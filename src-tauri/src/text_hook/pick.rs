@@ -577,7 +577,7 @@ impl Parse {
 }
 
 /// Sentences the game drew more than once in a row, once: CatSystem2 draws each line three times
-/// (`「そ、そうだよな」「そ、そうだよな」「そ、そうだよな」` is `「そ、そうだよな」`). Only a run of
+/// (`「わ、わかったよ」「わ、わかったよ」「わ、わかったよ」` is `「わ、わかったよ」`). Only a run of
 /// at least `MIN_REPEAT` characters that ends a sentence counts: a word said twice
 /// (`ガタッ、ガタッ`) is the text. Collapsed until nothing repeats: a speaker shown under another
 /// name comes as `名名「…」「…」名「…」`, which is `名「…」名「…」` once each part is once.
@@ -792,16 +792,16 @@ mod tests {
 
     #[test]
     fn sentences_drawn_three_times_come_out_once() {
-        let a = "「そ、そうだよな」";
-        let b = "今さらやめろと言われても困る。";
+        let a = "「わ、わかったよ」";
+        let b = "今日はもう帰ることにした。";
         assert_eq!(collapse_repeated_sentences(&format!("{a}{a}{a}{b}{b}{b}")), format!("{a}{b}"));
         // Four times over (a speaker shown under another name: `name＠shown「…」`).
-        let named = "りんか＠？？？「と、とんでもないところを見られた……」";
+        let named = "ゆかり＠？？？「え、ちょっと待って……」";
         assert_eq!(collapse_repeated_sentences(&named.repeat(4)), named);
         assert_eq!(collapse_repeated_sentences("「ん？」「ん？」「ん？」"), "「ん？」");
         // Its name and line drawn apart: name, name, line, line, then the two together.
-        assert_eq!(collapse_repeated_sentences("りんか＠？？？りんか＠？？？「そこはご想像にお任せするよ」「そこはご想像にお任せするよ」りんか＠？？？「そこはご想像にお任せするよ」"), "りんか＠？？？「そこはご想像にお任せするよ」");
-        assert_eq!(collapse_repeated_sentences(&format!("まあ、そういうことだ。涼太{a}涼太{a}")), format!("まあ、そういうことだ。涼太{a}"));
+        assert_eq!(collapse_repeated_sentences("ゆかり＠？？？ゆかり＠？？？「それは秘密にしておくよ」「それは秘密にしておくよ」ゆかり＠？？？「それは秘密にしておくよ」"), "ゆかり＠？？？「それは秘密にしておくよ」");
+        assert_eq!(collapse_repeated_sentences(&format!("まあ、そういうことだ。健一{a}健一{a}")), format!("まあ、そういうことだ。健一{a}"));
         // Words and short cries said twice are the text.
         for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
             assert_eq!(collapse_repeated_sentences(text), text);
@@ -810,14 +810,14 @@ mod tests {
 
     #[test]
     fn a_line_typed_out_or_sent_twice_is_one_line() {
-        let line = "決して稼ぎの良い仕事ではない。";
+        let line = "それほど楽な仕事ではない。";
         assert!(another_line("", line, 6));
         assert!(!another_line(line, line, 6));
-        assert!(!another_line("決して稼ぎの", line, 6));
-        assert!(!another_line(line, "決して稼ぎの", 6));
-        assert!(another_line(line, "周りの住人からは重宝されている。", 6));
+        assert!(!another_line("それほど楽な", line, 6));
+        assert!(!another_line(line, "それほど楽な", 6));
+        assert!(another_line(line, "町の人たちには頼りにされている。", 6));
         // A nameplate or a code is not a line.
-        assert!(!another_line(line, "セリシア", 6));
+        assert!(!another_line(line, "アカネ", 6));
         assert!(!another_line(line, "se_21_140_voice", 6));
     }
 
@@ -881,10 +881,10 @@ mod tests {
 
     #[test]
     fn of_a_text_and_its_shadow_the_unwrapped_copy_wins() {
-        let screen = [line("「最後の答えは、少年の手に残されました」", 430.0, 880.0, 700.0, 32.0)];
+        let screen = [line("「最後の答えは、まだ誰も知らない」", 430.0, 880.0, 700.0, 32.0)];
         let candidates = [
-            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最\n後の答えは、\n少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最後の答えは、少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最\n後の答えは、\nまだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最後の答えは、まだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
         ];
         assert_eq!(score(&candidates, &blocks(&screen))[0].key, "text");
     }
@@ -975,19 +975,19 @@ mod tests {
         // BGI: the nameplate sits on the dialogue box's edge, so both read as one block, and OCR
         // reads the line's "──" as "ー一".
         let screen = [
-            line("メデューサ兵", 180.0, 390.0, 130.0, 26.0),
-            line("「フンー一そういやこの前、地上に寄ってきた制服のお仲間がどうなったか知っ", 110.0, 440.0, 720.0, 28.0),
+            line("見張りの兵士", 180.0, 390.0, 130.0, 26.0),
+            line("「ああー一そういえば昨日、町の外れで見かけた旅人がどこへ行ったか知っ", 110.0, 440.0, 720.0, 28.0),
             line("てるか？」", 110.0, 475.0, 100.0, 28.0),
         ];
-        let line_text = "「フン──そういやこの前、地上に寄ってきた制服のお仲間がどうなったか知ってるか？」";
+        let line_text = "「ああ──そういえば昨日、町の外れで見かけた旅人がどこへ行ったか知ってるか？」";
         let candidates = [
-            Candidate { key: "name", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: "メデューサ兵", recent: 1, count: 3, noise: 0.0 },
+            Candidate { key: "name", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: "見張りの兵士", recent: 1, count: 3, noise: 0.0 },
             Candidate { key: "line", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: line_text, recent: 1, count: 3, noise: 0.0 },
         ];
         let scored = score(&candidates, &blocks(&screen));
         assert_eq!(chosen(&scored, 6.0).unwrap().key, "line");
         // A short run in common is no match.
-        assert_eq!(longest_common_run("そういやこの前", "この前の話"), 3);
+        assert_eq!(longest_common_run("そういえば昨日", "昨日の話"), 2);
     }
 
     #[test]
@@ -1018,10 +1018,10 @@ mod tests {
     fn a_script_engines_own_hook_beats_its_runtimes_strings() {
         // TyranoScript on Electron: LunaHook's tyranoscript hook sends the line; V8's string
         // functions send it too, with the speaker's name drawn above it in the same box.
-        let screen = [line("お母さん", 120.0, 560.0, 120.0, 30.0), line("おはよう。今日は朝から雨だよ。早く梅雨明けしないもんかね。", 120.0, 600.0, 900.0, 30.0)];
+        let screen = [line("お母さん", 120.0, 560.0, 120.0, 30.0), line("おはよう。今日も雨だね。早く晴れてくれるといいんだけど。", 120.0, 600.0, 900.0, 30.0)];
         let candidates = [
-            Candidate { key: "v8", hookcode: "HVX0@292530:game.exe", name: "v8::String::Write", text: "お母さんおはよう。今日は朝から雨だよ。早く梅雨明けしないもんかね。", recent: 1, count: 16, noise: 0.0 },
-            Candidate { key: "tyrano", hookcode: "EXHQXFN0@8CDC0:LunaHook64.dll", name: "tyranoscript", text: "おはよう。今日は朝から雨だよ。早く梅雨明けしないもんかね。\n", recent: 1, count: 9, noise: 0.0 },
+            Candidate { key: "v8", hookcode: "HVX0@292530:game.exe", name: "v8::String::Write", text: "お母さんおはよう。今日も雨だね。早く晴れてくれるといいんだけど。", recent: 1, count: 16, noise: 0.0 },
+            Candidate { key: "tyrano", hookcode: "EXHQXFN0@8CDC0:LunaHook64.dll", name: "tyranoscript", text: "おはよう。今日も雨だね。早く晴れてくれるといいんだけど。\n", recent: 1, count: 9, noise: 0.0 },
         ];
         let scored = score(&candidates, &blocks(&screen));
         assert_eq!(scored[0].key, "tyrano");
@@ -1033,10 +1033,10 @@ mod tests {
     fn a_unity_text_box_beats_the_runtimes_strings() {
         // Unity Mono with a script interpreter: `String` methods see each line as the script
         // handles it (ahead of showing it); TextMeshPro's setter, as it is shown.
-        let screen = [line("これではまるで妖精だ。", 200.0, 600.0, 600.0, 30.0)];
+        let screen = [line("まるで夢を見ているようだ。", 200.0, 600.0, 600.0, 30.0)];
         let candidates = [
-            Candidate { key: "string", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "String.op_Inequality", text: "これではまるで妖精だ。", recent: 1, count: 61, noise: 0.0 },
-            Candidate { key: "tmp", hookcode: "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY", name: "TMP_Text.set_text", text: "これではまるで妖精だ。", recent: 1, count: 61, noise: 0.0 },
+            Candidate { key: "string", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "String.op_Inequality", text: "まるで夢を見ているようだ。", recent: 1, count: 61, noise: 0.0 },
+            Candidate { key: "tmp", hookcode: "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY", name: "TMP_Text.set_text", text: "まるで夢を見ているようだ。", recent: 1, count: 61, noise: 0.0 },
         ];
         assert_eq!(score(&candidates, &blocks(&screen))[0].key, "tmp");
         assert!(is_generic("HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", "String.Substring"));

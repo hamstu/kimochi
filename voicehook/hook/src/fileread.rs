@@ -344,10 +344,10 @@ mod tests {
 
     #[test]
     fn voice_files_are_told_apart_by_their_path() {
-        assert!(voice_path("C:\\Games\\VN\\dohnadohnaTrialVoice.afa"));
+        assert!(voice_path("C:\\Games\\VN\\GameTrialVoice.afa"));
         assert!(voice_path("D:/vn/voice/ch01_0003.ogg"));
         assert!(voice_path("C:\\VN\\koe\\a.ovk"));
-        assert!(!voice_path("C:\\VN\\dohnadohnaTrialSound.afa"));
+        assert!(!voice_path("C:\\VN\\GameTrialSound.afa"));
         assert!(!voice_path("C:\\VN\\voice\\bgm01.ogg"));
         assert!(!voice_path("C:\\VN\\VoiceConfig.ini"));
     }

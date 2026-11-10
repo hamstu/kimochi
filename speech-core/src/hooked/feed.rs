@@ -181,8 +181,7 @@ impl Feed {
         decode(&self.clip_path(c.file.as_deref().ok_or("clip has no file")?)?)
     }
 }
-/// The pages of an Ogg file's first logical stream. Some games' encoder (Liar-soft's, through
-/// vorbis.acm) interleaves empty pages of a second stream; the decoder takes that stream's start
+/// The pages of an Ogg file's first logical stream. Some games' encoder (vorbis.acm) interleaves empty pages of a second stream; the decoder takes that stream's start
 /// for a new chain link and fails on its missing headers. Bytes that are not a clean run of pages
 /// are kept as they are.
 fn first_stream(bytes: Vec<u8>) -> Vec<u8> {

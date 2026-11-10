@@ -8,24 +8,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- Sentence audio can now use each line's own clean voice from the game on Windows when Text hooking is on (tested with AdvHD, SiglusEngine, KiriKiri, NScripter, Ren'Py and Unity games). Voices are matched to Log lines by timing, without speech recognition; Kimochi remembers how each game plays its voices, leaves unvoiced narration silent, and falls back to recording system audio when a game's voices can't be captured. Turn it off with Audio hooking under Text hooking.
-- The Text Hooker reads Unity games' dialogue more reliably on Windows: Kimochi reads the text box itself when the hooker can't (or can only through unrelated string functions), so you no longer need to restart the game and hook it again until it works.
-- Text hooking is now a switch under a game's window rather than a source of its own: choose the game's window, and where the game can be hooked, turn on Text hooking to read its text from inside the game. Turn it off to go back to OCR; the game stays hooked, so switching back is instant. The switch is remembered for each game.
-- Switching to Quick Shot, the clipboard, WebSocket or the browser no longer unhooks the game or forgets your window: the source menu takes you back to it, as it was.
-- Text hooking now reads TyranoScript and RPG Maker MV/MZ games, and picks their clean dialogue rather than text with the speaker's name and image paths mixed in.
-- Lines from CatSystem2 games no longer reach the Log doubled up, including lines from a speaker whose name the game hasn't revealed yet (whose real name no longer shows either).
-- Audio hooking now takes the voice from Unity games that use CRIWARE for their sound, which many Japanese games do.
-- Audio hooking now also takes the voice from games that mix all their sound themselves (such as AliceSoft's), by catching each voice file as the game loads it.
-- Text hooking no longer picks a game's nameplate over its dialogue when a long name happens to match the screen first.
-- Text hooking no longer gets stuck on a thread that stops after one line (as Majiro games start one per line): when other threads keep sending lines, it reads the screen again and picks the one that keeps going.
-- Games whose window was missing from the source menu (KiriKiri 2 and other older games) are now listed.
-- Audio hooking now takes the voices from Unity games built with IL2CPP, and from those on Unity's older Mono runtime.
-- Audio hooking now takes the voice from Unity games that decode their own voices and stream them to Unity (such as CatSystem's Unity games).
-- Text hooking no longer freezes Kimochi on games whose script passes very long strings through the hooker.
-- In Unity games, Text hooking now prefers the text box over the script's string functions, which see each line before it is shown and so threw off voice matching, and no longer follows a text object that draws one character at a time.
-- Audio hooking now takes the voice from games whose Ogg voice files carry padding the decoder used to reject (such as Liar-soft's), and from voice files the game reads only part of.
-- Audio hooking now takes the voice from BGI games, which load each voice and then restart it from the top.
-- Text hooking picks the dialogue even when OCR misreads a character or two of it (such as a long dash), rather than the speaker's name drawn just above the box.
+- **Audio hooking (Windows).** With Text hooking on, Sentence audio now takes each line's own clean voice straight from the game, without music or sound effects, and falls back to recording system audio when it can't. Turn it off with Audio hooking under Text hooking.
+- Text hooking is now a switch under a game's window rather than a source of its own; switching to another source and back keeps the game hooked and your window chosen.
+- Text hooking reads more games and picks their dialogue more reliably: Unity, TyranoScript and RPG Maker MV/MZ games, fewer doubled lines and fewer nameplates picked over the line, and no more freezes on games with very long script strings.
 
 ## [0.7.0] - 2026-11-07
 

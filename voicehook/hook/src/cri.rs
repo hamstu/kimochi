@@ -264,7 +264,7 @@ unsafe extern "C" fn start(player: P) -> u32 {
         drain();
         watch(player as usize);
         let cue = lock(&PLAYERS).get(&(player as usize)).and_then(|p| p.cue.clone());
-        // Its clips go with the shape of their cue's name (`Yuk_S00sky_000001`: `a_a9a_9`), else
+        // Its clips go with the shape of their cue's name (`Aki_S00park_000001`: `a_a9a_9`), else
         // the cue sheet they come from: games play each voice line on a player, even a sheet, of
         // its own, and name every voice cue alike.
         let group = cue.as_deref().map(|c| format!("cue:{}", shape(c))).or_else(|| lock(&PLAYER_SHEETS).get(&(player as usize)).cloned());
@@ -366,10 +366,10 @@ mod tests {
 
     #[test]
     fn voice_cues_share_a_shape_and_effects_do_not() {
-        assert_eq!(shape("Yuk_S00sky_000001"), "a_a9a_9");
-        assert_eq!(shape("Kan_S00sky_000124"), shape("Van_S01park_000003"));
-        assert_ne!(shape("Common_SE_NoticeWindow_Bye"), shape("Yuk_S00sky_000001"));
-        assert_ne!(shape("CharacterStep"), shape("Yuk_S00sky_000001"));
+        assert_eq!(shape("Aki_S00park_000001"), "a_a9a_9");
+        assert_eq!(shape("Ren_S00park_000124"), shape("Mio_S01room_000003"));
+        assert_ne!(shape("System_SE_Window_Close"), shape("Aki_S00park_000001"));
+        assert_ne!(shape("CharacterStep"), shape("Aki_S00park_000001"));
     }
 
     #[test]
