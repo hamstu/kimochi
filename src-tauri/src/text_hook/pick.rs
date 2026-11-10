@@ -132,10 +132,11 @@ pub fn is_generic_api_hook(hookcode: &str) -> bool {
 
 /// A generic hook: one on a Windows API ([`is_generic_api_hook`]), or one LunaHook puts on a
 /// script runtime's string functions, which every string the game's script handles passes
-/// through (`v8::String::Write` in an Electron or NW.js game), not its text box. Such a hook is in
-/// the game's own image, so only its name tells it apart.
+/// through (`v8::String::Write` in an Electron or NW.js game, `System.String` methods in a Unity
+/// Mono game, whose script interpreter compares and cuts its lines ahead of showing them), not its
+/// text box. Such a hook is in the game's own image, so only its name tells it apart.
 pub fn is_generic(hookcode: &str, name: &str) -> bool {
-    is_generic_api_hook(hookcode) || name.starts_with("v8::")
+    is_generic_api_hook(hookcode) || name.starts_with("v8::") || hookcode.contains("@mscorlib:System:String:")
 }
 
 /// Groups OCR lines into blocks: a line joins the previous block when it starts within a line
@@ -551,12 +552,19 @@ impl Parse {
 /// (`ガタッ、ガタッ`) is the text.
 pub fn collapse_repeated_sentences(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
+    // Longer than a line drawn a few times over (a script interpreter's source going through
+    // String functions: thousands of characters, every one of them a place to look): as it is.
+    if chars.len() > REPEATS_UP_TO * super::clean::MAX_LINE_CHARS {
+        return text.to_string();
+    }
     let ends = |c: char| "。！？!?」』）)…―～".contains(c);
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
     while i < chars.len() {
-        let longest = (chars.len() - i) / 2;
-        let repeat = (MIN_REPEAT..=longest).rev().find(|&n| ends(chars[i + n - 1]) && chars[i..i + n] == chars[i + n..i + 2 * n]);
+        let longest = ((chars.len() - i) / 2).min(super::clean::MAX_LINE_CHARS);
+        let repeat = (MIN_REPEAT..=longest)
+            .rev()
+            .find(|&n| chars[i] == chars[i + n] && ends(chars[i + n - 1]) && chars[i..i + n] == chars[i + n..i + 2 * n]);
         match repeat {
             Some(n) => {
                 out.extend(&chars[i..i + n]);
@@ -576,6 +584,8 @@ pub fn collapse_repeated_sentences(text: &str) -> String {
 
 /// The shortest sentence `collapse_repeated_sentences` takes as drawn twice.
 const MIN_REPEAT: usize = 6;
+/// The most times over `collapse_repeated_sentences` expects a line to be drawn.
+const REPEATS_UP_TO: usize = 4;
 
 /// The last sentence of `typewriter_lines`: what a thread is showing now.
 #[cfg(test)]
@@ -738,6 +748,20 @@ mod tests {
         for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
             assert_eq!(collapse_repeated_sentences(text), text);
         }
+    }
+
+    #[test]
+    fn a_script_going_through_string_functions_is_left_as_it_is_and_quickly() {
+        // A script interpreter's source, tens of thousands of characters with a bracket on every line.
+        let script = "if⏎(_EXITCODE_==4)⏎next⏎".repeat(2_000);
+        let start = std::time::Instant::now();
+        assert_eq!(collapse_repeated_sentences(&script), script);
+        assert!(start.elapsed() < std::time::Duration::from_millis(100), "{:?}", start.elapsed());
+        // The longest a line drawn a few times over can be.
+        let line = format!("{}。", "あ".repeat(crate::text_hook::clean::MAX_LINE_CHARS - 1));
+        let start = std::time::Instant::now();
+        assert_eq!(collapse_repeated_sentences(&line.repeat(3)), line);
+        assert!(start.elapsed() < std::time::Duration::from_millis(500), "{:?}", start.elapsed());
     }
 
     #[test]
@@ -912,6 +936,19 @@ mod tests {
         assert_eq!(scored[0].key, "tyrano");
         assert!(is_generic("HVX0@292530:game.exe", "v8::String::Length"));
         assert!(!is_generic("EXHQXFN0@8CDC0:LunaHook64.dll", "tyranoscript"));
+    }
+
+    #[test]
+    fn a_unity_text_box_beats_the_runtimes_strings() {
+        // Unity Mono with a script interpreter: `String` methods see each line as the script
+        // handles it (ahead of showing it); TextMeshPro's setter, as it is shown.
+        let screen = [line("これではまるで妖精だ。", 200.0, 600.0, 600.0, 30.0)];
+        let candidates = [
+            Candidate { key: "string", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "String.op_Inequality", text: "これではまるで妖精だ。", recent: 1, count: 61, noise: 0.0 },
+            Candidate { key: "tmp", hookcode: "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY", name: "TMP_Text.set_text", text: "これではまるで妖精だ。", recent: 1, count: 61, noise: 0.0 },
+        ];
+        assert_eq!(score(&candidates, &blocks(&screen))[0].key, "tmp");
+        assert!(is_generic("HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", "String.Substring"));
     }
 
     #[test]

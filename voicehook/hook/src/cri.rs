@@ -317,7 +317,7 @@ static SHEETS: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(Default::
 static PLAYER_SHEETS: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(Default::default);
 
 /// A cue name's shape: each run of letters `a`, of digits `9`, other characters kept.
-fn shape(name: &str) -> String {
+pub(crate) fn shape(name: &str) -> String {
     let mut out = String::new();
     for c in name.chars() {
         let class = if c.is_ascii_digit() { '9' } else if c.is_alphabetic() { 'a' } else { c };

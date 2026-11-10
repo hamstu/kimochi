@@ -52,6 +52,8 @@ const PICK_DELAY: Duration = Duration::from_millis(700);
 const PICK_MIN_MATCH: usize = 6;
 /// How old an IL2CPP game must be before the hooker attaches to it.
 const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
+/// Pieces in a row of a glyph or two after which a chosen thread is taken as drawing glyphs.
+const GLYPHS: u32 = 3;
 
 #[derive(Debug, Clone)]
 struct Thread {
@@ -66,6 +68,9 @@ struct Thread {
     /// Of those, pieces that held script codes (`clean::strip_codes`): a thread that mixes them in
     /// with the dialogue is a worse choice than one that sends the dialogue alone.
     noisy: u64,
+    /// Pieces in a row of a character or two: a text object per glyph (Unity CatSystem draws its
+    /// line one TextMeshPro object per character), not a line.
+    glyphs: u32,
     recent: VecDeque<Instant>,
     last_at: Option<Instant>,
 }
@@ -474,6 +479,7 @@ fn read_events(
                         text: String::new(),
                         count: 0,
                         noisy: 0,
+                        glyphs: 0,
                         recent: VecDeque::new(),
                         last_at: None,
                     });
@@ -619,6 +625,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         thread.text = lines.last().cloned().unwrap_or_default();
         thread.count += 1;
         thread.noisy += u64::from(clean::has_codes(text));
+        thread.glyphs = if pick::normalize(text).chars().count() <= 2 { thread.glyphs.saturating_add(1) } else { 0 };
         thread.last_at = Some(Instant::now());
         thread.recent.push_back(Instant::now());
         while thread.recent.len() > 32 {
@@ -701,6 +708,15 @@ fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
         return None;
     }
     let chosen = session.threads.iter().find(|t| t.key == selected)?;
+    // A text object that showed the line once and has shown a glyph at a time since: a thread
+    // showing whole lines takes over.
+    let spoken = &session.threads[index];
+    if chosen.glyphs >= GLYPHS && spoken.key != selected && spoken.count >= 3 && spoken.glyphs == 0 && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+        let text = pick::normalize(&spoken.text);
+        if text.chars().count() >= PICK_MIN_MATCH && pick::japanese_ratio(&text) >= 0.3 {
+            return Some(spoken.key.clone());
+        }
+    }
     // A Unity text object showing what the chosen hooker thread has: the object is set when the
     // line is shown, the hooker's string functions whenever the game handles the string.
     if !unity::is_unity(&chosen.hookcode) && !chosen.text.is_empty() {
@@ -781,7 +797,9 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                         session.selected = Some(key.clone());
                         session.selected_by = Some("auto");
                         session.pick_note = None;
-                        if let Some(exe) = session.exe.clone() {
+                        // A generic thread won only because nothing better showed the line yet:
+                        // the screen is read again next time, not this one taken back.
+                        if let Some(exe) = session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name)) {
                             remember(hook, &exe, Some(thread.signature()));
                         }
                         hook.line(&mut session, &key, &thread.text, false);

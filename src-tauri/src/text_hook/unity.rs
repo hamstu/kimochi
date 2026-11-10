@@ -274,6 +274,7 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
                     text: String::new(),
                     count: 0,
                     noisy: 0,
+                    glyphs: 0,
                     recent: Default::default(),
                     last_at: None,
                 });

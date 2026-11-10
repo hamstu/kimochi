@@ -19,6 +19,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Text hooking no longer picks a game's nameplate over its dialogue when a long name happens to match the screen first.
 - Games whose window was missing from the source menu (KiriKiri 2 and other older games) are now listed.
 - Audio hooking now takes the voices from Unity games built with IL2CPP, and from those on Unity's older Mono runtime.
+- Audio hooking now takes the voice from Unity games that decode their own voices and stream them to Unity (such as CatSystem's Unity games).
+- Text hooking no longer freezes Kimochi on games whose script passes very long strings through the hooker.
+- In Unity games, Text hooking now prefers the text box over the script's string functions, which see each line before it is shown and so threw off voice matching, and no longer follows a text object that draws one character at a time.
 
 ## [0.7.0] - 2026-11-07
 

@@ -12,6 +12,7 @@ adapter per audio path, an NW.js page script for HTML5 engines, a shared capture
 | winmm `waveOut*` (imports) | old engines that open a device per sound | per device: written PCM | fixture |
 | SDL_mixer (imports) | ONScripter builds with SDL2_mixer.dll, ports | per play: the chunk's decoded PCM + file name | fixture (SDL2_mixer 2.8.0) |
 | Unity Mono (internal calls) | Unity 2017-6000 Mono builds | per `AudioSource.Play*`: clip name + PCM (`GetData`) | Unity 6 (x64), 2019 (x86), 2021.3 (x64) and legacy-Mono (x64) games |
+| Unity Mono PCM reader clips (`mono_runtime_invoke`) | Unity Mono games that fill clips themselves (`AudioClip.Create` with a reader callback) | per clip: each block the game writes, as Unity asks for it; named for the clip, grouped by the shape of its name | a Unity Mono game decoding its own Ogg voices (x86) |
 | Unity IL2CPP (internal calls) | Unity IL2CPP builds (`GameAssembly.dll`) | per `AudioSource.Play*`: clip name + PCM (`GetData`) | a Unity 2020.1 IL2CPP game (x64) |
 | Ren'Py (embedded Python) | Ren'Py 6/7/8 | per file started on a channel: the original file + channel | Ren'Py 8.5 (voiced) and 8.3 games, fixture |
 | CRI ADX2 (exports) | Unity games with CRIWARE (`cri_ware_unity.dll`) | per `CriAtomExPlayer`: its own PCM before CRI mixes, through an Output Analyzer, cut at `Start`/`Stop`, named for the cue | a Unity 2021 IL2CPP game with CRIWARE (x64) |

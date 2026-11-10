@@ -103,8 +103,8 @@ pub fn on_mono(m: HMODULE, name: &str) {
         // Often at first (the app may hold its text hooker back until the text watch is in), then
         // every few seconds.
         let mut wait = std::time::Duration::from_millis(500);
-        let (mut audio, mut text) = (false, false);
-        while !(audio && text) {
+        let (mut audio, mut text, mut reader) = (false, false, false);
+        while !(audio && text && reader) {
             std::thread::sleep(wait);
             if started.elapsed().as_secs() >= 20 {
                 wait = std::time::Duration::from_secs(3);
@@ -135,8 +135,124 @@ pub fn on_mono(m: HMODULE, name: &str) {
             if !text && text_wanted() {
                 text = unsafe { attached(&late, || Ok::<_, String>(text_watch(API.get().unwrap(), &late))) }.unwrap_or(false) || giving_up;
             }
+            if !reader {
+                match unsafe { attached(&late, || reader_watch(API.get().unwrap())) } {
+                    Ok(n) => {
+                        log(&format!("unity: watching PCM reader clips ({n} mono_runtime_invoke slots)"));
+                        reader = true;
+                    }
+                    Err(e) if giving_up => {
+                        log(&format!("unity: PCM reader clips not watched: {e}"));
+                        reader = true;
+                    }
+                    Err(_) => {}
+                }
+            }
         }
     });
+}
+
+// ------------------------------------------------------------------ clips the game fills itself
+
+// A clip made with `AudioClip.Create(name, length, channels, frequency, stream: true, reader)` is
+// filled by the game's own code as it plays: an engine that decodes its voices itself (NVorbis, its
+// own archives) hands Unity no data to read with `GetData`, and its clips' length is a placeholder.
+// Unity asks for each next block through `AudioClip.InvokePCMReaderCallback_Internal(float[])`, a
+// managed method it calls with `mono_runtime_invoke` through a pointer it keeps (resolved with
+// `GetProcAddress` when it loaded Mono). That pointer, wherever it is in UnityPlayer's data, is
+// pointed at ours: after the call, the block the game wrote is the clip's next PCM.
+
+/// `AudioClip.InvokePCMReaderCallback_Internal`.
+static PCM_METHOD: AtomicUsize = AtomicUsize::new(0);
+static O_INVOKE: AtomicUsize = AtomicUsize::new(0);
+/// Clips whose blocks we have seen since they were last played (announced as streams).
+static READER_CLIPS: LazyLock<Mutex<std::collections::HashSet<usize>>> = LazyLock::new(Default::default);
+/// The clip each AudioSource last played, to end a filled clip's stream when its source stops.
+static SOURCE_CLIP: LazyLock<Mutex<HashMap<usize, usize>>> = LazyLock::new(Default::default);
+
+fn reader_key(clip: usize) -> sink::Key {
+    (11, clip)
+}
+
+unsafe fn reader_watch(a: &Mono) -> Result<usize, String> {
+    let clip_class = class(a, c"UnityEngine.AudioModule", c"AudioClip");
+    if clip_class.is_null() {
+        return Err("no AudioClip class yet".into());
+    }
+    let m = method(a, clip_class, "InvokePCMReaderCallback_Internal", 1);
+    if m.is_null() {
+        return Err("no AudioClip.InvokePCMReaderCallback_Internal".into());
+    }
+    let player = windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(crate::util::wide("UnityPlayer.dll").as_ptr());
+    // Before Unity 2017 the player is the game's exe.
+    let player = if player.is_null() { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()) } else { player };
+    let real = a.runtime_invoke as usize;
+    O_INVOKE.store(real, Ordering::SeqCst);
+    PCM_METHOD.store(m as usize, Ordering::SeqCst);
+    let mut n = 0;
+    for (start, len) in crate::il2cpp::writable_sections(player as usize) {
+        n += crate::il2cpp::repoint_all(start, len, real, t_runtime_invoke as *const () as usize);
+    }
+    if n == 0 {
+        return Err("mono_runtime_invoke not found in the player's data".into());
+    }
+    sink::send(Ev::Note(json!({"ev": "adapter", "adapter": "unity-reader", "slots": n})));
+    Ok(n)
+}
+
+/// Unity's every call into managed code goes through here: one compare on the way out.
+unsafe extern "C" fn t_runtime_invoke(method: P, obj: P, params: *mut P, exc: *mut P) -> P {
+    let o: unsafe extern "C" fn(P, P, *mut P, *mut P) -> P = std::mem::transmute(O_INVOKE.load(Ordering::SeqCst));
+    let r = o(method, obj, params, exc);
+    if method as usize == PCM_METHOD.load(Ordering::Relaxed) && !obj.is_null() && !params.is_null() {
+        let data = *params;
+        guard(|| unsafe { reader_block(obj, data) });
+    }
+    r
+}
+
+unsafe fn reader_block(clip: P, data: P) {
+    let Some(a) = API.get() else { return };
+    if data.is_null() {
+        return;
+    }
+    let n = (a.array_length)(data);
+    if n == 0 {
+        return;
+    }
+    let bytes = std::slice::from_raw_parts((a.array_addr_with_size)(data, 4, 0), n * 4).to_vec();
+    let key = reader_key(clip as usize);
+    if lock(&READER_CLIPS).insert(clip as usize) {
+        let get_i32 = |name: &'static str| -> i32 { unsafe { invoke(a, clip, std::ptr::null_mut(), name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) } };
+        let (channels, freq) = (get_i32("get_channels"), get_i32("get_frequency"));
+        let name = invoke(a, clip, std::ptr::null_mut(), "get_name", &mut []).and_then(|s| string(a, s));
+        // Grouped by the shape of the clip's name, as CRI cues are (`sln_co_0001`, `lea_co_0002`
+        // apart from `se_21_140`): no folder, and every clip its own stream.
+        let channel = name.as_deref().map(|n| format!("clip:{}", crate::cri::shape(n)));
+        sink::send(Ev::Create {
+            key,
+            api: "unity",
+            fmt: float_fmt(channels.max(1) as u16, freq.max(1) as u32),
+            info: json!({"reader": true, "clip_ptr": hex(clip as usize), "channel": channel}),
+        });
+        sink::send(Ev::Source { key, source: name.clone() });
+        sink::send(Ev::Play { key, looping: false, info: json!({"clip": name}) });
+    }
+    sink::send(Ev::Data { key, bytes, eos: false, looping: false, region: None, info: serde_json::Value::Null });
+}
+
+/// An AudioSource played `clip` (or stopped, `clip` None): a filled clip it was playing before
+/// ends. The clip it starts keeps the blocks Unity read for it just before (at Play, ahead of it).
+fn reader_source(src: usize, clip: Option<usize>) {
+    let before = match clip {
+        Some(c) => lock(&SOURCE_CLIP).insert(src, c),
+        None => lock(&SOURCE_CLIP).remove(&src),
+    };
+    if let Some(c) = before.filter(|&b| Some(b) != clip) {
+        if lock(&READER_CLIPS).remove(&c) {
+            sink::send(Ev::Stop { key: reader_key(c) });
+        }
+    }
 }
 
 /// Runs `f` on this thread attached to Mono's root domain, detaching after.
@@ -881,6 +997,7 @@ unsafe fn seen(what: &'static str, src: P, clip: P, injected: bool) {
     let key = (5u8, src as usize);
     if what == "Stop" || what == "Pause" {
         sink::send(Ev::Mark { key, what: "unity_stop", info: json!({"method": what}) });
+        reader_source(src as usize, None);
         return;
     }
     let (src_obj, clip_obj) = if injected {
@@ -897,6 +1014,7 @@ unsafe fn seen(what: &'static str, src: P, clip: P, injected: bool) {
         sink::send(Ev::Mark { key, what: "unity_play_unknown", info: json!({"method": what, "src_found": !src_obj.is_null()}) });
         return;
     }
+    reader_source(src as usize, Some(clip_obj as usize));
     let now = crate::util::now_ms();
     {
         let mut last = lock(&LAST);
