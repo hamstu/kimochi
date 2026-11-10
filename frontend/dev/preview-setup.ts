@@ -1118,6 +1118,8 @@ const HANDLERS: Record<string, Handler> = {
   accessibility_status: () =>
     params.get('accessibility') === 'none' ? null : params.get('accessibility') !== 'denied',
   request_accessibility: () => false,
+  capture_border_status: () => params.get('border') ?? 'unsupported',
+  open_capture_border_settings: () => undefined,
   source_window_state: () =>
     params.get('nosource') === '1'
       ? null
@@ -1628,6 +1630,7 @@ const WELCOME_ROUTES: Record<string, string> = {
   intro: '/',
   permission: '/screen-recording-permission',
   accessibility: '/accessibility',
+  border: '/capture-border',
   ocr: '/ocr',
   engine: '/engine',
   dictionaries: '/dictionaries',

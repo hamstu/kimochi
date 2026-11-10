@@ -304,6 +304,8 @@ choosing that source again brings its region back.
 | `enumerate` | `() -> [Source]` |
 | `permission` | `() -> bool` — **requests** Screen Recording access |
 | `permission_status` | `() -> "granted" \| "not_granted"` — read-only, never prompts |
+| `capture_border_status` | `() -> "hidden" \| "denied" \| "unsupported"` — whether captures hide Windows' yellow capture border; `denied` when Settings → Privacy & security → Screenshot borders turns it off for Kimochi; read-only, never prompts |
+| `open_capture_border_settings` | `() -> ()` — opens that Settings page (Windows) |
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |

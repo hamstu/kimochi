@@ -114,6 +114,14 @@
 .link:hover {
   text-decoration-color: currentColor;
 }
+/* A link that runs an action, inside a sentence. */
+.inlineButton {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
 
 /* "Why does Kimochi need this?", on a line of its own under a permission step's lede. */
 .why {

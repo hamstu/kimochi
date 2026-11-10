@@ -2963,6 +2963,33 @@ fn open_screen_capture_preferences() -> Reply<()> {
     platform::open_capture_settings()
 }
 
+/// Whether captures can hide the yellow border Windows draws around a captured window:
+/// `hidden`, `denied` (turned off in Settings → Privacy & security → Screenshot borders) or
+/// `unsupported` (an older Windows, or another OS). A query: Windows answers from Settings
+/// without a prompt, so onboarding polls it.
+#[tauri::command]
+async fn capture_border_status() -> Reply<CaptureBorder> {
+    #[cfg(target_os = "windows")]
+    return tauri::async_runtime::spawn_blocking(capture_border)
+        .await
+        .map_err(|e| format!("native: {e}"));
+    #[cfg(not(target_os = "windows"))]
+    Ok(CaptureBorder::Unsupported)
+}
+
+/// Opens Settings → Privacy & security → Screenshot borders (Windows).
+#[tauri::command]
+fn open_capture_border_settings() -> Reply<()> {
+    #[cfg(target_os = "windows")]
+    return std::process::Command::new("explorer.exe")
+        .arg("ms-settings:privacy-graphicscapturewithoutborder")
+        .spawn()
+        .map(drop)
+        .map_err(|e| format!("native: could not open Settings: {e}"));
+    #[cfg(not(target_os = "windows"))]
+    Err("not applicable: only Windows draws a capture border".into())
+}
+
 fn main() {
     // `kimochi status`, `kimochi scan --wait`, …: the command line runs instead of the app, before
     // anything below could claim the single instance or quit the running app (cli/mod.rs).
@@ -3241,6 +3268,8 @@ fn main() {
             ocr_frame,
             scan_state,
             permission_status,
+            capture_border_status,
+            open_capture_border_settings,
             watch_source,
             settings_get,
             settings_set,
