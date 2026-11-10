@@ -138,6 +138,9 @@ struct Stream {
     /// Played since its data was loaded (DirectSound one-shots) / started (XAudio2).
     played: bool,
     looping: bool,
+    /// Filled and stopped before it ever played: either a stream ring being primed (filled
+    /// again before it plays) or a one-shot loaded and then started from the top.
+    primed: bool,
     clips: u32,
     last_clip: Option<u32>,
     source: Option<String>,
@@ -218,6 +221,7 @@ impl Writer {
                 t_play: None,
                 played: false,
                 looping: false,
+                primed: false,
                 clips: 0,
                 last_clip: None,
                 source: None,
@@ -249,6 +253,13 @@ impl Writer {
             Ev::Create { key, api, fmt, info } => self.new_stream(key, api, fmt, t, info),
             Ev::Data { key, mut bytes, eos, looping, region, info } => {
                 let mut s = self.take(key, t);
+                if s.primed {
+                    // Filled again before it played: the first fill was a stream ring's priming
+                    // (SiglusEngine fills it, stops, rewinds and fills it again). Not a sound.
+                    self.write(json!({"ev": "discard", "t": t, "s": s.id, "bytes": s.pending.len()}));
+                    s.pending.clear();
+                    s.primed = false;
+                }
                 if let (Some((begin, len)), Some(f)) = (region, s.fmt) {
                     if f.is_linear() && f.block_align > 0 {
                         let a = f.block_align as usize;
@@ -291,6 +302,9 @@ impl Writer {
             }
             Ev::Play { key, looping, info } => {
                 let mut s = self.take(key, t);
+                // What was loaded before a stop plays now (BGI loads a voice, stops the buffer,
+                // rewinds and plays it).
+                s.primed = false;
                 if s.ds() {
                     s.looping = looping;
                     if s.played && !looping && !s.pending.is_empty() {
@@ -316,10 +330,11 @@ impl Writer {
                 let mut s = self.take(key, t);
                 self.write(json!({"ev": "stop", "t": t, "s": s.id}));
                 if s.ds() && !s.played && s.t_play.is_none() && !s.pending.is_empty() {
-                    // Filled and stopped without ever playing: an engine priming a stream ring
-                    // (SiglusEngine fills it, stops, rewinds and fills it again). Not a sound.
-                    self.write(json!({"ev": "discard", "t": t, "s": s.id, "bytes": s.pending.len()}));
-                    s.pending.clear();
+                    // Filled and stopped without ever playing: kept until the buffer is either
+                    // played (a one-shot) or filled again (a stream ring being primed).
+                    s.primed = true;
+                    self.streams.insert(key, s);
+                    return;
                 }
                 self.flush(&mut s, "stop", t);
                 s.played = false;
@@ -334,6 +349,9 @@ impl Writer {
             }
             Ev::Destroy { key } => {
                 if let Some(mut s) = self.streams.remove(&key) {
+                    if s.primed {
+                        s.pending.clear();
+                    }
                     self.flush(&mut s, "destroy", t);
                     self.write(json!({"ev": "destroy", "t": t, "s": s.id, "clips": s.clips}));
                 }
@@ -380,6 +398,7 @@ impl Writer {
             .iter()
             .filter(|(_, s)| {
                 !s.pending.is_empty()
+                    && !s.primed
                     && now - s.t_last > IDLE_MS
                     && now > s.clip_start() + s.pending_secs() * 1000.0 + IDLE_MS
             })

@@ -86,7 +86,7 @@ pub struct Scored {
 fn ignorable(c: char) -> bool {
     c.is_whitespace()
         || c.is_ascii_punctuation()
-        || "、。，．・：；？！゛゜´｀¨＾￣＿〃〆〇―‐／＼～∥｜…‥‘’“”（）〔〕［］｛｝〈〉《》「」『』【】＋－±×÷＝≠＜＞≦≧∞∴♪☆★○●◎◇◆□■△▲▽▼※→←↑↓〜｡｢｣､･"
+        || "、。，．・：；？！゛゜´｀¨＾￣＿〃〆〇―‐─━—–／＼～∥｜…‥‘’“”（）〔〕［］｛｝〈〉《》「」『』【】＋－±×÷＝≠＜＞≦≧∞∴♪☆★○●◎◇◆□■△▲▽▼※→←↑↓〜｡｢｣､･"
             .contains(c)
 }
 
@@ -185,6 +185,32 @@ pub fn blocks(lines: &[OcrLine]) -> Vec<Block> {
         .collect()
 }
 
+/// The fewest characters a run shared with a misread block must have: shorter runs turn up
+/// between any two Japanese texts.
+const MIN_RUN: usize = 8;
+/// Texts longer than this are not compared run by run (the comparison is quadratic).
+const MAX_RUN_TEXT: usize = 400;
+
+/// The length of the longest run of characters `a` and `b` share.
+fn longest_common_run(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    if a.len() > MAX_RUN_TEXT || b.len() > MAX_RUN_TEXT {
+        return 0;
+    }
+    let mut row = vec![0usize; b.len() + 1];
+    let mut best = 0;
+    for x in &a {
+        let mut diagonal = 0;
+        for (j, y) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = if x == y { diagonal + 1 } else { 0 };
+            best = best.max(row[j + 1]);
+            diagonal = above;
+        }
+    }
+    best
+}
+
 /// The fewest characters that count as a match: a two-kana string is on every screen.
 const MIN_MATCH: usize = 4;
 /// The least share of kana and kanji a thread needs to be chosen automatically.
@@ -222,7 +248,11 @@ pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
                     } else if shown >= MIN_MATCH && text.contains(&block.text) {
                         Some((i, shown, shown as f64 / length as f64))
                     } else {
-                        None
+                        // OCR misread a character or two (a long dash drawn as "ー", a kanji
+                        // taken for its look-alike): the longest run both share, counted the
+                        // same way, for its share of the thread's text.
+                        let run = longest_common_run(&text, &block.text);
+                        (run >= MIN_RUN).then(|| (i, run, run as f64 / length as f64))
                     }
                 })
                 .max_by_key(|(i, matched, _)| (*matched, Some(*i) == largest))?;
@@ -938,6 +968,26 @@ mod tests {
         // counts, but for its own length and never as the whole sentence.
         let scored = score(&candidates, &blocks(&screen()));
         assert!(scored.is_empty() || scored[0].matched < 20);
+    }
+
+    #[test]
+    fn a_line_with_a_misread_dash_beats_the_name_drawn_above_it() {
+        // BGI: the nameplate sits on the dialogue box's edge, so both read as one block, and OCR
+        // reads the line's "──" as "ー一".
+        let screen = [
+            line("メデューサ兵", 180.0, 390.0, 130.0, 26.0),
+            line("「フンー一そういやこの前、地上に寄ってきた制服のお仲間がどうなったか知っ", 110.0, 440.0, 720.0, 28.0),
+            line("てるか？」", 110.0, 475.0, 100.0, 28.0),
+        ];
+        let line_text = "「フン──そういやこの前、地上に寄ってきた制服のお仲間がどうなったか知ってるか？」";
+        let candidates = [
+            Candidate { key: "name", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: "メデューサ兵", recent: 1, count: 3, noise: 0.0 },
+            Candidate { key: "line", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: line_text, recent: 1, count: 3, noise: 0.0 },
+        ];
+        let scored = score(&candidates, &blocks(&screen));
+        assert_eq!(chosen(&scored, 6.0).unwrap().key, "line");
+        // A short run in common is no match.
+        assert_eq!(longest_common_run("そういやこの前", "この前の話"), 3);
     }
 
     #[test]
