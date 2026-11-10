@@ -58,6 +58,7 @@ pub(super) fn xid(w: &tauri::WebviewWindow) -> Result<u32, String> {
 
 /// Place by Tauri's logical coordinates (desktop units on X11).
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
+    if w.label() == "overlay" { crate::debug_report::count("overlay-placed"); }
     if super::gnome::pin_supported(w.label()) && super::gnome::eligible_popup_session() {
         // Set before first map, so the bridge never races the first lookup, and so the Shell
         // can say where the window is (a display capture blanks it, `gnome::own_frames`).
@@ -179,6 +180,7 @@ pub fn inspect(w: &tauri::WebviewWindow) -> Result<Value, String> {
 /// `present`), and a panel maps without focus (`make_panel` cleared accept-focus and set
 /// `_NET_WM_USER_TIME = 0`); the raise is a restack request, not an activation.
 pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
+    crate::debug_report::count("order-front");
     if super::gamescope::handles(w) { return super::gamescope::show(w); }
     w.show().map_err(|e| e.to_string())?;
     if session().backend == Backend::X11 {
@@ -199,6 +201,7 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
 /// from a user action the compositor saw), so this answers `false`; the reader is an
 /// ordinary window there and a click focuses it.
 pub fn promote_to_key(w: &tauri::WebviewWindow) -> Result<bool, String> {
+    crate::debug_report::count("promote-to-key");
     if session().backend == Backend::Wayland {
         return Ok(false);
     }
@@ -304,6 +307,7 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
 /// if Kimochi is still not in front a moment later its frontmost ordinary window is
 /// activated instead, which at least stops the game reading the controller.
 pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
+    crate::debug_report::count("activate-self");
     match session().backend {
         Backend::Wayland => Err(
             "unsupported on Wayland: applications cannot activate themselves without an activation token"

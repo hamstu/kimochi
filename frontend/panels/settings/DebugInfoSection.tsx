@@ -2,7 +2,8 @@
  * Settings → About → Debug info: what a remote bug report needs, in two clicks. "Copy debug info"
  * puts the report (`debug_report`, as Markdown from `ui/debug-report.ts`) on the clipboard for
  * Discord or a GitHub issue; "Save debug bundle" writes it with the recent logs to a zip. Verbose
- * logging records more (window focus, every scan) until Kimochi quits. Everything is redacted
+ * logging records more (window focus, every scan, memory and CPU every few seconds) for a day,
+ * across restarts. Everything is redacted
  * natively before it reaches this page (COMMANDS.md → Debug info).
  */
 import { useEffect, useState, type ReactNode } from 'react'
@@ -109,7 +110,7 @@ export function DebugInfoSection(): ReactNode {
       <SettingsRow
         label="Verbose logging"
         controlId="about-verbose-logging"
-        description="Records more detail, such as window focus changes and every scan, until Kimochi quits. Turn it on, make the problem happen, then save a bundle."
+        description="Records more detail, such as window focus changes, every scan, and memory and CPU use every few seconds. Stays on for a day, even if Kimochi or the computer restarts. Turn it on, make the problem happen, then save a bundle."
       >
         <Switch id="about-verbose-logging" checked={verbose} onCheckedChange={toggleVerbose} />
       </SettingsRow>

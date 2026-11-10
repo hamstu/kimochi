@@ -24,6 +24,7 @@ mod compact;
 mod cover;
 mod bug_report;
 mod debug_report;
+mod vitals;
 mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
@@ -1013,6 +1014,7 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
                         // The native empty region is committed before mapping.
                         window.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
                         platform::set_input_regions(&window, Some(&[]))?;
+                        debug_report::count("overlay-shown");
                         window.show().map_err(|e| e.to_string())?;
                         // The poll still thinks the words' regions are applied.
                         reshape_soon();
@@ -4233,6 +4235,7 @@ fn sync_input_shapes(
         }
         match platform::set_input_regions(&window, Some(&local)) {
             Ok(true) => {
+                debug_report::count("input-region");
                 *applied = Some(key);
                 *failing = false;
             }
@@ -4616,6 +4619,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                         continue;
                     }
                     if let Some(window) = handle.get_webview_window(&label) {
+                        debug_report::count(if interactive { "click-through-off" } else { "click-through-on" });
                         let _ = window.set_ignore_cursor_events(!interactive);
                     }
                 }

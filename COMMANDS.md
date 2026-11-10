@@ -1266,11 +1266,12 @@ never the whole file; a key that names a secret (token, key, password, cookie, â
 replaced, and every string loses bearer tokens, JWTs, URL query strings, `key=` values, e-mail
 addresses, long opaque strings and the user's name in paths. `debug_bundle_save` asks where to
 save, then writes a zip of `report.md` (the page's Markdown, redacted again), `report.json` and
-the redacted last 512 KB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
+the redacted last 2 MB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
 `auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `input` is Windows only (`null` elsewhere):
 `{pointerDevices: [{type, product, maxContacts}], digitizer, maxTouches}`, the pens,
 touchscreens and Windows Ink tablets that reach the webviews as pointers of their own.
-`debug_verbose_set` lasts until the app quits, and each change emits `verbose-logging` (the new
+`debug_verbose_set(true)` lasts a day, across restarts (the deadline is kept in `verbose-until` in
+the app data folder, removed when it is switched off), and each change emits `verbose-logging` (the new
 `bool`) so open windows start or stop their own diagnostics. While on, window focus changes
 (`window-focus`) and every scan (`scan`) are recorded too, and pointer diagnostics:
 `pointer-trace` from each panel and from the overlay while its region editor is open
@@ -1280,6 +1281,13 @@ that drove it and the ones it ignored), and on Windows `pointer-press` for every
 hook delivers to the overlay (screen and local point, and whether it came from a mouse, a pen or
 touch, or was injected). Elements are described by tag, classes, role and label, never their
 text.
+Every 5 s a `vitals` record (`src-tauri/src/vitals.rs`) gives `gapMs` (time since the last one;
+well over 5000 means Kimochi or the machine stalled) and `counts` (how often, since the last
+one, the overlay switched click-through on or off, had its input region set, was placed or
+shown, and Kimochi raised, focused or activated a window). On Linux it adds Kimochi's own and
+its child processes' CPU (% of one core), memory and threads, the system's free memory and
+swap, memory/CPU/IO pressure (`avg10`) and load. The file is flushed to disk after each one.
+The bundle carries the last 2 MB of each log.
 The shared `ocr_frame` path records `scan` phases `started`, `complete` and `failed`, with
 engine, frame id, dimensions, elapsed milliseconds, annotation/line counts and backend where
 available. It never includes pixels or recognized text. Debug capture status uses `capture.permission`;

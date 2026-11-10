@@ -21,6 +21,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Scan after a button press** moved to **Settings → Shortcuts & Controls**.
 - Controller buttons you've set stay visible in Settings, even with no controller connected.
 - Linux and Steam Deck: with **Verbose logging** on (Settings → About), Kimochi's debug info now records which running games it offers as sources and why any are left out, so a game that can't be chosen is easier to sort out.
+- **Verbose logging** (Settings → About) now stays on for a day, even if Kimochi or your computer restarts, and also records memory and CPU use every few seconds. If Kimochi freezes your computer, turn it on, make it happen again, restart, then save a debug bundle.
 
 ### Fixed
 
