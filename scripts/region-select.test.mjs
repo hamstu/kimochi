@@ -430,6 +430,18 @@ async function withFrames(body) {
   }
 }
 
+test('in controller mode the cursor bubble stays hidden: the button bar is the one hint', async () => {
+  const selector = new RegionSelect({ pad: { confirm: 'A', cancel: 'B' } })
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  // The bubble is the one holding the Esc key cap.
+  const bubble = element.children.find((child) => child.children?.some((part) => part.tag === 'kbd'))
+  selector.pointerAt({ x: 400, y: 300 })
+  assert.equal(bubble.style.opacity, '0', 'no "esc to cancel" beside "B Cancel"')
+  selector.cancel()
+  assert.equal(await pending, null)
+})
+
 test('a stick push opens stick mode: the left stick moves the top-left corner, the right the bottom-right', async () => {
   await withFrames(async (frame) => {
     const area = { x: 0, y: 0, width: 1000, height: 800 }

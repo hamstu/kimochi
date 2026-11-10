@@ -11,7 +11,7 @@
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type JSX } from 'react'
 import { CircleHelp, Maximize2, Minimize2, PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
 import { IconButton, Tooltip } from '@kit'
@@ -40,11 +40,52 @@ import { panel } from '../bridge/tauri'
 import { demoStops, inDemo } from '../bridge/demo'
 import './main.css'
 import { BootReady, rememberBootShape } from '../entries/boot'
+import { loadedView, loadView, preloadViews, whenIdle } from './lazyViews'
+import { preloadAllSettingsPagesWhenIdle } from '../panels/settings/settingsPages'
 
-const Notebook = lazy(() =>
-  import('@texthooker/components/NotebookPanel').then((m) => ({ default: m.NotebookPanel }))
-)
-const AnkiCards = lazy(() => import('./AnkiPanel').then((m) => ({ default: m.AnkiPanel })))
+const LazyNotebook = lazy(() => loadView('notebook'))
+const LazyAnkiCards = lazy(() => loadView('anki'))
+
+// Preloaded after the first content (see lazyViews), a view renders at once; `lazy` alone would
+// still suspend for a tick on its first show (the choice is made once per mount). The fallback is for a view opened before its chunk
+// arrived, and appears only if that takes long enough to notice.
+function Notebook(props: ComponentProps<typeof LazyNotebook>): JSX.Element {
+  const [Ready] = useState(() => loadedView('notebook'))
+  return Ready ? <Ready {...props} /> : <LazyNotebook {...props} />
+}
+function AnkiCards(): JSX.Element {
+  const [Ready] = useState(() => loadedView('anki'))
+  return Ready ? <Ready /> : <LazyAnkiCards />
+}
+
+/**
+ * Beside BootReady, so it mounts with the window's real content: then, while idle, fetches the
+ * other views' chunks (the Notebook and Anki cards, then the Settings pages) so switching to them
+ * never shows a loading state.
+ */
+function PreloadViews(): null {
+  useEffect(() => whenIdle(preloadViews), [])
+  useEffect(preloadAllSettingsPagesWhenIdle, [])
+  return null
+}
+
+function ViewLoading(): JSX.Element {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const id = setTimeout(() => setShown(true), 150)
+    return () => clearTimeout(id)
+  }, [])
+  return (
+    <div className="main-view-loading" role="status">
+      {shown && (
+        <>
+          <span className="k-spinner" aria-hidden="true" />
+          <span className="sr-only">Loading</span>
+        </>
+      )}
+    </div>
+  )
+}
 
 /** Gaming Mode, as native says before the first frame (platform::platform_prelude). */
 const gamingAtBoot = (): boolean =>
@@ -284,7 +325,7 @@ export default function MainPanel(): JSX.Element {
               )}
               <Transcript visible={view === 'log'} onOpenNotebook={openNotebook} />
               {view === 'notebook' && (
-                <Suspense fallback={<div role="status">Loading notebook…</div>}>
+                <Suspense fallback={<ViewLoading />}>
                   <Notebook
                     editingId={editing}
                     onEdit={setEditing}
@@ -293,7 +334,7 @@ export default function MainPanel(): JSX.Element {
                 </Suspense>
               )}
               {view === 'anki' && (
-                <Suspense fallback={<div role="status">Loading Anki cards…</div>}>
+                <Suspense fallback={<ViewLoading />}>
                   <AnkiCards />
                 </Suspense>
               )}
@@ -310,6 +351,7 @@ export default function MainPanel(): JSX.Element {
         <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
         {!inDemo() && <HelpDialog open={help} onOpenChange={setHelp} />}
         <BootReady label="log" />
+        <PreloadViews />
       </LogActionsProvider>
     </ReaderHost>
   )

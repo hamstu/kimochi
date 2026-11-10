@@ -7,11 +7,11 @@ import {nativeError} from '../bridge/tauri'
 interface Candidate {address: string; title: string; app: string}
 interface Status {available: boolean; linked: boolean}
 
-/** A portal has no window identity. Equal-sized candidates need an explicit choice. */
+/** A portal has no window identity. Equal-sized candidates need an explicit choice (Hyprland and KDE Plasma). */
 export function HyprlandWindowLink({sourceId}: {sourceId?: string}): React.JSX.Element | null {
   const caps = useCapabilities()
   const eligible = window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session?.backend === 'wayland'
-    && caps.session.compositor === 'Hyprland' && caps.overlay.passive && Boolean(sourceId?.startsWith('portal:window:'))
+    && ['Hyprland', 'KDE'].includes(caps.session.compositor ?? '') && caps.overlay.passive && Boolean(sourceId?.startsWith('portal:window:'))
   const [open, setOpen] = useState(false)
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [selected, setSelected] = useState('')

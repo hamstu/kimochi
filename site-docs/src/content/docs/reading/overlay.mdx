@@ -43,8 +43,16 @@ To have scanned text take your clicks instead, turn off
 **Click through text to the game** in **Settings → OCR & Overlay**. You still hold <kbd>Shift</kbd>
 to look words up.
 
-On **Linux with Wayland**, Kimochi can't see Shift while another app is in front, so there the
-overlay's text always takes your clicks.
+To use another key than Shift (some visual novels skip text while Shift is held), choose a
+**Lookup key** in **Settings → Shortcuts & Controls**: Ctrl, Alt (Option on a Mac) or, on a Mac,
+Command. Your dictionary still looks words up with its own key, Shift by default, so set the same
+key in its settings too.
+
+On **Linux with Wayland**, this works on **KDE Plasma** and on **Hyprland** (with its Shift
+shortcuts bound, see [Linux](/install/linux/); there the key is always Shift). On other Wayland
+desktops Kimochi can't see Shift while another app is in front, so there the overlay's text always
+takes your clicks. On KDE Plasma with **Legacy X11 App Support** set to **Never**, hovering a word
+looks it up, without Shift.
 
 ### The hint bar
 

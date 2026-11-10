@@ -1,9 +1,11 @@
 /**
- * Settings → Shortcuts & Controls, second half: enable gamepad input, the buttons Game Mode uses
- * (the controller menu and Read along), pick the primary controller, test it.
+ * Settings → Shortcuts & Controls, second half: enable gamepad input, scan after a game button,
+ * the buttons Game Mode uses (the controller menu and Read along), pick the primary controller,
+ * test it.
  */
 import type { ReactNode } from 'react'
-import { Badge, Button, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
+import { Badge, Button, Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
+import type { AutoScanSettings } from '../../vendor/shared-types'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 import { useSetting } from '../../bridge/useSetting'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
@@ -79,6 +81,64 @@ const ROW_LABELS = Object.fromEntries(
 /** The other actions bound to the same button as `key`, by label. */
 function sharedWith(buttons: ControllerButtons, key: keyof ControllerButtons): string[] {
   return sharedButtonActions(buttons, key).map((other) => ROW_LABELS[other])
+}
+
+const SCAN_DELAYS = [
+  { value: '100', label: '100 ms' },
+  { value: '500', label: '500 ms' },
+  { value: '1000', label: '1 s' },
+  { value: '1500', label: '1.5 s' },
+  { value: '2000', label: '2 s' },
+  { value: '3000', label: '3 s' }
+]
+
+/**
+ * `autoScanSettings`: a button the game uses (the one that advances its text) also starts a scan,
+ * after a delay for the next line to appear. The button keeps working in the game; native watches
+ * it (`gamepad.rs`), and the switch gates it. Choosing a button turns it on.
+ */
+function ScanAfterButtonSection(): ReactNode {
+  const [settings, setSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
+    enabled: false,
+    scanDelay: 500
+  })
+  const update = (patch: Partial<AutoScanSettings>): void => void setSettings({ ...settings, ...patch })
+
+  return (
+    <SettingsSection
+      title="Scan after a button press"
+      description="Automatically scan after you press a button on your gamepad."
+    >
+      <SettingsRow
+        label="Button"
+        controlId="autoscan-enabled"
+        description="Choose the button that triggers a scan."
+      >
+        <GamepadButtonCapture
+          value={settings.gamepadButton}
+          onChange={(button) =>
+            update(button === undefined ? { gamepadButton: undefined, enabled: false } : { gamepadButton: button, enabled: true })
+          }
+          size="1"
+        />
+        <Switch
+          id="autoscan-enabled"
+          aria-label="Scan after a button press"
+          checked={settings.enabled && settings.gamepadButton !== undefined}
+          disabled={settings.gamepadButton === undefined}
+          onCheckedChange={(enabled) => update({ enabled })}
+        />
+      </SettingsRow>
+      <SettingsRow label="Delay" description="How long to wait before scanning.">
+        <Select
+          aria-label="Scan delay"
+          value={settings.scanDelay.toString()}
+          onValueChange={(delay) => update({ scanDelay: parseInt(delay, 10) })}
+          options={SCAN_DELAYS}
+        />
+      </SettingsRow>
+    </SettingsSection>
+  )
 }
 
 /** The buttons Game Mode uses, by where they act; shown while gamepad input is on. */
@@ -163,7 +223,10 @@ export function GamepadSections(): ReactNode {
         )}
       </SettingsSection>
 
-      {enabled && <ControllerButtonSections />}
+      {/* Shown with gamepad support off too (the buttons disabled), so the bindings stay visible. */}
+      <ScanAfterButtonSection />
+
+      <ControllerButtonSections />
 
       {enabled && (
         <SettingsSection title="Connected gamepads">

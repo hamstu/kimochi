@@ -94,6 +94,43 @@ static LAST_PICK_ERROR: Mutex<Option<String>> = Mutex::new(None);
 /// Native failure text for the last portal pick, without exposing the restore token.
 pub fn last_portal_pick_error() -> Option<String> { LAST_PICK_ERROR.lock().unwrap().clone() }
 
+/// What the last portal pick asked for and got back, for diagnostics (never the token itself).
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortalPickInfo {
+    /// The ScreenCast portal's interface version.
+    pub version: u32,
+    /// What the portal offers (`monitor`, `window`, `virtual`), if it said.
+    pub available: Vec<&'static str>,
+    /// What Kimochi asked for.
+    pub requested: Vec<&'static str>,
+    /// A saved restore token was offered (the compositor may skip its picker).
+    pub token_offered: bool,
+    /// The portal returned a new restore token.
+    pub token_returned: bool,
+    /// Each stream the portal started: kind, size and position in compositor pixels.
+    pub streams: Vec<PortalStreamInfo>,
+    /// `granted`, `cancelled`, `timeout`, `failed`, or `no-streams`.
+    pub outcome: &'static str,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct PortalStreamInfo {
+    pub kind: &'static str,
+    pub size: Option<(i32, i32)>,
+    pub position: Option<(i32, i32)>,
+}
+
+static LAST_PICK_INFO: Mutex<Option<PortalPickInfo>> = Mutex::new(None);
+
+/// The record of the last portal pick (see [`PortalPickInfo`]).
+pub fn last_portal_pick_info() -> Option<PortalPickInfo> { LAST_PICK_INFO.lock().unwrap().clone() }
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn note_pick(update: impl FnOnce(&mut PortalPickInfo)) {
+    update(LAST_PICK_INFO.lock().unwrap().get_or_insert_with(PortalPickInfo::default));
+}
+
 /// Install the restore-token store the Wayland backend uses. Call once at startup,
 /// before or after `platform_backend()`; it is read at every pick. A no-op in effect on
 /// other platforms (nothing reads it), so callers need no `cfg`.
@@ -529,6 +566,22 @@ pub(crate) mod backend {
         }
     }
 
+    fn type_names(types: ashpd::enumflags2::BitFlags<SourceType>) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        if types.contains(SourceType::Monitor) { out.push("monitor") }
+        if types.contains(SourceType::Window) { out.push("window") }
+        if types.contains(SourceType::Virtual) { out.push("virtual") }
+        out
+    }
+
+    fn kind_name(kind: StreamKind) -> &'static str {
+        match kind {
+            StreamKind::Monitor => "monitor",
+            StreamKind::Window => "window",
+            StreamKind::Virtual => "virtual",
+        }
+    }
+
     fn stream_kind(t: Option<SourceType>) -> StreamKind {
         match t {
             Some(SourceType::Window) => StreamKind::Window,
@@ -546,14 +599,19 @@ pub(crate) mod backend {
     ) -> std::result::Result<Started, PickError> {
         let version = proxy.version();
         let wanted = SourceType::Monitor | SourceType::Window;
-        let mut types = proxy
-            .available_source_types()
-            .await
-            .map(|available| available & wanted)
-            .unwrap_or(wanted);
+        let available = proxy.available_source_types().await.ok();
+        let mut types = available.map(|available| available & wanted).unwrap_or(wanted);
         if types.is_empty() {
             types = SourceType::Monitor.into();
         }
+        *super::LAST_PICK_INFO.lock().unwrap() = Some(super::PortalPickInfo {
+            version,
+            available: available.map(type_names).unwrap_or_default(),
+            requested: type_names(types),
+            token_offered: version >= 4 && token.is_some(),
+            outcome: "pending",
+            ..Default::default()
+        });
         let mut options = SelectSourcesOptions::default()
             .set_cursor_mode(CursorMode::Hidden)
             .set_sources(types)
@@ -586,7 +644,15 @@ pub(crate) mod backend {
                 size: s.size(),
             })
             .collect();
+        super::note_pick(|info| {
+            info.token_returned = response.restore_token().is_some();
+            info.streams = streams
+                .iter()
+                .map(|s| super::PortalStreamInfo { kind: kind_name(s.kind), size: s.size, position: s.position })
+                .collect();
+        });
         if streams.is_empty() {
+            super::note_pick(|info| info.outcome = "no-streams");
             return Err(PickError::Cancelled);
         }
         let fd = proxy
@@ -1110,14 +1176,22 @@ pub(crate) mod backend {
                 Ok(Err(error)) => {
                     let _ = portal.join();
                     return match error {
-                        PickError::Cancelled => { store_token(None); self.fail("cancelled") },
-                        PickError::Failed(message) => self.fail(message),
+                        PickError::Cancelled => {
+                            super::note_pick(|info| if info.outcome == "pending" { info.outcome = "cancelled" });
+                            store_token(None);
+                            self.fail("cancelled")
+                        }
+                        PickError::Failed(message) => {
+                            super::note_pick(|info| info.outcome = "failed");
+                            self.fail(message)
+                        }
                     };
                 }
                 Err(_) => {
                     // Still in the picker: closing the session takes the dialog down.
                     shared.stop.store(true, Ordering::SeqCst);
                     let _ = portal.join();
+                    super::note_pick(|info| info.outcome = "timeout");
                     return self.fail("The system picker timed out");
                 }
             };
@@ -1125,12 +1199,16 @@ pub(crate) mod backend {
             store_token(started.token.as_deref());
             match start_cast(started, shared, portal) {
                 Ok(cast) => {
+                    super::note_pick(|info| info.outcome = "granted");
                     *self.cast.lock().unwrap() = Some(cast);
                     *self.last_error.lock().unwrap() = None;
                     *super::LAST_PICK_ERROR.lock().unwrap() = None;
                     true
                 }
-                Err(e) => self.fail(e.message),
+                Err(e) => {
+                    super::note_pick(|info| info.outcome = "failed");
+                    self.fail(e.message)
+                }
             }
         }
 

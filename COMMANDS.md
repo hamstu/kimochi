@@ -73,7 +73,8 @@ Keys and defaults mirror `src/main/settings.ts`:
 `hasCompletedOnboarding`, `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
-`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `scannedTextFontSize` (14),
+`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
+`meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll), `scannedTextFontSize` (14),
 `scannedTextHistory[]`, `audioSettings.voiceId`,
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
@@ -584,7 +585,12 @@ button cannot fire, it is reported in `failed` with the reason, and `platform_ca
 record one.
 
 **Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
-`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`). Kimochi does not watch
+`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`), set in Settings → Shortcuts &
+Controls. Not while one of Kimochi's windows has focus (the controller works the window there) or
+while `autoScanSettings.enabled` is off. With verbose logging on, every press is recorded as
+`{check: "gamepad-press", pressed, panelFocused, outcome}`, so a debug report says what it did and
+why no scan followed; a change in the connected controllers is always recorded as
+`{check: "gamepad", connected: [names]}`. Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
 global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
 mouse button on macOS is the exception, above).
@@ -787,7 +793,11 @@ dictionaries and 10ten's `jpdict` database were gone after every relaunch. Nativ
 the window at startup when the active engine is an extension engine, and on a switch as
 above. The window is never shown and never focused: `visible(false)`, `focused(false)`,
 `focusable(false)`, `skip_taskbar`, no decorations, 1×1 (never shown, so not content-protected), background
-throttling off like the overlay's, and it is not a panel, so `panel` refuses its label. Its
+throttling off like the overlay's, and it is not a panel, so `panel` refuses its label. On macOS
+it is then ordered in behind everything, fully transparent and click-through, with WebKit's
+occlusion detection off (`platform::keep_engine_in_foreground`): hidden, its web process idled at
+background priority and the first lookup after a pause was slow. `KIMOCHI_NO_ENGINE_GHOST` keeps it
+hidden. Its
 document-start scripts, for all frames, are the platform prelude, the label prelude
 (label `ext-<id>`, no frame band, no popup host) and `ext-host.js`; never a Yomitan shim.
 Its navigation allowlist is the engine's own origin (and `about:blank`). It shares the one
@@ -878,6 +888,15 @@ and Linux. 10ten keeps its scheme.
   `Referer` must come from the loopback origin, the app origin or (dev) the dev server, else 403
   (`{check: 'hachidori-loopback-refused'}`). It serves only the public extension release and host
   scripts, never user data; the dictionaries stay in WebKit's storage.
+- **Sharing → Link** (`relay_link.rs`, `host/ext/relay-link.js`). A Hachidori relay admits
+  `/link` only from `chrome-extension://`, `moz-extension://` or `hoshi://hoshidicts` (403
+  otherwise), and a page cannot choose its WebSocket's `Origin`. So in the background page a
+  `ws://<host>:<port>/link` socket opens `ws://127.0.0.1:<port>/__kimochi/relay-link?to=<host>:<port>`
+  instead: only from the loopback origin itself, it repeats the upgrade to the relay's `/link`
+  (and nothing else) with `Origin: hoshi://hoshidicts`, answers with the relay's status (101, or
+  its 403/503; 502 when unreachable), then copies bytes both ways without parsing frames
+  (TCP_NODELAY on both legs). `{check: 'hachidori-relay-link', ok, to, ms | why | status}` per
+  attempt, a repeated failure only once. On the scheme origin linking is unchanged.
 - **IPC.** Tauri treats the page as remote, and remote pages never reach app commands, so the
   extension window's commands are also the inline plugin **`kimochi-ext`** (`main.rs`
   `ext_ipc_plugin`, permissions from `build.rs`): `plugin:kimochi-ext|ext_relay`,
@@ -1247,11 +1266,12 @@ never the whole file; a key that names a secret (token, key, password, cookie, �
 replaced, and every string loses bearer tokens, JWTs, URL query strings, `key=` values, e-mail
 addresses, long opaque strings and the user's name in paths. `debug_bundle_save` asks where to
 save, then writes a zip of `report.md` (the page's Markdown, redacted again), `report.json` and
-the redacted last 512 KB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
+the redacted last 2 MB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
 `auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `input` is Windows only (`null` elsewhere):
 `{pointerDevices: [{type, product, maxContacts}], digitizer, maxTouches}`, the pens,
 touchscreens and Windows Ink tablets that reach the webviews as pointers of their own.
-`debug_verbose_set` lasts until the app quits, and each change emits `verbose-logging` (the new
+`debug_verbose_set(true)` lasts a day, across restarts (the deadline is kept in `verbose-until` in
+the app data folder, removed when it is switched off), and each change emits `verbose-logging` (the new
 `bool`) so open windows start or stop their own diagnostics. While on, window focus changes
 (`window-focus`) and every scan (`scan`) are recorded too, and pointer diagnostics:
 `pointer-trace` from each panel and from the overlay while its region editor is open
@@ -1261,6 +1281,13 @@ that drove it and the ones it ignored), and on Windows `pointer-press` for every
 hook delivers to the overlay (screen and local point, and whether it came from a mouse, a pen or
 touch, or was injected). Elements are described by tag, classes, role and label, never their
 text.
+Every 5 s a `vitals` record (`src-tauri/src/vitals.rs`) gives `gapMs` (time since the last one;
+well over 5000 means Kimochi or the machine stalled) and `counts` (how often, since the last
+one, the overlay switched click-through on or off, had its input region set, was placed or
+shown, and Kimochi raised, focused or activated a window). On Linux it adds Kimochi's own and
+its child processes' CPU (% of one core), memory and threads, the system's free memory and
+swap, memory/CPU/IO pressure (`avg10`) and load. The file is flushed to disk after each one.
+The bundle carries the last 2 MB of each log.
 The shared `ocr_frame` path records `scan` phases `started`, `complete` and `failed`, with
 engine, frame id, dimensions, elapsed milliseconds, annotation/line counts and backend where
 available. It never includes pixels or recognized text. Debug capture status uses `capture.permission`;
@@ -2121,20 +2148,61 @@ Real limitations, recorded rather than papered over.
 - **Transparent windows** use Tauri's macOS private API feature, which is unsuitable for
   a Mac App Store claim.
 
-## Optional Hyprland window geometry (Linux only)
+## Optional Wayland window geometry: Hyprland and KDE Plasma (Linux only)
 
 `linux_window_geometry({operation, sourceId, windowAddress?}) -> Value` operates on
-the current portal window share. `status` reports availability/link state;
-`candidates` lists native Wayland clients matching the real captured frame size;
-`link` explicitly associates the selected candidate for this app/share lifetime.
-`pointer` returns optional read-only compositor `{x,y}` coordinates without
-capturing a frame or claiming knowledge of buttons/modifiers. The Hyprland layer
-uses these to recover missed leave events and clear stale hover/reading holds.
-Unique matches are automatic; ambiguous matches use the source panel's
-**Relink window overlay…** dialog. Capture permission still comes from the portal.
-Only Hyprland with native layer-shell and one unrotated output at (0,0) is enabled.
-Missing/unsupported geometry retains the source-image crop fallback and does not
-place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
+the current portal window share, through `platform/linux/tracking.rs`: Hyprland's IPC socket
+(`hyprland.rs`) or, on KDE Plasma, a KWin script bridge (`kwin.rs`). `status` reports
+availability/link state (`{available, linked, bounds, visible}`); `candidates` lists windows
+matching the real captured frame size (`{address, title, app}`; on KDE `address` is KWin's
+window id); `link` explicitly associates the selected candidate for this app/share lifetime.
+`pointer` returns optional read-only compositor `{x,y}` coordinates (overlay-local) without
+capturing a frame or claiming knowledge of buttons/modifiers. The layer overlay uses these to
+recover missed leave events and clear stale hover/reading holds where Shift is not gated (with
+the gate, the native pointer feed below replaces that poll). Unique matches are automatic;
+ambiguous matches use the source panel's **Relink window overlay…** dialog. Capture permission
+still comes from the portal. Missing/unsupported geometry retains the source-image crop fallback
+and does not place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
+
+- **Hyprland:** native layer-shell and one unrotated output at (0,0); XWayland clients excluded.
+- **KDE Plasma (KWin 6; 5.27 best-effort):** Kimochi serves `dev.kimochi.KWinBridge` at
+  `/dev/kimochi/KWinBridge` on its own session-bus connection and loads a KWin script
+  (`org.kde.kwin.Scripting`, plugin `kimochi-bridge`) that pushes window snapshots on change
+  (`Push(s json)`) and long-polls commands (`Next() -> s`, answered by `Reply(i seq, s json)`:
+  `snapshot`, `pointer`, `activate`). Only KWin's own bus name may call it. KWin's window
+  streams are the whole frame (title bar included) at the output's scale, so the frame is
+  matched; native Wayland and XWayland windows, fractional scales and several outputs are
+  supported: Kimochi's layer surfaces move to the linked window's output
+  (`gtk_layer_set_monitor`) and bounds/pointer are relative to it. A linked window stream holds
+  only that window, so captures of it no longer hide the overlay (no flicker).
+  `activate_source` on a linked `portal:window:` source asks the script to restore, switch
+  desktop to and activate it. `KIMOCHI_KWIN_WINDOW_TRACKING=0` disables the bridge.
+
+### Wayland Shift gate
+
+A keyboard-NONE layer overlay sees no Shift, so the native pointer poll (`spawn_cursor_poll`) gets
+one from `platform/linux/shift.rs` and the pointer from `tracking::pointer()`; with both,
+`platform::cursor()` answers on Wayland as on X11 and the overlay's words are Shift-gated
+(`View::live_regions`, `state::ShiftGate`) exactly as on macOS/Windows.
+`capabilities().overlay.shiftGate` says so and `overlay.shiftSource` names the source (`x11`,
+`xwayland`, `portal`); without one both are off and the words take the mouse.
+
+- **KDE Plasma:** KWin hands XWayland the modifier keys whichever window has the keyboard while
+  `[Xwayland] XwaylandEavesdrops` (Legacy X11 App Support) is not `None` (Plasma 6 default:
+  `Combinations`), so a private X11 connection reads them from `QueryPointer`'s mask. The poll
+  relays Shift's edges as `linux-dictionary-modifier` for the overlay's DOM-event path. When the
+  setting is `None`, `overlay.lookupOnHover` is true instead and the overlay's text looks up on
+  hover (`host/linux-scan-input.js` `hover`).
+- **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired (Hyprland fires
+  only bindings its config names).
+
+The compositor is asked for positions (≤ ~80/s) only while Shift is held or the gate is still open
+(`platform::pointer_demand`); otherwise the poll reads the modifiers alone. Buttons are known only
+over an X11 window; over Wayland ones the overlay takes them from its own surface's DOM events.
+`KIMOCHI_WAYLAND_SHIFT=0` turns the gate off. The gate follows `overlayLookupKey` where every
+modifier is readable (X11, XWayland; `platform::lookup_keys_readable`); with Hyprland's portal it is
+always Shift, and Settings offers the Lookup key row on Wayland only for `shiftSource: "xwayland"`.
+On KDE `sources.activateWindow` is true while the KWin bridge is up (`tracking::can_activate`).
 
 ## Optional GNOME Shell overlay (Linux only)
 

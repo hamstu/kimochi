@@ -368,7 +368,17 @@ function install() {
           target.events.onConnect.emit(port)
         } else if (payload.kind === 'port-message') {
           const port = relayPorts.get(payload.channel)
-          port?.onMessage.emit(payload.message, port)
+          if (port) port.onMessage.emit(payload.message, port)
+          else if (from) {
+            // This end is gone (the window reloaded, or closed the port as its frame left). Said
+            // back, so the sender's CrossFrameAPI drops the port and opens a new one on its next
+            // call, instead of every call on it waiting out an "Acknowledgement timeout" (#97).
+            const reply = { kind: 'port-close', channel: payload.channel }
+            if (!(overLane && lane.send(from, reply))) {
+              void tauri?.core?.invoke('ext_relay', { target: from, payload: reply }).catch(() => {})
+            }
+            hub.log({ check: 'relay-port-unknown', from, channel: payload.channel })
+          }
         } else if (payload.kind === 'port-close') {
           relayPorts.get(payload.channel)?.remoteClosed()
         } else if (payload.kind === 'ping') {
@@ -381,6 +391,9 @@ function install() {
         } else if (payload.kind === 'pong') {
           pending.get(payload.id)?.resolve(payload)
           pending.delete(payload.id)
+        } else if (payload.kind === 'popup-hover') {
+          // The pointer entered or left this window's pop-ups in their own window (#95).
+          root.__kimochiPopupHover?.(Boolean(payload.over))
         } else if (payload.kind === 'navigate' && payload.url) {
           const next = new URL(payload.url, root.location.href)
           // Protocol and host, not `origin`: a custom scheme's URL origin is "null" in some engines.

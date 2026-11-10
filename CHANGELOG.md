@@ -8,9 +8,39 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
 - **Audio hooking (Windows).** With Text hooking on, Sentence audio now takes each line's own clean voice straight from the game, without music or sound effects, and falls back to recording system audio when it can't. Turn it off with Audio hooking under Text hooking.
+- ⭐ **The overlay on KDE Plasma (Wayland).** Share a game's window and Kimochi now draws its text right over the game and follows the window when you move it (also to another monitor). Hold <kbd>Shift</kbd> (or your **Lookup key**) over the text to look words up and to click it, as on Windows and macOS; without it, your clicks go through to the game. **Bring to front** works for a shared window too. Before, the overlay stayed empty on Plasma, and **Bring to front** said "only a window source can be brought to the front".
+- **Hyprland:** once you've bound Kimochi's two Shift shortcuts, the overlay's text lets your clicks through to the game until you hold <kbd>Shift</kbd>, as on Windows and macOS. Before, it took every click on it.
+- **Lookup key**: choose the key you hold to look up words on the overlay (Shift, Ctrl, Alt or, on a Mac, Command) in **Settings → Shortcuts & Controls**. Handy for visual novels that skip text with Shift.
+
+- **Hachidori sharing relays (experimental).** Hachidori in Kimochi can now link to a shared Hachidori through a relay (the Hachidori Anki add-on's, or hachidori-relay) from **Settings → Dictionary → Sharing**, and use its dictionaries and settings like any linked browser, on this computer or across your network. Before, linking failed with "No shared Hachidori answered".
+
+### Changed
+
 - Text hooking is now a switch under a game's window rather than a source of its own; switching to another source and back keeps the game hooked and your window chosen.
 - Text hooking reads more games and picks their dialogue more reliably: Unity, TyranoScript and RPG Maker MV/MZ games, fewer doubled lines and fewer nameplates picked over the line, and no more freezes on games with very long script strings.
+- **Scan after a button press** moved to **Settings → Shortcuts & Controls**.
+- Controller buttons you've set stay visible in Settings, even with no controller connected.
+- Linux and Steam Deck: with **Verbose logging** on (Settings → About), Kimochi's debug info now records which running games it offers as sources and why any are left out, so a game that can't be chosen is easier to sort out.
+- **Verbose logging** (Settings → About) now stays on for a day, even if Kimochi or your computer restarts, and also records memory and CPU use every few seconds. If Kimochi freezes your computer, turn it on, make it happen again, restart, then save a debug bundle.
+
+### Fixed
+
+- Linux (Wayland): the first time you open Kimochi from the AppImage, its global shortcuts now reach your desktop. Before, they failed with "App info not found" until the next start.
+- The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
+- Linux (Wayland, e.g. KDE Plasma): no more "Bring to front" error for a shared window, and Kimochi now explains when the overlay can't follow one.
+- With Yomitan, looking up words in the Log keeps working after a pause. Before, lookups there could stop with "Acknowledgement timeout" errors.
+- Yomitan's **Hide popup on cursor exit** now works on the overlay and in the Log: the pop-up closes when you move off it.
+- Hachidori: words inside a pop-up open their own pop-up on the overlay, and on older macOS versions in the Log too.
+- Text you select in a Hachidori pop-up now goes into Anki's `{popup-selection-text}` field, as in Yomitan. Kimochi's own pop-up (Yomitan API) fills that field from your selection too.
+- Words on the overlay sit more exactly over the game's text with Apple Live Text, Google Lens and MeikiOCR, so the word under your pointer is the one looked up. Brackets and 、。 that a game sets in half a cell no longer push the rest of the line out of place.
+- AnkiConnect no longer drops out with "error sending request for url".
+- Hachidori and 10ten lookups on macOS stay quick after a pause, even while your Mac is busy: macOS no longer slows down the dictionary engine running in the background.
+- Linux (including the Steam Deck): importing large or many Yomitan dictionaries no longer stops with "not enough space" once they pass about 1 GB.
+- Steam Deck Gaming Mode: after you restart a game, Kimochi keeps reading it with its crop. Before, **Crop** and scans failed with "that source has closed" until you chose the game again.
+- The crop editor shows one hint in controller mode, the button bar, instead of a second "esc to cancel" hint beside it.
 
 ## [0.7.0] - 2026-11-07
 

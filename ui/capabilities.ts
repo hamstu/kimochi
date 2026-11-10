@@ -62,12 +62,21 @@ export interface PlatformCapabilities {
     icons: boolean
     followWindowBounds: boolean
     foregroundTracking: boolean
+    /** Whether a window source can be brought to the front; absent means it can (Linux says). */
+    activateWindow?: boolean
   }
   overlay: {
     passive: boolean
     inputRegions: 'poll' | 'native' | 'wholeWindowOnly'
     nonActivating: boolean
     nativeHoverWorkaround: boolean
+    /** Linux: whether the pointer poll reads the lookup key, so the words are gated by it. */
+    shiftGate?: boolean
+    /** Linux: where that key comes from: `x11`, `xwayland` (KDE Plasma; any modifier) or
+     * `portal` (Hyprland; Shift only). */
+    shiftSource?: 'x11' | 'xwayland' | 'portal' | null
+    /** KDE Plasma with nothing reporting Shift: the overlay's text looks up on hover. */
+    lookupOnHover?: boolean
   }
   input: {
     globalShortcuts: boolean

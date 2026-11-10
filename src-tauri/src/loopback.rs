@@ -465,6 +465,12 @@ fn serve_on(app: &tauri::AppHandle, listener: TcpListener, port: u16) -> Result<
             }
         };
         let router = axum::Router::new().fallback(handle).with_state(server);
+        // Small writes go out at once: a relay link (relay_link.rs) carries short request/reply
+        // frames, and Nagle would hold one back behind an unacknowledged write.
+        use axum::serve::ListenerExt;
+        let listener = listener.tap_io(|tcp| {
+            let _ = tcp.set_nodelay(true);
+        });
         if let Err(error) = axum::serve(listener, router).await {
             eprintln!("kimochi: hachidori loopback server stopped: {error}");
         }
@@ -489,6 +495,15 @@ async fn handle(
             return refuse(StatusCode::FORBIDDEN);
         }
     };
+    if request.uri().path() == crate::relay_link::PATH {
+        // Hachidori's link to a sharing relay: only from Hachidori's own pages on this origin.
+        if echo.as_deref() != Some(origin_of(server.port).as_str()) {
+            report(&server.app, json!({ "check": "hachidori-loopback-refused", "why": "relay-link-origin", "path": crate::relay_link::PATH }));
+            return refuse(StatusCode::FORBIDDEN);
+        }
+        let app = server.app.clone();
+        return crate::relay_link::bridge(request, move |value| report(&app, value)).await;
+    }
     let method = request.method().clone();
     let mut builder = axum::response::Response::builder()
         .header(header::CACHE_CONTROL, "no-store")

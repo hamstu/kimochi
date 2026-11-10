@@ -233,6 +233,9 @@ export const YOMITAN_MARKERS: readonly string[] = [
   "sentence-furigana",
 ];
 
+/** Markers a field can map to beyond YOMITAN_MARKERS, which Kimochi's pop-up fills itself. */
+export const LOCAL_MARKERS: readonly string[] = ["popup-selection-text"];
+
 /* Stats (Bucket 1) */
 
 export interface Stats {
@@ -287,6 +290,8 @@ export interface YomitanAnkiFields {
   audio?: string;
   sentence?: string;
   "sentence-furigana"?: string;
+  /** Not from /ankiFields: the pop-up's selection, filled in as a card is added. */
+  "popup-selection-text"?: string;
 }
 
 /** Base64-encoded media file bundled with /ankiFields when includeMedia=true. */

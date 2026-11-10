@@ -287,7 +287,7 @@ pub fn identity(source: &str) -> Option<serde_json::Value> {
 /// The `Name` and `Icon` of the application whose desktop entry claims windows of `class`
 /// (`StartupWMClass`, or an entry named after the class), as GNOME's app system would name it.
 /// Looked up once per class.
-fn desktop_entry(class: &str) -> Option<(String, String)> {
+pub(super) fn desktop_entry(class: &str) -> Option<(String, String)> {
     /// `(Name, Icon)` by window class; `None` where no entry claims the class.
     type Entries = HashMap<String, Option<(String, String)>>;
     static FOUND: LazyLock<Mutex<Entries>> = LazyLock::new(Default::default);

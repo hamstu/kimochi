@@ -117,6 +117,7 @@ fn request<B: serde::Serialize + zbus::zvariant::DynamicType>(
 
 pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) -> Value {
     stop();
+    super::shift::portal_bound(false);
     let _ = app.emit("linux-dictionary-modifier", json!({"shift":false}));
     if suspended {
         return json!({"registered":[],"failed":[],"suspended":true,"backend":"portal"});
@@ -247,9 +248,20 @@ fn bind(
         "org.freedesktop.host.portal.Registry",
     )
     .map_err(|e| e.to_string())?;
-    let _: () = registry
-        .call("Register", &("Kimochi", Dict::new()))
-        .map_err(|e| format!("Could not identify Kimochi to the shortcut portal: {e}"))?;
+    // The portal finds Kimochi.desktop through GLib's watched index of desktop files, which
+    // learns of an entry `desktop_identity` has only just written a moment later (measured on
+    // KDE Plasma 6: the first launch of an AppImage failed with "App info not found").
+    let mut attempt = 0;
+    loop {
+        match registry.call::<_, _, ()>("Register", &("Kimochi", Dict::new())) {
+            Ok(()) => break,
+            Err(e) if attempt < 10 && e.to_string().contains("App info not found") => {
+                attempt += 1;
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(e) => return Err(format!("Could not identify Kimochi to the shortcut portal: {e}")),
+        }
+    }
     let portal = Proxy::new(
         &conn,
         "org.freedesktop.portal.Desktop",
@@ -351,6 +363,7 @@ fn bind(
                 .to_string()
         })
         .collect();
+    super::shift::portal_bound(registered.iter().any(|name| name.starts_with("dictionaryShift")));
     let report = json!({"backend":"portal","pending":false,"registered":registered,"failed":[]});
     *REPORT.lock().unwrap() = Some(report.clone());
     crate::record(
@@ -383,6 +396,9 @@ fn bind(
         }
         if let Some(action) = id.strip_prefix("dev.kimochi.app.") {
             if let Some(shift) = modifiers.update(action, member == "Activated") {
+                if super::shift::portal_shift(shift) {
+                    let _ = app.emit("platform-capabilities", crate::capabilities_value(app, &app.state::<Shared>()));
+                }
                 let _ = app.emit("linux-dictionary-modifier", json!({"shift":shift}));
                 crate::record(
                     app,

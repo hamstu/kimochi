@@ -672,6 +672,7 @@ fn annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
                     y: top,
                     width: right - left,
                     height: bottom - top,
+                    segments: Vec::new(),
                 })
             })
             .collect();
@@ -696,6 +697,7 @@ fn annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
                 y: top,
                 width: right - left,
                 height: bottom - top,
+                segments: Vec::new(),
             })
         })
         .collect()
@@ -717,6 +719,7 @@ fn text_lines(lines: &[meikiocr::TextLine], width: u32, height: u32) -> Vec<Text
                 y: f64::from(top),
                 width: f64::from(right.saturating_sub(left)),
                 height: f64::from(bottom.saturating_sub(top)),
+                segments: Vec::new(),
             }
         })
         .collect()

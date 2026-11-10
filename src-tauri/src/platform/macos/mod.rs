@@ -497,6 +497,57 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     }
 }
 
+/// Keeps an extension window's web process (Hachidori's, 10ten's) at foreground priority.
+///
+/// WebKit gives a hidden view's process background priority: measured on macOS 26, the
+/// `ext-*` window's WebContent process dropped to priority 4 within seconds of idling
+/// (efficiency cores, throttled I/O), and `background_throttling(Disabled)` does not prevent
+/// it. The first lookup after a pause then took 26 ms (worst 101 ms) on an M5 Max with other
+/// background work running, against 6 ms with this. So the window is ordered in, fully
+/// transparent, untitled, click-through, behind everything, on every Space and out of the
+/// window cycle and Mission Control, and WebKit is told not to treat it as covered (an alpha-0 window
+/// otherwise counts as occluded, and occluded counts as hidden). It never activates the app.
+/// Nothing is ordered in when this WebKit lacks the private switch. `KIMOCHI_NO_ENGINE_GHOST`
+/// keeps the window hidden, as before.
+pub fn keep_engine_in_foreground(w: &tauri::WebviewWindow) -> Result<(), String> {
+    if std::env::var_os("KIMOCHI_NO_ENGINE_GHOST").is_some() {
+        return Ok(());
+    }
+    let window = w.clone();
+    let label = w.label().to_owned();
+    w.with_webview(move |platform| {
+        // SAFETY: on the main thread (with_webview), with the window's own WKWebView.
+        let result = unsafe { ghost_window(&window, platform.inner() as *mut AnyObject) };
+        if let Err(error) = result {
+            eprintln!("kimochi: {}", json!({ "check": "engine-window-foreground", "window": label, "error": error }));
+        }
+    })
+    .map_err(|e| e.to_string())
+}
+
+unsafe fn ghost_window(w: &tauri::WebviewWindow, view: *mut AnyObject) -> Result<(), String> {
+    use objc2::runtime::{Bool, Sel};
+    let view = view.as_ref().ok_or("no WKWebView")?;
+    let switch = Sel::register(c"_setWindowOcclusionDetectionEnabled:");
+    let can: Bool = msg_send![view, respondsToSelector: switch];
+    if !can.as_bool() {
+        return Err("this WebKit has no _setWindowOcclusionDetectionEnabled:".into());
+    }
+    let _: () = msg_send![view, _setWindowOcclusionDetectionEnabled: Bool::NO];
+    let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
+    // Other apps' window pickers (recorders, screen sharing) skip untitled windows.
+    (*p).setTitle(ns_string!(""));
+    // Window switchers (Raycast, AltTab) list what Accessibility lists.
+    let _: () = msg_send![p as *mut AnyObject, setAccessibilityElement: Bool::NO];
+    (*p).setAlphaValue(0.);
+    (*p).setIgnoresMouseEvents(true);
+    (*p).setCollectionBehavior(
+        overlay_behavior((*p).collectionBehavior()) | NSWindowCollectionBehavior::Transient,
+    );
+    (*p).orderBack(None);
+    Ok(())
+}
+
 /// Where an overlay-family panel may appear: on every Space, full-screen ones included.
 ///
 /// A window belongs to the Space it was opened on, so without this the overlay, the

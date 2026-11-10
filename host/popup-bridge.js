@@ -362,6 +362,14 @@ async function useRemotePopup(remote, note) {
     }
   }
 
+  // The pop-ups' own window says when the pointer enters or leaves them (ui/popup-host.js). The
+  // frontend learns it from its popup's `mouseOver` and `mouseOut`, which a `PopupProxy` never
+  // emits: emitted here, "Hide popup on cursor exit" works in this window as in a browser (#95).
+  const proxies = new Set()
+  globalThis.__kimochiPopupHover = (over) => {
+    for (const proxy of proxies) proxy.trigger?.(over ? 'mouseOver' : 'mouseOut', {})
+  }
+
   const create = PopupFactory.prototype.getOrCreatePopup
   PopupFactory.prototype.getOrCreatePopup = async function (details, ...rest) {
     const isDefault =
@@ -372,7 +380,9 @@ async function useRemotePopup(remote, note) {
       !details.parentPopupId
     if (isDefault) {
       try {
-        return await create.call(this, { ...details, frameId: remote.frameId }, ...rest)
+        const popup = await create.call(this, { ...details, frameId: remote.frameId }, ...rest)
+        proxies.add(popup)
+        return popup
       } catch (error) {
         // A popup in this window is worse than one in its own window, and far better
         // than none. Say so once, out loud, rather than looking like it worked.
@@ -437,15 +447,7 @@ export function prewarmPopups(Popup, note) {
  * deepest popup holding the point wins, as the topmost one on screen. Returns whether one did.
  */
 export function replayIntoPopup(popups, x, y, init) {
-  let best = null
-  for (const popup of popups ?? []) {
-    if (!popup?.isVisibleSync?.()) continue
-    const frame = popup._frame
-    if (!(frame instanceof HTMLIFrameElement)) continue
-    const rect = frame.getBoundingClientRect()
-    if (x < rect.left || y < rect.top || x >= rect.right || y >= rect.bottom) continue
-    if (!best || (popup.depth ?? 0) > (best.popup.depth ?? 0)) best = { popup, frame, rect }
-  }
+  const best = popupAt(popups, x, y)
   if (!best) return false
   const { frame, rect } = best
   let win = null
@@ -463,4 +465,39 @@ export function replayIntoPopup(popups, x, y, init) {
   const target = doc.elementFromPoint(clientX, clientY) ?? win
   target.dispatchEvent(new win.PointerEvent('pointermove', { ...init, clientX, clientY }))
   return true
+}
+
+/** The deepest visible Yomitan popup whose frame holds (`x`, `y`), with its frame and rectangle. */
+function popupAt(popups, x, y) {
+  let best = null
+  for (const popup of popups ?? []) {
+    if (!popup?.isVisibleSync?.()) continue
+    const frame = popup._frame
+    if (!(frame instanceof HTMLIFrameElement)) continue
+    const rect = frame.getBoundingClientRect()
+    if (x < rect.left || y < rect.top || x >= rect.right || y >= rect.bottom) continue
+    if (!best || (popup.depth ?? 0) > (best.popup.depth ?? 0)) best = { popup, frame, rect }
+  }
+  return best
+}
+
+/**
+ * Tell Yomitan's popups when the replayed pointer enters and leaves them.
+ *
+ * Yomitan learns that the pointer left a popup from a `mouseout` on the popup's frame element
+ * (js/app/popup.js `_onFrameMouseOut`), which is what "Hide popup on cursor exit" acts on, and
+ * that it came back from a `mouseover`, which cancels a pending hide. The windows holding the
+ * popups never get the mouse's own moves (see `replayIntoPopup`), so neither event ever fired
+ * and the popup stayed open (#95). This fires them as a browser would, as the pointer crosses a
+ * frame's edge: call it with every pointer sample, and with `x` null once the pointer has left
+ * the window. Returns the tracker's new state; start from null.
+ */
+export function trackPopupHover(previous, popups, x, y) {
+  const frame = x === null || y === null ? null : (popupAt(popups, x, y)?.frame ?? null)
+  if (frame === previous) return frame
+  if (previous?.isConnected) {
+    previous.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: frame }))
+  }
+  frame?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: previous }))
+  return frame
 }

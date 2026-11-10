@@ -25,7 +25,7 @@
 
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
-import { layoutParts, characterCells } from './text-layout.js'
+import { layoutParts, characterCells, chars, squeezeMargins } from './text-layout.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
 import { shownForHits } from './hit-visible.js'
 
@@ -207,8 +207,42 @@ function runElement(run, origin, vertical, inline) {
   const span = document.createElement('span')
   span.className = 'ocr-run'
   Object.assign(span.style, runStyle(run, origin, vertical, inline))
-  span.append(document.createTextNode(run.text))
+  appendRunText(span, run)
   return span
+}
+
+/** Whether a run is drawn as more than its plain text: see `appendRunText`. */
+const placedGlyphs = (run) => Boolean(run.squeeze || run.offsets)
+
+/**
+ * A run's text, as the layout placed it (text-layout.js `fit`): each mark it squeezed (SQUEEZE)
+ * in a span whose margins cut the blank half of its em, as a font's half-width alternate would,
+ * and each glyph the engine's boxes moved off the even pitch (`offsets`) moved by a margin before
+ * it. Plain inline spans, so the text stays one flow for the engines' scanners.
+ */
+function appendRunText(element, run) {
+  if (!placedGlyphs(run)) return void element.append(document.createTextNode(run.text))
+  let plain = ''
+  let previous = 0
+  chars(run.text).forEach((character, index) => {
+    const margins = squeezeMargins(character, run.squeeze)
+    const offset = run.offsets?.[index] ?? 0
+    const move = offset - previous
+    previous = offset
+    if (!margins && Math.abs(move) < 0.05) {
+      plain += character
+      return
+    }
+    if (plain) element.append(document.createTextNode(plain))
+    plain = ''
+    const glyph = document.createElement('span')
+    glyph.className = 'ocr-glyph'
+    glyph.style.marginLeft = `${(margins?.before ?? 0) * run.fontSize + move}px`
+    if (margins?.after) glyph.style.marginRight = `${margins.after * run.fontSize}px`
+    glyph.textContent = character
+    element.append(glyph)
+  })
+  if (plain) element.append(document.createTextNode(plain))
 }
 
 /**
@@ -252,7 +286,9 @@ function runSignature(runs) {
     run.text,
     ...[run.rect.x, run.rect.y, run.rect.width, run.rect.height].map(round),
     ...[run.fontSize, run.spacing, run.lead, run.shift].map(round),
-    run.weight
+    run.weight,
+    run.squeeze ?? '',
+    ...(run.offsets ?? []).map(round)
   ])
 }
 
@@ -876,7 +912,8 @@ export class TextOverlayRenderer {
           width: `${runs[0].rect.width}px`,
           height: `${runs[0].rect.height}px`
         })
-        current.textContent = box.text
+        if (placedGlyphs(runs[0])) appendRunText(current, runs[0])
+        else current.textContent = box.text
       } else {
         for (const run of runs) current.append(runElement(run, flow, vertical, true))
       }

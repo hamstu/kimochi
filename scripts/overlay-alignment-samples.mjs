@@ -1,7 +1,8 @@
 /**
  * The rendered samples of the overlay alignment corpus (scripts/fixtures/overlay-alignment/):
  * game-style text drawn glyph by glyph in headless Chrome, so where every character truly is is
- * known. Each covers a case the overlay has to line up on: dialogue with tracking, a pixel font
+ * known. Each covers a case the overlay has to line up on: dialogue with tracking, dialogue with
+ * half-width brackets and pauses, a pixel font
  * blown up 3×, long katakana runs mixed with Latin and digits, small UI text, a large title, and
  * vertical columns.
  */
@@ -16,6 +17,20 @@ export const SAMPLES = [
       { text: '「ねえ、今日は一緒に図書館へ行かない？」', font: "'Hiragino Maru Gothic ProN'", size: 36, tracking: 0.12, color: '#fff', x: 80, y: 486 },
       { text: '「ごめん、アルバイトがあるから無理なんだ。」', font: "'Hiragino Maru Gothic ProN'", size: 36, tracking: 0.12, color: '#fff', x: 80, y: 552 },
       { text: '「じゃあ、また明日にしようね。」', font: "'Hiragino Maru Gothic ProN'", size: 36, tracking: 0.12, color: '#fff', x: 80, y: 618 }
+    ]
+  },
+  {
+    // Brackets and pauses in half a cell, as many games set them: drawn full-width, each one
+    // pushes the rest of its line half a glyph along (#92).
+    name: 'halfwidth',
+    width: 1280,
+    height: 720,
+    background: '#2b2f45',
+    panels: [{ x: 40, y: 450, width: 1200, height: 240, fill: '#0e1020', stroke: '#c9cff0', border: 4, radius: 10 }],
+    lines: [
+      { text: 'ルッカ「もう完成したよ。広場の奥へ行ってみて！」', font: "'Hiragino Sans'", size: 36, tracking: 0.04, color: '#fff', x: 80, y: 486, halfWidth: '「」、。' },
+      { text: '「ええと、その……『転送装置』って何？」', font: "'Hiragino Sans'", size: 36, tracking: 0.04, color: '#fff', x: 80, y: 552, halfWidth: '「」『』、。' },
+      { text: 'クロノ「よし、行こう。」マール「うん、行こう！」', font: "'Hiragino Sans'", size: 36, tracking: 0.04, color: '#fff', x: 80, y: 618, halfWidth: '「」、。' }
     ]
   },
   {

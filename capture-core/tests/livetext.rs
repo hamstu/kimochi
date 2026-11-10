@@ -121,6 +121,22 @@ fn main() {
         println!("  # read {read:?} in {:.0}ms", observation.duration_ms);
     });
 
+    case("each line comes with its characters boxed, in order, along it", &|| {
+        // The overlay places its glyphs by these (#92). VisionKit's `children` of a line is
+        // private API: a release that drops or reshapes it should fail here, not misplace text.
+        let observation = observe(japanese_frame(900, 140, &[("今日は寒いですね", place(40.0, 40.0, 48.0))]));
+        let line = observation.lines.iter().find(|line| line.text.contains("寒い")).expect("the line");
+        let spelled: String = line.segments.iter().map(|segment| segment.text.as_str()).collect();
+        assert_eq!(spelled, line.text, "the characters spell the line");
+        for pair in line.segments.windows(2) {
+            assert!(pair[1].x >= pair[0].x, "left to right: {:?}", line.segments);
+        }
+        for segment in &line.segments {
+            assert!(segment.x >= line.x - 1.0 && segment.x + segment.width <= line.x + line.width + 1.0, "inside the line");
+            assert!(segment.width > 4.0, "in frame pixels, not fractions: {segment:?}");
+        }
+    });
+
     case("a one-character change reads as different text", &|| {
         // The case the whole settling policy is built around: two sentences that
         // a similarity threshold would call the same must not come back equal.

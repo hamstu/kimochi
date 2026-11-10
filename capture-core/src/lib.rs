@@ -41,7 +41,7 @@ pub mod text;
 pub mod win_rules;
 pub use hash::{dhash_rgba, hamming};
 pub use ids::{Platform, SourceId};
-pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver};
+pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver, TextSegment};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CaptureError {
@@ -242,7 +242,7 @@ pub fn crop_rect(crop: Option<Crop>, width: u32, height: u32) -> Result<[u32; 4]
 
 
 #[cfg(target_os = "linux")]
-pub use linux_portal::last_portal_pick_error;
+pub use linux_portal::{last_portal_pick_error, last_portal_pick_info, PortalPickInfo, PortalStreamInfo};
 
 #[cfg(test)]
 mod tests {

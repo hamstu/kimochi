@@ -901,7 +901,7 @@
         }
         return
       }
-      if (event.key === 'Shift' && !shift) {
+      if (event.key === lookupKey() && !shift) {
         shift = true
         gate()
       }
@@ -911,7 +911,7 @@
   window.addEventListener(
     'keyup',
     (event) => {
-      if (event.key !== 'Shift') return
+      if (event.key !== lookupKey()) return
       shift = false
       // Once lit, a box stays usable while the pointer is on it, as in the overlay.
       held = Boolean(boxUnderPointer()?.hasAttribute('data-lit'))
@@ -926,6 +926,8 @@
   })
 
   const clickThrough = () => settings?.clickThrough !== false
+  /** The key that opens the gate (`overlayLookupKey` in Kimochi), as `KeyboardEvent.key` names it. */
+  const lookupKey = () => ({ ctrl: 'Control', alt: 'Alt', meta: 'Meta' })[settings?.lookupKey] ?? 'Shift'
 
   /** Boxes take the pointer: always without click-through; with it, while Shift is held. */
   function gate() {

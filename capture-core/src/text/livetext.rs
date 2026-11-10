@@ -27,7 +27,7 @@
 //! `NSBitmapImageRep` that owns it — no PNG encode, no `capture:` URL, no fetch
 //! and no canvas, so nothing about reading a frame depends on that round trip.
 
-use super::{join_lines, Observation, ObserverStatus, TextLine, TextObserver};
+use super::{join_lines, Observation, ObserverStatus, TextLine, TextObserver, TextSegment};
 use crate::{CaptureError, Frame, Result};
 use block2::{Block, RcBlock};
 use objc2::rc::{autoreleasepool, Allocated, Retained};
@@ -665,6 +665,17 @@ fn to_frame_pixels(lines: Vec<TextLine>, frame: &Frame) -> Vec<TextLine> {
             y: line.y * height,
             width: line.width * width,
             height: line.height * height,
+            segments: line
+                .segments
+                .into_iter()
+                .map(|segment| TextSegment {
+                    text: segment.text,
+                    x: segment.x * width,
+                    y: segment.y * height,
+                    width: segment.width * width,
+                    height: segment.height * height,
+                })
+                .collect(),
         })
         .collect()
 }
@@ -968,34 +979,87 @@ fn extract(
                 if text.trim().is_empty() {
                     continue;
                 }
-                let has_quad: bool = msg_send![line, respondsToSelector: sel!(quad)];
-                let rect = if has_quad {
-                    let quad: *mut AnyObject = msg_send![line, quad];
-                    if quad.is_null() {
-                        NSRect::ZERO
-                    } else {
-                        let responds: bool =
-                            msg_send![quad, respondsToSelector: sel!(boundingBox)];
-                        if responds {
-                            msg_send![quad, boundingBox]
-                        } else {
-                            NSRect::ZERO
-                        }
-                    }
-                } else {
-                    NSRect::ZERO
-                };
+                let rect = bounding_box(line);
                 out.push(TextLine {
                     text,
                     x: rect.origin.x,
                     y: rect.origin.y,
                     width: rect.size.width,
                     height: rect.size.height,
+                    segments: characters_of(line),
                 });
             }
             Ok(out)
         }
     })
+}
+
+/// The bounding box of a VisionKit text object's quad (a line, or one of its characters), in
+/// fractions of the image; zero when it has none.
+///
+/// # Safety
+/// `object` is a live VisionKit text object (`VKWKLineInfo`, `VKWKTextInfo`), inside the
+/// analysis callback.
+unsafe fn bounding_box(object: *mut AnyObject) -> NSRect {
+    let has_quad: bool = msg_send![object, respondsToSelector: sel!(quad)];
+    if !has_quad {
+        return NSRect::ZERO;
+    }
+    let quad: *mut AnyObject = msg_send![object, quad];
+    if quad.is_null() {
+        return NSRect::ZERO;
+    }
+    let responds: bool = msg_send![quad, respondsToSelector: sel!(boundingBox)];
+    if responds {
+        msg_send![quad, boundingBox]
+    } else {
+        NSRect::ZERO
+    }
+}
+
+/// A line's characters with their boxes: VisionKit's `children` of a `VKWKLineInfo`, one
+/// `VKWKTextInfo` per character for Japanese (measured on macOS 26). The overlay places its glyphs
+/// by them rather than by the line's two ends alone, so a bracket or an ellipsis the game sets
+/// narrower or wider than the overlay's font does not shift the rest of the line (#92). Empty
+/// when the selector is missing or any child cannot be read: the line's own box still serves.
+///
+/// # Safety
+/// `line` is a live `VKWKLineInfo`, inside the analysis callback.
+unsafe fn characters_of(line: *mut AnyObject) -> Vec<TextSegment> {
+    let responds: bool = msg_send![line, respondsToSelector: sel!(children)];
+    if !responds {
+        return Vec::new();
+    }
+    let children: *mut AnyObject = msg_send![line, children];
+    if children.is_null() {
+        return Vec::new();
+    }
+    let count: usize = msg_send![children, count];
+    let mut out = Vec::with_capacity(count);
+    for index in 0..count {
+        let child: *mut AnyObject = msg_send![children, objectAtIndex: index];
+        if child.is_null() {
+            return Vec::new();
+        }
+        let has_string: bool = msg_send![child, respondsToSelector: sel!(string)];
+        if !has_string {
+            return Vec::new();
+        }
+        let string: Option<Retained<NSString>> = msg_send![child, string];
+        let Some(string) = string else { return Vec::new() };
+        let rect = bounding_box(child);
+        if rect.size.width <= 0. || rect.size.height <= 0. {
+            return Vec::new();
+        }
+        out.push(TextSegment {
+            text: string.to_string(),
+            x: rect.origin.x,
+            y: rect.origin.y,
+            width: rect.size.width,
+            height: rect.size.height,
+        });
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1237,6 +1301,7 @@ mod tests {
             y: 0.0,
             width: 1.0,
             height: 1.0,
+            segments: Vec::new(),
         }]));
         // A second, later delivery for the same analysis must not overwrite the
         // answer that was already taken as authoritative.
