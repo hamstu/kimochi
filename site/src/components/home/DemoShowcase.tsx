@@ -4,7 +4,7 @@ import { PlatformStrip } from './PlatformStrip'
 
 /**
  * "Runs on", then the live preview: a desktop dressed as the visitor's own OS, where Mochiko guides
- * them through Kimochi (OCR, look-ups, Anki, and the Text Hooker). `id="demo"` is the header nav's anchor.
+ * them through Kimochi (OCR, look-ups, Anki, and Text hooking). `id="demo"` is the header nav's anchor.
  */
 export function DemoShowcase() {
   const guessed = useGuessedPlatform()

@@ -67,7 +67,7 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
     let score = |d: &Decision| match &d.outcome {
         Outcome::Voiced(v) => match &v.how {
             How::Matched(m) => Some(m.score),
-            How::Timed => None,
+            How::Timed | How::Hooked => None,
         },
         _ => None,
     };

@@ -13,6 +13,8 @@ ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "
 mp3lame-encoder = "0.2.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+hound = "3.5"
+lewton = "0.10"
 
 [lints.clippy]
 # As in src-tauri: `chunks_exact(2)` says "one 16-bit sample" more plainly than `as_chunks::<2>().0`.

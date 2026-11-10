@@ -1,0 +1,14 @@
+[package]
+name = "vh-hook"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "vhhook"
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = { workspace = true }
+vh-common = { workspace = true }
+windows-sys = { workspace = true }

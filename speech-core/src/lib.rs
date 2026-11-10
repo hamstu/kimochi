@@ -13,6 +13,7 @@
 pub mod clips;
 pub mod encode;
 pub mod fbank;
+pub mod hooked;
 pub mod listener;
 pub mod matching;
 pub mod readings;

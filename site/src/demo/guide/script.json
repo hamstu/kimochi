@@ -188,7 +188,7 @@
     },
     {
       "face": "thinking",
-      "say": "One more trick! With the Text Hooker, Kimochi can read a game’s text straight out of the game, with no scanning at all. Want to see?",
+      "say": "One more trick! With Text hooking, Kimochi can read a game’s text straight out of the game, with no scanning at all. Want to see?",
       "choices": [
         { "label": "Show me!", "goto": "hook" },
         { "label": "Maybe later", "goto": "outro" }
@@ -197,7 +197,7 @@
     {
       "id": "hook",
       "face": "wink",
-      "say": "The Text Hooker works on Windows and Linux, so let’s pretend this is a Windows PC for a moment.",
+      "say": "Text hooking works on Windows and Linux, so let’s pretend this is a Windows PC for a moment.",
       "if": "notHookPlatform",
       "do": "windowsDesk"
     },
@@ -206,39 +206,27 @@
       "face": "happy",
       "say": "Open Kimochi’s source menu again.",
       "point": [{ "log": ".src-empty" }, { "log": ".src-card" }],
-      "until": [{ "logVisible": ".src-type" }, "hookStarted"],
-      "wrong": { "when": { "logClicked": "[data-grid=capture] .sg-tile" }, "goto": "hookOops" }
+      "until": [{ "logVisible": ".src-type" }, "gameSource"],
+      "ahead": { "when": "gameSource", "goto": "hookSwitch" }
     },
     {
-      "id": "hookType",
       "face": "excited",
-      "say": "This time, pick Text Hooker…",
-      "point": { "log": ".src-type", "text": "Text Hooker" },
-      "until": [{ "logVisible": "[data-grid=hook] .sg-tile" }, "hookStarted"],
-      "wrong": { "when": { "logClicked": "[data-grid=capture] .sg-tile" }, "goto": "hookOops" }
+      "say": "Pick Window or screen…",
+      "point": { "log": ".src-type", "text": "Window" },
+      "until": [{ "logVisible": "[data-grid=capture] .sg-tile" }, "gameSource"]
     },
     {
-      "id": "hookPick",
       "face": "happy",
       "say": "…and My VN again.",
-      "point": { "log": "[data-grid=hook] .sg-tile", "text": "My VN" },
-      "until": "hookStarted",
-      "wrong": { "when": { "logClicked": "[data-grid=capture] .sg-tile" }, "goto": "hookOops" },
-      "next": "hooking"
+      "point": { "log": "[data-grid=capture] .sg-tile", "text": "My VN" },
+      "until": "gameSource"
     },
     {
-      "id": "hookOops",
-      "face": "surprised",
-      "say": "Oops, that was Window or screen, which reads the game with OCR. Open the source menu again and pick My VN under Text Hooker this time.",
-      "point": [
-        { "log": "[data-grid=hook] .sg-tile", "text": "My VN" },
-        { "log": ".src-type", "text": "Text Hooker" },
-        { "log": ".src-empty" },
-        { "log": ".src-card" }
-      ],
-      "until": [{ "logVisible": "[data-grid=hook] .sg-tile" }, "hookStarted"],
-      "wrong": { "when": { "logClicked": "[data-grid=capture] .sg-tile" }, "goto": "hookOops" },
-      "next": "hookPick"
+      "id": "hookSwitch",
+      "face": "excited",
+      "say": "Kimochi can hook this game, so there’s a Text hooking box under its card. Turn it on!",
+      "point": [{ "log": "button[role=switch]", "text": "Text hooking" }, { "log": ".src-panel" }],
+      "until": "hookStarted"
     },
     {
       "id": "hooking",
@@ -249,7 +237,12 @@
     {
       "face": "surprised",
       "say": "Hooked! 🪝 Kimochi found the game’s text, and each line now comes straight from the game.",
-      "point": [{ "log": ".k-select-trigger:not(.sb-engine-select)" }, { "log": ".src-panel" }]
+      "point": [{ "log": ".src-hook-select" }, { "log": ".src-panel" }]
+    },
+    {
+      "face": "happy",
+      "say": "Audio hooking is in the same box. With it on, your Anki cards get each line’s voice straight from the game, without the music or sound effects.",
+      "point": { "log": "button[role=switch]", "text": "Audio hooking" }
     },
     {
       "face": "thinking",

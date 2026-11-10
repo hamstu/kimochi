@@ -72,8 +72,16 @@ fn class_name(hwnd: HWND) -> String {
     String::from_utf16_lossy(&buf[..len.max(0) as usize])
 }
 
+/// Owned by a window on screen: a dialog or popup of it ([`rules::owner_hides`]).
 fn owned(hwnd: HWND) -> bool {
-    unsafe { GetWindow(hwnd, GW_OWNER) }.is_ok_and(|o| !o.is_invalid())
+    unsafe { GetWindow(hwnd, GW_OWNER) }.is_ok_and(|o| {
+        !o.is_invalid()
+            && rules::owner_hides(
+                unsafe { IsWindowVisible(o) }.as_bool(),
+                frame_bounds(o).map_or(0., |b| b.width),
+                frame_bounds(o).map_or(0., |b| b.height),
+            )
+    })
 }
 
 fn window_source_id(hwnd: HWND, pid: u32) -> SourceId {

@@ -10,6 +10,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- **Audio hooking (Windows).** With Text hooking on, Sentence audio now takes each line's own clean voice straight from the game, without music or sound effects, and falls back to recording system audio when it can't. Turn it off with Audio hooking under Text hooking.
 - ⭐ **The overlay on KDE Plasma (Wayland).** Share a game's window and Kimochi now draws its text right over the game and follows the window when you move it (also to another monitor). Hold <kbd>Shift</kbd> (or your **Lookup key**) over the text to look words up and to click it, as on Windows and macOS; without it, your clicks go through to the game. **Bring to front** works for a shared window too. Before, the overlay stayed empty on Plasma, and **Bring to front** said "only a window source can be brought to the front".
 - **Hyprland:** once you've bound Kimochi's two Shift shortcuts, the overlay's text lets your clicks through to the game until you hold <kbd>Shift</kbd>, as on Windows and macOS. Before, it took every click on it.
 - **Lookup key**: choose the key you hold to look up words on the overlay (Shift, Ctrl, Alt or, on a Mac, Command) in **Settings → Shortcuts & Controls**. Handy for visual novels that skip text with Shift.
@@ -18,6 +19,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- Text hooking is now a switch under a game's window rather than a source of its own; switching to another source and back keeps the game hooked and your window chosen.
+- Text hooking reads more games and picks their dialogue more reliably: Unity, TyranoScript and RPG Maker MV/MZ games, fewer doubled lines and fewer nameplates picked over the line, and no more freezes on games with very long script strings.
 - **Scan after a button press** moved to **Settings → Shortcuts & Controls**.
 - Controller buttons you've set stay visible in Settings, even with no controller connected.
 - Linux and Steam Deck: with **Verbose logging** on (Settings → About), Kimochi's debug info now records which running games it offers as sources and why any are left out, so a game that can't be chosen is easier to sort out.

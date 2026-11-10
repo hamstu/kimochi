@@ -293,7 +293,7 @@ const MAIN: Surface = {
           param: 'input',
           label: 'Log input',
           default: 'ocr',
-          options: opts(['ocr', 'Screen (OCR)'], ['clipboard', 'Clipboard'], ['websocket', 'Texthooker (WebSocket)'], ['hook', 'Text Hooker'])
+          options: opts(['ocr', 'Window (OCR)'], ['hook', 'Window (Text hooking on)'], ['clipboard', 'Clipboard'], ['websocket', 'Texthooker (WebSocket)'])
         },
         { kind: 'toggle', param: 'nosource', label: 'No source chosen', on: '1' },
         {

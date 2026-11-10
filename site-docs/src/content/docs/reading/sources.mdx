@@ -1,6 +1,6 @@
 ---
 title: Sources and crop
-description: Choose the window or screen Kimochi reads, crop it to the dialogue, or switch to the Text Hooker, Quick Shot, the clipboard or a WebSocket.
+description: Choose the window or screen Kimochi reads, crop it to the dialogue, turn on Text hooking for a game, or switch to Quick Shot, the clipboard or a WebSocket.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -19,8 +19,7 @@ Open **Change source** (or **Choose a source** when none is set) to switch:
 
 | Source | What it reads |
 | --- | --- |
-| **Window or screen** | An app window or a whole display, with OCR. |
-| **Text Hooker** | A Windows game's text, read directly from the game. On Windows, and on Linux through Proton or Wine; see [Text Hooker](/reading/text-hooker/). |
+| **Window or screen** | An app, a game or a whole display, read with OCR. A game's text can also be read from inside the game, with [Text hooking](#text-hooking). |
 | **Quick Shot** | No source to choose: the Scan shortcut asks you to draw an area anywhere, then reads it. |
 | **Clipboard** | Text copied to the clipboard, for example by a text hooker. |
 | **WebSocket** | Lines from a text source on your network. |
@@ -32,8 +31,8 @@ Open **Change source** (or **Choose a source** when none is set) to switch:
 
 <Screenshot id="source-menu" alt="The source menu: Window or screen, Quick Shot, Clipboard and WebSocket, then Clear source." width={720} />
 
-On Windows and Linux the menu also has **Text Hooker**, under **Window or screen**; point at it to choose the
-game to hook.
+While Quick Shot, Clipboard, WebSocket or Browser is the source, the menu starts with **Back to**
+and the window or screen you read before. Choose it to go back, with Text hooking as you left it.
 
 ## Choosing a window or screen
 
@@ -51,6 +50,20 @@ Pick a window to read just that window wherever it is, or a screen to read every
 
 With **Auto switch sessions by window name** on (the default), each window you read gets its own
 [session](/log/sessions/), created the first time.
+
+## Text hooking
+
+When the window belongs to a game Kimochi can hook (a Windows game, on Windows or on Linux through
+Proton or Wine), a **Text hooking** box shows right under the source card.
+
+<Screenshot id="hook-switch" alt="The sidebar with a game's window chosen: the source card, then the Text hooking box with its switch off, its info mark and its settings button." width={272} />
+
+- Turn the switch on and Kimochi reads the game's text from inside the game, with no OCR. The box
+  then also has the hooked text and **Audio hooking**.
+- Turn it off and the window is read with OCR again. The game stays hooked, so turning it back on
+  is instant.
+
+Kimochi remembers the switch for each game. See [Text hooking](/reading/text-hooker/).
 
 ## Crop area
 
@@ -83,7 +96,7 @@ as the game's scene without its dialogue box. Without one, cards get the whole s
 Choose **Crop area → Set Anki crop area…** (**Change Anki crop area…** once there is one). The same
 editor opens, as a green box; **Save** keeps it. It shows as a green frame on the live preview. **Clear Anki crop area** removes it.
 
-A [Text Hooker](/reading/text-hooker/) source has no OCR crop area, so its card has **Anki crop**
+With [Text hooking](#text-hooking) on there is no OCR crop area, so the card has **Anki crop**
 instead of **Crop area**, which opens the editor straight away. It's there while **Enhance Anki
 cards** adds screenshots; otherwise **Change source** takes the card's whole width.
 

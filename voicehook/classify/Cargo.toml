@@ -1,0 +1,16 @@
+[package]
+name = "vh-classify"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "vh_classify"
+
+[[bin]]
+name = "vh-classify"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }

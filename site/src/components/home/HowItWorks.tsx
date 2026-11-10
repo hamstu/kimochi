@@ -10,7 +10,7 @@ const STEPS = [
   {
     n: '二',
     title: 'Scan / Read',
-    body: "Press Scan, or turn on Auto OCR. With the Text Hooker, lines come in by themselves. Turn on the overlay if you're feeling funky."
+    body: "Press Scan, or turn on Auto OCR. With Text hooking on, lines come in by themselves. Turn on the overlay if you're feeling funky."
   },
   {
     n: '三',

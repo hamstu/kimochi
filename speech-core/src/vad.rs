@@ -37,6 +37,32 @@ impl Vad {
         Ok(Self { session })
     }
 
+    /// The share of `samples`' 32 ms frames (mono, any rate) that are speech (p > 0.5), with
+    /// quiet audio brought up as `Stream` does. A whole clip at once: a hooked game sound.
+    pub fn speech_share(&mut self, samples: &[f32], sample_rate: u32) -> Result<f64, String> {
+        let audio = to_16k(samples, sample_rate);
+        let mut scorer = Scorer::default();
+        let mut peaks = std::collections::VecDeque::new();
+        let mut frame = [0f32; FRAME];
+        let (mut frames, mut speech) = (0usize, 0usize);
+        for chunk in audio.chunks_exact(FRAME) {
+            peaks.push_back(chunk.iter().fold(0f32, |m, s| m.max(s.abs())));
+            if peaks.len() > HOLD_FRAMES {
+                peaks.pop_front();
+            }
+            let held = peaks.iter().fold(0f32, |m, p| m.max(*p));
+            let gain = if held < 1e-5 { 1.0 } else { (0.5 / held).clamp(1.0, 1_000.0) };
+            for (out, s) in frame.iter_mut().zip(chunk) {
+                *out = s * gain;
+            }
+            frames += 1;
+            if scorer.score(&mut self.session, &frame)? > 0.5 {
+                speech += 1;
+            }
+        }
+        Ok(if frames == 0 { 0.0 } else { speech as f64 / frames as f64 })
+    }
+
     /// Speech in `samples` (mono, any rate), in ms from their start.
     pub fn speech(&mut self, samples: &[f32], sample_rate: u32) -> Result<Vec<Span>, String> {
         let mut audio = to_16k(samples, sample_rate);

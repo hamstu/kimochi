@@ -20,6 +20,7 @@ pub mod clean;
 pub mod pick;
 pub mod process;
 pub mod store;
+mod unity;
 pub mod wine;
 
 use crate::state::Shared;
@@ -49,6 +50,12 @@ const PICK_DELAY: Duration = Duration::from_millis(700);
 /// The fewest matched characters (scaled by the share of the thread they are) an automatic
 /// choice accepts.
 const PICK_MIN_MATCH: usize = 6;
+/// How old an IL2CPP game must be before the hooker attaches to it.
+const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
+/// Pieces in a row of a glyph or two after which a chosen thread is taken as drawing glyphs.
+const GLYPHS: u32 = 3;
+/// Lines from other engine threads, with the chosen one silent, after which the screen is read again.
+const MISSED_LINES: u32 = 3;
 
 #[derive(Debug, Clone)]
 struct Thread {
@@ -63,6 +70,9 @@ struct Thread {
     /// Of those, pieces that held script codes (`clean::strip_codes`): a thread that mixes them in
     /// with the dialogue is a worse choice than one that sends the dialogue alone.
     noisy: u64,
+    /// Pieces in a row of a character or two: a text object per glyph (Unity CatSystem draws its
+    /// line one TextMeshPro object per character), not a line.
+    glyphs: u32,
     recent: VecDeque<Instant>,
     last_at: Option<Instant>,
 }
@@ -91,6 +101,9 @@ struct Session {
     threads: Vec<Thread>,
     selected: Option<String>,
     selected_by: Option<&'static str>,
+    /// Lines other threads have sent since the chosen one last spoke, and the last of them.
+    missed: u32,
+    missed_text: String,
     pick_note: Option<String>,
     /// Why an earlier engine was given up for the one in use.
     fallback: Option<String>,
@@ -111,6 +124,10 @@ struct Session {
     /// Hooks the hooker found in the game but could not insert (`failed_hook`): the game took the
     /// hook, yet the code its text goes through could not be patched.
     hook_failures: Vec<String>,
+    /// The Unity text requests (`unity.rs`), once the hooker could not hook a Unity game's text.
+    unity: Vec<unity::Request>,
+    /// When the text being handled was set in the game (Unix ms), for a source that says.
+    text_at: Option<u64>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
 }
@@ -131,6 +148,14 @@ pub fn install(app: &tauri::AppHandle) {
 }
 
 impl Hook {
+    /// Whether the Log takes the hooked text: the reader's Text hooking switch (the Log's input
+    /// is the hooked game). Off, the game stays hooked, so turning it back on is instant.
+    fn reading_text(&self) -> bool {
+        self.app.try_state::<Shared>().is_none_or(|service| {
+            service.settings.get_path(&["superTexthooker", "inputSource"]).ok().flatten().is_none_or(|value| value == json!("hook"))
+        })
+    }
+
     fn lock(&self) -> MutexGuard<'_, Session> {
         self.session.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -154,6 +179,15 @@ impl Hook {
     /// their text box a row at a time (SiglusEngine, at each line break and ruby) are joined back
     /// up, unless the game's settings say not to.
     fn line(&self, session: &mut Session, key: &str, text: &str, carries_on: bool) {
+        // Text hooking turned off for now: the game stays hooked, but its lines go nowhere, and
+        // the next line sent once it is back on starts afresh rather than carrying on one the Log
+        // never had.
+        if !self.reading_text() {
+            session.last_key = None;
+            session.last_line = None;
+            session.last_id = None;
+            return;
+        }
         let config = self.config(session);
         let Some(mut text) = config.clean(text) else {
             if !text.trim().is_empty() {
@@ -169,7 +203,11 @@ impl Hook {
         // after a long one, even at a slow text speed (ten characters a second). A line the reader
         // clicked on to comes later than that.
         let window = (JOIN_BASE + JOIN_PER_CHAR * session.last_piece_chars as u32).min(CARRY_ON);
-        let recent = session.last_key.as_deref() == Some(key) && session.last_sent.is_some_and(|at| at.elapsed() < window);
+        // Rows are joined for engines that hand over a row at a time, never for a Unity text box,
+        // which is set whole.
+        let recent = session.last_key.as_deref() == Some(key)
+            && session.last_sent.is_some_and(|at| at.elapsed() < window)
+            && !session.threads.iter().any(|t| t.key == key && unity::is_unity(&t.hookcode));
         let piece_chars = text.chars().count();
         if !carries_on && config.join_lines && recent {
             if let Some(before) = session.last_line.as_deref() {
@@ -187,10 +225,14 @@ impl Hook {
         session.last_piece_chars = piece_chars;
         session.last_line = Some(text.to_string());
         let replaces = if carries_on { session.last_id.take() } else { None };
-        let at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        // When the game set the text, if the source says (the Unity text, timed by the DLL on the
+        // clock its voice clips are timed by); else now.
+        let at = session.text_at.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0)
+        });
         // Each line has its own screenshot of the source, taken now, under the line's id (the
         // Log line's ingest id), as a scan's lines share their scan's.
         session.lines += 1;
@@ -214,7 +256,7 @@ impl Hook {
 fn status_of(session: &Session) -> Value {
     let mut threads: Vec<&Thread> = session.threads.iter().filter(|t| !t.text.is_empty()).collect();
     // Engine hooks first, then the busiest: the order a person scans for the dialogue.
-    threads.sort_by_key(|t| (pick::is_generic_api_hook(&t.hookcode), std::cmp::Reverse(t.last_at)));
+    threads.sort_by_key(|t| (pick::is_generic(&t.hookcode, &t.name), std::cmp::Reverse(t.last_at)));
     let manifest = store::manifest();
     json!({
         "supported": cfg!(any(windows, target_os = "linux")),
@@ -230,13 +272,14 @@ fn status_of(session: &Session) -> Value {
         "pickNote": session.pick_note,
         "fallback": session.fallback,
         "hookFailures": session.hook_failures,
+        "unityText": !session.unity.is_empty(),
         "threads": threads.iter().map(|t| json!({
             "key": t.key,
             "name": pick::display_name(&t.hookcode, &t.name),
             "hookcode": t.hookcode,
             "preview": t.text.chars().rev().take(160).collect::<Vec<_>>().into_iter().rev().collect::<String>(),
             "count": t.count,
-            "generic": pick::is_generic_api_hook(&t.hookcode),
+            "generic": pick::is_generic(&t.hookcode, &t.name),
             "selected": session.selected.as_deref() == Some(t.key.as_str()),
         })).collect::<Vec<_>>(),
     })
@@ -441,6 +484,7 @@ fn read_events(
                         text: String::new(),
                         count: 0,
                         noisy: 0,
+                        glyphs: 0,
                         recent: VecDeque::new(),
                         last_at: None,
                     });
@@ -453,6 +497,9 @@ fn read_events(
                     continue;
                 }
                 crate::debug_report::trace(&hook.app, json!({ "check": "texthook-hook-failed", "hookcode": code }));
+                if unity::is_unity_failure(&code) && session.unity.is_empty() {
+                    read_unity_text(hook, &mut session, false);
+                }
                 session.hook_failures.push(code);
             }
             "thread_removed" => {
@@ -470,6 +517,7 @@ fn read_events(
                 let pid = event["pid"].as_u64().unwrap_or(0) as u32;
                 session.threads.retain(|t| t.pid != pid);
                 session.pids.retain(|p| *p != pid);
+                session.targets.retain(|p| p.pid != pid);
                 if session.pids.is_empty() {
                     session.phase = "ended";
                     session.detail = Some("The game has closed.".into());
@@ -479,6 +527,9 @@ fn read_events(
             _ => continue,
         }
         hook.publish(&session);
+        let disconnected = event["event"] == "disconnected";
+        drop(session);
+        if disconnected { refresh_voice_hook(); }
     }
     let _ = ready.send(Err("the hook helper exited".into()));
     let mut session = hook.lock();
@@ -509,17 +560,69 @@ fn failed_hook(message: &str) -> Option<String> {
     Some(rest.split_whitespace().next().unwrap_or("").to_string())
 }
 
+/// The voice hook DLL reads this Unity game's text (`unity.rs`). With `then_hooker`, the text
+/// hooker starts once the DLL is watching the text (or has said it cannot), so that the DLL's
+/// breakpoint is in before the hooker patches the same function: a hooker that patches it after
+/// copies the breakpoint along, which the DLL follows; one that patched it first leaves the DLL
+/// out.
+fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool) {
+    let mut then_hooker = then_hooker;
+    for target in session.targets.clone() {
+        let start_hooker = std::mem::take(&mut then_hooker);
+        let generation = session.generation;
+        let request = match unity::request(target.pid) {
+            Ok(r) => r,
+            Err(e) => {
+                // With no request made, `texthook_start` starts the hooker itself.
+                crate::debug_report::trace(&hook.app, json!({ "check": "texthook-unity-text", "ok": false, "error": e }));
+                continue;
+            }
+        };
+        session.unity.push(request);
+        crate::debug_report::trace(&hook.app, json!({ "check": "texthook-unity-text", "ok": true, "pid": target.pid }));
+        let app = hook.app.clone();
+        std::thread::spawn(move || {
+            // Usually in already, for sentence audio; loading it again is harmless.
+            let injected = inject_voice_dll(&app, &target);
+            if start_hooker {
+                if injected.is_ok() {
+                    let watching = unity::wait_for_watch(&crate::sentence_audio::voice_hook::base_dir(), target.pid, Duration::from_secs(10));
+                    crate::debug_report::trace(&app, json!({ "check": "texthook-unity-text", "watch": watching }));
+                }
+                std::thread::spawn(move || run(hook, generation, ENGINES[0]));
+            }
+            if let Err(e) = injected {
+                crate::debug_report::trace(&app, json!({ "check": "texthook-unity-text", "ok": false, "error": e }));
+                return;
+            }
+            unity::follow(hook, generation, target.pid);
+        });
+    }
+}
+
 fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
+    // A line drawn several times over (CatSystem2) is the line once.
+    let collapsed = pick::collapse_repeated_sentences(text);
+    let text = collapsed.as_str();
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One
     // that pauses while typing for longer than the hooker waits comes in pieces: a piece that
     // carries on the line the last one ended on finishes that line.
     let (lines, carries_on) = {
         let thread = &session.threads[index];
         let recent = thread.last_at.is_some_and(|at| at.elapsed() < CARRY_ON);
-        match recent.then(|| pick::typewriter_lines_after(&thread.text, text)).flatten() {
-            Some(lines) => (lines, true),
-            None => (pick::typewriter_lines(text), false),
+        // A Unity text object's text arrives settled, the whole text box (`unity::Settle`): one line,
+        // never frames of a typewriter to take apart.
+        if unity::is_unity(&thread.hookcode) {
+            // One that extends the object's last carries it on, however late: a typewriter paused
+            // for longer than it takes to settle (live Unity: 9 s between the pieces).
+            let carries_on = !thread.text.is_empty() && text != thread.text && text.starts_with(thread.text.as_str());
+            (vec![text.to_string()], carries_on)
+        } else {
+            match recent.then(|| pick::typewriter_lines_after(&thread.text, text)).flatten() {
+                Some(lines) => (lines, true),
+                None => (pick::typewriter_lines(text), false),
+            }
         }
     };
     {
@@ -527,6 +630,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         thread.text = lines.last().cloned().unwrap_or_default();
         thread.count += 1;
         thread.noisy += u64::from(clean::has_codes(text));
+        thread.glyphs = if pick::normalize(text).chars().count() <= 2 { thread.glyphs.saturating_add(1) } else { 0 };
         thread.last_at = Some(Instant::now());
         thread.recent.push_back(Instant::now());
         while thread.recent.len() > 32 {
@@ -554,17 +658,46 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     }
     if session.selected.as_deref() == Some(key) {
         crate::debug_report::trace(&hook.app, json!({ "check": "texthook-burst", "text": text, "lines": lines, "carriesOn": carries_on }));
+        session.missed = 0;
         for (i, line) in lines.iter().enumerate() {
             hook.line(session, key, line, carries_on && i == 0);
         }
         return;
+    }
+    // Another engine thread sending a line while the chosen one says nothing: each line once, however
+    // many threads send it and however many pieces it is typed out in.
+    {
+        let spoken = &session.threads[index];
+        let shown = pick::normalize(text);
+        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+            session.missed = session.missed.saturating_add(1);
+            session.missed_text = shown;
+        }
+    }
+    // A thread chosen automatically that has said one thing only and nothing since (a menu drawn
+    // once, the largest text on screen when it was read), while this one keeps speaking; or one
+    // that has missed the last few lines other threads sent (a hook that starts a thread per line,
+    // as Majiro's does beside the one that keeps going): the screen is read again.
+    if session.selected_by == Some("auto") && (session.threads[index].count >= 3 || session.missed >= MISSED_LINES) {
+        let stale = session
+            .threads
+            .iter()
+            .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
+            .is_some_and(|t| (t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10))) || session.missed >= MISSED_LINES);
+        if stale {
+            session.missed = 0;
+            crate::debug_report::trace(&hook.app, json!({ "check": "texthook-repick", "from": session.selected }));
+            session.selected = None;
+            session.selected_by = None;
+            hook.publish(session);
+        }
     }
     if session.selected.is_some() {
         return;
     }
     // A thread chosen for this game before is taken back as soon as it speaks.
     let saved = session.exe.as_deref().and_then(|exe| remembered(hook, exe));
-    if saved.as_ref() == Some(&session.threads[index].signature()) {
+    if unity::remembers_by_signature(&session.threads[index].hookcode) && saved.as_ref() == Some(&session.threads[index].signature()) {
         session.selected = Some(key.to_string());
         session.selected_by = Some("saved");
         session.pick_note = None;
@@ -593,6 +726,23 @@ fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
         return None;
     }
     let chosen = session.threads.iter().find(|t| t.key == selected)?;
+    // A text object that showed the line once and has shown a glyph at a time since: a thread
+    // showing whole lines takes over.
+    let spoken = &session.threads[index];
+    if chosen.glyphs >= GLYPHS && spoken.key != selected && spoken.count >= 3 && spoken.glyphs == 0 && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+        let text = pick::normalize(&spoken.text);
+        if text.chars().count() >= PICK_MIN_MATCH && pick::japanese_ratio(&text) >= 0.3 {
+            return Some(spoken.key.clone());
+        }
+    }
+    // A Unity text object showing what the chosen hooker thread has: the object is set when the
+    // line is shown, the hooker's string functions whenever the game handles the string.
+    if !unity::is_unity(&chosen.hookcode) && !chosen.text.is_empty() {
+        let text = pick::normalize(&chosen.text);
+        if let Some(unity) = session.threads.iter().find(|t| unity::is_unity(&t.hookcode) && t.count >= 2 && pick::normalize(&t.text) == text) {
+            return Some(unity.key.clone());
+        }
+    }
     if chosen.noisy < 2 || chosen.noisy * 5 < chosen.count {
         return None;
     }
@@ -601,7 +751,7 @@ fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
     let others: Vec<&Thread> = if spoken.key == selected { session.threads.iter().collect() } else { vec![spoken] };
     others
         .into_iter()
-        .filter(|t| t.key != selected && t.noisy == 0 && t.count >= 3 && !pick::is_generic_api_hook(&t.hookcode))
+        .filter(|t| t.key != selected && t.noisy == 0 && t.count >= 3 && !pick::is_generic(&t.hookcode, &t.name))
         .find(|t| {
             let text = pick::normalize(&t.text);
             let length = text.chars().count();
@@ -625,14 +775,30 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                 }
                 return;
             }
+            // Text hooking off for now: the window is not read until it is back on.
+            if !hook.reading_text() {
+                continue;
+            }
             session.pick_pending = false;
-            let candidates: Vec<Thread> = session.threads.iter().filter(|t| !t.text.is_empty()).cloned().collect();
+            // A Unity text object that has said one thing only is likely a label (a button, a
+            // menu): it says the same thing again and again, and is never sent twice.
+            // And the hooker's thread with the same text as a Unity text object is left to the
+            // object: the object is set when the line is shown, the hooker's string functions
+            // whenever the game handles the string.
+            let unity_texts: Vec<&str> = session.threads.iter().filter(|t| unity::is_unity(&t.hookcode) && t.count >= 2).map(|t| t.text.as_str()).collect();
+            let candidates: Vec<Thread> = session
+                .threads
+                .iter()
+                .filter(|t| !t.text.is_empty() && (!unity::is_unity(&t.hookcode) || t.count >= 2))
+                .filter(|t| unity::is_unity(&t.hookcode) || !unity_texts.contains(&t.text.as_str()))
+                .cloned()
+                .collect();
             (session.source_id.clone(), session.observer_engine.clone(), candidates)
         };
         let outcome = read_screen(hook, &source_id, observer_engine.as_deref()).map(|blocks| {
             let list: Vec<Candidate> = candidates
                 .iter()
-                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
+                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, name: &t.name, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
                 .collect();
             pick::score(&list, &blocks)
         });
@@ -641,15 +807,17 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             continue;
         }
         match outcome {
-            Ok(scored) => match scored.first() {
-                Some(best) if best.effective >= PICK_MIN_MATCH as f64 => {
+            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64) {
+                Some(best) => {
                     let key = best.key.clone();
                     let thread = session.threads.iter().find(|t| t.key == key).cloned();
                     if let Some(thread) = thread {
                         session.selected = Some(key.clone());
                         session.selected_by = Some("auto");
                         session.pick_note = None;
-                        if let Some(exe) = session.exe.clone() {
+                        // A generic thread won only because nothing better showed the line yet:
+                        // the screen is read again next time, not this one taken back.
+                        if let Some(exe) = session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name)) {
                             remember(hook, &exe, Some(thread.signature()));
                         }
                         hook.line(&mut session, &key, &thread.text, false);
@@ -792,7 +960,13 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
     .map_err(|e| e.to_string())
 }
 
-/// Hooks the game behind window source `source_id`; replaces any earlier session.
+/// A session in this phase is hooking its game, or has: starting it again would only interrupt it.
+fn keeps_going(phase: &str) -> bool {
+    matches!(phase, "starting" | "downloading" | "attaching" | "hooked")
+}
+
+/// Hooks the game behind window source `source_id`; replaces any earlier session, unless it is
+/// one hooking the same game.
 #[tauri::command]
 pub async fn texthook_start(source_id: String, observer_engine: Option<String>) -> Result<Value, String> {
     let hook = hook().ok_or("text hooking is not available")?;
@@ -822,6 +996,14 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     .map_err(|e| e.to_string())??;
     let generation = {
         let mut session = hook.lock();
+        // The same game, already being hooked or hooked (the game started with Hook automatically
+        // on, and the reader turned Text hooking on too): that session goes on. Stopping it while
+        // it attaches leaves the hooker's DLL in the game with no host, which then never reconnects.
+        let pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
+        if session.source_id == source_id && session.pids == pids && keeps_going(session.phase) {
+            session.observer_engine = observer_engine.or(session.observer_engine.take());
+            return Ok(status_of(&session));
+        }
         stop_child(&mut session);
         let generation = session.generation + 1;
         *session = Session {
@@ -834,15 +1016,40 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             observer_engine,
             ..Default::default()
         };
+        // A Unity (Mono) game's text is read by the voice hook DLL too, from the start: the
+        // hooker reaches it, when it can, through string functions that run at all times for
+        // all sorts of strings, which tell little of when a line is shown (`unity.rs`).
+        if cfg!(windows) && targets.iter().any(|t| t.wine.is_none() && unity::is_mono_game(&t.exe)) {
+            read_unity_text(hook, &mut session, true);
+        }
         hook.publish(&session);
         generation
     };
+    refresh_voice_hook();
     if let Some(target) = targets.first() {
         // The window's own process: under Wine the target's id is the prefix's.
         let exe = target.exe.clone();
         std::thread::spawn(move || save_icon(hook, pid, &exe));
     }
-    std::thread::spawn(move || run(hook, generation, ENGINES[0]));
+    // A Unity game's hooker starts once the DLL is watching its text (`read_unity_text`).
+    if hook.lock().unity.is_empty() {
+        // An IL2CPP game the hooker attaches to while it starts up hangs (LunaHook, live): a game
+        // started moments ago (Hook automatically) is given until `IL2CPP_STARTUP` to start first.
+        let starting = targets
+            .first()
+            .filter(|t| t.wine.is_none() && unity::is_il2cpp_game(&t.exe))
+            .and_then(|t| process::age(t.pid))
+            .and_then(|age| IL2CPP_STARTUP.checked_sub(age));
+        std::thread::spawn(move || {
+            if let Some(wait) = starting {
+                std::thread::sleep(wait);
+                if hook.lock().generation != generation {
+                    return;
+                }
+            }
+            run(hook, generation, ENGINES[0])
+        });
+    }
     Ok(status_of(&hook.lock()))
 }
 
@@ -855,7 +1062,10 @@ pub fn texthook_stop() -> Result<Value, String> {
     let generation = session.generation + 1;
     *session = Session { generation, phase: "idle", ..Default::default() };
     hook.publish(&session);
-    Ok(status_of(&session))
+    let status = status_of(&session);
+    drop(session);
+    refresh_voice_hook();
+    Ok(status)
 }
 
 #[tauri::command]
@@ -954,6 +1164,85 @@ pub fn texthook_forget(exe: String, all: bool) -> Result<(), String> {
 pub fn shutdown() {
     if let Some(hook) = hook() {
         stop_child(&mut hook.lock());
+    }
+}
+
+/// Update sentence audio when the selected text-hook game or its settings change.
+pub fn refresh_voice_hook() {
+    let Some(hook) = hook() else {
+        return;
+    };
+    let targets = hook.lock().targets.clone();
+    let Some(service) = hook
+        .app
+        .try_state::<std::sync::Arc<crate::sentence_audio::SentenceAudio>>()
+    else {
+        return;
+    };
+    let config = service.config();
+    let enabled = cfg!(windows) && config.enabled && config.voice_hook && hook.reading_text();
+    service.hook_targets(if enabled {
+        targets.iter().map(|t| t.pid).collect()
+    } else {
+        Vec::new()
+    });
+    if !enabled {
+        return;
+    }
+    for target in targets {
+        if !service.hook_attempt(target.pid) {
+            continue;
+        }
+        let app = hook.app.clone();
+        let service = service.inner().clone();
+        std::thread::spawn(move || {
+            if let Err(e) = inject_voice_dll(&app, &target) {
+                service.hook_failed(e);
+            }
+        });
+    }
+}
+
+/// Injects the voice hook DLL into `target`, from a staged copy (so a rebuild or an update can
+/// replace the app's own while the game runs). Loading it into a game that has it is harmless.
+fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<(), String> {
+    let helper = hookd_path(app)?.with_file_name(if target.bits == 32 {
+        "kimochi-hookd-x86.exe"
+    } else {
+        "kimochi-hookd-x64.exe"
+    });
+    let dll = helper.with_file_name(if target.bits == 32 {
+        "kimochi-voicehook-x86.dll"
+    } else {
+        "kimochi-voicehook-x64.dll"
+    });
+    if !dll.is_file() {
+        return Err(
+            "The voice hook DLL is missing from this build; using system audio.".into(),
+        );
+    }
+    let dll = crate::sentence_audio::voice_hook::staged_dll(
+        &dll,
+        &crate::sentence_audio::voice_hook::base_dir(),
+    )
+    .map_err(|e| format!("The voice hook DLL could not be prepared; using system audio: {e}"))?;
+    let mut command = Command::new(helper);
+    command
+        .args(["inject", "--pid", &target.pid.to_string(), "--dll"])
+        .arg(dll);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let output = command.output().map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Voice hook failed; using system audio: {}",
+            String::from_utf8_lossy(&output.stdout)
+        ))
     }
 }
 

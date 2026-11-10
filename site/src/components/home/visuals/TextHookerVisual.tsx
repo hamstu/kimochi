@@ -2,7 +2,7 @@ import { AArrowDown, AArrowUp, Ellipsis } from 'lucide-react'
 import { VisualFrame } from './parts'
 
 /**
- * The Text Hooker (Windows): the hooked line in its card over the game (`ui/hook-card.js`), with
+ * Text hooking (Windows games): the hooked line in its card over the game (`ui/hook-card.js`), with
  * Auto align setting it over the game's own text box. The card's bar along its top moves it; −/+
  * and ⋯ sit along its bottom, as in the app. Uses the Overlay card's scene (`.overlay-scene`).
  */
@@ -30,7 +30,7 @@ export function TextHookerVisual() {
           </div>
         </div>
         <span className="absolute top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-[var(--scene-chip)] px-2 py-0.5 text-[10px] font-medium whitespace-nowrap text-[var(--scene-chip-ink)]">
-          Text Hooker · LunaHook
+          Text hooking · LunaHook
         </span>
       </div>
     </VisualFrame>

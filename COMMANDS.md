@@ -1436,7 +1436,7 @@ While `sentenceAudio.enabled` is on, Kimochi keeps the last `sentenceAudio.secon
 default 30) of what the computer plays in memory, gives each Log line the clip of its voice, and
 gives each new card the audio of the line it was mined from (`src-tauri/src/sentence_audio/`, with
 the listener in `speech-core/`). `sentenceAudio` is a machine key: never synced, shared by every
-profile. Its other fields: `field` (the note field the line's audio goes in, default
+profile. Its other fields: `voiceHook` (default true: prefer clean individual voices from the selected Windows Text Hooker game, with automatic system-audio fallback), `field` (the note field the line's audio goes in, default
 `SentenceAudio`), `wordField` (the note field the mined word's audio goes in; empty, the default,
 for none), `clips` (line clips kept on disk, 5–100, default 15), `startOffsetMs` and `endOffsetMs`
 (−5000–5000, moving every clip's ends), `trim` (cut a clip placed by timing to its speech, default
@@ -1447,7 +1447,7 @@ on).
 | `sentence_audio_status` | `() -> Status`: the recording's state, for Settings → Anki |
 | `sentence_audio_line` | `({uid, text, ts, source, scan})`: the Log added a line (or changed one's text, same `uid`); `ts` its arrival in Unix ms, `source` its `LineSource`, `scan` the OCR scan it was read in or null (a scan's lines are decided together: blocks said apart each get their own voice, parts of one box share it, and a block that looks like a name box needs a strong match of its own). Ignored while recording is off. |
 | `sentence_audio_forget` | `({uids})`: the Log deleted these lines, or a fuller reading of the same text replaced them; their kept clips are removed and their voice is free for other lines again |
-| `sentence_audio_debug` | `() -> {status: Status, clips, listener}`: for Diagnostics → Sentence audio. `listener` (null until recording starts) is `{heardUntil, transcribedUntil, speaking, speechDetection, recogniser, lines, heard}`: the newest 40 lines, newest first, each `{uid, text, ts, appeared, scan, outcome (waiting, voiced, silent, missed), how, score, heard, clip: [from, to], provisional, window: [from, to], decidedAt, changes, note}` (`note`: why it was decided as it was), and what the recogniser heard in the last minute, `{startMs, endMs, text}` |
+| `sentence_audio_debug` | `() -> {status: Status, clips, listener, hooked, hookError}`: for Diagnostics → Sentence audio. `listener` (null until recording starts) is `{heardUntil, transcribedUntil, speaking, speechDetection, recogniser, lines, heard}`: the newest 40 lines, newest first, each `{uid, text, ts, appeared, scan, outcome (waiting, voiced, silent, missed), how, score, heard, clip: [from, to], provisional, window: [from, to], decidedAt, changes, note}` (`note`: why it was decided as it was), and what the recogniser heard in the last minute, `{startMs, endMs, text}` |
 | `sentence_audio_lines` | `() -> LineAudio[]`: what is known about recent lines' audio (the decided ones, and every kept clip), for the Log |
 | `sentence_audio_clip` | `({uid}) -> string \| null`: line `uid`'s clip as base64 MP3, or null when none is kept |
 | `sentence_audio_attach` | `({url, noteId, sentence, field, word, wordField, reading})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence` for `word`; its audio follows in the background into `field` (or `sentenceAudio.field` when null), and the word's into `wordField` (or `sentenceAudio.wordField`), looked for by `word`, then `reading`. Runs whenever sentence audio is on, recording or not: the line is the best match among the lines heard and the clips kept |
@@ -1458,11 +1458,10 @@ on).
 | `sentence-audio-line` | `LineAudio`: the listener decided (or decided again) a line's audio. A line matched by its words keeps its clip (a later decision only ever brings a better match), and a line without one is tried again for 40 s as more speech is transcribed. |
 
 `LineAudio` is `{uid, state, durationMs?, how?, message?}`: `state` `voiced` (a clip, `durationMs`
-long, found by its words, `how: "matched"`, or by timing, `"timed"`), `silent` (no voice was
+long, obtained directly from the game, `how: "hooked"`, found by its words, `"matched"`, or by timing, `"timed"`), `silent` (no voice was
 detected near the line) or `missed` (its audio was no longer held; `message` says why).
 
-`Status` is tagged by `state`: `off`, `needsModel` (on, waiting for the speech model, whose
-download turning it on starts: nothing is recorded without it), `starting`, `recording {source, excludesOwnAudio}` (what is
+`Status` is tagged by `state`: `off`, `needsModel` (legacy; recording and clean hooked clips now start while the fallback model downloads), `starting`, `recording {source, excludesOwnAudio}` (what is
 recorded, and whether Kimochi's own sounds are left out), `noPermission {message}` (macOS: Screen
 Recording not granted), `unavailable {message}` (this computer cannot record its audio now: no
 PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or
@@ -1732,7 +1731,7 @@ bundles ship the sidecar (cross-built with MinGW); Linux ARM64 bundles do not.
 | Command | Signature |
 | --- | --- |
 | `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine) |
-| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its launcher children (`.bin`/`.log`/`.dat`); replaces any session. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher) |
+| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher) |
 | `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |
 | `texthook_status` | `() -> HookStatus` |
 | `texthook_select` | `({key}) -> HookStatus` — the thread the Log reads, remembered for the game; `key: null` forgets it and chooses automatically again |
@@ -1754,6 +1753,7 @@ HookStatus = {
   hookFailures,                   // hook codes the hooker found but could not insert (LunaHook's
                                   // "钩子注入失败 <code>"); with nothing selected, the sidebar
                                   // suggests restarting the game
+  unityText,                      // true while the voice hook DLL reads a Unity game's text
   threads: [{key, name, hookcode, preview, count, generic, selected}]
 }
 ```
@@ -2335,3 +2335,64 @@ On GNOME, a linked portal window stream contains the selected window actor alone
 captures preserve annotation/popup visibility; screen streams and unlinked shares retain
 Linux hide-during-capture suppression and freshness fencing. General own-window exclusion
 capabilities remain false.
+
+### Clean game voices
+
+On Windows, sentence audio injects the matching x86/x64 voice DLL through the existing hookd
+helper into the explicitly selected Text Hooker game processes. The DLL injected is a copy keyed
+by its content under `%LOCALAPPDATA%/kimochi-voicehook/bin/<hash>/` (a game keeps an injected
+file locked until it exits, which would stop Kimochi from being updated). Captures are
+discovered under `%LOCALAPPDATA%/kimochi-voicehook/<pid>-<time>`; DirectSound buffers made before
+injection (Kimochi attaches to running games) are asked for their size, so streaming rings are
+not taken for loops. The build stages both DLLs with the helpers. Unsupported engines, failed
+injection, missing/invalid clips and ambiguous timing all use the existing system-audio
+listener. Linux and macOS retain that listener. Web-game launch adapters are outside this
+integration.
+
+Unity (Mono) games, attached while running: the DLL takes each `AudioSource` internal call from
+Mono's table and repoints the compiled wrapper that calls it, and names each clip by its
+AudioSource's GameObject when that is an asset path (`Sound/Voice/ch01_003.ogg`), so the voice
+folder groups and names the voice. Their text is read by the DLL as well: for a Unity Mono game
+(`UnityPlayer.dll` and `<name>_Data/Managed`), or once LunaHook reports a `…:JIT:UNITY` hook it
+could not insert, Kimochi creates the event `Local\voicehook_text_<pid>`, injects the DLL (even
+with sentence audio off) and starts the hooker only once the DLL watches
+`TMPro.TMP_Text.set_text` (a breakpoint on its first instruction, so no memory near the JIT code
+is needed; up to 10 s). The DLL writes `{"ev":"text","obj","text","t"}` events; each `TMP_Text`
+object is a thread with hookcode `UNITY:TMP_Text.set_text`, its lines sent with the DLL's time,
+whole (never joined as rows). The thread choice skips objects that have said one thing only
+(labels) and hands the choice from a hooker thread over to a Unity object showing the same text.
+
+The `hooked` diagnostics object is `{captures, clipsSeen, matched, lagMs, leadMs, typingMs,
+rejected, groups, error}`; groups carry `{group, voice, clips, medianDur, named, reasons}`.
+`hookError` describes helper failures separately. A hooked line is shown as `how: "hooked"` in
+the Log and Diagnostics, kept as MP3, and used for sentence audio on cards. Hooked clips have no
+character alignment, so they do not invent word-audio boundaries. Typewriter text updates
+retain the same clip. `sentence_audio_debug` runs off the main thread.
+
+Matching uses names/channels, looping, duration, mono format and repeated alignment with text
+anchors; groups are judged only on clips played within 20 s of a Log line. Unnamed streams need
+at least three clips and a clear score advantage over groups large enough to judge. A voice may
+start `leadMs` before its line arrives (700 ms at first, learned within 0.4–1.5 s) or `lagMs`
+after (1.5 s, learned up to 4 s), each clip measured from its nearest line. Engines that hand a
+row over once it is typed (KiriKiri, NScripter) start its voice earlier the longer it is: a typing
+delay (`typingMs`, 0–200 ms a character) is learned when it explains clearly more voice starts
+than none, and moves hook lines' anchors back. Until five voices have settled the timing, a late
+start (or a narration row's claim on a voice a quote row arriving soon after may own) waits.
+Lines opening a quote (「 or 『, after a name at most) are preferred, and a row carrying on a quote
+opened by an earlier row shares that quote's clip. A match waits while a sound of the voice's
+stream that started in the line's window is still playing. Simultaneous ambiguous candidates
+fall back. With speech detection available (Silero, not the speech model), a candidate of 1.5 s
+or more with essentially no speech (effects in the voice's format) is set aside (`rejected`).
+Lines stay matchable as long as clips are kept, so a slow pass catches up.
+
+Once the game's voices are established (a stream named as voice, three matches, or a stream
+remembered from an earlier session while its capture runs), a line given no clip is kept silent
+rather than given system audio placed by timing alone; a match by the line's words still
+counts, on every path (the listening pass and cards). Each game's voice stream and typing delay
+are remembered by executable in `%LOCALAPPDATA%/kimochi-voicehook/games.json` (`{exe: {group,
+typingMs}}`). Unfinished streams wait at most 15 seconds before fallback; a card waits up to 30 s
+while the game's own voice for its line is still expected. Speech recognition is skipped while
+all recent lines are hooked or waiting for their hooked clip. Disabling `voiceHook` immediately
+stops using captures; an already-loaded DLL stays until game exit, with at most 256 saved clips
+and a 128 MiB clip budget per capture. The reader prunes clips older than ten minutes, and
+captures untouched for an hour that belong to no hooked process are removed.

@@ -126,6 +126,8 @@ fn rules() -> &'static [(Regex, &'static str)] {
             (r"</?[A-Za-z][A-Za-z0-9_-]*(?:[\s=][^<>]*)?/?>", ""),
             // {漢字/かんじ} and {漢字:かんじ}.
             (r"\{([^{}/:]+)[/:][^{}]*\}", "$1"),
+            // [漢字/かんじ] (CatSystem; `[オレ/・・]` puts emphasis dots over the word).
+            (r"\[([^\[\]/]+)/[^\[\]]*\]", "$1"),
             // Ren'Py's text tags: {w}, {p=1.0}, {i}…{/i}, {color=#fff}.
             (r"\{/?[a-z]+(?:=[^{}]*)?\}", ""),
             // Tyrano's line and page breaks, and its ruby tag (the base text follows it).
@@ -133,6 +135,11 @@ fn rules() -> &'static [(Regex, &'static str)] {
             // ｜漢字《かんじ》 and 漢字《かんじ》.
             (r"[|｜]([^|｜《》]+)《[^《》]*》", "$1"),
             (r"(\p{Han}+)《[^《》]*》", "$1"),
+            // A speaker as CatSystem2 sends one shown under another name (`ゆかり＠？？？「…」`):
+            // the name shown.
+            (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", "$1"),
+            // A line break written out (`\n`) in the script's text: Unity CatSystem.
+            (r"(?:\\n)+([^A-Za-z\\]|$)", "\n$1"),
         ]
         .into_iter()
         .map(|(pattern, to)| (Regex::new(pattern).expect("markup rule"), to))
@@ -253,12 +260,20 @@ mod tests {
         assert_eq!(strip_markup("<b>今日</b>は<color=#fff>晴れ</color>"), "今日は晴れ");
         assert_eq!(strip_markup("<ruby>漢字<rt>かんじ</rt></ruby>です"), "漢字です");
         assert_eq!(strip_markup("{漢字/かんじ}を{読:よ}む"), "漢字を読む");
+        assert_eq!(strip_markup("[僕/ぼく]は[思/おも]った"), "僕は思った");
         assert_eq!(strip_markup("待って{w}ください{p=1.0}"), "待ってください");
         assert_eq!(strip_markup("[ruby text=\"かんじ\"]漢字[r]次"), "漢字次");
         assert_eq!(strip_markup("｜東京《とうきょう》へ行く。漢字《かんじ》"), "東京へ行く。漢字");
         // Japanese brackets are text, not markup.
         assert_eq!(strip_markup("〈彼〉は【アキ】「……」"), "〈彼〉は【アキ】「……」");
         assert_eq!(strip_markup("a < b > c"), "a < b > c");
+        // A speaker shown under another name: the name shown.
+        assert_eq!(strip_markup("ゆかり＠？？？「本当にそうかな……」"), "？？？「本当にそうかな……」");
+        assert_eq!(strip_markup("連絡先は a＠b です「はい」"), "連絡先は a＠b です「はい」");
+        // A line break written out is one.
+        assert_eq!(strip_markup("名前\\n「行くぞ」\\n"), "名前\n「行くぞ」\n");
+        assert_eq!(strip_markup("一行目\\n\\n二行目"), "一行目\n二行目");
+        assert_eq!(strip_markup("C:\\name"), "C:\\name");
     }
 
     #[test]

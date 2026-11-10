@@ -192,7 +192,28 @@ impl Luna {
     /// once: the PE header can disagree with what actually runs (launchers, emulation layers).
     pub fn attach(&self, pid: u32, bits: u32, pc: PcHooks) -> Result<(), String> {
         self.pid_call(b"Luna_ConnectProcess\0", pid)?;
-        let need = unsafe { (self.symbol::<unsafe extern "C" fn(u32) -> bool>(b"Luna_CheckIfNeedInject\0")?)(pid) };
+        let need_inject = unsafe { self.symbol::<unsafe extern "C" fn(u32) -> bool>(b"Luna_CheckIfNeedInject\0")? };
+        // A hook DLL already in the game reconnects (an earlier helper quit without detaching), or
+        // is on its way out: an earlier helper detached it moments ago (the app hooking another
+        // window of the same game). That one unloads, and then a fresh one is injected.
+        let mut need = unsafe { need_inject(pid) };
+        if !need {
+            let deadline = Instant::now() + Duration::from_secs(8);
+            loop {
+                if shared().connected.contains_key(&pid) {
+                    emit("attached", json!({ "pid": pid, "bits": bits, "reused": true }));
+                    break;
+                }
+                if unsafe { need_inject(pid) } {
+                    need = true;
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err("a hook is already loaded in this process but did not reconnect; restart the game".into());
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
         if need {
             let mut errors = Vec::new();
             for bits in [bits, if bits == 32 { 64 } else { 32 }] {
@@ -209,10 +230,6 @@ impl Luna {
             if !errors.is_empty() {
                 return Err(errors.join("; "));
             }
-        } else if self.wait_connected(pid, Duration::from_secs(6)) {
-            emit("attached", json!({ "pid": pid, "bits": bits, "reused": true }));
-        } else {
-            return Err("a hook is already loaded in this process but did not reconnect; restart the game".into());
         }
         match pc {
             PcHooks::On => self.pc_hooks(pid)?,

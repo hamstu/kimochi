@@ -3,7 +3,7 @@
  * OCR scans are also sent. The same input choice is the main window's source menu.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Aperture, Camera, Check, Clipboard, ExternalLink, Globe, Plug, Radio } from 'lucide-react'
+import { Aperture, Camera, Check, Clipboard, ExternalLink, Globe, Radio } from 'lucide-react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import {
   Button,
@@ -27,15 +27,18 @@ import { showSettingsTab } from './showSettingsTab'
 import { openTextHookerSettings } from '../../main/hookGames'
 
 type InputSource = Settings['inputSource']
-/** The texthooker's inputs, with OCR split into Screen and Quick Shot. */
-type Mode = InputSource | 'quickshot'
+/**
+ * The texthooker's inputs, with OCR split into a window or screen and Quick Shot. A hooked game
+ * (`hook`) is a window too: its Text hooking switch is under its card in the sidebar.
+ */
+type Mode = Exclude<InputSource, 'hook'> | 'quickshot'
 
 const INPUT_SOURCES = [
   {
     value: 'ocr',
-    label: 'Screen',
+    label: 'Window or screen',
     icon: <Camera />,
-    detail: 'Scan the window or screen chosen in the source menu with OCR.'
+    detail: 'Reads the window or screen chosen in the source menu: with OCR, or from inside a game with Text hooking.'
   },
   {
     value: 'quickshot',
@@ -54,12 +57,6 @@ const INPUT_SOURCES = [
     label: 'WebSocket',
     icon: <Radio />,
     detail: 'Receives plain-text messages from a text source on your network.'
-  },
-  {
-    value: 'hook',
-    label: 'Text Hooker',
-    icon: <Plug />,
-    detail: "Hooks a game's text from inside it. Choose the game in the source menu. (Windows)"
   },
   {
     value: 'browser',
@@ -152,8 +149,9 @@ export function SourcesTab(): ReactNode {
   // Text hooking reads Windows games: on Windows, and on Linux through Proton or Wine.
   const os = useCapabilities().os
   const hookable = os === 'windows' || os === 'linux'
-  const choose = (next: Mode): void => {
-    void updateSettings({ inputSource: next === 'quickshot' ? 'ocr' : next })
+  const choose = (next: Mode, current: InputSource): void => {
+    // A hooked game is already a window: choosing the window keeps its Text hooking.
+    if (!(next === 'ocr' && current === 'hook')) void updateSettings({ inputSource: next === 'quickshot' ? 'ocr' : next })
     if ((next === 'quickshot') !== quickShot) void setQuickShot(next === 'quickshot')
   }
   return (
@@ -164,18 +162,22 @@ export function SourcesTab(): ReactNode {
       <WithReaderSettings>
         {(settings) => {
           const mode: Mode =
-            settings.inputSource === 'ocr' && quickShot ? 'quickshot' : settings.inputSource
+            settings.inputSource === 'hook'
+              ? 'ocr'
+              : settings.inputSource === 'ocr' && quickShot
+                ? 'quickshot'
+                : settings.inputSource
           return (
             <div className="texthooker">
               <SettingsSection title="Input">
                 <ToggleGroup.Root
                   type="single"
                   value={mode}
-                  onValueChange={(value) => value && choose(value as Mode)}
+                  onValueChange={(value) => value && choose(value as Mode, settings.inputSource)}
                   className="input-source-list"
                   aria-label="Input"
                 >
-                  {INPUT_SOURCES.filter((option) => option.value !== 'hook' || hookable).map((option) => (
+                  {INPUT_SOURCES.map((option) => (
                     <ToggleGroup.Item
                       key={option.value}
                       value={option.value}
@@ -207,10 +209,10 @@ export function SourcesTab(): ReactNode {
                     />
                   </SettingsRow>
                 ) : null}
-                {settings.inputSource === 'hook' ? (
+                {mode === 'ocr' && hookable ? (
                   <SettingsRow
-                    label="Text Hooker settings"
-                    description="Defaults for every game, and per-game settings."
+                    label="Text hooking"
+                    description="Turn it on for a game under its card in the sidebar. Here: the defaults for every game, and each game's own settings."
                   >
                     <Button size="sm" onClick={() => void openTextHookerSettings()}>
                       Open

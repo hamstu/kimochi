@@ -300,6 +300,8 @@ export interface CardTagsSettings {
 }
 
 export interface SentenceAudioSettings {
+  /** Prefer clean voice clips from a hooked Windows game. */
+  voiceHook: boolean
   /** Keep the last `seconds` of what the computer plays, give each Log line the clip of its
       voice, and new cards their line's audio. */
   enabled: boolean
@@ -355,6 +357,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   soundEffectsClicks: true,
   soundEffectsVolume: 0.5,
   sentenceAudio: {
+    voiceHook: true,
     enabled: false,
     seconds: 30,
     field: 'SentenceAudio',

@@ -294,3 +294,6 @@ Textractor-5.2.0-Zip-Version-English-Only.zip: TextractorCLI.exe and
 texthook.dll for x86 and x64, with that release's Visual C++ runtime DLLs.
 Its LICENSE (from the upstream tag v5.2.0) travels with the download as
 LICENSE.txt. Source: the upstream tag v5.2.0.
+
+Clean game voice decoding uses hound (Apache-2.0) and lewton (MIT OR Apache-2.0),
+with ogg (BSD-3-Clause), compiled from their crates.io source distributions.

@@ -18,6 +18,7 @@
 //!   fields are filled. The card is never held up: the audio follows it.
 //!
 //! Settings: `sentenceAudio` (a machine key, never synced: recording is this computer's choice).
+pub(crate) mod voice_hook;
 use crate::reader::ankiconnect;
 use crate::settings::Settings;
 use base64::Engine as _;
@@ -39,8 +40,12 @@ use tauri::{Emitter, Manager};
 /// How long a card waits for its line to be decided (its voice to end) before taking what has
 /// been heard.
 const MAX_WAIT_MS: f64 = 15_000.0;
+/// How long a card waits while the game's own voice for its line is still expected.
+const HOOK_WAIT_MS: f64 = 30_000.0;
 const DRAIN_EVERY: Duration = Duration::from_millis(50);
 const LISTEN_EVERY: Duration = Duration::from_millis(100);
+/// How long a line the hook gave up on keeps the listener running until it is decided.
+const UNDECIDED_MS: f64 = 300_000.0;
 /// How often the listener looks for the speech model (downloaded, or removed).
 const MODEL_CHECK_EVERY: Duration = Duration::from_secs(2);
 /// CPU threads the recogniser uses: enough to keep well ahead of the recording, little enough
@@ -58,6 +63,8 @@ const DEBUG_HEARD_MS: f64 = 60_000.0;
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
     pub enabled: bool,
+    /// Prefer clean game clips on Windows; fall back when unavailable.
+    pub voice_hook: bool,
     /// Audio kept, in seconds.
     pub seconds: f64,
     /// The note field the line's audio goes in.
@@ -77,6 +84,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: false,
+            voice_hook: true,
             seconds: 30.0,
             field: "SentenceAudio".into(),
             word_field: String::new(),
@@ -90,12 +98,7 @@ impl Default for Config {
 
 impl Config {
     pub fn load(settings: &Settings) -> Self {
-        let mut config: Config = settings
-            .get("sentenceAudio")
-            .ok()
-            .flatten()
-            .and_then(|v| serde_json::from_value(v).ok())
-            .unwrap_or_default();
+        let mut config: Config = settings.get("sentenceAudio").ok().flatten().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
         config.seconds = config.seconds.clamp(10.0, 120.0);
         config.clips = config.clips.clamp(5, 100);
         config.start_offset_ms = config.start_offset_ms.clamp(-5_000.0, 5_000.0);
@@ -114,21 +117,30 @@ impl Config {
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum State {
     Off,
-    /// On, waiting for the speech model to download: nothing is recorded without it.
-    NeedsModel,
     Starting,
     /// `source`: what is recorded. `excludesOwnAudio`: Kimochi's own sounds are left out.
     #[serde(rename_all = "camelCase")]
-    Recording { source: String, excludes_own_audio: bool },
+    Recording {
+        source: String,
+        excludes_own_audio: bool,
+    },
     /// macOS: Screen Recording is not granted.
-    NoPermission { message: String },
+    NoPermission {
+        message: String,
+    },
     /// This computer cannot record its audio now (no PipeWire, no output device); tried again
     /// every `RETRY_UNAVAILABLE`.
-    Unavailable { message: String },
+    Unavailable {
+        message: String,
+    },
     /// No backend for this OS.
-    Unsupported { message: String },
+    Unsupported {
+        message: String,
+    },
     /// The stream failed or stopped; it is started again shortly.
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 /// Whether lines are matched by their words: the speech model's state in the listener.
@@ -139,7 +151,9 @@ pub enum Recogniser {
     Absent,
     Loading,
     Ready,
-    Failed { message: String },
+    Failed {
+        message: String,
+    },
 }
 
 /// What happened to the last card's audio, for Settings.
@@ -186,6 +200,8 @@ pub struct LineAudio {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Debug {
+    pub hooked: kimochi_speech::hooked::Report,
+    pub hook_error: Option<String>,
     pub status: Status,
     /// Clips kept on disk.
     pub clips: usize,
@@ -226,15 +242,20 @@ enum Input {
 /// The listener and its own copy of the recording, owned by the `listen` thread (and borrowed by
 /// a card that cannot wait).
 struct Ears {
+    hooked: kimochi_speech::hooked::Hooked,
+    discovery: voice_hook::Discovery,
     listener: Listener,
     ring: AudioRing,
     /// The next sample of the shared ring to copy.
     cursor: Option<u64>,
     model: Option<PathBuf>,
     model_checked: Option<Instant>,
+    /// The speech model being loaded on its own thread (seconds on a slow CPU), for `model`.
+    loading: Option<std::sync::mpsc::Receiver<(PathBuf, Result<SenseVoice, String>)>>,
 }
 
 pub struct SentenceAudio {
+    capture: Mutex<voice_hook::Capture>,
     host: Arc<Host>,
     settings: Arc<Settings>,
     ring: Arc<Mutex<AudioRing>>,
@@ -256,20 +277,12 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl SentenceAudio {
     pub fn new(app: tauri::AppHandle, settings: Arc<Settings>) -> Arc<Self> {
-        let clips_dir = app
-            .path()
-            .app_local_data_dir()
-            .map(|d| d.join("sentence-audio"))
-            .unwrap_or_else(|_| std::env::temp_dir().join("kimochi-sentence-audio"));
+        let clips_dir = app.path().app_local_data_dir().map(|d| d.join("sentence-audio")).unwrap_or_else(|_| std::env::temp_dir().join("kimochi-sentence-audio"));
         let (runtime_app, model_app, fetch_app, emit_app) = (app.clone(), app.clone(), app.clone(), app);
         let host = Host {
             runtime: Box::new(move || crate::meiki_ocr::onnx_runtime(&runtime_app)),
-            model_dir: Box::new(move || {
-                crate::model_store::models_dir(&model_app, crate::model_store::Engine::SenseVoice).ok()
-            }),
-            fetch_model: Box::new(move || {
-                crate::model_store::ensure_started(&fetch_app, crate::model_store::Engine::SenseVoice)
-            }),
+            model_dir: Box::new(move || crate::model_store::models_dir(&model_app, crate::model_store::Engine::SenseVoice).ok()),
+            fetch_model: Box::new(move || crate::model_store::ensure_started(&fetch_app, crate::model_store::Engine::SenseVoice)),
             emit: Box::new(move |line| {
                 let _ = emit_app.emit("sentence-audio-line", line);
             }),
@@ -280,6 +293,7 @@ impl SentenceAudio {
     fn with_host(settings: Arc<Settings>, host: Host, clips_dir: PathBuf) -> Arc<Self> {
         let config = Config::load(&settings);
         Arc::new(Self {
+            capture: Mutex::new(voice_hook::Capture::default()),
             host: Arc::new(host),
             settings,
             ring: Arc::new(Mutex::new(AudioRing::new(48_000, config.seconds))),
@@ -304,6 +318,7 @@ impl SentenceAudio {
         let config = self.config();
         lock(&self.ring).set_seconds(config.seconds);
         lock(&self.store).set_keep(config.clips);
+        crate::text_hook::refresh_voice_hook();
         let mut running = lock(&self.running);
         if config.enabled == *running {
             return;
@@ -311,25 +326,10 @@ impl SentenceAudio {
         *running = config.enabled;
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         if config.enabled {
-            if (self.host.model_dir)().is_some() {
-                self.start(generation);
-            } else {
-                // The speech model is required: fetch it, and start once it is there.
-                *lock(&self.state) = State::NeedsModel;
-                let service = self.clone();
-                std::thread::Builder::new()
-                    .name("sentence-audio-model".into())
-                    .spawn(move || {
-                        (service.host.fetch_model)();
-                        while service.live(generation) {
-                            if (service.host.model_dir)().is_some() {
-                                service.start(generation);
-                                break;
-                            }
-                            std::thread::sleep(MODEL_CHECK_EVERY);
-                        }
-                    })
-                    .ok();
+            self.start(generation);
+            if (self.host.model_dir)().is_none() {
+                let host = self.host.clone();
+                std::thread::spawn(move || (host.fetch_model)());
             }
         } else {
             *lock(&self.state) = State::Off;
@@ -344,15 +344,9 @@ impl SentenceAudio {
     fn start(self: &Arc<Self>, generation: u64) {
         *lock(&self.state) = State::Starting;
         let (ring, state, current) = (self.ring.clone(), self.state.clone(), self.generation.clone());
-        std::thread::Builder::new()
-            .name("sentence-audio".into())
-            .spawn(move || record(generation, current, ring, state))
-            .ok();
+        std::thread::Builder::new().name("sentence-audio".into()).spawn(move || record(generation, current, ring, state)).ok();
         let service = self.clone();
-        std::thread::Builder::new()
-            .name("sentence-audio-listen".into())
-            .spawn(move || service.listen(generation))
-            .ok();
+        std::thread::Builder::new().name("sentence-audio-listen".into()).spawn(move || service.listen(generation)).ok();
     }
 
     pub fn status(&self) -> Status {
@@ -373,7 +367,7 @@ impl SentenceAudio {
     }
 
     fn recording(&self) -> bool {
-        matches!(*lock(&self.state), State::Recording { .. })
+        matches!(*lock(&self.state), State::Recording { .. }) || (*lock(&self.running) && !lock(&self.capture).pids.is_empty())
     }
 
     fn live(&self, generation: u64) -> bool {
@@ -395,8 +389,34 @@ impl SentenceAudio {
 
     /// What the listener knows, for the Diagnostics window.
     pub fn debug(&self) -> Debug {
-        let report = lock(&self.ears).as_ref().map(|ears| ears.listener.report(DEBUG_LINES, DEBUG_HEARD_MS));
-        Debug { status: self.status(), clips: lock(&self.store).all().count(), listener: report }
+        let mut report = lock(&self.ears).as_ref().map(|ears| ears.listener.report(DEBUG_LINES, DEBUG_HEARD_MS));
+        if let Some(report) = report.as_mut() {
+            let store = lock(&self.store);
+            for line in &mut report.lines {
+                // The line's own state too: its clip may have left the store (only the newest `clips` are kept) since.
+                let kept = self.line_state(&line.uid);
+                let state = kept.as_ref().filter(|l| l.how.as_deref() == Some("hooked"));
+                let info = store.get(&line.uid).filter(|i| i.how == "hooked");
+                if kept.as_ref().is_some_and(|l| l.state == "silent") && line.outcome == "voiced" {
+                    // The listener placed audio by timing alone, but with the game's voices being
+                    // captured the line was kept as unvoiced (see `listen`): show what the Log has.
+                    line.outcome = "silent";
+                    line.how = None;
+                    line.clip = None;
+                    line.note = "Unvoiced: the game's voices are being captured and none came with this line.".into();
+                } else if state.is_some() || info.is_some() {
+                    line.outcome = "voiced";
+                    line.how = Some("hooked");
+                    line.score = None;
+                    line.heard = None;
+                    line.clip = info.map(|info| (info.start_ms, info.start_ms + info.duration_ms));
+                    line.provisional = false;
+                    line.note = "Clean game voice, matched by capture timing and stream heuristics.".into();
+                }
+            }
+        }
+        let hooked = lock(&self.ears).as_ref().map(|ears| ears.hooked.report.clone()).unwrap_or_default();
+        Debug { status: self.status(), clips: lock(&self.store).all().count(), listener: report, hooked, hook_error: lock(&self.capture).error.clone() }
     }
 
     /// The automatic-scan observer read `text` from the screen at `at_ms`.
@@ -412,13 +432,7 @@ impl SentenceAudio {
         let mut out: Vec<LineAudio> = lock(&self.lines).iter().cloned().collect();
         for info in lock(&self.store).all() {
             if !out.iter().any(|l| l.uid == info.uid) {
-                out.push(LineAudio {
-                    uid: info.uid.clone(),
-                    state: "voiced",
-                    duration_ms: Some(info.duration_ms),
-                    how: Some(info.how.clone()),
-                    message: None,
-                });
+                out.push(LineAudio { uid: info.uid.clone(), state: "voiced", duration_ms: Some(info.duration_ms), how: Some(info.how.clone()), message: None });
             }
         }
         out
@@ -449,15 +463,25 @@ impl SentenceAudio {
             if !self.live(generation) {
                 break;
             }
+            let began = Instant::now();
             let ears = ears.get_or_insert_with(|| self.hear());
             self.check_model(ears);
+            let model_ms = began.elapsed().as_millis();
             self.copy_audio(ears);
             ears.listener.cutting = self.config().cutting();
+            ears.discovery.poll(&lock(&self.capture), &mut ears.hooked, self.config().voice_hook);
+            ears.hooked.max_wait_ms = (self.config().seconds * 1000.0 - 2000.0).min(15_000.0);
             for input in lock(&self.inbox).drain(..) {
                 match input {
-                    Input::Line(line) => ears.listener.line(line),
+                    Input::Line(line) => {
+                        lock(&self.store).update_hooked_text(&line.uid, &line.text);
+                        ears.listener.line(line.clone());
+                        let line = ears.listener.get_line(&line.uid).cloned().unwrap_or(line);
+                        ears.hooked.line(line);
+                    }
                     Input::Forget(uids) => {
                         ears.listener.forget(&uids);
+                        ears.hooked.forget(&uids);
                         lock(&self.lines).retain(|l| !uids.contains(&l.uid));
                         let mut store = lock(&self.store);
                         for uid in &uids {
@@ -467,9 +491,43 @@ impl SentenceAudio {
                     Input::Screen(text, at) => ears.listener.screen.observed(&text, at),
                 }
             }
-            let decisions = ears.listener.tick(&ears.ring, now_ms());
+            let inputs_ms = began.elapsed().as_millis();
+            let now = now_ms();
+            for matched in ears.hooked.tick(now) {
+                if let Err(e) = self.keep_hooked(&matched) {
+                    ears.hooked.report.error = Some(e);
+                    ears.hooked.retry(&matched.line.uid);
+                }
+            }
+            ears.discovery.remember(&mut ears.hooked, &voice_hook::base_dir());
+            let hooked_ms = began.elapsed().as_millis();
+            // A line the hook gave up on is the listener's, however late: one left undecided when a slow
+            // pass outlasted the hook's own horizon would otherwise wait forever.
+            let undecided = ears.hooked.lines().iter().any(|l| {
+                now - l.ts < UNDECIDED_MS
+                    && !ears.hooked.completed(&l.uid)
+                    && !ears.hooked.waiting(&l.uid, now)
+                    && ears.listener.get_line(&l.uid).is_some()
+                    && ears.listener.decision(&l.uid).is_none()
+            });
+            let mut decisions = if undecided || ears.hooked.needs_fallback(now) { ears.listener.tick(&ears.ring, now) } else { Vec::new() };
+            let listener_ms = began.elapsed().as_millis();
+            for line in ears.hooked.lines() {
+                if !ears.hooked.completed(&line.uid) && !ears.hooked.waiting(&line.uid, now) && self.line_state(&line.uid).is_none() && !decisions.iter().any(|d| d.uid == line.uid)
+                {
+                    if let Some(decision) = ears.listener.decision(&line.uid) {
+                        decisions.push(decision.clone());
+                    }
+                }
+            }
             for decision in decisions {
-                self.keep(ears, &decision);
+                if !ears.hooked.completed(&decision.uid) && !ears.hooked.waiting(&decision.uid, now) {
+                    self.keep(ears, &decision);
+                }
+            }
+            let total = began.elapsed().as_millis();
+            if total > 500 {
+                eprintln!("[sentence-audio] slow pass: {total} ms (model {model_ms}, inputs {inputs_ms}, hooked {hooked_ms}, listener {listener_ms})");
             }
         }
     }
@@ -483,17 +541,31 @@ impl SentenceAudio {
         let config = self.config();
         let mut listener = Listener::new(vad.ok(), None);
         listener.cutting = config.cutting();
-        Ears {
-            listener,
-            ring: AudioRing::new(48_000, config.seconds),
-            cursor: None,
-            model: None,
-            model_checked: None,
-        }
+        // Its own speech detection: the listener's streams the recording, this one judges whole clips.
+        let mut hooked = kimochi_speech::hooked::Hooked::default();
+        hooked.speech = (self.host.runtime)().and_then(|()| Vad::new()).ok();
+        Ears { hooked, discovery: Default::default(), listener, ring: AudioRing::new(48_000, config.seconds), cursor: None, model: None, model_checked: None, loading: None }
     }
 
     /// Load the speech model once it is downloaded; drop it once it is removed.
     fn check_model(&self, ears: &mut Ears) {
+        // Loaded off this thread: the listening pass holds the listener, and a load under it would
+        // hold up clean-voice matching and every command that reads the listener meanwhile.
+        if let Some(Ok((dir, loaded))) = ears.loading.as_ref().map(|rx| rx.try_recv()) {
+            ears.loading = None;
+            if ears.model.as_ref() == Some(&dir) {
+                *lock(&self.recogniser) = match loaded {
+                    Ok(model) => {
+                        ears.listener.set_recogniser(Some(model));
+                        Recogniser::Ready
+                    }
+                    Err(message) => {
+                        eprintln!("[sentence-audio] the speech model did not load: {message}");
+                        Recogniser::Failed { message }
+                    }
+                };
+            }
+        }
         if ears.model_checked.is_some_and(|at| at.elapsed() < MODEL_CHECK_EVERY) {
             return;
         }
@@ -504,6 +576,7 @@ impl SentenceAudio {
         }
         ears.listener.set_recogniser(None);
         ears.model = dir.clone();
+        ears.loading = None;
         let Some(dir) = dir else {
             *lock(&self.recogniser) = Recogniser::Absent;
             return;
@@ -513,17 +586,15 @@ impl SentenceAudio {
             return;
         }
         *lock(&self.recogniser) = Recogniser::Loading;
-        let loaded = crate::engine_probe::guarded(|| SenseVoice::load(&dir, RECOGNISER_THREADS));
-        *lock(&self.recogniser) = match loaded {
-            Ok(model) => {
-                ears.listener.set_recogniser(Some(model));
-                Recogniser::Ready
-            }
-            Err(message) => {
-                eprintln!("[sentence-audio] the speech model did not load: {message}");
-                Recogniser::Failed { message }
-            }
-        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        ears.loading = Some(rx);
+        std::thread::Builder::new()
+            .name("sentence-audio-model".into())
+            .spawn(move || {
+                let loaded = crate::engine_probe::guarded(|| SenseVoice::load(&dir, RECOGNISER_THREADS));
+                let _ = tx.send((dir, loaded));
+            })
+            .ok();
     }
 
     /// Copy what the capture added to the shared ring into the listener's own, so recognising
@@ -547,6 +618,20 @@ impl SentenceAudio {
 
     /// Keep what was decided for a line: its clip in the store, its state for the Log.
     fn keep(&self, ears: &Ears, decision: &Decision) {
+        if self.line_state(&decision.uid).is_some_and(|l| l.how.as_deref() == Some("hooked")) {
+            return;
+        }
+        // With the game's voices being captured, a line given no clip of its own is most likely
+        // unvoiced: what the system recording placed there by timing alone is the music, effects or
+        // another line, not its voice. A match by its words still counts. Every decision comes
+        // here: the listening pass, and a card that cannot wait (`decide`).
+        let silenced;
+        let decision = if ears.hooked.established() && matches!(&decision.outcome, Outcome::Voiced(v) if matches!(v.how, kimochi_speech::listener::How::Timed)) {
+            silenced = Decision { outcome: Outcome::Silent, ..decision.clone() };
+            &silenced
+        } else {
+            decision
+        };
         let line = match &decision.outcome {
             Outcome::Voiced(voice) => match clips::render(&ears.ring, voice) {
                 Ok(rendered) => match lock(&self.store).put(&decision.uid, &decision.text, voice, &rendered) {
@@ -575,6 +660,53 @@ impl SentenceAudio {
             }
         }
         (self.host.emit)(&line);
+    }
+
+    /// Select only processes belonging to the explicit text-hook source.
+    pub fn hook_targets(&self, pids: Vec<u32>) {
+        let mut capture = lock(&self.capture);
+        if capture.pids != pids {
+            capture.pids = pids;
+            capture.generation += 1;
+            capture.error = None;
+            capture.attempted.clear();
+        }
+    }
+    pub fn hook_attempt(&self, pid: u32) -> bool {
+        let mut capture = lock(&self.capture);
+        if capture.attempted.contains(&pid) {
+            false
+        } else {
+            capture.attempted.push(pid);
+            true
+        }
+    }
+    pub fn hook_failed(&self, error: String) {
+        lock(&self.capture).error = Some(error);
+    }
+
+    fn keep_hooked(&self, matched: &kimochi_speech::hooked::Matched) -> Result<(), String> {
+        let mut samples = matched.samples.clone();
+        kimochi_speech::trim::fade(&mut samples, matched.sample_rate);
+        let rendered = clips::Rendered {
+            mp3: kimochi_speech::encode::mp3(&samples, matched.sample_rate)?,
+            duration_ms: samples.len() as f64 * 1000.0 / matched.sample_rate as f64,
+            pcm: samples,
+            sample_rate: matched.sample_rate,
+            start_ms: matched.clip.start,
+        };
+        let voice = kimochi_speech::listener::Voice { from_ms: rendered.start_ms, to_ms: rendered.start_ms + rendered.duration_ms, how: kimochi_speech::listener::How::Hooked };
+        let info = lock(&self.store).put(&matched.line.uid, &matched.line.text, &voice, &rendered)?;
+        let line = voiced(&matched.line.uid, info);
+        let mut lines = lock(&self.lines);
+        lines.retain(|l| l.uid != line.uid);
+        lines.push_back(line.clone());
+        while lines.len() > LINES_KEEP {
+            lines.pop_front();
+        }
+        drop(lines);
+        (self.host.emit)(&line);
+        Ok(())
     }
 
     /// The line a card was made from (found by its fields' text: its sentence, or all of them),
@@ -613,9 +745,7 @@ impl SentenceAudio {
                 uid
             }
             (_, Some((uid, _))) => uid,
-            (None, None) if !self.recording() && lock(&self.store).all().next().is_none() => {
-                return Err("System audio is not being recorded.".into())
-            }
+            (None, None) if !self.recording() && lock(&self.store).all().next().is_none() => return Err("System audio is not being recorded.".into()),
             _ => return Err("The card's sentence is not a line with audio, so no audio was added.".into()),
         };
         // A kept clip from before this run has no line state: its clip is its state.
@@ -631,20 +761,8 @@ impl SentenceAudio {
                 let store = lock(&self.store);
                 let info = store.get(&uid).ok_or("The line's clip is no longer kept.")?;
                 let mp3 = store.read(&uid).ok_or("The line's clip is no longer kept.")?;
-                let word = if want_word {
-                    word_candidates(fields, words, &info.text)
-                        .into_iter()
-                        .find_map(|w| store.word(&uid, &w).map(|mp3| (w, mp3)))
-                } else {
-                    None
-                };
-                Ok(Made {
-                    filename: format!("kimochi_{}.mp3", now_ms() as u64),
-                    mp3,
-                    duration_ms: info.duration_ms,
-                    matched: info.how == "matched",
-                    word,
-                })
+                let word = if want_word { word_candidates(fields, words, &info.text).into_iter().find_map(|w| store.word(&uid, &w).map(|mp3| (w, mp3))) } else { None };
+                Ok(Made { filename: format!("kimochi_{}.mp3", now_ms() as u64), mp3, duration_ms: info.duration_ms, matched: info.how == "matched", word })
             }
             "silent" => Err(SILENT.into()),
             _ => Err(state.message.unwrap_or_else(|| "The line's audio is no longer held.".into())),
@@ -654,10 +772,13 @@ impl SentenceAudio {
     /// Wait for a live line to be decided (its voice to end), then, undecided or decided without
     /// a match by its words, try it with everything heard by now.
     fn decide(&self, uid: &str, ts: f64) {
-        while self.line_state(uid).is_none() && now_ms() - ts < MAX_WAIT_MS && self.recording() {
+        // Longer while the game's own voice for the line is still expected (a long line still
+        // playing, or held until the game's timing is learned): its clean clip beats the recording.
+        let hook_waiting = || lock(&self.ears).as_ref().is_some_and(|ears| ears.hooked.waiting(uid, now_ms()) || ears.hooked.pending(uid, now_ms()));
+        while self.line_state(uid).is_none() && (now_ms() - ts < MAX_WAIT_MS || (now_ms() - ts < HOOK_WAIT_MS && hook_waiting())) && self.recording() {
             std::thread::sleep(Duration::from_millis(200));
         }
-        if self.line_state(uid).is_none_or(|l| l.how.as_deref() != Some("matched")) {
+        if self.line_state(uid).is_none_or(|l| !matches!(l.how.as_deref(), Some("matched" | "hooked"))) {
             let mut guard = lock(&self.ears);
             if let Some(ears) = guard.as_mut() {
                 if let Some(decision) = ears.listener.decide_now(&ears.ring, now_ms(), uid) {
@@ -680,23 +801,13 @@ impl SentenceAudio {
         }
     }
 
-    async fn attach_inner(
-        self: Arc<Self>,
-        anki: &Anki,
-        note_id: u64,
-        fields: Vec<(String, String)>,
-        field: &str,
-        word_field: &str,
-        words: Vec<String>,
-    ) -> Result<(), String> {
+    async fn attach_inner(self: Arc<Self>, anki: &Anki, note_id: u64, fields: Vec<(String, String)>, field: &str, word_field: &str, words: Vec<String>) -> Result<(), String> {
         if field.is_empty() {
             return Err("No sentence-audio field is set in Settings → Anki.".into());
         }
         let info = anki.call("notesInfo", json!({ "notes": [note_id] })).await?;
         let note = info.get(0).and_then(|n| n.get("fields")).ok_or("Anki did not find the new card.")?;
-        let empty = |name: &str| {
-            note.get(name).map(|f| f.get("value").and_then(Value::as_str).is_none_or(|v| v.trim().is_empty()))
-        };
+        let empty = |name: &str| note.get(name).map(|f| f.get("value").and_then(Value::as_str).is_none_or(|v| v.trim().is_empty()));
         let Some(sentence_empty) = empty(field) else {
             return Err(format!("The card's note type has no “{field}” field, so no audio was added."));
         };
@@ -706,9 +817,7 @@ impl SentenceAudio {
             return Ok(());
         }
         let service = self.clone();
-        let made = tauri::async_runtime::spawn_blocking(move || service.make(&fields, words, word_empty))
-            .await
-            .map_err(|e| e.to_string())??;
+        let made = tauri::async_runtime::spawn_blocking(move || service.make(&fields, words, word_empty)).await.map_err(|e| e.to_string())??;
         let mut update = serde_json::Map::new();
         let mut done = Vec::new();
         if sentence_empty {
@@ -738,10 +847,7 @@ impl SentenceAudio {
         if !update.is_empty() {
             anki.call("updateNoteFields", json!({ "note": { "id": note_id, "fields": update } })).await?;
             // The Anki tab marks the card as given its audio by Kimochi.
-            let kinds: Vec<&str> = update
-                .keys()
-                .map(|name| if name == field { crate::anki_cards::SENTENCE_AUDIO } else { crate::anki_cards::WORD_AUDIO })
-                .collect();
+            let kinds: Vec<&str> = update.keys().map(|name| if name == field { crate::anki_cards::SENTENCE_AUDIO } else { crate::anki_cards::WORD_AUDIO }).collect();
             crate::anki_cards::enhanced(note_id, &kinds);
         }
         let how = if made.matched { "matched by its words" } else { "placed by timing" };
@@ -790,11 +896,7 @@ pub(crate) fn card_word(fields: &[(String, String)], line: &str) -> Option<Strin
         return Some(plain(value));
     }
     let line = plain(line);
-    fields
-        .iter()
-        .map(|(_, v)| plain(v))
-        .filter(|v| (1..=15).contains(&v.chars().count()) && line.contains(v.as_str()))
-        .min_by_key(|v| v.chars().count())
+    fields.iter().map(|(_, v)| plain(v)).filter(|v| (1..=15).contains(&v.chars().count()) && line.contains(v.as_str())).min_by_key(|v| v.chars().count())
 }
 
 /// A card's fields as sent: (name, text).
@@ -894,12 +996,16 @@ fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>,
 /// After the relay carried a dictionary extension's request: when it was an `addNote` that
 /// AnkiConnect accepted, the card's audio follows.
 pub fn after_relay(app: &tauri::AppHandle, url: &str, request: &Value, reply_status: u16, reply_body: &str) {
-    let Some(service) = app.try_state::<Arc<SentenceAudio>>() else { return };
+    let Some(service) = app.try_state::<Arc<SentenceAudio>>() else {
+        return;
+    };
     // On, recording or not: a clip kept from earlier (before a restart, say) still fits the card.
     if !service.config().enabled {
         return;
     }
-    let Some((anki, note_id, fields)) = added_card(url, request, reply_status, reply_body) else { return };
+    let Some((anki, note_id, fields)) = added_card(url, request, reply_status, reply_body) else {
+        return;
+    };
     let service = service.inner().clone();
     tauri::async_runtime::spawn(service.attach(anki, note_id, fields, None, Vec::new()));
 }
@@ -916,10 +1022,7 @@ pub(crate) fn added_card(url: &str, request: &Value, reply_status: u16, reply_bo
         .and_then(Value::as_object)
         .map(|fields| fields.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string()))).collect())
         .unwrap_or_default();
-    let anki = Anki {
-        url: url.to_string(),
-        key: request.get("key").and_then(Value::as_str).map(str::to_string),
-    };
+    let anki = Anki { url: url.to_string(), key: request.get("key").and_then(Value::as_str).map(str::to_string) };
     Some((anki, note_id, fields))
 }
 
@@ -966,14 +1069,7 @@ pub fn sentence_audio_status(service: tauri::State<'_, Arc<SentenceAudio>>) -> S
 /// Unix ms. `source`: the Log's line source (`ocr`, `websocket`, `clipboard`, `webhook`).
 /// `scan`: the OCR scan it was read in (a scan's lines, a name box and the dialogue, share it).
 #[tauri::command]
-pub fn sentence_audio_line(
-    service: tauri::State<'_, Arc<SentenceAudio>>,
-    uid: String,
-    text: String,
-    ts: f64,
-    source: String,
-    scan: Option<String>,
-) {
+pub fn sentence_audio_line(service: tauri::State<'_, Arc<SentenceAudio>>, uid: String, text: String, ts: f64, source: String, scan: Option<String>) {
     service.record_line(Line { uid, text, ts, ocr: source == "ocr", appeared: None, scan });
 }
 
@@ -984,10 +1080,12 @@ pub fn sentence_audio_forget(service: tauri::State<'_, Arc<SentenceAudio>>, uids
 }
 
 /// The recording, the speech model and the listener's view of the recent lines, for the
-/// Diagnostics window.
+/// Diagnostics window. Off the main thread: the report waits for the listening pass, which can
+/// take seconds while speech is recognised, and a synchronous command would freeze every window.
 #[tauri::command]
-pub fn sentence_audio_debug(service: tauri::State<'_, Arc<SentenceAudio>>) -> Debug {
-    service.debug()
+pub async fn sentence_audio_debug(service: tauri::State<'_, Arc<SentenceAudio>>) -> Result<Debug, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || service.debug()).await.map_err(|e| e.to_string())
 }
 
 /// What is known about each recent line's audio, for the Log.
@@ -1048,11 +1146,7 @@ pub fn sentence_audio_attach(
 /// Kimochi's AnkiConnect, and its line's kept clip is put in its empty sentence-audio field (and
 /// the word's in the word-audio field). Works while recording is off: the clips are kept.
 #[tauri::command]
-pub async fn sentence_audio_add_to_note(
-    service: tauri::State<'_, Arc<SentenceAudio>>,
-    settings: tauri::State<'_, crate::state::Shared>,
-    note_id: u64,
-) -> Result<(), String> {
+pub async fn sentence_audio_add_to_note(service: tauri::State<'_, Arc<SentenceAudio>>, settings: tauri::State<'_, crate::state::Shared>, note_id: u64) -> Result<(), String> {
     let (url, key) = ankiconnect::configured(&settings.settings);
     let anki = Anki { url, key };
     let info = anki.call("notesInfo", json!({ "notes": [note_id] })).await?;
@@ -1118,9 +1212,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-{}", std::process::id()));
         let settings = Settings::load(dir.join("settings.json"));
         assert_eq!(Config::load(&settings), Config::default());
-        settings
-            .set("sentenceAudio", json!({ "enabled": true, "seconds": 999, "field": " Audio ", "startOffsetMs": -200, "clips": 1, "wordField": " Word " }))
-            .unwrap();
+        settings.set("sentenceAudio", json!({ "enabled": true, "seconds": 999, "field": " Audio ", "startOffsetMs": -200, "clips": 1, "wordField": " Word " })).unwrap();
         let config = Config::load(&settings);
         assert!(config.enabled && config.trim);
         assert_eq!((config.seconds, config.field.as_str(), config.start_offset_ms), (120.0, "Audio", -200.0));
@@ -1130,11 +1222,8 @@ mod tests {
 
     #[test]
     fn a_cards_word_is_also_looked_for_by_its_reading() {
-        let fields = vec![
-            ("Expression".to_string(), "今日は".to_string()),
-            ("ExpressionReading".to_string(), "こんにちは".to_string()),
-            ("Sentence".to_string(), "こんにちは".to_string()),
-        ];
+        let fields =
+            vec![("Expression".to_string(), "今日は".to_string()), ("ExpressionReading".to_string(), "こんにちは".to_string()), ("Sentence".to_string(), "こんにちは".to_string())];
         assert_eq!(word_candidates(&fields, Vec::new(), "こんにちは"), vec!["今日は", "こんにちは"]);
         // The pop-up's word and reading come first, once each.
         let given = vec!["今日は".to_string(), "こんにちは".to_string()];
@@ -1149,21 +1238,11 @@ mod tests {
         std::fs::create_dir_all(&clips).unwrap();
         std::fs::write(clips.join("clip-1.mp3"), b"ID3 kept").unwrap();
         std::fs::write(clips.join("clip-2.mp3"), b"ID3 other").unwrap();
-        let info = |uid: &str, text: &str, file: &str| {
-            json!({ "uid": uid, "text": text, "file": file, "durationMs": 900.0, "how": "matched", "startMs": 0.0 })
-        };
-        std::fs::write(
-            clips.join("clips.json"),
-            serde_json::to_vec(&json!([info("a", "こんにちは", "clip-1.mp3"), info("b", "一応、事情は聞いてるよ。", "clip-2.mp3")])).unwrap(),
-        )
-        .unwrap();
+        let info = |uid: &str, text: &str, file: &str| json!({ "uid": uid, "text": text, "file": file, "durationMs": 900.0, "how": "matched", "startMs": 0.0 });
+        std::fs::write(clips.join("clips.json"), serde_json::to_vec(&json!([info("a", "こんにちは", "clip-1.mp3"), info("b", "話はだいたい聞いてるよ。", "clip-2.mp3")])).unwrap())
+            .unwrap();
         let settings = Arc::new(Settings::load(dir.join("settings.json")));
-        let host = Host {
-            runtime: Box::new(|| Err("no runtime in tests".into())),
-            model_dir: Box::new(|| None),
-            fetch_model: Box::new(|| {}),
-            emit: Box::new(|_| {}),
-        };
+        let host = Host { runtime: Box::new(|| Err("no runtime in tests".into())), model_dir: Box::new(|| None), fetch_model: Box::new(|| {}), emit: Box::new(|_| {}) };
         let service = SentenceAudio::with_host(settings, host, clips);
         let fields = vec![("Expression".to_string(), "今日は".to_string()), ("Sentence".to_string(), "こんにちは".to_string())];
         let made = service.make(&fields, Vec::new(), false).map_err(|e| e.to_string()).unwrap();
@@ -1195,7 +1274,16 @@ mod tests {
         };
         let service = SentenceAudio::with_host(Arc::new(Settings::load(dir.join("settings.json"))), host, clips);
         // An empty recording: whatever the lines' voices were, they are no longer held.
-        let ears = Ears { listener: Listener::new(None, None), ring: AudioRing::new(48_000, 30.0), cursor: None, model: None, model_checked: None };
+        let ears = Ears {
+            hooked: Default::default(),
+            discovery: Default::default(),
+            listener: Listener::new(None, None),
+            ring: AudioRing::new(48_000, 30.0),
+            cursor: None,
+            model: None,
+            model_checked: None,
+            loading: None,
+        };
         let voice = || Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
         service.keep(&ears, &Decision { uid: "a".into(), text: "こんにちは".into(), outcome: voice(), provisional: false });
         service.keep(&ears, &Decision { uid: "b".into(), text: "猫が好きです。".into(), outcome: voice(), provisional: false });
@@ -1206,7 +1294,38 @@ mod tests {
     }
 
     #[test]
-    fn nothing_is_recorded_until_the_speech_model_is_there() {
+    fn with_the_games_voices_captured_a_timed_guess_is_silence_on_every_path() {
+        // Live Ren'Py: narration mined into cards got snippets of the music, because the card path
+        // (`decide`) kept the system recording's timed guess that the listening pass discards.
+        use kimochi_speech::listener::{How, Voice};
+        let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-silenced-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let clips = dir.join("clips");
+        std::fs::create_dir_all(&clips).unwrap();
+        let emitted = Arc::new(Mutex::new(Vec::<LineAudio>::new()));
+        let seen = emitted.clone();
+        let host = Host {
+            runtime: Box::new(|| Err("no runtime in tests".into())),
+            model_dir: Box::new(|| None),
+            fetch_model: Box::new(|| {}),
+            emit: Box::new(move |line| seen.lock().unwrap().push(line.clone())),
+        };
+        let service = SentenceAudio::with_host(Arc::new(Settings::load(dir.join("settings.json"))), host, clips);
+        // A game whose voice stream an earlier session established, its capture running.
+        let mut hooked = kimochi_speech::hooked::Hooked::default();
+        hooked.add_capture(dir.join("capture"));
+        hooked.remembered = Some("renpy | ogg | audio/voice/hero".into());
+        assert!(hooked.established());
+        let ears = Ears { hooked, discovery: Default::default(), listener: Listener::new(None, None), ring: AudioRing::new(48_000, 30.0), cursor: None, model: None, model_checked: None, loading: None };
+        let timed = Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
+        service.keep(&ears, &Decision { uid: "narration".into(), text: "彼が手を差し伸べてくる。".into(), outcome: timed, provisional: false });
+        let states: Vec<(String, &str)> = emitted.lock().unwrap().iter().map(|l| (l.uid.clone(), l.state)).collect();
+        assert_eq!(states, vec![("narration".to_string(), "silent")]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn recording_can_start_while_the_fallback_model_downloads() {
         let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-gate-{}", std::process::id()));
         let settings = Arc::new(Settings::load(dir.join("settings.json")));
         settings.set("sentenceAudio", json!({ "enabled": true })).unwrap();
@@ -1222,15 +1341,16 @@ mod tests {
         };
         let service = SentenceAudio::with_host(settings.clone(), host, dir.join("clips"));
         service.settings_changed();
-        assert_eq!(service.status().state, State::NeedsModel);
+        assert!(*lock(&service.running));
         for _ in 0..50 {
-            if fetched.load(Ordering::SeqCst) > 0 {
+            if fetched.load(Ordering::SeqCst) > 0 && lock(&service.ears).is_some() {
                 break;
             }
             std::thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(fetched.load(Ordering::SeqCst), 1);
-        assert_eq!(service.status().state, State::NeedsModel);
+        assert!(lock(&service.ears).is_some(), "listener must start without the speech model");
+        assert!(*lock(&service.running));
         settings.set("sentenceAudio", json!({ "enabled": false })).unwrap();
         service.settings_changed();
         assert_eq!(service.status().state, State::Off);
@@ -1332,6 +1452,29 @@ mod tests {
         let sound = updated["params"]["note"]["fields"]["SentenceAudio"].as_str().unwrap();
         assert_eq!(sound, format!("[sound:{}]", stored["params"]["filename"].as_str().unwrap()));
         assert!(service.lines().iter().any(|l| l.uid == "0" && l.state == "voiced"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod hooked_integration_tests {
+    use super::*;
+    #[test]
+    fn clean_clip_is_kept_for_cards_and_fallback_cannot_overwrite_it() {
+        let dir = std::env::temp_dir().join(format!("kimochi-hook-integration-{}", std::process::id()));
+        let host = Host { runtime: Box::new(|| Err("no runtime".into())), model_dir: Box::new(|| None), fetch_model: Box::new(|| {}), emit: Box::new(|_| {}) };
+        let service = SentenceAudio::with_host(Arc::new(Settings::load(dir.join("settings.json"))), host, dir.join("clips"));
+        let line = Line { uid: "hooked".into(), text: "\u{4eca}\u{65e5}\u{306f}\u{6674}\u{308c}\u{3067}\u{3059}".into(), ts: 1000., ocr: false, appeared: None, scan: None };
+        let clip =
+            kimochi_speech::hooked::HookClip { seq: 1, stream: 1, api: "dsound".into(), start: 1000., dur: 1., file: None, source: None, fmt: None, looping: false, channel: None };
+        service.keep_hooked(&kimochi_speech::hooked::Matched { line: line.clone(), clip, samples: vec![0.2; 16000], sample_rate: 16000 }).unwrap();
+        let ears = service.hear();
+        service.keep(&ears, &Decision { uid: line.uid.clone(), text: line.text.clone(), outcome: Outcome::Silent, provisional: false });
+        assert_eq!(service.line_state(&line.uid).unwrap().how.as_deref(), Some("hooked"));
+        let made = service.make(&[("Sentence".into(), line.text)], Vec::new(), true).unwrap();
+        assert!(!made.mp3.is_empty());
+        assert!(!made.matched);
+        assert!(made.word.is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

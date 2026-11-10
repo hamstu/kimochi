@@ -176,6 +176,9 @@ export function SentenceAudioSection(): ReactNode {
               the main window to see which cards get enhanced.
             </Callout>
           </div>
+          <SettingsRow label="Audio hooking" controlId="sentence-audio-hook" description="On Windows, take each line's voice straight from a game with Text hooking on. Where it can't, system audio is recorded instead.">
+            <Switch id="sentence-audio-hook" checked={config.voiceHook} onCheckedChange={(voiceHook) => update({ voiceHook })} />
+          </SettingsRow>
           {model.status && !modelReady && (
             <div className="settings-note">
               <ModelDownload controls={model} emphasis label="Speech model" />
@@ -184,8 +187,8 @@ export function SentenceAudioSection(): ReactNode {
           {!modelReady && (
             <div className="settings-note">
               <p className="k-description">
-                Sentence audio needs this model to hear each line&apos;s words. Recording starts once
-                it&apos;s downloaded.
+                Clean hooked clips work without this model. The fallback uses it to match words in
+                system audio when a game cannot provide clean clips.
               </p>
             </div>
           )}

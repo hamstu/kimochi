@@ -20,7 +20,7 @@ interface LineReport {
   appeared: number | null
   scan: string | null
   outcome: 'waiting' | 'voiced' | 'silent' | 'missed'
-  how: 'matched' | 'timed' | null
+  how: 'matched' | 'timed' | 'hooked' | null
   score: number | null
   heard: string | null
   clip: [number, number] | null
@@ -34,6 +34,8 @@ interface LineReport {
 interface Debug {
   status: SentenceAudioStatus
   clips: number
+  hooked: { captures: number; clipsSeen: number; matched: number; lagMs: number; error: string | null; groups: { group: string; voice: number; reasons: string[] }[] }
+  hookError: string | null
   listener: {
     heardUntil: number | null
     transcribedUntil: number | null
@@ -56,6 +58,7 @@ const behind = (until: number | null | undefined): string =>
 
 function outcome(line: LineReport): { label: string; tone: string } {
   if (line.outcome === 'voiced') {
+    if (line.how === 'hooked') return { label: 'hooked', tone: 'good' }
     return line.how === 'matched'
       ? { label: `matched ${Math.round((line.score ?? 0) * 100)}%`, tone: 'good' }
       : { label: 'by timing', tone: 'info' }
@@ -141,6 +144,11 @@ export default function SentenceAudioDebugPanel(): JSX.Element {
             )}
           </div>
         )}
+        {debug?.hooked && <div className="sa-facts">
+          <span><b>voice hook</b> {debug.hooked.captures} captures · {debug.hooked.clipsSeen} clips · {debug.hooked.matched} lines matched · lag {debug.hooked.lagMs.toFixed(0)}ms</span>
+          {(debug.hookError || debug.hooked.error) && <span className="sa-warn">{debug.hookError || debug.hooked.error}</span>}
+          {debug.hooked.groups.map((g) => <span key={g.group}><b>{Math.round(g.voice * 100)}%</b> {g.group} · {g.reasons.join(', ')}</span>)}
+        </div>}
         {status && !listener && <div className="sa-muted">Not listening: turn on Sentence Audio in Settings → Anki.</div>}
         {listener && (
           <>

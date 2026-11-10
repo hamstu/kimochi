@@ -1,0 +1,14 @@
+[package]
+name = "vh-fixture"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "vh-fixture"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+vh-common = { workspace = true }
+windows-sys = { workspace = true }
