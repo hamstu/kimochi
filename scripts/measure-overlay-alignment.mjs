@@ -36,9 +36,10 @@
  *
  * The corpus, scripts/fixtures/overlay-alignment/:
  *
- *  - Six rendered samples (`generate`), drawn for this, with their images: dialogue in a rounded
- *    gothic with tracking, a 3× pixel font with spaces, long katakana with Latin and digits,
- *    small UI text, a large Mincho title, and vertical columns.
+ *  - Seven rendered samples (`generate`), drawn for this, with their images: dialogue in a rounded
+ *    gothic with tracking, dialogue with its brackets and pauses in half a cell (`halfwidth`, read
+ *    by Google Lens and Live Text only), a 3× pixel font with spaces, long katakana with Latin and
+ *    digits, small UI text, a large Mincho title, and vertical columns.
  *  - `chrono`: one line pair of Chrono Trigger dialogue from a real capture (Retina, so scale 2),
  *    its truth from the game's fixed grid and the ink in each cell (`truth`). The image is not
  *    committed; pass its folder as `--images` to measure it.

@@ -71,7 +71,7 @@ function drawn(run) {
     // A squeezed mark (text-layout.js SQUEEZE) is drawn with its blank half cut by margins.
     const [cutBefore, cutAfter] = run.squeeze?.includes(c) ? SQUEEZE.get(c) : [0, 0]
     before -= cutBefore
-    const origin = (run.vertical ? run.rect.y : run.rect.x) + run.lead + f * before + run.spacing * i
+    const origin = (run.vertical ? run.rect.y : run.rect.x) + run.lead + f * before + run.spacing * i + (run.offsets?.[i] ?? 0)
     before += advance(c) - cutAfter
     if (!c.trim()) return
     if (run.vertical) {
@@ -216,5 +216,19 @@ test('Manga OCR: a speech bubble is lettered as columns at one size, over its ow
     assert.ok(row.coverage >= 0.6, `${sample}: coverage ${row.coverage.toFixed(2)}`)
     assert.ok(row.alongMean <= along, `${sample}: mean along ${row.alongMean.toFixed(3)}`)
     assert.ok(row.sizeSpread <= 0.02, `${sample}: sizes on one column vary ${(row.sizeSpread * 100).toFixed(1)}%`)
+  }
+})
+
+test('brackets and pauses a game sets in half a cell are drawn so, and the line stays on its glyphs', () => {
+  // `halfwidth`: 「」『』、。 in half a cell, as many games set them (#92). Drawn full-width, each
+  // pushed the rest of its line half a glyph along: Google Lens's glyphs were 0.2 of a glyph out.
+  const fixture = fixtures.find((f) => f.sample === 'halfwidth' && f.engine === 'googlelens')
+  const { runs } = layout(fixture)
+  assert.ok(runs.some((run) => run.squeeze?.includes('「')), 'the brackets were seen as half-width')
+  const row = scored.find((r) => r.sample === 'halfwidth' && r.engine === 'googlelens')
+  assert.ok(row.alongMean <= 0.11, `mean along ${row.alongMean.toFixed(3)}`)
+  // Full-width brackets stay full-width: no other sample's runs are squeezed.
+  for (const other of fixtures.filter((f) => f.sample === 'dialogue')) {
+    assert.ok(layout(other).runs.every((run) => !run.squeeze), `${other.engine} squeezed full-width brackets`)
   }
 })
