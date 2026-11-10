@@ -406,7 +406,8 @@ function AudioHookRow(): ReactNode {
 
 /**
  * Text hooking, right under a game's card: a box like the switch rows', headed by its switch.
- * While it is on, the box also holds the hooked text's select and Audio hooking.
+ * While it is on, the box also holds the hooked text's select and, on Windows (the only place
+ * a game's voices can be hooked so far), Audio hooking.
  */
 function TextHookBox({
   on,
@@ -419,6 +420,8 @@ function TextHookBox({
   onToggle: () => void
   onManage: () => void
 }): ReactNode {
+  const os = useCapabilities().os
+  const voiceHookable = os === 'windows' || os === 'linux'
   return (
     <div className="src-rows src-hook-box" data-on={on ? '' : undefined}>
       <SourceRow
@@ -435,26 +438,40 @@ function TextHookBox({
           <div className="src-hook-body">
             <HookControls status={status} onManage={onManage} />
           </div>
-          <AudioHookRow />
+          {voiceHookable && <AudioHookRow />}
         </>
       )}
     </div>
   )
 }
 
-/** Whether the game behind a window can be hooked, and its exe; null until known. */
+/**
+ * Whether the game behind a window can be hooked, and its exe; null until known. A window shared
+ * through the Wayland portal names no process until Kimochi links it to its window (KWin,
+ * Hyprland), after its first frames, so it is asked about again until then.
+ */
 function useHookTarget(sourceId: string | null): HookTarget | null {
   const [found, setFound] = useState<{ id: string; target: HookTarget } | null>(null)
   useEffect(() => {
     if (!sourceId) return
     let live = true
-    void texthookTargets([sourceId])
-      .then((targets) => {
-        if (live) setFound({ id: sourceId, target: targets[sourceId] ?? { hookable: false } })
-      })
-      .catch(() => {})
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const look = (): void => {
+      void texthookTargets([sourceId])
+        .then((targets) => {
+          if (!live) return
+          const target = targets[sourceId] ?? { hookable: false }
+          setFound((was) =>
+            was?.id === sourceId && JSON.stringify(was.target) === JSON.stringify(target) ? was : { id: sourceId, target }
+          )
+          if (!target.hookable && sourceId.startsWith('portal:window:')) timer = setTimeout(look, 3000)
+        })
+        .catch(() => {})
+    }
+    look()
     return () => {
       live = false
+      clearTimeout(timer)
     }
   }, [sourceId])
   return found && found.id === sourceId ? found.target : null
@@ -915,10 +932,14 @@ export function SourcePanel({
     startedHook.current = sourceId
     void texthookStart(sourceId, hookObserver).catch(() => {})
   }
-  // A Text Hooker source restored at launch (or changed from elsewhere) is hooked again.
+  // The chosen window's game, when it can be hooked: the Text hooking box is shown for it.
+  const hookTarget = useHookTarget(hookAvailable && source?.type === 'window' ? source.sourceId : null)
+  // A Text Hooker source restored at launch (or changed from elsewhere) is hooked again: a window
+  // shared through the portal once it is linked to its game's window (`useHookTarget`).
   const hookSourceId = mode === 'hook' && source?.type === 'window' ? source.sourceId : null
+  const hookReady = !hookSourceId?.startsWith('portal:window:') || Boolean(hookTarget?.hookable)
   useEffect(() => {
-    if (!hookSourceId || !hookAvailable || startedHook.current === hookSourceId) return
+    if (!hookSourceId || !hookAvailable || !hookReady || startedHook.current === hookSourceId) return
     let live = true
     // Asked afresh: a reloaded window must not restart a session that is already running.
     void texthookStatus()
@@ -931,7 +952,7 @@ export function SourcePanel({
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per source, not per observer change
-  }, [hookSourceId, hookAvailable])
+  }, [hookSourceId, hookAvailable, hookReady])
   // Hook automatically: while the Text Hooker is the input, a game hooked before whose settings
   // say so is hooked as soon as its window is open. With nothing hooked, any such window open now;
   // with a game hooked, only a window opened since (the newest game takes over: one hook at a
@@ -986,8 +1007,6 @@ export function SourcePanel({
       clearInterval(timer)
     }
   }, [mode, hookAvailable, hookBusy, autoGames, hookSourceId])
-  // The chosen window's game, when it can be hooked: the Text hooking box is shown for it.
-  const hookTarget = useHookTarget(hookAvailable && source?.type === 'window' ? source.sourceId : null)
   const hookExe = hookTarget?.hookable ? (hookTarget.exe ?? null) : mode === 'hook' ? (hook.exe ?? null) : null
   /**
    * Makes sure the game behind `sourceId` is hooked. A session already on it is kept: one paused
@@ -1016,6 +1035,18 @@ export function SourcePanel({
     controller.onSelectSource(sourceId)
     if (hookIt) ensureHook(sourceId)
   }
+  // A window shared through the portal is known to be a game only once it is linked, after it
+  // was chosen: Text hooking then comes on as `chooseWindow` would have, if it is on for the game.
+  const lateHookExe = hookTarget?.hookable && source?.sourceId.startsWith('portal:window:') ? (hookTarget.exe ?? null) : null
+  const lateHookOn = lateHookExe !== null && textHookOn(hookGames[gameKey(lateHookExe)])
+  const lateHooked = useRef<string | null>(null)
+  useEffect(() => {
+    if (!source || mode !== 'ocr' || !lateHookOn || lateHooked.current === source.sourceId) return
+    lateHooked.current = source.sourceId
+    choose('hook')
+    ensureHook(source.sourceId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per linked source
+  }, [source?.sourceId, mode, lateHookOn])
   /** The Text hooking switch: kept for the game, and the Log's input follows it at once. */
   const setTextHook = async (on: boolean): Promise<void> => {
     if (!source || !hookExe) return

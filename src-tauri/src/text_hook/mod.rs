@@ -940,13 +940,28 @@ fn run(hook: &'static Hook, generation: u64, engine: &'static str) {
 
 // ---------------------------------------------------------------------------- commands
 
+/// The process behind a window source: in its id, or for a window shared through the Wayland
+/// portal (which names none) the one KWin or Hyprland linked the stream to. A portal window is
+/// linked once its first frames arrive, so it becomes hookable then.
+fn window_pid(source_id: &str) -> Option<u32> {
+    let id = kimochi_capture::SourceId::parse(source_id).filter(|s| s.is_window())?;
+    if let Some(pid) = id.pid() {
+        return Some(pid);
+    }
+    #[cfg(target_os = "linux")]
+    if source_id.starts_with("portal:window:") {
+        return crate::platform::tracking::linked_pid(source_id);
+    }
+    None
+}
+
 /// Which of these window sources can be hooked, and why not when one cannot.
 #[tauri::command]
 pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut out = serde_json::Map::new();
         for id in source_ids {
-            let pid = kimochi_capture::SourceId::parse(&id).filter(|s| s.is_window()).and_then(|s| s.pid());
+            let pid = window_pid(&id);
             let value = match pid.map(process::target) {
                 Some(Ok(target)) => json!({ "hookable": true, "bits": target.bits, "exe": target.exe }),
                 Some(Err(reason)) => json!({ "hookable": false, "reason": reason }),
@@ -973,10 +988,7 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     if !cfg!(any(windows, target_os = "linux")) {
         return Err("Text Hooker works on Windows and Linux.".into());
     }
-    let pid = kimochi_capture::SourceId::parse(&source_id)
-        .filter(|s| s.is_window())
-        .and_then(|s| s.pid())
-        .ok_or("Choose an app window to hook.")?;
+    let pid = window_pid(&source_id).ok_or("Choose an app window to hook.")?;
     #[cfg(target_os = "linux")]
     let helper = hookd_path(&hook.app);
     let targets = tauri::async_runtime::spawn_blocking(move || {

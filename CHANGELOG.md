@@ -10,13 +10,14 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **Audio hooking on Linux.** Windows games running through Proton or Wine now get each line's clean voice straight from the game too, the same way as on Windows.
+- **Audio hooking on Linux.** Windows games played through Proton or Wine now get clean voice clips straight from the game too, just like on Windows.
 
 ### Fixed
 
-- Text hooking a Proton or Wine game no longer risks crashing the game when it is slow to accept the hook (for example while it is still starting its audio).
 - Steam Deck Gaming Mode: Kimochi added to Steam by hand (the AppImage as a non-Steam game) now works like Kimochi added with **Add to Steam**. Before, it couldn't read the screen ("X11 error … GetImage"), Auto OCR stopped after a few tries, and no game could be chosen as a source.
 - **Add to Steam** now finds your Steam account when more than one has signed in on the device. Before, it could fail with "Kimochi could not tell which Steam account is signed in".
+- Text hooking works in Desktop Mode on KDE Plasma (Wayland), on the Steam Deck too: the **Text hooking** switch now appears under a game you chose in the system picker, once Kimochi has found its window. Before, it never appeared there.
+- KDE Plasma (Wayland): the overlay now follows a Windows game played in a window through Proton or Wine. Before, Kimochi couldn't find the game's window ("No matching window is available"), so the overlay couldn't follow it.
 
 ## [0.8.0] - 2026-11-10
 

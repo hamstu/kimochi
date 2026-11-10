@@ -267,6 +267,11 @@ pub fn enrich(frame: &mut Frame) {
     }
 }
 
+/// The process of the window `source` is linked to (see `kwin::linked_pid`).
+pub fn linked_pid(source: &str) -> Option<u32> {
+    BINDING.lock().ok()?.as_ref().filter(|b| b.source == source).map(|b| b.pid)
+}
+
 /// The linked window's title and app (its class), as GNOME's Shell integration reports them,
 /// so the anonymous portal source is named after the game and its crop is the game's own.
 pub fn identity(source: &str) -> Option<serde_json::Value> {
