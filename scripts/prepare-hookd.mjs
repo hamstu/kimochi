@@ -50,7 +50,9 @@ if (process.platform === 'win32' || process.platform === 'linux') {
       path.join(root, `hookd/target/${target}/release/kimochi-hookd.exe`),
       path.join(destination, `kimochi-hookd-${arch}.exe`)
     )
-    const voice = spawnSync('cargo', ['build', '--locked', '--release', '--manifest-path', path.join(root, 'voicehook/Cargo.toml'), '-p', 'vh-hook', '--target', target], { stdio: 'inherit' })
+    // MinGW builds would carry their symbols and line tables inside the DLL (MSVC's go to a PDB).
+    const env = target.endsWith('-gnu') ? { ...process.env, CARGO_PROFILE_RELEASE_STRIP: 'symbols' } : process.env
+    const voice = spawnSync('cargo', ['build', '--locked', '--release', '--manifest-path', path.join(root, 'voicehook/Cargo.toml'), '-p', 'vh-hook', '--target', target], { stdio: 'inherit', env })
     if (voice.error) throw voice.error
     if (voice.status !== 0) throw new Error(`Voice hook ${arch} build failed (${voice.status}). Install the ${target} Rust target and ${tools}.`)
     await copyFile(path.join(root, `voicehook/target/${target}/release/vhhook.dll`), path.join(destination, `kimochi-voicehook-${arch}.dll`))
