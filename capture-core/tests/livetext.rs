@@ -113,12 +113,9 @@ fn main() {
         assert!(read.contains("今日は寒いですね"), "read {read:?}");
         assert!(observation.lines.len() >= 2, "{} lines", observation.lines.len());
         assert_eq!(observation.engine, "apple-live-text");
-        assert!(
-            observation.duration_ms < 3000.0,
-            "took {}ms, too slow to run every half second",
-            observation.duration_ms
-        );
-        println!("  # read {read:?} in {:.0}ms", observation.duration_ms);
+        // Not timed: the first read of a process loads VisionKit's models, which on a busy machine
+        // takes seconds. Keeping up is what matters, and is measured on repeated reads below.
+        println!("  # read {read:?} in {:.0}ms (cold)", observation.duration_ms);
     });
 
     case("each line comes with its characters boxed, in order, along it", &|| {
@@ -227,6 +224,7 @@ fn main() {
                 let mut observer = platform_observer();
                 let frame = japanese_frame(600, 160, &[("繰り返し", place(40.0, 40.0, 44.0))]);
                 let started = Instant::now();
+                let mut durations = Vec::new();
                 for round in 0..12 {
                     let observation = observer
                         .observe(&frame, Duration::from_secs(10))
@@ -236,12 +234,19 @@ fn main() {
                         "round {round}: {:?}",
                         observation.text
                     );
+                    durations.push(observation.duration_ms);
                 }
-                started.elapsed()
+                (started.elapsed(), durations)
             },
             Duration::from_secs(60),
         );
-        println!("  # 12 observations in {elapsed:?}");
+        let (elapsed, mut durations) = elapsed;
+        durations.sort_by(f64::total_cmp);
+        let median = durations[durations.len() / 2];
+        println!("  # 12 observations in {elapsed:?}, median {median:.0}ms");
+        // Fast enough to read every half second, as automatic scanning does. The median, so a cold
+        // first read or a moment of load on the machine doesn't decide it: typically about 40 ms.
+        assert!(median < 500.0, "a typical read took {median:.0}ms, too slow to run every half second");
     });
 
     case("an acknowledgement cannot arrive while its own main-queue item runs", &|| {
