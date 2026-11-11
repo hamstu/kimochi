@@ -306,13 +306,21 @@ impl Ipc {
     pub fn activate(&self, id: u64) -> std::result::Result<(), String> {
         match self {
             Ipc::Hyprland(path) => {
-                let reply = hyprland_request(path, &format!("dispatch focuswindow address:0x{id:x}"))
-                    .ok_or("Hyprland did not answer")?;
-                let reply = String::from_utf8_lossy(&reply);
-                if reply.trim() == "ok" {
+                let ask = |command: &str| {
+                    hyprland_request(path, command)
+                        .map(|reply| String::from_utf8_lossy(&reply).trim().to_owned())
+                        .ok_or_else(|| "Hyprland did not answer".to_string())
+                };
+                let reply = ask(&format!("dispatch focuswindow address:0x{id:x}"))?;
+                if reply == "ok" {
+                    return Ok(());
+                }
+                // A Lua configuration (Hyprland 0.55+) takes dispatchers as Lua calls only.
+                let lua = ask(&format!(r#"eval hl.dispatch(hl.dsp.focus({{ window = "address:0x{id:x}" }}))"#))?;
+                if lua == "ok" {
                     Ok(())
                 } else {
-                    Err(format!("Hyprland: {}", reply.trim()))
+                    Err(format!("Hyprland: {reply} / {lua}"))
                 }
             }
             Ipc::Sway(path) => {

@@ -308,7 +308,10 @@ impl NativeCapture {
         let driver = driver().ok_or_else(|| CaptureError::new("unsupported", "No native Wayland capture"))?;
         let resolved = self.resolve(source_id)?;
         if let Resolved::Window(w) = &resolved {
-            if w.minimized {
+            // A window on another workspace may still stream its last picture: a scan would read
+            // what is no longer there, so it waits, as on X11 and Windows. A picker thumbnail may
+            // show it (macOS lists other Spaces' windows the same way).
+            if w.minimized || (!thumbnail && w.on_screen == Some(false)) {
                 return Err(out_of_view());
             }
         }

@@ -249,7 +249,11 @@ impl Out {
         let name = if known(&self.make) || known(&self.model) {
             [self.make.as_str(), self.model.as_str()].into_iter().filter(|s| known(s)).collect::<Vec<_>>().join(" ")
         } else {
-            self.description.clone().filter(|d| !d.is_empty()).unwrap_or_else(|| handle.clone())
+            // Compositors describe an output as "<make> <model> (<connector>)"; with neither
+            // known (a VM's virtual output) that is only padding around the connector.
+            let described = self.description.as_deref().map(str::trim).unwrap_or("");
+            let described = described.strip_suffix(&format!("({handle})")).unwrap_or(described).trim();
+            if described.is_empty() { handle.clone() } else { described.to_string() }
         };
         Some(NativeOutput {
             handle,
