@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // The KDE Plasma overlay scenario, end to end in the rig (see README.md):
-//   node scripts/e2e-kde/run.mjs [--scale 1.5] [--x11] [--outputs 2] [--dictionary] [--twin] [--no-eavesdrop] [--keep]
-// A fresh headless Plasma session, the fake game, the debug app; the window is chosen in KDE's
-// own portal picker. Then: OCR, the overlay drawn on the game's text, following a moved window,
+//   node scripts/e2e-kde/run.mjs [--scale 1.5] [--x11] [--outputs 2] [--dictionary] [--twin] [--no-eavesdrop] [--portal] [--keep]
+// A fresh headless Plasma session, the fake game, the debug app; the window is chosen in Kimochi's
+// own picker and captured through KWin's screencast by its window id (with --portal: in KDE's
+// screen-share dialog, then linked to its KWin window). Then: OCR, the overlay drawn on the game's text, following a moved window,
 // hover, Bring to front, and the global scan shortcut; with --dictionary, 10ten is downloaded
 // through Settings and a hover must open its pop-up; with --twin, a second window of the same size
 // makes the link ambiguous, so Kimochi must ask which window was shared. Shift works as on macOS
@@ -21,6 +22,9 @@ const flag = (name) => argv.includes(name)
 const value = (name, fallback) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : fallback }
 const scale = Number(value('--scale', '1'))
 const x11 = flag('--x11')
+// Native capture (KWin's own screencast, sources chosen in Kimochi's picker) unless --portal.
+const native = !flag('--portal')
+if (!native) process.env.KIMOCHI_WAYLAND_CAPTURE = 'portal'
 const outputs = Number(value('--outputs', '1'))
 const out = join(RIG, 'out'); 
 const results = []
@@ -116,6 +120,23 @@ if (flag('--dictionary')) {
 rig.k('ocr', 'meikiocr')
 rig.k('open')
 await sleep(1500)
+let source
+if (native) {
+  // Kimochi's own picker: the compositor's windows by name, with thumbnails; no system dialog.
+  await tap('panel.html', 'Kimochi', 'Choose a source', 'Window or screen')
+  await sleep(1500) // thumbnails
+  shot('1-picker')
+  await tap('panel.html', 'Kimochi', 'Rig Game')
+  source = await until('the chosen window', () => { const s = rig.kjson('status').source; return s?.sourceId?.startsWith('wayland:window:') && s })
+  check('native window chosen in Kimochi\'s own picker (no system dialog)', source && !rig.windows().some(w => w.caption.startsWith('Share screen')), source.sourceId)
+  const named = rig.kjson('status').source
+  check('the source is named after the window and its app', named.name === 'Rig Game', named)
+  if (flag('--twin')) {
+    await sleep(3000)
+    const text = await evaluate('panel.html', 'document.body.innerText')
+    check('equal-size windows: nothing asks which one (the source names its window)', !/Link the shared window|Choose the shared window/.test(text))
+  }
+} else {
 await tap('panel.html', 'Kimochi', 'Choose a source', 'Window or screen', 'Choose New Source')
 const picker = await until('KDE\'s screen picker', () => rig.windows().find(w => w.caption.startsWith('Share screen')))
 await sleep(1500) // thumbnails
@@ -130,7 +151,7 @@ for (let i = 0; i < 3 && rig.windows().some(w => w.caption.startsWith('Share scr
   rig.input('move', ...card, 'sleep', 300, 'click')
   await sleep(1200)
 }
-const source = await until('the shared window', () => { const s = rig.kjson('status').source; return s?.sourceId?.startsWith('portal:window:') && s })
+source = await until('the shared window', () => { const s = rig.kjson('status').source; return s?.sourceId?.startsWith('portal:window:') && s })
 check('portal window source chosen', source, source.sourceId)
 if (flag('--twin')) {
   // Two windows fit the stream: the source panel asks (HyprlandWindowLink, KDE too).
@@ -142,15 +163,18 @@ if (flag('--twin')) {
   const linked = await until('the explicit link', async () => (await invoke('linux_window_geometry', { operation: 'status', sourceId: source.sourceId, windowAddress: null })).linked, { timeout: 8000 }).catch(() => false)
   check('the chosen window is linked', linked)
 }
+}
 
 // Read with Kimochi out of the way, as a player would.
 rig.js(`for (const w of workspace.windowList()) { if (w.resourceClass == 'kimochi' && w.normalWindow) w.minimized = true; if (w.caption == 'Rig Game') workspace.activeWindow = w }`)
 await sleep(800)
 const text = rig.k('scan', '--wait', '--timeout', '90')
 check('OCR reads the shared window', /今日は/.test(text) && /図書館/.test(text), text.replace(/\n/g, ' / '))
-const status = await until('the window link', async () => { const s = await invoke('linux_window_geometry', { operation: 'status', sourceId: source.sourceId, windowAddress: null }); return s.linked && s })
+const status = native
+  ? await until('the window bounds', async () => { const s = await invoke('source_window_state', { sourceId: source.sourceId }); return s?.bounds && { linked: true, bounds: s.bounds } })
+  : await until('the window link', async () => { const s = await invoke('linux_window_geometry', { operation: 'status', sourceId: source.sourceId, windowAddress: null }); return s.linked && s })
 const g = game()
-check('stream linked to the game window', status.linked && Math.abs(status.bounds.x - g.frame.x) < 1 && Math.abs(status.bounds.y - g.frame.y) < 1
+check(native ? 'bounds are the game window\'s own' : 'stream linked to the game window', status.linked && Math.abs(status.bounds.x - g.frame.x) < 1 && Math.abs(status.bounds.y - g.frame.y) < 1
   && Math.abs(status.bounds.width - g.frame.width) < 1, { bounds: status.bounds, frame: g.frame })
 await until('overlay boxes', async () => (await boxes()).length > 0, { timeout: 10000 }).catch(() => {})
 await boxesOnText('in place')

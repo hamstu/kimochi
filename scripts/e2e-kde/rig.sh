@@ -17,7 +17,7 @@ export RIG=${KIMOCHI_KDE_RIG:-${TMPDIR:-/tmp}/kimochi-kde-rig}
 NAME=${KIMOCHI_KDE_CONTAINER:-kimochi-kde}
 IMAGE=${KIMOCHI_KDE_IMAGE:-kimochi-kde}
 BIN=${KIMOCHI_BIN:-${CARGO_TARGET_DIR:-$REPO/src-tauri/target}/debug/kimochi}
-inside() { podman exec -i -w "$HERE" -e RIG="$RIG" "$NAME" bash -c '. "$RIG/env"; "$@"' _ "$@"; }
+inside() { podman exec -i -w "$HERE" -e RIG="$RIG" ${KIMOCHI_WAYLAND_CAPTURE:+-e KIMOCHI_WAYLAND_CAPTURE="$KIMOCHI_WAYLAND_CAPTURE"} "$NAME" bash -c '. "$RIG/env"; "$@"' _ "$@"; }
 cmd=${1:-}; shift || true
 case "$cmd" in
   image) podman build -t "$IMAGE" "$HERE" ;;
