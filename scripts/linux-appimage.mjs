@@ -121,11 +121,24 @@ export function linuxLayerShellSource(libraries = ldconfigLibraries(spawnSync('l
   return source
 }
 
+/**
+ * libgpg-error from the build machine. linuxdeploy's excludelist leaves it out as "always on the
+ * host", but the AppImage bundles libgcrypt (WebKitGTK's crypto) and that needs it; NixOS's
+ * appimage-run, for one, provides no copy, and the app then cannot start ("libgpg-error.so.0:
+ * cannot open shared object file"). Bundled next to its libgcrypt, the pair always match.
+ */
+export function linuxGpgErrorSource(libraries = ldconfigLibraries(spawnSync('ldconfig', ['-p'], { encoding: 'utf8' }).stdout ?? '')) {
+  const source = libraries.get('libgpg-error.so.0')
+  if (!source) throw new Error('libgpg-error.so.0 unavailable, which the bundled libgcrypt needs; install libgpg-error0 (Arch: libgpg-error)')
+  return source
+}
+
 // `node scripts/linux-appimage.mjs --check-deps` (or the older `--check-avif`): CI's quick check,
 // right after installing packages, for the libraries the AppImage must bundle.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && ['--check-deps', '--check-avif'].includes(process.argv[2])) {
   console.log(`AVIF dictionary images: libavif ${linuxAvifSource().version}`)
   console.log(`Native Wayland overlays: ${linuxLayerShellSource()}`)
+  console.log(`libgcrypt's libgpg-error: ${linuxGpgErrorSource()}`)
 }
 
 /** The SPA plugin directories the AppImage carries (see repairLinuxAppImages). */
@@ -141,6 +154,7 @@ export async function repairLinuxAppImages({ target, release, env }) {
   // Fail before the slow steps when a library the bundle needs is missing.
   linuxAvifSource()
   const layerShell = linuxLayerShellSource()
+  const gpgError = linuxGpgErrorSource()
   await bundleLinuxAudio(appdir, env)
   // PipeWire loads its SPA plugins dynamically. The compiled-in Ubuntu multiarch path is
   // absent on SteamOS/Arch, even when PipeWire is installed, and SPA_PLUGIN_DIR points at the
@@ -203,6 +217,8 @@ export async function repairLinuxAppImages({ target, release, env }) {
   }
   await copyFile(layerShell, path.join(libraries, 'libgtk-layer-shell.so.0'))
   console.log(`Bundled GTK layer-shell runtime from ${layerShell}.`)
+  await copyFile(gpgError, path.join(libraries, 'libgpg-error.so.0'))
+  console.log(`Bundled libgpg-error from ${gpgError}.`)
   const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
   const script = await readFile(hook, 'utf8')
   await writeFile(hook, script.replace(/^export GDK_BACKEND=x11.*$/m, `# Respect an explicit backend; prefer native Wayland in a Wayland login.\nif [ -z "\${GDK_BACKEND:-}" ]; then\n    if [ "\${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "\${WAYLAND_DISPLAY:-}" ]; then\n        GDK_BACKEND=wayland\n    else\n        GDK_BACKEND=x11\n    fi\nfi\nexport GDK_BACKEND`))

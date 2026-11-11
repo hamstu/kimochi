@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { hashOverlapsHeaders, ldconfigLibraries, linuxLayerShellSource, spaPlugins, verifyDictionaryImages } from './linux-appimage.mjs'
+import { hashOverlapsHeaders, ldconfigLibraries, linuxGpgErrorSource, linuxLayerShellSource, spaPlugins, verifyDictionaryImages } from './linux-appimage.mjs'
 
 // Minimal ELF64 section metadata, using the real failed library's header/hash offsets.
 function elf(programHeaders, hashOffset = 0x1f0) {
@@ -76,4 +76,10 @@ test('the AppImage bundles GTK 3 layer-shell from the build machine', () => {
 
 test('a build machine without GTK 3 layer-shell fails the build, naming the package', () => {
   assert.throws(() => linuxLayerShellSource(ldconfigLibraries(ldconfig([gtk4Layer]))), /install libgtk-layer-shell0 \(Arch: gtk-layer-shell\)/)
+})
+
+test('the AppImage bundles libgpg-error, which linuxdeploy excludes but NixOS lacks', () => {
+  const gpgError = 'libgpg-error.so.0 (libc6,x86-64) => /lib/x86_64-linux-gnu/libgpg-error.so.0'
+  assert.equal(linuxGpgErrorSource(ldconfigLibraries(ldconfig([gtk3Layer, gpgError]))), '/lib/x86_64-linux-gnu/libgpg-error.so.0')
+  assert.throws(() => linuxGpgErrorSource(ldconfigLibraries(ldconfig([gtk3Layer]))), /install libgpg-error0/)
 })
