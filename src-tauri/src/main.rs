@@ -4829,6 +4829,10 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
         let mut last: Option<(String, platform::WindowState)> = None;
         let mut ticks = 0_u32;
         let mut asked = 0_u64;
+        // Since when the window has had no state (closed, or a desktop that can't say), and when
+        // the backend was last asked whether it closed.
+        let mut missing: Option<(String, std::time::Instant)> = None;
+        let mut confirmed = std::time::Instant::now();
         loop {
             std::thread::sleep(Duration::from_millis(100));
             ticks = ticks.wrapping_add(1);
@@ -4851,8 +4855,27 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             let previous = last.as_ref().filter(|(id, _)| *id == source_id).map(|(_, state)| *state);
             let Some(state) = platform::desktop_window_state(&window, previous.as_ref()) else {
                 compact::forget_source(&handle);
+                // A closed window clears the source rather than leaving a dead card and overlay.
+                let since = match &missing {
+                    Some((id, since)) if *id == source_id => *since,
+                    _ => {
+                        missing = Some((source_id.clone(), std::time::Instant::now()));
+                        continue;
+                    }
+                };
+                if since.elapsed() >= Duration::from_millis(600)
+                    && confirmed.elapsed() >= Duration::from_secs(2)
+                {
+                    confirmed = std::time::Instant::now();
+                    if sources::clear_if_closed(&service, &source_id) {
+                        record(&handle, &service, json!({ "check": "source-closed", "sourceId": source_id }));
+                        last = None;
+                        missing = None;
+                    }
+                }
                 continue;
             };
+            missing = None;
             if previous.is_some_and(|p| !p.differs(&state)) {
                 continue;
             }
