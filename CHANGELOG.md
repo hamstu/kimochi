@@ -21,6 +21,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - **Hachidori** no longer gets stuck at startup on "the extension host did not answer the engine worker".
+- **Yomitan:** hovering the last word of a line on the overlay no longer looks up the word without its last character (`食べまし` instead of `食べました`) when **Layout-aware scan** is on in your Yomitan profile. Kimochi now always scans its own pages with that option off.
 - Verbose logging now records more about controllers, to help debug ones whose buttons aren't detected.
 - When the window you were reading closes, Kimochi now lets go of it and goes back to **Choose a source**, instead of keeping a dead source card and repeating errors. A minimised window, or one on another workspace, is still kept and read again when it comes back.
 - **NixOS:** the AppImage now starts with `appimage-run`. Before, it stopped at "libgpg-error.so.0: cannot open shared object file".

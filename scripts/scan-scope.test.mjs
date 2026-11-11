@@ -162,6 +162,7 @@ test('text marked data-no-scan is never read, even where everything else scans',
 
 // --- frontend-mode.js, with the vendored Frontend replaced by a stand-in. -------------------
 
+let frontendModeLoads = 0
 async function loadFrontendMode() {
   const calls = []
   class Frontend {
@@ -194,8 +195,9 @@ async function loadFrontendMode() {
       }
     }]
   })
-  const code = Buffer.from(outputFiles[0].contents).toString('base64')
-  const mode = await import(`data:text/javascript;base64,${code}`)
+  // A fresh module each time (an identical data: URL is the cached module), so it wraps this Frontend.
+  const source = `${Buffer.from(outputFiles[0].contents)}\n// load ${++frontendModeLoads}`
+  const mode = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
   return { mode, Frontend, calls }
 }
 
@@ -228,6 +230,111 @@ test('a document that never sets a scope keeps Yomitan\'s default of scanning ev
   assert.equal(frontend._textScanner.includeSelector, null)
 })
 
+// --- The last word of a line, with Kimochi's controls after it in the document. --------------
+//
+// These run the vendored `TextSourceRange` and `DOMTextScanner` over a linked DOM, so the range
+// end lands where Yomitan really leaves it: a read that runs out of text walks on to the last
+// node in the document, past the hook card's `data-no-scan` controls.
+
+const { TextSourceRange } = await import('../extensions/yomitan/js/dom/text-source-range.js')
+const matches = el().matches
+const STYLE = {
+  display: 'inline', position: 'static', visibility: 'visible', opacity: '1', fontSize: '16px',
+  color: 'rgb(0, 0, 0)', userSelect: 'auto', webkitUserSelect: 'auto', whiteSpace: 'normal'
+}
+globalThis.window ??= {}
+globalThis.window.getComputedStyle ??= (node) => ({ ...STYLE, ...node.style })
+
+function tag(nodeName, attrs, style, ...childNodes) {
+  const node = { nodeType: 1, nodeName, attrs, style, matches, parentNode: null, nextSibling: null, previousSibling: null, childNodes }
+  childNodes.forEach((child, i) => {
+    child.parentNode = node
+    child.previousSibling = childNodes[i - 1] ?? null
+    child.nextSibling = childNodes[i + 1] ?? null
+  })
+  node.firstChild = childNodes[0] ?? null
+  node.lastChild = childNodes.at(-1) ?? null
+  return node
+}
+const chars = (nodeValue) => ({ nodeType: 3, nodeName: '#text', nodeValue, childNodes: [], firstChild: null })
+
+class FakeRange {
+  constructor(startContainer, startOffset, endContainer = startContainer, endOffset = startOffset) {
+    Object.assign(this, { startContainer, startOffset, endContainer, endOffset })
+  }
+  setStart(node, offset) { Object.assign(this, { startContainer: node, startOffset: offset }) }
+  setEnd(node, offset) { Object.assign(this, { endContainer: node, endOffset: offset }) }
+  cloneRange() { return new FakeRange(this.startContainer, this.startOffset, this.endContainer, this.endOffset) }
+  toString() { return '' }
+}
+
+/** The overlay's shape (render.js, hook-card.js): a line's word boxes, then the hook card. */
+function overlayDocument({ menuOpen = false } = {}) {
+  const word = (value) => tag('SPAN', { class: 'ocr-word' }, { display: 'inline-flex', position: 'absolute' },
+    tag('SPAN', { class: 'ocr-word-text' }, { display: 'block' },
+      tag('SPAN', { class: 'ocr-word-current' }, {}, chars(value)),
+      tag('SPAN', { class: 'ocr-lookahead' }, {})))
+  const first = word('猫が')
+  const last = word('食べました')
+  const label = chars('不透明度')
+  const card = tag('DIV', { class: 'hook-card' }, { display: 'block', position: 'absolute' }, chars('\n  '),
+    tag('DIV', { class: 'hook-card-bar', 'data-no-scan': '' }, { display: 'flex' }, chars('\n    '),
+      tag('BUTTON', { class: 'hook-card-button' }, { display: 'inline-block' }, chars('⋯')), chars('\n  ')),
+    tag('DIV', { class: 'hook-card-menu', 'data-no-scan': '' }, { display: menuOpen ? 'block' : 'none' },
+      tag('SPAN', { class: 'hook-card-menu-label' }, {}, label)),
+    tag('DIV', { class: 'hook-card-controls', 'data-no-scan': '' }, { display: 'flex' }))
+  tag('BODY', {}, { display: 'block' }, chars('\n    '),
+    tag('DIV', { id: 'words' }, { display: 'block' }, first, last), chars('\n    '), card, chars('\n    '),
+    tag('DIV', { id: 'hover' }, { display: 'block' }), chars('\n  '))
+  const textOf = (box) => box.firstChild.firstChild.firstChild
+  return { first: textOf(first), last: textOf(last), label }
+}
+
+/**
+ * What a frontend's scanner reads from character `offset` of `node`, through frontend-mode.js,
+ * with the profile's Layout-aware scan option set to `layoutAwareScan`. The flag is read back from
+ * the scanner, as Yomitan's own lookup (`_findTermDictionaryEntries`) does.
+ */
+async function lookup(node, offset, layoutAwareScan) {
+  const { Frontend } = await loadFrontendMode()
+  const frontend = new Frontend()
+  await frontend.prepare()
+  const scanner = frontend._textScanner
+  scanner.setOptions({ layoutAwareScan })
+  const source = TextSourceRange.create(new FakeRange(node, offset))
+  const text = scanner.getTextSourceContent(source, 16, scanner._layoutAwareScan, 'mouse')
+  // The page's whitespace is text without the option: the read ends in the whitespace before the card.
+  return text.trimEnd()
+}
+
+test('Layout-aware scan stays off on Kimochi\'s pages, whatever the profile says', async () => {
+  const { Frontend } = await loadFrontendMode()
+  const frontend = new Frontend()
+  await frontend.prepare()
+  frontend._textScanner.setOptions({ layoutAwareScan: true })
+  assert.equal(frontend._textScanner._layoutAwareScan, false)
+})
+
+test('the last word of a line is read whole, with the profile\'s Layout-aware scan on or off', async () => {
+  const { first, last } = overlayDocument()
+  for (const layoutAwareScan of [true, false]) {
+    // With the option on, this read ran out of text, ended past the hook card's controls, and
+    // lost its last character to Yomitan's exclude check.
+    assert.equal(await lookup(last, 0, layoutAwareScan), '食べました')
+    assert.equal(await lookup(last, 1, layoutAwareScan), 'べました')
+    assert.equal(await lookup(first, 0, layoutAwareScan), '猫が食べました')
+  }
+})
+
+test('text inside a data-no-scan control is still never read', async () => {
+  const { last, label } = overlayDocument({ menuOpen: true })
+  for (const layoutAwareScan of [true, false]) {
+    assert.equal(await lookup(label, 0, layoutAwareScan), '')
+    // A line's last word stops before the open menu.
+    assert.equal(await lookup(last, 0, layoutAwareScan), '食べました')
+  }
+})
+
 // --- Who sets the scope, and who carries the marker. ----------------------------------------
 
 test('only the panel relay scopes its scanner, to the marker the Log lines carry', () => {
@@ -254,4 +361,8 @@ test('the vendored seams the scope relies on are still there', () => {
   const scanner = read('extensions/yomitan/js/language/text-scanner.js')
   assert.match(scanner, /set includeSelector\(value\) \{\s*this\._includeSelector = value;/)
   assert.match(scanner, /const includeSelector = this\._includeSelector;/)
+  // frontend-mode.js keeps Layout-aware scan off by holding this flag false; every lookup reads it.
+  assert.match(scanner, /this\._layoutAwareScan = layoutAwareScan;/)
+  assert.equal(scanner.match(/const layoutAwareScan = this\._layoutAwareScan;/g)?.length, 2)
+  assert.match(scanner, /textSource\.setStartOffset\(this\._scanLength, this\._layoutAwareScan, true\);/)
 })

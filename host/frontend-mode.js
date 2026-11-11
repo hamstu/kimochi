@@ -18,6 +18,22 @@ function applyScanScope(frontend) {
   }
   scanner.includeSelector = scanScope;
   scanner.excludeSelector = NO_SCAN;
+  scanWithoutLayout(scanner);
+}
+
+/**
+ * Yomitan's "Layout-aware scan" profile option is always off on Kimochi's pages. With it on, a
+ * read that runs out of text (a line's last word) walks on to the end of the document and leaves
+ * its end there, past Kimochi's `data-no-scan` controls, so Yomitan's exclude check trims the
+ * word's last character (`食べました` → `食べまし`). The profile keeps its value, and
+ * Yomitan's own popup (its own scanner, not a frontend's) still uses it.
+ */
+function scanWithoutLayout(scanner) {
+  if (!("_layoutAwareScan" in scanner)) {
+    console.error("[kimochi] TextScanner#_layoutAwareScan is gone; Layout-aware scan may trim a line's last letter.");
+    return;
+  }
+  Object.defineProperty(scanner, "_layoutAwareScan", { configurable: true, get: () => false, set() {} });
 }
 
 /**
