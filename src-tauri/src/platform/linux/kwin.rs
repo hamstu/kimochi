@@ -566,12 +566,36 @@ pub fn enrich(frame: &mut Frame) {
 
 /// Global pointer position, relative to the overlay's output; never button state. Asked for on
 /// its own (snapshots are pushed on window changes, not pointer motion).
+/// The cursor in KWin's global logical coordinates (the space of its outputs' geometry).
+pub fn pointer_global() -> Option<(f64, f64)> {
+    bridge()?;
+    let cursor: Point = serde_json::from_value(ask("pointer", json!({}))?).ok()?;
+    (cursor.x.is_finite() && cursor.y.is_finite()).then_some((cursor.x, cursor.y))
+}
+
 pub fn pointer() -> Option<Value> {
     let snapshot = snapshot()?;
     let origin = overlay_output(&snapshot)?.geometry;
     let cursor: Point = serde_json::from_value(ask("pointer", json!({}))?).ok()?;
     let (x, y) = (cursor.x - origin.x, cursor.y - origin.y);
     (x.is_finite() && y.is_finite()).then(|| json!({"x": x, "y": y}))
+}
+
+/// Kimochi's own ordinary windows (main window, Settings, Welcome…) where KWin has them, relative
+/// to the overlay's output like every other bound here: a Wayland client is never told where its
+/// own windows are. `None` when the bridge cannot answer.
+pub fn own_frames() -> Option<Vec<Rect>> {
+    let snapshot = snapshot()?;
+    let origin = overlay_output(&snapshot)?.geometry;
+    let own = std::process::id();
+    Some(
+        snapshot
+            .windows
+            .iter()
+            .filter(|w| w.pid == own && w.normal && !w.minimized && !w.hidden && w.on_desktop && w.layer.is_none_or(|l| l <= 2))
+            .map(|w| Rect { x: w.frame.x - origin.x, y: w.frame.y - origin.y, ..w.frame })
+            .collect(),
+    )
 }
 
 /// The linked window's title and application, for naming the anonymous portal source.

@@ -319,6 +319,7 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
     // `scaleFactor` is frame pixels per desktop point, as in the frame's own info.
     let desktop = platform::desktop_frame_info(&frame.info);
     let (width, height, scale) = (desktop.width, desktop.height, desktop.scale_factor);
+    let source_bounds = desktop.source_bounds;
     let info = serde_json::to_value(&desktop).unwrap_or(Value::Null);
     let token = service
         .images
@@ -330,6 +331,9 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
         "width": width,
         "height": height,
         "scaleFactor": scale,
+        // Where the source is on the desktop, when the platform knows: a screen's bounds in its
+        // global layout (the Linux layer editor places itself by it), a window's frame.
+        "sourceBounds": source_bounds,
     }))
 }
 

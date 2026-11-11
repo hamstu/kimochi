@@ -324,6 +324,7 @@ choosing that source again brings its region back.
 | `place_overlay` | `({rect}) -> ()` |
 | `desktop` | `() -> [Rect]` |
 | `displays` | `() -> [{id, bounds, work_area, scale_factor}]` |
+| `layer_outputs` | `({operation: 'list'}) -> {outputs: [Rect], current: Rect \| null, pointer: {x, y} \| null}`, `({operation: 'move', rect}) -> bool` — Linux layer-shell overlay only (KDE Plasma, Hyprland, wlroots): every output and the pointer in the compositor's global logical layout, and moving the overlay to the output with that geometry. The Wayland region editor uses it to edit a shared screen on whichever of its outputs the pointer is over. No outputs elsewhere |
 | `watch_source` | `({sourceId \| null}) -> ()` |
 
 **Ownership split.** `capture_frame` performs a native capture and nothing else: no

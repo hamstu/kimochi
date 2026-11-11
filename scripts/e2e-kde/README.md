@@ -35,6 +35,18 @@ node scripts/e2e-kde/run.mjs --dictionary     # downloads 10ten (network) and ch
 node scripts/e2e-kde/run.mjs --no-eavesdrop   # Legacy X11 App Support: Never (no Shift; hover lookups)
 ```
 
+```sh
+node scripts/e2e-kde/crop.mjs                 # crop areas with two monitors (native capture)
+node scripts/e2e-kde/crop.mjs --portal        # the same through KDE's dialog: a screen, Full
+                                              # Workspace, a virtual screen, a linked window
+node scripts/e2e-kde/crop.mjs --scale2 1.5    # the second monitor at its own scale
+```
+
+`crop.mjs` puts the game on the second monitor and checks that the crop editor opens there (and, for
+the full workspace, follows the pointer across), that the saved crop is the box drawn in the
+source's own pixels, that the scan reads it and the overlay's text sits on the game there, and that a
+window's second crop replaces its first and **Clear OCR crop area** clears it.
+
 Each run starts a fresh session and profile, opens a fake game (`target.py`, which reports where it
 drew its text), starts Kimochi, approves its global shortcuts, shares the game's window through the
 picker and checks: OCR, the stream linked to the right KWin window, overlay boxes on the game's text
@@ -75,6 +87,16 @@ window, overlapping, then list, capture, thumbnails, bench and activate; PNGs in
 is refused until a desktop file with `X-KDE-Wayland-Interfaces` names its executable.
 `KWIN_LOGGING_RULES` (e.g. `kwin_core.debug=true;KWIN_UTILS.debug=true`) replaces KWin's logging
 rules for a session.
+
+## Two rigs at once
+
+Give the second its own container, directory and inspector port (the container uses the host
+network); keep the directory short, since D-Bus socket paths have a length limit:
+
+```sh
+KIMOCHI_KDE_CONTAINER=kimochi-kde-2 KIMOCHI_KDE_RIG=/tmp/kde-rig-2 \
+WK_HOST=127.0.0.1:9343 WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9343 node scripts/e2e-kde/crop.mjs
+```
 
 ## Rig notes
 

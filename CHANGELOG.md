@@ -26,6 +26,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Hachidori** no longer gets stuck at startup on "the extension host did not answer the engine worker".
 - Verbose logging now records more about controllers, to help debug ones whose buttons aren't detected.
+- **KDE Plasma and other Wayland desktops:** with more than one monitor, **Crop area** works on every monitor, not only the main one. Share your second monitor, or **Share full Workspace**, and the crop editor opens on the monitor under your pointer (and follows it to the others); the overlay's text then shows on that monitor, over the game, instead of squeezed onto the main one. **Share virtual screen** opens its crop editor as a picture of that screen.
+- **KDE Plasma and Hyprland:** with a shared window, a new crop now replaces the old one, and **Clear OCR crop area** clears it. Before, the window kept going back to its first crop.
+- **KDE Plasma and Hyprland:** a whole-screen scan no longer misses text in the top-left corner of the screen while one of Kimochi's own windows is open somewhere else.
 - When the window you were reading closes, Kimochi now lets go of it and goes back to **Choose a source**, instead of keeping a dead source card and repeating errors. A minimised window, or one on another workspace, is still kept and read again when it comes back.
 - **NixOS:** the AppImage now starts with `appimage-run`. Before, it stopped at "libgpg-error.so.0: cannot open shared object file".
 - Text hooking no longer shows a long line twice in some games (a line that wraps onto two lines came through once as drawn and once whole).

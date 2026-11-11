@@ -99,6 +99,26 @@ pub fn pointer() -> Option<serde_json::Value> {
     point["y"].as_f64().filter(|v| v.is_finite())?;
     Some(point)
 }
+/// Kimochi's own windows on the monitor's current workspace (Hyprland's one supported monitor is
+/// at the origin, so its coordinates are the overlay's). `None` when Hyprland cannot answer.
+pub fn own_frames() -> Option<Vec<Rect>> {
+    let snapshot = snapshot()?;
+    let own = std::process::id();
+    Some(
+        snapshot
+            .clients
+            .iter()
+            .filter(|c| c.pid == own && c.mapped && !c.hidden && c.workspace.id == snapshot.monitor.workspace.id)
+            .map(|c| Rect { x: c.at[0], y: c.at[1], width: c.size[0], height: c.size[1] })
+            .collect(),
+    )
+}
+
+/// The cursor in Hyprland's global layout coordinates (`cursorpos` is not monitor-relative).
+pub fn pointer_global() -> Option<(f64, f64)> {
+    let point = pointer()?;
+    Some((point["x"].as_f64()?, point["y"].as_f64()?))
+}
 fn query<T: serde::de::DeserializeOwned>(command: &[u8]) -> Option<T> {
     serde_json::from_slice(&request(command)?).ok()
 }

@@ -1541,6 +1541,29 @@ async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Re
         .map_err(|e| e.to_string())?
 }
 
+/// Linux layer-shell outputs for the region editor; see `platform::linux::screens`.
+/// `list` -> `{outputs, current, pointer}` (global logical), `move` (`rect`) -> whether it moved.
+/// Elsewhere (and without layer-shell) `list` has no outputs.
+#[tauri::command]
+async fn layer_outputs(operation: String, rect: Option<Rect>) -> Reply<Value> {
+    tauri::async_runtime::spawn_blocking(move || -> std::result::Result<Value, String> {
+        #[cfg(target_os = "linux")]
+        return match (operation.as_str(), rect) {
+            ("list", _) => Ok(platform::screens::layout()),
+            ("move", Some(rect)) => Ok(json!(platform::screens::move_to(rect))),
+            _ => Err("invalid: layer_outputs takes list, or move with a rect".into()),
+        };
+        #[cfg(not(target_os = "linux"))]
+        match (operation.as_str(), rect) {
+            ("list", _) => Ok(json!({"outputs": [], "current": null, "pointer": null})),
+            ("move", Some(_)) => Ok(json!(false)),
+            _ => Err("invalid: layer_outputs takes list, or move with a rect".into()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// The chosen source's current pixels for the sidebar's live preview. See `sources::live_thumbnail`.
 #[tauri::command]
 async fn source_live_thumbnail(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
@@ -1737,7 +1760,7 @@ fn blank_own_windows(app: &tauri::AppHandle, source_id: &str, frame: &mut kimoch
     let (width, height, full, crop) = (info.width, info.height, (info.full_width, info.full_height), info.crop_pixels);
     // On GNOME the Shell knows where the windows are; the cache only has what GTK was told.
     #[cfg(target_os = "linux")]
-    let own = platform::gnome::own_frames(app, cover::COVERING).unwrap_or_else(cover::own_rects);
+    let own = platform::own_frames(app, cover::COVERING).unwrap_or_else(cover::own_rects);
     #[cfg(not(target_os = "linux"))]
     let own = {
         let _ = app;
@@ -3310,6 +3333,7 @@ fn main() {
             source_icon,
             source_preview,
             source_hover_preview,
+            layer_outputs,
             source_live_thumbnail,
             source_window_state,
             accessibility_status,

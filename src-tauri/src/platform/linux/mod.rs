@@ -52,6 +52,7 @@ pub mod native;
 pub mod tracking;
 pub mod shift;
 mod layer;
+pub mod screens;
 pub mod shortcuts;
 pub mod icons;
 mod rules;
@@ -456,6 +457,18 @@ pub fn capabilities() -> Value {
         "gamepad": true,
         "ocrAccelerators": {"meikiocr": "cpu", "mangaocr": "cpu", "ppocr": "cpu"},
     })
+}
+
+/// Where Kimochi's own ordinary windows are (`labels`, those `cover` blanks out of screen
+/// captures), in the space a captured screen's `source_bounds` are in; `None` where `cover`'s own
+/// record of them is right (X11). GNOME's Shell knows; on a layer-shell desktop KWin's bridge or
+/// Hyprland's IPC does, and with neither nothing is blanked: a Wayland window's own frame is
+/// always at the origin (`own_frames_reliable`), which would blank a made-up corner of the screen.
+pub fn own_frames(app: &tauri::AppHandle, labels: &[&str]) -> Option<Vec<Rect>> {
+    if let Some(frames) = gnome::own_frames(app, labels) {
+        return Some(frames);
+    }
+    (!on_x11()).then(|| tracking::own_frames().unwrap_or_default())
 }
 
 pub fn region_editing() -> bool { gamescope::editing() || layer::region_editing() }
