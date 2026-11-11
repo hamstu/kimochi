@@ -2150,6 +2150,30 @@ Real limitations, recorded rather than papered over.
 - **Transparent windows** use Tauri's macOS private API feature, which is unsuitable for
   a Mac App Store claim.
 
+## Native Wayland capture: sources by window identity (Linux only)
+
+Where the compositor has its own capture API, `platform_backend()` returns capture-core's
+`NativeCapture` (`capture-core/src/linux_native/`) instead of the ScreenCast portal:
+`capabilities.session.captureBackend` is `native-mutter` (GNOME, through Kimochi's Shell extension
+and `org.gnome.Mutter.ScreenCast`), `native-kwin` (KDE Plasma 6, `zkde_screencast_unstable_v1` and
+`org_kde_plasma_window_management`) or `native-ext` (Hyprland, Sway ≥1.12, COSMIC:
+`ext-image-copy-capture` with `ext-foreign-toplevel-list`, plus Hyprland's or Sway's IPC for
+geometry). Then `capture.pickerRequired` is false, `sources.catalog`, `thumbnails`, `icons`,
+`followWindowBounds`, `foregroundTracking`, `activateWindow` and `nativeWindows` are true, and
+`capture.isolatedWindows` says a window's stream holds that window alone.
+
+Source ids are `wayland:window:{handle}:{pid}` and `wayland:display:{connector}` (the handle is the
+compositor's own window id: Mutter's, KWin's uuid, or the ext identifier). `source_catalog`,
+`source_thumbnail`, `source_icon`, `source_window_state` and `activate_source` answer for them as
+on X11; `linux_window_geometry`'s link dialog and **Relink window overlay…** exist only for portal
+sources. A minimised window, or one on another workspace, captures as `unavailable` (`gone: hidden:`);
+a closed one as `stale_source`. `KIMOCHI_WAYLAND_CAPTURE=portal|mutter|kwin|ext` forces a choice.
+On GNOME, `gnome_overlay` `track` takes `{operation: "bind", sourceId}` for a native window (the
+Shell's overlay then follows it by id) and the extension's `Windows` method lists and activates
+windows; startup updates an older extension in place (`gnome::refresh_for_native`). On Plasma ≤6.7
+an AppImage or dev build writes a hidden `dev.kimochi.KWinCapture.desktop` naming its executable
+(`native::authorize_kwin`); the .deb ships `kimochi-screencast.desktop`.
+
 ## Optional Wayland window geometry: Hyprland and KDE Plasma (Linux only)
 
 `linux_window_geometry({operation, sourceId, windowAddress?}) -> Value` operates on

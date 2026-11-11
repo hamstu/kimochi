@@ -165,6 +165,30 @@ x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks in
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
 bounds versus the overlay.
 
+### Native Wayland capture (2026-11-11)
+
+`platform/linux/native.rs` over capture-core's `linux_native` (see COMMANDS.md, "Native Wayland
+capture"): picker sources, window bounds and visibility, front window, frontmost app/pid, app icons
+(desktop entry → GTK icon theme) and activation come from the compositor's inventory; the
+portal stays the fallback. Bounds are global logical on GNOME (the Shell draws the overlay) and
+output-local with a layer-shell overlay, which follows the window's output. Verified:
+
+- GNOME 46 (ubuntu-vm, real session): catalog, thumbnails (25–80 ms), icons, OCR, the Shell
+  overlay bound by window id, move/resize/fullscreen/minimize/close, Quick Shot's screen list, and
+  the in-place extension update from an older revision. Steady captures ~7 ms (debug build).
+- KDE Plasma 6.7 (`scripts/e2e-kde`, now native by default; `--portal` keeps the portal flow): every
+  scenario passes, including `--x11`, `--scale 1.5`, `--outputs 2` and `--twin` (no link prompt).
+- Hyprland 0.56 (omarchy-vm, Lua config, scale 1.33): catalog, OCR, layer overlay on the text,
+  follows a move, hides on another workspace, activation (`hl.dsp.focus` when the classic
+  dispatcher is refused), close. Window captures are full resolution (bounds × scale).
+- Sway 1.12 (`scripts/e2e-native`, headless): driver-level only (probe). Sway renders window
+  captures at scale 1 on scaled outputs (wlroots), so text there gets fewer pixels; Sway 1.11 has
+  no window capture source and falls back to the portal.
+
+Not covered: COSMIC, niri (it answers Mutter's ScreenCast API but has no Kimochi extension, so it
+uses the portal), GNOME 47+ (the extension still declares 46 only), multi-monitor GNOME (the Shell
+overlay supports one monitor, as before).
+
 ### KDE Plasma window geometry (2026-11-09)
 
 Verified in a headless Plasma 6.7 session (Fedora 43, KWin virtual backend, real
