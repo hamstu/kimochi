@@ -37,10 +37,14 @@ const STANDARD: [Button; 17] = [
 ];
 
 pub fn start(app: &tauri::AppHandle, service: &Shared) {
+    // gilrs reports a controller it cannot read (Windows.Gaming.Input's id or reading failing)
+    // only through `log`, then skips it: without this a pad that is listed but never presses
+    // leaves nothing behind.
+    install_gilrs_log();
     let mut gilrs = match Gilrs::new() {
         Ok(gilrs) => gilrs,
         Err(e) => {
-            service.log(json!({
+            crate::debug_report::record_now(json!({
                 "check": "gamepad",
                 "status": "unavailable",
                 "detail": e.to_string(),
@@ -64,19 +68,24 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         let mut last_tick = Instant::now();
         // The controllers last recorded as connected, so the diagnostics log names each change.
         let mut logged_pads: Option<Vec<String>> = None;
+        let mut raw = RawEventLog::default();
         loop {
             // Wake as soon as input arrives rather than on a fixed frame, so a stick sweeping
             // the controller menu is reported the moment it moves. The timeout keeps hotplug
             // and settings current while nothing is pressed; MIN_TICK lets a burst of events
             // settle into one tick instead of one tick each.
-            let _ = gilrs.next_event_blocking(Some(IDLE_TICK));
+            if let Some(event) = gilrs.next_event_blocking(Some(IDLE_TICK)) {
+                raw.note(&gilrs, &event);
+            }
             let since = last_tick.elapsed();
             if since < MIN_TICK {
                 std::thread::sleep(MIN_TICK - since);
             }
             last_tick = Instant::now();
             // Drain the queue so connect/disconnect and button state stay current.
-            while gilrs.next_event().is_some() {}
+            while let Some(event) = gilrs.next_event() {
+                raw.note(&gilrs, &event);
+            }
             if !service.settings.get_or("gamepadSettings.enabled", true) {
                 BUTTONS_HELD.store(false, Ordering::SeqCst);
                 hand_back_when_released(&app);
@@ -88,7 +97,14 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             let pads: Vec<_> = gilrs.gamepads().collect();
             let names: Vec<String> = pads.iter().filter(|(_, pad)| pad.is_connected()).map(|(_, pad)| pad.name().to_owned()).collect();
             if logged_pads.as_ref() != Some(&names) {
-                service.log(json!({ "check": "gamepad", "connected": names }));
+                // Always on disk, not only in the Debug panel: which pads, and how gilrs reads
+                // each, is the first question for "listed but no button lights up".
+                crate::debug_report::record_now(json!({
+                    "check": "gamepad",
+                    "connected": names,
+                    "backend": BACKEND,
+                    "pads": pads.iter().enumerate().map(|(index, (_, pad))| describe_pad(index, pad)).collect::<Vec<_>>(),
+                }));
                 logged_pads = Some(names);
             }
             let devices: Vec<_> = pads
@@ -216,6 +232,126 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             previous = buttons;
         }
     });
+}
+
+/// The gilrs backend this build reads controllers with.
+const BACKEND: &str = if cfg!(windows) { "windows-gaming-input" } else if cfg!(target_os = "macos") { "iokit" } else { "evdev" };
+
+/// One controller as gilrs sees it, for the diagnostics log. The uuid and ids name the model,
+/// never the person.
+fn describe_pad(index: usize, pad: &gilrs::Gamepad) -> Value {
+    json!({
+        "index": index,
+        "name": pad.name(),
+        "osName": pad.os_name(),
+        "connected": pad.is_connected(),
+        "vendor": pad.vendor_id().map(|id| format!("{id:04x}")),
+        "product": pad.product_id().map(|id| format!("{id:04x}")),
+        "uuid": pad.uuid().iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+        "mapping": format!("{:?}", pad.mapping_source()),
+        "power": format!("{:?}", pad.power_info()),
+    })
+}
+
+/// How many raw button and axis events verbose logging records one by one per run; after that
+/// `vitals` only counts them.
+const RAW_BUTTON_EVENTS: u32 = 40;
+const RAW_AXIS_EVENTS: u32 = 10;
+
+/// Verbose only: what gilrs itself delivers, before the standard layout. A pad whose presses
+/// arrive as `Unknown` buttons (a mapping gilrs lacks) reads as never pressed; a pad that sends
+/// nothing at all points at the backend or at something holding the controller (Steam Input,
+/// remappers).
+#[derive(Default)]
+struct RawEventLog {
+    buttons: u32,
+    axes: u32,
+}
+
+impl RawEventLog {
+    fn note(&mut self, gilrs: &Gilrs, event: &gilrs::Event) {
+        use gilrs::EventType;
+        if !crate::debug_report::verbose() {
+            return;
+        }
+        let (kind, detail) = match event.event {
+            EventType::ButtonPressed(button, code)
+            | EventType::ButtonRepeated(button, code)
+            | EventType::ButtonReleased(button, code) => {
+                ("button", json!({ "button": format!("{button:?}"), "code": code.to_string() }))
+            }
+            EventType::ButtonChanged(button, value, code) => {
+                ("button", json!({ "button": format!("{button:?}"), "value": value, "code": code.to_string() }))
+            }
+            EventType::AxisChanged(axis, value, code) => {
+                ("axis", json!({ "axis": format!("{axis:?}"), "value": value, "code": code.to_string() }))
+            }
+            _ => {
+                crate::debug_report::count("gamepad-other-event");
+                crate::debug_report::trace_now(json!({
+                    "check": "gamepad-raw", "event": format!("{:?}", event.event), "pad": usize::from(event.id),
+                }));
+                return;
+            }
+        };
+        let (budget, limit) = if kind == "button" {
+            crate::debug_report::count("gamepad-button-event");
+            (&mut self.buttons, RAW_BUTTON_EVENTS)
+        } else {
+            crate::debug_report::count("gamepad-axis-event");
+            (&mut self.axes, RAW_AXIS_EVENTS)
+        };
+        if *budget >= limit {
+            return;
+        }
+        *budget += 1;
+        let pad = gilrs.gamepad(event.id);
+        let name = format!("{:?}", event.event);
+        let mut value = json!({
+            "check": "gamepad-raw",
+            "event": name.split('(').next().unwrap_or_default(),
+            "pad": usize::from(event.id),
+            "name": pad.name(),
+            // What the standard layout reads right after it: empty while a button is down means
+            // the press never reaches the buttons Kimochi binds.
+            "standardPressed": STANDARD.iter().enumerate().filter(|(_, b)| pad.is_pressed(**b)).map(|(i, _)| i).collect::<Vec<_>>(),
+        });
+        if let (Some(target), Some(extra)) = (value.as_object_mut(), detail.as_object()) {
+            target.extend(extra.clone());
+        }
+        if *budget == limit {
+            value["last"] = json!(true);
+        }
+        crate::debug_report::trace_now(value);
+    }
+}
+
+/// Forwards gilrs's own warnings and errors to the diagnostics log; everything else is dropped.
+struct GilrsLog;
+
+impl log::Log for GilrsLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Warn && metadata.target().starts_with("gilrs")
+    }
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            crate::debug_report::record_now(json!({
+                "check": "gamepad-backend",
+                "level": record.level().as_str(),
+                "target": record.target(),
+                "message": record.args().to_string(),
+            }));
+        }
+    }
+    fn flush(&self) {}
+}
+
+fn install_gilrs_log() {
+    static LOGGER: GilrsLog = GilrsLog;
+    // Nothing else in Kimochi installs a `log` logger; if something ever does, it keeps its place.
+    if log::set_logger(&LOGGER).is_ok() {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
 }
 
 /// Ordinary controls own controller actions while focused; overlay navigation is separate.

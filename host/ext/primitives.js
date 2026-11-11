@@ -146,6 +146,34 @@ export function runListeners(targets, message, sender, copy) {
   return { handled, response }
 }
 
+/** How far behind the highest seq a late message is still told apart from a redelivery. */
+const RELAY_REORDER_WINDOW = 4096
+
+/**
+ * The seqs received from one sender: everything at or below `floor`, plus those above it in
+ * `recent`. `accept(seq)` records a new seq and is false for one already received (or one so far
+ * behind that it can no longer be told apart, which only a long-delayed redelivery would be).
+ */
+export function relaySeqWindow(size = RELAY_REORDER_WINDOW) {
+  const recent = new Set()
+  let floor = 0
+  let highest = 0
+  return {
+    get highest() { return highest },
+    accept(seq) {
+      if (seq <= floor || recent.has(seq)) return false
+      recent.add(seq)
+      if (seq > highest) highest = seq
+      // Prune in steps of `size`, not on every message once full.
+      if (highest - floor > 2 * size) {
+        floor = highest - size
+        for (const old of recent) if (old <= floor) recent.delete(old)
+      }
+      return true
+    }
+  }
+}
+
 /**
  * Listen to native's channel, broadcast and window-addressed relay events. Channels transfer
  * large replies without evaluating huge JS events. Separate event names keep
@@ -153,22 +181,32 @@ export function runListeners(targets, message, sender, copy) {
  * browser harness. Native stamps a per-sender `seq`, and
  * delivery is not exactly-once, so a sequence number already seen from a sender is dropped (a
  * redelivered port acknowledgement fails the whole call, a redelivered broadcast fires every
- * listener twice). `onDuplicate(from, seq)` is told about each drop.
+ * listener twice). `onDuplicate(from, seq, payload)` is told about each drop.
+ *
+ * Nor is delivery in order: one sender's messages reach a window over its channel, its own
+ * event and the broadcast event, and a target's messages move from event to channel when it
+ * registers one. So only a seq actually received is a duplicate, never one merely below the
+ * highest: dropping those lost Hachidori's first storage read at startup, and the engine gave up
+ * 30 s later ("the extension host did not answer the engine worker"). `onReordered(from, seq,
+ * highest, payload)` is told about each message that arrived after a later one.
  */
-export async function listenRelay(tauri, label, onPayload, onDuplicate = () => {}) {
+export async function listenRelay(tauri, label, onPayload, onDuplicate = () => {}, onReordered = () => {}) {
   if (!tauri?.event?.listen) return
-  const seen = new Map()
+  const senders = new Map()
   const receive = ({ payload }) => {
     if (!payload?.payload) return
     const { from, to, seq } = payload
     if (from === label) return
     if (typeof to === 'string' && to !== label) return
     if (typeof seq === 'number' && typeof from === 'string') {
-      if (seq <= (seen.get(from) ?? 0)) {
-        onDuplicate(from, seq)
+      let sender = senders.get(from)
+      if (!sender) senders.set(from, (sender = relaySeqWindow()))
+      const highest = sender.highest
+      if (!sender.accept(seq)) {
+        onDuplicate(from, seq, payload.payload)
         return
       }
-      seen.set(from, seq)
+      if (seq < highest) onReordered(from, seq, highest, payload.payload)
     }
     onPayload(payload.payload, from)
   }

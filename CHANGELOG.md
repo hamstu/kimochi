@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Hachidori** no longer gets stuck on "the extension host did not answer the engine worker" at startup. A message sent while Kimochi was starting could be dropped as a repeat, so Hachidori waited for an answer that never came.
 - When the window you were reading closes, Kimochi now lets go of it and goes back to **Choose a source**, instead of keeping a dead source card and repeating errors. A minimised window, or one on another workspace, is still kept and read again when it comes back.
 - **NixOS:** the AppImage now starts with `appimage-run`. Before, it stopped at "libgpg-error.so.0: cannot open shared object file".
 - Text hooking no longer shows a long line twice in some games (a line that wraps onto two lines came through once as drawn and once whole).

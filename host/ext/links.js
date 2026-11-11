@@ -71,9 +71,22 @@ function relaySender(tauri) {
   }
 }
 
-/** Listen to `ext-relay` with the shared address filter and per-sender de-duplication. */
+/** What a dropped or late relay message was, for the evidence log: never its arguments. */
+const relayWhat = (payload) => ({ type: payload?.type ?? payload?.kind ?? null, op: typeof payload?.op === 'string' ? payload.op : null })
+
+/**
+ * Listen to `ext-relay` with the shared address filter and per-sender de-duplication. A late
+ * message is logged too: one dropped as a duplicate that was really late is how Hachidori's
+ * startup read was lost.
+ */
 const listenRelay = (tauri, label, onPayload, report) =>
-  listenSharedRelay(tauri, label, onPayload, (from, seq) => report({ check: 'ext-host-relay-duplicate', from, seq }))
+  listenSharedRelay(
+    tauri,
+    label,
+    onPayload,
+    (from, seq, payload) => report({ check: 'ext-host-relay-duplicate', from, seq, ...relayWhat(payload) }),
+    (from, seq, highest, payload) => report({ check: 'ext-host-relay-reordered', from, seq, highest, ...relayWhat(payload) })
+  )
 
 // ---------------------------------------------------------------- Router
 
