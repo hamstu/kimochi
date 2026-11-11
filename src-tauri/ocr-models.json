@@ -105,6 +105,35 @@
         }
       ]
     },
+    "vocr": {
+      "name": "VOCR6",
+      "files": [
+        {
+          "name": "textspot8_exact.onnx",
+          "repository": "bee-san/vita-vn-ocr",
+          "revision": "983d2354b99edef8e4cf09a1b05fadadf5757d6c",
+          "url": "https://github.com/bee-san/vita-vn-ocr/releases/download/v0.5.1-onnx.2/textspot8_exact.onnx",
+          "sha256": "d5603e1ff09e0f827353b0b71f543ec0c67b48aa74d9e79e8f665d1d2b0f9429",
+          "size": 94490
+        },
+        {
+          "name": "VOCR6.2_L_fast.onnx",
+          "repository": "bee-san/vita-vn-ocr",
+          "revision": "983d2354b99edef8e4cf09a1b05fadadf5757d6c",
+          "url": "https://github.com/bee-san/vita-vn-ocr/releases/download/v0.5.1-onnx.2/VOCR6.2_L_fast.onnx",
+          "sha256": "3084fb3bd1332832c872009d869d267d5acd1bd69d26c80f742aa2f31a80c938",
+          "size": 2525242
+        },
+        {
+          "name": "vocr_lm6_o3_1000k.vlm",
+          "repository": "bee-san/vita-vn-ocr",
+          "revision": "983d2354b99edef8e4cf09a1b05fadadf5757d6c",
+          "url": "https://github.com/bee-san/vita-vn-ocr/releases/download/v0.5.1-onnx.2/vocr_lm6_o3_1000k.vlm",
+          "sha256": "41591accf8499f1c34557e585cca382de2c4b5ca15f270c985612c32487e251f",
+          "size": 982320
+        }
+      ]
+    },
     "sensevoice": {
       "name": "SenseVoice speech",
       "files": [

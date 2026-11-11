@@ -28,6 +28,14 @@ const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = 
       ['PP-OCRv6_small_rec.yml', 150579]
     ]
   },
+  vocr: {
+    name: 'VOCR6',
+    files: [
+      ['textspot8_exact.onnx', 94490],
+      ['VOCR6.2_L_fast.onnx', 2525242],
+      ['vocr_lm6_o3_1000k.vlm', 982320]
+    ]
+  },
   mangaocr: {
     name: 'Manga OCR',
     files: [
@@ -83,7 +91,7 @@ function at(engine: ModelEngine, received: number): { file: string; got: number;
 
 const seeded = new URLSearchParams(location.search).get('model')
 const states = new Map<ModelEngine, ModelStatus>(
-  (['meikiocr', 'mangaocr', 'ppocr', 'screenai', 'sensevoice'] as ModelEngine[]).map((engine) => {
+  (['meikiocr', 'mangaocr', 'ppocr', 'screenai', 'vocr', 'sensevoice'] as ModelEngine[]).map((engine) => {
     const half = Math.round(total(engine) * 0.32)
     const seed =
       seeded === 'downloading' || seeded === 'paused'
@@ -188,7 +196,7 @@ function start(engine: ModelEngine): ModelStatus {
 export function onModelSettingSet(key: string, value: unknown): void {
   if (
     key !== 'ocrMode' ||
-    (value !== 'meikiocr' && value !== 'mangaocr' && value !== 'ppocr' && value !== 'screenai')
+    (value !== 'meikiocr' && value !== 'mangaocr' && value !== 'ppocr' && value !== 'screenai' && value !== 'vocr')
   )
     return
   if (states.get(value)?.state === 'absent') start(value)
@@ -198,6 +206,7 @@ const engineOf = (args: Record<string, unknown> | undefined): ModelEngine =>
   args?.engine === 'mangaocr' ||
   args?.engine === 'ppocr' ||
   args?.engine === 'screenai' ||
+  args?.engine === 'vocr' ||
   args?.engine === 'sensevoice'
     ? args.engine
     : 'meikiocr'

@@ -30,6 +30,7 @@ export const OCR_PICTURES: Record<OcrMode, Picture> = {
   ppocr: { glyph: PADDLE },
   // Google's library, but not a Google product of its own to show a logo for.
   screenai: { glyph: <ScanEye /> },
+  vocr: { monogram: 'V' },
   livetext: { glyph: <ScanText /> },
   oneocr: { src: windows, tile: true }
 }

@@ -98,6 +98,21 @@ impl Image {
             .map(|image| image.to_rgb8())
             .map_err(|error| format!("image: {error}"))
     }
+
+    /// The pixels as VOCR's integer luma, read straight from the captured rows (no RGB copy).
+    pub fn grey(&self) -> Result<kimochi_vocr::Grey, String> {
+        if let Some(frame) = &self.raw {
+            let (width, height) = (frame.info.width as usize, frame.info.height as usize);
+            let stride = frame.info.stride.max(width * 4);
+            if width == 0 || height == 0 || frame.pixels.len() < stride * (height - 1) + width * 4 {
+                return Err("image: the frame is empty or shorter than its geometry".into());
+            }
+            return Ok(kimochi_vocr::Grey::from_interleaved(&frame.pixels, width, height, stride, 4));
+        }
+        let rgb = self.rgb()?;
+        let (width, height) = (rgb.width() as usize, rgb.height() as usize);
+        Ok(kimochi_vocr::Grey::from_interleaved(rgb.as_raw(), width, height, width * 3, 3))
+    }
 }
 
 /// Pixels never touch disk and never leave the process except through an explicit

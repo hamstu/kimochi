@@ -3,6 +3,7 @@ dist/
 src-tauri/target/
 capture-core/target/
 speech-core/target/
+vocr-core/target/
 src-tauri/gen/
 # Machine-local Cargo overrides, e.g. local OCR crate checkouts (CONTRIBUTING.md)
 .cargo/config.local.toml

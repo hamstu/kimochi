@@ -173,8 +173,8 @@ The overlay is everything Kimochi draws over the source. `overlay text` is only 
 Usage: kimochi ocr [<engine>] [--json]
 
 Without an argument, list this computer's OCR engines and which is selected. With one, switch:
-googlelens, cloud, meikiocr, mangaocr, ppocr, screenai, livetext (macOS) or oneocr (Windows).
-Choosing a local engine whose model isn't downloaded yet starts the download.",
+googlelens, cloud, meikiocr, mangaocr, ppocr, screenai, vocr, livetext (macOS) or oneocr
+(Windows). Choosing a local engine whose model isn't downloaded yet starts the download.",
         "source" => "\
 Usage: kimochi source                 The source Kimochi reads
        kimochi source list            Every window and display it could read (not where only the
@@ -513,6 +513,7 @@ fn engine_name(engine: &str) -> &str {
         "mangaocr" => "Manga OCR",
         "ppocr" => "PaddleOCR",
         "screenai" => "Screen AI",
+        "vocr" => "VOCR6",
         "livetext" => "Live Text",
         "oneocr" => "Windows OCR (OneOCR)",
         other => other,
@@ -605,7 +606,7 @@ fn ocr_list(args: &Args) -> Outcome {
 }
 
 /// Every `ocrMode` there is; which of them this computer has is the app's to say.
-const ENGINES: &[&str] = &["googlelens", "cloud", "meikiocr", "local", "mangaocr", "ppocr", "screenai", "livetext", "oneocr"];
+const ENGINES: &[&str] = &["googlelens", "cloud", "meikiocr", "local", "mangaocr", "ppocr", "screenai", "vocr", "livetext", "oneocr"];
 
 fn ocr_set(args: &Args, engine: &str) -> Outcome {
     if !ENGINES.contains(&engine) {

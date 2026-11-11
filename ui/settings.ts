@@ -29,6 +29,7 @@ export type OcrMode =
   | 'mangaocr'
   | 'ppocr'
   | 'screenai'
+  | 'vocr'
   | 'livetext'
   | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
@@ -493,6 +494,20 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       "Uses Google Chrome's copy when Chrome has one. Otherwise Kimochi downloads it from Google once (about 80 MB)."
+  },
+  vocr: {
+    label: 'Local (VOCR6)',
+    name: 'VOCR6',
+    tagline: 'Fastest, for VN dialogue boxes',
+    geometry: true,
+    runs: 'local',
+    description:
+      'A tiny model trained on visual-novel dialogue from PS Vita and PSP games. Very fast and accurate on dialogue boxes, but not a general OCR: busy screens, manga and vertical text read better with the other engines.',
+    strengths: [
+      'A scan takes about a hundredth of a second, on the CPU',
+      'Made for horizontal dialogue and speaker names in visual novels'
+    ],
+    requirements: 'A one-time model download of 3.6 MB. Reads horizontal text only.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',
