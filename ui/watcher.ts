@@ -5,9 +5,12 @@
  * changing, and then lets the selected engine read the settled frame. The watcher decides what
  * the overlay keeps on screen in between, so it has to be at least as good as the reader:
  *
- *  - A local engine that can keep up (PaddleOCR, MeikiOCR, Apple Live Text, OneOCR) watches for
- *    itself. A second model would only add memory and, being worse, erase lines the reader
- *    found. The watcher setting does not apply.
+ *  - A local engine that can keep up (PaddleOCR, MeikiOCR, Apple Live Text, OneOCR, VOCR6,
+ *    Screen AI) watches for itself. A second model would only add memory and, being worse, erase
+ *    lines the reader found. The watcher setting does not apply.
+ *  - VOCR6 and Screen AI watch only for themselves. VOCR6 reads only horizontal dialogue boxes,
+ *    so it would miss what another engine finds; Screen AI runs in a helper process that may not
+ *    be on the computer, and is no faster than the engines below.
  *  - An online engine, or Manga OCR (too slow to watch), gets the best watcher this machine has:
  *    PaddleOCR on a graphics card, then the engine built into the OS (Live Text, OneOCR), then
  *    PaddleOCR on the CPU, then MeikiOCR. Only engines that are already here count: choosing a
@@ -19,23 +22,31 @@
  */
 import type { OcrEngineCapability, OcrEngineKey } from './capabilities.js'
 
-/** The engines that can watch, as `capture_frame`'s `observerEngine` names them. */
+/** The engines that can watch for any reader, and that Settings offers as the watcher. */
 export type WatcherEngine = 'ppocr' | 'livetext' | 'oneocr' | 'meikiocr'
+/** The engines that watch only when they are the reader. */
+export type SelfWatcherEngine = 'vocr' | 'screenai'
+/** Every engine `capture_frame`'s `observerEngine` can name. */
+export type ObserverEngine = WatcherEngine | SelfWatcherEngine
 /** The Settings choice: automatic, one engine, or image comparison. */
 export type WatcherChoice = 'auto' | WatcherEngine | 'image'
 
 export type Watcher =
-  | { kind: 'text'; engine: WatcherEngine; because: 'selected' | 'chosen' | 'best' }
+  | { kind: 'text'; engine: ObserverEngine; because: 'selected' | 'chosen' | 'best' }
   | { kind: 'image'; because: 'chosen' | 'none' }
 
 export const WATCHER_ENGINES: readonly WatcherEngine[] = ['ppocr', 'livetext', 'oneocr', 'meikiocr']
+export const SELF_WATCHER_ENGINES: readonly SelfWatcherEngine[] = ['vocr', 'screenai']
 
 type Engines = Partial<Record<OcrEngineKey, OcrEngineCapability>>
 
 const isWatcherEngine = (key: string): key is WatcherEngine =>
   (WATCHER_ENGINES as readonly string[]).includes(key)
 
-const available = (engines: Engines, key: WatcherEngine): boolean => engines[key]?.available === true
+const watchesItself = (key: string): key is ObserverEngine =>
+  isWatcherEngine(key) || (SELF_WATCHER_ENGINES as readonly string[]).includes(key)
+
+const available = (engines: Engines, key: ObserverEngine): boolean => engines[key]?.available === true
 
 /** PaddleOCR on an accelerator: fast enough to watch at full cadence. */
 const paddleOnGpu = (engines: Engines): boolean =>
@@ -56,7 +67,7 @@ export function resolveWatcher(
   engines: Engines,
   choice: WatcherChoice = 'auto'
 ): Watcher {
-  if (isWatcherEngine(ocrMode) && available(engines, ocrMode)) {
+  if (watchesItself(ocrMode) && available(engines, ocrMode)) {
     return { kind: 'text', engine: ocrMode, because: 'selected' }
   }
   if (choice === 'image') return { kind: 'image', because: 'chosen' }

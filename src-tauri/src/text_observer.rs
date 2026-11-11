@@ -10,6 +10,9 @@
 //!  - `ppocr`: PaddleOCR, sharing the scan engine (`pp_ocr::read_lines`).
 //!  - `meikiocr`: MeikiOCR, with an engine of its own (below).
 //!  - `oneocr` (Windows): the Snipping Tool engine, through its worker process.
+//!  - `vocr`: VOCR6, sharing the scan engine (`vocr::read_lines`). Only when it is the reader.
+//!  - `screenai`: Chrome Screen AI, through the scan's warm worker process. Only when it is the
+//!    reader.
 //!
 //! None of them downloads anything: a watcher whose models are missing reports
 //! `unsupported`, and the overlay picks another.
@@ -144,7 +147,7 @@ impl TextObserver for Observers {
 }
 
 fn known(engine: &str) -> Option<&'static str> {
-    ["livetext", "ppocr", "meikiocr", "oneocr"].into_iter().find(|known| *known == engine)
+    ["livetext", "ppocr", "meikiocr", "oneocr", "vocr", "screenai"].into_iter().find(|known| *known == engine)
 }
 
 fn build(app: &tauri::AppHandle, engine: &'static str) -> Box<dyn TextObserver> {
@@ -160,6 +163,11 @@ fn build(app: &tauri::AppHandle, engine: &'static str) -> Box<dyn TextObserver> 
             Err(reason) => unsupported(unavailable_detail("MeikiOCR", &reason)),
         },
         "ppocr" => Box::new(EngineObserver::paddle(app.clone())),
+        "vocr" => match crate::meiki_ocr::runtime_available(app) {
+            Ok(()) => Box::new(EngineObserver::vocr(app.clone())),
+            Err(reason) => unsupported(unavailable_detail("VOCR6", &reason)),
+        },
+        "screenai" => Box::new(EngineObserver::screenai(app.clone())),
         #[cfg(target_os = "windows")]
         "oneocr" => Box::new(EngineObserver::oneocr(app.clone())),
         _ => unsupported(format!(
@@ -463,6 +471,48 @@ impl EngineObserver {
         }, regions)
     }
 
+    /// VOCR6 on the scan engine, which loads (and keeps) it on first use.
+    ///
+    /// Always whole frames: its line spotter reads the frame at one scale, chosen from the frame's
+    /// size, and a whole frame takes about 11 ms on a desktop CPU anyway.
+    pub fn vocr(app: tauri::AppHandle) -> Self {
+        Self::new(app, "vocr", "VOCR6", crate::vocr::models_ready, |app| {
+            Box::new(move |Request { image, .. }| -> Answer {
+                let started = Instant::now();
+                let (width, height) = (image.width() as usize, image.height() as usize);
+                let grey = kimochi_vocr::Grey::from_interleaved(image.as_raw(), width, height, width * 3, 3);
+                let lines = crate::vocr::read_lines(&app, &grey).map_err(|e| match e {
+                    crate::pp_ocr::ReadError::Unavailable(reason) => Failure::Unavailable(reason),
+                    crate::pp_ocr::ReadError::Inference(reason) => Failure::Inference(reason),
+                })?;
+                Ok(Read {
+                    lines: text_lines(&lines, image.width(), image.height()),
+                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                    scan: crate::vocr::scan_result(&lines),
+                    raw: lines,
+                    partial: false,
+                })
+            })
+        }, None)
+    }
+
+    /// Chrome Screen AI through the scan's worker process (`screen_ai`), whole frames, its lines.
+    pub fn screenai(app: tauri::AppHandle) -> Self {
+        Self::new(app, "screenai", "Screen AI", |_| Ok(()), |app| {
+            Box::new(move |Request { image, .. }| -> Answer {
+                let started = Instant::now();
+                let result = crate::screen_ai::recognize_rgb(&app, &image).map_err(Failure::Inference)?;
+                Ok(Read {
+                    lines: line_annotation_lines(&result),
+                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                    scan: result,
+                    raw: Vec::new(),
+                    partial: false,
+                })
+            })
+        }, None)
+    }
+
     /// The Snipping Tool engine through its worker process, line by line.
     #[cfg(target_os = "windows")]
     pub fn oneocr(app: tauri::AppHandle) -> Self {
@@ -680,6 +730,11 @@ fn annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
             return lines;
         }
     }
+    line_annotation_lines(result)
+}
+
+/// A result's `line` annotations as frame-pixel lines (Screen AI's lines, OneOCR's fallback).
+fn line_annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
     let Some(annotations) = result["textAnnotations"].as_array() else { return Vec::new() };
     annotations
         .iter()

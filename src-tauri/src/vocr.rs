@@ -113,18 +113,41 @@ fn as_meiki(lines: &[kimochi_vocr::Line]) -> Vec<meikiocr::TextLine> {
         .collect()
 }
 
+/// The models directory is complete (`text_observer`'s gate; nothing is downloaded here).
+pub(crate) fn models_ready(app: &tauri::AppHandle) -> Result<(), String> {
+    model_store::models_dir(app, model_store::Engine::Vocr).map(|_| ())
+}
+
+/// One read on the scan engine, loading it on first use. Auto OCR's watcher shares it with the
+/// scans (`text_observer`): it is a few megabytes and reads a frame in milliseconds, so a scan
+/// waits at most one observation for the lock, and the frame the watcher read last is the one
+/// a scan reuses (`text_observer::scan_for`).
+pub(crate) fn read_lines(app: &tauri::AppHandle, grey: &kimochi_vocr::Grey) -> Result<Vec<meikiocr::TextLine>, crate::pp_ocr::ReadError> {
+    use crate::pp_ocr::ReadError;
+    let state = app.state::<VocrState>();
+    let mut engine = state.0.lock().map_err(|_| ReadError::Inference("VOCR6 worker unavailable".into()))?;
+    if engine.is_none() {
+        *engine = Some(load_engine(app).map_err(|reason| ReadError::Unavailable(format!("VOCR6 is not ready: {reason}")))?);
+    }
+    let engine = engine.as_mut().ok_or(ReadError::Inference("VOCR6 initialization failed".into()))?;
+    let lines = engine_probe::guarded(|| engine.read_capture(grey).map_err(|e| format!("VOCR6 inference: {e}")))
+        .map_err(ReadError::Inference)?;
+    Ok(as_meiki(&lines))
+}
+
+/// What a scan returns for `lines`.
+pub(crate) fn scan_result(lines: &[meikiocr::TextLine]) -> Value {
+    let mut result = crate::meiki_ocr::annotations(lines, "vocr");
+    result["backend"] = json!({"requested": "Cpu", "selected": "Cpu", "fallback_reasons": []});
+    result
+}
+
 pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
     let grey = image.grey().map_err(|e| format!("VOCR6 {e}"))?;
-    let state = app.state::<VocrState>();
-    let mut engine = state.0.lock().map_err(|_| "VOCR6 worker unavailable".to_string())?;
-    if engine.is_none() {
-        *engine = Some(load_engine(app).map_err(|reason| format!("VOCR6 is not ready: {reason}"))?);
-    }
-    let engine = engine.as_mut().ok_or("VOCR6 initialization failed")?;
-    let lines = engine_probe::guarded(|| engine.read_capture(&grey).map_err(|e| format!("VOCR6 inference: {e}")))?;
-    let mut result = crate::meiki_ocr::annotations(&as_meiki(&lines), "vocr");
-    result["backend"] = json!({"requested": "Cpu", "selected": "Cpu", "fallback_reasons": []});
-    Ok(result)
+    let lines = read_lines(app, &grey).map_err(|e| match e {
+        crate::pp_ocr::ReadError::Unavailable(reason) | crate::pp_ocr::ReadError::Inference(reason) => reason,
+    })?;
+    Ok(scan_result(&lines))
 }
 
 #[cfg(test)]

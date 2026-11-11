@@ -342,11 +342,27 @@ pub fn recognize(app: &tauri::AppHandle, image: &Image) -> Result<Value, String>
         (None, Some(d)) => (&d.as_raw()[..], d.width(), d.height(), d.width() as usize * 4),
         (None, None) => unreachable!("decoded when there is no frame"),
     };
+    recognize_rows(app, &found, data, width, height, stride)
+}
+
+/// Recognise an RGB image: Auto OCR's watcher (`text_observer`), whose frames arrive converted.
+pub(crate) fn recognize_rgb(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<Value, String> {
+    let found = component(app)?;
+    let (width, height) = image.dimensions();
+    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+    for pixel in image.as_raw().chunks_exact(3) {
+        rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
+    }
+    recognize_rows(app, &found, &rgba, width, height, width as usize * 4)
+}
+
+/// Recognise RGBA rows of `stride` bytes with the warm worker, starting it if need be.
+fn recognize_rows(app: &tauri::AppHandle, found: &Found, data: &[u8], width: u32, height: u32, stride: usize) -> Result<Value, String> {
     if width == 0 || height == 0 {
         return Ok(value_from_lines(&[], 1., width, height));
     }
     let mut slot = WORKER.lock().unwrap_or_else(|p| p.into_inner());
-    let running = worker(app, &mut slot, &found)?;
+    let running = worker(app, &mut slot, found)?;
     let scale = fit(width, height, running.ready.max_dimension);
     let pixels = if scale == 1. {
         Pixels::Rows { data, width, height, stride }

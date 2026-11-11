@@ -19,6 +19,18 @@ test('a local engine watches for itself, whatever the setting says', () => {
   assert.equal(watcherChoiceApplies('ppocr', mac), false)
 })
 
+test('VOCR6 and Screen AI watch for themselves, but never for another reader', () => {
+  const engines = { ...mac, vocr: on('cpu'), screenai: on('cpu') }
+  for (const mode of ['vocr', 'screenai']) {
+    assert.deepEqual(resolveWatcher(mode, engines, 'livetext'), { kind: 'text', engine: mode, because: 'selected' })
+    assert.equal(watcherChoiceApplies(mode, engines), false)
+    // Not downloaded (or no Screen AI copy): the best watcher here instead.
+    assert.equal(resolveWatcher(mode, { ...mac, [mode]: off }).engine, 'ppocr')
+  }
+  assert.equal(resolveWatcher('googlelens', { vocr: on('cpu'), screenai: on('cpu') }).kind, 'image')
+  assert.equal(resolveWatcher('googlelens', engines, 'vocr').engine, 'ppocr')
+})
+
 test('an online engine or Manga OCR gets the best watcher here', () => {
   assert.equal(resolveWatcher('googlelens', mac).engine, 'ppocr')
   assert.equal(resolveWatcher('cloud', windowsGpu).engine, 'ppocr')
