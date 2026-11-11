@@ -10,7 +10,15 @@
  */
 
 export type PlatformOs = 'macos' | 'windows' | 'linux'
-export type OcrEngineKey = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
+export type OcrEngineKey =
+  | 'googlelens'
+  | 'cloud'
+  | 'meikiocr'
+  | 'mangaocr'
+  | 'ppocr'
+  | 'screenai'
+  | 'livetext'
+  | 'oneocr'
 
 export interface OcrEngineCapability {
   available: boolean
@@ -23,6 +31,13 @@ export interface OcrEngineCapability {
    * ("Downloading model… 32%" is then the `reason`). Choosing the engine asks to download them.
    */
   model?: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | null
+  /** Screen AI: the version of the copy in use ("153.7"). */
+  version?: string
+  /**
+   * Screen AI: where the copy in use came from: `downloaded` (Kimochi's), `shared` (owocr's
+   * ~/.config/screen_ai) or a browser's name ("Google Chrome").
+   */
+  source?: string
 }
 
 export type CaptureAuthorization =
@@ -154,6 +169,8 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     meikiocr: { available: true },
     mangaocr: { available: true },
     ppocr: { available: true },
+    // Native says whether a copy was found; nothing is assumed (fields merge over this default).
+    screenai: { available: false },
     livetext: { available: true },
     oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },

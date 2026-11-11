@@ -51,6 +51,7 @@ mod platform;
 mod ocr_result;
 mod panels;
 mod scan_trace;
+mod screen_ai;
 mod screenshots;
 mod sentence_audio;
 mod settings;
@@ -1987,6 +1988,7 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
         "meikiocr" | "local" => return meiki_ocr::recognize(app, image),
         "mangaocr" => return manga_ocr::recognize(app, image),
         "ppocr" => return pp_ocr::recognize(app, image),
+        "screenai" => return screen_ai::recognize(app, image),
         _ => {}
     }
     let png = image.png()?;
@@ -2060,7 +2062,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// The engines `ocr_frame` can dispatch to in this build: the portable ones, plus
 /// the OS engine of the OS this was built for.
 fn native_engine_known(engine: &str) -> bool {
-    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr")
+    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr" | "screenai")
         || (cfg!(target_os = "windows") && engine == "oneocr")
         || (cfg!(target_os = "macos") && engine == "livetext")
 }
@@ -2097,7 +2099,7 @@ async fn ocr_frame(
         // this scan's result, and running the models again would only repeat it.
         let reused = image.observed_by(&engine);
         let pixels_only = reused.is_some()
-            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext");
+            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext" | "screenai");
         let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
         if let Ok(p) = path(&app, "last-ocr-frame.png") {
@@ -2126,6 +2128,7 @@ async fn ocr_frame(
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &image),
             "mangaocr" => manga_ocr::recognize(&app, &image),
             "ppocr" => pp_ocr::recognize(&app, &image),
+            "screenai" => screen_ai::recognize(&app, &image),
             "googlelens" => google_lens::recognize(&png),
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png),
@@ -2361,6 +2364,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     {
         payload["ocrEngines"]["livetext"] = livetext::capability();
     }
+    payload["ocrEngines"]["screenai"] = screen_ai::capability(app);
     // Kimochi cloud needs a signed-in Kimochi account with Kimochi Cloud (a trial, a plan or
     // lifetime). Only whether it has it reaches the webviews, never the token.
     let cloud_access = cloud::access();

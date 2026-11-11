@@ -443,8 +443,20 @@ function popupAnki(step: 'find' | 'store' | 'add' | 'browse'): unknown {
 
 /** `?platform=`: macOS by default; Windows and Linux shaped as their backends will report. */
 function previewCapabilities(): PlatformCapabilities {
+  // `?screenai=missing`: no browser has Screen AI, so it waits on Google's download.
+  const screenai: PlatformCapabilities['ocrEngines']['screenai'] =
+    params.get('screenai') === 'missing'
+      ? {
+          available: false,
+          selectable: true,
+          model: 'absent',
+          reason:
+            'Screen AI is not on this computer yet. Download it from Google, or let Google Chrome fetch it (chrome://components, Screen AI, Check for update).'
+        }
+      : { available: true, accelerator: 'cpu', version: '153.7', source: 'Google Chrome' }
   const mac: PlatformCapabilities = {
     ...DEFAULT_CAPABILITIES_MACOS,
+    ocrEngines: { ...DEFAULT_CAPABILITIES_MACOS.ocrEngines, screenai },
     osVersion: '15.5',
     arch: 'aarch64',
     capture: {
@@ -479,6 +491,7 @@ function previewCapabilities(): PlatformCapabilities {
         meikiocr: { available: true, accelerator: 'directml' },
         mangaocr: { available: false, reason: 'Not available on Windows yet' },
         ppocr: { available: true, accelerator: 'directml' },
+        screenai,
         livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' },
         oneocr: { available: true }
       },
@@ -525,6 +538,7 @@ function previewCapabilities(): PlatformCapabilities {
         meikiocr: { available: true, accelerator: 'cpu' },
         mangaocr: { available: true, accelerator: 'cpu' },
         ppocr: { available: true, accelerator: 'cpu' },
+        screenai,
         livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' },
         oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
       },

@@ -201,7 +201,7 @@ pub(crate) fn accelerator(backend: Backend) -> &'static str {
 /// Which runtime files were present when the runtime was initialised.
 static RUNTIME_DIAGNOSTICS: OnceLock<Vec<String>> = OnceLock::new();
 
-fn initialize_runtime(root: &Path) -> Result<(), String> {
+pub(crate) fn initialize_runtime(root: &Path) -> Result<(), String> {
     static INITIALIZED: OnceLock<Result<(), String>> = OnceLock::new();
     INITIALIZED
         .get_or_init(|| {

@@ -224,6 +224,8 @@ impl Engine {
             url: self.pin.asset.url.clone(),
             sha256: self.pin.asset.sha256.clone(),
             size: self.pin.asset.size,
+            platforms: Vec::new(),
+            unpack: false,
         }
     }
 }
@@ -372,7 +374,7 @@ pub fn zip_entries(zip: &[u8]) -> Result<Vec<ZipEntry>, String> {
 }
 
 /// The entry's bytes, inflated, size- and CRC-checked.
-fn entry_data(zip: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, String> {
+pub(crate) fn entry_data(zip: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, String> {
     if u32_at(zip, entry.local)? != LOCAL {
         return Err(format!("Corrupt local header: {}", entry.name));
     }

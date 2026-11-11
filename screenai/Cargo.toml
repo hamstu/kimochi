@@ -1,0 +1,37 @@
+[package]
+name = "kimochi-screenai"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+description = "Chrome Screen AI as a Kimochi OCR engine: the out-of-process worker that loads Google's library, and the pieces Kimochi uses to talk to it (pipe protocol, result decoding, finding the component)."
+
+[lib]
+path = "src/lib.rs"
+
+# The worker is the only code that loads Google's library. Kimochi itself links only the library
+# half of this crate (no FFI, no dependencies).
+[[bin]]
+name = "kimochi-screenai-worker"
+path = "src/main.rs"
+required-features = ["worker"]
+
+[features]
+worker = ["dep:libloading", "dep:libc", "dep:windows-sys"]
+
+[dependencies]
+libloading = { version = "0.8", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", optional = true, features = ["Win32_Foundation", "Win32_System_Console"] }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[profile.release]
+strip = true
+opt-level = "s"
+lto = true

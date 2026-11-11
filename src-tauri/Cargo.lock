@@ -3164,6 +3164,7 @@ dependencies = [
  "hyper-util",
  "image",
  "kimochi-capture",
+ "kimochi-screenai",
  "kimochi-speech",
  "libc",
  "log",
@@ -3233,6 +3234,10 @@ dependencies = [
  "x11rb",
  "zbus",
 ]
+
+[[package]]
+name = "kimochi-screenai"
+version = "0.1.0"
 
 [[package]]
 name = "kimochi-speech"
