@@ -3428,6 +3428,9 @@ fn main() {
             // KDE Plasma ≤ 6.7 lets only a desktop-file-authorized executable capture natively.
             #[cfg(target_os = "linux")]
             platform::native::authorize_kwin();
+            // GNOME: an extension from an older Kimochi has no window list yet.
+            #[cfg(target_os = "linux")]
+            platform::gnome::refresh_for_native();
             let (backend, capture_unavailable) = match platform_backend() {
                 Ok(backend) => (backend, None),
                 Err(e) => (

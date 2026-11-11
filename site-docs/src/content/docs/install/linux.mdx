@@ -57,9 +57,16 @@ Kimochi has Linux builds for **x64** and **ARM64**, as an **AppImage** (any dist
 
 How Kimochi sees your screen depends on your desktop.
 
-- **Wayland** (most current desktops): your desktop shows its own dialog to choose the screen or
-  window Kimochi may capture. **Change source → Choose New Source…** in the sidebar opens it. **Use Current Source** keeps the one you picked;
-  Kimochi remembers it across restarts.
+- **Wayland on GNOME, KDE Plasma 6, Hyprland, Sway 1.12+ and COSMIC**: Kimochi lists your screens and
+  windows itself, with live previews, as on macOS and Windows: **Change source → Window or screen**.
+  No desktop dialog, and nothing to link afterwards: Kimochi knows which window you chose, so the
+  overlay follows it when you move, resize or full-screen it, hides while it's minimised or on another
+  workspace, and **Bring to front** brings it back. On GNOME this needs the GNOME overlay extension
+  (below); on Plasma 6.7 and older, the .deb (or Kimochi itself, when run as an AppImage) tells
+  Plasma it may capture windows.
+- **Other Wayland desktops**: your desktop shows its own dialog to choose the screen or window
+  Kimochi may capture. **Change source → Choose New Source…** in the sidebar opens it. **Use Current
+  Source** keeps the one you picked; Kimochi remembers it across restarts.
 - **X11**: Kimochi lists your windows itself, as on macOS and Windows. Minimised windows and windows
   on other workspaces aren't listed.
 
@@ -74,19 +81,17 @@ enables screen annotations, dictionary pop-ups and desktop region selection (one
 either, **Crop area → Set OCR crop area…** (or **Set Anki crop area…**) opens a crop editor inside
 Kimochi's window.
 
-The overlay is tested on **KDE Plasma 6**, on **Hyprland** (on Omarchy) and on **GNOME 46** with
-the GNOME overlay extension. Other desktops with layer-shell support, such as Sway, should work but
-aren't tested yet. On those, Kimochi can't tell where a shared *window* is, so the overlay can't
-draw over it and the source card can't bring it to the front: share your whole screen instead. You
-can still look up words in the Log.
+The overlay is tested on **KDE Plasma 6**, on **Hyprland** (on Omarchy), on **Sway** and on
+**GNOME 46** with the GNOME overlay extension. On other desktops with layer-shell support, where
+windows are chosen in the desktop's dialog, Kimochi can't tell where a shared *window* is, so the
+overlay can't draw over it and the source card can't bring it to the front: share your whole screen
+instead. You can still look up words in the Log.
 
 ### KDE Plasma
 
-On Plasma, share the game's **window** in the dialog (or a whole screen). Kimochi asks Plasma where
-that window is, so the overlay sits on the game, follows it when you move it or send it to another
-monitor, and hides while the game is minimised or on another desktop. **Bring to front** brings the
-game back. If two open windows are exactly the same size, Kimochi asks which one you shared:
-**Relink window overlay…** in the source menu asks again.
+On Plasma, choose the game's **window** in Kimochi's list (or a whole screen). The overlay sits on
+the game, follows it when you move it or send it to another monitor, and hides while the game is
+minimised or on another desktop. **Bring to front** brings the game back.
 
 Hold <kbd>Shift</kbd> over the overlay's text to look words up and to click it, as on Windows and
 macOS; without Shift, your clicks go through to the game. Kimochi sees Shift through Plasma's

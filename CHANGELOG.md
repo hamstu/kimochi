@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- ⭐ **Linux: pick windows like on Windows and macOS.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows and screens itself, with live previews, instead of opening your desktop's screen-share dialog. No more "click the window you shared" or **Relink window overlay…**: Kimochi knows exactly which window you chose, so the overlay follows it as you move, resize or full-screen it, hides while it's minimised or on another workspace, and **Bring to front** works everywhere. (GNOME needs the GNOME overlay extension; other desktops keep the screen-share dialog.)
+
 ### Fixed
 
 - Text hooking no longer shows a long line twice in some games (a line that wraps onto two lines came through once as drawn and once whole).

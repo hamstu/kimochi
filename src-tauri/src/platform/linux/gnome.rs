@@ -48,6 +48,20 @@ pub fn status() -> Value {
     result.unwrap_or_else(|error| json!({"available":false,"reason":error}))
 }
 
+/// Native window capture on GNOME lists windows through the extension's `Windows` method. An
+/// extension installed by an older Kimochi lacks it: update it in place (the same as **Update** in
+/// Settings; implementation updates reload without a new login) before the capture backend is
+/// chosen, so this launch already lists windows itself instead of opening the screen-share dialog.
+pub fn refresh_for_native() {
+    if !eligible() { return; }
+    let running = status();
+    if running["available"] != true || running["nativeWindows"] == true { return; }
+    match install() {
+        Ok(result) => eprintln!("GNOME: extension updated for native window capture (live: {})", result["live"]),
+        Err(e) => eprintln!("GNOME: extension update for native window capture failed: {e}"),
+    }
+}
+
 pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     // Capability probes are valid on every Linux desktop. Only actual GNOME
     // operations require eligibility; otherwise optional integration breaks lookup.
