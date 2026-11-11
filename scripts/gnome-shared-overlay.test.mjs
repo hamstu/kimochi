@@ -6,7 +6,7 @@ import {load} from './load.mjs'
 const {installGnomeOverlay}=await load('gnome-overlay.js')
 
 const source=(await readFile(new URL('../src-tauri/gnome-extension/implementation.js',import.meta.url),'utf8'))
-  .replace(/^import .*;\n/gm,'').replace('export default class','class')+'\nKimochiOverlay'
+  .replace("import * as Config from 'resource:///org/gnome/shell/misc/config.js';\n", "const Config = {PACKAGE_VERSION: '46.0'};\n").replace(/^import .*;\n/gm,'').replace('export default class','class')+'\nKimochiOverlay'
 function shellFixture() {
   const signals=[],actors=[]
   const context={Extension:class{},global:{get_window_actors:()=>actors,get_pointer:()=>[20,30,0]},

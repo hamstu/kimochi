@@ -301,9 +301,9 @@ Local Shift state is shared across all documents in a native window: focus enter
 Wayland Quick Shot uses a granted portal screen stream and the native layer crop editor, not global pointer/display discovery. Without a shared screen it opens the system picker; choose an entire screen. The granted screen is reused until replaced/closed. A one-off crop is converted from logical layer coordinates to captured frame pixels and is not committed as the saved source crop. Picker/crop cancellation and unsupported native layers report status rather than silently doing nothing. Window-following overlays remain deferred; sharing a window is insufficient for on-screen Quick Shot placement. Other compositor/multi-output acceptance remains unverified.
 
 
-### Optional GNOME 46 Wayland overlay (Ubuntu prototype)
+### Optional GNOME Wayland overlay (GNOME 46–51)
 
-On GNOME 46 Wayland, **Set up GNOME overlay** installs the extension embedded in
+On GNOME 46–51 Wayland (46 on ubuntu-vm; 47–51 in `scripts/e2e-gnome`), **Set up GNOME overlay** installs the extension embedded in
 this Linux build. Initial installation (or migration from the old monolithic
 extension) requires one login so GNOME discovers the stable loader. Subsequent
 **Update GNOME overlay** operations (Settings → General → Desktop integration) stage an immutable implementation, disable/enable

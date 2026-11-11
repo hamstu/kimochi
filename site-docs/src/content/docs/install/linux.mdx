@@ -75,14 +75,14 @@ How Kimochi sees your screen depends on your desktop.
 ### The overlay on Wayland
 
 Drawing over other apps on Wayland needs the desktop's layer-shell support. On desktops without it,
-**Show overlay** reads **Overlay unavailable**. On GNOME 46,
+**Show overlay** reads **Overlay unavailable**. On GNOME 46 to 51,
 **Settings → General → Desktop integration → GNOME overlay** sets up a small GNOME extension that
 enables screen annotations, dictionary pop-ups and desktop region selection (one monitor). Without
 either, **Crop area → Set OCR crop area…** (or **Set Anki crop area…**) opens a crop editor inside
 Kimochi's window.
 
 The overlay is tested on **KDE Plasma 6**, on **Hyprland** (on Omarchy), on **Sway** and on
-**GNOME 46** with the GNOME overlay extension. On other desktops with layer-shell support, where
+**GNOME 46 to 51** with the GNOME overlay extension. On other desktops with layer-shell support, where
 windows are chosen in the desktop's dialog, Kimochi can't tell where a shared *window* is, so the
 overlay can't draw over it and the source card can't bring it to the front: share your whole screen
 instead. You can still look up words in the Log.

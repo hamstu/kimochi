@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
 import vm from 'node:vm'
 const source=(await readFile(new URL('../src-tauri/gnome-extension/implementation.js',import.meta.url),'utf8'))
-  .replace(/^import .*;\n/gm,'').replace('export default class','class')+'\nKimochiOverlay'
+  .replace("import * as Config from 'resource:///org/gnome/shell/misc/config.js';\n", "const Config = {PACKAGE_VERSION: '46.0'};\n").replace(/^import .*;\n/gm,'').replace('export default class','class')+'\nKimochiOverlay'
 function fixture(){
   const calls=[],signals=[],display={focus_window:null,grab_accelerator:()=>17,ungrab_accelerator:id=>calls.push(['release',id])}
   const Overlay=vm.runInNewContext(source,{Extension:class{},global:{display},

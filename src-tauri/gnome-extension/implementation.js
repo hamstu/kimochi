@@ -8,6 +8,7 @@ import Meta from 'gi://Meta';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 
 const IFACE = 'dev.kimochi.GnomeOverlay';
 const ORDINARY = ['log','settings','diagnostics','dictionary','welcome','sync-log'];
@@ -16,6 +17,13 @@ const COVERING = ['log','settings','diagnostics','dictionary','welcome'];
 // window id, captured through org.gnome.Mutter.ScreenCast: bound exactly, never matched).
 const WINDOW_SOURCE = /^(portal:window:[0-9]+|wayland:window:[0-9]+(:[0-9]+)?)$/;
 const SCREEN_SOURCE = /^(portal:display:[0-9]+|wayland:display:[A-Za-z0-9_.-]+)$/;
+const SHELL_MAJOR = Number.parseInt(Config.PACKAGE_VERSION, 10);
+// GNOME 50 dropped `affectsInputRegion` (it only shaped the X11 stage input region; on Wayland,
+// reactive actors take input either way) and rejects unknown chrome parameters.
+const addChrome = (actor, params) => {
+    const {affectsInputRegion, ...rest} = params;
+    Main.layoutManager.addChrome(actor, SHELL_MAJOR >= 50 ? rest : {affectsInputRegion, ...rest});
+};
 const isWindowSource = id => typeof id === 'string' && WINDOW_SOURCE.test(id);
 const nativeWindowId = id => /^wayland:window:([0-9]+)/.exec(id ?? '')?.[1] ?? null;
 const XML = `<node><interface name="${IFACE}">
@@ -58,7 +66,7 @@ export default class KimochiOverlay extends Extension {
         this._buttons = 0;
         this._focusBeforePopup = null;
         this._group = new Clutter.Actor({reactive: false});
-        Main.layoutManager.addChrome(this._group, {affectsInputRegion: false, trackFullscreen: false});
+        addChrome(this._group, {affectsInputRegion: false, trackFullscreen: false});
         this._bus = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this._bus.export(Gio.DBus.session, '/dev/kimochi/GnomeOverlay');
         this._name = Gio.bus_own_name_on_connection(Gio.DBus.session, IFACE, Gio.BusNameOwnerFlags.NONE, null, null);
@@ -135,7 +143,7 @@ export default class KimochiOverlay extends Extension {
             this._finishPick(null,'cancelled');this._finishCrop(false,'cancelled');
             this._dismissedPayload=this._payload;this._clear('emergency-hide');
         });
-        Main.layoutManager.addChrome(this._fallbackHide,{affectsInputRegion:true,trackFullscreen:false});
+        addChrome(this._fallbackHide,{affectsInputRegion:true,trackFullscreen:false});
         this._fallbackHide.hide();
         this._pointerSignal = global.stage.connect('captured-event', (_actor, event) => {
             if ((this._crop && !this._crop.webview || this._pick) && event.type() === Clutter.EventType.KEY_PRESS) {
@@ -278,7 +286,7 @@ export default class KimochiOverlay extends Extension {
                 this._pickWatch=Gio.bus_watch_name_on_connection(Gio.DBus.session,sender,Gio.BusNameWatcherFlags.NONE,null,()=>this._finishPick(null,'owner-vanished'));
                 this._dismissPopup();this._group.hide();
                 this._pickGroup=new Clutter.Actor({reactive:false});
-                Main.layoutManager.addChrome(this._pickGroup,{affectsInputRegion:true,trackFullscreen:false});
+                addChrome(this._pickGroup,{affectsInputRegion:true,trackFullscreen:false});
                 for (const m of Main.layoutManager.monitors) {
                     const surface=new St.Widget({reactive:true,can_focus:true,style:'background-color: rgba(0,0,0,0.12);'});
                     surface.set_position(m.x,m.y);surface.set_size(m.width,m.height);this._pickGroup.add_child(surface);
@@ -581,7 +589,7 @@ export default class KimochiOverlay extends Extension {
     _openCrop(label) {
         const c = this._crop, m = c.monitor;
         this._cropGroup = new Clutter.Actor({reactive:false});
-        Main.layoutManager.addChrome(this._cropGroup, {affectsInputRegion:true, trackFullscreen:false});
+        addChrome(this._cropGroup, {affectsInputRegion:true, trackFullscreen:false});
         const surface = new St.Widget({reactive:true, can_focus:true});
         surface.set_position(m.x,m.y); surface.set_size(m.width,m.height);
         this._cropGroup.add_child(surface);
@@ -726,7 +734,7 @@ export default class KimochiOverlay extends Extension {
     }
 
     Status() {
-        return JSON.stringify({controller:this._controller?{mode:this._controller.mode,rect:this._controller.rect,mapped:Boolean(this._controller.window)}:null,nativeShortcuts:true,protocol: 1, shell: '46', words: this._words.length,
+        return JSON.stringify({controller:this._controller?{mode:this._controller.mode,rect:this._controller.rect,mapped:Boolean(this._controller.window)}:null,nativeShortcuts:true,protocol: 1, shell: String(SHELL_MAJOR), words: this._words.length,
             keyboardGrab: false, fullscreenInputSurface: Boolean(this._crop || this._pick), hideButton: this._hideButton?.visible ? (()=>{const b=this._fallbackHide?.get_paint_visibility()?this._fallbackHide:this._hideButton;return {position:b.get_transformed_position(),size:b.get_transformed_size(),floating:b===this._fallbackHide};})() : null, pointer: global.get_pointer(),
             sharedOverlay: true, windowPolicy: true,
             panels:[...(this._pins?.values()??[])].map(p=>({label:p.label,above:Boolean(p.window?.is_above()),mapped:Boolean(p.window)})),
