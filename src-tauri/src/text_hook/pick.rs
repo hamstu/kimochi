@@ -603,19 +603,26 @@ fn collapse_once(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
     while i < chars.len() {
-        let longest = ((chars.len() - i) / 2).min(super::clean::MAX_LINE_CHARS);
+        // Up to all that is left but a character: copies differing in line breaks differ in length.
+        let longest = (chars.len() - i).saturating_sub(1).min(super::clean::MAX_LINE_CHARS);
         // The shortest sentence that repeats: drawn four times, the line twice over repeats too.
         // A whole quote, however short (`「ん？」「ん？」「ん？」`), is a sentence too.
         let quote = |n: usize| chars[i] == '「' && chars[i + n - 1] == '」';
-        let repeat = (3..=longest).find(|&n| {
-            (n >= MIN_REPEAT || quote(n)) && chars[i] == chars[i + n] && ends(chars[i + n - 1]) && chars[i..i + n] == chars[i + n..i + 2 * n]
+        // The copies need not break where each other does: a game can send a long line as drawn,
+        // wrapped onto two lines, and then whole (`…ている\n壁の…た。…ている壁の…た。`).
+        let repeat = (3..=longest).find_map(|n| {
+            if !(n >= MIN_REPEAT || quote(n)) || !ends(chars[i + n - 1]) {
+                return None;
+            }
+            same_but_breaks(&chars[i..i + n], &chars[i + n..]).map(|len| (n, len))
         });
         match repeat {
-            Some(n) => {
+            Some((n, len)) => {
                 out.extend(&chars[i..i + n]);
-                i += n;
-                while i + n <= chars.len() && chars[i..i + n] == chars[i - n..i] {
-                    i += n;
+                let sentence = i..i + n;
+                i += n + len;
+                while let Some(len) = same_but_breaks(&chars[sentence.clone()], &chars[i..]) {
+                    i += len;
                 }
             }
             None => {
@@ -625,6 +632,29 @@ fn collapse_once(text: &str) -> String {
         }
     }
     out
+}
+
+/// How many characters at the start of `rest` are `sentence` again, line breaks aside (either
+/// copy may have them where the other does not). `None` when `rest` does not start with it.
+fn same_but_breaks(sentence: &[char], rest: &[char]) -> Option<usize> {
+    let brk = |c: char| c == '\n' || c == '\r';
+    let mut want = sentence.iter().copied().filter(|&c| !brk(c)).peekable();
+    want.peek()?;
+    let mut used = 0;
+    for &c in rest {
+        if brk(c) {
+            used += 1;
+            continue;
+        }
+        if want.next() != Some(c) {
+            return None;
+        }
+        used += 1;
+        if want.peek().is_none() {
+            return Some(used);
+        }
+    }
+    None
 }
 
 /// Whether `shown` (normalized) is a line of dialogue other than `before`: Japanese, `min` characters
@@ -806,6 +836,22 @@ mod tests {
         for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
             assert_eq!(collapse_repeated_sentences(text), text);
         }
+    }
+
+    #[test]
+    fn a_long_line_sent_wrapped_and_then_whole_comes_out_once() {
+        // As drawn (wrapped onto two lines), then whole: the drawn copy is kept.
+        let wrapped = "雨が上がるのを待っているうちに、\nいつの間にか日が暮れていた。";
+        let whole = wrapped.replace('\n', "");
+        assert_eq!(collapse_repeated_sentences(&format!("{wrapped}{whole}")), wrapped);
+        // The other way round, between other lines, and sent a third time.
+        let next = "「もう帰ろうか」";
+        assert_eq!(collapse_repeated_sentences(&format!("{whole}{wrapped}{next}")), format!("{whole}{next}"));
+        assert_eq!(collapse_repeated_sentences(&format!("{wrapped}{whole}{wrapped}")), wrapped);
+        // Two different lines are both kept, wrapped or not.
+        let other = "雨が上がるのを待っているうちに、\nいつの間にか眠っていた。";
+        let text = format!("{wrapped}{other}");
+        assert_eq!(collapse_repeated_sentences(&text), text);
     }
 
     #[test]

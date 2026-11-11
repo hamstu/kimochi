@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- Text hooking no longer shows a long line twice in some games (a line that wraps onto two lines came through once as drawn and once whole).
+
 ## [0.8.1] - 2026-11-10
 
 ### Added
