@@ -1,0 +1,16 @@
+# Headless GNOME Shell (Mutter virtual monitor) for the Kimochi GNOME extension and the native
+# Mutter capture driver. One image per GNOME release:
+#   Fedora 41 → GNOME 47, 42 → 48, 43 → 49, 44 → 50, 45 → 51.
+ARG FEDORA=43
+FROM registry.fedoraproject.org/fedora:${FEDORA}
+# Again inside the stage, for the OpenSSL 3 compat check (Fedora 45 moved to OpenSSL 4).
+ARG FEDORA
+RUN dnf -y install --setopt=install_weak_deps=False \
+      gnome-shell mutter gsettings-desktop-schemas dconf glib2 \
+      pipewire wireplumber dbus-daemon dbus-tools \
+      xorg-x11-server-Xwayland mesa-dri-drivers mesa-libEGL mesa-libgbm \
+      webkit2gtk4.1 glib-networking gtk3 libayatana-appindicator-gtk3 \
+      gstreamer1-plugins-base gstreamer1-plugins-good \
+      google-noto-sans-cjk-fonts google-noto-sans-fonts \
+      openssl-libs $( [ ${FEDORA} -ge 45 ] && echo openssl3-libs ) python3-gobject python3-dbus gobject-introspection wayland-utils procps-ng psmisc jq \
+    && dnf clean all && rm -rf /var/cache/* /usr/share/doc /usr/share/man

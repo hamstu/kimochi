@@ -48,6 +48,23 @@ pub fn status() -> Value {
     result.unwrap_or_else(|error| json!({"available":false,"reason":error}))
 }
 
+/// Keep the running extension at this build's implementation: native window capture lists
+/// windows through its `Windows` method, which an extension from an older Kimochi lacks, and
+/// newer GNOME releases need its fixes. Implementation updates reload in place without a new login
+/// (the same as **Update** in Settings), before the capture backend is chosen, so this launch
+/// already lists windows itself instead of opening the screen-share dialog.
+pub fn refresh_for_native() {
+    if !eligible() { return; }
+    let running = status();
+    if running["available"] != true { return; }
+    let Ok(revision) = digest(IMPLEMENTATION) else { return };
+    if running["revision"] == revision.as_str() { return; }
+    match install() {
+        Ok(result) => eprintln!("GNOME: extension updated to this build's revision (live: {})", result["live"]),
+        Err(e) => eprintln!("GNOME: extension update failed: {e}"),
+    }
+}
+
 pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     // Capability probes are valid on every Linux desktop. Only actual GNOME
     // operations require eligibility; otherwise optional integration breaks lookup.
@@ -87,10 +104,42 @@ mod status_tests {
     }
 }
 
+/// GNOME Shell majors the extension declares (metadata.json) and is tested against
+/// (scripts/e2e-gnome). GNOME refuses to load it on a major not listed there.
+const SHELL_VERSIONS: [u32; 6] = [46, 47, 48, 49, 50, 51];
+/// SHA-256 of metadata.json as earlier releases installed it (GNOME 46 only).
+const KNOWN_METADATA: [&str; 1] = ["be3f1c1f49909c08dd0d462d8cea90be1555dcc259a47b7eb1ecec232fb5fdee"];
+
+fn shell_supported(version: &str) -> bool {
+    version.trim().strip_prefix("GNOME Shell ")
+        .and_then(|v| v.split(['.', ' ', '-']).next())
+        .and_then(|major| major.parse::<u32>().ok())
+        .is_some_and(|major| SHELL_VERSIONS.contains(&major))
+}
+
+#[cfg(test)]
+mod version_tests {
+    #[test]
+    fn supported_shell_versions_match_the_extension_metadata() {
+        let metadata: serde_json::Value = serde_json::from_str(include_str!("../../../gnome-extension/metadata.json")).unwrap();
+        let declared: Vec<u32> = metadata["shell-version"].as_array().unwrap().iter()
+            .map(|v| v.as_str().unwrap().parse().unwrap()).collect();
+        assert_eq!(declared, super::SHELL_VERSIONS);
+        for (text, ok) in [("GNOME Shell 46.0\n", true), ("GNOME Shell 48.8", true), ("GNOME Shell 51.1", true),
+            ("GNOME Shell 50.alpha", true), ("GNOME Shell 45.5", false), ("GNOME Shell 52.0", false), ("", false)] {
+            assert_eq!(super::shell_supported(text), ok, "{text}");
+        }
+    }
+}
+
+const IMPLEMENTATION: &str = include_str!("../../../gnome-extension/implementation.js");
+
 fn install() -> Result<Value, String> {
     let version = std::process::Command::new("gnome-shell").arg("--version").output().map_err(|e| e.to_string())?;
-    if !String::from_utf8_lossy(&version.stdout).starts_with("GNOME Shell 46.") {
-        return Err("This integration has been validated only for GNOME 46".into());
+    let version = String::from_utf8_lossy(&version.stdout);
+    if !shell_supported(&version) {
+        return Err(format!("This integration supports GNOME {}–{}; this is {}",
+            SHELL_VERSIONS[0], SHELL_VERSIONS[SHELL_VERSIONS.len() - 1], version.trim()));
     }
     let home = std::env::var_os("XDG_DATA_HOME").map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
@@ -98,7 +147,6 @@ fn install() -> Result<Value, String> {
     let dir = home.join("gnome-shell/extensions/kimochi-overlay@hamstu.github.io");
     let files = [("metadata.json", include_str!("../../../gnome-extension/metadata.json")),
         ("extension.js", include_str!("../../../gnome-extension/extension.js"))];
-    const IMPLEMENTATION: &str = include_str!("../../../gnome-extension/implementation.js");
     let revision = digest(IMPLEMENTATION)?;
     let running = status();
     let previous_revision = running["revision"].as_str().map(str::to_owned)
@@ -121,8 +169,13 @@ fn install() -> Result<Value, String> {
     std::fs::create_dir_all(dir.join("revisions")).map_err(|e| e.to_string())?;
     for (name, contents) in files {
         let path = dir.join(name);
-        if path.exists() && name == "metadata.json" && std::fs::read_to_string(&path).map_err(|e| e.to_string())? != contents {
-            return Err("Existing Kimochi metadata differs; it was not overwritten".into());
+        if path.exists() && name == "metadata.json" {
+            // Earlier releases' metadata (fewer shell versions) is ours to replace; anything else
+            // is a user edit.
+            let installed = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            if installed != contents && !KNOWN_METADATA.contains(&digest(&installed)?.as_str()) {
+                return Err("Existing Kimochi metadata differs; it was not overwritten".into());
+            }
         }
         std::fs::write(path, contents).map_err(|e| e.to_string())?;
     }
@@ -364,14 +417,41 @@ fn digest(contents: &str) -> Result<String, String> {
     checksum.string().ok_or_else(|| "Missing SHA digest".into())
 }
 
-/// A live GNOME pairing is explicit and scoped to this portal node/session.
+/// A window source the Shell can track: a portal stream once linked, or a native source
+/// (Mutter's own window id), which is bound by id and never matched.
+fn trackable(source_id: &str) -> bool {
+    source_id.starts_with("portal:window:") || native_window(source_id)
+}
+fn native_window(source_id: &str) -> bool {
+    kimochi_capture::linux_native::window_handle(source_id).is_some()
+}
+
+/// Bind a native window source to its window in the Shell (by Mutter's id), unless it is
+/// already: the Shell's overlay, crop editor and pop-ups then follow that window.
+pub fn ensure_bound(source_id: &str) {
+    if !eligible() || !native_window(source_id) { return; }
+    let bound = request("track", json!({"operation":"status","sourceId":source_id})).is_ok_and(|v| !v.is_null());
+    if !bound {
+        match request("track", json!({"operation":"bind","sourceId":source_id})) {
+            // Closed: the source watcher clears the selection (sources::clear_if_closed).
+            Err(e) if e.contains("That window has closed") => {}
+            Err(e) => eprintln!("GNOME: could not bind {source_id}: {e}"),
+            Ok(_) => {}
+        }
+    }
+}
+
+/// A live GNOME pairing is explicit and scoped to this portal node/session, or a native
+/// window's own id.
 pub fn tracked_bounds(source_id: &str) -> Option<kimochi_capture::Rect> {
-    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    if !eligible() || !trackable(source_id) { return None; }
+    ensure_bound(source_id);
     let value = request("track", json!({"operation":"status","sourceId":source_id})).ok()?;
     serde_json::from_value(value["bounds"].clone()).ok()
 }
 
 pub fn match_window(source_id: &str, width: u32, height: u32) -> Option<kimochi_capture::Rect> {
+    if native_window(source_id) { return tracked_bounds(source_id); }
     if !eligible() || !source_id.starts_with("portal:window:") { return None; }
     let value = request("track", json!({"operation":"match","sourceId":source_id,"width":width,"height":height})).ok()?;
     serde_json::from_value(value["bounds"].clone()).ok()
@@ -379,7 +459,7 @@ pub fn match_window(source_id: &str, width: u32, height: u32) -> Option<kimochi_
 
 /// Refuse to stretch a partial or stale-sized portal buffer over a linked window.
 pub fn tracked_frame_bounds(source_id: &str, width: u32, height: u32) -> Option<kimochi_capture::Rect> {
-    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    if !eligible() || !trackable(source_id) { return None; }
     let value = request("track", json!({"operation":"status","sourceId":source_id})).ok()?;
     let rect: kimochi_capture::Rect = serde_json::from_value(value["bounds"].clone()).ok()?;
     let scale = value["scale"].as_f64()?;
@@ -443,7 +523,7 @@ extern "C" { fn g_icon_new_for_string(value:*const std::ffi::c_char,error:*mut *
 extern "C" {
     fn gdk_pixbuf_save_to_bufferv(pixbuf:*mut std::ffi::c_void,buffer:*mut *mut std::ffi::c_char,size:*mut usize,kind:*const std::ffi::c_char,keys:*mut *mut std::ffi::c_char,values:*mut *mut std::ffi::c_char,error:*mut *mut glib::ffi::GError)->i32;
 }
-fn icon_png(name:&str,size:i32)->Option<Vec<u8>>{
+pub(super) fn icon_png(name:&str,size:i32)->Option<Vec<u8>>{
     let name=name.to_owned();
     let load=move || unsafe {
         let name=std::ffi::CString::new(name).ok()?;

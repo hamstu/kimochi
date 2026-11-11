@@ -25,8 +25,11 @@ sleep 0.3
 pipewire >"$RIG/log/pipewire.log" 2>&1 &
 sleep 0.5; wireplumber >"$RIG/log/wireplumber.log" 2>&1 &
 # As Plasma starts it: the wrapper owns the XWayland sockets. KWIN_WAYLAND_NO_PERMISSION_CHECKS (test
-# rig only) opens fake input to the harness's injector.
-{ QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES="kwin_scripting=true" KWIN_WAYLAND_NO_PERMISSION_CHECKS=1 \
+# rig only) opens fake input to the harness's injector. RIG_PERMISSION_CHECKS=1 leaves it out: KWin's
+# restricted globals (screencast, window management, fake input) then go only to executables whose
+# desktop file asks for them, as on a real Plasma 6.7 desktop (and `rig.sh input` stops working).
+CHECKS=(KWIN_WAYLAND_NO_PERMISSION_CHECKS=1); [ "${RIG_PERMISSION_CHECKS:-0}" = 1 ] && CHECKS=()
+{ env "${CHECKS[@]}" QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES="${KWIN_LOGGING_RULES:-kwin_scripting=true}" \
     kwin_wayland_wrapper --virtual --width "$W" --height "$H" --output-count "$OUTPUTS" --xwayland --socket wayland-0
   echo "kwin-exit=$?"; } >"$RIG/log/kwin.log" 2>&1 &
 for _ in $(seq 100); do [ -S "$XDG_RUNTIME_DIR/wayland-0" ] && break; sleep 0.1; done

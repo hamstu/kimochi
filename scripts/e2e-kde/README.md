@@ -9,7 +9,11 @@ Nothing on the host's own desktop is touched, so it runs unattended, also over S
 ## Requirements
 
 Linux with rootless Podman and a GPU render node (`/dev/dri/renderD*`: KWin's screencast, which the
-portal needs, and its screenshots require GL; a VM's virtio-gpu is enough). About 3 GB of disk for
+portal needs, and its screenshots require GL; a VM's virtio-gpu is enough, and so is WSL2's `vgem`
+node, where Mesa renders with llvmpipe). Your user must be able to open both `/dev/dri/renderD*` and
+`/dev/dri/card*` (KWin opens the primary node to identify the device; without it KWin falls back to
+QPainter and every screencast fails with "Unsupported compositing type"); the `render` and `video`
+groups are the usual way. About 3 GB of disk for
 the image. The repo's usual Node/Rust setup builds the app on the host; the container only runs it
 (it mounts the repo and the binary's directory at the same paths).
 
@@ -61,6 +65,16 @@ check things in one call (or `rig.hold` in run.mjs), never `keydown` alone.
 
 `wk.mjs` talks to WebKitGTK's remote inspector (`WEBKIT_INSPECTOR_HTTP_SERVER`, port 9333, set by
 `rig.sh app`); `ui.mjs` taps Kimochi's UI by visible text with real pointer clicks.
+
+## Native capture driver
+
+`native-kwin.sh` checks capture-core's `kwin` driver (`linux_native/kwin.rs`: KWin's window list and
+screencast by window uuid, no picker) with `examples/native_probe`: a Wayland and an XWayland game
+window, overlapping, then list, capture, thumbnails, bench and activate; PNGs in `$RIG/out`.
+`--auth` runs KWin with its real permission checks (`RIG_PERMISSION_CHECKS=1`) and proves the probe
+is refused until a desktop file with `X-KDE-Wayland-Interfaces` names its executable.
+`KWIN_LOGGING_RULES` (e.g. `kwin_core.debug=true;KWIN_UTILS.debug=true`) replaces KWin's logging
+rules for a session.
 
 ## Rig notes
 

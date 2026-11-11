@@ -31,7 +31,10 @@
         ],
         "recommends": [
           "libgtk-layer-shell0"
-        ]
+        ],
+        "files": {
+          "/usr/share/applications/kimochi-screencast.desktop": "linux/kimochi-screencast.desktop"
+        }
       }
     }
   }

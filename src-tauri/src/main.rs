@@ -3425,6 +3425,12 @@ fn main() {
             kimochi_capture::set_portal_token_store(Box::new(PortalTokens(store.clone())));
             // Capture may be unavailable (an OS without a backend yet): the reader,
             // dictionary, texthooker and settings still start, and the UI is told why.
+            // KDE Plasma ≤ 6.7 lets only a desktop-file-authorized executable capture natively.
+            #[cfg(target_os = "linux")]
+            platform::native::authorize_kwin();
+            // GNOME: an extension from an older Kimochi has no window list yet.
+            #[cfg(target_os = "linux")]
+            platform::gnome::refresh_for_native();
             let (backend, capture_unavailable) = match platform_backend() {
                 Ok(backend) => (backend, None),
                 Err(e) => (
@@ -4376,6 +4382,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         // pointer stopped is never lost.
         let mut unsent_move = false;
         let mut last_buttons = false;
+        let mut last_gate = false;
         let mut last_popup_shift = false;
         let mut ticks: u64 = 0;
         let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
@@ -4569,11 +4576,16 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 let due = (unsent_move
                     && (ticks.is_multiple_of(2) || scanning || OVERLAY_DRAG.load(std::sync::atomic::Ordering::Relaxed)))
                     || modifiers != last_modifiers
-                    || down != last_buttons;
+                    || down != last_buttons
+                    // The gate can shut with the pointer still (its grace running out), and on
+                    // Wayland positions stop being read once it has: the overlay must still hear
+                    // it, or it takes the next click for a word's rather than a click away.
+                    || gate_open != last_gate;
                 if due {
                     unsent_move = false;
                     last_modifiers = modifiers;
                     last_buttons = down;
+                    last_gate = gate_open;
                     #[cfg(target_os = "linux")]
                     let layer = platform::wayland_layer_overlay();
                     #[cfg(not(target_os = "linux"))]
@@ -4823,6 +4835,10 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
         let mut last: Option<(String, platform::WindowState)> = None;
         let mut ticks = 0_u32;
         let mut asked = 0_u64;
+        // Since when the window has had no state (closed, or a desktop that can't say), and when
+        // the backend was last asked whether it closed.
+        let mut missing: Option<(String, std::time::Instant)> = None;
+        let mut confirmed = std::time::Instant::now();
         loop {
             std::thread::sleep(Duration::from_millis(100));
             ticks = ticks.wrapping_add(1);
@@ -4845,8 +4861,27 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             let previous = last.as_ref().filter(|(id, _)| *id == source_id).map(|(_, state)| *state);
             let Some(state) = platform::desktop_window_state(&window, previous.as_ref()) else {
                 compact::forget_source(&handle);
+                // A closed window clears the source rather than leaving a dead card and overlay.
+                let since = match &missing {
+                    Some((id, since)) if *id == source_id => *since,
+                    _ => {
+                        missing = Some((source_id.clone(), std::time::Instant::now()));
+                        continue;
+                    }
+                };
+                if since.elapsed() >= Duration::from_millis(600)
+                    && confirmed.elapsed() >= Duration::from_secs(2)
+                {
+                    confirmed = std::time::Instant::now();
+                    if sources::clear_if_closed(&service, &source_id) {
+                        record(&handle, &service, json!({ "check": "source-closed", "sourceId": source_id }));
+                        last = None;
+                        missing = None;
+                    }
+                }
                 continue;
             };
+            missing = None;
             if previous.is_some_and(|p| !p.differs(&state)) {
                 continue;
             }

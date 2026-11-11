@@ -51,6 +51,8 @@ export function installWaylandPointerExit(win, { leave, enter = () => {}, dismis
     if (inside) { enter(); cancel() }
     else exit()
   }
+  // The poll stopped: the surface's own edges decide again.
+  stop.unsample = () => { sampledInside = null }
   stop.outside = () => sampledInside === false || sampledInside === null && nativeInside === false
   win.addEventListener('pagehide', stop, { once: true })
   return stop

@@ -48,11 +48,11 @@ To use another key than Shift (some visual novels skip text while Shift is held)
 Command. Your dictionary still looks words up with its own key, Shift by default, so set the same
 key in its settings too.
 
-On **Linux with Wayland**, this works on **KDE Plasma** and on **Hyprland** (with its Shift
-shortcuts bound, see [Linux](/install/linux/); there the key is always Shift). On other Wayland
-desktops Kimochi can't see Shift while another app is in front, so there the overlay's text always
-takes your clicks. On KDE Plasma with **Legacy X11 App Support** set to **Never**, hovering a word
-looks it up, without Shift.
+On **Linux with Wayland**, this works on **KDE Plasma** and on **Hyprland** (there the key is always
+Shift, which Kimochi binds while it runs, see [Linux](/install/linux/)). On other Wayland desktops
+Kimochi can't see Shift while another app is in front, so there the overlay's text always takes your
+clicks. On KDE Plasma with **Legacy X11 App Support** set to **Never**, and on Hyprland until Kimochi
+has seen Shift, hovering a word looks it up, without Shift.
 
 ### The hint bar
 
@@ -89,8 +89,8 @@ each choice:
 
 - **macOS:** Game Mode throttles the overlay while a full-screen game is in front; Kimochi tells you
   when it happens. See [Install on macOS](/install/macos/#game-mode).
-- **Linux on Wayland:** the overlay needs the desktop's layer-shell support or, on GNOME 46, the
-  GNOME overlay extension. Without them the switch reads **Overlay unavailable**. See
+- **Linux on Wayland:** the overlay needs the desktop's layer-shell support or, on GNOME 46 to 51,
+  the GNOME overlay extension. Without them the switch reads **Overlay unavailable**. See
   [Install on Linux](/install/linux/#the-overlay-on-wayland).
 - **Debug overlay** (**Settings → General → Diagnostics**) marks the scanned text boxes over the
   source and opens the Diagnostics window, to check what the OCR found.

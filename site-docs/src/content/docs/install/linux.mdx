@@ -57,9 +57,16 @@ Kimochi has Linux builds for **x64** and **ARM64**, as an **AppImage** (any dist
 
 How Kimochi sees your screen depends on your desktop.
 
-- **Wayland** (most current desktops): your desktop shows its own dialog to choose the screen or
-  window Kimochi may capture. **Change source → Choose New Source…** in the sidebar opens it. **Use Current Source** keeps the one you picked;
-  Kimochi remembers it across restarts.
+- **Wayland on GNOME, KDE Plasma 6, Hyprland, Sway 1.12+ and COSMIC**: Kimochi lists your screens and
+  windows itself, with live previews, as on macOS and Windows: **Change source → Window or screen**.
+  No desktop dialog, and nothing to link afterwards: Kimochi knows which window you chose, so the
+  overlay follows it when you move, resize or full-screen it, hides while it's minimised or on another
+  workspace, and **Bring to front** brings it back. On GNOME this needs the GNOME overlay extension
+  (below); on Plasma 6.7 and older, the .deb (or Kimochi itself, when run as an AppImage) tells
+  Plasma it may capture windows.
+- **Other Wayland desktops**: your desktop shows its own dialog to choose the screen or window
+  Kimochi may capture. **Change source → Choose New Source…** in the sidebar opens it. **Use Current
+  Source** keeps the one you picked; Kimochi remembers it across restarts.
 - **X11**: Kimochi lists your windows itself, as on macOS and Windows. Minimised windows and windows
   on other workspaces aren't listed.
 
@@ -68,25 +75,23 @@ How Kimochi sees your screen depends on your desktop.
 ### The overlay on Wayland
 
 Drawing over other apps on Wayland needs the desktop's layer-shell support. On desktops without it,
-**Show overlay** reads **Overlay unavailable**. On GNOME 46,
+**Show overlay** reads **Overlay unavailable**. On GNOME 46 to 51,
 **Settings → General → Desktop integration → GNOME overlay** sets up a small GNOME extension that
 enables screen annotations, dictionary pop-ups and desktop region selection (one monitor). Without
 either, **Crop area → Set OCR crop area…** (or **Set Anki crop area…**) opens a crop editor inside
 Kimochi's window.
 
-The overlay is tested on **KDE Plasma 6**, on **Hyprland** (on Omarchy) and on **GNOME 46** with
-the GNOME overlay extension. Other desktops with layer-shell support, such as Sway, should work but
-aren't tested yet. On those, Kimochi can't tell where a shared *window* is, so the overlay can't
-draw over it and the source card can't bring it to the front: share your whole screen instead. You
-can still look up words in the Log.
+The overlay is tested on **KDE Plasma 6**, on **Hyprland** (on Omarchy), on **Sway** and on
+**GNOME 46 to 51** with the GNOME overlay extension. On other desktops with layer-shell support, where
+windows are chosen in the desktop's dialog, Kimochi can't tell where a shared *window* is, so the
+overlay can't draw over it and the source card can't bring it to the front: share your whole screen
+instead. You can still look up words in the Log.
 
 ### KDE Plasma
 
-On Plasma, share the game's **window** in the dialog (or a whole screen). Kimochi asks Plasma where
-that window is, so the overlay sits on the game, follows it when you move it or send it to another
-monitor, and hides while the game is minimised or on another desktop. **Bring to front** brings the
-game back. If two open windows are exactly the same size, Kimochi asks which one you shared:
-**Relink window overlay…** in the source menu asks again.
+On Plasma, choose the game's **window** in Kimochi's list (or a whole screen). The overlay sits on
+the game, follows it when you move it or send it to another monitor, and hides while the game is
+minimised or on another desktop. **Bring to front** brings the game back.
 
 Hold <kbd>Shift</kbd> over the overlay's text to look words up and to click it, as on Windows and
 macOS; without Shift, your clicks go through to the game. Kimochi sees Shift through Plasma's
@@ -98,17 +103,21 @@ asks to confirm its global shortcuts (**Scan** and the **Controller menu**); cha
 
 ### Global shortcuts on Hyprland
 
-Hyprland lists Kimochi's shortcuts but doesn't assign their keys, so bind them in your own config.
-The first two lines bind **Scan** and the **Controller menu** (use any keys you like); the last two
-let the dictionary see <kbd>Shift</kbd> for lookups over other apps, without taking it from them.
-Once Kimochi has seen Shift through them, the overlay's text lets your clicks through to the game
-until you hold Shift, as on Windows and macOS.
+Hyprland lists Kimochi's shortcuts but doesn't give them keys itself, so while Kimochi runs it
+binds them for you: **Scan** and the **Controller menu** on the keys set in **Settings → Shortcuts &
+Controls**, and <kbd>Shift</kbd> for the dictionary, without taking it from the game. These binds
+last only while Kimochi runs and never touch your config; Kimochi adds them again when Hyprland
+reloads. Once Kimochi has seen Shift through them, the overlay's text lets your clicks through to the
+game until you hold Shift, as on Windows and macOS. Until then, hovering a word on the overlay looks
+it up.
 
-With Hyprland 0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
+If your config already uses one of those keys for something else, Kimochi leaves it alone and
+Settings says which. Choose another key there, or bind Kimochi's shortcut yourself. With Hyprland
+0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
 
 ```lua
-hl.bind("CTRL + SHIFT + 8", hl.dsp.global("Kimochi:dev.kimochi.app.triggerScan"))
-hl.bind("CTRL + SHIFT + SPACE", hl.dsp.global("Kimochi:dev.kimochi.app.openControllerMenu"))
+hl.bind("CTRL + SHIFT + 8", hl.dsp.global("Kimochi:dev.kimochi.app.triggerScan"), { description = "Kimochi scan" })
+hl.bind("CTRL + SHIFT + SPACE", hl.dsp.global("Kimochi:dev.kimochi.app.openControllerMenu"), { description = "Kimochi controls" })
 hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })
 hl.bind("Shift_R", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftRight"), { non_consuming = true, transparent = true, ignore_mods = true })
 ```

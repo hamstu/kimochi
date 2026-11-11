@@ -1,9 +1,10 @@
-/** Only compositor-linked, current-size portal frames can overlay a window.
+/** Only compositor-linked (portal) or compositor-named (native), current-size frames can overlay a window.
  * A window move is safe; a resized window must wait for a new matching buffer.
  * Unknown geometry keeps the source-image crop fallback and no desktop annotations.
  */
 export function portalWindowBounds(info, liveBounds = null) {
-  if (!info?.source_id?.startsWith('portal:window:') || !info.source_bounds) return null
+  // A portal stream (linked to its window) or a native one (`wayland:`, named by the compositor).
+  if (!/^(portal|wayland):window:/.test(info?.source_id ?? '') || !info.source_bounds) return null
   const bounds = liveBounds ?? info.source_bounds
   const scale = info.scale_factor
   if (![bounds.x, bounds.y, bounds.width, bounds.height, scale].every(Number.isFinite)

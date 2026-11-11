@@ -535,7 +535,7 @@ pub fn anki_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
 /// Reads nothing: no source is selected, now or at the next launch. Each source's saved crop is
 /// kept, so choosing it again brings its region back. The scan on screen belonged to the source,
 /// so it goes too.
-pub fn clear(service: &Shared) -> Result<Value, String> {
+pub fn clear(service: &Service) -> Result<Value, String> {
     service.settings.set_many(&[(&["lastSelectedSource"], Value::Null)])?;
     let previous = service.selection.lock().unwrap().take();
     let mut view = service.view.lock().unwrap();
@@ -555,17 +555,50 @@ fn gone_for_good(error: &str) -> bool {
     error.starts_with("gone:") && !error.starts_with(&format!("gone: {HIDDEN}:"))
 }
 
-/// Turn automatic scanning off when a capture of the chosen source finds it gone for good: the
-/// window closed, so every later round would fail the same way. A minimised window is not
-/// gone; the loop waits for it (`ui/autoscan.ts`).
+/// Let go of the chosen source when a capture finds it gone for good: the window closed (or the
+/// shared stream ended), so every later round would fail the same way. The selection is cleared,
+/// as if the reader had cleared it, and every window goes back to "Choose a source". A window
+/// that is only out of view (minimised, another workspace) is not gone; the loop waits for it
+/// (`ui/autoscan.ts`).
 pub fn stop_auto_if_gone(service: &Service, source_id: &str, error: &str) {
-    if !gone_for_good(error) {
-        return;
+    if gone_for_good(error) {
+        clear_closed(service, source_id);
     }
+}
+
+/// Clear the selection if it is still `source_id`, which has closed.
+fn clear_closed(service: &Service, source_id: &str) -> bool {
     if service.selection.lock().unwrap().as_deref() != Some(source_id) {
-        return;
+        return false;
     }
-    service.view.lock().unwrap().auto_ocr = false;
+    if clear(service).is_err() {
+        // Settings could not be written: at least stop reading a source that is not there.
+        service.view.lock().unwrap().auto_ocr = false;
+        return false;
+    }
+    service.set_status("The source closed. Choose another.");
+    true
+}
+
+/// Whether the chosen window, which no longer answers the desktop's window queries, has closed:
+/// asked of the capture backend, whose `stale_source` is "closed" on every platform (a minimised
+/// or off-workspace window is `unavailable`). Clears the selection when it has. Skipped while a
+/// scan holds the backend; the scan reports the same thing (`stop_auto_if_gone`).
+pub fn clear_if_closed(service: &Service, source_id: &str) -> bool {
+    if service.selection.lock().unwrap().as_deref() != Some(source_id) {
+        return false;
+    }
+    let Ok(mut backend) = service.backend.try_lock() else { return false };
+    let request = CaptureRequest { source_id: source_id.to_string(), crop: None };
+    #[cfg(target_os = "linux")]
+    let result = backend.preview(&request);
+    #[cfg(not(target_os = "linux"))]
+    let result = backend.capture(&request);
+    drop(backend);
+    match result {
+        Err(error) if error.code == "stale_source" => clear_closed(service, source_id),
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------- system picker

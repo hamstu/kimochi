@@ -6,7 +6,7 @@ import vm from 'node:vm'
 // Execute the real Shell implementation methods with only the compositor/DBus
 // boundary substituted. No second implementation of selection or dismissal.
 const source = (await readFile(new URL('../src-tauri/gnome-extension/implementation.js', import.meta.url), 'utf8'))
-  .replace(/^import .*;\n/gm, '').replace('export default class', 'class') + '\nKimochiOverlay'
+  .replace("import * as Config from 'resource:///org/gnome/shell/misc/config.js';\n", "const Config = {PACKAGE_VERSION: '46.0'};\n").replace(/^import .*;\n/gm, '').replace('export default class', 'class') + '\nKimochiOverlay'
 const Overlay = vm.runInNewContext(source, { Extension: class {}, GLib: { Variant: class {} } })
 function fixture() {
   const overlay = new Overlay()

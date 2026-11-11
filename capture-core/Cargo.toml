@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 png = "0.18"
 rtrb = "0.4"
 
@@ -83,6 +84,19 @@ ashpd = { version = "0.13", default-features = false, features = ["screencast", 
 pipewire = "0.10"
 async-io = "2"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# Native Wayland capture (src/linux_native): Mutter's ScreenCast D-Bus API and Kimochi's GNOME
+# Shell extension (zbus, the version ashpd and the app already build, on the same async-io
+# runtime), and the Wayland protocols KWin's and wlroots-like compositors capture through.
+zbus = { version = "5.9", default-features = false, features = ["async-io", "blocking-api"] }
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
+wayland-scanner = "0.31"
+wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+# The ext driver: wlr foreign-toplevel state where no compositor IPC says more, and the SHM
+# buffers (memfd, mmap) and poll loop of its capture threads.
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+rustix = { version = "1", features = ["std", "fs", "mm", "event", "pipe"] }
 
 # A main-thread harness: VisionKit delivers its completion to the main queue, so a
 # test that runs on a spawned harness thread can never see it.

@@ -64,6 +64,11 @@ export interface PlatformCapabilities {
     foregroundTracking: boolean
     /** Whether a window source can be brought to the front; absent means it can (Linux says). */
     activateWindow?: boolean
+    /**
+     * Linux Wayland: sources come from the compositor's own capture API and name their windows
+     * (`wayland:` ids), so nothing is picked in the system picker or linked by hand.
+     */
+    nativeWindows?: boolean
   }
   overlay: {
     passive: boolean

@@ -165,6 +165,30 @@ x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks in
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
 bounds versus the overlay.
 
+### Native Wayland capture (2026-11-11)
+
+`platform/linux/native.rs` over capture-core's `linux_native` (see COMMANDS.md, "Native Wayland
+capture"): picker sources, window bounds and visibility, front window, frontmost app/pid, app icons
+(desktop entry → GTK icon theme) and activation come from the compositor's inventory; the
+portal stays the fallback. Bounds are global logical on GNOME (the Shell draws the overlay) and
+output-local with a layer-shell overlay, which follows the window's output. Verified:
+
+- GNOME 46 (ubuntu-vm, real session): catalog, thumbnails (25–80 ms), icons, OCR, the Shell
+  overlay bound by window id, move/resize/fullscreen/minimize/close, Quick Shot's screen list, and
+  the in-place extension update from an older revision. Steady captures ~7 ms (debug build).
+- KDE Plasma 6.7 (`scripts/e2e-kde`, now native by default; `--portal` keeps the portal flow): every
+  scenario passes, including `--x11`, `--scale 1.5`, `--outputs 2` and `--twin` (no link prompt).
+- Hyprland 0.56 (omarchy-vm, Lua config, scale 1.33): catalog, OCR, layer overlay on the text,
+  follows a move, hides on another workspace, activation (`hl.dsp.focus` when the classic
+  dispatcher is refused), close. Window captures are full resolution (bounds × scale).
+- Sway 1.12 (`scripts/e2e-native`, headless): driver-level only (probe). Sway renders window
+  captures at scale 1 on scaled outputs (wlroots), so text there gets fewer pixels; Sway 1.11 has
+  no window capture source and falls back to the portal.
+
+Not covered: COSMIC, niri (it answers Mutter's ScreenCast API but has no Kimochi extension, so it
+uses the portal), GNOME 47+ (the extension still declares 46 only), multi-monitor GNOME (the Shell
+overlay supports one monitor, as before).
+
 ### KDE Plasma window geometry (2026-11-09)
 
 Verified in a headless Plasma 6.7 session (Fedora 43, KWin virtual backend, real
@@ -195,7 +219,11 @@ Debug-build cost in the rig: idle with the feed on vs off is within noise (Kimoc
 way, XWayland +0.1-0.4%, KWin unchanged); holding Shift and sweeping the pointer at 60 Hz, KWin
 ~5% (positions asked ≤ ~80/s only then). 10ten takes WebKitGTK for Safari and drops a modifier-only
 move at the last move's point, so a Shift press at rest is preceded by a plain move a pixel off.
-Hyprland's path (portal Shift bindings, once one fires) is built but not run on Hyprland yet.
+Hyprland's path (portal Shift bindings, once one fires): Kimochi binds them at runtime (2026-11-11).
+Verified on Hyprland 0.56.1 (Lua config, Omarchy, ARM64 VM): the binds are added, survive
+`hyprctl reload`, and without a Shift press yet the overlay looks up on hover (`lookupOnHover`); a
+physical Shift press through the runtime bind is not yet verified there (synthetic `wtype` input
+does not trigger Hyprland binds).
 
 ### Native Wayland overlays (Linux bring-up)
 
@@ -215,9 +243,11 @@ registration/failure and Activated events are recorded in evidence. A denied or
 missing portal reports its exact error without failing app startup. X11 retains
 the existing global-shortcut plugin.
 
-Hyprland's backend advertises actions but ignores preferred key combinations;
-the user must bind those actions in compositor configuration. Capabilities/settings
-explain this limitation. No compositor IPC is used by the app. Portal service
+Hyprland's backend advertises actions but ignores preferred key combinations, and
+fires an action only for a config bind naming it. Kimochi adds those binds at runtime
+over Hyprland's IPC socket (`hyprland_binds.rs`; `keyword` or Lua `eval`), skips
+combinations the config already binds (reported in Settings), re-adds them after
+`configreloaded` and removes them on quit; the config file is never written. Portal service
 restart/rebinding, KDE/GNOME shortcut dialogs and physical fullscreen shortcuts
 remain unverified.
 
@@ -250,7 +280,8 @@ Editable controls remain ordinary text inputs. Vendor Yomitan stays unchanged.
 Native layer-shell overlays keep keyboard mode NONE. On Hyprland, two explicit
 GlobalShortcuts portal actions relay left/right Shift press and release, without
 claiming a global raw keyboard watcher. Desktop bindings must be non-consuming.
-For Hyprland 0.56.1 Lua configuration (add to the user's bindings file):
+Kimochi adds these at runtime (`hyprland_binds.rs`); the equivalent Hyprland 0.56.1
+Lua configuration, for users who bind them themselves:
 
 ```lua
 hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })
@@ -277,9 +308,9 @@ Local Shift state is shared across all documents in a native window: focus enter
 Wayland Quick Shot uses a granted portal screen stream and the native layer crop editor, not global pointer/display discovery. Without a shared screen it opens the system picker; choose an entire screen. The granted screen is reused until replaced/closed. A one-off crop is converted from logical layer coordinates to captured frame pixels and is not committed as the saved source crop. Picker/crop cancellation and unsupported native layers report status rather than silently doing nothing. Window-following overlays remain deferred; sharing a window is insufficient for on-screen Quick Shot placement. Other compositor/multi-output acceptance remains unverified.
 
 
-### Optional GNOME 46 Wayland overlay (Ubuntu prototype)
+### Optional GNOME Wayland overlay (GNOME 46–51)
 
-On GNOME 46 Wayland, **Set up GNOME overlay** installs the extension embedded in
+On GNOME 46–51 Wayland (46 on ubuntu-vm; 47–51 in `scripts/e2e-gnome`), **Set up GNOME overlay** installs the extension embedded in
 this Linux build. Initial installation (or migration from the old monolithic
 extension) requires one login so GNOME discovers the stable loader. Subsequent
 **Update GNOME overlay** operations (Settings → General → Desktop integration) stage an immutable implementation, disable/enable

@@ -341,6 +341,10 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
 
 /// Bring a window source to the front. Linux goes by its process, as before.
 pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<serde_json::Value, String> {
+    // A native Wayland window is raised by the compositor that named it.
+    if id.platform() == kimochi_capture::Platform::Wayland {
+        return super::native::activate(id);
+    }
     activate_process(id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?)
         .map(|()| serde_json::json!({ "process": true }))
 }

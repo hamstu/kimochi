@@ -468,8 +468,10 @@ real window while still identifying who has focus.
 The overlay clears its text *and* republishes its hit regions at once when this closes:
 an invisible rectangle that still takes the mouse is worse than a visible one.
 
-`pointer` `{x, y, over, blocked, down, shift, ctrl, alt, meta}` carries the desktop
-cursor and the held modifiers to the overlay. The overlay is click-through except over
+`pointer` `{x, y, over, blocked, gate, down, shift, ctrl, alt, meta}` carries the desktop
+cursor and the held modifiers to the overlay. It goes out on a move, a modifier or button
+edge, and when Shift's gate (`gate`, `state::ShiftGate`) opens or shuts, which it can with the
+pointer still (and on Wayland, positions stop being read once it has shut). The overlay is click-through except over
 the words themselves and the reader's own application owns both the pointer and the
 keyboard, so it sees no `mousemove` of its own until the pointer is already on a word,
 and no `keydown` at all. That costs two things: the proximity effect, whose job is to
@@ -2150,6 +2152,30 @@ Real limitations, recorded rather than papered over.
 - **Transparent windows** use Tauri's macOS private API feature, which is unsuitable for
   a Mac App Store claim.
 
+## Native Wayland capture: sources by window identity (Linux only)
+
+Where the compositor has its own capture API, `platform_backend()` returns capture-core's
+`NativeCapture` (`capture-core/src/linux_native/`) instead of the ScreenCast portal:
+`capabilities.session.captureBackend` is `native-mutter` (GNOME, through Kimochi's Shell extension
+and `org.gnome.Mutter.ScreenCast`), `native-kwin` (KDE Plasma 6, `zkde_screencast_unstable_v1` and
+`org_kde_plasma_window_management`) or `native-ext` (Hyprland, Sway ≥1.12, COSMIC:
+`ext-image-copy-capture` with `ext-foreign-toplevel-list`, plus Hyprland's or Sway's IPC for
+geometry). Then `capture.pickerRequired` is false, `sources.catalog`, `thumbnails`, `icons`,
+`followWindowBounds`, `foregroundTracking`, `activateWindow` and `nativeWindows` are true, and
+`capture.isolatedWindows` says a window's stream holds that window alone.
+
+Source ids are `wayland:window:{handle}:{pid}` and `wayland:display:{connector}` (the handle is the
+compositor's own window id: Mutter's, KWin's uuid, or the ext identifier). `source_catalog`,
+`source_thumbnail`, `source_icon`, `source_window_state` and `activate_source` answer for them as
+on X11; `linux_window_geometry`'s link dialog and **Relink window overlay…** exist only for portal
+sources. A minimised window, or one on another workspace, captures as `unavailable` (`gone: hidden:`);
+a closed one as `stale_source`. `KIMOCHI_WAYLAND_CAPTURE=portal|mutter|kwin|ext` forces a choice.
+On GNOME, `gnome_overlay` `track` takes `{operation: "bind", sourceId}` for a native window (the
+Shell's overlay then follows it by id) and the extension's `Windows` method lists and activates
+windows; startup updates an older extension in place (`gnome::refresh_for_native`). On Plasma ≤6.7
+an AppImage or dev build writes a hidden `dev.kimochi.KWinCapture.desktop` naming its executable
+(`native::authorize_kwin`); the .deb ships `kimochi-screencast.desktop`.
+
 ## Optional Wayland window geometry: Hyprland and KDE Plasma (Linux only)
 
 `linux_window_geometry({operation, sourceId, windowAddress?}) -> Value` operates on
@@ -2166,7 +2192,10 @@ ambiguous matches use the source panel's **Relink window overlay…** dialog. Ca
 still comes from the portal. Missing/unsupported geometry retains the source-image crop fallback
 and does not place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
 
-- **Hyprland:** native layer-shell and one unrotated output at (0,0); XWayland clients excluded.
+- **Hyprland:** native layer-shell and one unrotated output at (0,0). Native Wayland and XWayland
+  clients (Proton/Wine games) match; an XWayland buffer is either the window's logical size or, with
+  `xwayland:force_zero_scaling`, the output's scale. Kimochi's own windows never make a size
+  ambiguous (a tiled Log and game often split the screen equally).
 - **KDE Plasma (KWin 6; 5.27 best-effort):** Kimochi serves `dev.kimochi.KWinBridge` at
   `/dev/kimochi/KWinBridge` on its own session-bus connection and loads a KWin script
   (`org.kde.kwin.Scripting`, plugin `kimochi-bridge`) that pushes window snapshots on change
@@ -2195,8 +2224,22 @@ one from `platform/linux/shift.rs` and the pointer from `tracking::pointer()`; w
   relays Shift's edges as `linux-dictionary-modifier` for the overlay's DOM-event path. When the
   setting is `None`, `overlay.lookupOnHover` is true instead and the overlay's text looks up on
   hover (`host/linux-scan-input.js` `hover`).
-- **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired (Hyprland fires
-  only bindings its config names).
+- **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired. Hyprland fires
+  only bindings its config names, so Kimochi binds them itself while it runs (below); until a press
+  arrives, `overlay.lookupOnHover` is true and the overlay's text looks up on hover, as on KDE.
+
+**Hyprland binds** (`platform/linux/hyprland_binds.rs`). Hyprland's GlobalShortcuts portal
+registers `dev.kimochi.app.*` but ignores `preferred_trigger`. After `BindShortcuts`, Kimochi adds a
+runtime-only bind per shortcut over the IPC socket, dispatching `global` to the name Hyprland listed
+(`j/globalshortcuts`, `<app id>:<id>`): `keyword bindd …` on a `hyprland.conf` session, `eval
+hl.bind(…)` on a Lua one (which refuses `keyword`). The Shift pair is non-consuming, transparent
+and ignores mods. Each bind's description starts `Kimochi: `, so one left by a crash is taken back.
+A combination the config already binds is left alone and reported in
+`globalShortcutReport.failed` (`hyprland: true`, shown as `globalShortcutRemediation`) unless the
+bind dispatches to that shortcut (legacy binds say so; a Lua bind is opaque, so a description
+naming Kimochi counts, and a shortcut that then fires drops its failure). The binds are re-added on
+the event socket's `configreloaded` and removed by `shortcuts::stop` (re-apply and quit). Nothing
+is written to the config.
 
 The compositor is asked for positions (≤ ~80/s) only while Shift is held or the gate is still open
 (`platform::pointer_demand`); otherwise the poll reads the modifiers alone. Buttons are known only

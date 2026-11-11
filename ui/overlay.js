@@ -52,7 +52,7 @@ import { logSections } from './log-sections.js'
 import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
-import { parseSourceId } from './source-id.js'
+import { isNativeWaylandSourceId, isWaylandScreenSourceId, isWaylandWindowSourceId, parseSourceId } from './source-id.js'
 import { portalWindowBounds, portalCropArea } from './portal-window-geometry.js'
 import {
   DICTIONARY_ENGINE_KEY,
@@ -921,7 +921,7 @@ function draw() {
   if (waylandDisabled) { if (!gnomeOverlay?.shared) renderer.clear(); void gnomeOverlay?.update(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
-  const portalWindow = waylandLayer && state.info?.source_id?.startsWith('portal:window:')
+  const portalWindow = waylandLayer && isWaylandWindowSourceId(state.info?.source_id)
   const linkedBounds = portalWindow ? portalWindowBounds(state.info, state.sourceBounds) : null
   if (portalWindow && (!linkedBounds || state.sourceWindow?.onScreen === false)) {
     renderer.clear()
@@ -2672,7 +2672,11 @@ async function editSourceRegion(target = 'ocr') {
 async function gnomeCropAvailable(sourceId = null) {
   if (!waylandDisabled || window.__KIMOCHI_PLATFORM__?.os !== 'linux') return false
   let status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
-  if (sourceId?.startsWith('portal:window:') && status.available && status.windowTracking && status.tracked?.sourceId !== sourceId) {
+  if (isNativeWaylandSourceId(sourceId) && sourceId.includes(':window:') && status.available && status.nativeWindows && status.tracked?.sourceId !== sourceId) {
+    // A native window is bound by its Mutter id: nothing to match.
+    await native.invoke('gnome_overlay', {operation:'track', payload:{operation:'bind',sourceId}}).catch(() => null)
+    status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
+  } else if (sourceId?.startsWith('portal:window:') && status.available && status.windowTracking && status.tracked?.sourceId !== sourceId) {
     const frame = await native.sourceHoverPreview(sourceId)
     if (frame?.width && frame?.height) {
       await native.invoke('gnome_overlay', {operation:'track', payload:{operation:'match',sourceId,width:frame.width,height:frame.height,name:state.viewSource?.name}})
@@ -2680,11 +2684,11 @@ async function gnomeCropAvailable(sourceId = null) {
     }
   }
   return status.available && status.cropEditor && status.monitors?.length === 1 &&
-    (!sourceId?.startsWith('portal:window:') || status.tracked?.sourceId === sourceId)
+    (!isWaylandWindowSourceId(sourceId) || status.tracked?.sourceId === sourceId)
 }
 
 async function editGnomeRegion(sourceId, {quick = false, region = REGIONS.ocr, onStart} = {}) {
-  if (!/^portal:(display|window):[0-9]+$/.test(sourceId)) throw new Error('Desktop crop requires a shared screen or linked window.')
+  if (!isWaylandWindowSourceId(sourceId) && !isWaylandScreenSourceId(sourceId)) throw new Error('Desktop crop requires a shared screen or linked window.')
   state.regionSelecting = true
   syncAutoScanner()
   let restoreLog = false
@@ -3040,7 +3044,9 @@ async function quickShot() {
     quickShotClosedAt = performance.now()
   }
   try {
-    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (await native.capabilities()).capture.pickerRequired) {
+    const quickCaps = window.__KIMOCHI_PLATFORM__?.os === 'linux' ? await native.capabilities() : null
+    // Wayland has no global pointer or display list for an app: Quick Shot crops a screen source.
+    if (quickCaps && (quickCaps.capture.pickerRequired || quickCaps.sources.nativeWindows)) {
       const { runWaylandQuickShot } = await import('./linux-quick-shot.js')
       await runWaylandQuickShot({
         available: waylandLayer || await gnomeCropAvailable(),
@@ -4348,7 +4354,11 @@ await native.watchCapabilities(async (caps) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   void syncGamingHints()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
-    shiftGated = caps.session?.backend !== 'wayland' || caps.overlay?.shiftGate === true
+    const gated = caps.session?.backend !== 'wayland' || caps.overlay?.shiftGate === true
+    // The first Shift press stops the pointer poll (`refreshLayerPointer`): its last sample
+    // (often "outside", taken while the pointer was on the game) must not outlive it.
+    if (gated && !shiftGated) layerPointerExit?.unsample()
+    shiftGated = gated
     lookupOnHover = caps.overlay?.lookupOnHover === true
   }
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
@@ -4516,7 +4526,10 @@ window.__kimochiOverlayState = () => ({
   liveOverlay: setting('liveOverlayEnabled'),
   visibility: document.visibilityState,
   origin: state.origin,
-  info: state.info ? { source: state.info.source_id, crop: state.info.crop_pixels } : null
+  info: state.info ? { source: state.info.source_id, crop: state.info.crop_pixels, bounds: state.info.source_bounds, full: [state.info.full_width, state.info.full_height] } : null,
+  geometry: state.geometry,
+  overlayVisible: state.flags.overlayVisible,
+  sourceBounds: state.sourceBounds
 })
 
 // Gaming Mode: while the controller drives Kimochi, Steam is paused, and the Deck's controller

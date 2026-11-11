@@ -36,6 +36,17 @@ pub fn report() -> Value {
         .clone()
         .unwrap_or(json!({"backend":"portal","pending":true}))
 }
+/// What to do about shortcuts Kimochi could not bind on Hyprland (`hyprland_binds`), if any.
+pub fn hyprland_remediation() -> Option<String> {
+    let report = report();
+    let failed: Vec<String> = report["failed"].as_array()?.iter()
+        .filter(|f| f["hyprland"] == true)
+        .filter_map(|f| Some(format!("{} ({})", f["name"].as_str()?, f["error"].as_str()?)))
+        .collect();
+    (!failed.is_empty()).then(|| format!(
+        "Hyprland could not take these shortcuts: {}. Choose another key here, or bind one in your Hyprland config to the global shortcut Kimochi:dev.kimochi.app.<name>.",
+        failed.join("; ")))
+}
 pub fn dispatch_gnome(app:&tauri::AppHandle,name:&str) {
     let allowed=report();
     if available() && allowed["backend"]=="gnome-shell" && allowed["registered"].as_array().is_some_and(|keys|keys.iter().any(|key|key==name)) && actions::ACTIONS.contains(&name) {
@@ -46,6 +57,7 @@ pub fn dispatch_gnome(app:&tauri::AppHandle,name:&str) {
 
 pub fn stop() {
     if report()["backend"]=="gnome-shell" {let _=super::gnome::request("shortcuts",json!({"bindings":[]}));}
+    super::hyprland_binds::unbind();
     GENERATION.fetch_add(1, Ordering::SeqCst);
     AVAILABLE.store(false, Ordering::SeqCst);
     if let Some(connection) = CONNECTION.lock().unwrap().take() {
@@ -282,6 +294,8 @@ fn bind(
     .map_err(|e| e.to_string())?;
     let session = OwnedObjectPath::try_from(session).map_err(|e| e.to_string())?;
     let mut bindings = Vec::new();
+    // Hyprland fires these only for binds that name them (`hyprland_binds`).
+    let mut keyed: Vec<super::hyprland_binds::Shortcut> = Vec::new();
     for (name, definition) in definitions {
         if definition["enabled"] == json!(false) {
             continue;
@@ -289,16 +303,20 @@ fn bind(
         let Some(accelerator) = definition["accelerator"].as_str() else {
             continue;
         };
+        let description = match name.as_str() {
+            "triggerScan" => "Scan Japanese text",
+            "openControllerMenu" => "Open Kimochi controls",
+            _ => &name,
+        };
         let mut data = Dict::new();
-        data.insert(
-            "description".into(),
-            text(match name.as_str() {
-                "triggerScan" => "Scan Japanese text",
-                "openControllerMenu" => "Open Kimochi controls",
-                _ => &name,
-            }),
-        );
+        data.insert("description".into(), text(description));
         data.insert("preferred_trigger".into(), text(&trigger(accelerator)));
+        keyed.push(super::hyprland_binds::Shortcut {
+            id: format!("dev.kimochi.app.{name}"),
+            accelerator: accelerator.to_owned(),
+            description: description.to_owned(),
+            passive: false,
+        });
         bindings.push((format!("dev.kimochi.app.{name}"), data));
     }
     // Hyprland supports non-consuming modifier-only desktop bindings. Other
@@ -321,6 +339,12 @@ fn bind(
                 text("Hold Shift for dictionary lookup"),
             );
             data.insert("preferred_trigger".into(), text(key));
+            keyed.push(super::hyprland_binds::Shortcut {
+                id: format!("dev.kimochi.app.{name}"),
+                accelerator: key.to_owned(),
+                description: "Hold Shift for dictionary lookup".to_owned(),
+                passive: true,
+            });
             bindings.push((format!("dev.kimochi.app.{name}"), data));
         }
     }
@@ -364,7 +388,20 @@ fn bind(
         })
         .collect();
     super::shift::portal_bound(registered.iter().any(|name| name.starts_with("dictionaryShift")));
-    let report = json!({"backend":"portal","pending":false,"registered":registered,"failed":[]});
+    // Hyprland registers the actions but fires one only for a bind naming it: add those binds.
+    let failed: Vec<Value> = if super::hyprland_binds::available() {
+        let keyed: Vec<_> = keyed.into_iter().filter(|k| bound.iter().any(|(b, _)| *b == k.id)).collect();
+        let accelerators: Vec<_> = keyed.iter().map(|k| (k.id.clone(), k.accelerator.clone())).collect();
+        super::hyprland_binds::bind(keyed).into_iter().map(|(id, error)| {
+            let accelerator = accelerators.iter().find(|(k, _)| *k == id).map(|(_, a)| a.clone());
+            json!({"name": id.strip_prefix("dev.kimochi.app.").unwrap_or(&id), "accelerator": accelerator, "error": error, "hyprland": true})
+        }).collect()
+    } else {
+        Vec::new()
+    };
+    let registered: Vec<String> = registered.into_iter()
+        .filter(|name| !failed.iter().any(|f| f["name"] == name.as_str())).collect();
+    let report = json!({"backend":"portal","pending":false,"registered":registered,"failed":failed});
     *REPORT.lock().unwrap() = Some(report.clone());
     crate::record(
         app,
@@ -416,10 +453,30 @@ fn bind(
                 &app.state::<Shared>(),
                 json!({"check":"global-shortcut-activated","action":action}),
             );
+            // It fired, so whatever key the user's config gave it works: no longer a failure.
+            if forget_failure(action) {
+                let _ = app.emit("platform-capabilities", crate::capabilities_value(app, &app.state::<Shared>()));
+            }
             actions::dispatch(app, &app.state::<Shared>(), action);
         }
     }
     Ok(())
+}
+
+/// Drop `action` from the report's failures (and count it registered). True when it was there.
+fn forget_failure(action: &str) -> bool {
+    let mut report = REPORT.lock().unwrap();
+    let Some(report) = report.as_mut() else { return false };
+    let Some(failed) = report["failed"].as_array_mut() else { return false };
+    let before = failed.len();
+    failed.retain(|f| f["name"] != action);
+    if failed.len() == before {
+        return false;
+    }
+    if let Some(registered) = report["registered"].as_array_mut() {
+        registered.push(json!(action));
+    }
+    true
 }
 
 #[derive(Default)]
