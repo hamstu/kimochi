@@ -505,7 +505,35 @@ struct Setup {
     screencast: screencast::ZkdeScreencastUnstableV1,
 }
 
+/// When the app last (re)wrote a desktop file authorizing its executable for KWin's restricted
+/// interfaces (KWin ≤ 6.7 matches a client's executable to an installed desktop file). KWin reads
+/// new desktop files only when its cache is older than about 1.5 s, so a probe right after the
+/// write is refused once and then tried again.
+static AUTHORIZED_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+const AUTHORIZATION_SETTLE: Duration = Duration::from_millis(1800);
+
+/// Say that an authorizing desktop file was just written (see [`AUTHORIZED_AT`]).
+pub fn note_authorization_written() {
+    *AUTHORIZED_AT.lock().unwrap() = Some(std::time::Instant::now());
+}
+
 pub fn probe() -> std::result::Result<Box<dyn Driver>, String> {
+    match probe_once() {
+        Err(e) if e.contains("does not offer") => {
+            let Some(written) = *AUTHORIZED_AT.lock().unwrap() else { return Err(e) };
+            if written.elapsed() > Duration::from_secs(30) {
+                return Err(e);
+            }
+            if let Some(wait) = AUTHORIZATION_SETTLE.checked_sub(written.elapsed()) {
+                std::thread::sleep(wait);
+            }
+            probe_once()
+        }
+        other => other,
+    }
+}
+
+fn probe_once() -> std::result::Result<Box<dyn Driver>, String> {
     let model: Shared = Arc::default();
     let outputs: Proxies<wl_output::WlOutput> = Arc::default();
     let windows: Proxies<pwin::OrgKdePlasmaWindow> = Arc::default();

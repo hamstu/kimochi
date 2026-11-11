@@ -18,6 +18,43 @@ pub fn active() -> bool {
     !super::x11_session() && !super::gamescope::active() && !super::gaming_sources::active() && nat::init().is_some()
 }
 
+/// KDE Plasma up to 6.7 offers its screencast and window-list protocols (`zkde_screencast`,
+/// `org_kde_plasma_window_management`) only to an executable that an installed desktop file names
+/// in `Exec` and authorizes in `X-KDE-Wayland-Interfaces`. The `.deb` installs one for
+/// `/usr/bin/kimochi`; an AppImage runs from a new mount each launch, and a dev build from its
+/// target directory, so the app keeps a hidden user entry naming its current executable. Plasma 6.8
+/// and later need none of this. Call before the capture backend is created.
+pub fn authorize_kwin() {
+    if super::x11_session() || super::session().compositor.as_deref() != Some("KDE") {
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else { return };
+    if exe == std::path::Path::new("/usr/bin/kimochi") {
+        return;
+    }
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")));
+    let Some(applications) = data.map(|d| d.join("applications")) else { return };
+    let entry = applications.join("dev.kimochi.KWinCapture.desktop");
+    // KWin compares `Exec`'s first word with the client's executable, unquoted.
+    let path = exe.to_string_lossy();
+    if path.contains(char::is_whitespace) {
+        return;
+    }
+    let text = format!(
+        "[Desktop Entry]\nType=Application\nName=Kimochi\nComment=Lets Kimochi list and capture windows on KDE Plasma without the screen-share dialog\nExec={path}\nIcon=kimochi\nTerminal=false\nNoDisplay=true\nX-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1,org_kde_plasma_window_management\nX-Kimochi-Generated=true\n"
+    );
+    if std::fs::read_to_string(&entry).ok().as_deref() == Some(text.as_str()) {
+        return;
+    }
+    // Written fresh (not edited in place): KWin notices new files, not changed ones.
+    let _ = std::fs::remove_file(&entry);
+    if std::fs::create_dir_all(&applications).and_then(|()| std::fs::write(&entry, text)).is_ok() {
+        kimochi_capture::linux_native::kwin::note_authorization_written();
+    }
+}
+
 pub fn driver() -> Option<&'static str> {
     nat::driver_name()
 }

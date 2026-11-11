@@ -12,7 +12,7 @@
 //! |---|---|---|---|
 //! | [`mutter`] | GNOME Shell | Kimochi's Shell extension (`MetaWindow` ids) | `org.gnome.Mutter.ScreenCast` `RecordWindow`/`RecordMonitor` → PipeWire |
 //! | [`kwin`] | KDE Plasma 6 | `org_kde_plasma_window_management` (uuids) | `zkde_screencast_unstable_v1` → PipeWire |
-//! | [`ext`] | Hyprland, Sway, COSMIC, other wlroots-likes | `ext_foreign_toplevel_list_v1` (+ compositor IPC for geometry) | `ext_image_copy_capture_v1` (SHM, in process) |
+//! | [`ext`] | Hyprland, Sway ≥1.12, COSMIC, other wlroots-likes | `ext_foreign_toplevel_list_v1` (+ compositor IPC for geometry) | `ext_image_copy_capture_v1` (SHM, in process) |
 //!
 //! Every driver publishes frames into the same mailbox as the portal ([`Slot`]), so capturing is
 //! the same newest-frame copy everywhere. When no driver works (another compositor, KDE without
@@ -45,6 +45,8 @@ pub mod mutter;
 mod backend;
 #[cfg(target_os = "linux")]
 pub use backend::{activate, driver, driver_name, init, inventory, report, Driver, Feed, NativeCapture, Target};
+#[cfg(target_os = "linux")]
+pub(crate) use backend::pipewire_feed;
 
 /// How long the reader's source stream stays open after its last capture.
 pub const KEEP_CAPTURE: std::time::Duration = std::time::Duration::from_secs(90);

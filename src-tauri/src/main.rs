@@ -3425,6 +3425,9 @@ fn main() {
             kimochi_capture::set_portal_token_store(Box::new(PortalTokens(store.clone())));
             // Capture may be unavailable (an OS without a backend yet): the reader,
             // dictionary, texthooker and settings still start, and the UI is told why.
+            // KDE Plasma ≤ 6.7 lets only a desktop-file-authorized executable capture natively.
+            #[cfg(target_os = "linux")]
+            platform::native::authorize_kwin();
             let (backend, capture_unavailable) = match platform_backend() {
                 Ok(backend) => (backend, None),
                 Err(e) => (
