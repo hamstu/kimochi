@@ -452,7 +452,8 @@ function install() {
         // a redelivered backend broadcast fires every listener twice.
         lane.listen((payload, from) => hub.settle(payload, from, true))
         await listenRelay(tauri, hub.label, (payload, from) => hub.settle(payload, from), (from, seq) =>
-          hub.log({ check: 'relay-duplicate', from, seq })
+          hub.log({ check: 'relay-duplicate', from, seq }),
+          (from, seq, highest) => hub.log({ check: 'relay-reordered', from, seq, highest })
         )
       }
       await tauri?.core

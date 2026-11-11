@@ -179,6 +179,16 @@ fn heartbeat(app: &tauri::AppHandle, mut restored: Option<u64>) {
     }
 }
 
+/// Records `value` in the diagnostics log from anywhere, verbose logging or not, once
+/// [`install`] ran: for rare events a report must always carry, like a library's own errors.
+pub fn record_now(value: Value) {
+    if let Some(app) = APP.get() {
+        if let Some(service) = app.try_state::<Shared>() {
+            crate::record(app, &service, value);
+        }
+    }
+}
+
 /// [`trace`] from anywhere, once [`install`] ran.
 pub fn trace_now(value: Value) {
     if let Some(app) = APP.get() {

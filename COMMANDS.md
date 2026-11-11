@@ -593,8 +593,13 @@ record one.
 Controls. Not while one of Kimochi's windows has focus (the controller works the window there) or
 while `autoScanSettings.enabled` is off. With verbose logging on, every press is recorded as
 `{check: "gamepad-press", pressed, panelFocused, outcome}`, so a debug report says what it did and
-why no scan followed; a change in the connected controllers is always recorded as
-`{check: "gamepad", connected: [names]}`. Kimochi does not watch
+why no scan followed, and the first raw button and axis events gilrs delivers are recorded as
+`{check: "gamepad-raw", event, button|axis, code, value?, standardPressed}` (presses that arrive
+as `Unknown` or leave `standardPressed` empty never reach a binding; `vitals` counts the rest).
+A change in the connected controllers is always recorded as `{check: "gamepad", connected:
+[names], backend, pads: [{name, osName, vendor, product, uuid, mapping, power}]}`, and gilrs's own
+warnings and errors (a controller it lists but cannot read) as `{check: "gamepad-backend", level,
+message}`. Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
 global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
 mouse button on macOS is the exception, above).
