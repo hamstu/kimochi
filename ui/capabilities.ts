@@ -17,6 +17,7 @@ export type OcrEngineKey =
   | 'mangaocr'
   | 'ppocr'
   | 'screenai'
+  | 'vocr'
   | 'livetext'
   | 'oneocr'
 
@@ -171,6 +172,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     ppocr: { available: true },
     // Native says whether a copy was found; nothing is assumed (fields merge over this default).
     screenai: { available: false },
+    vocr: { available: true },
     livetext: { available: true },
     oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },

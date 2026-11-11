@@ -30,7 +30,8 @@ a running log of every line with audio, Anki export and a notebook for names and
 Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux builds.
 
 - **OCR where the text is**: Google Lens by default (captures are sent to Google), or local
-  engines (PaddleOCR, MeikiOCR, Manga OCR, Apple Live Text on macOS, OneOCR on Windows 11). Auto
+  engines (PaddleOCR, MeikiOCR, Manga OCR, VOCR6 for visual-novel dialogue, Apple Live Text on
+  macOS, OneOCR on Windows 11). Auto
   OCR watches for new text with a local engine, waits for it to settle, then reads it once.
 - **Pop-up dictionaries**: Yomitan, Hachidori or 10ten, downloaded on demand from their
   upstream releases, hash-checked and run unmodified, with your own dictionaries; or the Yomitan
@@ -64,7 +65,8 @@ You need Node 22+ and stable Rust, plus per OS:
 The OCR engines are separate crates ([kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr),
 [kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr),
 [kimochi-ppocr](https://github.com/hamstu/kimochi-ppocr)); Cargo fetches them at the exact
-revisions pinned in `src-tauri/Cargo.toml`, so there is nothing else to clone:
+revisions pinned in `src-tauri/Cargo.toml`, so there is nothing else to clone. VOCR6's port lives
+in this repository (`vocr-core/`):
 
 ```sh
 git clone https://github.com/hamstu/kimochi

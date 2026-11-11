@@ -40,6 +40,7 @@ mod mouse_buttons;
 mod manga_ocr;
 mod pp_ocr;
 mod meiki_ocr;
+mod vocr;
 #[cfg(target_os = "windows")]
 #[path = "platform/windows/oneocr.rs"]
 mod oneocr;
@@ -301,6 +302,9 @@ fn release_scan_engines(app: &tauri::AppHandle) {
         });
         if !scans_with(&app, "ppocr") && watching != Some("ppocr") {
             pp_ocr::unload(&app);
+        }
+        if !scans_with(&app, "vocr") {
+            vocr::unload(&app);
         }
         // glibc keeps what the engines freed in its arenas; give it back to the system
         // (Manga OCR's own unload already does, for its other callers).
@@ -2008,6 +2012,7 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
         "mangaocr" => return manga_ocr::recognize(app, image),
         "ppocr" => return pp_ocr::recognize(app, image),
         "screenai" => return screen_ai::recognize(app, image),
+        "vocr" => return vocr::recognize(app, image),
         _ => {}
     }
     let png = image.png()?;
@@ -2081,7 +2086,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// The engines `ocr_frame` can dispatch to in this build: the portable ones, plus
 /// the OS engine of the OS this was built for.
 fn native_engine_known(engine: &str) -> bool {
-    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr" | "screenai")
+    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr" | "screenai" | "vocr")
         || (cfg!(target_os = "windows") && engine == "oneocr")
         || (cfg!(target_os = "macos") && engine == "livetext")
 }
@@ -2118,7 +2123,7 @@ async fn ocr_frame(
         // this scan's result, and running the models again would only repeat it.
         let reused = image.observed_by(&engine);
         let pixels_only = reused.is_some()
-            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext" | "screenai");
+            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext" | "screenai" | "vocr");
         let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
         if let Ok(p) = path(&app, "last-ocr-frame.png") {
@@ -2148,6 +2153,7 @@ async fn ocr_frame(
             "mangaocr" => manga_ocr::recognize(&app, &image),
             "ppocr" => pp_ocr::recognize(&app, &image),
             "screenai" => screen_ai::recognize(&app, &image),
+            "vocr" => vocr::recognize(&app, &image),
             "googlelens" => google_lens::recognize(&png),
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png),
@@ -2374,6 +2380,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         meikiocr: meiki_ocr::availability(app),
         mangaocr: manga_ocr::availability(app),
         ppocr: pp_ocr::availability(app),
+        vocr: vocr::availability(app),
     });
     #[cfg(target_os = "windows")]
     {
@@ -2402,6 +2409,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         ("meikiocr", meiki_ocr::verification()),
         ("mangaocr", manga_ocr::verification()),
         ("ppocr", pp_ocr::verification()),
+        ("vocr", vocr::verification()),
     ] {
         if let Some(engine_probe::Verified { available: true, accelerator: Some(accelerator), .. }) = verified {
             if payload["ocrEngines"][key]["available"] == json!(true) {
@@ -3564,6 +3572,7 @@ fn main() {
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
             app.manage(pp_ocr::PpState::default());
+            app.manage(vocr::VocrState::default());
             manga_ocr::prewarm(&handle);
 
             boot::mark("setup-state-ready");

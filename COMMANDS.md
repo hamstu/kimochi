@@ -86,7 +86,7 @@ back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere),
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
-`ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'screenai' | 'livetext' | 'oneocr'`;
+`ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'screenai' | 'vocr' | 'livetext' | 'oneocr'`;
 `'local'` is the retired name for `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR
 mode — reads as the default), default `'googlelens'` for a new install only: a settings file that
 exists but never recorded `ocrMode` loads as `'cloud'`, the engine it was using. `endpoint` (unset
@@ -312,8 +312,8 @@ choosing that source again brings its region back.
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
-| `capture_frame` | `({request, observe?, observerMode?, observerEngine?}) -> {id, info, url, observation, …}` — with `observe`, the watcher reads the frame: `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
-| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, `'ppocr'`, `'screenai'`, and `'livetext'` / `'oneocr'` on their OS) |
+| `capture_frame` | `({request, observe?, observerMode?, observerEngine?}) -> {id, info, url, observation, …}` — with `observe`, the watcher reads the frame: `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS, and `'vocr'` / `'screenai'` when they are the reader; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
+| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, `'ppocr'`, `'screenai'`, `'vocr'`, and `'livetext'` / `'oneocr'` on their OS) |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
 | `clear` | `() -> ()` |
@@ -1665,7 +1665,7 @@ data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming prof
 Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
 SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
 
-`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PaddleOCR), `"screenai"` (Chrome Screen AI, see below) or
+`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PaddleOCR), `"screenai"` (Chrome Screen AI, see below), `"vocr"` (VOCR6) or
 `"sensevoice"` (SenseVoice-Small, sentence audio's speech recogniser; never an `ocrMode`). Every command answers with the engine's
 `ModelStatus` after acting:
 

@@ -71,6 +71,8 @@ getrandom = "0.2"
 regex = "1"
 # Sentence audio's listener, recogniser and clips (speech-core: Silero, SenseVoice, LAME).
 kimochi-speech = { path = "../speech-core" }
+# VOCR6 (vita-vn-ocr): its spotter, recognizer and character LM on the same ONNX Runtime (vocr.rs).
+kimochi-vocr = { path = "../vocr-core" }
 [target.'cfg(target_os = "macos")'.dependencies]
 mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd", features = ["metal"] }
 objc2 = "0.6"
@@ -152,6 +154,9 @@ strip = true
 # minutes, holding Auto OCR's scan lock; dev builds and `npm run bundle`'s debug installer are
 # where scans get tested.
 [profile.dev.package.ppocr]
+opt-level = 3
+# VOCR6's preprocessing, spotter decode and LM beam: a scan is ~11 ms optimized.
+[profile.dev.package.kimochi-vocr]
 opt-level = 3
 [profile.dev.package.mangaocr]
 opt-level = 3

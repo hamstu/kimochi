@@ -3166,6 +3166,7 @@ dependencies = [
  "kimochi-capture",
  "kimochi-screenai",
  "kimochi-speech",
+ "kimochi-vocr",
  "libc",
  "log",
  "mangaocr",
@@ -3249,6 +3250,16 @@ dependencies = [
  "mp3lame-encoder",
  "objc2",
  "objc2-app-kit",
+ "ort",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kimochi-vocr"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
  "ort",
  "serde",
  "serde_json",

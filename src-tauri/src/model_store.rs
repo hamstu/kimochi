@@ -13,6 +13,7 @@
 //!   meikiocr/  meiki.text.detect.v0.1.960x544.onnx ... verified.json
 //!   mangaocr/  pytorch_model.bin ... pytorch_model.bin.part  verified.json
 //!   ppocr/  PP-OCRv6_small_det.onnx  PP-OCRv6_small_rec.onnx  PP-OCRv6_small_rec.yml  verified.json
+//!   vocr/  textspot8_exact.onnx  VOCR6.2_L_fast.onnx  vocr_lm6_o3_1000k.vlm  verified.json
 //!   sensevoice/  model.int8.onnx  tokens.txt  verified.json
 //!   screenai/  screen-ai-153.07-mac-arm64/  verified.json
 //! ```
@@ -222,6 +223,8 @@ pub enum Engine {
     Meiki,
     Manga,
     PpOcr,
+    /// VOCR6 (vita-vn-ocr): the textspot8 spotter, the Large recognizer and the character LM.
+    Vocr,
     /// Sentence audio's speech recogniser: not an OCR engine, never an `ocrMode`.
     SenseVoice,
     /// Chrome Screen AI's package from Google, when no browser on this computer has a copy
@@ -231,15 +234,16 @@ pub enum Engine {
 }
 
 impl Engine {
-    pub const ALL: [Engine; 5] = [
+    pub const ALL: [Engine; 6] = [
         Engine::Meiki,
         Engine::Manga,
         Engine::PpOcr,
+        Engine::Vocr,
         Engine::SenseVoice,
         Engine::ScreenAi,
     ];
     /// The OCR engines among them whose models are their only requirement.
-    pub const OCR: [Engine; 3] = [Engine::Meiki, Engine::Manga, Engine::PpOcr];
+    pub const OCR: [Engine; 4] = [Engine::Meiki, Engine::Manga, Engine::PpOcr, Engine::Vocr];
 
     /// The `ocrMode` setting value (OCR engines), the directory name and the manifest key.
     pub fn key(self) -> &'static str {
@@ -247,6 +251,7 @@ impl Engine {
             Engine::Meiki => "meikiocr",
             Engine::Manga => "mangaocr",
             Engine::PpOcr => "ppocr",
+            Engine::Vocr => "vocr",
             Engine::SenseVoice => "sensevoice",
             Engine::ScreenAi => "screenai",
         }
@@ -258,6 +263,7 @@ impl Engine {
             "meikiocr" | "local" => Some(Engine::Meiki),
             "mangaocr" => Some(Engine::Manga),
             "ppocr" => Some(Engine::PpOcr),
+            "vocr" => Some(Engine::Vocr),
             "sensevoice" => Some(Engine::SenseVoice),
             "screenai" => Some(Engine::ScreenAi),
             _ => None,
@@ -1435,6 +1441,7 @@ pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<Model
                 crate::pp_ocr::delete_cache(app);
                 close_observer(app, "ppocr");
             }
+            Engine::Vocr => crate::vocr::unload(app),
             Engine::SenseVoice => crate::sentence_audio::unload_model(app),
             // The worker reads the library and models from the package directory.
             Engine::ScreenAi => crate::screen_ai::unload(),
@@ -1606,6 +1613,10 @@ mod tests {
         for path in [pp.detection, pp.recognition, pp.dictionary] {
             assert!(names(Engine::PpOcr).contains(&path.to_string_lossy().into_owned()));
         }
+        let vocr = kimochi_vocr::ModelPaths::from_dir("", crate::vocr::TIER, crate::vocr::MODE, true);
+        for path in [Some(vocr.spotter), Some(vocr.recognizer), vocr.lm].into_iter().flatten() {
+            assert!(names(Engine::Vocr).contains(&path.to_string_lossy().into_owned()));
+        }
         assert!(manifest.engine(Engine::Manga).total_size() > 500_000_000);
         for file in [kimochi_speech::sense_voice::MODEL_FILE, kimochi_speech::sense_voice::TOKENS_FILE] {
             assert!(names(Engine::SenseVoice).contains(&file.to_string()));
@@ -1619,7 +1630,7 @@ mod tests {
                 r#"{{"name":"{name}","repository":"r","revision":"v","url":"https://x/y","sha256":"{sha}","size":1}}"#
             );
             format!(
-                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}},"screenai":{{"name":"A","files":[{entry}]}}}}}}"#
+                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"vocr":{{"name":"V","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}},"screenai":{{"name":"A","files":[{entry}]}}}}}}"#
             )
         };
         let good = "a".repeat(64);
@@ -1653,7 +1664,7 @@ mod tests {
     fn an_unpacked_file_must_be_a_zip() {
         let entry = r#"{"name":"pkg.tar","repository":"r","revision":"v","url":"https://x/y","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":1,"unpack":true}"#;
         let json = format!(
-            r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}},"screenai":{{"name":"A","files":[{entry}]}}}}}}"#
+            r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"vocr":{{"name":"V","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}},"screenai":{{"name":"A","files":[{entry}]}}}}}}"#
         );
         assert!(Manifest::parse(&json).unwrap_err().contains("not a .zip"));
     }

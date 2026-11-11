@@ -59,6 +59,7 @@ export function EngineSettings({
     case 'meikiocr':
     case 'mangaocr':
     case 'ppocr':
+    case 'vocr':
       return <ModelDownload controls={model} emphasis={emphasis} />
     case 'screenai':
       return <ScreenAiSetup model={model} emphasis={emphasis} />

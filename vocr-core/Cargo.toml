@@ -1,0 +1,21 @@
+[package]
+name = "kimochi-vocr"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "VOCR6 (bee-san/vita-vn-ocr): the textspot8 line spotter, the VOCR6 recognizer, the character LM and character cells, on ONNX Runtime."
+
+[dependencies]
+# The app's ONNX Runtime (bundled with MeikiOCR), loaded at run time: same pin as src-tauri.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The LM file's checksum. Already in src-tauri's lock file.
+crc32fast = "1.5"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[lints.clippy]
+# As in src-tauri: `chunks_exact(4)` says "one little-endian u32" more plainly than `as_chunks::<4>().0`.
+chunks_exact_to_as_chunks = "allow"
