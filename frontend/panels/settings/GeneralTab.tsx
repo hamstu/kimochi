@@ -1,5 +1,4 @@
-/** Settings → General: appearance and interface size for every Kimochi window, sound effects, desktop integration (GNOME, the Steam library) and the welcome guide. Updates are on About. */
-import { GnomeOverlaySetup } from '../../main/GnomeOverlaySetup'
+/** Settings → General: appearance and interface size for every Kimochi window, sound effects, the Steam library and the welcome guide. Updates are on About. */
 import { SteamLibrarySection } from './SteamLibrarySection'
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
@@ -158,7 +157,6 @@ export function GeneralTab(): ReactNode {
           />
         </SettingsRow>
       </SettingsSection>
-      <GnomeOverlaySetup settings />
       <SteamLibrarySection />
       <SettingsSection title="Help">
         <SettingsRow

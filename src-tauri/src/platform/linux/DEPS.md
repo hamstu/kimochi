@@ -310,10 +310,11 @@ Wayland Quick Shot uses a granted portal screen stream and the native layer crop
 
 ### Optional GNOME Wayland overlay (GNOME 46–51)
 
-On GNOME 46–51 Wayland (46 on ubuntu-vm; 47–51 in `scripts/e2e-gnome`), **Set up GNOME overlay** installs the extension embedded in
-this Linux build. Initial installation (or migration from the old monolithic
-extension) requires one login so GNOME discovers the stable loader. Subsequent
-**Update GNOME overlay** operations (Settings → General → Desktop integration) stage an immutable implementation, disable/enable
+On GNOME 46–51 Wayland (46 on ubuntu-vm; 47–51 in `scripts/e2e-gnome`), the welcome guide's
+**Set up GNOME integration** step (or the source panel's **Set up** while the overlay is unavailable)
+installs the extension embedded in this Linux build. Initial installation (or migration from the
+old monolithic extension) requires one login so GNOME discovers the stable loader. Subsequent
+updates, run at launch for an installed and enabled extension (`gnome::keep_current`), stage an immutable implementation, disable/enable
 only Kimochi, verify its running revision and restore the previous implementation
 if startup fails. Other enabled extension names are preserved. Unrecognized edits
 to Kimochi's loader/metadata are refused; the recognized legacy implementation is

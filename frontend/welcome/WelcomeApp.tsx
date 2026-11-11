@@ -3,7 +3,8 @@
  * step at a time above a persistent action bar.
  *
  *   intro → Screen Recording permission (macOS) → Accessibility (macOS)
- *   → capture border (Windows, when Settings keeps it on) → OCR engine → dictionary engine (choose + download) → that engine's setup
+ *   → capture border (Windows, when Settings keeps it on) → GNOME extension (GNOME on Wayland)
+ *   → OCR engine → dictionary engine (choose + download) → that engine's setup
  *   → Steam library (a Steam Deck / SteamOS in Desktop Mode) → done
  *
  * Steps are hash routes, so a reload (switching dictionary engine reloads every reader window,
@@ -34,6 +35,8 @@ import macOSScreenPerms from './assets/howto-screen-macos.png'
 import CaptureBorderArt, { BorderSettingsArt } from './CaptureBorderArt'
 import DictionarySetup, { DictionaryPractice } from './DictionarySetup'
 import EngineSetup from './EngineSetup'
+import GnomeExtensionStep from './GnomeExtensionStep'
+import { GNOME_ROUTE, useGnomeEligible, useGnomeExtension } from './gnomeExtension'
 import IntroStep from './IntroStep'
 import { AccessibilityWhy, ScreenRecordingWhy } from './PermissionWhy'
 import SteamLibraryStep from './SteamLibraryStep'
@@ -51,6 +54,7 @@ type StepId =
   | 'capture'
   | 'accessibility'
   | 'border'
+  | 'gnome'
   | 'ocr'
   | 'engine'
   | 'dictionaries'
@@ -62,6 +66,7 @@ const STEP_OF: Record<string, StepId> = {
   '/screen-recording-permission': 'capture',
   '/accessibility': 'accessibility',
   '/capture-border': 'border',
+  [GNOME_ROUTE]: 'gnome',
   '/ocr': 'ocr',
   '/engine': 'engine',
   '/dictionaries': 'dictionaries',
@@ -133,7 +138,7 @@ function useCaptureBorder(watch: boolean): CaptureBorder | null {
 }
 
 /**
- * The flow for this computer: the capture, Accessibility and capture border steps only where
+ * The flow for this computer: the capture, Accessibility, capture border and GNOME extension steps only where
  * something needs doing.
  */
 function useFlow(pathname: string): {
@@ -141,6 +146,7 @@ function useFlow(pathname: string): {
   captureRoute: string | null
   accessibilityRoute: string | null
   borderRoute: string | null
+  gnomeRoute: string | null
   back: string | null
 } {
   const captureStep = useCaptureStep()
@@ -155,11 +161,15 @@ function useFlow(pathname: string): {
   const current = STEP_OF[pathname]
   const accessibilityRoute = !gaming && accessibility === 'needed' ? '/accessibility' : null
   const borderRoute = border === 'denied' ? '/capture-border' : null
+  // Until its status is known the step stays in, so the intro never skips it by mistake.
+  const [gnome] = useGnomeExtension(false)
+  const gnomeRoute = useGnomeEligible() && !gaming && gnome?.available !== true ? GNOME_ROUTE : null
   const steps: StepId[] = [
     'intro',
     ...(captureRoute || current === 'capture' ? (['capture'] as const) : []),
     ...(accessibilityRoute || current === 'accessibility' ? (['accessibility'] as const) : []),
     ...(borderRoute || current === 'border' ? (['border'] as const) : []),
+    ...(gnomeRoute || current === 'gnome' ? (['gnome'] as const) : []),
     'ocr',
     'engine',
     'dictionaries',
@@ -170,7 +180,8 @@ function useFlow(pathname: string): {
     '/screen-recording-permission': '/',
     '/accessibility': captureRoute ?? '/',
     '/capture-border': accessibilityRoute ?? captureRoute ?? '/',
-    '/ocr': borderRoute ?? accessibilityRoute ?? captureRoute ?? '/',
+    [GNOME_ROUTE]: borderRoute ?? accessibilityRoute ?? captureRoute ?? '/',
+    '/ocr': gnomeRoute ?? borderRoute ?? accessibilityRoute ?? captureRoute ?? '/',
     '/engine': '/ocr',
     '/dictionaries': '/engine',
     '/dictionary-settings': '/dictionaries',
@@ -179,7 +190,7 @@ function useFlow(pathname: string): {
     '/done': steam ? STEAM_ROUTE : dictionaryReady === false ? '/engine' : '/dictionaries',
     '/main': '/done'
   }
-  return { steps, captureRoute, accessibilityRoute, borderRoute, back: BACK[pathname] ?? null }
+  return { steps, captureRoute, accessibilityRoute, borderRoute, gnomeRoute, back: BACK[pathname] ?? null }
 }
 
 // ---------------------------------------------------------------- capture
@@ -286,7 +297,7 @@ function AccessibilityScreen({ next }: { next: string }): JSX.Element {
  * around it unless Settings → Privacy & security → Screenshot borders lets apps turn it off.
  * Optional; Kimochi reads the same either way.
  */
-function CaptureBorderScreen(): JSX.Element {
+function CaptureBorderScreen({ next }: { next: string }): JSX.Element {
   const hidden = useCaptureBorder(true) === 'hidden'
   return (
     <Step
@@ -308,7 +319,7 @@ function CaptureBorderScreen(): JSX.Element {
       <BorderSettingsArt />
       <StepActions>
         <Button variant="primary" asChild>
-          <Link to="/ocr">Continue</Link>
+          <Link to={next}>Continue</Link>
         </Button>
       </StepActions>
     </Step>
@@ -473,8 +484,9 @@ function StepDots({ steps, current }: { steps: StepId[]; current: StepId | undef
 export default function WelcomeApp(): JSX.Element {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { steps, captureRoute, accessibilityRoute, borderRoute, back } = useFlow(pathname)
-  const afterAccessibility = borderRoute ?? '/ocr'
+  const { steps, captureRoute, accessibilityRoute, borderRoute, gnomeRoute, back } = useFlow(pathname)
+  const afterBorder = gnomeRoute ?? '/ocr'
+  const afterAccessibility = borderRoute ?? afterBorder
   const afterCapture = accessibilityRoute ?? afterAccessibility
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
@@ -512,7 +524,8 @@ export default function WelcomeApp(): JSX.Element {
               <Route index element={<IntroStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
               <Route path="/screen-recording-permission" element={<ScreenPermissionScreen next={afterCapture} />} />
               <Route path="/accessibility" element={<AccessibilityScreen next={afterAccessibility} />} />
-              <Route path="/capture-border" element={<CaptureBorderScreen />} />
+              <Route path="/capture-border" element={<CaptureBorderScreen next={afterBorder} />} />
+              <Route path={GNOME_ROUTE} element={<GnomeExtensionStep next="/ocr" />} />
               {/* The system picker step is gone: a reload there carries on to the OCR step. */}
               <Route path="/system-picker" element={<Navigate to="/ocr" replace />} />
               <Route path="/ocr" element={<OcrScreen />} />
