@@ -140,6 +140,17 @@ impl Modifiers {
             _ => self.shift,
         }
     }
+
+    /// Marks the lookup key held: a controller's lookup button stands in for it
+    /// (`gamepad::lookup_held`).
+    pub fn hold(&mut self, key: &str) {
+        match key {
+            "ctrl" => self.ctrl = true,
+            "alt" => self.alt = true,
+            "meta" => self.meta = true,
+            _ => self.shift = true,
+        }
+    }
 }
 
 /// Where the pointer is (desktop coordinates), whether the primary button is down,

@@ -339,11 +339,18 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
     }
 }
 
-/// Bring a window source to the front. Linux goes by its process, as before.
+/// Bring a window source to the front: the window itself on X11, else its process.
 pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<serde_json::Value, String> {
     // A native Wayland window is raised by the compositor that named it.
     if id.platform() == kimochi_capture::Platform::Wayland {
         return super::native::activate(id);
+    }
+    // The window itself on X11, when it is still there: a game under Wine has other windows of its
+    // own (a hidden one is often the process's first), and activating the process could pick one.
+    if session().backend == Backend::X11 {
+        if let Some(xid) = x11::window_of(id) {
+            return x11::activate_window(xid).map(|()| serde_json::json!({ "window": xid }));
+        }
     }
     activate_process(id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?)
         .map(|()| serde_json::json!({ "process": true }))

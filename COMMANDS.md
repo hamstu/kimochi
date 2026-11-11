@@ -79,7 +79,9 @@ Keys and defaults mirror `src/main/settings.ts`:
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
-`gamepadSettings.{enabled,preferredGamepadIndex}` (enabled defaults true),
+`gamepadSettings.{enabled,preferredGamepadIndex,lookupButton}` (enabled defaults true; `lookupButton`, a
+button index held as the lookup key (`gamepad::lookup_held`), defaults on a Steam Deck to the first
+back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere),
 `lastSelectedSource.{sourceId,type,name,appName}`,
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
@@ -143,7 +145,8 @@ Mirrors `src/main/native-windows.ts`.
 | `panel_cursor` | `({kind}) -> ()` |
 
 `action`: `show`, `show_inactive`, `hide`, `drag`, `place`, `minimize`, `restore`,
-`pin`, `unpin`, `inspect`. The main window also accepts `mini` and `expand`:
+`maximize` (toggles: maximized, or back to the size before; ignored for fixed-size windows,
+Mini mode and Gaming Mode; `PanelInfo.maximized` reports it), `pin`, `unpin`, `inspect`. The main window also accepts `mini` and `expand`:
 temporary compact bounds and forced pin, restored on expand; `PanelInfo.mini` reports
 the current mode. Compact bounds and the forced pin are not saved to settings.
 Selecting a full-screen source or entering full screen switches to Mini mode once

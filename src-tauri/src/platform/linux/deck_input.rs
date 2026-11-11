@@ -68,6 +68,8 @@ pub struct Reader {
     sample: Option<Sample>,
     received: Option<Instant>,
     retry: Instant,
+    /// Read in Desktop Mode on a Steam Deck too, not only under Gamescope.
+    desktop: bool,
 }
 
 impl Reader {
@@ -89,11 +91,25 @@ impl Reader {
             sample: None,
             received: None,
             retry: Instant::now(),
+            desktop: false,
         }
     }
 
+    /// A reader that also works in Desktop Mode on a Steam Deck (the controller thread,
+    /// `gamepad.rs`). There Steam's Desktop layout turns the buttons into keys and the trackpad
+    /// into a mouse, and its virtual pad reports nothing while a desktop window has focus, so the
+    /// Deck's own report is the only place the back grips (and every button) can be read.
+    /// Read-only, like Gaming Mode: Steam keeps the controller.
+    pub fn with_desktop() -> Self {
+        Self { desktop: true, ..Self::new() }
+    }
+
+    fn wanted(&self) -> bool {
+        super::gamescope::active() || (self.desktop && crate::steam_library::is_steam_deck())
+    }
+
     fn open(&mut self) {
-        if !super::gamescope::active() || Instant::now() < self.retry {
+        if !self.wanted() || Instant::now() < self.retry {
             return;
         }
         self.retry = Instant::now() + Duration::from_secs(1);

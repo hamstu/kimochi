@@ -106,8 +106,10 @@ body,
   background: var(--k-hover);
   color: var(--k-text);
 }
-/* The pin fills its box corner to corner, so it reads larger than the other glyphs at one size. */
-.native-window-actions button.native-pin svg {
+/* The pin and the maximize square fill their box corner to corner, so they read larger than the
+   other glyphs at one size. */
+.native-window-actions button.native-pin svg,
+.native-window-actions button.native-maximize svg {
   width: var(--k-icon-xs);
   height: var(--k-icon-xs);
 }

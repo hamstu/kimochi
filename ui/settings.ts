@@ -258,7 +258,7 @@ export interface Settings {
   }
   audioSettings: { voiceId: string; model?: string }
   serverSettings: { mode: ServerMode }
-  gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
+  gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number; lookupButton?: number | null }
   controllerButtons: ControllerButtons
   gameModeSettings: GameModeSettings
   yomitanSettings: {
