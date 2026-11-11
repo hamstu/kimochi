@@ -93,6 +93,10 @@ wayland-backend = { version = "0.3", features = ["client_system"] }
 wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
 wayland-scanner = "0.31"
 wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+# The ext driver: wlr foreign-toplevel state where no compositor IPC says more, and the SHM
+# buffers (memfd, mmap) and poll loop of its capture threads.
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+rustix = { version = "1", features = ["std", "fs", "mm", "event", "pipe"] }
 
 # A main-thread harness: VisionKit delivers its completion to the main queue, so a
 # test that runs on a spawned harness thread can never see it.

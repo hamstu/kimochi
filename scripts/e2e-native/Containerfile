@@ -1,0 +1,10 @@
+# Headless Sway (and Hyprland) for the native `ext` capture driver. One layer.
+# Arch, because toplevel capture (ext_foreign_toplevel_image_capture_source_manager_v1) arrived in
+# Sway 1.12; Fedora 43's 1.11 only captures outputs. Hyprland is here for its enrichment path.
+FROM docker.io/library/archlinux:latest
+RUN pacman -Syu --noconfirm --needed \
+      sway swaybg foot xterm xorg-xwayland libpipewire mesa ttf-dejavu wayland-utils jq procps-ng libcap \
+      hyprland \
+    && pacman -Scc --noconfirm && rm -rf /var/cache/pacman/pkg/* /usr/share/doc /usr/share/man \
+    # Rootless containers cannot grant file capabilities; sway only wants CAP_SYS_NICE.
+    && (setcap -r /usr/bin/sway 2>/dev/null || true)
