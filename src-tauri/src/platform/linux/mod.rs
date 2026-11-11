@@ -46,6 +46,7 @@ mod input_guard;
 mod controller_neutral;
 pub mod deck_input;
 pub mod hyprland;
+mod hyprland_binds;
 pub mod kwin;
 pub mod native;
 pub mod tracking;
@@ -439,13 +440,14 @@ pub fn capabilities() -> Value {
             // and the compositor reports the pointer (KDE Plasma, Hyprland).
             "shiftGate": x11 || feed.is_some(),
             "shiftSource": if x11 { Some("x11") } else { feed.map(shift::Source::as_str) },
-            // A layer overlay sees no Shift (keyboard NONE). Where nothing relays it on KDE Plasma
-            // (Legacy X11 App Support turned off), the overlay's text looks up on hover instead
-            // (host/linux-scan-input.js).
-            "lookupOnHover": !x11 && layer::available() && s.compositor.as_deref() == Some("KDE") && feed.is_none(),
+            // A layer overlay sees no Shift (keyboard NONE). Where nothing relays it, the overlay's
+            // text looks up on hover instead (host/linux-scan-input.js): KDE Plasma with Legacy
+            // X11 App Support turned off, and Hyprland until its Shift binds have delivered a
+            // press (`hyprland_binds`; none at all when the Shift keys are bound to something else).
+            "lookupOnHover": !x11 && layer::available() && matches!(s.compositor.as_deref(), Some("KDE" | "Hyprland")) && feed.is_none(),
             "nativeHoverWorkaround": false,
         },
-        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else if shortcuts::report()["backend"] == "gnome-shell" { "gnome-shell" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if !x11 && s.compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") { Some("On Hyprland, set key combinations in your compositor configuration. Changing a shortcut here does not update those desktop bindings.") } else { None }},
+        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else if shortcuts::report()["backend"] == "gnome-shell" { "gnome-shell" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if x11 { None } else { shortcuts::hyprland_remediation() }},
         // The executable's file name, which is what `frontmost_app` and focus events
         // report for this app.
         "ownAppNames": ["Kimochi", "kimochi"],

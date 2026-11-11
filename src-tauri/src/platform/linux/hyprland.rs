@@ -1,7 +1,8 @@
 //! Optional read-only Hyprland geometry for portal window streams.
 //! A unique full-buffer size match establishes an in-memory association. Never
 //! select by title/focus, retarget a closed window, or guess between equal sizes.
-//! Initially single-output and native Wayland clients only; other cases fall back.
+//! Single-output only; other layouts fall back. XWayland clients (Wine and Proton games) match
+//! at either their logical size or the output's scale (`xwayland:force_zero_scaling`).
 use kimochi_capture::{Frame, Rect};
 use serde::Deserialize;
 use std::{
@@ -99,6 +100,14 @@ pub fn pointer() -> Option<serde_json::Value> {
     Some(point)
 }
 fn query<T: serde::de::DeserializeOwned>(command: &[u8]) -> Option<T> {
+    serde_json::from_slice(&request(command)?).ok()
+}
+/// Hyprland's event socket (`.socket2.sock`): one `event>>data` line per event.
+pub(super) fn events() -> Option<UnixStream> {
+    UnixStream::connect(socket()?.with_file_name(".socket2.sock")).ok()
+}
+/// One request on Hyprland's command socket and its raw reply (`hyprland_binds` sends commands).
+pub(super) fn request(command: &[u8]) -> Option<Vec<u8>> {
     let mut stream = UnixStream::connect(socket()?).ok()?;
     stream
         .set_read_timeout(Some(Duration::from_millis(100)))
@@ -112,7 +121,7 @@ fn query<T: serde::de::DeserializeOwned>(command: &[u8]) -> Option<T> {
     if data.len() > 2_000_000 {
         return None;
     }
-    serde_json::from_slice(&data).ok()
+    Some(data)
 }
 fn snapshot() -> Option<Snapshot> {
     if !available() {
@@ -168,7 +177,6 @@ fn unique_match(snapshot: &Snapshot, width: u32, height: u32) -> Option<&Client>
     let candidate = matches.next()?;
     (matches.next().is_none()
         && candidate.pid != std::process::id()
-        && !candidate.xwayland
         && candidate.mapped
         && !candidate.hidden)
         .then_some(candidate)
@@ -251,7 +259,6 @@ pub fn frame_bounds(source: &str, width: u32, height: u32) -> Option<Rect> {
     let client = resolve(&snapshot, binding.as_ref()?)?;
     (client.mapped
         && !client.hidden
-        && !client.xwayland
         && matches_frame(client, &snapshot.monitor, width, height))
     .then(|| rect(client))
     .flatten()
@@ -357,37 +364,35 @@ pub fn status(source: &str) -> serde_json::Value {
     serde_json::json!({"available":snapshot.is_some(),"linked":linked,
         "bounds":tracked.map(|(bounds,_)|bounds),"visible":tracked.is_some_and(|(_,visible)|visible)})
 }
+/// Windows the shared frame could be: mapped, not Kimochi's, and the frame's size.
+fn candidates_in(snapshot: &Snapshot, width: u32, height: u32) -> Vec<&Client> {
+    snapshot
+        .clients
+        .iter()
+        .filter(|c| {
+            c.mapped
+                && !c.hidden
+                && c.pid != std::process::id()
+                && matches_frame(c, &snapshot.monitor, width, height)
+        })
+        .collect()
+}
 fn explicit_match<'a>(
     snapshot: &'a Snapshot,
     address: &str,
     width: u32,
     height: u32,
 ) -> Option<&'a Client> {
-    snapshot.clients.iter().find(|c| {
-        c.address == address
-            && c.mapped
-            && !c.hidden
-            && !c.xwayland
-            && c.pid != std::process::id()
-            && matches_frame(c, &snapshot.monitor, width, height)
-    })
+    candidates_in(snapshot, width, height)
+        .into_iter()
+        .find(|c| c.address == address)
 }
 pub fn candidates(width: u32, height: u32) -> Result<serde_json::Value, String> {
     let snapshot = snapshot().ok_or("Native window linking currently needs Hyprland with one unrotated output at the desktop origin")?;
-    Ok(serde_json::Value::Array(
-        snapshot
-            .clients
-            .iter()
-            .filter(|c| {
-                c.mapped
-                    && !c.hidden
-                    && !c.xwayland
-                    && c.pid != std::process::id()
-                    && matches_frame(c, &snapshot.monitor, width, height)
-            })
-            .map(|c| serde_json::json!({"address":c.address,"title":c.title,"app":c.app}))
-            .collect(),
-    ))
+    Ok(candidates_in(&snapshot, width, height)
+        .into_iter()
+        .map(|c| serde_json::json!({"address":c.address,"title":c.title,"app":c.app}))
+        .collect())
 }
 pub fn link(source: &str, address: &str, width: u32, height: u32) -> Result<(), String> {
     let snapshot = snapshot().ok_or("Hyprland window geometry is unavailable")?;
@@ -489,12 +494,23 @@ mod tests {
         assert!(explicit_match(&s, "0x2", 1660, 1373).is_none());
     }
     #[test]
-    fn unsupported_or_unmapped_clients_never_match() {
+    fn hidden_clients_never_match() {
         let mut s = sample();
-        s.clients[0].xwayland = true;
-        assert!(unique_match(&s, 1660, 1373).is_none());
-        s.clients[0].xwayland = false;
         s.clients[0].hidden = true;
         assert!(unique_match(&s, 1660, 1373).is_none());
+        assert!(explicit_match(&s, "0x1", 1660, 1373).is_none());
+    }
+    #[test]
+    fn an_xwayland_game_links_at_its_logical_or_scaled_size() {
+        // A Proton game on XWayland: unscaled, its buffer is its logical size; with
+        // `xwayland:force_zero_scaling` it is the output's scale, as for a native client.
+        let mut s = sample();
+        s.clients[0].xwayland = true;
+        s.clients[0].size = [640., 480.];
+        assert_eq!(unique_match(&s, 640, 480).unwrap().address, "0x1");
+        assert_eq!(unique_match(&s, 853, 640).unwrap().address, "0x1");
+        assert!(unique_match(&s, 800, 600).is_none());
+        assert_eq!(explicit_match(&s, "0x1", 640, 480).unwrap().address, "0x1");
+        assert_eq!(candidates_in(&s, 640, 480).len(), 1);
     }
 }
