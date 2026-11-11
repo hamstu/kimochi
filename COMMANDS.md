@@ -2190,7 +2190,10 @@ ambiguous matches use the source panel's **Relink window overlay…** dialog. Ca
 still comes from the portal. Missing/unsupported geometry retains the source-image crop fallback
 and does not place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
 
-- **Hyprland:** native layer-shell and one unrotated output at (0,0); XWayland clients excluded.
+- **Hyprland:** native layer-shell and one unrotated output at (0,0). Native Wayland and XWayland
+  clients (Proton/Wine games) match; an XWayland buffer is either the window's logical size or, with
+  `xwayland:force_zero_scaling`, the output's scale. Kimochi's own windows never make a size
+  ambiguous (a tiled Log and game often split the screen equally).
 - **KDE Plasma (KWin 6; 5.27 best-effort):** Kimochi serves `dev.kimochi.KWinBridge` at
   `/dev/kimochi/KWinBridge` on its own session-bus connection and loads a KWin script
   (`org.kde.kwin.Scripting`, plugin `kimochi-bridge`) that pushes window snapshots on change
@@ -2219,8 +2222,22 @@ one from `platform/linux/shift.rs` and the pointer from `tracking::pointer()`; w
   relays Shift's edges as `linux-dictionary-modifier` for the overlay's DOM-event path. When the
   setting is `None`, `overlay.lookupOnHover` is true instead and the overlay's text looks up on
   hover (`host/linux-scan-input.js` `hover`).
-- **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired (Hyprland fires
-  only bindings its config names).
+- **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired. Hyprland fires
+  only bindings its config names, so Kimochi binds them itself while it runs (below); until a press
+  arrives, `overlay.lookupOnHover` is true and the overlay's text looks up on hover, as on KDE.
+
+**Hyprland binds** (`platform/linux/hyprland_binds.rs`). Hyprland's GlobalShortcuts portal
+registers `dev.kimochi.app.*` but ignores `preferred_trigger`. After `BindShortcuts`, Kimochi adds a
+runtime-only bind per shortcut over the IPC socket, dispatching `global` to the name Hyprland listed
+(`j/globalshortcuts`, `<app id>:<id>`): `keyword bindd …` on a `hyprland.conf` session, `eval
+hl.bind(…)` on a Lua one (which refuses `keyword`). The Shift pair is non-consuming, transparent
+and ignores mods. Each bind's description starts `Kimochi: `, so one left by a crash is taken back.
+A combination the config already binds is left alone and reported in
+`globalShortcutReport.failed` (`hyprland: true`, shown as `globalShortcutRemediation`) unless the
+bind dispatches to that shortcut (legacy binds say so; a Lua bind is opaque, so a description
+naming Kimochi counts, and a shortcut that then fires drops its failure). The binds are re-added on
+the event socket's `configreloaded` and removed by `shortcuts::stop` (re-apply and quit). Nothing
+is written to the config.
 
 The compositor is asked for positions (≤ ~80/s) only while Shift is held or the gate is still open
 (`platform::pointer_demand`); otherwise the poll reads the modifiers alone. Buttons are known only

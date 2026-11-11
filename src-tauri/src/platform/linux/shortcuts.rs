@@ -453,10 +453,30 @@ fn bind(
                 &app.state::<Shared>(),
                 json!({"check":"global-shortcut-activated","action":action}),
             );
+            // It fired, so whatever key the user's config gave it works: no longer a failure.
+            if forget_failure(action) {
+                let _ = app.emit("platform-capabilities", crate::capabilities_value(app, &app.state::<Shared>()));
+            }
             actions::dispatch(app, &app.state::<Shared>(), action);
         }
     }
     Ok(())
+}
+
+/// Drop `action` from the report's failures (and count it registered). True when it was there.
+fn forget_failure(action: &str) -> bool {
+    let mut report = REPORT.lock().unwrap();
+    let Some(report) = report.as_mut() else { return false };
+    let Some(failed) = report["failed"].as_array_mut() else { return false };
+    let before = failed.len();
+    failed.retain(|f| f["name"] != action);
+    if failed.len() == before {
+        return false;
+    }
+    if let Some(registered) = report["registered"].as_array_mut() {
+        registered.push(json!(action));
+    }
+    true
 }
 
 #[derive(Default)]

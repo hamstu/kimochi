@@ -219,7 +219,11 @@ Debug-build cost in the rig: idle with the feed on vs off is within noise (Kimoc
 way, XWayland +0.1-0.4%, KWin unchanged); holding Shift and sweeping the pointer at 60 Hz, KWin
 ~5% (positions asked ≤ ~80/s only then). 10ten takes WebKitGTK for Safari and drops a modifier-only
 move at the last move's point, so a Shift press at rest is preceded by a plain move a pixel off.
-Hyprland's path (portal Shift bindings, once one fires) is built but not run on Hyprland yet.
+Hyprland's path (portal Shift bindings, once one fires): Kimochi binds them at runtime (2026-11-11).
+Verified on Hyprland 0.56.1 (Lua config, Omarchy, ARM64 VM): the binds are added, survive
+`hyprctl reload`, and without a Shift press yet the overlay looks up on hover (`lookupOnHover`); a
+physical Shift press through the runtime bind is not yet verified there (synthetic `wtype` input
+does not trigger Hyprland binds).
 
 ### Native Wayland overlays (Linux bring-up)
 
@@ -239,9 +243,11 @@ registration/failure and Activated events are recorded in evidence. A denied or
 missing portal reports its exact error without failing app startup. X11 retains
 the existing global-shortcut plugin.
 
-Hyprland's backend advertises actions but ignores preferred key combinations;
-the user must bind those actions in compositor configuration. Capabilities/settings
-explain this limitation. No compositor IPC is used by the app. Portal service
+Hyprland's backend advertises actions but ignores preferred key combinations, and
+fires an action only for a config bind naming it. Kimochi adds those binds at runtime
+over Hyprland's IPC socket (`hyprland_binds.rs`; `keyword` or Lua `eval`), skips
+combinations the config already binds (reported in Settings), re-adds them after
+`configreloaded` and removes them on quit; the config file is never written. Portal service
 restart/rebinding, KDE/GNOME shortcut dialogs and physical fullscreen shortcuts
 remain unverified.
 
@@ -274,7 +280,8 @@ Editable controls remain ordinary text inputs. Vendor Yomitan stays unchanged.
 Native layer-shell overlays keep keyboard mode NONE. On Hyprland, two explicit
 GlobalShortcuts portal actions relay left/right Shift press and release, without
 claiming a global raw keyboard watcher. Desktop bindings must be non-consuming.
-For Hyprland 0.56.1 Lua configuration (add to the user's bindings file):
+Kimochi adds these at runtime (`hyprland_binds.rs`); the equivalent Hyprland 0.56.1
+Lua configuration, for users who bind them themselves:
 
 ```lua
 hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })

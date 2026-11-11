@@ -103,17 +103,21 @@ asks to confirm its global shortcuts (**Scan** and the **Controller menu**); cha
 
 ### Global shortcuts on Hyprland
 
-Hyprland lists Kimochi's shortcuts but doesn't assign their keys, so bind them in your own config.
-The first two lines bind **Scan** and the **Controller menu** (use any keys you like); the last two
-let the dictionary see <kbd>Shift</kbd> for lookups over other apps, without taking it from them.
-Once Kimochi has seen Shift through them, the overlay's text lets your clicks through to the game
-until you hold Shift, as on Windows and macOS.
+Hyprland lists Kimochi's shortcuts but doesn't give them keys itself, so while Kimochi runs it
+binds them for you: **Scan** and the **Controller menu** on the keys set in **Settings → Shortcuts &
+Controls**, and <kbd>Shift</kbd> for the dictionary, without taking it from the game. These binds
+last only while Kimochi runs and never touch your config; Kimochi adds them again when Hyprland
+reloads. Once Kimochi has seen Shift through them, the overlay's text lets your clicks through to the
+game until you hold Shift, as on Windows and macOS. Until then, hovering a word on the overlay looks
+it up.
 
-With Hyprland 0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
+If your config already uses one of those keys for something else, Kimochi leaves it alone and
+Settings says which. Choose another key there, or bind Kimochi's shortcut yourself. With Hyprland
+0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
 
 ```lua
-hl.bind("CTRL + SHIFT + 8", hl.dsp.global("Kimochi:dev.kimochi.app.triggerScan"))
-hl.bind("CTRL + SHIFT + SPACE", hl.dsp.global("Kimochi:dev.kimochi.app.openControllerMenu"))
+hl.bind("CTRL + SHIFT + 8", hl.dsp.global("Kimochi:dev.kimochi.app.triggerScan"), { description = "Kimochi scan" })
+hl.bind("CTRL + SHIFT + SPACE", hl.dsp.global("Kimochi:dev.kimochi.app.openControllerMenu"), { description = "Kimochi controls" })
 hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })
 hl.bind("Shift_R", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftRight"), { non_consuming = true, transparent = true, ignore_mods = true })
 ```

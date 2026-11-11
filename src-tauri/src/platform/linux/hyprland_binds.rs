@@ -209,7 +209,13 @@ fn apply(shortcuts: &[Shortcut]) -> Vec<(String, String)> {
         };
         if let Some(bind) = existing.iter().find(|b| !b.description.starts_with(MARK) && combo.matches(b)) {
             if !bind.fires(global) {
-                fail(format!("{} is already bound in your Hyprland config", combo.label()));
+                // A Lua bind says nothing of what it does: it may be the user's own for this
+                // shortcut, which its first use shows (`shortcuts.rs` then drops the report).
+                fail(if bind.dispatcher == "__lua" {
+                    format!("{} is already bound in your Hyprland config; if that bind is Kimochi's, this goes once you use it", combo.label())
+                } else {
+                    format!("{} is already bound in your Hyprland config", combo.label())
+                });
             }
             continue;
         }

@@ -170,16 +170,17 @@ fn matches_frame(client: &Client, monitor: &Monitor, width: u32, height: u32) ->
         && (size_matches(scale) || (client.xwayland && size_matches(1.)))
 }
 fn unique_match(snapshot: &Snapshot, width: u32, height: u32) -> Option<&Client> {
+    unique_match_besides(snapshot, width, height, std::process::id())
+}
+/// Kimochi's own windows (`own`) are never the shared one, so they do not make a size ambiguous:
+/// on a tiling desktop the Log and the game often split the screen into equal halves.
+fn unique_match_besides(snapshot: &Snapshot, width: u32, height: u32, own: u32) -> Option<&Client> {
     let mut matches = snapshot
         .clients
         .iter()
-        .filter(|c| matches_frame(c, &snapshot.monitor, width, height));
+        .filter(|c| c.pid != own && matches_frame(c, &snapshot.monitor, width, height));
     let candidate = matches.next()?;
-    (matches.next().is_none()
-        && candidate.pid != std::process::id()
-        && candidate.mapped
-        && !candidate.hidden)
-        .then_some(candidate)
+    (matches.next().is_none() && candidate.mapped && !candidate.hidden).then_some(candidate)
 }
 fn rect(client: &Client) -> Option<Rect> {
     client
@@ -492,6 +493,17 @@ mod tests {
         assert!(explicit_match(&s, "0x2", 1000, 800).is_none());
         s.clients[1].hidden = true;
         assert!(explicit_match(&s, "0x2", 1660, 1373).is_none());
+    }
+    #[test]
+    fn kimochis_own_equal_sized_window_is_not_ambiguous() {
+        let mut s = sample();
+        let mut log = s.clients[0].clone();
+        log.address = "0x2".into();
+        log.pid = 7;
+        s.clients.push(log);
+        assert_eq!(unique_match_besides(&s, 1660, 1373, 7).unwrap().address, "0x1");
+        // Anyone else's equal-sized window still is.
+        assert!(unique_match_besides(&s, 1660, 1373, 8).is_none());
     }
     #[test]
     fn hidden_clients_never_match() {
