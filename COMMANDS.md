@@ -2294,6 +2294,16 @@ cancels stale imports before they can create another implementation. A recognize
 upgrade preserves a hash-named backup and reports `needsLogin:true` even if the old loader
 is still serving the previous implementation.
 
+`status` also reports `installed` (the extension's files are in place) and `current` (they are
+this build's metadata, loader and implementation), and, when installed, `enabled` (GNOME's
+`enabled-extensions` lists it; off once the reader turns it off in the Extensions app). The welcome guide's GNOME step calls
+`install`, as does the source panel's notice while the overlay is unavailable for want of the
+extension; there is no Settings control. At launch, before the capture backend is chosen, native
+updates an installed extension that isn't `current` or isn't running this build's revision
+(`gnome::keep_current`). It never installs one that isn't there, and leaves one alone that the
+reader turned off in GNOME's Extensions app (`install` would turn it back on). A live `install`
+or `update` emits `platform-capabilities`.
+
 ## Gaming Mode sources
 
 In Gaming Mode, when Gamescope's PipeWire node is present, capture uses it directly instead of the

@@ -53,7 +53,7 @@ export const FAQ = [
     id: 'platforms',
     q: 'Which platforms does Kimochi run on?',
     a: [
-      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
+      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature. On Linux, the overlay is tested on KDE Plasma 6, Hyprland (Omarchy), Sway and GNOME 46 to 51.'
     ],
     links: [
       { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },

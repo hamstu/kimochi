@@ -1026,7 +1026,7 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
                 }
             }
             if operation=="track"&&payload["operation"]=="match"&&!result.is_null(){if let Some(id)=payload["sourceId"].as_str(){platform::gnome::refresh_identity(&service,id);}}
-            if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {platform::gnome::invalidate_pins();hotkeys::apply(&app,&service.settings);}
+            if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {platform::gnome::invalidate_pins();hotkeys::apply(&app,&service.settings);let _=app.emit("platform-capabilities",capabilities_value(&app,&service));}
             Ok(result)
         }).await.map_err(|e|e.to_string())?
     }
@@ -3428,9 +3428,10 @@ fn main() {
             // KDE Plasma ≤ 6.7 lets only a desktop-file-authorized executable capture natively.
             #[cfg(target_os = "linux")]
             platform::native::authorize_kwin();
-            // GNOME: an extension from an older Kimochi has no window list yet.
+            // GNOME: the extension the reader set up (welcome guide) follows the app's version;
+            // one from an older Kimochi has no window list yet. Shortcuts are applied after this.
             #[cfg(target_os = "linux")]
-            platform::gnome::refresh_for_native();
+            let _ = platform::gnome::keep_current();
             let (backend, capture_unavailable) = match platform_backend() {
                 Ok(backend) => (backend, None),
                 Err(e) => (

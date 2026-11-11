@@ -28,8 +28,34 @@ fn connection() -> Result<Connection, String> {
     Ok(cached.as_ref().unwrap().clone())
 }
 
+const UUID: &str = "kimochi-overlay@hamstu.github.io";
+const METADATA: &str = include_str!("../../../gnome-extension/metadata.json");
+const LOADER: &str = include_str!("../../../gnome-extension/extension.js");
+const IMPLEMENTATION: &str = include_str!("../../../gnome-extension/implementation.js");
+
+fn extension_dir() -> Result<std::path::PathBuf, String> {
+    let home = std::env::var_os("XDG_DATA_HOME").map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
+        .ok_or("User data directory unavailable")?;
+    Ok(home.join("gnome-shell/extensions").join(UUID))
+}
+
+/// What is on disk: `installed` once the reader has set the extension up, `current` when its
+/// metadata, loader and implementation are this build's (GNOME may still be running an older one
+/// until the next login).
+fn installed() -> (bool, bool) {
+    let Ok(dir) = extension_dir() else { return (false, false) };
+    if !dir.join("metadata.json").exists() { return (false, false); }
+    let read = |name: &str| std::fs::read_to_string(dir.join(name));
+    let current = read("metadata.json").is_ok_and(|text| text == METADATA)
+        && read("extension.js").is_ok_and(|text| text == LOADER)
+        && digest(IMPLEMENTATION).is_ok_and(|revision| read("revision").is_ok_and(|text| text.trim() == revision));
+    (true, current)
+}
+
 pub fn status() -> Value {
     if !eligible() { return json!({"available":false}); }
+    let (installed, current) = installed();
     let result = (|| -> Result<Value, String> {
         let conn = connection()?;
         let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
@@ -45,30 +71,54 @@ pub fn status() -> Value {
     DESKTOP_POPUP.store(result.as_ref().is_ok_and(|value| value["desktopPopup"] == true), Ordering::SeqCst);
     AVAILABLE.store(result.is_ok(), Ordering::SeqCst);
     if result.is_err() { *PIN_REVISION.lock().unwrap() = None; }
-    result.unwrap_or_else(|error| json!({"available":false,"reason":error}))
+    let mut value = result.unwrap_or_else(|error| json!({"available":false,"reason":error}));
+    value["installed"] = json!(installed);
+    value["current"] = json!(current);
+    value
 }
 
-/// Keep the running extension at this build's implementation: native window capture lists
-/// windows through its `Windows` method, which an extension from an older Kimochi lacks, and
-/// newer GNOME releases need its fixes. Implementation updates reload in place without a new login
-/// (the same as **Update** in Settings), before the capture backend is chosen, so this launch
-/// already lists windows itself instead of opening the screen-share dialog.
-pub fn refresh_for_native() {
-    if !eligible() { return; }
+/// On launch, keep an extension the reader set up (welcome guide) in step with this build. Native
+/// window capture lists windows through its `Windows` method, which an extension from an older
+/// Kimochi lacks, and newer GNOME releases need its fixes, so this runs before the capture backend
+/// is chosen: an implementation-only update reloads in place and this launch already lists windows
+/// itself instead of opening the screen-share dialog. A new loader or metadata waits for the next
+/// login. Never installs an extension that isn't there. Returns the update's result when it ran.
+pub fn keep_current() -> Option<Result<Value, String>> {
+    if !eligible() { return None; }
+    let (installed, current) = installed();
+    // Turned off in GNOME's Extensions app: updating would turn it back on (`install` enables it).
+    if !installed || !enabled_in_gnome() { return None; }
     let running = status();
-    if running["available"] != true { return; }
-    let Ok(revision) = digest(IMPLEMENTATION) else { return };
-    if running["revision"] == revision.as_str() { return; }
-    match install() {
-        Ok(result) => eprintln!("GNOME: extension updated to this build's revision (live: {})", result["live"]),
+    let revision = digest(IMPLEMENTATION).ok()?;
+    // Up to date on disk, and either running this build or waiting for a login to load it.
+    if current && (running["available"] != true || running["revision"] == revision.as_str()) { return None; }
+    let result = install();
+    match &result {
+        Ok(value) => {
+            if value["live"] == true { invalidate_pins(); }
+            eprintln!("GNOME: extension updated to this build's revision (live: {})", value["live"]);
+        }
         Err(e) => eprintln!("GNOME: extension update failed: {e}"),
     }
+    Some(result)
+}
+
+/// Whether GNOME's `enabled-extensions` lists ours: off once the reader turns it off in Extensions.
+fn enabled_in_gnome() -> bool {
+    let Ok(out) = std::process::Command::new("gsettings").args(["get", "org.gnome.shell", "enabled-extensions"]).output()
+    else { return false };
+    out.status.success() && String::from_utf8_lossy(&out.stdout).contains(&format!("'{UUID}'"))
 }
 
 pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     // Capability probes are valid on every Linux desktop. Only actual GNOME
     // operations require eligibility; otherwise optional integration breaks lookup.
-    if operation == "status" { return Ok(status()); }
+    if operation == "status" {
+        let mut value = status();
+        // Only here, not in `status` (polled internally): it spawns gsettings.
+        if eligible() && value["installed"] == true { value["enabled"] = json!(enabled_in_gnome()); }
+        return Ok(value);
+    }
     if !eligible() { return Err("GNOME integration requires GNOME Wayland without native layer-shell".into()); }
     if operation == "install" || operation == "update" { return install(); }
     if operation == "crop" || operation == "track" || operation == "shortcuts" || operation == "controller" || operation == "surface" {
@@ -107,8 +157,12 @@ mod status_tests {
 /// GNOME Shell majors the extension declares (metadata.json) and is tested against
 /// (scripts/e2e-gnome). GNOME refuses to load it on a major not listed there.
 const SHELL_VERSIONS: [u32; 6] = [46, 47, 48, 49, 50, 51];
-/// SHA-256 of metadata.json as earlier releases installed it (GNOME 46 only).
-const KNOWN_METADATA: [&str; 1] = ["be3f1c1f49909c08dd0d462d8cea90be1555dcc259a47b7eb1ecec232fb5fdee"];
+/// SHA-256 of metadata.json as earlier releases installed it (GNOME 46 only; the first also
+/// still named the repository `kimochi-tauri`).
+const KNOWN_METADATA: [&str; 2] = [
+    "8e1f3b5aec478df527b2edd83d35dde3144f523290cd91627697d0ca9ddebcae",
+    "be3f1c1f49909c08dd0d462d8cea90be1555dcc259a47b7eb1ecec232fb5fdee",
+];
 
 fn shell_supported(version: &str) -> bool {
     version.trim().strip_prefix("GNOME Shell ")
@@ -132,8 +186,6 @@ mod version_tests {
     }
 }
 
-const IMPLEMENTATION: &str = include_str!("../../../gnome-extension/implementation.js");
-
 fn install() -> Result<Value, String> {
     let version = std::process::Command::new("gnome-shell").arg("--version").output().map_err(|e| e.to_string())?;
     let version = String::from_utf8_lossy(&version.stdout);
@@ -141,12 +193,9 @@ fn install() -> Result<Value, String> {
         return Err(format!("This integration supports GNOME {}–{}; this is {}",
             SHELL_VERSIONS[0], SHELL_VERSIONS[SHELL_VERSIONS.len() - 1], version.trim()));
     }
-    let home = std::env::var_os("XDG_DATA_HOME").map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
-        .ok_or("User data directory unavailable")?;
-    let dir = home.join("gnome-shell/extensions/kimochi-overlay@hamstu.github.io");
-    let files = [("metadata.json", include_str!("../../../gnome-extension/metadata.json")),
-        ("extension.js", include_str!("../../../gnome-extension/extension.js"))];
+    let dir = extension_dir()?;
+    let files = [("metadata.json", METADATA),
+        ("extension.js", LOADER)];
     let revision = digest(IMPLEMENTATION)?;
     let running = status();
     let previous_revision = running["revision"].as_str().map(str::to_owned)
@@ -170,8 +219,8 @@ fn install() -> Result<Value, String> {
     for (name, contents) in files {
         let path = dir.join(name);
         if path.exists() && name == "metadata.json" {
-            // Earlier releases' metadata (fewer shell versions) is ours to replace; anything else
-            // is a user edit.
+            // Earlier releases' metadata (fewer shell versions, the repository's old name) is ours
+            // to replace; anything else is a user edit.
             let installed = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
             if installed != contents && !KNOWN_METADATA.contains(&digest(&installed)?.as_str()) {
                 return Err("Existing Kimochi metadata differs; it was not overwritten".into());
@@ -197,13 +246,13 @@ fn install() -> Result<Value, String> {
     let text = String::from_utf8_lossy(&current.stdout);
     let variant = glib::Variant::parse(None, text.trim()).map_err(|e| e.to_string())?;
     let mut names = variant.get::<Vec<String>>().ok_or("Unexpected enabled-extensions setting")?;
-    let uuid = "kimochi-overlay@hamstu.github.io";
+    let uuid = UUID;
     if !names.iter().any(|name| name == uuid) {
         names.push(uuid.into());
         let result = std::process::Command::new("gsettings").args(["set", "org.gnome.shell", "enabled-extensions", names.to_variant().print(true).as_str()]).output().map_err(|e| e.to_string())?;
         if !result.status.success() { return Err(String::from_utf8_lossy(&result.stderr).into_owned()); }
     }
-    let enabled = std::process::Command::new("gnome-extensions").args(["enable", "kimochi-overlay@hamstu.github.io"]).output().map_err(|e| e.to_string())?;
+    let enabled = std::process::Command::new("gnome-extensions").args(["enable", UUID]).output().map_err(|e| e.to_string())?;
     let restart = || -> Result<(), String> {
         let conn = connection()?;
         let proxy = Proxy::new(&conn, "org.gnome.Shell.Extensions", "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions").map_err(|e| e.to_string())?;

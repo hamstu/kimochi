@@ -119,6 +119,7 @@ import { showAnkiTab } from '../panels/settings/ankiPageTab'
 import { showSettingsTab } from '../panels/settings/showSettingsTab'
 import { detectAudioField, detectPictureField } from '../panels/settings/sentenceAudioField'
 import { isGamingMode, useCapabilities } from '../bridge/capabilities'
+import { GnomeExtensionNotice } from './GnomeExtensionNotice'
 import { GnomeWindowLink } from './GnomeWindowLink'
 import { HyprlandWindowLink } from './HyprlandWindowLink'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
@@ -1443,6 +1444,7 @@ export function SourcePanel({
           </div>
           {gameModeNotice}
           {untrackedNotice}
+          {overlayUnavailable && !isGamingMode(capabilities) && <GnomeExtensionNotice />}
         </div>
       )}
 
@@ -1458,6 +1460,7 @@ export function SourcePanel({
           </div>
           {gameModeNotice}
           {untrackedNotice}
+          {overlayUnavailable && !isGamingMode(capabilities) && <GnomeExtensionNotice />}
         </div>
       )}
       {mode === 'hook' && source && (

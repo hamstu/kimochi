@@ -10,8 +10,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- ⭐ **Linux: pick windows like on Windows and macOS.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows and screens itself, with live previews, instead of opening your desktop's screen-share dialog. No more "click the window you shared" or **Relink window overlay…**: Kimochi knows exactly which window you chose, so the overlay follows it as you move, resize or full-screen it, hides while it's minimised or on another workspace, and **Bring to front** works everywhere. (GNOME needs the GNOME overlay extension; other desktops keep the screen-share dialog.)
-- **GNOME 47 to 51 are supported.** The GNOME overlay extension, and with it Kimochi's own window list, the on-screen overlay, dictionary pop-ups and region selection, now works on GNOME 47, 48, 49, 50 and 51 as well as 46 (Ubuntu 24.10 and later, Fedora 41 and later). An installed extension updates itself when Kimochi starts.
+- ⭐ **Linux: pick windows like on Windows and macOS.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows and screens itself, with live previews, instead of opening your desktop's screen-share dialog. No more "click the window you shared" or **Relink window overlay…**: Kimochi knows exactly which window you chose, so the overlay follows it as you move, resize or full-screen it, hides while it's minimised or on another workspace, and **Bring to front** works everywhere. (GNOME needs the GNOME overlay extension, which the welcome guide sets up; other desktops keep the screen-share dialog.)
+- **GNOME 47 to 51 are supported.** The GNOME overlay extension, and with it Kimochi's own window list, the on-screen overlay, dictionary pop-ups and region selection, now works on GNOME 47, 48, 49, 50 and 51 as well as 46 (Ubuntu 24.10 and later, Fedora 41 and later). An installed extension updates itself when Kimochi starts, unless you turned it off in GNOME's Extensions app.
+
+### Changed
+
+- **GNOME: the welcome guide sets up the GNOME extension.** On GNOME, the overlay and dictionary pop-ups need a small extension; the welcome guide now sets it up as one of its steps, and Kimochi keeps it up to date on its own, so there's no button for it in Settings any more. If you skipped it, **Set up** next to **Overlay unavailable** in the sidebar does the same.
 
 ### Fixed
 

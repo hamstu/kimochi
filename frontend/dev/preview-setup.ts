@@ -858,6 +858,7 @@ const cliCommand = (installed: boolean): Record<string, unknown> => ({
   onPath: true,
   note: null
 })
+let gnomeInstalled = false
 let cliInstalled = false
 
 const HANDLERS: Record<string, Handler> = {
@@ -897,6 +898,15 @@ const HANDLERS: Record<string, Handler> = {
   // Settings → Browser Extension.
   browser_bridge_status: () => ({ enabled: true, listening: true, port: 27640, connected: 1, browsers: ['Chrome'] }),
   browser_extension_folder: () => '/Users/you/Library/Application Support/com.kimochi.app/browser-extension',
+  // The welcome guide's GNOME step (?platform=linux): set up on Set up, live after a login.
+  gnome_overlay: (args) => {
+    const { operation } = args as { operation: string }
+    if (operation === 'install') {
+      gnomeInstalled = true
+      return { installed: true, live: false, needsLogin: true }
+    }
+    return { available: false, installed: gnomeInstalled, current: gnomeInstalled, enabled: gnomeInstalled }
+  },
   cli_status: () => cliCommand(cliInstalled),
   cli_install: () => cliCommand((cliInstalled = true)),
   cli_uninstall: () => cliCommand((cliInstalled = false)),
