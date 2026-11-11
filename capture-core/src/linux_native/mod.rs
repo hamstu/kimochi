@@ -45,8 +45,6 @@ pub mod mutter;
 mod backend;
 #[cfg(target_os = "linux")]
 pub use backend::{activate, driver, driver_name, init, inventory, report, Driver, Feed, NativeCapture, Target};
-#[cfg(target_os = "linux")]
-pub(crate) use backend::pipewire_feed;
 
 /// How long the reader's source stream stays open after its last capture.
 pub const KEEP_CAPTURE: std::time::Duration = std::time::Duration::from_secs(90);
@@ -189,6 +187,8 @@ pub fn sources(inventory: &Inventory, own_pid: u32) -> Vec<Source> {
         .windows
         .iter()
         .filter(|w| !w.auxiliary && w.pid != Some(own_pid))
+        // Helper surfaces (a clipboard bridge's 1×1 window) are no one's reading source.
+        .filter(|w| w.bounds.is_none_or(|b| b.width >= 32.0 && b.height >= 32.0))
         .map(|w| Source {
             id: window_source_id(w),
             kind: "window",

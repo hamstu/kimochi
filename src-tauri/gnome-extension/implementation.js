@@ -12,6 +12,12 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 const IFACE = 'dev.kimochi.GnomeOverlay';
 const ORDINARY = ['log','settings','diagnostics','dictionary','welcome','sync-log'];
 const COVERING = ['log','settings','diagnostics','dictionary','welcome'];
+// Window sources: a portal stream (anonymous until linked) or a native one (Mutter's own
+// window id, captured through org.gnome.Mutter.ScreenCast: bound exactly, never matched).
+const WINDOW_SOURCE = /^(portal:window:[0-9]+|wayland:window:[0-9]+(:[0-9]+)?)$/;
+const SCREEN_SOURCE = /^(portal:display:[0-9]+|wayland:display:[A-Za-z0-9_.-]+)$/;
+const isWindowSource = id => typeof id === 'string' && WINDOW_SOURCE.test(id);
+const nativeWindowId = id => /^wayland:window:([0-9]+)/.exec(id ?? '')?.[1] ?? null;
 const XML = `<node><interface name="${IFACE}">
 <method name="Status"><arg type="s" direction="out"/></method>
 <method name="Present"><arg type="s" direction="in"/></method>
@@ -28,6 +34,7 @@ const XML = `<node><interface name="${IFACE}">
 <method name="Shortcuts"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
 <signal name="Action"><arg type="s"/></signal>
 <method name="Track"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+<method name="Windows"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
 <signal name="TrackResult"><arg type="s"/></signal>
 <signal name="CropResult"><arg type="s"/></signal>
 <method name="Highlight"><arg type="s" direction="in"/></method>
@@ -65,7 +72,7 @@ export default class KimochiOverlay extends Extension {
             if (this._crop && GLib.get_monotonic_time() - this._crop.updated > 5000000) this._finishCrop(false, 'timeout');
             if (this._lastUpdate && GLib.get_monotonic_time() - this._lastUpdate > 5000000)
                 this._clear();
-            if (this._crop?.sourceId?.startsWith('portal:window:')) {
+            if (isWindowSource(this._crop?.sourceId)) {
                 const t=this._trackedStatus(),a=this._crop.area;
                 if(!t||!this._crop.webview&&!t.visible||['x','y','width','height'].some(k=>Math.abs(t.bounds[k]-a[k])>=2)) this._finishCrop(false,'window-changed');
             }
@@ -238,6 +245,17 @@ export default class KimochiOverlay extends Extension {
                 this._tracked.window.unminimize();this._tracked.window.activate_with_workspace(global.get_current_time(),this._tracked.window.get_workspace());
                 invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({ok:true})]));return;
             }
+            if (data.operation==='bind') {
+                // A native source names its window: bind that one, no matching and no picking.
+                const id=nativeWindowId(data.sourceId);
+                if(!id||!isWindowSource(data.sourceId)) throw new Error('Not a native window source');
+                const current=this._trackedStatus();
+                if(current?.sourceId===data.sourceId){invocation.return_value(new GLib.Variant('(s)',[JSON.stringify(current)]));return;}
+                const win=global.get_window_actors().map(a=>a.meta_window).find(w=>String(w.get_id())===id);
+                if(!win) throw new Error('That window has closed');
+                this._bindTracked(win,sender,data.sourceId,false,'native',win.get_pid());
+                invocation.return_value(new GLib.Variant('(s)',[JSON.stringify(this._trackedStatus())]));return;
+            }
             if (data.operation==='match') {
                 if(typeof data.sourceId!=='string'||!/^portal:window:[0-9]+$/.test(data.sourceId)||
                     ![data.width,data.height].every(v=>Number.isInteger(v)&&v>0&&v<=65535)) throw new Error('Invalid shared window frame');
@@ -284,6 +302,42 @@ export default class KimochiOverlay extends Extension {
             } else throw new Error('Unknown tracking operation');
             invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({ok:true})]));
         } catch(e) {invocation.return_dbus_error(`${IFACE}.InvalidTracking`,e.message);}
+    }
+
+    // Every window the reader could capture, for Kimochi's own source picker (native capture
+    // through Mutter's ScreenCast API takes these ids), and activation of one by id.
+    // Front to back. Bounds are what Mutter streams for the window (`_captureBounds`).
+    WindowsAsync([payload], invocation) {
+        try {
+            if (payload.length>4096) throw new Error('Windows request exceeds limit');
+            const data=JSON.parse(payload||'{}');
+            const windows=global.get_window_actors().map(a=>a.meta_window).filter(w=>w&&w.get_compositor_private()).reverse();
+            if (data.operation==='activate') {
+                const win=windows.find(w=>String(w.get_id())===String(data.id));
+                if(!win) throw new Error('That window has closed');
+                win.unminimize();
+                win.activate_with_workspace(global.get_current_time(),win.get_workspace());
+                invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({ok:true})]));return;
+            }
+            if (data.operation && data.operation!=='list') throw new Error('Unknown windows operation');
+            const tracker=Shell.WindowTracker.get_default(),focused=global.display.focus_window;
+            const active=global.workspace_manager.get_active_workspace();
+            const ordinary=[Meta.WindowType.NORMAL,Meta.WindowType.DIALOG,Meta.WindowType.MODAL_DIALOG,Meta.WindowType.UTILITY];
+            const list=windows.map(w=>{
+                const app=tracker.get_window_app(w),info=app?.get_app_info(),r=this._captureBounds(w),f=w.get_frame_rect();
+                const actor=w.get_compositor_private();
+                const onWorkspace=w.is_on_all_workspaces()||w.get_workspace()===active;
+                return {id:String(w.get_id()),title:w.get_title()??'',appId:info?.get_id()??w.get_gtk_application_id()??w.get_wm_class()??null,
+                    appName:app?.get_name()??null,iconName:info?.get_icon()?.to_string()??null,wmClass:w.get_wm_class()??null,pid:w.get_pid(),
+                    bounds:{x:r.x,y:r.y,width:r.width,height:r.height},frame:{x:f.x,y:f.y,width:f.width,height:f.height},
+                    monitor:w.get_monitor(),scale:actor.get_resource_scale(),minimized:Boolean(w.minimized),
+                    onScreen:Boolean(!w.minimized&&onWorkspace&&w.showing_on_its_workspace()),focused:w===focused,
+                    auxiliary:!ordinary.includes(w.get_window_type())||w.is_skip_taskbar()||Boolean(w.get_transient_for()),
+                    xwayland:w.get_client_type()===Meta.WindowClientType.X11};
+            });
+            const monitors=Main.layoutManager.monitors.map(m=>({index:m.index,x:m.x,y:m.y,width:m.width,height:m.height,scale:m.geometry_scale,primary:m.index===Main.layoutManager.primaryIndex}));
+            invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({windows:list,monitors})]));
+        } catch(e) {invocation.return_dbus_error(`${IFACE}.InvalidWindows`,e.message);}
     }
 
     _finishPick(win,reason) {
@@ -464,13 +518,13 @@ export default class KimochiOverlay extends Extension {
                 if (Main.sessionMode.isLocked || Main.sessionMode.isGreeter) throw new Error('Crop editor unavailable while locked');
                 if (Main.layoutManager.monitors.length !== 1) throw new Error('Desktop crop requires one monitor until portal output mapping is validated');
                 if (typeof data.id !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(data.id) ||
-                    typeof data.sourceId !== 'string' || !/^portal:(display|window):[0-9]+$/.test(data.sourceId) ||
+                    typeof data.sourceId !== 'string' || !(SCREEN_SOURCE.test(data.sourceId) || isWindowSource(data.sourceId)) ||
                     ![data.width, data.height].every(v => Number.isInteger(v) && v > 0 && v <= 65535) || !['Save', 'Scan'].includes(data.label))
                     throw new Error('An entire shared screen and valid frame dimensions are required');
                 const m = Main.layoutManager.monitors[0];
                 const monitor = {x:m.x, y:m.y, width:m.width, height:m.height};
-                const tracked=data.sourceId.startsWith('portal:window:')?this._trackedStatus():null;
-                if(data.sourceId.startsWith('portal:window:')&&(!tracked||tracked.sourceId!==data.sourceId||!this._tracked.window.showing_on_its_workspace()||this._tracked.window.minimized||this._tracked.owner!==sender)) throw new Error('Link and bring the shared window to the front before desktop cropping');
+                const tracked=isWindowSource(data.sourceId)?this._trackedStatus():null;
+                if(isWindowSource(data.sourceId)&&(!tracked||tracked.sourceId!==data.sourceId||!this._tracked.window.showing_on_its_workspace()||this._tracked.window.minimized||this._tracked.owner!==sender)) throw new Error('Link and bring the shared window to the front before desktop cropping');
                 const area=tracked?tracked.bounds:monitor;
                 const visibleArea={x:Math.max(area.x,monitor.x),y:Math.max(area.y,monitor.y)};
                 visibleArea.width=Math.min(area.x+area.width,monitor.x+monitor.width)-visibleArea.x;
@@ -679,7 +733,7 @@ export default class KimochiOverlay extends Extension {
             surface: this._surface ? {rect:this._surface.rect,sourceId:this._surface.sourceId,
                 origin:this._surfaceState().origin,windowListHidden:this._passiveWindows?.has(this._surface.window)??false,visible:Boolean(this._surface.visible),mapped:Boolean(this._surface.window)} : null,
             painted: this._surface ? Boolean(this._surface.visible) : this._words.length > 0 && this._group.get_paint_visibility(),
-            windowTracking: true, tracked: this._trackedStatus(), picking: Boolean(this._pick), pickWindows:this._pick ? global.get_window_actors().map(a=>a.meta_window).filter(w=>w.get_pid()!==this._pick.pid&&w.showing_on_its_workspace()&&!w.minimized).slice(-50).map(w=>{const r=w.get_frame_rect();return {title:w.get_title(),pid:w.get_pid(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};}) : [], cropEditor: true, crop: this._crop ? this._crop.webview ? {id:this._crop.id,ui:'shared',backgroundSuppressed:Boolean(this._crop.backgroundSuppressed),opacity:this._crop.window?.get_compositor_private()?.opacity,monitor:this._crop.monitor,mapped:Boolean(this._crop.window),rect:this._crop.rect} : {id: this._crop.id, rect: this._crop.rect, dragging: Boolean(this._crop.drag), monitor: this._crop.monitor, save: {position:this._cropSave.get_transformed_position(),size:this._cropSave.get_transformed_size()}, cancel:{position:this._cropCancel.get_transformed_position(),size:this._cropCancel.get_transformed_size()}} : null,
+            windowTracking: true, nativeWindows: true, tracked: this._trackedStatus(), picking: Boolean(this._pick), pickWindows:this._pick ? global.get_window_actors().map(a=>a.meta_window).filter(w=>w.get_pid()!==this._pick.pid&&w.showing_on_its_workspace()&&!w.minimized).slice(-50).map(w=>{const r=w.get_frame_rect();return {title:w.get_title(),pid:w.get_pid(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};}) : [], cropEditor: true, crop: this._crop ? this._crop.webview ? {id:this._crop.id,ui:'shared',backgroundSuppressed:Boolean(this._crop.backgroundSuppressed),opacity:this._crop.window?.get_compositor_private()?.opacity,monitor:this._crop.monitor,mapped:Boolean(this._crop.window),rect:this._crop.rect} : {id: this._crop.id, rect: this._crop.rect, dragging: Boolean(this._crop.drag), monitor: this._crop.monitor, save: {position:this._cropSave.get_transformed_position(),size:this._cropSave.get_transformed_size()}, cancel:{position:this._cropCancel.get_transformed_position(),size:this._cropCancel.get_transformed_size()}} : null,
             appearance: 'matched-word-highlight', matched: this._match ?? null, desktopPopup: true, revision: this.metadata.revision,
             ownPopup: this._nativePopup ? (() => { const r = this._nativePopup.get_frame_rect(); return {x: r.x, y: r.y, width: r.width, height: r.height, windowType: this._nativePopup.get_window_type(), overrideRedirect: this._nativePopup.is_override_redirect(), above: this._nativePopup.is_above(), visible: Boolean(this._nativePopup.get_compositor_private()?.get_paint_visibility())}; })() : null,
             focus: global.display.focus_window?.get_title() ?? null,
@@ -800,7 +854,7 @@ export default class KimochiOverlay extends Extension {
             if (Main.layoutManager.monitors.length !== 1)
                 throw new Error('Shared GNOME annotation surfaces currently require one monitor');
             const monitor = Main.layoutManager.monitors[0];
-            if (data.sourceKind === 'screen' && !/^portal:display:[0-9]+$/.test(data.sourceId))
+            if (data.sourceKind === 'screen' && !SCREEN_SOURCE.test(data.sourceId))
                 throw new Error('Annotation surface requires a shared screen');
             if (data.sourceKind === 'window' && (this._sourceKind !== 'window' ||
                 this._tracked?.owner !== sender || !this._trackedStatus()))

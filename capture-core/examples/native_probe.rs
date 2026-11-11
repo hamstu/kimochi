@@ -86,6 +86,25 @@ fn main() {
                 println!("{} captures: median {:.1}ms, p95 {:.1}ms, max {:.1}ms", times.len(), times[times.len() / 2], times[times.len() * 95 / 100], times[times.len() - 1]);
             }
         }
+        "follow" => {
+            // One stream, sampled every 250 ms: size, bounds and scale as the window changes.
+            let id = find(args.get(1).expect("source"));
+            let seconds: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
+            let until = Instant::now() + Duration::from_secs(seconds);
+            let mut last = String::new();
+            let started = Instant::now();
+            while Instant::now() < until {
+                let line = match capture.capture(&CaptureRequest { source_id: id.clone(), crop: None }) {
+                    Ok(f) => format!("{}x{} scale={:.3} bounds={:?}", f.info.width, f.info.height, f.info.scale_factor, f.info.source_bounds.map(|b| (b.x, b.y, b.width, b.height))),
+                    Err(e) => format!("error {}: {}", e.code, e.message),
+                };
+                if line != last {
+                    println!("{:>6.2}s {line}", started.elapsed().as_secs_f64());
+                    last = line;
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
         "thumbs" => {
             for s in &sources {
                 let started = Instant::now();
