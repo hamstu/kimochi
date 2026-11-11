@@ -4382,6 +4382,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         // pointer stopped is never lost.
         let mut unsent_move = false;
         let mut last_buttons = false;
+        let mut last_gate = false;
         let mut last_popup_shift = false;
         let mut ticks: u64 = 0;
         let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
@@ -4575,11 +4576,16 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 let due = (unsent_move
                     && (ticks.is_multiple_of(2) || scanning || OVERLAY_DRAG.load(std::sync::atomic::Ordering::Relaxed)))
                     || modifiers != last_modifiers
-                    || down != last_buttons;
+                    || down != last_buttons
+                    // The gate can shut with the pointer still (its grace running out), and on
+                    // Wayland positions stop being read once it has: the overlay must still hear
+                    // it, or it takes the next click for a word's rather than a click away.
+                    || gate_open != last_gate;
                 if due {
                     unsent_move = false;
                     last_modifiers = modifiers;
                     last_buttons = down;
+                    last_gate = gate_open;
                     #[cfg(target_os = "linux")]
                     let layer = platform::wayland_layer_overlay();
                     #[cfg(not(target_os = "linux"))]

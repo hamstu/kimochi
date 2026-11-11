@@ -468,8 +468,10 @@ real window while still identifying who has focus.
 The overlay clears its text *and* republishes its hit regions at once when this closes:
 an invisible rectangle that still takes the mouse is worse than a visible one.
 
-`pointer` `{x, y, over, blocked, down, shift, ctrl, alt, meta}` carries the desktop
-cursor and the held modifiers to the overlay. The overlay is click-through except over
+`pointer` `{x, y, over, blocked, gate, down, shift, ctrl, alt, meta}` carries the desktop
+cursor and the held modifiers to the overlay. It goes out on a move, a modifier or button
+edge, and when Shift's gate (`gate`, `state::ShiftGate`) opens or shuts, which it can with the
+pointer still (and on Wayland, positions stop being read once it has shut). The overlay is click-through except over
 the words themselves and the reader's own application owns both the pointer and the
 keyboard, so it sees no `mousemove` of its own until the pointer is already on a word,
 and no `keydown` at all. That costs two things: the proximity effect, whose job is to

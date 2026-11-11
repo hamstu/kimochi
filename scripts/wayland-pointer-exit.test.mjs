@@ -91,3 +91,15 @@ test('compositor samples recover a missed leave without postponing dismissal eac
   f.stop.leave() // Shape updates can unmap the surface while the real pointer stays put.
   assert.equal(f.stop.outside(), false)
 })
+
+test('a stopped compositor poll leaves the surface edges in charge', () => {
+  // Hyprland: the poll runs until the first Shift press, which gates the words; its last
+  // sample was taken with the pointer on the game.
+  const f = fixture()
+  f.stop.sample(false)
+  f.stop.leave()
+  f.stop.unsample()
+  assert.equal(f.stop.outside(), true)
+  f.stop.enter()
+  assert.equal(f.stop.outside(), false)
+})

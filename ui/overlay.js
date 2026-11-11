@@ -4354,7 +4354,11 @@ await native.watchCapabilities(async (caps) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   void syncGamingHints()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
-    shiftGated = caps.session?.backend !== 'wayland' || caps.overlay?.shiftGate === true
+    const gated = caps.session?.backend !== 'wayland' || caps.overlay?.shiftGate === true
+    // The first Shift press stops the pointer poll (`refreshLayerPointer`): its last sample
+    // (often "outside", taken while the pointer was on the game) must not outlive it.
+    if (gated && !shiftGated) layerPointerExit?.unsample()
+    shiftGated = gated
     lookupOnHover = caps.overlay?.lookupOnHover === true
   }
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
