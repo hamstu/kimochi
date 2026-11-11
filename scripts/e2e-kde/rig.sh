@@ -29,7 +29,7 @@ case "$cmd" in
     # which its screencast (the portal) and screenshots need.
     podman run -d --name "$NAME" --device /dev/dri --network host --security-opt label=disable \
       -v "$REPO:$REPO" -v "$RIG:$RIG" -v "$(dirname "$BIN"):$(dirname "$BIN")" "$IMAGE" sleep infinity >/dev/null
-    podman exec -d -e RIG="$RIG" -e WIDTH="${WIDTH:-1920}" -e HEIGHT="${HEIGHT:-1080}" -e SCALE="${SCALE:-1}" -e OUTPUTS="${OUTPUTS:-1}" \
+    podman exec -d -e RIG="$RIG" -e WIDTH="${WIDTH:-1920}" -e HEIGHT="${HEIGHT:-1080}" -e SCALE="${SCALE:-1}" -e OUTPUTS="${OUTPUTS:-1}" -e RIG_PERMISSION_CHECKS="${RIG_PERMISSION_CHECKS:-0}" ${KWIN_LOGGING_RULES:+-e KWIN_LOGGING_RULES="$KWIN_LOGGING_RULES"} \
       "$NAME" bash "$HERE/session.sh"
     for _ in $(seq 150); do [ -e "$RIG/ready" ] && break; sleep 0.2; done
     [ -e "$RIG/ready" ] || { echo "session failed; logs in $RIG/log" >&2; exit 1; }
