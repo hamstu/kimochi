@@ -15,8 +15,11 @@
 //! **Capture.** `ext_image_copy_capture_manager_v1` on a toplevel source (or an output source,
 //! when offered), into SHM buffers on a thread per stream ([`stream`]). A toplevel capture
 //! renders that window alone (no other window, no overlay above it): [`Driver::isolated_windows`].
-//! Its size is the window's surface at its output's scale, which is the IPC's rect × scale on
-//! Sway and Hyprland (server-side borders are outside both).
+//! It covers what the IPC's rect covers (the window, server-side borders and title bars outside
+//! both), so frame width over bounds width is the stream's scale. Sway 1.12 (wlroots' scene
+//! capture source) renders a toplevel at scale 1, its logical size, whatever the output's scale;
+//! output captures are physical pixels. A window on another workspace is still captured (its
+//! last contents).
 use super::{encode_handle, decode_handle, Driver, Feed, Inventory, NativeWindow, Target};
 use crate::{CaptureError, Result};
 
@@ -196,8 +199,9 @@ impl Driver for Ext {
     }
 
     fn bounds_match_stream(&self) -> bool {
-        // Bounds only come from IPC, whose rect is the window's surface (borders excluded) on
-        // both Sway and Hyprland. Without IPC there are no bounds to compare.
+        // Bounds only come from IPC, whose rect is what the toplevel capture shows (borders
+        // excluded): checked on Sway 1.12 at scale 1, 1.5 and 2 (frames are logical size there).
+        // Without IPC there are no bounds to compare.
         true
     }
 }

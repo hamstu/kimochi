@@ -100,11 +100,16 @@ pub fn open(source: Source) -> Result<Feed> {
             })
             .map_err(|e| CaptureError::new("native", e))?
     };
-    let guard = Guard { wake: Some(wake_tx), thread: Some(thread) };
+    let mut guard = Guard { wake: Some(wake_tx), thread: Some(thread) };
     match ready_rx.recv_timeout(START_WAIT) {
         Ok(Ok(())) => {}
         Ok(Err(e)) => return Err(e),
-        Err(_) => return Err(CaptureError::new("native", "The compositor did not start the capture in time")),
+        Err(_) => {
+            // Still waiting on the compositor: let the thread finish on its own (it ends as soon
+            // as it gets an answer, the wake pipe being closed) rather than block on it here.
+            drop(guard.thread.take());
+            return Err(CaptureError::new("native", "The compositor did not start the capture in time"));
+        }
     }
     let gone = move || finished.load(Ordering::SeqCst);
     Ok(Feed::new(slot, gone, Box::new(guard)))

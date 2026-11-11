@@ -51,7 +51,7 @@ cmd=${1:-}; shift || true
 case "$cmd" in
   image) podman build -t "$IMAGE" "$HERE" ;;
   up)
-    podman rm -f "$NAME" >/dev/null 2>&1 || true
+    podman rm -f -t 0 "$NAME" >/dev/null 2>&1 || true
     rm -rf "$RIG"; mkdir -p "$RIG/out"
     podman run -d --name "$NAME" --device /dev/dri --security-opt label=disable \
       -v "$REPO:$REPO:ro" -v "$RIG:$RIG" -v "$(dirname "$BIN"):$(dirname "$BIN"):ro" "$IMAGE" sleep infinity >/dev/null
@@ -104,6 +104,6 @@ case "$cmd" in
     sleep 1
     scenario scale1.5
     echo; echo "PNGs: $RIG/out" ;;
-  down) podman rm -f "$NAME" >/dev/null ;;
+  down) podman rm -f -t 0 "$NAME" >/dev/null ;;
   *) sed -n '2,10p' "$0"; exit 2 ;;
 esac
