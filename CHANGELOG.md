@@ -16,6 +16,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Changed
 
 - **GNOME: the welcome guide sets up the GNOME extension.** On GNOME, the overlay and dictionary pop-ups need a small extension; the welcome guide now sets it up as one of its steps, and Kimochi keeps it up to date on its own, so there's no button for it in Settings any more. If you skipped it, **Set up** next to **Overlay unavailable** in the sidebar does the same.
+- **Text hooking:** the hooked-text menu no longer reorders as lines arrive, and lists only text with Japanese in it (the rest is under **Show all**).
 
 ### Fixed
 

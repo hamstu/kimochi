@@ -1758,8 +1758,10 @@ HookStatus = {
                                   // "钩子注入失败 <code>"); with nothing selected, the sidebar
                                   // suggests restarting the game
   unityText,                      // true while the voice hook DLL reads a Unity game's text
-  threads: [{key, name, hookcode, preview, count, generic, selected}]
-}
+  threads: [{key, name, hookcode, preview, count, japanese, generic, selected}]
+}                                 // engine hooks first, then in the order the hooker found them
+                                  // (stable: not reordered by new text); `japanese` once any of a
+                                  // thread's text has read as Japanese (sticky), the menu's filter
 ```
 
 Events: `texthook-status` (a `HookStatus`, on every change and every hooked sentence) and

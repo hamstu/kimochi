@@ -118,6 +118,12 @@ pub fn japanese_ratio(normalized: &str) -> f64 {
     normalized.chars().filter(|c| japanese(*c)).count() as f64 / total as f64
 }
 
+/// Whether a thread's text reads as Japanese, by the share automatic choice asks for: the hook menu
+/// lists such threads, and keeps the rest behind "Show all".
+pub fn looks_japanese(text: &str) -> bool {
+    japanese_ratio(&normalize(text)) >= MIN_JAPANESE
+}
+
 /// Generic hooks LunaHook (and Textractor) insert on Windows APIs carry the API's module in the
 /// hook code (`HQ-54@0:gdi32.dll:TextOutW`). An engine hook names an engine, not a DLL export.
 pub fn is_generic_api_hook(hookcode: &str) -> bool {
@@ -693,6 +699,15 @@ pub fn display_name(hookcode: &str, name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn japanese_text_is_listed_and_engine_noise_is_not() {
+        assert!(looks_japanese("「おはよう」と彼は言った。"));
+        assert!(looks_japanese("Ｈ：今日はいい天気だね"));
+        for noise in ["", "0x004A21F0", "SYSTEM_MENU_OPEN", "Loading... 42%", r"C:\Game\data.pak"] {
+            assert!(!looks_japanese(noise), "{noise:?}");
+        }
+    }
 
     /// What LunaHook gave for one line of a Unity game that types its text out:
     /// `UnityEngine.UI.Text.set_text` on the text and on its shadow, and `String.op_Inequality`.

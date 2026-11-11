@@ -75,6 +75,9 @@ struct Thread {
     glyphs: u32,
     recent: VecDeque<Instant>,
     last_at: Option<Instant>,
+    /// Some text it carried read as Japanese (`pick::looks_japanese`). Sticky: the hook menu
+    /// lists the thread from then on, even while it carries other text.
+    japanese: bool,
 }
 
 impl Thread {
@@ -255,8 +258,9 @@ impl Hook {
 
 fn status_of(session: &Session) -> Value {
     let mut threads: Vec<&Thread> = session.threads.iter().filter(|t| !t.text.is_empty()).collect();
-    // Engine hooks first, then the busiest: the order a person scans for the dialogue.
-    threads.sort_by_key(|t| (pick::is_generic(&t.hookcode, &t.name), std::cmp::Reverse(t.last_at)));
+    // Engine hooks first, then in the order the hooker found them. Not by the latest text: with
+    // several threads busy, every line reordered the open menu under the pointer.
+    threads.sort_by_key(|t| pick::is_generic(&t.hookcode, &t.name));
     let manifest = store::manifest();
     json!({
         "supported": cfg!(any(windows, target_os = "linux")),
@@ -279,6 +283,7 @@ fn status_of(session: &Session) -> Value {
             "hookcode": t.hookcode,
             "preview": t.text.chars().rev().take(160).collect::<Vec<_>>().into_iter().rev().collect::<String>(),
             "count": t.count,
+            "japanese": t.japanese,
             "generic": pick::is_generic(&t.hookcode, &t.name),
             "selected": session.selected.as_deref() == Some(t.key.as_str()),
         })).collect::<Vec<_>>(),
@@ -487,6 +492,7 @@ fn read_events(
                         glyphs: 0,
                         recent: VecDeque::new(),
                         last_at: None,
+                        japanese: false,
                     });
                 }
                 continue;
@@ -628,6 +634,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let thread = &mut session.threads[index];
         thread.text = lines.last().cloned().unwrap_or_default();
+        thread.japanese |= pick::looks_japanese(&thread.text);
         thread.count += 1;
         thread.noisy += u64::from(clean::has_codes(text));
         thread.glyphs = if pick::normalize(text).chars().count() <= 2 { thread.glyphs.saturating_add(1) } else { 0 };

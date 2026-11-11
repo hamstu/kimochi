@@ -5,15 +5,19 @@
  * A hooked game produces several threads (the dialogue, a nameplate, menus, engine noise). The
  * dialogue is chosen automatically, by the thread remembered for this game or by matching each
  * thread's text against what is on screen. The select shows the chosen thread's latest line; its
- * menu lists every live thread with its latest text, so a wrong choice is one click to correct,
- * and that choice is remembered for the game. While the hook starts, or waits for text, the select
+ * menu lists the live threads with their latest text, so a wrong choice is one click to correct,
+ * and that choice is remembered for the game. The menu keeps its rows in place as text arrives
+ * (native orders them by when the hooker found them), and lists only threads that have carried
+ * Japanese: the rest (engine names, file paths, numbers) are behind "Show all". Automatic choice
+ * still considers every thread, since a slot that holds other text now may hold the dialogue later. While the hook starts, or waits for text, the select
  * says so in place, so nothing moves when the text arrives.
  */
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AlertTriangle, ChevronsUpDown, MessageSquareText, Sparkles } from 'lucide-react'
 import {
   Callout,
   Menu,
+  MenuCheckboxItem,
   MenuContent,
   MenuLabel,
   MenuRadioGroup,
@@ -72,6 +76,9 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
   const selected = status.threads.find((thread) => thread.selected) ?? null
   const failed = status.phase === 'failed' || status.phase === 'ended'
   const view = shown(status, selected)
+  const [showAll, setShowAll] = useState(false)
+  const listed = showAll ? status.threads : status.threads.filter((thread) => thread.japanese || thread.selected)
+  const hidden = status.threads.length - status.threads.filter((thread) => thread.japanese || thread.selected).length
   const how =
     status.selectedBy === 'saved'
       ? 'Remembered for this game'
@@ -138,7 +145,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
                 Choose automatically
               </MenuRadioItem>
               <MenuSeparator />
-              {status.threads.map((thread) => (
+              {listed.map((thread) => (
                 <MenuRadioItem
                   key={thread.key}
                   value={thread.key}
@@ -151,6 +158,19 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
                 </MenuRadioItem>
               ))}
             </MenuRadioGroup>
+            {hidden > 0 && (
+              <>
+                <MenuSeparator />
+                <MenuCheckboxItem
+                  checked={showAll}
+                  // Stays open: the reader is looking through the list.
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={(checked) => setShowAll(checked === true)}
+                >
+                  Show all ({hidden} without Japanese)
+                </MenuCheckboxItem>
+              </>
+            )}
           </MenuContent>
         </Menu>
       )}

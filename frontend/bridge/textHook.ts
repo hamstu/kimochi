@@ -23,6 +23,8 @@ export interface HookThread {
   /** The thread's latest text, its last 160 characters. */
   preview: string
   count: number
+  /** Some of its text has read as Japanese (sticky). The menu lists the others only on request. */
+  japanese: boolean
   /** One of the generic Windows API hooks rather than an engine hook. */
   generic: boolean
   selected: boolean
