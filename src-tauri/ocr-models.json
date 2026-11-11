@@ -1,5 +1,5 @@
 {
-  "$comment": "Source of truth for the local OCR model files (and sentence audio's speech model, sensevoice): compiled into the app (src/model_store.rs), which downloads them on demand into <app local data>/models/<engine>/, and read by scripts/prepare-meikiocr.mjs and scripts/prepare-mangaocr.mjs when staging models for development (--with-models). Every file is pinned by revision, SHA-256 and size.",
+  "$comment": "Source of truth for the local OCR model files (and sentence audio's speech model, sensevoice): compiled into the app (src/model_store.rs), which downloads them on demand into <app local data>/models/<engine>/, and read by scripts/prepare-meikiocr.mjs and scripts/prepare-mangaocr.mjs when staging models for development (--with-models). Every file is pinned by revision, SHA-256 and size. screenai is Google's Chrome Screen AI package (CIPD, Google's own servers), one zip per platform, unpacked once verified; it is only downloaded when no browser on the computer has a copy (src/screen_ai.rs), and is never bundled or staged.",
   "schemaVersion": 1,
   "engines": {
     "meikiocr": {
@@ -123,6 +123,60 @@
           "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/tokens.txt",
           "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
           "size": 315894
+        }
+      ]
+    },
+    "screenai": {
+      "name": "Screen AI",
+      "files": [
+        {
+          "name": "screen-ai-153.07-mac-arm64.zip",
+          "repository": "chromium/third_party/screen-ai/mac-arm64",
+          "revision": "version:153.07",
+          "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/mac-arm64/+/version:153.07",
+          "sha256": "23739d43889e7772066aab5699b6dce7fce2640135bcb67470f0c8e4c0773f33",
+          "size": 78164700,
+          "platforms": [
+            "mac-arm64"
+          ],
+          "unpack": true
+        },
+        {
+          "name": "screen-ai-153.07-mac-amd64.zip",
+          "repository": "chromium/third_party/screen-ai/mac-amd64",
+          "revision": "version:153.07",
+          "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/mac-amd64/+/version:153.07",
+          "sha256": "af7441cd969b6c1bea4353573345f815ed5b575244104a4e055dade01b2ded5f",
+          "size": 81291243,
+          "platforms": [
+            "mac-amd64"
+          ],
+          "unpack": true
+        },
+        {
+          "name": "screen-ai-153.07-windows-amd64.zip",
+          "repository": "chromium/third_party/screen-ai/windows-amd64",
+          "revision": "version:153.07",
+          "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/windows-amd64/+/version:153.07",
+          "sha256": "6e486dcce0225033cbf22354e89426c1f3f5a0e0110a324cde0472980892e724",
+          "size": 76721301,
+          "platforms": [
+            "windows-amd64",
+            "windows-arm64"
+          ],
+          "unpack": true
+        },
+        {
+          "name": "screen-ai-153.07-linux.zip",
+          "repository": "chromium/third_party/screen-ai/linux",
+          "revision": "version:153.07",
+          "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/linux/+/version:153.07",
+          "sha256": "dd835442283554b7af65cfce991525373f8db2769c58ce7d6a61a504668cd253",
+          "size": 78476584,
+          "platforms": [
+            "linux-amd64"
+          ],
+          "unpack": true
         }
       ]
     }

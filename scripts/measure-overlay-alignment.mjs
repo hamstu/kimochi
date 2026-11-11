@@ -53,7 +53,8 @@
  *    measured so a change to them is measured too). Google Lens through the app's ignored live
  *    test (google_lens.rs), Kimochi cloud through its endpoint, MeikiOCR and Manga OCR through
  *    their crates' examples with the app's models, Apple Live Text through capture-core's
- *    observer, each shaped as `ocr_frame` returns it. Manga OCR finds no text in most game
+ *    observer, Chrome Screen AI through the app's ignored benchmark (screen_ai.rs, with
+ *    SCREENAI_DUMP), each shaped as `ocr_frame` returns it. Manga OCR finds no text in most game
  *    images (its detector is for manga pages), so it has fixtures only where it did.
  *  - `oneocr-shape`: OneOCR runs only on Windows, so its answer is synthesised from the truth in
  *    the shape its worker returns: a group per line, the line's box two or three pixels outside

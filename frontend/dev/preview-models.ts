@@ -38,6 +38,10 @@ const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = 
       ['pytorch_model.bin', 444135475]
     ]
   },
+  screenai: {
+    name: 'Screen AI',
+    files: [['screen-ai-153.07-mac-arm64.zip', 78164700]]
+  },
   sensevoice: {
     name: 'SenseVoice speech',
     files: [
@@ -79,7 +83,7 @@ function at(engine: ModelEngine, received: number): { file: string; got: number;
 
 const seeded = new URLSearchParams(location.search).get('model')
 const states = new Map<ModelEngine, ModelStatus>(
-  (['meikiocr', 'mangaocr', 'ppocr', 'sensevoice'] as ModelEngine[]).map((engine) => {
+  (['meikiocr', 'mangaocr', 'ppocr', 'screenai', 'sensevoice'] as ModelEngine[]).map((engine) => {
     const half = Math.round(total(engine) * 0.32)
     const seed =
       seeded === 'downloading' || seeded === 'paused'
@@ -90,6 +94,9 @@ const states = new Map<ModelEngine, ModelStatus>(
               overallReceived: half,
               message: 'the connection was interrupted while downloading pytorch_model.bin'
             }
+          : engine === 'screenai' && !seeded && new URLSearchParams(location.search).get('screenai') !== 'missing'
+            ? // A browser's copy (`?screenai=missing` for none).
+              { state: 'ready' as const, source: 'browser' as const, overallReceived: 0 }
           : seeded === 'ready' || (!seeded && engine === 'meikiocr')
             ? {
                 state: 'ready' as const,
@@ -179,12 +186,21 @@ function start(engine: ModelEngine): ModelStatus {
  * their download (the pickers only save it after the download confirmation).
  */
 export function onModelSettingSet(key: string, value: unknown): void {
-  if (key !== 'ocrMode' || (value !== 'meikiocr' && value !== 'mangaocr' && value !== 'ppocr')) return
+  if (
+    key !== 'ocrMode' ||
+    (value !== 'meikiocr' && value !== 'mangaocr' && value !== 'ppocr' && value !== 'screenai')
+  )
+    return
   if (states.get(value)?.state === 'absent') start(value)
 }
 
 const engineOf = (args: Record<string, unknown> | undefined): ModelEngine =>
-  args?.engine === 'mangaocr' || args?.engine === 'ppocr' || args?.engine === 'sensevoice' ? args.engine : 'meikiocr'
+  args?.engine === 'mangaocr' ||
+  args?.engine === 'ppocr' ||
+  args?.engine === 'screenai' ||
+  args?.engine === 'sensevoice'
+    ? args.engine
+    : 'meikiocr'
 
 /** Merged into the preview's command table. */
 export const MODEL_HANDLERS: Record<

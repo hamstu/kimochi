@@ -1156,6 +1156,8 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "ppocr": engine(dynamic.ppocr, &accelerators["ppocr"]),
         // Replaced on macOS (main.rs); said here so no default can offer it elsewhere.
         "livetext": {"available": false, "reason": "Apple Live Text is available on macOS only."},
+        // Replaced by `screen_ai::capability` (main.rs), which looks for a copy.
+        "screenai": {"available": false},
     });
     payload["observer"] = dynamic.observer;
     payload["ownPids"] = json!([std::process::id()]);

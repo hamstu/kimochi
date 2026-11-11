@@ -39,7 +39,8 @@
     "trace:mark": "node scripts/trace-report.mjs --mark",
     "test:native:reader-popup": "node scripts/test-reader-popup-native.mjs",
     "prepare:meikiocr": "node scripts/prepare-meikiocr.mjs",
-    "prepare:mangaocr": "node scripts/prepare-mangaocr.mjs"
+    "prepare:mangaocr": "node scripts/prepare-mangaocr.mjs",
+    "prepare:screenai": "node scripts/prepare-screenai.mjs"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

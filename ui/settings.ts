@@ -22,7 +22,15 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
+export type OcrMode =
+  | 'googlelens'
+  | 'cloud'
+  | 'meikiocr'
+  | 'mangaocr'
+  | 'ppocr'
+  | 'screenai'
+  | 'livetext'
+  | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 
@@ -470,6 +478,21 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       'A one-time model download of about 30 MB. Uses the GPU if there is one, else the CPU. On a Mac, the first start takes a few seconds while macOS prepares the model; later starts take about two.'
+  },
+  screenai: {
+    label: 'Local (Screen AI)',
+    name: 'Screen AI',
+    tagline: "Chrome's built-in OCR",
+    geometry: true,
+    runs: 'local',
+    description:
+      'The on-device OCR Google Chrome uses for scanned PDFs. Fast and very accurate on game text, horizontal or vertical, with a box for every character.',
+    strengths: [
+      'Reads game dialogue, menus and vertical text accurately',
+      'Fast, with nothing sent anywhere'
+    ],
+    requirements:
+      "Uses Google Chrome's copy when Chrome has one. Otherwise Kimochi downloads it from Google once (about 80 MB)."
   },
   livetext: {
     label: 'Local (Apple Live Text)',

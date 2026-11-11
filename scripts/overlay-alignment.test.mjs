@@ -119,7 +119,7 @@ const scored = fixtures
 
 test('the corpus covers every engine', () => {
   const engines = new Set(fixtures.map((fixture) => fixture.engine))
-  for (const engine of ['googlelens', 'cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr-shape'])
+  for (const engine of ['googlelens', 'cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr-shape', 'screenai'])
     assert.ok(engines.has(engine), `no fixture for ${engine}`)
 })
 
@@ -133,6 +133,8 @@ const LIMITS = {
   googlelens: { along: 0.08, p90: 0.16, across: 0.06 },
   meikiocr: { along: 0.08, p90: 0.16, across: 0.06 },
   'oneocr-shape': { along: 0.06, p90: 0.1, across: 0.06 },
+  // Measured 0.067 along, 0.132 p90, 0.047 across (Screen AI 153.7, its character boxes).
+  screenai: { along: 0.08, p90: 0.16, across: 0.06 },
   livetext: { along: 0.2, p90: 0.42, across: 0.1 },
   // Where its detector's line regions are clean. Its manga samples are held below.
   mangaocr: { along: 0.06, p90: 0.12, across: 0.06, samples: ['large'] }

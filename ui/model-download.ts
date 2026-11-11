@@ -5,12 +5,16 @@
  * pure wording and decisions the settings card, the sidebar badge and the engine pickers share.
  */
 
-/** The local OCR engines: an `ocrMode` value whose models are downloaded. */
-export type OcrModelEngine = 'meikiocr' | 'mangaocr' | 'ppocr'
+/**
+ * The local OCR engines: an `ocrMode` value whose models are downloaded. Screen AI is one too, but
+ * only where no browser on the computer has it (`source: 'browser'` then, ready with nothing
+ * downloaded).
+ */
+export type OcrModelEngine = 'meikiocr' | 'mangaocr' | 'ppocr' | 'screenai'
 /** Every downloadable model: the OCR engines', and sentence audio's speech recogniser. */
 export type ModelEngine = OcrModelEngine | 'sensevoice'
 export type ModelState = 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready'
-export type ModelSource = 'downloaded' | 'bundled' | 'development'
+export type ModelSource = 'downloaded' | 'bundled' | 'development' | 'browser'
 export type ModelAction = 'download' | 'pause' | 'resume' | 'retry' | 'cancel' | 'delete'
 
 /**
@@ -54,11 +58,11 @@ const STATES: readonly ModelState[] = [
   'verifying',
   'ready'
 ]
-const SOURCES: readonly ModelSource[] = ['downloaded', 'bundled', 'development']
+const SOURCES: readonly ModelSource[] = ['downloaded', 'bundled', 'development', 'browser']
 
 /** Whether an `ocrMode` value is a local OCR engine with downloaded models. */
 export const isModelEngine = (mode: unknown): mode is OcrModelEngine =>
-  mode === 'meikiocr' || mode === 'mangaocr' || mode === 'ppocr'
+  mode === 'meikiocr' || mode === 'mangaocr' || mode === 'ppocr' || mode === 'screenai'
 
 const isDownloadable = (engine: unknown): engine is ModelEngine =>
   isModelEngine(engine) || engine === 'sensevoice'
@@ -123,7 +127,9 @@ export function statusLine(status: DownloadStatus): string {
         ? 'Ready · included with this build'
         : status.source === 'development'
           ? 'Ready · using the development copy'
-          : `Ready · ${formatBytes(status.overallTotal)}`
+          : status.source === 'browser'
+            ? 'Ready · using a copy already on this computer'
+            : `Ready · ${formatBytes(status.overallTotal)}`
   }
 }
 
@@ -182,6 +188,11 @@ export function engineChoice(mode: string, status: ModelStatus | null): 'confirm
 /** The wording of the confirmation `engineChoice` asks for. */
 export function downloadPrompt(status: ModelStatus): { title: string; description: string } {
   const size = status.overallTotal > 0 ? `about ${formatBytes(status.overallTotal)}` : 'large'
+  if (status.engine === 'screenai')
+    return {
+      title: 'Download Screen AI from Google?',
+      description: `No browser on this computer has Screen AI, so Kimochi will download it from Google (${size}). It runs on this computer; nothing you scan is sent anywhere.`
+    }
   return {
     title: `Download ${status.name}?`,
     description: `${status.name} needs its model, which is ${size}. It will be downloaded now; scans with ${status.name} start once it finishes.`

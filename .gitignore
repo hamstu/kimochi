@@ -11,6 +11,7 @@ src-tauri/gen/
 src-tauri/resources/meikiocr/
 src-tauri/resources/mangaocr/
 src-tauri/resources/oneocr/
+src-tauri/resources/screenai/
 src-tauri/resources/hookd/
 src-tauri/resources/cli/
 
@@ -19,6 +20,7 @@ src-tauri/resources/cli/
 # --all --if-missing` (run by prepare.mjs for an absent tree, and by CI) refills them.
 extensions/*/
 oneocr-worker/target/
+screenai/target/
 hookd/target/
 cli-launcher/target/
 

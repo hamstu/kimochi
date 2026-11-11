@@ -40,6 +40,7 @@
     "active": true,
     "resources": {
       "resources/meikiocr/runtime/": "meikiocr/runtime/",
+      "resources/screenai/": "screenai/",
       "resources/meikiocr/LICENSE": "meikiocr/LICENSE",
       "resources/meikiocr/NOTICE": "meikiocr/NOTICE",
       "resources/mangaocr/LICENSE": "mangaocr/LICENSE",

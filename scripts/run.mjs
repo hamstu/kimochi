@@ -158,6 +158,8 @@ if (
   if (process.platform === 'win32') await mkdir('src-tauri/resources/oneocr', { recursive: true })
   // ...and the `kimochi` command's launcher (prepare-cli-launcher.mjs).
   if (process.platform === 'win32') await mkdir('src-tauri/resources/cli', { recursive: true })
+  // ...and the Chrome Screen AI worker's (prepare-screenai.mjs), on every OS.
+  await mkdir('src-tauri/resources/screenai', { recursive: true })
   // ...and the Text Hooker sidecar's (prepare-hookd.mjs), which Linux bundles too.
   if (process.platform === 'win32' || process.platform === 'linux')
     await mkdir('src-tauri/resources/hookd', { recursive: true })
@@ -174,6 +176,28 @@ if (
   }
 }
 
+if (['dev', 'bundle', 'release'].includes(task)) {
+  await import('./prepare-screenai.mjs')
+  if (darwin && task !== 'dev') {
+    // The worker loads Google's Screen AI library, which Google signed: library validation
+    // would refuse it in a hardened process signed by another team, so the worker (and only the
+    // worker) carries the entitlement that allows it (screenai-worker.entitlements).
+    const identity = env.APPLE_SIGNING_IDENTITY ?? '-'
+    exitOnFailure(
+      run('codesign', [
+        '--force',
+        '--sign',
+        identity,
+        '--options',
+        'runtime',
+        '--entitlements',
+        'src-tauri/screenai-worker.entitlements',
+        ...(identity === '-' ? ['--timestamp=none'] : ['--timestamp']),
+        'src-tauri/resources/screenai/kimochi-screenai-worker'
+      ])
+    )
+  }
+}
 if (process.platform === 'win32' && ['dev', 'bundle', 'release'].includes(task)) {
   await import('./prepare-oneocr.mjs')
   await import('./prepare-hookd.mjs')
@@ -211,6 +235,20 @@ if (task === 'check' || task === 'check:all') {
       'src-tauri/Cargo.toml',
       '--features',
       'custom-protocol',
+      '--',
+      '-D',
+      'warnings'
+    ])
+  )
+  // The Screen AI worker crate is its own package (screenai/), so clippy above does not reach it.
+  exitOnFailure(
+    run('cargo', [
+      'clippy',
+      '--manifest-path',
+      'screenai/Cargo.toml',
+      '--features',
+      'worker',
+      '--all-targets',
       '--',
       '-D',
       'warnings'

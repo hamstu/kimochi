@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Chrome Screen AI worker's entitlements (macOS bundles; scripts/run.mjs signs it with these).
+  Google signs the Screen AI library with its own team ID, which hardened-runtime library
+  validation would refuse to load into a process Kimochi's team signed. Only this small worker
+  opts out, never Kimochi itself: it loads nothing but that library, given by path.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
