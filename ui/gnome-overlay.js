@@ -45,7 +45,7 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
       const status = await gnomeRequest('status')
       if (!status.available) { renderer.clear(); shared = false; return }
       const info = state.info
-      const screen = info?.source_id?.startsWith('portal:display:')
+      const screen = /^(portal|wayland):display:/.test(info?.source_id ?? '')
       const tracked = !screen && status.tracked?.sourceId === info?.source_id ? status.tracked : null
       const monitor = screen ? (status.monitors?.length === 1 ? status.monitors[0] : null) : tracked?.bounds
       if (!enabled() || !state.geometry || !monitor || (!screen && (!tracked?.visible && !tracked?.covered || !info.source_bounds || Math.abs(info.source_bounds.width-monitor.width)>=2 || Math.abs(info.source_bounds.height-monitor.height)>=2))) {

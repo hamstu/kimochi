@@ -9,7 +9,7 @@
  *     {platform}:window:{handle}[:{pid}]
  */
 
-export type SourcePlatform = 'macos' | 'windows' | 'x11' | 'portal'
+export type SourcePlatform = 'macos' | 'windows' | 'x11' | 'portal' | 'gamescope' | 'wayland'
 export type SourceKind = 'display' | 'window'
 
 export interface ParsedSourceId {
@@ -21,7 +21,7 @@ export interface ParsedSourceId {
   pid: number | null
 }
 
-const PLATFORMS = new Set<string>(['macos', 'windows', 'x11', 'portal'])
+const PLATFORMS = new Set<string>(['macos', 'windows', 'x11', 'portal', 'gamescope', 'wayland'])
 
 /** The parts of `id`, or null for anything that is not a well-formed id (never "a display"). */
 export function parseSourceId(id: unknown): ParsedSourceId | null {
@@ -53,3 +53,22 @@ export const isWindowSourceId = (id: unknown): boolean => parseSourceId(id)?.kin
 
 /** Whether `id` names a display. */
 export const isDisplaySourceId = (id: unknown): boolean => parseSourceId(id)?.kind === 'display'
+
+/**
+ * A window on a Wayland desktop: a portal stream (anonymous until linked to its compositor
+ * window) or a native source (`wayland:`, captured through the compositor's own API, which
+ * names its window). Either way its place comes from the compositor, never from the frame.
+ */
+export const isWaylandWindowSourceId = (id: unknown): boolean => {
+  const parsed = parseSourceId(id)
+  return parsed?.kind === 'window' && (parsed.platform === 'portal' || parsed.platform === 'wayland')
+}
+
+/** A whole screen on a Wayland desktop (portal or native). */
+export const isWaylandScreenSourceId = (id: unknown): boolean => {
+  const parsed = parseSourceId(id)
+  return parsed?.kind === 'display' && (parsed.platform === 'portal' || parsed.platform === 'wayland')
+}
+
+/** A native Wayland source (`wayland:`): its window is known by id, never linked by hand. */
+export const isNativeWaylandSourceId = (id: unknown): boolean => parseSourceId(id)?.platform === 'wayland'

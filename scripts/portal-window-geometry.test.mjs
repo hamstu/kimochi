@@ -8,6 +8,11 @@ test('only a compositor-linked portal window can use native placement',()=>{
  assert.equal(portalWindowBounds({...info,source_bounds:null},bounds),null)
  assert.equal(portalWindowBounds({...info,source_id:'portal:display:7'}),null)
 })
+test('a native window source names its window and places the same way',()=>{
+ const native={...info,source_id:'wayland:window:2470594572:4242'}
+ assert.equal(portalWindowBounds(native),bounds)
+ assert.equal(portalWindowBounds({...native,source_id:'wayland:display:DP-1'}),null)
+})
 test('moves follow the linked window; stale buffers after resize hide annotations',()=>{
  const moved={...bounds,x:430,y:80}
  assert.equal(portalWindowBounds(info,moved),moved)

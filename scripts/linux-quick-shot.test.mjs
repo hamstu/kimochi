@@ -18,6 +18,10 @@ test('Wayland Quick Shot reuses a shared screen and scans its one-off crop', asy
   const f = fixture([{ id: 'portal:display:64' }]); await runWaylandQuickShot(f.options)
   assert.deepEqual(f.calls, [['edit', f.screen.id], ['scan', f.screen.id, f.crop]])
 })
+test('native Wayland capture lists screens: Quick Shot opens no picker', async () => {
+  const f = fixture([{ id: 'wayland:window:17:4242' }, { id: 'wayland:display:DP-1' }]); await runWaylandQuickShot(f.options)
+  assert.deepEqual(f.calls, [['edit', 'wayland:display:DP-1'], ['scan', 'wayland:display:DP-1', f.crop]])
+})
 test('Wayland Quick Shot asks for screen consent when only a window is shared', async () => {
   const f = fixture([{ id: 'portal:window:64' }]); await runWaylandQuickShot(f.options)
   assert.equal(f.calls[1], 'pick')

@@ -47,6 +47,7 @@ mod controller_neutral;
 pub mod deck_input;
 pub mod hyprland;
 pub mod kwin;
+pub mod native;
 pub mod tracking;
 pub mod shift;
 mod layer;
@@ -228,6 +229,8 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
         Ok(gaming_sources::sources())
     } else if on_x11() {
         x11::picker_sources()
+    } else if native::active() {
+        native::picker_sources()
     } else {
         Err(format!(
             "{WAYLAND}: sources are chosen in the system picker"
@@ -239,7 +242,11 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
 pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
     if on_x11() {
         x11::window_bounds(id)
+    } else if native::is_source(&id.to_string()) && !gnome::eligible_popup_session() {
+        native::window_bounds(id)
     } else if gnome::eligible_popup_session() {
+        // Binds a native source to its window first (by id); a portal one must be linked.
+        gnome::ensure_bound(&id.to_string());
         let value = gnome::request("track", json!({"operation":"status","sourceId":id.to_string()})).ok()?;
         let rect = serde_json::from_value(value["bounds"].clone()).ok()?;
         Some((rect, value["visible"].as_bool().unwrap_or(false)))
@@ -253,6 +260,8 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
 pub fn front_window() -> Option<super::FrontWindow> {
     if on_x11() {
         x11::front_window()
+    } else if native::active() {
+        native::front_window()
     } else {
         None
     }
@@ -262,6 +271,8 @@ pub fn front_window() -> Option<super::FrontWindow> {
 pub fn frontmost_app() -> Option<String> {
     if on_x11() {
         x11::frontmost_app()
+    } else if native::active() {
+        native::frontmost_app()
     } else {
         None
     }
@@ -270,6 +281,8 @@ pub fn frontmost_app() -> Option<String> {
 pub fn frontmost_pid() -> Option<u32> {
     if on_x11() {
         x11::frontmost_pid()
+    } else if native::active() {
+        native::frontmost_pid()
     } else {
         None
     }
@@ -283,6 +296,8 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
         gaming_sources::icon_png(&app.name, target)
     } else if on_x11() {
         x11::app_icon_png(&app.name, app.pid, target)
+    } else if native::active() {
+        native::app_icon_png(&app.name, app.pid, target).or_else(|| gnome::paired_app_icon_png(&app.name, target))
     } else {
         gnome::paired_app_icon_png(&app.name, target)
     }
@@ -353,7 +368,9 @@ pub fn capabilities() -> Value {
     // Gaming Mode reads Gamescope's apps directly when its PipeWire node is there; the
     // portal (one composed screen, no catalog) is the fallback.
     let gaming = gaming_sources::active();
-    let portal = !gaming && (gamescope::active() || !x11);
+    // The compositor's own capture API (no system picker, sources by window identity).
+    let native = !gaming && !x11 && native::active();
+    let portal = !gaming && !native && (gamescope::active() || !x11);
     let gnome_status = gnome::status();
     let gnome = gnome_status["available"].as_bool().unwrap_or(false);
     let tracking = gnome && gnome_status["windowTracking"].as_bool().unwrap_or(false);
@@ -368,7 +385,7 @@ pub fn capabilities() -> Value {
             "layerShell": s.layer_shell,
             "nativeLayerShell": layer::available(),
             "nativeGamescope": gamescope::active(),
-            "captureBackend": if gaming { "gamescope-pipewire" } else if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
+            "captureBackend": if gaming { "gamescope-pipewire" } else if native { match native::driver() { Some("mutter") => "native-mutter", Some("kwin") => "native-kwin", _ => "native-ext" } } else if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
             "nativeGnomeShell": gnome,
             "xwayland": s.xwayland || gamescope::active(),
         },
@@ -380,6 +397,8 @@ pub fn capabilities() -> Value {
             "pickerRequired": portal,
             // X11 and portal window streams support capture; Wayland tracking is deferred.
             "windowCapture": true,
+            // A native window's stream shows that window alone: nothing to hide for captures.
+            "isolatedWindows": native,
             // X has no capture exclusion list: a display capture includes our overlay.
             "excludesOwnWindows": false,
             "overlayExclusion": if gamescope::scene_capture() { "compositorScene" } else { "hideDuringCapture" },
@@ -391,10 +410,12 @@ pub fn capabilities() -> Value {
             // A Gaming Mode app fills the output; nothing moves to follow.
             "followWindowBounds": !gaming && (!portal || tracking || tracking::available()),
             "foregroundTracking": !gaming && !portal,
+            // Native sources name their windows: bounds, focus and activation need no linking.
+            "nativeWindows": native,
             // Whether `activate_source` can bring a window source forward: a portal stream's
             // window is anonymous, so only GNOME's Shell integration, KWin's script bridge (KDE
             // Plasma) or Gamescope can.
-            "activateWindow": gaming || !portal || gnome::eligible_popup_session() || tracking::can_activate(),
+            "activateWindow": gaming || native || !portal || gnome::eligible_popup_session() || tracking::can_activate(),
         },
         "overlay": {
             "available": x11 || layer::available() || gnome,

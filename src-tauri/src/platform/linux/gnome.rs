@@ -364,14 +364,38 @@ fn digest(contents: &str) -> Result<String, String> {
     checksum.string().ok_or_else(|| "Missing SHA digest".into())
 }
 
-/// A live GNOME pairing is explicit and scoped to this portal node/session.
+/// A window source the Shell can track: a portal stream once linked, or a native source
+/// (Mutter's own window id), which is bound by id and never matched.
+fn trackable(source_id: &str) -> bool {
+    source_id.starts_with("portal:window:") || native_window(source_id)
+}
+fn native_window(source_id: &str) -> bool {
+    kimochi_capture::linux_native::window_handle(source_id).is_some()
+}
+
+/// Bind a native window source to its window in the Shell (by Mutter's id), unless it is
+/// already: the Shell's overlay, crop editor and pop-ups then follow that window.
+pub fn ensure_bound(source_id: &str) {
+    if !eligible() || !native_window(source_id) { return; }
+    let bound = request("track", json!({"operation":"status","sourceId":source_id})).is_ok_and(|v| !v.is_null());
+    if !bound {
+        if let Err(e) = request("track", json!({"operation":"bind","sourceId":source_id})) {
+            eprintln!("GNOME: could not bind {source_id}: {e}");
+        }
+    }
+}
+
+/// A live GNOME pairing is explicit and scoped to this portal node/session, or a native
+/// window's own id.
 pub fn tracked_bounds(source_id: &str) -> Option<kimochi_capture::Rect> {
-    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    if !eligible() || !trackable(source_id) { return None; }
+    ensure_bound(source_id);
     let value = request("track", json!({"operation":"status","sourceId":source_id})).ok()?;
     serde_json::from_value(value["bounds"].clone()).ok()
 }
 
 pub fn match_window(source_id: &str, width: u32, height: u32) -> Option<kimochi_capture::Rect> {
+    if native_window(source_id) { return tracked_bounds(source_id); }
     if !eligible() || !source_id.starts_with("portal:window:") { return None; }
     let value = request("track", json!({"operation":"match","sourceId":source_id,"width":width,"height":height})).ok()?;
     serde_json::from_value(value["bounds"].clone()).ok()
@@ -379,7 +403,7 @@ pub fn match_window(source_id: &str, width: u32, height: u32) -> Option<kimochi_
 
 /// Refuse to stretch a partial or stale-sized portal buffer over a linked window.
 pub fn tracked_frame_bounds(source_id: &str, width: u32, height: u32) -> Option<kimochi_capture::Rect> {
-    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    if !eligible() || !trackable(source_id) { return None; }
     let value = request("track", json!({"operation":"status","sourceId":source_id})).ok()?;
     let rect: kimochi_capture::Rect = serde_json::from_value(value["bounds"].clone()).ok()?;
     let scale = value["scale"].as_f64()?;
@@ -443,7 +467,7 @@ extern "C" { fn g_icon_new_for_string(value:*const std::ffi::c_char,error:*mut *
 extern "C" {
     fn gdk_pixbuf_save_to_bufferv(pixbuf:*mut std::ffi::c_void,buffer:*mut *mut std::ffi::c_char,size:*mut usize,kind:*const std::ffi::c_char,keys:*mut *mut std::ffi::c_char,values:*mut *mut std::ffi::c_char,error:*mut *mut glib::ffi::GError)->i32;
 }
-fn icon_png(name:&str,size:i32)->Option<Vec<u8>>{
+pub(super) fn icon_png(name:&str,size:i32)->Option<Vec<u8>>{
     let name=name.to_owned();
     let load=move || unsafe {
         let name=std::ffi::CString::new(name).ok()?;

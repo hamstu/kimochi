@@ -1,4 +1,7 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" */
+
+/** A whole screen: shared through the portal, or listed by native capture. */
+const isWaylandScreenSourceId = (id) => /^(portal|wayland):display:/.test(id ?? '')
 /** Called only by the Linux Wayland branch. Portal consent replaces pointer/display discovery. */
 export async function runWaylandQuickShot({ available, catalog, pick, edit, scan, status, log }) {
   if (!available) {
@@ -6,7 +9,8 @@ export async function runWaylandQuickShot({ available, catalog, pick, edit, scan
     log({ check: 'quick-shot-skipped', reason: 'native Wayland overlay unavailable' })
     return
   }
-  let source = (await catalog()).find((item) => item.id?.startsWith('portal:display:'))
+  // Native capture lists every screen; with the portal, a screen shared earlier this session.
+  let source = (await catalog()).find((item) => isWaylandScreenSourceId(item.id))
   if (!source) {
     status('Choose an entire screen in the system picker for Quick Shot.')
     const result = await pick()
@@ -17,7 +21,7 @@ export async function runWaylandQuickShot({ available, catalog, pick, edit, scan
     }
     source = result.source
   }
-  if (!source?.id?.startsWith('portal:display:')) {
+  if (!isWaylandScreenSourceId(source?.id)) {
     status('Quick Shot needs an entire screen. Try again and choose a screen in the system picker.')
     log({ check: 'quick-shot-skipped', reason: 'portal window selected instead of screen' })
     return

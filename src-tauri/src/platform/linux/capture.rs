@@ -146,7 +146,12 @@ impl CaptureBackend for Protected {
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
         let mut sources=self.inner.enumerate()?;
-        for source in &mut sources {super::gnome::decorate_source(source); super::gaming_sources::decorate(source);}
+        let native = kimochi_capture::linux_native::inventory();
+        for source in &mut sources {
+            super::gnome::decorate_source(source);
+            super::gaming_sources::decorate(source);
+            if let Some(inventory) = &native { super::native::decorate(source, inventory); }
+        }
         Ok(sources)
     }
     fn close(&mut self) {
@@ -171,8 +176,10 @@ impl CaptureBackend for Protected {
         // it. Hiding them each observation only creates a visible blink.
         // Screen streams and unverified window shares retain full suppression.
         // KWin's window stream renders that window alone as well, once it is linked.
-        let isolated_window = request.source_id.starts_with("portal:window:")
-            && (before.is_some() || super::tracking::isolated(&request.source_id));
+        let isolated_window = (request.source_id.starts_with("portal:window:")
+            && (before.is_some() || super::tracking::isolated(&request.source_id)))
+            // A native window's stream is that window alone (Mutter, KWin, ext toplevel capture).
+            || kimochi_capture::linux_native::window_handle(&request.source_id).is_some();
         if super::region_editing() {
             return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
         }
@@ -207,15 +214,16 @@ impl CaptureBackend for Protected {
             }
         }
         if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
-        if let Ok(frame) = result.as_mut() { super::tracking::enrich(frame); }
+        if let Ok(frame) = result.as_mut() { super::tracking::enrich(frame); super::native::enrich(frame); }
         drop(hidden);
         result
     }
     // Picker/sidebar images never enter OCR or the observer. They may include
     // annotations, but must not disturb what the user is reading.
     fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
-        let mut frame = self.inner.capture(request)?;
+        let mut frame = self.inner.preview(request)?;
         super::tracking::enrich(&mut frame);
+        super::native::enrich(&mut frame);
         Ok(frame)
     }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
