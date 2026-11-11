@@ -12,7 +12,7 @@
 //! {platform}:window:{handle}:{pid}
 //! ```
 //!
-//! `platform` is `macos`, `windows`, `x11`, `portal` or `gamescope`. `handle` is whatever the
+//! `platform` is `macos`, `windows`, `x11`, `portal`, `gamescope` or `wayland`. `handle` is whatever the
 //! backend needs to find the source again *within one desktop session* (a
 //! `CGWindowID`, an `HWND` in hex, an X11 window id, a PipeWire node): it is a string
 //! here because handles are pointer-sized on Windows and must never round-trip through
@@ -28,6 +28,9 @@ pub enum Platform {
     Portal,
     /// Gamescope's own PipeWire stream (Steam Deck Gaming Mode), one app at a time.
     Gamescope,
+    /// Wayland without the portal: the compositor's own capture API, by window identity
+    /// (`linux_native`). Handles are the compositor's ids and never contain `:`.
+    Wayland,
 }
 
 impl Platform {
@@ -38,6 +41,7 @@ impl Platform {
             Platform::X11 => "x11",
             Platform::Portal => "portal",
             Platform::Gamescope => "gamescope",
+            Platform::Wayland => "wayland",
         }
     }
 
@@ -48,6 +52,7 @@ impl Platform {
             "x11" => Platform::X11,
             "portal" => Platform::Portal,
             "gamescope" => Platform::Gamescope,
+            "wayland" => Platform::Wayland,
             _ => return None,
         })
     }
@@ -192,7 +197,9 @@ impl SourceId {
 
     /// Whether this build's backend can resolve the id.
     pub fn is_local(&self) -> bool {
-        self.platform() == Platform::current()
+        let here = Platform::current();
+        // A Wayland session answers both its portal streams and native sources.
+        self.platform() == here || (here == Platform::Portal && self.platform() == Platform::Wayland)
     }
 }
 

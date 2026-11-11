@@ -31,6 +31,9 @@ pub use linux_portal::{set_portal_token_store, MemoryTokenStore, TokenStore, PIC
 // Gaming Mode: Gamescope's PipeWire node, per app. Ids and catalog rules compile
 // everywhere; the backend is Linux-only.
 pub mod linux_gamescope;
+pub mod linux_native;
+#[cfg(target_os = "linux")]
+pub use linux_native::NativeCapture;
 #[cfg(target_os = "linux")]
 pub use linux_gamescope::GamescopeCapture;
 
@@ -65,7 +68,7 @@ pub struct Capabilities {
     pub system_picker_required: bool,
     pub retained_session: bool,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,
@@ -188,7 +191,12 @@ pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
         if gamescope_capture_now() {
             Ok(Box::new(GamescopeCapture::new()))
         } else if wayland_session_now() {
-            Ok(Box::new(PortalCapture::new()))
+            // The compositor's own capture API when this session has one we speak (no system
+            // picker, sources by window identity); the ScreenCast portal otherwise.
+            match NativeCapture::new() {
+                Some(native) => Ok(Box::new(native)),
+                None => Ok(Box::new(PortalCapture::new())),
+            }
         } else {
             Ok(Box::new(X11Capture::connect()?))
         }

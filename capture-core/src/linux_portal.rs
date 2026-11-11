@@ -373,14 +373,14 @@ pub(crate) mod backend {
     use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
 
-    const FIRST_FRAME_WAIT: Duration = Duration::from_millis(500);
+    pub(crate) const FIRST_FRAME_WAIT: Duration = Duration::from_millis(500);
     /// Connecting to PipeWire through the portal's fd is local and quick.
-    const PIPEWIRE_START_WAIT: Duration = Duration::from_secs(5);
+    pub(crate) const PIPEWIRE_START_WAIT: Duration = Duration::from_secs(5);
     /// How often the portal thread looks at the stop flag while it waits on D-Bus.
-    const STOP_POLL: Duration = Duration::from_millis(200);
-    const MAX_PIXELS: u64 = 64_000_000;
-    const PIXEL_FORMAT: &str = "RGBA8 straight alpha, top-left rows";
-    const COLOR_SPACE: &str = "Display native (SDR; no embedded ICC profile)";
+    pub(crate) const STOP_POLL: Duration = Duration::from_millis(200);
+    pub(crate) const MAX_PIXELS: u64 = 64_000_000;
+    pub(crate) const PIXEL_FORMAT: &str = "RGBA8 straight alpha, top-left rows";
+    pub(crate) const COLOR_SPACE: &str = "Display native (SDR; no embedded ICC profile)";
 
     fn native_error(e: impl ToString) -> CaptureError {
         CaptureError::new("native", e)
@@ -401,10 +401,10 @@ pub(crate) mod backend {
     // ----- Mailbox -----------------------------------------------------------------
 
     /// One frame, already converted to tightly packed RGBA.
-    struct LatestFrame {
-        pixels: Vec<u8>,
-        width: u32,
-        height: u32,
+    pub(crate) struct LatestFrame {
+        pub(crate) pixels: Vec<u8>,
+        pub(crate) width: u32,
+        pub(crate) height: u32,
     }
 
     /// The newest buffer as PipeWire delivered it, copied into memory the slot keeps and reuses.
@@ -423,21 +423,21 @@ pub(crate) mod backend {
 
     /// What one stream's PipeWire callbacks share with captures.
     #[derive(Default)]
-    struct Slot {
+    pub(crate) struct Slot {
         raw: Mutex<Option<RawFrame>>,
         /// `raw` as RGBA, and the generation it was made from.
         converted: Mutex<Option<(u64, Arc<LatestFrame>)>>,
         arrived: Condvar,
         generation: AtomicU64,
         /// The stream has stopped: nothing more comes.
-        ended: AtomicBool,
+        pub(crate) ended: AtomicBool,
     }
 
     impl Slot {
         /// Keep `data` (a mapped buffer's valid bytes) as the newest frame, in the slot's own
         /// memory: no allocation once the size is steady, and no per-pixel work.
         #[allow(clippy::too_many_arguments)]
-        fn publish_raw(
+        pub(crate) fn publish_raw(
             &self,
             data: &[u8],
             offset: usize,
@@ -461,12 +461,12 @@ pub(crate) mod backend {
             let stride = width as i32 * 4;
             self.publish_raw(&pixels, 0, stride, width, height, [0, 0, width, height], PixelOrder::Rgba);
         }
-        fn end(&self) {
+        pub(crate) fn end(&self) {
             self.ended.store(true, Ordering::SeqCst);
             self.arrived.notify_all();
         }
         /// The newest frame, waiting up to `limit` for the first one.
-        fn frame(&self, limit: Duration, after: Option<Instant>) -> Option<Arc<LatestFrame>> {
+        pub(crate) fn frame(&self, limit: Duration, after: Option<Instant>) -> Option<Arc<LatestFrame>> {
             let raw = self.raw.lock().unwrap();
             let (raw, _) = self
                 .arrived
@@ -494,11 +494,11 @@ pub(crate) mod backend {
 
     /// Flags the session's threads share.
     #[derive(Default)]
-    struct Shared {
+    pub(crate) struct Shared {
         /// The portal closed the session, or PipeWire dropped the stream.
-        closed: AtomicBool,
+        pub(crate) closed: AtomicBool,
         /// The backend wants the session gone.
-        stop: AtomicBool,
+        pub(crate) stop: AtomicBool,
     }
 
     // ----- Session -----------------------------------------------------------------
@@ -889,19 +889,26 @@ pub(crate) mod backend {
         format: Option<Negotiated>,
     }
 
-    type Ready = mpsc::Sender<std::result::Result<pw::channel::Sender<()>, String>>;
+    pub(crate) type Ready = mpsc::Sender<std::result::Result<pw::channel::Sender<()>, String>>;
 
     fn pipewire_main(
-        fd: OwnedFd,
+        fd: Option<OwnedFd>,
         nodes: &[(u32, Arc<Slot>)],
         shared: &Arc<Shared>,
         ready: &Ready,
     ) -> std::result::Result<(), String> {
         let mainloop = pw::main_loop::MainLoopRc::new(None).map_err(|e| e.to_string())?;
         let context = pw::context::ContextRc::new(&mainloop, None).map_err(|e| e.to_string())?;
-        let core = context
-            .connect_fd_rc(fd, None)
-            .map_err(|e| format!("PipeWire refused the portal's connection: {e}"))?;
+        // A portal session hands over its own connection; compositor screencast APIs (Mutter,
+        // KWin) publish their nodes on the session's daemon.
+        let core = match fd {
+            Some(fd) => context
+                .connect_fd_rc(fd, None)
+                .map_err(|e| format!("PipeWire refused the portal's connection: {e}"))?,
+            None => context
+                .connect_rc(None)
+                .map_err(|e| format!("PipeWire is not running: {e}"))?,
+        };
         let _core_listener = core
             .add_listener_local()
             .error({
@@ -1060,8 +1067,8 @@ pub(crate) mod backend {
         Ok(())
     }
 
-    fn pipewire_thread(
-        fd: OwnedFd,
+    pub(crate) fn pipewire_thread(
+        fd: Option<OwnedFd>,
         nodes: Vec<(u32, Arc<Slot>)>,
         shared: Arc<Shared>,
         ready: Ready,
@@ -1086,7 +1093,7 @@ pub(crate) mod backend {
             let (nodes, shared) = (slots.clone(), shared.clone());
             std::thread::Builder::new()
                 .name("kimochi-pipewire".into())
-                .spawn(move || pipewire_thread(started.fd, nodes, shared, ready_tx))
+                .spawn(move || pipewire_thread(Some(started.fd), nodes, shared, ready_tx))
                 .map_err(native_error)?
         };
         let mut cast = Cast {
