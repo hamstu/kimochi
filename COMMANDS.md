@@ -79,12 +79,14 @@ Keys and defaults mirror `src/main/settings.ts`:
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
-`gamepadSettings.{enabled,preferredGamepadIndex}` (enabled defaults true),
+`gamepadSettings.{enabled,preferredGamepadIndex,lookupButton}` (enabled defaults true; `lookupButton`, a
+button index held as the lookup key (`gamepad::lookup_held`), defaults on a Steam Deck to the first
+back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere),
 `lastSelectedSource.{sourceId,type,name,appName}`,
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
-`ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'`;
+`ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'screenai' | 'vocr' | 'livetext' | 'oneocr'`;
 `'local'` is the retired name for `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR
 mode — reads as the default), default `'googlelens'` for a new install only: a settings file that
 exists but never recorded `ocrMode` loads as `'cloud'`, the engine it was using. `endpoint` (unset
@@ -143,7 +145,8 @@ Mirrors `src/main/native-windows.ts`.
 | `panel_cursor` | `({kind}) -> ()` |
 
 `action`: `show`, `show_inactive`, `hide`, `drag`, `place`, `minimize`, `restore`,
-`pin`, `unpin`, `inspect`. The main window also accepts `mini` and `expand`:
+`maximize` (toggles: maximized, or back to the size before; ignored for fixed-size windows,
+Mini mode and Gaming Mode; `PanelInfo.maximized` reports it), `pin`, `unpin`, `inspect`. The main window also accepts `mini` and `expand`:
 temporary compact bounds and forced pin, restored on expand; `PanelInfo.mini` reports
 the current mode. Compact bounds and the forced pin are not saved to settings.
 Selecting a full-screen source or entering full screen switches to Mini mode once
@@ -309,8 +312,8 @@ choosing that source again brings its region back.
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
-| `capture_frame` | `({request, observe?, observerMode?, observerEngine?}) -> {id, info, url, observation, …}` — with `observe`, the watcher reads the frame: `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
-| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, and `'livetext'` / `'oneocr'` on their OS) |
+| `capture_frame` | `({request, observe?, observerMode?, observerEngine?}) -> {id, info, url, observation, …}` — with `observe`, the watcher reads the frame: `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS, and `'vocr'` / `'screenai'` when they are the reader; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
+| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, `'ppocr'`, `'screenai'`, `'vocr'`, and `'livetext'` / `'oneocr'` on their OS) |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
 | `clear` | `() -> ()` |
@@ -321,6 +324,7 @@ choosing that source again brings its region back.
 | `place_overlay` | `({rect}) -> ()` |
 | `desktop` | `() -> [Rect]` |
 | `displays` | `() -> [{id, bounds, work_area, scale_factor}]` |
+| `layer_outputs` | `({operation: 'list'}) -> {outputs: [Rect], current: Rect \| null, pointer: {x, y} \| null}`, `({operation: 'move', rect}) -> bool` — Linux layer-shell overlay only (KDE Plasma, Hyprland, wlroots): every output and the pointer in the compositor's global logical layout, and moving the overlay to the output with that geometry. The Wayland region editor uses it to edit a shared screen on whichever of its outputs the pointer is over. No outputs elsewhere |
 | `watch_source` | `({sourceId \| null}) -> ()` |
 
 **Ownership split.** `capture_frame` performs a native capture and nothing else: no
@@ -1662,8 +1666,8 @@ data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming prof
 Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
 SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
 
-`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PaddleOCR) or `"sensevoice"` (SenseVoice-Small, sentence audio's
-speech recogniser; never an `ocrMode`). Every command answers with the engine's
+`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PaddleOCR), `"screenai"` (Chrome Screen AI, see below), `"vocr"` (VOCR6) or
+`"sensevoice"` (SenseVoice-Small, sentence audio's speech recogniser; never an `ocrMode`). Every command answers with the engine's
 `ModelStatus` after acting:
 
 | Command | Signature |
@@ -1680,7 +1684,7 @@ speech recogniser; never an `ocrMode`). Every command answers with the engine's
 ModelStatus = {
   engine, name,                      // "meikiocr", "MeikiOCR"
   state: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready',
-  source: 'downloaded' | 'bundled' | 'development' | null,  // where ready models live
+  source: 'downloaded' | 'bundled' | 'development' | 'browser' | null,  // where ready models live
   file, receivedBytes, totalBytes,   // the file in progress (downloading / verifying)
   overallReceived, overallTotal,     // bytes across every file of the engine
   message                            // why it failed
@@ -1719,6 +1723,38 @@ status `ready` with that `source`; they cannot be deleted from the app.
 path refuses with the same reason: `ocr_frame` and `scan` fail with
 `"<Engine> is not ready: <reason>"`, and the observer as above. Switching to an engine whose
 models are ready scans at once.
+
+**Packages.** A manifest file may be listed for some platforms only (`platforms`: `mac-arm64`,
+`mac-amd64`, `windows-amd64`, `windows-arm64`, `linux-amd64`, `linux-arm64`); an engine with no
+file for this computer cannot be downloaded (`model_download_start` fails it with "Not available
+for this computer"). A file with `unpack: true` is a zip: once verified it is unpacked into
+`<engine>/<name without .zip>/` and the zip is deleted; that directory then stands for the file.
+
+### Chrome Screen AI (`screenai`)
+
+Google's on-device OCR library from Chrome (`src-tauri/src/screen_ai.rs`, the `screenai/` crate).
+Kimochi never bundles it. It uses, in order: its own download (Google's package for this
+platform from Google's CIPD servers, pinned by version and SHA-256 in `ocr-models.json`;
+Windows on ARM gets the x64 package), the copy owocr and GameSentenceMiner keep in
+`~/.config/screen_ai/`, then a Chromium browser's component (`<user data>/screen_ai/<version>/`,
+Chrome first). With a browser's copy, `model_status` reports `ready` with `source: 'browser'` and
+nothing to download or delete. Google publishes no Linux ARM64 package: there only a browser's
+copy works, and without one the engine is unavailable and not selectable.
+
+The library runs in the `kimochi-screenai-worker` helper (bundled under `screenai/`; two on
+Windows, `kimochi-screenai-x64.exe` and `-arm64.exe`, picked by the library's architecture),
+started on the first scan (or at launch when Screen AI is the engine in use) and kept running.
+Frames go to it as raw RGBA over a pipe, scaled down first when larger than the library reads
+(2048 px). A worker that crashes or hangs fails that scan and is replaced on the next; a copy
+whose worker cannot start is not offered again that session.
+
+`platform_capabilities` reports `ocrEngines.screenai` as `{available: true, accelerator: 'cpu',
+version, source, runtimePath}` with a copy (`source`: `'downloaded'`, `'shared'` for
+`~/.config/screen_ai`, or the browser's name, such as `'Google Chrome'`), and otherwise
+`{available: false, selectable, reason}`, plus `model: <state>` while only the download is
+missing. It is re-sent as `platform-capabilities` when the download changes state; a copy a
+browser installs meanwhile is found the next time the capabilities are asked for (the panel's
+"Look again").
 
 ## Text Hooker (Windows; Linux through Proton or Wine)
 

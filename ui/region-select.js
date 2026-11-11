@@ -348,10 +348,12 @@ export class RegionSelect {
 
   /**
    * Start over with `initial` (or no box), as if just opened: for a caller that moved the surface
-   * to another display, where the old box means nothing.
+   * to another display, where the old box means nothing. `area`, when given, replaces the limits
+   * too (`null` lifts them): another display can show a different part of the source.
    */
-  reset(initial = null) {
+  reset(initial = null, { area } = {}) {
     if (!this._els) return
+    if (area !== undefined) this._area = isRect(area) ? { ...area } : null
     this._gesture = null
     this._rect = isRect(initial) ? this._clampMove({ ...initial }) : null
     this._editing = this._rect !== null

@@ -369,7 +369,7 @@ const MAIN: Surface = {
           param: 'ocr',
           label: 'OCR model',
           default: 'googlelens',
-          options: opts(['googlelens', 'Google Lens'], ['meikiocr', 'MeikiOCR'], ['mangaocr', 'Manga OCR'], ['ppocr', 'PaddleOCR'])
+          options: opts(['googlelens', 'Google Lens'], ['meikiocr', 'MeikiOCR'], ['mangaocr', 'Manga OCR'], ['ppocr', 'PaddleOCR'], ['vocr', 'VOCR6'])
         },
         ENGINE
       ]

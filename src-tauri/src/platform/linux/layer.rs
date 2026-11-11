@@ -191,6 +191,60 @@ pub fn follow_output(geometry: Rect) -> bool {
     });
     true
 }
+/// Every output's logical geometry, in GDK's layout: the compositor's global logical space (GTK
+/// reads it from xdg-output), which is where a portal monitor stream's position is, and the space
+/// [`follow_output`] matches in. Empty without layer-shell. Asked on GTK's main thread and kept
+/// for half a second: a capture asks on every scan.
+pub fn outputs() -> Vec<Rect> {
+    use std::time::{Duration, Instant};
+    static CACHE: std::sync::Mutex<Option<(Instant, Vec<Rect>)>> = std::sync::Mutex::new(None);
+    if !available() {
+        return Vec::new();
+    }
+    if let Some((at, list)) = CACHE.lock().ok().and_then(|c| c.clone()) {
+        if at.elapsed() < Duration::from_millis(500) {
+            return list;
+        }
+    }
+    let read = || unsafe {
+        let display = gdk_display_get_default();
+        if display.is_null() {
+            return Vec::new();
+        }
+        (0..gdk_display_get_n_monitors(display))
+            .map(|i| {
+                let mut r = CairoRect { x: 0, y: 0, width: 0, height: 0 };
+                gdk_monitor_get_geometry(gdk_display_get_monitor(display, i), &mut r);
+                Rect { x: f64::from(r.x), y: f64::from(r.y), width: f64::from(r.width), height: f64::from(r.height) }
+            })
+            .filter(|r| r.width > 0. && r.height > 0.)
+            .collect::<Vec<_>>()
+    };
+    // The last list read, however old, when GTK's main thread is too busy to answer in time: the
+    // layout seldom changes, and an empty one would drop a capture's place on the desktop.
+    let last = || CACHE.lock().ok().and_then(|c| c.as_ref().map(|(_, list)| list.clone())).unwrap_or_default();
+    let list = if glib::MainContext::default().is_owner() {
+        read()
+    } else {
+        let Some(first) = LAYERS.lock().ok().and_then(|w| w.first().cloned()) else { return Vec::new() };
+        let (tx, rx) = std::sync::mpsc::channel();
+        if first.run_on_main_thread(move || { let _ = tx.send(read()); }).is_err() {
+            return last();
+        }
+        match rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(list) => list,
+            Err(_) => {
+                eprintln!("Wayland layer-shell: the output list took over a second; using the last one");
+                return last();
+            }
+        }
+    };
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = Some((Instant::now(), list.clone()));
+    }
+    list
+}
+
 #[repr(C)]
 struct CairoRect {
     x: c_int,

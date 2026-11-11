@@ -115,6 +115,11 @@ fn resolve(id: &SourceId) -> Option<Window> {
     Some(window)
 }
 
+/// The X window a window source names, while it is still that process's window.
+pub fn window_of(id: &SourceId) -> Option<Window> {
+    resolve(id)
+}
+
 pub fn picker_sources() -> Result<Vec<Source>, String> {
     let d = desktop().ok_or("native: could not connect to the X server")?;
     Ok(d.sources(std::process::id()))

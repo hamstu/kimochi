@@ -125,6 +125,13 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
         url: 'https://github.com/PaddlePaddle/PaddleOCR'
       },
       {
+        id: 'vita-vn-ocr',
+        name: 'VOCR6 (vita-vn-ocr)',
+        role: 'On-device OCR for visual-novel dialogue, ported to Rust',
+        license: 'GPL-3.0-or-later · models non-commercial use only',
+        url: 'https://github.com/bee-san/vita-vn-ocr'
+      },
+      {
         id: 'manga-ocr',
         name: 'Manga OCR',
         role: 'On-device OCR for manga',

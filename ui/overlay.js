@@ -54,6 +54,7 @@ import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import { isNativeWaylandSourceId, isWaylandScreenSourceId, isWaylandWindowSourceId, parseSourceId } from './source-id.js'
 import { portalWindowBounds, portalCropArea } from './portal-window-geometry.js'
+import { cropFromOutput, cropToOutput, outputArea, outputAt, sameRect as sameOutput, screenOutputs, startOutput } from './wayland-screen-crop.js'
 import {
   DICTIONARY_ENGINE_KEY,
   NO_ENGINE,
@@ -972,7 +973,11 @@ function draw() {
       innerWidth / state.info.full_width,
       innerHeight / state.info.full_height
     )
-    readerBounds = linkedBounds ?? {
+    // A screen with a place on the desktop: its bounds relative to the overlay's output, which
+    // native moved to the output its crop is on (src-tauri/src/platform/linux/screens.rs). Only a
+    // screen with none (a virtual one) is fitted to the overlay's output.
+    const screenBounds = isWaylandScreenSourceId(state.info.source_id) ? (state.info.source_bounds ?? null) : null
+    readerBounds = linkedBounds ?? screenBounds ?? {
       x: (innerWidth - state.info.full_width * scale) / 2,
       y: (innerHeight - state.info.full_height * scale) / 2,
       width: state.info.full_width * scale,
@@ -2450,6 +2455,9 @@ async function followPointer(selector, onDisplay) {
  * editor's cursor bubble beside the cursor. With `onDisplay` (Quick Shot), the overlay also follows
  * the cursor onto another display while nothing is drawn yet, and `onDisplay` is told where it went.
  *
+ * `follow`, given, runs instead of that poll for as long as the editor is open (the Linux layer
+ * overlay's own, `followLayerOutputs`).
+ *
  * `area`, `initial`, `picture` and `alternateLabel` pass through to the editor (see
  * ui/region-select.js); `onStart` gets the running editor, for a caller that keeps its picture
  * fresh. The rectangle comes back with the editor's `action`: `alternate` when the
@@ -2460,7 +2468,7 @@ async function followPointer(selector, onDisplay) {
  *   picture?: object, alternateLabel?: string, onStart?: (selector: object) => void}} [options]
  * @returns {Promise<{x:number,y:number,width:number,height:number,action:string}|null>}
  */
-async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alternateLabel, onStart, accent, title } = {}) {
+async function editRegion(confirmLabel, { onDisplay, follow, area, initial, picture, alternateLabel, onStart, accent, title } = {}) {
   let RegionSelect
   try {
     ;({ RegionSelect } = await import('./region-select.js'))
@@ -2515,7 +2523,8 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alt
     })
     const running = selector.start()
     onStart?.(selector)
-    void followPointer(selector, onDisplay)
+    // `follow` replaces the pointer poll for an editor that moves itself (a Wayland screen).
+    void (follow ? follow(selector) : followPointer(selector, onDisplay))
     const stopPad = usePad
       ? await startRegionPad(selector, { native, gamescope, buttons, log }).catch((error) => {
           log({ check: 'region-pad-failed', error: String(error?.message ?? error) })
@@ -2626,6 +2635,7 @@ async function editSourceRegion(target = 'ocr') {
     // (never pattern-matched on a platform name) only when the view has not caught up.
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
+    await bringSourceForward(sourceId, kind)
     const desktopCrop = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled && await gnomeCropAvailable(sourceId)
     const saved = desktopCrop ? await editGnomeRegion(sourceId, { region })
       : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
@@ -2665,6 +2675,28 @@ async function editSourceRegion(target = 'ocr') {
     // Auto OCR starts afresh here, on the new region.
     state.regionCommitting = false
     syncAutoScanner()
+  }
+}
+
+/**
+ * The region editor is drawn over the game, so on a Linux desktop the game comes to the front
+ * first: opened from Kimochi's own window, which stays in front of the game otherwise, the editor
+ * framed Kimochi instead of the game. Where the window can be brought forward at all
+ * (`sources.activateWindow`: X11, KWin's bridge, GNOME's Shell integration); Gaming Mode has its own
+ * editor. A failure leaves the editor where it was before.
+ */
+async function bringSourceForward(sourceId, kind) {
+  if (kind !== 'window' || window.__KIMOCHI_PLATFORM__?.os !== 'linux' || nativeGamescope) return
+  const caps = await native.capabilities().catch(() => null)
+  if (!caps?.sources?.activateWindow) return
+  try {
+    await native.activateSource(sourceId)
+    // The compositor restacks and the source's bounds follow a moment later (a minimized window
+    // comes back where it was).
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    log({ check: 'region-edit-activated', sourceId })
+  } catch (error) {
+    log({ check: 'region-edit-activate-failed', error: String(error?.message ?? error) })
   }
 }
 
@@ -2764,6 +2796,20 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
   if (!frame?.width || !frame?.height) {
     throw new Error('No portal frame available. Choose a source in the system picker first.')
   }
+  let screenPicture = false
+  if (kind !== 'window') {
+    // A screen is edited where it is, on whichever of its outputs the pointer is over.
+    const layout = await native.invoke('layer_outputs', { operation: 'list' }).catch(() => null)
+    const outputs = layout?.outputs ?? []
+    const screen = frame.sourceBounds
+    if (screen && screenOutputs(screen, outputs).length) {
+      return editLayerScreen(sourceId, frame, screen, layout, { quick, region, onStart })
+    }
+    // With the outputs known, a screen on none of them (a virtual screen) is shown as its picture.
+    // Without them (Gamescope's one output in Gaming Mode), the screen is the overlay's own.
+    screenPicture = outputs.length > 0
+    if (screenPicture) log({ check: 'region-edit-screen-picture', sourceId, bounds: screen ?? null, outputs: outputs.length })
+  }
   // A hidden layer has not received its output-sized configure yet (initially 1×1).
   // Map it for the editor before reading its viewport, and unwind even if setup fails.
   state.regionSelecting = true
@@ -2780,7 +2826,9 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
     // A compositor-linked window can be edited over the game itself. Anonymous
     // streams retain their screenshot editor rather than inventing an origin.
     const linked = kind === 'window' && frame.desktopVisible ? frame.desktopBounds : null
-    const fit = kind === 'window' && !linked
+    // Anything not over its own place on screen is shown as its latest picture, fitted.
+    const pictured = !linked && (kind === 'window' || screenPicture)
+    const fit = pictured
       ? Math.min(origin.width / frame.width, origin.height / frame.height)
       : null
     const bounds = linked ?? (fit === null ? origin : {
@@ -2791,7 +2839,7 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
     })
     const area = linked ? portalCropArea(bounds, origin) : bounds
     if (!area) throw new Error('The shared window is outside this display. Bring it into view and try again.')
-    if (kind === 'window' && !linked) {
+    if (pictured) {
       // WebKitGTK's image loader can reject capture:// from an HTTP dev page,
       // while the native fetch bridge can read it. Decode the same PNG as a blob.
       const response = await fetch(frame.url)
@@ -2805,7 +2853,7 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
       title: quick ? undefined : region.title,
       area,
       initial: saved ? cropToLocal(saved, origin, bounds) : !quick && region.whole ? area : null,
-      picture: kind === 'window' && !linked ? bounds : undefined,
+      picture: pictured ? bounds : undefined,
       onStart: (selector) => {
         if (pictureUrl) void selector.setPicture(pictureUrl)
         onStart?.(selector)
@@ -2833,10 +2881,119 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
     if (crop.width <= 0 || crop.height <= 0) return false
     if (quick) return crop
     await region.commit(sourceId, crop)
-    log({ check: 'region-saved', region: region.name, kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : kind === 'window' ? 'source-image' : 'screen', action: rect.action })
+    log({ check: 'region-saved', region: region.name, kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : pictured ? 'source-image' : 'screen', action: rect.action })
     return savedAction(rect)
   } finally {
     if (pictureUrl) URL.revokeObjectURL(pictureUrl)
+    state.regionSelecting = false
+    syncAutoScanner()
+    await native.regionKeys(false)
+    await publishRegions()
+  }
+}
+
+/** How often the Linux layer editor asks where the pointer is, to follow it between outputs. */
+const LAYER_FOLLOW_MS = 100
+
+/**
+ * Put the layer overlay on `output` (global logical geometry) and wait for its surface to take that
+ * output's size: the editor's limits are in its points. Returns whether it moved.
+ */
+async function moveLayerOverlay(output) {
+  const moved = Boolean(await native.invoke('layer_outputs', { operation: 'move', rect: output }))
+  const fits = () =>
+    innerWidth > 1 && innerHeight > 1 &&
+    (!moved || (Math.abs(innerWidth - output.width) < 2 && Math.abs(innerHeight - output.height) < 2))
+  for (let attempt = 0; !fits(); attempt++) {
+    if (attempt >= 75) {
+      // A zoomed or scaled webview can differ from the output's logical size; edit anyway.
+      log({ check: 'layer-output-size', output, viewport: { width: innerWidth, height: innerHeight } })
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
+  // Text from an earlier scan was placed for the output the overlay left.
+  draw()
+  return moved
+}
+
+/**
+ * The layer editor's pointer poll (`editRegion`'s `follow`): it moves the overlay to whichever of
+ * the screen's outputs the pointer goes to while nothing is drawn yet, and keeps the editor's
+ * cursor bubble beside the pointer. `onOutput(output)` gives that output's `{area, initial}`.
+ */
+async function followLayerOutputs(selector, screen, start, onOutput) {
+  let output = start
+  while (selector.active) {
+    if (!selector.dragging) {
+      const layout = await native.invoke('layer_outputs', { operation: 'list' }).catch(() => null)
+      if (!selector.active) return
+      const pointer = layout?.pointer ?? null
+      const next = pointer ? outputAt(screenOutputs(screen, layout.outputs), pointer) : null
+      let snap = false
+      if (next && !sameOutput(next, output) && (selector.idle || selector.pristine)) {
+        try {
+          await moveLayerOverlay(next)
+          if (!selector.active) return
+          output = next
+          const { area, initial } = onOutput(next)
+          selector.reset(initial, { area })
+          snap = true
+          log({ check: 'region-output-moved', output: next })
+        } catch (error) {
+          log({ check: 'region-output-move-failed', error: String(error?.message ?? error) })
+        }
+      }
+      if (pointer && !selector.dragging) {
+        const local = { x: pointer.x - output.x, y: pointer.y - output.y }
+        const inside = local.x >= 0 && local.y >= 0 && local.x < output.width && local.y < output.height
+        selector.pointerAt(inside ? local : null, { snap })
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, LAYER_FOLLOW_MS))
+  }
+}
+
+/**
+ * A shared screen on the Linux layer overlay, edited over the screen itself (see
+ * ui/wayland-screen-crop.js): on the output under the pointer, or the one the saved region is on,
+ * following the pointer to the screen's other outputs — a secondary monitor, or any part of a
+ * whole-workspace share. Returns like `editPortalRegion`.
+ */
+async function editLayerScreen(sourceId, frame, screen, layout, { quick = false, region = REGIONS.ocr, onStart } = {}) {
+  const saved = quick ? null : region.saved()
+  let output = startOutput(screen, layout.outputs, { pointer: layout.pointer, saved, current: layout.current })
+  const initialFor = (o) =>
+    saved ? cropToOutput(saved, screen, o) : !quick && region.whole ? outputArea(screen, o) : null
+  state.regionSelecting = true
+  try {
+    // Map the surface for the editor before moving and measuring it (a hidden one is 1x1).
+    await native.regionKeys(true)
+    await publishRegions()
+    await moveLayerOverlay(output)
+    const rect = await editRegion(quick ? 'Scan' : region.confirmLabel, {
+      alternateLabel: quick ? undefined : region.alternateLabel,
+      accent: quick ? undefined : region.accent,
+      title: quick ? undefined : region.title,
+      area: outputArea(screen, output),
+      initial: initialFor(output),
+      follow: (selector) =>
+        followLayerOutputs(selector, screen, output, (next) => {
+          output = next
+          return { area: outputArea(screen, next), initial: initialFor(next) }
+        }),
+      onStart
+    })
+    if (!rect) return false
+    if (await native.selectedSource() !== sourceId) throw new Error('The shared source changed while editing. Open the editor again.')
+    const crop = cropFromOutput(rect, screen, output, frame)
+    if (!crop) return false
+    if (quick) return crop
+    await region.commit(sourceId, crop)
+    log({ check: 'region-saved', region: region.name, kind: 'display', sourceId, crop, editor: 'wayland-layer', placement: 'screen', output, outputs: screenOutputs(screen, layout.outputs).length, action: rect.action })
+    return savedAction(rect)
+  } finally {
     state.regionSelecting = false
     syncAutoScanner()
     await native.regionKeys(false)

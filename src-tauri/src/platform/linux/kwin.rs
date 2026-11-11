@@ -62,6 +62,7 @@ function desktopOk(w) {
 function outputOf(w) { return w.output ? w.output.name : null; }
 function snapshot() {
   const active = workspace.activeWindow;
+  const stack = workspace.stackingOrder || [];
   const windows = [];
   for (const w of list()) {
     if (w.deleted || w.desktopWindow || w.dock || w.splash || w.tooltip || w.notification
@@ -72,7 +73,7 @@ function snapshot() {
       client: w.clientGeometry ? rect(w.clientGeometry) : null,
       output: outputOf(w), minimized: !!w.minimized, hidden: !!w.hidden, onDesktop: desktopOk(w),
       normal: !!(w.normalWindow || w.dialog), layer: w.layer === undefined ? null : w.layer,
-      fullScreen: !!w.fullScreen, active: w === active
+      fullScreen: !!w.fullScreen, active: w === active, stack: stack.indexOf(w)
     });
   }
   const outputs = (workspace.screens || []).map(o => ({ name: o.name, geometry: rect(o.geometry), scale: o.devicePixelRatio || 1 }));
@@ -103,6 +104,7 @@ workspace.windowRemoved.connect(push);
 workspace.windowActivated.connect(push);
 workspace.currentDesktopChanged.connect(push);
 if (workspace.screensChanged) workspace.screensChanged.connect(push);
+if (workspace.stackingOrderChanged) workspace.stackingOrderChanged.connect(push);
 push();
 function poll() {
   callDBus(S, P, I, "Next", function (text) {
@@ -143,6 +145,9 @@ struct Window {
     layer: Option<i32>,
     #[serde(default)]
     active: bool,
+    /// Position in KWin's stacking order, bottom first; `None` from a script without it (or -1).
+    #[serde(default)]
+    stack: Option<i64>,
 }
 #[derive(Clone, Debug, Deserialize)]
 struct Output {
@@ -480,12 +485,40 @@ pub fn tracked(source: &str) -> Option<(Rect, bool)> {
         .find(|w| w.active)
         .is_none_or(|active| active.pid == window.pid || active.pid == std::process::id());
     let visible = foreground
+        && !covered_by_own_window(&snapshot, window)
         && !window.minimized
         && !window.hidden
         && window.on_desktop
         && output.is_some_and(|o| window.output.as_ref() == Some(&o.name))
         && output.is_some_and(|o| rect.x < o.geometry.width && rect.y < o.geometry.height && rect.x + rect.width > 0. && rect.y + rect.height > 0.);
     Some((rect, visible))
+}
+
+/// Whether the reader is using one of Kimochi's ordinary windows (the main window with Settings,
+/// the dictionary) that is stacked above the game and over part of it. Kimochi in front counts as
+/// the game in front, so the reader can use its windows beside the game; but one over the game must
+/// not have the overlay's text drawn on top of it (as on X11, `state::source_focus` `covered`).
+/// Never in Mini mode: its small window sits over the game on purpose.
+fn covered_by_own_window(snapshot: &Snapshot, game: &Window) -> bool {
+    if crate::compact::active() {
+        return false;
+    }
+    let Some(game_stack) = game.stack.filter(|s| *s >= 0) else { return false };
+    let overlaps = |a: &Rect, b: &Rect| a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    snapshot.windows.iter().any(|w| {
+        w.pid == std::process::id()
+            && w.active
+            && w.normal
+            // Normal or kept on top (KWin's NormalLayer 2, AboveLayer 3); the overlay and the
+            // pop-ups are layer-shell surfaces far above.
+            && w.layer.is_some_and(|layer| layer <= 3)
+            && !w.minimized
+            && !w.hidden
+            && w.on_desktop
+            && w.output == game.output
+            && w.stack.is_some_and(|s| s > game_stack)
+            && overlaps(&w.frame, &game.frame)
+    })
 }
 
 pub fn linked(source: &str) -> bool {
@@ -533,12 +566,36 @@ pub fn enrich(frame: &mut Frame) {
 
 /// Global pointer position, relative to the overlay's output; never button state. Asked for on
 /// its own (snapshots are pushed on window changes, not pointer motion).
+/// The cursor in KWin's global logical coordinates (the space of its outputs' geometry).
+pub fn pointer_global() -> Option<(f64, f64)> {
+    bridge()?;
+    let cursor: Point = serde_json::from_value(ask("pointer", json!({}))?).ok()?;
+    (cursor.x.is_finite() && cursor.y.is_finite()).then_some((cursor.x, cursor.y))
+}
+
 pub fn pointer() -> Option<Value> {
     let snapshot = snapshot()?;
     let origin = overlay_output(&snapshot)?.geometry;
     let cursor: Point = serde_json::from_value(ask("pointer", json!({}))?).ok()?;
     let (x, y) = (cursor.x - origin.x, cursor.y - origin.y);
     (x.is_finite() && y.is_finite()).then(|| json!({"x": x, "y": y}))
+}
+
+/// Kimochi's own ordinary windows (main window, Settings, Welcome…) where KWin has them, relative
+/// to the overlay's output like every other bound here: a Wayland client is never told where its
+/// own windows are. `None` when the bridge cannot answer.
+pub fn own_frames() -> Option<Vec<Rect>> {
+    let snapshot = snapshot()?;
+    let origin = overlay_output(&snapshot)?.geometry;
+    let own = std::process::id();
+    Some(
+        snapshot
+            .windows
+            .iter()
+            .filter(|w| w.pid == own && w.normal && !w.minimized && !w.hidden && w.on_desktop && w.layer.is_none_or(|l| l <= 2))
+            .map(|w| Rect { x: w.frame.x - origin.x, y: w.frame.y - origin.y, ..w.frame })
+            .collect(),
+    )
 }
 
 /// The linked window's title and application, for naming the anonymous portal source.
@@ -698,6 +755,40 @@ mod tests {
         s.windows[0].pid = 7;
         assert!(resolve(&s, &binding).is_none());
     }
+    #[test]
+    fn kimochis_own_window_over_the_game_hides_what_is_drawn_over_it() {
+        let mut s = sample();
+        s.windows[0].stack = Some(3);
+        let mut own = s.windows[0].clone();
+        own.id = "{kimochi}".into();
+        own.pid = std::process::id();
+        own.layer = Some(2);
+        own.stack = Some(5);
+        own.frame = Rect { x: 600., y: 0., width: 800., height: 800. };
+        own.active = true;
+        s.windows[0].active = false;
+        s.windows.push(own);
+        assert!(covered_by_own_window(&s, &s.windows[0]));
+        // Kept on top over the game but not in use: the game is still what is being read.
+        s.windows[1].active = false;
+        assert!(!covered_by_own_window(&s, &s.windows[0]));
+        s.windows[1].active = true;
+        // Beside the game, or behind it: not covered.
+        s.windows[1].frame.x = 1100.;
+        assert!(!covered_by_own_window(&s, &s.windows[0]));
+        s.windows[1].frame.x = 600.;
+        s.windows[1].stack = Some(1);
+        assert!(!covered_by_own_window(&s, &s.windows[0]));
+        // The overlay (a layer-shell surface over everything) never counts.
+        s.windows[1].stack = Some(5);
+        s.windows[1].layer = Some(9);
+        assert!(!covered_by_own_window(&s, &s.windows[0]));
+        // A script without stacking order says nothing.
+        s.windows[1].layer = Some(2);
+        s.windows[0].stack = None;
+        assert!(!covered_by_own_window(&s, &s.windows[0]));
+    }
+
     #[test]
     fn the_script_names_the_bridge_service_once() {
         assert_eq!(SCRIPT.matches("%SERVICE%").count(), 1);

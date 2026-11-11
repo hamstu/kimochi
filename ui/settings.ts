@@ -22,7 +22,16 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
+export type OcrMode =
+  | 'googlelens'
+  | 'cloud'
+  | 'meikiocr'
+  | 'mangaocr'
+  | 'ppocr'
+  | 'screenai'
+  | 'vocr'
+  | 'livetext'
+  | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 
@@ -250,7 +259,7 @@ export interface Settings {
   }
   audioSettings: { voiceId: string; model?: string }
   serverSettings: { mode: ServerMode }
-  gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
+  gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number; lookupButton?: number | null }
   controllerButtons: ControllerButtons
   gameModeSettings: GameModeSettings
   yomitanSettings: {
@@ -470,6 +479,35 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       'A one-time model download of about 30 MB. Uses the GPU if there is one, else the CPU. On a Mac, the first start takes a few seconds while macOS prepares the model; later starts take about two.'
+  },
+  screenai: {
+    label: 'Local (Screen AI)',
+    name: 'Screen AI',
+    tagline: "Chrome's built-in OCR",
+    geometry: true,
+    runs: 'local',
+    description:
+      'The on-device OCR Google Chrome uses for scanned PDFs. Fast and very accurate on game text, horizontal or vertical, with a box for every character.',
+    strengths: [
+      'Reads game dialogue, menus and vertical text accurately',
+      'Fast, with nothing sent anywhere'
+    ],
+    requirements:
+      "Uses Google Chrome's copy when Chrome has one. Otherwise Kimochi downloads it from Google once (about 80 MB)."
+  },
+  vocr: {
+    label: 'Local (VOCR6)',
+    name: 'VOCR6',
+    tagline: 'Fastest, for VN dialogue boxes',
+    geometry: true,
+    runs: 'local',
+    description:
+      'A tiny model trained on visual-novel dialogue from PS Vita and PSP games. Very fast and accurate on dialogue boxes, but not a general OCR: busy screens, manga and vertical text read better with the other engines.',
+    strengths: [
+      'A scan takes about a hundredth of a second, on the CPU',
+      'Made for horizontal dialogue and speaker names in visual novels'
+    ],
+    requirements: 'A one-time model download of 3.6 MB. Reads horizontal text only.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',

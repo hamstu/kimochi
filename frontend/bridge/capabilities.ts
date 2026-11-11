@@ -62,6 +62,20 @@ export function loadCapabilities(): Promise<PlatformCapabilities> {
   return loading
 }
 
+/**
+ * Ask native again, for something it does not announce on its own: a component another program
+ * installed (Chrome fetching Screen AI) since the capabilities were last sent.
+ */
+export async function refreshCapabilities(): Promise<PlatformCapabilities> {
+  watch()
+  try {
+    set(normalizeCapabilities(await platformCapabilities()))
+  } catch {
+    // Keep what is known.
+  }
+  return current
+}
+
 function subscribe(notify: () => void): () => void {
   subscribers.add(notify)
   return () => subscribers.delete(notify)

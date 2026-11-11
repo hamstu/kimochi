@@ -520,19 +520,39 @@ pub fn tracked_frame_bounds(source_id: &str, width: u32, height: u32) -> Option<
 /// the formerly anonymous descriptor. Native live identity never survives closure.
 /// The window's identity comes from the Shell integration here, or on Hyprland from the
 /// window the portal stream is linked to (`tracking::identity`: Hyprland or KWin).
+/// The window a portal window stream is linked to: its title, app name, app id and icon name.
+/// GNOME's Shell extension answers when it runs; elsewhere the compositor bridge that linked it
+/// (KWin's script on KDE Plasma, Hyprland's IPC). `None` while the stream is not linked.
+fn linked_identity(source_id: &str) -> Option<Value> {
+    if !source_id.starts_with("portal:window:") { return None; }
+    if eligible() {
+        request("track", json!({"operation":"status","sourceId":source_id})).ok()
+    } else {
+        super::tracking::identity(source_id)
+    }
+}
+
+/// The portal's name for an anonymous window stream, before it is linked to a window.
+const ANONYMOUS_WINDOW: &str = "Shared window";
+
+/// Name the saved selection after the window its stream is linked to, and carry its crops along.
+///
+/// A source's crops are saved under a key made of its name and app (`descriptor_key`), and scans
+/// read them through the saved selection. `decorate_source` gives a linked stream the same name
+/// when it is listed, so `commit` saves under the key read here; this catches the selection up
+/// when the window is linked, or retitled, after it was saved.
+///
+/// From the anonymous name, a crop the window already has wins: it is that window's own, saved the
+/// last time it was shared. From a real title (the window was retitled), the crop in use moves to
+/// the new title, as it would have on any platform that names windows itself.
 pub fn refresh_identity(service: &crate::state::Shared, source_id: &str) {
-    if !source_id.starts_with("portal:window:") { return; }
-    let identity = if eligible() {
-        let Ok(identity)=request("track",json!({"operation":"status","sourceId":source_id})) else{return;};
-        identity
-    } else if let Some(identity)=super::tracking::identity(source_id) {
-        identity
-    } else { return; };
+    let Some(identity) = linked_identity(source_id) else { return };
     let Ok(mut descriptor)=service.settings.get("lastSelectedSource").map(|v|v.unwrap_or(Value::Null)) else{return;};
     if descriptor["sourceId"]!=source_id{return;}
     let Some(title)=identity["title"].as_str().filter(|s|!s.trim().is_empty()) else{return;};
     let old=descriptor.clone();
-    let old_key=crate::state::descriptor_key("window",old["name"].as_str().unwrap_or(""),old["appName"].as_str());
+    let old_name=old["name"].as_str().unwrap_or("");
+    let old_key=crate::state::descriptor_key("window",old_name,old["appName"].as_str());
     descriptor["name"]=json!(title);
     descriptor["appName"]=identity["appName"].clone();
     descriptor["appId"]=identity["appId"].clone();
@@ -545,14 +565,19 @@ pub fn refresh_identity(service: &crate::state::Shared, source_id: &str) {
     }
     if descriptor==old{return;}
     let new_key=crate::state::descriptor_key("window",title,descriptor["appName"].as_str());
+    // Full-screen windows keep a crop of their own (`shaped_crop_key`): carry that one.
+    let fullscreen=service.source_fullscreen.load(std::sync::atomic::Ordering::Relaxed);
+    let old_key=crate::state::shaped_crop_key(old_key,"window",fullscreen);
+    let new_key=crate::state::shaped_crop_key(new_key,"window",fullscreen);
+    let carry_over=old_name!=ANONYMOUS_WINDOW;
     let crops=service.settings.get("cropRegions").ok().flatten().unwrap_or(Value::Null);
     let active=service.settings.get("cropScanEnabled").ok().flatten().unwrap_or(Value::Null);
     let anki=service.settings.get("ankiCropRegions").ok().flatten().unwrap_or(Value::Null);
     let mut changes=vec![(vec!["lastSelectedSource"],descriptor)];
-    if new_key!=old_key && crops.get(&new_key).is_none() {
+    if new_key!=old_key && (carry_over || crops.get(&new_key).is_none()) {
         if let Some(crop)=crops.get(&old_key){changes.push((vec!["cropRegions",&new_key],crop.clone()));changes.push((vec!["cropScanEnabled",&new_key],active[&old_key].clone()));}
     }
-    if new_key!=old_key && anki.get(&new_key).is_none() {
+    if new_key!=old_key && (carry_over || anki.get(&new_key).is_none()) {
         if let Some(crop)=anki.get(&old_key).filter(|v|!v.is_null()){changes.push((vec!["ankiCropRegions",&new_key],crop.clone()));}
     }
     let borrowed:Vec<(&[&str],Value)>=changes.iter().map(|(path,v)|(path.as_slice(),v.clone())).collect();
@@ -593,12 +618,12 @@ pub(super) fn icon_png(name:&str,size:i32)->Option<Vec<u8>>{
 }
 
 /// The paired native window is authoritative for a portal window's identity.
+/// Name a linked portal window stream after its window (see `refresh_identity`), on every desktop
+/// that can link one: the name is part of the key its crops are saved under.
 pub fn decorate_source(source: &mut kimochi_capture::Source) {
-    if !source.id.starts_with("portal:window:") {return;}
-    if let Ok(value)=request("track",json!({"operation":"status","sourceId":source.id})) {
-        if let Some(title)=value["title"].as_str().filter(|title|!title.trim().is_empty()) {source.name=title.to_owned();}
-        if let Some(name)=value["appName"].as_str() {source.app=Some(name.to_owned());}
-    }
+    let Some(value) = linked_identity(&source.id) else { return };
+    if let Some(title)=value["title"].as_str().filter(|title|!title.trim().is_empty()) {source.name=title.to_owned();}
+    if let Some(name)=value["appName"].as_str() {source.app=Some(name.to_owned());}
 }
 
 /// Resolve only the matched native app, never a guessed title-to-app association.

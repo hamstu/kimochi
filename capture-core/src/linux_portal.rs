@@ -43,7 +43,9 @@
 //! **Coordinates.** A monitor stream's position and size are in the compositor's
 //! logical coordinate space; frames are physical pixels. `Source.bounds` and
 //! `FrameInfo.source_bounds` are that logical rectangle for monitors and `None` for
-//! windows (Wayland does not disclose where a window is). `FrameInfo.scale_factor` is
+//! windows (Wayland does not disclose where a window is) and for virtual outputs (KDE's
+//! "virtual screen": an output made for the share, on no screen anyone sees, so nothing can
+//! be drawn over it). `FrameInfo.scale_factor` is
 //! frame pixels per logical unit, `frame width / logical width`, when the portal gave a
 //! size, and 1.0 otherwise.
 //!
@@ -190,9 +192,10 @@ impl PortalStream {
         .to_string()
     }
 
-    /// Logical bounds: monitors only, and only when the portal sent both halves.
+    /// Logical bounds: monitors only, and only when the portal sent both halves. A virtual
+    /// output has a place in the compositor's layout but on no physical screen, so it has none.
     pub fn bounds(&self) -> Option<Rect> {
-        if self.kind == StreamKind::Window {
+        if self.kind != StreamKind::Monitor {
             return None;
         }
         let ((x, y), (w, h)) = (self.position?, self.size?);
@@ -207,7 +210,8 @@ impl PortalStream {
     pub fn source(&self) -> Source {
         let (kind, name) = match self.kind {
             StreamKind::Window => ("window", "Shared window"),
-            StreamKind::Monitor | StreamKind::Virtual => ("display", "Shared screen"),
+            StreamKind::Monitor => ("display", "Shared screen"),
+            StreamKind::Virtual => ("display", "Virtual screen"),
         };
         Source {
             id: self.source_id(),
@@ -1441,13 +1445,15 @@ mod tests {
         assert_eq!(w.name, "Shared window");
         assert!(w.bounds.is_none());
 
-        // A virtual output is captured like a monitor.
+        // A virtual output is captured like a monitor, but is on no screen: no bounds.
         let v = PortalStream {
             kind: StreamKind::Virtual,
             ..monitor()
         }
         .source();
         assert_eq!(v.kind, "display");
+        assert_eq!(v.name, "Virtual screen");
+        assert!(v.bounds.is_none());
 
         // Half a rectangle is no rectangle.
         let partial = PortalStream {

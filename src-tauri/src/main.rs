@@ -40,6 +40,7 @@ mod mouse_buttons;
 mod manga_ocr;
 mod pp_ocr;
 mod meiki_ocr;
+mod vocr;
 #[cfg(target_os = "windows")]
 #[path = "platform/windows/oneocr.rs"]
 mod oneocr;
@@ -51,6 +52,7 @@ mod platform;
 mod ocr_result;
 mod panels;
 mod scan_trace;
+mod screen_ai;
 mod screenshots;
 mod sentence_audio;
 mod settings;
@@ -300,6 +302,9 @@ fn release_scan_engines(app: &tauri::AppHandle) {
         });
         if !scans_with(&app, "ppocr") && watching != Some("ppocr") {
             pp_ocr::unload(&app);
+        }
+        if !scans_with(&app, "vocr") {
+            vocr::unload(&app);
         }
         // glibc keeps what the engines freed in its arenas; give it back to the system
         // (Manga OCR's own unload already does, for its other callers).
@@ -1160,6 +1165,18 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
     // KDE Plasma: KWin raises the window the portal stream is linked to.
     #[cfg(target_os = "linux")]
     if source_id.starts_with("portal:window:") {
+        // Not linked yet (nothing has been read from it since it was chosen): link it from its
+        // current frame first, as a scan would, rather than failing the click.
+        if platform::tracking::can_activate() && platform::tracking::linked_pid(&source_id).is_none() {
+            let service = app.state::<Shared>().inner().clone();
+            let id = source_id.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                let frame = sources::hover_preview(&service, &id).ok()?;
+                let (width, height) = (frame["width"].as_u64()?, frame["height"].as_u64()?);
+                platform::tracking::frame_bounds(&id, width as u32, height as u32)
+            })
+            .await;
+        }
         if let Some(result) = platform::tracking::activate(&source_id) {
             let service = app.state::<Shared>().inner().clone();
             record(&app, &service, json!({ "check": "activate-source", "sourceId": source_id, "backend": "kwin", "error": result.as_ref().err() }));
@@ -1504,10 +1521,17 @@ async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Re
         let value = {
             let mut value = value;
             let bounds = value["width"].as_u64().zip(value["height"].as_u64())
-                .and_then(|(width, height)| platform::tracking::frame_bounds(&source_id, width as u32, height as u32));
-            if let Some(bounds) = bounds {
+                .and_then(|(width, height)| platform::tracking::frame_bounds(&source_id, width as u32, height as u32))
+                .map(|bounds| (bounds, platform::tracking::tracked(&source_id).is_some_and(|(_, visible)| visible)))
+                // A native window is named by the compositor: its bounds need no linking, so the
+                // crop editor draws over the window itself rather than over a picture of it.
+                .or_else(|| {
+                    let id = SourceId::parse(&source_id).filter(|id| id.is_window() && platform::native::is_source(&source_id))?;
+                    platform::window_bounds(&id)
+                });
+            if let Some((bounds, visible)) = bounds {
                 value["desktopBounds"] = serde_json::to_value(bounds).map_err(|e| e.to_string())?;
-                value["desktopVisible"] = json!(platform::tracking::tracked(&source_id).is_some_and(|(_, visible)| visible));
+                value["desktopVisible"] = json!(visible);
             }
             value
         };
@@ -1515,6 +1539,29 @@ async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Re
     })
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// Linux layer-shell outputs for the region editor; see `platform::linux::screens`.
+/// `list` -> `{outputs, current, pointer}` (global logical), `move` (`rect`) -> whether it moved.
+/// Elsewhere (and without layer-shell) `list` has no outputs.
+#[tauri::command]
+async fn layer_outputs(operation: String, rect: Option<Rect>) -> Reply<Value> {
+    tauri::async_runtime::spawn_blocking(move || -> std::result::Result<Value, String> {
+        #[cfg(target_os = "linux")]
+        return match (operation.as_str(), rect) {
+            ("list", _) => Ok(platform::screens::layout()),
+            ("move", Some(rect)) => Ok(json!(platform::screens::move_to(rect))),
+            _ => Err("invalid: layer_outputs takes list, or move with a rect".into()),
+        };
+        #[cfg(not(target_os = "linux"))]
+        match (operation.as_str(), rect) {
+            ("list", _) => Ok(json!({"outputs": [], "current": null, "pointer": null})),
+            ("move", Some(_)) => Ok(json!(false)),
+            _ => Err("invalid: layer_outputs takes list, or move with a rect".into()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// The chosen source's current pixels for the sidebar's live preview. See `sources::live_thumbnail`.
@@ -1713,7 +1760,7 @@ fn blank_own_windows(app: &tauri::AppHandle, source_id: &str, frame: &mut kimoch
     let (width, height, full, crop) = (info.width, info.height, (info.full_width, info.full_height), info.crop_pixels);
     // On GNOME the Shell knows where the windows are; the cache only has what GTK was told.
     #[cfg(target_os = "linux")]
-    let own = platform::gnome::own_frames(app, cover::COVERING).unwrap_or_else(cover::own_rects);
+    let own = platform::own_frames(app, cover::COVERING).unwrap_or_else(cover::own_rects);
     #[cfg(not(target_os = "linux"))]
     let own = {
         let _ = app;
@@ -1987,6 +2034,8 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
         "meikiocr" | "local" => return meiki_ocr::recognize(app, image),
         "mangaocr" => return manga_ocr::recognize(app, image),
         "ppocr" => return pp_ocr::recognize(app, image),
+        "screenai" => return screen_ai::recognize(app, image),
+        "vocr" => return vocr::recognize(app, image),
         _ => {}
     }
     let png = image.png()?;
@@ -2060,7 +2109,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// The engines `ocr_frame` can dispatch to in this build: the portable ones, plus
 /// the OS engine of the OS this was built for.
 fn native_engine_known(engine: &str) -> bool {
-    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr")
+    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr" | "screenai" | "vocr")
         || (cfg!(target_os = "windows") && engine == "oneocr")
         || (cfg!(target_os = "macos") && engine == "livetext")
 }
@@ -2097,7 +2146,7 @@ async fn ocr_frame(
         // this scan's result, and running the models again would only repeat it.
         let reused = image.observed_by(&engine);
         let pixels_only = reused.is_some()
-            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext");
+            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext" | "screenai" | "vocr");
         let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
         if let Ok(p) = path(&app, "last-ocr-frame.png") {
@@ -2126,6 +2175,8 @@ async fn ocr_frame(
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &image),
             "mangaocr" => manga_ocr::recognize(&app, &image),
             "ppocr" => pp_ocr::recognize(&app, &image),
+            "screenai" => screen_ai::recognize(&app, &image),
+            "vocr" => vocr::recognize(&app, &image),
             "googlelens" => google_lens::recognize(&png),
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png),
@@ -2352,6 +2403,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         meikiocr: meiki_ocr::availability(app),
         mangaocr: manga_ocr::availability(app),
         ppocr: pp_ocr::availability(app),
+        vocr: vocr::availability(app),
     });
     #[cfg(target_os = "windows")]
     {
@@ -2361,6 +2413,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     {
         payload["ocrEngines"]["livetext"] = livetext::capability();
     }
+    payload["ocrEngines"]["screenai"] = screen_ai::capability(app);
     // Kimochi cloud needs a signed-in Kimochi account with Kimochi Cloud (a trial, a plan or
     // lifetime). Only whether it has it reaches the webviews, never the token.
     let cloud_access = cloud::access();
@@ -2379,6 +2432,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         ("meikiocr", meiki_ocr::verification()),
         ("mangaocr", manga_ocr::verification()),
         ("ppocr", pp_ocr::verification()),
+        ("vocr", vocr::verification()),
     ] {
         if let Some(engine_probe::Verified { available: true, accelerator: Some(accelerator), .. }) = verified {
             if payload["ocrEngines"][key]["available"] == json!(true) {
@@ -3279,6 +3333,7 @@ fn main() {
             source_icon,
             source_preview,
             source_hover_preview,
+            layer_outputs,
             source_live_thumbnail,
             source_window_state,
             accessibility_status,
@@ -3541,6 +3596,7 @@ fn main() {
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
             app.manage(pp_ocr::PpState::default());
+            app.manage(vocr::VocrState::default());
             manga_ocr::prewarm(&handle);
 
             boot::mark("setup-state-ready");
@@ -4420,7 +4476,13 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     lookup_key = String::from("shift");
                 }
             }
-            let sample = platform::desktop_cursor();
+            // A controller's lookup button stands in for the lookup key (`gamepad::lookup_held`).
+            let sample = platform::desktop_cursor().map(|mut sample| {
+                if gamepad::lookup_held() {
+                    sample.modifiers.hold(&lookup_key);
+                }
+                sample
+            });
             let key_held = |modifiers: &Modifiers| modifiers.holds(&lookup_key);
             scanning = sample.as_ref().is_some_and(|s| key_held(&s.modifiers));
             let gate_open = {

@@ -8,6 +8,7 @@ import type { OcrMode } from '../../bridge/settings'
 import type { ModelControls } from '../../bridge/models'
 import { DEV_BUILD } from '../../bridge/devBuild'
 import { ModelDownload } from './ModelDownload'
+import { ScreenAiSetup } from './ScreenAiSetup'
 
 /** One setting inside the detail panel: label and description, the control beside them. */
 export function EngineSetting({
@@ -58,7 +59,10 @@ export function EngineSettings({
     case 'meikiocr':
     case 'mangaocr':
     case 'ppocr':
+    case 'vocr':
       return <ModelDownload controls={model} emphasis={emphasis} />
+    case 'screenai':
+      return <ScreenAiSetup model={model} emphasis={emphasis} />
     case 'googlelens':
     case 'oneocr':
     case 'livetext':

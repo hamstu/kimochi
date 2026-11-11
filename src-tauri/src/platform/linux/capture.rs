@@ -214,7 +214,12 @@ impl CaptureBackend for Protected {
             }
         }
         if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
-        if let Ok(frame) = result.as_mut() { super::tracking::enrich(frame); super::native::enrich(frame); }
+        if let Ok(frame) = result.as_mut() {
+            super::tracking::enrich(frame);
+            super::native::enrich(frame);
+            // A shared screen: the overlay goes to the output its crop is on (`screens.rs`).
+            super::screens::enrich(frame, request.crop.as_ref());
+        }
         drop(hidden);
         result
     }
@@ -224,6 +229,8 @@ impl CaptureBackend for Protected {
         let mut frame = self.inner.preview(request)?;
         super::tracking::enrich(&mut frame);
         super::native::enrich(&mut frame);
+        // Global coordinates, unlike a capture's (the region editor places itself by them).
+        super::screens::assume_bounds(&mut frame);
         Ok(frame)
     }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {

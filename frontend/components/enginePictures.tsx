@@ -4,7 +4,7 @@
  * extension's model menu), so both show the same pictures.
  */
 import type { ReactNode } from 'react'
-import { ScanText } from 'lucide-react'
+import { ScanEye, ScanText } from 'lucide-react'
 import type { OcrMode } from '../bridge/settings'
 import googleLens from '../assets/engine-icons/google-lens.svg'
 import kimochiCloud from '../assets/engine-icons/kimochi-cloud.svg'
@@ -28,6 +28,9 @@ export const OCR_PICTURES: Record<OcrMode, Picture> = {
   meikiocr: { monogram: 'M' },
   mangaocr: { monogram: '漫', lang: 'ja' },
   ppocr: { glyph: PADDLE },
+  // Google's library, but not a Google product of its own to show a logo for.
+  screenai: { glyph: <ScanEye /> },
+  vocr: { monogram: 'V' },
   livetext: { glyph: <ScanText /> },
   oneocr: { src: windows, tile: true }
 }

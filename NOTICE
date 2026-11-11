@@ -25,6 +25,13 @@ Native inference for PaddleOCR's PP-OCRv6 models
 (https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0); its preprocessing
 and postprocessing follow PaddleOCR/PaddleX's reference behaviour.
 
+kimochi-vocr (vocr-core/ in this repository), GPL-3.0-only. A Rust port of
+bee-san/vita-vn-ocr's reference ONNX pipeline tools/vocr_onnx.py
+(https://github.com/bee-san/vita-vn-ocr, GPL-3.0-or-later, release
+v0.5.1-onnx.2, commit 983d2354b99edef8e4cf09a1b05fadadf5757d6c): the
+textspot8 decode, the recognizer's preprocessing, CTC and character cells,
+and the character LM's beam decoder.
+
 mangaocr (crate from https://github.com/hamstu/kimochi-mangaocr),
 GPL-3.0-only. Native Rust inference and page grouping for:
   - Manga OCR: https://github.com/kha-white/manga-ocr (Apache-2.0); the
@@ -99,7 +106,8 @@ MP3. Its source is at https://crates.io/crates/mp3lame-sys.
 OCR models (downloaded on demand, not bundled)
 ----------------------------------------------
 
-Kimochi does not include any OCR model. When you choose MeikiOCR or Manga OCR,
+Kimochi does not include any OCR model. When you choose MeikiOCR, Manga OCR,
+PaddleOCR or VOCR6,
 the app downloads that engine's model files from their upstream location; the
 same goes for sentence audio's speech model, below.
 Every file is pinned by revision, SHA-256 and size in src-tauri/ocr-models.json.
@@ -112,6 +120,14 @@ MeikiOCR models, LGPL-3.0, by rtr46 on Hugging Face:
 
 Manga OCR model, Apache-2.0: https://huggingface.co/kha-white/manga-ocr-base
 (revision aa6573bd10b0d446cbf622e29c3e084914df9741).
+
+VOCR6 models (the textspot8 line spotter, the VOCR6.2 Large recognizer and the
+1 MB character LM), from bee-san/vita-vn-ocr release v0.5.1-onnx.2
+(https://github.com/bee-san/vita-vn-ocr/releases/tag/v0.5.1-onnx.2). The
+weights are GPL-3.0-or-later and, because of their training inputs, for
+non-commercial use only (VOCR6-ATTRIBUTION.md and SPOTTER-ATTRIBUTION.md in the
+release); the character LM is CC BY-SA 4.0 (LM-ATTRIBUTION.md). The ONNX
+conversion method follows a report by astra (ONNX-ATTRIBUTION.md).
 
 Comic Text Detector ONNX weights, GPL-3.0, from dmMaze/comic-text-detector,
 as distributed by zyddnys/manga-image-translator (GPL-3.0), release
@@ -182,7 +198,7 @@ welcome guide are in frontend/assets/engine-icons/ (README there):
   - windows.svg: the four-pane Windows logo, drawn for Kimochi, for OneOCR
     (the OCR in Windows Snipping Tool).
 Apple Live Text, MeikiOCR and Manga OCR are shown with a lucide glyph
-(ScanText, ISC) or a monogram, not a logo. PaddleOCR is shown with a paddle
+(ScanText, ISC) or a monogram, not a logo; so is VOCR6 (a monogram). PaddleOCR is shown with a paddle
 drawn for Kimochi, not PaddlePaddle's logo.
 
 Google, Google Lens, Microsoft, Windows, Snipping Tool, Apple and Live Text

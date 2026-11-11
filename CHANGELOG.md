@@ -8,28 +8,44 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Group text into regions:** a word that wraps onto the next line now looks up correctly when a region covers columns side by side, or blocks of vertical text one above the other (as on a manga page). Before, the lookup ran on into the other column or block.
+
+## [0.9.0] - 2026-11-11
+
 ### Added
 
-- ⭐ **Linux: pick windows like on Windows and macOS.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows and screens itself, with live previews, instead of opening your desktop's screen-share dialog. No more "click the window you shared" or **Relink window overlay…**: Kimochi knows exactly which window you chose, so the overlay follows it as you move, resize or full-screen it, hides while it's minimised or on another workspace, and **Bring to front** works everywhere. (GNOME needs the GNOME overlay extension, which the welcome guide sets up; other desktops keep the screen-share dialog.)
-- **GNOME 47 to 51 are supported.** The GNOME overlay extension, and with it Kimochi's own window list, the on-screen overlay, dictionary pop-ups and region selection, now works on GNOME 47, 48, 49, 50 and 51 as well as 46 (Ubuntu 24.10 and later, Fedora 41 and later). An installed extension updates itself when Kimochi starts, unless you turned it off in GNOME's Extensions app.
+- 🪟 **Linux: Kimochi's own window picker.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows with live previews, just like on Windows and macOS. No more desktop screen-share dialog and no more 'linking': the overlay follows your game as you move, resize or full-screen it, and **Bring to front** works everywhere.
+- 🔍 **New OCR engine: Screen AI.** The on-device OCR from Google Chrome, now in Settings → OCR & Overlay on macOS, Windows and Linux. It's fast, very accurate on game text (horizontal or vertical), and works offline. It's a one-time download of about 80 MB, or none if Chrome already has it.
+- 🎴 **New OCR engine: VOCR6.** A tiny (3.6 MB), super-fast offline OCR made for visual-novel dialogue boxes. Great for horizontal dialogue and speaker names; for manga, vertical text or busy screens, use another engine.
+- 🐧 **GNOME 47 to 51 are supported** (Ubuntu 24.10+, Fedora 41+), not just GNOME 46.
+- 🎮 **Steam Deck in Desktop Mode: look words up with a button.** Hold the L4 back grip and move the pointer over text with the trackpad. You can pick another button in Settings → Shortcuts & Controls.
+- A **maximize** button in the title bar of Kimochi's windows.
 
 ### Changed
 
-- **GNOME: the welcome guide sets up the GNOME extension.** On GNOME, the overlay and dictionary pop-ups need a small extension; the welcome guide now sets it up as one of its steps, and Kimochi keeps it up to date on its own, so there's no button for it in Settings any more. If you skipped it, **Set up** next to **Overlay unavailable** in the sidebar does the same.
-- **Text hooking:** the hooked-text menu no longer reorders as lines arrive, and lists only text with Japanese in it (the rest is under **Show all**).
+- **GNOME: the welcome guide sets up the GNOME extension** for you, and Kimochi keeps it up to date.
+- **Text hooking:** the hooked-text menu no longer jumps around as lines arrive, and only lists text with Japanese in it (the rest is under **Show all**).
 
 ### Fixed
 
-- **Hachidori** no longer gets stuck at startup on "the extension host did not answer the engine worker".
-- Verbose logging now records more about controllers, to help debug ones whose buttons aren't detected.
-- **Group text into regions:** when one region covers more than one block of text (columns side by side, or vertical text in blocks one above the other, as on a manga page), it now reads each block through before the next, so looking up a word that wraps onto the next line finds its real ending instead of a line from the other block.
-- When the window you were reading closes, Kimochi now lets go of it and goes back to **Choose a source**, instead of keeping a dead source card and repeating errors. A minimised window, or one on another workspace, is still kept and read again when it comes back.
-- **NixOS:** the AppImage now starts with `appimage-run`. Before, it stopped at "libgpg-error.so.0: cannot open shared object file".
-- Text hooking no longer shows a long line twice in some games (a line that wraps onto two lines came through once as drawn and once whole).
-- **Hyprland (Omarchy):** where Kimochi still uses the screen-share dialog, the overlay now follows a game running through Proton or Wine in a window. Before, Kimochi asked you to "Link the shared window" every time and found nothing to link.
-- **Hyprland (Omarchy):** the Scan and Controller menu shortcuts now work without editing your Hyprland config. Kimochi binds them, and Shift for the dictionary, while it runs, and leaves keys your config already uses alone.
-- **Hyprland (Omarchy):** hovering a word on the overlay looks it up again. Once Kimochi has seen Shift, the overlay lets your clicks through to the game until you hold Shift, as on Windows and macOS.
-- **Hyprland (Omarchy):** a game tiled beside Kimochi at the same size no longer asks you to link its window.
+- **Hachidori** no longer gets stuck at startup.
+- Closing a game/source window now resets the app to **Choose a source**, instead of leaving the broken one there.
+- **NixOS:** the AppImage now starts with `appimage-run`.
+- Text hooking no longer shows long lines twice in some games.
+- **Steam Deck in Desktop Mode:** the controller menu button (R4) and other controller shortcuts now work, whichever window has focus.
+- **Linux:** changing the crop area, or clicking the source preview, now brings the game to the front.
+- **Linux (Wayland):** **Crop area** works on every monitor, not just the main one.
+- **KDE Plasma and Hyprland:**
+  - A new crop replaces the old one, and **Clear OCR crop area** works.
+  - Whole-screen scans no longer miss text in the top-left corner.
+- **Hyprland (Omarchy):**
+  - The overlay now follows Proton and Wine games.
+  - The Scan and Controller shortcuts work without editing your Hyprland config.
+  - Hovering a word on the overlay looks it up again.
+  - A game tiled next to Kimochi no longer asks you to link its window.
+- Verbose logging records more about controllers, to help debug ones that aren't detected.
 
 ## [0.8.1] - 2026-11-10
 

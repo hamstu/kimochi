@@ -18,6 +18,15 @@ pub fn available() -> bool {
 pub fn pointer() -> Option<Value> {
     if kde() { kwin::pointer() } else { hyprland::pointer() }
 }
+/// The cursor in the compositor's global logical coordinates (where its outputs are), unlike
+/// [`pointer`], which is relative to the overlay's output.
+pub fn pointer_global() -> Option<(f64, f64)> {
+    if kde() { kwin::pointer_global() } else { hyprland::pointer_global() }
+}
+/// Kimochi's own ordinary windows, overlay-local, where the compositor bridge knows them.
+pub fn own_frames() -> Option<Vec<Rect>> {
+    if kde() { kwin::own_frames() } else { hyprland::own_frames() }
+}
 pub fn clear() {
     kwin::clear();
     hyprland::clear();

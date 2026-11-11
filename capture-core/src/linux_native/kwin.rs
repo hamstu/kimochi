@@ -20,7 +20,9 @@
 //! server-side title bar and borders included, the shadow not). The plasma window `geometry` event
 //! is that frame, so it is `bounds`, and frame pixels over bounds is the scale. (Checked on KWin
 //! 6.7: a GTK window with server-side decoration streams 960x576 for a 960x540 client area, and
-//! as an XWayland window 800x536 for 800x500. `client_geometry` would not match either.)
+//! as an XWayland window 800x536 for 800x500. `client_geometry` would not match either.) Before 6.7
+//! (SteamOS has 6.4) the stream is the client area alone: `backend.rs` narrows the bounds to it
+//! from the first frame (`stream_insets`).
 use super::{pipewire_feed, Driver, Feed, Inventory, NativeOutput, NativeWindow, Target};
 use crate::{CaptureError, Rect, Result};
 use std::collections::{HashMap, HashSet};

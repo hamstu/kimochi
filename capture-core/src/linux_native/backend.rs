@@ -87,6 +87,51 @@ struct Registry {
 
 static REGISTRY: OnceLock<Registry> = OnceLock::new();
 static INVENTORY: Mutex<Option<(Instant, Inventory)>> = Mutex::new(None);
+/// Per window (by handle): what its frame has around the area its stream shows, in logical
+/// pixels (left, top, right, bottom), learnt from its frames. See [`stream_insets`].
+static INSETS: Mutex<Option<HashMap<String, [f64; 4]>>> = Mutex::new(None);
+
+/// What a window's frame has around the area its stream shows: `None` when the stream is the
+/// whole frame. KWin streams the frame from Plasma 6.7 (see `kwin.rs`), but up to 6.6 (SteamOS's
+/// 6.4 among them) only the client area: 960x559 for a 962x588 XWayland frame (a 1 px border
+/// each side and below, a 28 px title bar). Sides and bottom are taken to be equal, as server-side
+/// decorations draw them; the title bar is the rest. `scale` is the window's output's.
+fn stream_insets(frame: Rect, width: u32, height: u32, scale: f64) -> Option<[f64; 4]> {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let (fw, fh) = (frame.width * scale, frame.height * scale);
+    let (w, h) = (f64::from(width), f64::from(height));
+    if (fw - w).abs() <= 2.0 && (fh - h).abs() <= 2.0 {
+        return None;
+    }
+    if w > fw + 2.0 || h > fh + 2.0 {
+        return None;
+    }
+    let side = ((fw - w) / 2.0 / scale).max(0.0);
+    let top = frame.height - h / scale - side;
+    (top >= 0.0 && top < frame.height / 2.0 && side < frame.width / 4.0).then_some([side, top, side, side])
+}
+
+fn inset(bounds: Rect, [left, top, right, bottom]: [f64; 4]) -> Rect {
+    Rect {
+        x: bounds.x + left,
+        y: bounds.y + top,
+        width: (bounds.width - left - right).max(1.0),
+        height: (bounds.height - top - bottom).max(1.0),
+    }
+}
+
+/// The inventory with each window's bounds narrowed to what its stream shows, where learnt.
+fn with_insets(mut inv: Inventory) -> Inventory {
+    let insets = INSETS.lock().unwrap();
+    if let Some(insets) = insets.as_ref().filter(|m| !m.is_empty()) {
+        for window in &mut inv.windows {
+            if let (Some(bounds), Some(edges)) = (window.bounds, insets.get(&window.handle)) {
+                window.bounds = Some(inset(bounds, *edges));
+            }
+        }
+    }
+    inv
+}
 
 /// The order to try drivers in: the session's own first, then the rest (niri, for one, answers
 /// Mutter's API; a GNOME session never has the ext protocols).
@@ -155,7 +200,7 @@ pub fn report() -> Vec<(&'static str, std::result::Result<(), String>)> {
 
 /// The desktop now, cached for [`INVENTORY_TTL`]. `None` without a driver or when it fails.
 pub fn inventory() -> Option<Inventory> {
-    inventory_fresh(false).ok()
+    inventory_fresh(false).ok().map(with_insets)
 }
 
 fn inventory_fresh(force: bool) -> Result<Inventory> {
@@ -363,7 +408,27 @@ impl NativeCapture {
         let crop = crop_rect(crop, fw, fh)?;
         let mut pixels =
             if crop == [0, 0, fw, fh] { frame.pixels.clone() } else { crop_pixels(&frame.pixels, fw, crop) };
-        let bounds = resolved.bounds().filter(|b| b.width > 0.0 && b.height > 0.0);
+        let mut bounds = resolved.bounds().filter(|b| b.width > 0.0 && b.height > 0.0);
+        // KWin before Plasma 6.7 streams a window's client area, not its frame: the bounds are
+        // narrowed to it, here and in the inventory from now on (`with_insets`).
+        if let (Resolved::Window(w), Some(frame_bounds), "kwin") = (&resolved, bounds, driver.name()) {
+            let scale = inventory_fresh(false)
+                .ok()
+                .and_then(|inv| w.output.as_deref().and_then(|o| inv.output(o)).map(|o| o.scale))
+                .unwrap_or(1.0);
+            let edges = stream_insets(frame_bounds, fw, fh, scale);
+            let mut insets = INSETS.lock().unwrap();
+            let map = insets.get_or_insert_with(HashMap::new);
+            match edges {
+                Some(edges) => {
+                    map.insert(w.handle.clone(), edges);
+                    bounds = Some(inset(frame_bounds, edges));
+                }
+                None => {
+                    map.remove(&w.handle);
+                }
+            }
+        }
         let base_scale = match (&resolved, bounds) {
             (Resolved::Output(o), _) if o.scale > 0.0 => f64::from(fw) / o.bounds.width.max(1.0),
             (Resolved::Window(_), Some(b)) if driver.bounds_match_stream() => f64::from(fw) / b.width,
@@ -447,6 +512,24 @@ impl CaptureBackend for NativeCapture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stream_of_the_client_area_narrows_the_frame_to_it() {
+        let frame = Rect { x: 3.0, y: 0.0, width: 962.0, height: 588.0 };
+        // KWin 6.4 (SteamOS), an XWayland game: 1 px borders and a 28 px title bar.
+        let edges = stream_insets(frame, 960, 559, 1.0).expect("client area");
+        assert_eq!(edges, [1.0, 28.0, 1.0, 1.0]);
+        assert_eq!(inset(frame, edges), Rect { x: 4.0, y: 28.0, width: 960.0, height: 559.0 });
+        // The same at scale 2.
+        let edges = stream_insets(frame, 1920, 1118, 2.0).expect("client area");
+        assert_eq!(edges, [1.0, 28.0, 1.0, 1.0]);
+        // KWin 6.7 streams the frame: nothing to narrow.
+        assert_eq!(stream_insets(frame, 962, 588, 1.0), None);
+        assert_eq!(stream_insets(frame, 1924, 1176, 2.0), None);
+        // A stream bigger than the frame, or one that cannot be a client area, is left alone.
+        assert_eq!(stream_insets(frame, 1280, 800, 1.0), None);
+        assert_eq!(stream_insets(frame, 960, 100, 1.0), None);
+    }
 
     #[test]
     fn the_session_driver_is_tried_first() {

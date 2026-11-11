@@ -733,7 +733,8 @@ fn attach_events(
 
 fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpec) {
     if window.label() == MAIN && crate::compact::active() { return; }
-    if window.is_minimized().unwrap_or(false) {
+    // A maximized window keeps the bounds it had before: they are what restoring brings back.
+    if window.is_minimized().unwrap_or(false) || window.is_maximized().unwrap_or(false) {
         return;
     }
     if let Ok(rect) = platform::desktop_bounds(window) {
@@ -756,6 +757,7 @@ pub fn info(window: &WebviewWindow) -> Result<Value, String> {
         "pinned": pinned,
         "focused": window.is_focused().map_err(|e| e.to_string())?,
         "resizable": window.is_resizable().map_err(|e| e.to_string())?,
+        "maximized": window.is_maximized().unwrap_or(false),
         "visible": window.is_visible().map_err(|e| e.to_string())?,
     }))
 }
@@ -845,6 +847,21 @@ fn apply(
         #[cfg(target_os = "linux")]
         "minimize" if platform::gamescope::handles(window) => platform::gamescope::hide(window)?,
         "minimize" => window.minimize().map_err(native_err)?,
+        // The title bar's maximize button: maximized, or back to the size it had. Not in Gaming
+        // Mode (its windows fill the screen) nor for Mini mode or the fixed-size panels.
+        #[cfg(target_os = "linux")]
+        "maximize" if platform::gamescope::handles(window) => {},
+        "maximize" if label == MAIN && crate::compact::active() => {},
+        "maximize" if !window.is_resizable().unwrap_or(false) => {},
+        "maximize" => {
+            let was = window.is_maximized().map_err(native_err)?;
+            if was {
+                window.unmaximize().map_err(native_err)?;
+            } else {
+                window.maximize().map_err(native_err)?;
+            }
+            MAXIMIZE_ASKED.lock().unwrap_or_else(|p| p.into_inner()).replace((label.to_owned(), !was));
+        }
         "restore" => {
             window.unminimize().map_err(native_err)?;
             window.show().map_err(native_err)?;
@@ -883,6 +900,14 @@ fn apply(
     if platform::gamescope::handles(window) {
         state["visible"] = json!(platform::gamescope::is_visible(window));
     }
+    // A compositor maximizes a moment later (Wayland): report what was asked for, as for the pin.
+    if action == "maximize" {
+        if let Some((asked_label, maximized)) = MAXIMIZE_ASKED.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            if asked_label == label {
+                state["maximized"] = json!(maximized);
+            }
+        }
+    }
     // `is_always_on_top` reads back the old level until AppKit has applied the new one, so
     // report what was asked for; otherwise the pin button shows the previous state.
     if action == "pin" || action == "unpin" {
@@ -896,6 +921,8 @@ fn apply(
                 "visible": state["visible"],
                 "pinned": state["pinned"],
                 "bounds": state["bounds"],
+                "maximized": state["maximized"],
+                "mini": state["mini"],
             }),
         );
     }
@@ -904,6 +931,9 @@ fn apply(
 
 /// The main window (the Log with its Controller sidebar).
 pub const MAIN: &str = "log";
+
+/// The state the last `maximize` asked for, reported back before the compositor has applied it.
+static MAXIMIZE_ASKED: std::sync::Mutex<Option<(String, bool)>> = std::sync::Mutex::new(None);
 #[cfg(test)]
 const DICTIONARY: &str = "dictionary";
 

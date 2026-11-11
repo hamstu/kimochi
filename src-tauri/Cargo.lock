@@ -3146,7 +3146,7 @@ dependencies = [
 
 [[package]]
 name = "kimochi"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "arboard",
  "async-channel",
@@ -3164,7 +3164,9 @@ dependencies = [
  "hyper-util",
  "image",
  "kimochi-capture",
+ "kimochi-screenai",
  "kimochi-speech",
+ "kimochi-vocr",
  "libc",
  "log",
  "mangaocr",
@@ -3235,6 +3237,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "kimochi-screenai"
+version = "0.1.0"
+
+[[package]]
 name = "kimochi-speech"
 version = "0.1.0"
 dependencies = [
@@ -3244,6 +3250,16 @@ dependencies = [
  "mp3lame-encoder",
  "objc2",
  "objc2-app-kit",
+ "ort",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kimochi-vocr"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
  "ort",
  "serde",
  "serde_json",

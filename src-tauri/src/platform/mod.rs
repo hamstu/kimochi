@@ -140,6 +140,17 @@ impl Modifiers {
             _ => self.shift,
         }
     }
+
+    /// Marks the lookup key held: a controller's lookup button stands in for it
+    /// (`gamepad::lookup_held`).
+    pub fn hold(&mut self, key: &str) {
+        match key {
+            "ctrl" => self.ctrl = true,
+            "alt" => self.alt = true,
+            "meta" => self.meta = true,
+            _ => self.shift = true,
+        }
+    }
 }
 
 /// Where the pointer is (desktop coordinates), whether the primary button is down,
@@ -1078,6 +1089,8 @@ pub struct DynamicCapabilities {
     /// `(available, reason)` for the bundled Manga OCR models.
     pub mangaocr: (bool, Option<String>),
     pub ppocr: (bool, Option<String>),
+    /// VOCR6, on the CPU everywhere (`vocr.rs`).
+    pub vocr: (bool, Option<String>),
 }
 
 /// The full `platform_capabilities` payload (see CROSS_PLATFORM_PLAN.md §3.3).
@@ -1154,8 +1167,11 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "meikiocr": engine(dynamic.meikiocr, &accelerators["meikiocr"]),
         "mangaocr": engine(dynamic.mangaocr, &accelerators["mangaocr"]),
         "ppocr": engine(dynamic.ppocr, &accelerators["ppocr"]),
+        "vocr": engine(dynamic.vocr, &json!("cpu")),
         // Replaced on macOS (main.rs); said here so no default can offer it elsewhere.
         "livetext": {"available": false, "reason": "Apple Live Text is available on macOS only."},
+        // Replaced by `screen_ai::capability` (main.rs), which looks for a copy.
+        "screenai": {"available": false},
     });
     payload["observer"] = dynamic.observer;
     payload["ownPids"] = json!([std::process::id()]);

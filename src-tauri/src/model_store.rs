@@ -13,8 +13,16 @@
 //!   meikiocr/  meiki.text.detect.v0.1.960x544.onnx ... verified.json
 //!   mangaocr/  pytorch_model.bin ... pytorch_model.bin.part  verified.json
 //!   ppocr/  PP-OCRv6_small_det.onnx  PP-OCRv6_small_rec.onnx  PP-OCRv6_small_rec.yml  verified.json
+//!   vocr/  textspot8_exact.onnx  VOCR6.2_L_fast.onnx  vocr_lm6_o3_1000k.vlm  verified.json
 //!   sensevoice/  model.int8.onnx  tokens.txt  verified.json
+//!   screenai/  screen-ai-153.07-mac-arm64/  verified.json
 //! ```
+//!
+//! Most engines' files are used as they are. A file marked `unpack` is a zip (Chrome Screen AI's
+//! package from Google): once verified it is unpacked into the directory named after it, the zip
+//! is deleted, and the directory is what counts as the file from then on. A file may also be
+//! listed for some platforms only (`platforms`, see [`platform`]); an engine with no file for
+//! this computer cannot be downloaded here.
 //!
 //! A file is only ever written as `<name>.part`; it reaches its final name by an atomic
 //! rename after its size and SHA-256 have been checked, so a final path never holds a
@@ -75,6 +83,45 @@ pub struct ModelFile {
     pub url: String,
     pub sha256: String,
     pub size: u64,
+    /// The platforms ([`platform`]) this file is for; every platform when empty.
+    #[serde(default)]
+    pub platforms: Vec<String>,
+    /// A zip, unpacked into `<dir>/<name without .zip>/` once verified (see the module docs).
+    #[serde(default)]
+    pub unpack: bool,
+}
+
+impl ModelFile {
+    /// What stands for the file once it is in place: the file, or for `unpack` its directory.
+    pub fn installed(&self, dir: &Path) -> PathBuf {
+        match self.name.strip_suffix(".zip").filter(|_| self.unpack) {
+            Some(stem) => dir.join(stem),
+            None => dir.join(&self.name),
+        }
+    }
+
+    fn present(&self, dir: &Path) -> bool {
+        let path = self.installed(dir);
+        if self.unpack {
+            path.is_dir()
+        } else {
+            path.is_file()
+        }
+    }
+}
+
+/// This computer as the manifest's `platforms` name it, after Google's package names:
+/// `mac-arm64`, `mac-amd64`, `windows-amd64`, `windows-arm64`, `linux-amd64`, `linux-arm64`.
+pub fn platform() -> &'static str {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => "mac-arm64",
+        ("macos", "x86_64") => "mac-amd64",
+        ("windows", "x86_64") => "windows-amd64",
+        ("windows", "aarch64") => "windows-arm64",
+        ("linux", "x86_64") => "linux-amd64",
+        ("linux", "aarch64") => "linux-arm64",
+        _ => "other",
+    }
 }
 
 /// The files one engine needs.
@@ -88,7 +135,16 @@ impl EngineModels {
     pub fn total_size(&self) -> u64 {
         self.files.iter().map(|f| f.size).sum()
     }
+
+    /// Whether this computer has anything to download: false for an engine whose files are
+    /// all for other platforms.
+    pub fn offered(&self) -> bool {
+        !self.files.is_empty()
+    }
 }
+
+/// Why an engine's models cannot be downloaded on this computer.
+pub const NOT_OFFERED: &str = "Not available for this computer";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Manifest {
@@ -99,15 +155,28 @@ impl Manifest {
     /// Parse and check a manifest: every engine present, every file name a plain file
     /// name (it becomes a path), every checksum 64 lowercase hex digits, every size known.
     pub fn parse(json: &str) -> Result<Self, String> {
-        let manifest: Manifest = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        Self::parse_for(json, platform())
+    }
+
+    /// `parse`, keeping only the files for `platform`.
+    pub fn parse_for(json: &str, platform: &str) -> Result<Self, String> {
+        let mut manifest: Manifest = serde_json::from_str(json).map_err(|e| e.to_string())?;
         for engine in Engine::ALL {
             let models = manifest
                 .engines
-                .get(engine.key())
+                .get_mut(engine.key())
                 .ok_or_else(|| format!("no models listed for {}", engine.key()))?;
             if models.files.is_empty() {
                 return Err(format!("no files listed for {}", engine.key()));
             }
+            for file in &models.files {
+                if file.unpack && !file.name.ends_with(".zip") {
+                    return Err(format!("{} is unpacked but is not a .zip", file.name));
+                }
+            }
+            models
+                .files
+                .retain(|f| f.platforms.is_empty() || f.platforms.iter().any(|p| p == platform));
             for file in &models.files {
                 let plain = !file.name.is_empty()
                     && !file.name.contains(['/', '\\'])
@@ -154,14 +223,27 @@ pub enum Engine {
     Meiki,
     Manga,
     PpOcr,
+    /// VOCR6 (vita-vn-ocr): the textspot8 spotter, the Large recognizer and the character LM.
+    Vocr,
     /// Sentence audio's speech recogniser: not an OCR engine, never an `ocrMode`.
     SenseVoice,
+    /// Chrome Screen AI's package from Google, when no browser on this computer has a copy
+    /// (`screen_ai.rs`). Not in `OCR`: its capability is `screen_ai::capability`'s, because a
+    /// browser's copy makes it usable with nothing downloaded.
+    ScreenAi,
 }
 
 impl Engine {
-    pub const ALL: [Engine; 4] = [Engine::Meiki, Engine::Manga, Engine::PpOcr, Engine::SenseVoice];
-    /// The OCR engines among them.
-    pub const OCR: [Engine; 3] = [Engine::Meiki, Engine::Manga, Engine::PpOcr];
+    pub const ALL: [Engine; 6] = [
+        Engine::Meiki,
+        Engine::Manga,
+        Engine::PpOcr,
+        Engine::Vocr,
+        Engine::SenseVoice,
+        Engine::ScreenAi,
+    ];
+    /// The OCR engines among them whose models are their only requirement.
+    pub const OCR: [Engine; 4] = [Engine::Meiki, Engine::Manga, Engine::PpOcr, Engine::Vocr];
 
     /// The `ocrMode` setting value (OCR engines), the directory name and the manifest key.
     pub fn key(self) -> &'static str {
@@ -169,7 +251,9 @@ impl Engine {
             Engine::Meiki => "meikiocr",
             Engine::Manga => "mangaocr",
             Engine::PpOcr => "ppocr",
+            Engine::Vocr => "vocr",
             Engine::SenseVoice => "sensevoice",
+            Engine::ScreenAi => "screenai",
         }
     }
 
@@ -179,14 +263,16 @@ impl Engine {
             "meikiocr" | "local" => Some(Engine::Meiki),
             "mangaocr" => Some(Engine::Manga),
             "ppocr" => Some(Engine::PpOcr),
+            "vocr" => Some(Engine::Vocr),
             "sensevoice" => Some(Engine::SenseVoice),
+            "screenai" => Some(Engine::ScreenAi),
             _ => None,
         }
     }
 
-    /// An `ocrMode` value naming an OCR engine.
+    /// An `ocrMode` value naming an OCR engine with a download.
     pub fn from_ocr_mode(mode: &str) -> Option<Self> {
-        Self::from_key(mode).filter(|e| Self::OCR.contains(e))
+        Self::from_key(mode).filter(|e| Self::OCR.contains(e) || *e == Engine::ScreenAi)
     }
 }
 
@@ -278,6 +364,8 @@ pub enum Source {
     Downloaded,
     Bundled,
     Development,
+    /// Another program's copy: Screen AI from a browser on this computer.
+    Browser,
 }
 
 impl Source {
@@ -286,6 +374,7 @@ impl Source {
             Source::Downloaded => "downloaded",
             Source::Bundled => "bundled",
             Source::Development => "development",
+            Source::Browser => "browser",
         }
     }
 }
@@ -298,7 +387,7 @@ pub struct ModelStatus {
     pub name: String,
     /// absent | downloading | paused | failed | verifying | ready
     pub state: &'static str,
-    /// Where ready models live: downloaded | bundled | development.
+    /// Where ready models live: downloaded | bundled | development | browser.
     pub source: Option<&'static str>,
     /// The file being downloaded or verified.
     pub file: Option<String>,
@@ -365,7 +454,7 @@ pub(crate) fn part_path(dir: &Path, name: &str) -> PathBuf {
 /// Whether every file is present in `dir`. Used for bundled and development models,
 /// which are trusted as staged (the prepare scripts verified them).
 pub fn complete(dir: &Path, files: &[ModelFile]) -> bool {
-    files.iter().all(|f| dir.join(&f.name).is_file())
+    files.iter().all(|f| f.present(dir))
 }
 
 /// The first complete directory: the ready store, then each fallback in order.
@@ -408,12 +497,51 @@ fn write_marker(dir: &Path, marker: &Marker) -> io::Result<()> {
 /// A final file that was verified against this manifest entry and still has its size.
 fn verified(dir: &Path, file: &ModelFile, marker: &Marker) -> bool {
     marker.files.get(&file.name) == Some(&file.sha256)
-        && fs::metadata(dir.join(&file.name)).is_ok_and(|m| m.is_file() && m.len() == file.size)
+        && if file.unpack {
+            file.present(dir)
+        } else {
+            fs::metadata(dir.join(&file.name)).is_ok_and(|m| m.is_file() && m.len() == file.size)
+        }
+}
+
+/// Unpack a verified zip into the directory it stands for, through a staging directory so the
+/// final one only ever holds a whole package, then delete the zip.
+fn unpack(dir: &Path, file: &ModelFile) -> Result<(), Stop> {
+    let failed = |e: String| Stop::Failed(format!("could not unpack {}: {e}", file.name));
+    let zip_path = dir.join(&file.name);
+    let target = file.installed(dir);
+    let staging = dir.join(format!(
+        ".staging-{}",
+        target.file_name().unwrap_or_default().to_string_lossy()
+    ));
+    remove_dir(&staging).map_err(|e| failed(e.to_string()))?;
+    let zip = fs::read(&zip_path).map_err(|e| failed(e.to_string()))?;
+    for entry in crate::extension_store::zip_entries(&zip).map_err(failed)? {
+        let path = staging.join(&entry.name);
+        if entry.directory {
+            fs::create_dir_all(&path).map_err(|e| failed(e.to_string()))?;
+            continue;
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| failed(e.to_string()))?;
+        }
+        let data = crate::extension_store::entry_data(&zip, &entry).map_err(failed)?;
+        fs::write(&path, data).map_err(|e| failed(e.to_string()))?;
+    }
+    drop(zip);
+    remove_dir(&target).map_err(|e| failed(e.to_string()))?;
+    fs::rename(&staging, &target).map_err(|e| failed(e.to_string()))?;
+    let _ = fs::remove_file(&zip_path);
+    Ok(())
 }
 
 /// The store's phase as found on disk at start-up: `ready` when every file is verified,
 /// `paused` when anything was downloaded, `absent` otherwise.
 pub fn scan_disk(dir: &Path, files: &[ModelFile]) -> Phase {
+    // Nothing to download here is never "ready" (`EngineModels::offered`).
+    if files.is_empty() {
+        return Phase::Absent;
+    }
     let marker = read_marker(dir);
     let (mut all, mut any, mut received) = (true, false, 0u64);
     for file in files {
@@ -770,6 +898,13 @@ impl ModelStore {
             if slot.phase == Phase::Ready {
                 return None;
             }
+            if !self.models(engine).offered() {
+                slot.phase = Phase::Failed {
+                    message: NOT_OFFERED.into(),
+                    overall_received: 0,
+                };
+                return None;
+            }
             let total = self.models(engine).total_size();
             let control = Arc::new(AtomicU8::new(RUN));
             slot.control = Some(control.clone());
@@ -883,6 +1018,9 @@ impl ModelStore {
                 let _ = write_marker(&dir, &marker);
             }
             let _ = fs::remove_file(dir.join(&file.name));
+            if file.unpack {
+                let _ = remove_dir(&file.installed(&dir));
+            }
             let mut progress = |event: Progress| {
                 let (phase, transition) = match event {
                     Progress::Bytes(received) => (
@@ -912,6 +1050,9 @@ impl ModelStore {
                 }
             };
             download_file(self.fetch.as_ref(), &dir, file, control, &mut progress)?;
+            if file.unpack {
+                unpack(&dir, file)?;
+            }
             marker.files.insert(file.name.clone(), file.sha256.clone());
             write_marker(&dir, &marker)
                 .map_err(|e| Stop::Failed(format!("could not record {}: {e}", file.name)))?;
@@ -1033,6 +1174,10 @@ impl ModelTicker {
 fn fallbacks(app: &tauri::AppHandle, engine: Engine) -> Vec<(Source, PathBuf)> {
     use tauri::Manager;
     let mut dirs = Vec::new();
+    // Nothing of Google's is bundled or staged; a browser's copy is `screen_ai`'s to find.
+    if engine == Engine::ScreenAi {
+        return dirs;
+    }
     if let Ok(resources) = app.path().resource_dir() {
         dirs.push((Source::Bundled, resources.join(engine.key()).join("models")));
     }
@@ -1103,6 +1248,9 @@ pub fn install(app: &tauri::AppHandle) -> Result<(), String> {
 /// The directory to load an engine's models from, or why it cannot scan yet.
 pub fn models_dir(app: &tauri::AppHandle, engine: Engine) -> Result<PathBuf, String> {
     let models = manifest().engine(engine);
+    if !models.offered() {
+        return Err(NOT_OFFERED.into());
+    }
     let store = store(app);
     let ready = store.as_ref().and_then(|s| s.ready_dir(engine));
     if let Some((dir, _)) = resolve(ready, &fallbacks(app, engine), &models.files) {
@@ -1132,6 +1280,9 @@ pub fn status(app: &tauri::AppHandle, engine: Engine) -> ModelStatus {
     let store = store(app);
     let phase = store.as_ref().map_or(Phase::Absent, |s| s.phase(engine));
     let fallback = match phase {
+        Phase::Absent if engine == Engine::ScreenAi => {
+            crate::screen_ai::browser_copy().map(|_| Source::Browser)
+        }
         Phase::Absent => resolve(None, &fallbacks(app, engine), &models.files).map(|(_, s)| s),
         _ => None,
     };
@@ -1151,6 +1302,13 @@ pub fn on_engine_selected(app: &tauri::AppHandle, mode: &str) {
         return;
     };
     if models_dir(app, engine).is_ok() {
+        return;
+    }
+    // Screen AI needs no download when a browser here already has it, nor where Google
+    // publishes no package.
+    if engine == Engine::ScreenAi
+        && (crate::screen_ai::browser_copy().is_some() || !manifest().engine(engine).offered())
+    {
         return;
     }
     if let Some(store) = store(app) {
@@ -1283,7 +1441,10 @@ pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<Model
                 crate::pp_ocr::delete_cache(app);
                 close_observer(app, "ppocr");
             }
+            Engine::Vocr => crate::vocr::unload(app),
             Engine::SenseVoice => crate::sentence_audio::unload_model(app),
+            // The worker reads the library and models from the package directory.
+            Engine::ScreenAi => crate::screen_ai::unload(),
         }
         store.delete(engine)
     })
@@ -1331,6 +1492,8 @@ mod tests {
             url: format!("https://models.test/{name}"),
             sha256: sha(content),
             size: content.len() as u64,
+            platforms: Vec::new(),
+            unpack: false,
         }
     }
 
@@ -1450,6 +1613,10 @@ mod tests {
         for path in [pp.detection, pp.recognition, pp.dictionary] {
             assert!(names(Engine::PpOcr).contains(&path.to_string_lossy().into_owned()));
         }
+        let vocr = kimochi_vocr::ModelPaths::from_dir("", crate::vocr::TIER, crate::vocr::MODE, true);
+        for path in [Some(vocr.spotter), Some(vocr.recognizer), vocr.lm].into_iter().flatten() {
+            assert!(names(Engine::Vocr).contains(&path.to_string_lossy().into_owned()));
+        }
         assert!(manifest.engine(Engine::Manga).total_size() > 500_000_000);
         for file in [kimochi_speech::sense_voice::MODEL_FILE, kimochi_speech::sense_voice::TOKENS_FILE] {
             assert!(names(Engine::SenseVoice).contains(&file.to_string()));
@@ -1463,7 +1630,7 @@ mod tests {
                 r#"{{"name":"{name}","repository":"r","revision":"v","url":"https://x/y","sha256":"{sha}","size":1}}"#
             );
             format!(
-                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}}}}}}"#
+                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"vocr":{{"name":"V","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}},"screenai":{{"name":"A","files":[{entry}]}}}}}}"#
             )
         };
         let good = "a".repeat(64);
@@ -1472,6 +1639,137 @@ mod tests {
         assert!(Manifest::parse(&with("dir\\\\model.onnx", &good)).is_err());
         assert!(Manifest::parse(&with("model.onnx", "abc")).is_err());
         assert!(Manifest::parse(r#"{"engines":{}}"#).is_err());
+    }
+
+    #[test]
+    fn screen_ai_offers_one_package_per_platform_and_none_where_google_publishes_none() {
+        let files = |platform| Manifest::parse_for(MANIFEST_JSON, platform).unwrap().engine(Engine::ScreenAi).files.clone();
+        for platform in ["mac-arm64", "mac-amd64", "windows-amd64", "linux-amd64"] {
+            let files = files(platform);
+            assert_eq!(files.len(), 1, "{platform}");
+            assert!(files[0].unpack && files[0].name.ends_with(".zip"), "{platform}");
+            assert!(files[0].url.starts_with("https://chrome-infra-packages.appspot.com/"), "{platform}");
+        }
+        // Windows on ARM runs the x64 package in the x64 worker (screen_ai.rs).
+        assert_eq!(files("windows-arm64"), files("windows-amd64"));
+        let manifest = Manifest::parse_for(MANIFEST_JSON, "linux-arm64").unwrap();
+        assert!(!manifest.engine(Engine::ScreenAi).offered());
+        // Every other engine is offered everywhere.
+        for engine in Engine::ALL.into_iter().filter(|e| *e != Engine::ScreenAi) {
+            assert!(manifest.engine(engine).offered());
+        }
+    }
+
+    #[test]
+    fn an_unpacked_file_must_be_a_zip() {
+        let entry = r#"{"name":"pkg.tar","repository":"r","revision":"v","url":"https://x/y","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":1,"unpack":true}"#;
+        let json = format!(
+            r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"vocr":{{"name":"V","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}},"screenai":{{"name":"A","files":[{entry}]}}}}}}"#
+        );
+        assert!(Manifest::parse(&json).unwrap_err().contains("not a .zip"));
+    }
+
+    /// A stored zip (no compression) holding `entries`, enough for `unpack`.
+    fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let (mut zip, mut central) = (Vec::new(), Vec::new());
+        for (name, data) in entries {
+            let offset = zip.len() as u32;
+            let crc = crc32fast::hash(data);
+            let header = |zip: &mut Vec<u8>, signature: u32| {
+                zip.extend_from_slice(&signature.to_le_bytes());
+                if signature == 0x0201_4b50 {
+                    zip.extend_from_slice(&20u16.to_le_bytes()); // made by
+                }
+                zip.extend_from_slice(&20u16.to_le_bytes()); // needed
+                zip.extend_from_slice(&0u16.to_le_bytes()); // flags
+                zip.extend_from_slice(&0u16.to_le_bytes()); // stored
+                zip.extend_from_slice(&[0; 4]); // time, date
+                zip.extend_from_slice(&crc.to_le_bytes());
+                zip.extend_from_slice(&(data.len() as u32).to_le_bytes());
+                zip.extend_from_slice(&(data.len() as u32).to_le_bytes());
+                zip.extend_from_slice(&(name.len() as u16).to_le_bytes());
+                zip.extend_from_slice(&0u16.to_le_bytes()); // extra
+            };
+            header(&mut zip, 0x0403_4b50);
+            zip.extend_from_slice(name.as_bytes());
+            zip.extend_from_slice(data);
+            header(&mut central, 0x0201_4b50);
+            central.extend_from_slice(&[0; 6]); // comment length, disk, internal attributes
+            central.extend_from_slice(&0u32.to_le_bytes()); // external attributes
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let start = zip.len() as u32;
+        zip.extend_from_slice(&central);
+        zip.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+        zip.extend_from_slice(&[0; 4]);
+        zip.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+        zip.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+        zip.extend_from_slice(&(central.len() as u32).to_le_bytes());
+        zip.extend_from_slice(&start.to_le_bytes());
+        zip.extend_from_slice(&0u16.to_le_bytes());
+        zip
+    }
+
+    #[test]
+    fn a_package_is_unpacked_after_verification_and_its_zip_removed() {
+        let zip = stored_zip(&[("resources/lib.so", b"library"), ("manifest.json", b"{}")]);
+        let package = ModelFile { unpack: true, ..file("pkg-1.zip", &zip) };
+        let mut server = FakeServer::default();
+        server.files.insert(package.url.clone(), zip.clone());
+        let root = TempDir::new("unpack");
+        let files = vec![package.clone()];
+        let mut manifest = test_manifest(&files, &files);
+        manifest.engines.insert("screenai".into(), EngineModels { name: "Screen AI".into(), files: files.clone() });
+        let store = ModelStore::new(root.0.clone(), manifest, Arc::new(server));
+        store.start(Engine::ScreenAi);
+        assert_eq!(wait_until(&store, Engine::ScreenAi, |p| *p == Phase::Ready), Phase::Ready);
+        let dir = store.dir(Engine::ScreenAi);
+        assert_eq!(fs::read(dir.join("pkg-1/resources/lib.so")).unwrap(), b"library");
+        assert!(!dir.join("pkg-1.zip").exists());
+        assert_eq!(store.ready_dir(Engine::ScreenAi), Some(dir.clone()));
+        // A restart finds it verified without the zip.
+        assert_eq!(scan_disk(&dir, &files), Phase::Ready);
+        // A package directory removed by hand is no longer ready.
+        fs::remove_dir_all(dir.join("pkg-1")).unwrap();
+        assert_eq!(scan_disk(&dir, &files), Phase::Absent);
+    }
+
+    /// Google's real package for this platform, served from a local copy (`SCREENAI_ZIP`), through
+    /// the pinned manifest entry: size, SHA-256, unpacking and the layout `screen_ai` looks for.
+    #[test]
+    #[ignore = "manual: needs SCREENAI_ZIP, Google's package for this platform"]
+    fn the_pinned_screen_ai_package_installs_where_screen_ai_finds_it() {
+        let package = manifest().engine(Engine::ScreenAi).files[0].clone();
+        let mut server = FakeServer::default();
+        server.files.insert(package.url.clone(), fs::read(std::env::var("SCREENAI_ZIP").unwrap()).unwrap());
+        let root = TempDir::new("screenai-real");
+        let mut manifest = test_manifest(&[], &[]);
+        manifest.engines.insert("screenai".into(), manifest_engine_screenai());
+        let store = ModelStore::new(root.0.clone(), manifest, Arc::new(server));
+        store.start(Engine::ScreenAi);
+        // The fake server's small chunks make 78 MB slow; wait longer than `wait_until` does.
+        let started = Instant::now();
+        while store.with_slot(Engine::ScreenAi, |s| s.control.is_some()) && started.elapsed() < Duration::from_secs(600) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert_eq!(store.phase(Engine::ScreenAi), Phase::Ready);
+        let found = kimochi_screenai::locate::package_in(&package.installed(&store.dir(Engine::ScreenAi)), std::env::consts::OS).unwrap();
+        assert!(found.dir.join(kimochi_screenai::locate::library_name(std::env::consts::OS)).is_file());
+    }
+
+    fn manifest_engine_screenai() -> EngineModels {
+        manifest().engine(Engine::ScreenAi).clone()
+    }
+
+    #[test]
+    fn an_engine_with_nothing_for_this_platform_fails_to_start_instead_of_claiming_ready() {
+        let root = TempDir::new("not-offered");
+        let mut manifest = test_manifest(&[], &[]);
+        manifest.engines.insert("screenai".into(), EngineModels { name: "Screen AI".into(), files: vec![] });
+        let store = ModelStore::new(root.0.clone(), manifest, Arc::new(FakeServer::default()));
+        store.start(Engine::ScreenAi);
+        assert!(matches!(store.phase(Engine::ScreenAi), Phase::Failed { ref message, .. } if message == NOT_OFFERED));
     }
 
     #[test]

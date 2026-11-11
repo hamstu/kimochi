@@ -114,3 +114,21 @@ export function acceleratorLabel(accelerator: OcrEngineCapability['accelerator']
       return null
   }
 }
+
+/**
+ * Where the Screen AI copy in use came from, as the detail panel says it (its capability's
+ * `source`): "Google Chrome’s copy", "Kimochi’s download", "the copy in ~/.config/screen_ai".
+ */
+export function screenAiSource(source: string | undefined): string | null {
+  switch (source) {
+    case undefined:
+    case '':
+      return null
+    case 'downloaded':
+      return 'Kimochi’s download'
+    case 'shared':
+      return 'the copy in ~/.config/screen_ai'
+    default:
+      return `${source}’s copy`
+  }
+}
