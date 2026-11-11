@@ -24,6 +24,9 @@ enum Parser {
     Lua,
 }
 
+/// Hyprland's modifiers with their mask bits, in the order Kimochi spells them.
+const MODS: [(&str, u32); 4] = [("SUPER", 64), ("CTRL", 4), ("ALT", 8), ("SHIFT", 1)];
+
 #[derive(Clone, Debug, PartialEq)]
 struct Combo {
     mods: Vec<&'static str>,
@@ -49,6 +52,8 @@ impl Combo {
                 mods.push(modifier);
             }
         }
+        // One spelling per combination: Lua's `hl.unbind` only finds a bind spelled as it was added.
+        mods.sort_by_key(|m| MODS.iter().position(|(name, _)| name == m));
         let key = match key {
             "Space" => "space",
             "Enter" | "Return" => "Return",
@@ -61,8 +66,13 @@ impl Combo {
         // Spelled into a command (and Lua): keysym names only.
         key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_').then(|| Combo { mods, key: key.to_owned() })
     }
+    /// The combination a bind in `j/binds` stands for, spelled as Kimochi spells it.
+    fn of(bind: &Bind) -> Combo {
+        let mods = MODS.iter().filter(|(_, bit)| bind.modmask & bit != 0).map(|(name, _)| *name).collect();
+        Combo { mods, key: bind.key.clone() }
+    }
     fn modmask(&self) -> u32 {
-        self.mods.iter().map(|m| match *m { "SHIFT" => 1, "CTRL" => 4, "ALT" => 8, _ => 64 }).sum()
+        MODS.iter().filter(|(name, _)| self.mods.contains(name)).map(|(_, bit)| bit).sum()
     }
     fn matches(&self, bind: &Bind) -> bool {
         bind.submap.is_empty() && bind.modmask == self.modmask() && bind.key.eq_ignore_ascii_case(&self.key)
@@ -183,9 +193,7 @@ fn apply(shortcuts: &[Shortcut]) -> Vec<(String, String)> {
     };
     // A crashed run's binds still dispatch to this app; take them back rather than call them taken.
     for bind in existing.iter().filter(|b| b.description.starts_with(MARK)) {
-        let mods = ["SHIFT", "CTRL", "ALT", "SUPER"].into_iter()
-            .filter(|m| bind.modmask & match *m { "SHIFT" => 1, "CTRL" => 4, "ALT" => 8, _ => 64 } != 0).collect();
-        remove(&Combo { mods, key: bind.key.clone() });
+        remove(&Combo::of(bind));
     }
     let globals: Vec<Global> = super::hyprland::request(b"j/globalshortcuts")
         .and_then(|data| serde_json::from_slice(&data).ok())
@@ -283,6 +291,17 @@ mod tests {
         assert!(Combo::parse("Alt+,").is_none());
         assert!(Combo::parse("Hyper+Z").is_none());
         assert!(Combo::parse("").is_none());
+    }
+
+    #[test]
+    fn a_leftover_bind_is_spelled_as_it_was_added() {
+        // Lua's `hl.unbind("SHIFT + CTRL + 8")` leaves a bind added as `CTRL + SHIFT + 8`.
+        for accelerator in ["Shift+Control+8", "Control+Shift+8", "Shift+Alt+Super+Z"] {
+            let added = Combo::parse(accelerator).unwrap();
+            let bind: Bind = serde_json::from_value(serde_json::json!({"modmask":added.modmask(),"key":added.key})).unwrap();
+            assert_eq!(Combo::of(&bind).lua(), added.lua(), "{accelerator}");
+        }
+        assert_eq!(Combo::parse("Shift+Control+8").unwrap().lua(), "CTRL + SHIFT + 8");
     }
 
     #[test]
