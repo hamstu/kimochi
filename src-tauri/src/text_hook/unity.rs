@@ -277,6 +277,7 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
                     glyphs: 0,
                     recent: Default::default(),
                     last_at: None,
+                    japanese: false,
                 });
                 hook.publish(&session);
             }

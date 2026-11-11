@@ -246,9 +246,11 @@ const HOOK_THREADS = [
   { key: '1:1:503a:0', name: 'KiriKiri', hookcode: 'HS-8@1A2B3:Game.exe',
     // Embedded in the site's demo, the game's own first line.
     preview: EMBED ? (DEMO_CONTENT.lines.find((l) => l.play)?.text ?? '') : '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。',
-    count: 12, generic: false, selected: true },
-  { key: '1:2:4f2b:0', name: 'DrawTextW', hookcode: 'HQ-24@0:user32.dll:DrawTextW', preview: 'ミサキ', count: 12, generic: true, selected: false },
-  { key: '1:3:5164:0', name: 'DrawTextExW', hookcode: 'HQ-24@0:user32.dll:DrawTextExW', preview: 'オート　スキップ　セーブ', count: 3, generic: true, selected: false }
+    count: 12, japanese: true, generic: false, selected: true },
+  { key: '1:2:4f2b:0', name: 'DrawTextW', hookcode: 'HQ-24@0:user32.dll:DrawTextW', preview: 'ミサキ', count: 12, japanese: true, generic: true, selected: false },
+  { key: '1:3:5164:0', name: 'DrawTextExW', hookcode: 'HQ-24@0:user32.dll:DrawTextExW', preview: 'オート　スキップ　セーブ', count: 3, japanese: true, generic: true, selected: false },
+  // Engine noise: listed only under "Show all".
+  { key: '1:4:61a0:0', name: 'GetGlyphOutlineW', hookcode: 'HQ-24@0:gdi32.dll:GetGlyphOutlineW', preview: 'data/scenario/ch01.ks', count: 40, japanese: false, generic: true, selected: false }
 ]
 /** The hooked game of `?input=hook` (Settings → Text Hooker's first game). */
 const PRESET_EXE = 'C:/Games/Moonlit Harbor/Game.exe'
