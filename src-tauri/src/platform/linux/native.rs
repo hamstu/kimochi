@@ -121,7 +121,36 @@ fn drawable(inventory: &Inventory, window: &NativeWindow) -> bool {
     let foreground = inventory
         .focused()
         .is_none_or(|f| f.handle == window.handle || f.pid == Some(own) || (f.pid.is_some() && f.pid == window.pid));
-    foreground && !window.minimized && window.on_screen != Some(false)
+    foreground
+        && !window.minimized
+        && window.on_screen != Some(false)
+        && !(driver() == Some("kwin") && !crate::compact::active() && covered_by_own_window(inventory, window))
+}
+
+/// Whether the reader is using one of Kimochi's ordinary windows (the main window, the dictionary)
+/// that is in front of the game and over part of it. Kimochi focused counts as the game in front,
+/// so its windows can sit beside the game; but the overlay's text must not be drawn over one that
+/// covers it (as `kwin.rs` does for portal streams). Only where the inventory is front to back
+/// (KWin's stacking order), and never in Mini mode, whose small window sits over the game on purpose.
+fn covered_by_own_window(inventory: &Inventory, game: &NativeWindow) -> bool {
+    let own = std::process::id();
+    let Some(game_bounds) = game.bounds else { return false };
+    let overlaps = |a: &Rect, b: &Rect| a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    inventory
+        .windows
+        .iter()
+        // Front to back: only the windows in front of the game.
+        .take_while(|w| w.handle != game.handle)
+        .any(|w| {
+            w.pid == Some(own)
+                && w.focused
+                // The overlay and pop-ups skip the taskbar: auxiliary.
+                && !w.auxiliary
+                && !w.minimized
+                && w.on_screen != Some(false)
+                && w.output == game.output
+                && w.bounds.is_some_and(|b| overlaps(&b, &game_bounds))
+        })
 }
 
 /// A native window source's bounds (where the overlay draws) and whether it is drawable now.
@@ -219,6 +248,25 @@ mod tests {
         let mut away = game;
         away.on_screen = Some(false);
         assert!(!drawable(&inv, &away));
+    }
+
+    #[test]
+    fn kimochis_own_window_in_front_of_the_game_covers_it() {
+        let game = window("1", 10, false);
+        let mut own = window("2", std::process::id(), true);
+        own.bounds = Some(Rect { x: 2400.0, y: 300.0, width: 900.0, height: 700.0 });
+        let inv = Inventory { windows: vec![own.clone(), game.clone()], outputs: vec![] };
+        assert!(covered_by_own_window(&inv, &game), "in front and over it");
+        let behind = Inventory { windows: vec![game.clone(), own.clone()], outputs: vec![] };
+        assert!(!covered_by_own_window(&behind, &game), "behind the game");
+        let mut beside = own.clone();
+        beside.bounds = Some(Rect { x: 0.0, y: 0.0, width: 900.0, height: 700.0 });
+        let inv = Inventory { windows: vec![beside, game.clone()], outputs: vec![] };
+        assert!(!covered_by_own_window(&inv, &game), "beside the game");
+        let mut overlay = own;
+        overlay.auxiliary = true;
+        let inv = Inventory { windows: vec![overlay, game.clone()], outputs: vec![] };
+        assert!(!covered_by_own_window(&inv, &game), "the overlay itself");
     }
 
     #[test]

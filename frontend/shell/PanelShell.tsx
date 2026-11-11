@@ -14,7 +14,7 @@
  *  - with verbose logging on, pointer diagnostics go to the log (`ui/pointer-diagnostics.js`).
  */
 import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from 'react'
-import { Minus, Pin, PinOff, Volume2, VolumeX, X } from 'lucide-react'
+import { Copy, Minus, Pin, PinOff, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { nativeError, panel, panelContentHeight, onEvent, quitApp } from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
 import { useGamingControls } from './useGamingControls'
@@ -45,6 +45,11 @@ export default function PanelShell({
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(false)
+  // Whether the window can be maximized (a resizable window, not the main window in Mini mode)
+  // and is: the maximize button shows only then, and its icon follows.
+  const [resizable, setResizable] = useState(false)
+  const [maximized, setMaximized] = useState(false)
+  const [compact, setCompact] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [soundEffects, setSoundEffects] = useSetting<boolean>('soundEffects', true)
   const soundOn = soundEffects !== false
@@ -77,14 +82,21 @@ export default function PanelShell({
     let active = true
     panel(label, 'inspect')
       .then((info) => {
-        if (active) setPinned(Boolean(info?.pinned))
+        if (!active) return
+        setPinned(Boolean(info?.pinned))
+        setResizable(Boolean(info?.resizable))
+        setMaximized(Boolean(info?.maximized))
+        setCompact(Boolean(info?.mini))
       })
       .catch(() => {
         /* The window may not be registered yet; the panel:state event corrects this. */
       })
     let unlisten: (() => void) | undefined
     onEvent<PanelStateEvent>('panel:state', (payload) => {
-      if (payload?.label === label) setPinned(Boolean(payload.pinned))
+      if (payload?.label !== label) return
+      setPinned(Boolean(payload.pinned))
+      if (payload.maximized !== undefined && payload.maximized !== null) setMaximized(Boolean(payload.maximized))
+      if (payload.mini !== undefined && payload.mini !== null) setCompact(Boolean(payload.mini))
     })
       .then((stop) => {
         if (active) unlisten = stop
@@ -96,6 +108,26 @@ export default function PanelShell({
       unlisten?.()
     }
   }, [label])
+
+  // Maximized or restored some other way (the desktop's own shortcut, a snap to the edge): the
+  // button follows, read again once a resize settles.
+  useEffect(() => {
+    if (!resizable) return
+    let timer = 0
+    const onResize = (): void => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        panel(label, 'inspect')
+          .then((info) => setMaximized(Boolean(info?.maximized)))
+          .catch(() => undefined)
+      }, 300)
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [label, resizable])
 
   // Fixed-size panels only: report rendered height so the native window hugs its menu rows.
   useEffect(() => {
@@ -115,14 +147,16 @@ export default function PanelShell({
     return () => observer.disconnect()
   }, [mini, label])
 
+  const canMaximize = !gaming && !mini && !compact && resizable
   const headerRef = useRef<HTMLElement>(null)
   const run = useCallback(
-    (action: 'pin' | 'unpin' | 'minimize' | 'hide' | 'drag') => {
+    (action: 'pin' | 'unpin' | 'minimize' | 'maximize' | 'hide' | 'drag') => {
       // The icon flips on the click; the reply confirms it (or reverts it on failure below).
       if (action === 'pin' || action === 'unpin') setPinned(action === 'pin')
       panel(label, action)
         .then((info) => {
           if (action === 'pin' || action === 'unpin') setPinned(Boolean(info?.pinned))
+          if (action === 'maximize') setMaximized(Boolean(info?.maximized))
           setError(null)
         })
         .catch((caught) => {
@@ -146,9 +180,20 @@ export default function PanelShell({
         return
       run('drag')
     }
+    // A double click on the title bar maximizes or restores, as on every desktop.
+    const onDoubleClick = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement
+      if (!canMaximize || target.closest('button, [role="button"], [role="radio"], a, input, select, textarea'))
+        return
+      run('maximize')
+    }
     header.addEventListener('mousedown', onMouseDown)
-    return () => header.removeEventListener('mousedown', onMouseDown)
-  }, [run])
+    header.addEventListener('dblclick', onDoubleClick)
+    return () => {
+      header.removeEventListener('mousedown', onMouseDown)
+      header.removeEventListener('dblclick', onDoubleClick)
+    }
+  }, [run, canMaximize])
 
   return (
     <div ref={panelRef} className={`native-panel native-panel-${label}`}>
@@ -184,6 +229,16 @@ export default function PanelShell({
           {!gaming && (
             <button aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}>
               <Minus />
+            </button>
+          )}
+          {canMaximize && (
+            <button
+              aria-label={maximized ? 'Restore window size' : 'Maximize window'}
+              title={maximized ? 'Restore' : 'Maximize'}
+              className="native-maximize"
+              onClick={() => run('maximize')}
+            >
+              {maximized ? <Copy /> : <Square />}
             </button>
           )}
           {/* The main window is the app: closing it quits. Every other window just hides. */}

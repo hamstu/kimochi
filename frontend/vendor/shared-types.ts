@@ -196,6 +196,8 @@ export type GamepadDevice = {
 export type GamepadSettings = {
   enabled: boolean
   preferredGamepadIndex?: number // Index of preferred gamepad
+  /** Held, it stands in for the lookup key (`gamepad::lookup_held`); a Steam Deck's L4 by default. */
+  lookupButton?: number | null
 }
 
 // Gamepad state for UI updates

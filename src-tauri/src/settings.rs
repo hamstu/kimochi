@@ -22,7 +22,12 @@ pub fn defaults() -> Value {
         "scannedTextHistory": [],
         "audioSettings": { "voiceId": "j210dv0vWm7fCknyQpbA" },
         "autoScanSettings": { "enabled": false, "scanDelay": 500 },
-        "gamepadSettings": { "enabled": true },
+        // `lookupButton`: held, it stands in for the lookup key (`gamepad::lookup_held`). On a
+        // Steam Deck the upper left back grip (L4), beside the controller menu's R4; elsewhere none.
+        "gamepadSettings": {
+            "enabled": true,
+            "lookupButton": if crate::steam_library::is_steam_deck() { json!(DECK_LOOKUP_BUTTON) } else { Value::Null },
+        },
         // Standard button indices for the buttons of the overlay's controller menu and word
         // mode: A, B, Y, X, LB, RB, View. `null` unbinds one.
         "controllerButtons": {
@@ -141,6 +146,7 @@ impl Settings {
             match serde_json::from_slice::<Value>(&bytes) {
                 Ok(stored) => {
                     let engine_recorded = stored.get("ocrMode").is_some();
+                    let lookup_recorded = stored.pointer("/gamepadSettings/lookupButton").is_some();
                     // The Yomitan API's tags became card enhancement's, for every dictionary.
                     let card_tags = match stored.get(crate::card_tags::KEY) {
                         Some(_) => None,
@@ -154,6 +160,14 @@ impl Settings {
                     // that never recorded an engine was using Cloud OCR, and keeps it.
                     if !engine_recorded {
                         doc["ocrMode"] = json!("cloud");
+                    }
+                    // The Deck's default lookup grip is one no shortcut uses already (a reader
+                    // may have put the controller menu on L4).
+                    if !lookup_recorded {
+                        if let Some(preferred) = doc.pointer("/gamepadSettings/lookupButton").and_then(Value::as_u64) {
+                            let free = free_lookup_button(preferred as usize, &hotkeys_over(doc.get("hotkeys")));
+                            doc["gamepadSettings"]["lookupButton"] = json!(free);
+                        }
                     }
                 }
                 // A corrupt file must not wipe the user's settings silently, and must
@@ -463,6 +477,20 @@ pub fn default_hotkeys() -> Map<String, Value> {
 
 /// R4: the Deck's buttons after the 17 standard ones (platform/linux/deck_input.rs).
 pub const DECK_MENU_BUTTON: usize = 18;
+/// L4, the upper left back grip: the Deck's default lookup button (`gamepadSettings.lookupButton`).
+pub const DECK_LOOKUP_BUTTON: usize = 17;
+
+/// The lookup button to default to: `preferred` unless a shortcut's controller chord uses it, else
+/// the first back grip none uses (L4, R4, L5, R5), else none. A button both held for lookups and
+/// pressed for a shortcut would do both.
+pub fn free_lookup_button(preferred: usize, hotkeys: &Map<String, Value>) -> Option<usize> {
+    let used: Vec<usize> = hotkeys
+        .values()
+        .filter(|definition| definition.get("enabled") != Some(&Value::Bool(false)))
+        .flat_map(gamepad_chord)
+        .collect();
+    std::iter::once(preferred).chain(17..=20).find(|button| !used.contains(button))
+}
 
 /// The default keys: Shift+F8 and Shift+F9 on Windows and Linux, where a Ctrl chord's Ctrl
 /// reaches the game first and most visual novels skip text while it is held (#16); ⌘⇧8 and
@@ -531,12 +559,12 @@ pub fn gamepad_chord(definition: &Value) -> Vec<usize> {
 /// `gamepadButtons` wins (an empty array or `null` clears the default); failing that a
 /// legacy `gamepadButton` is carried over as a chord of one.
 pub fn merged_hotkeys(settings: &Settings) -> Map<String, Value> {
-    let overrides = settings
-        .get("hotkeys")
-        .ok()
-        .flatten()
-        .and_then(|v| v.as_object().cloned())
-        .unwrap_or_default();
+    hotkeys_over(settings.get("hotkeys").ok().flatten().as_ref())
+}
+
+/// The default hotkeys with stored `hotkeys` overrides applied (`merged_hotkeys`).
+fn hotkeys_over(stored: Option<&Value>) -> Map<String, Value> {
+    let overrides = stored.and_then(|v| v.as_object().cloned()).unwrap_or_default();
     let mut merged = default_hotkeys();
     for (name, entry) in merged.iter_mut() {
         let Some(over) = overrides.get(name).and_then(Value::as_object) else {
@@ -747,6 +775,21 @@ mod tests {
         assert_eq!(default_hotkeys_for(false)["openControllerMenu"]["gamepadButtons"], json!([10, 11]));
         assert_eq!(default_hotkeys_for(true)["openControllerMenu"]["gamepadButtons"], json!([DECK_MENU_BUTTON]));
         assert_eq!(default_hotkeys_for(true)["triggerScan"]["gamepadButtons"], json!([]));
+    }
+
+    #[test]
+    fn the_default_lookup_grip_is_one_no_shortcut_uses() {
+        let mut hotkeys = default_hotkeys_for(true);
+        assert_eq!(free_lookup_button(DECK_LOOKUP_BUTTON, &hotkeys), Some(DECK_LOOKUP_BUTTON));
+        // The controller menu moved to L4: the lookup grip is R4, which the menu no longer uses.
+        hotkeys["openControllerMenu"]["gamepadButtons"] = json!([DECK_LOOKUP_BUTTON]);
+        assert_eq!(free_lookup_button(DECK_LOOKUP_BUTTON, &hotkeys), Some(DECK_MENU_BUTTON));
+        // A switched-off shortcut does not count.
+        hotkeys["openControllerMenu"]["enabled"] = json!(false);
+        assert_eq!(free_lookup_button(DECK_LOOKUP_BUTTON, &hotkeys), Some(DECK_LOOKUP_BUTTON));
+        hotkeys["openControllerMenu"]["enabled"] = json!(true);
+        hotkeys["triggerScan"]["gamepadButtons"] = json!([18, 19, 20]);
+        assert_eq!(free_lookup_button(DECK_LOOKUP_BUTTON, &hotkeys), None);
     }
 
     #[test]

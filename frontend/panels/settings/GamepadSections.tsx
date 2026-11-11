@@ -5,9 +5,11 @@
  */
 import type { ReactNode } from 'react'
 import { Badge, Button, Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
-import type { AutoScanSettings } from '../../vendor/shared-types'
+import type { AutoScanSettings, GamepadSettings } from '../../vendor/shared-types'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 import { useSetting } from '../../bridge/useSetting'
+import { useHotkeys } from '../../bridge/useHotkeys'
+import { gamepadChord } from '../../vendor/shared-defaults'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import {
   DEFAULT_CONTROLLER_BUTTONS,
@@ -81,6 +83,45 @@ const ROW_LABELS = Object.fromEntries(
 /** The other actions bound to the same button as `key`, by label. */
 function sharedWith(buttons: ControllerButtons, key: keyof ControllerButtons): string[] {
   return sharedButtonActions(buttons, key).map((other) => ROW_LABELS[other])
+}
+
+/** `overlayLookupKey` by name, for saying which key the lookup button stands in for. */
+const LOOKUP_KEY_NAMES: Record<string, string> = { shift: 'Shift', ctrl: 'Ctrl', alt: 'Alt', meta: 'Command' }
+
+/**
+ * `gamepadSettings.lookupButton`: held, it stands in for the lookup key (native reads it with the
+ * pointer, `gamepad::lookup_held`), so a reader with only a controller looks words up by holding it
+ * and moving the pointer. A Steam Deck's L4 by default, read from the Deck itself whatever Steam's
+ * layout makes of it.
+ */
+function LookupButtonRow({ disabled }: { disabled: boolean }): ReactNode {
+  const [settings, setSettings] = useSetting<GamepadSettings>('gamepadSettings', { enabled: true })
+  const [key] = useSetting<string>('overlayLookupKey', 'shift')
+  const [hotkeys] = useHotkeys()
+  const name = LOOKUP_KEY_NAMES[key] ?? 'Shift'
+  const button = settings.lookupButton ?? undefined
+  // A shortcut whose controller chord uses the button fires as well when it is pressed to look up.
+  const shared =
+    button === undefined
+      ? []
+      : Object.values(hotkeys)
+          .filter((hotkey) => hotkey.enabled !== false && gamepadChord(hotkey).includes(button))
+          .map((hotkey) => hotkey.name)
+  return (
+    <SettingsRow
+      label="Lookup button"
+      disabled={disabled}
+      badge={shared.length > 0 ? <Badge tone="warn">Same as {shared.join(', ')}</Badge> : undefined}
+      description={`Hold it and move the pointer over text to look words up, as if you held ${name}.`}
+    >
+      <GamepadButtonCapture
+        value={settings.lookupButton ?? undefined}
+        onChange={(button) => void setSettings({ ...settings, lookupButton: button ?? null })}
+        disabled={disabled}
+        size="1"
+      />
+    </SettingsRow>
+  )
 }
 
 const SCAN_DELAYS = [
@@ -221,6 +262,7 @@ export function GamepadSections(): ReactNode {
             <Callout tone="warn">No gamepad has been detected.</Callout>
           </div>
         )}
+        <LookupButtonRow disabled={!enabled} />
       </SettingsSection>
 
       {/* Shown with gamepad support off too (the buttons disabled), so the bindings stay visible. */}

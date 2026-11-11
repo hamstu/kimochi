@@ -13,6 +13,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - ⭐ **Linux: pick windows like on Windows and macOS.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows and screens itself, with live previews, instead of opening your desktop's screen-share dialog. No more "click the window you shared" or **Relink window overlay…**: Kimochi knows exactly which window you chose, so the overlay follows it as you move, resize or full-screen it, hides while it's minimised or on another workspace, and **Bring to front** works everywhere. (GNOME needs the GNOME overlay extension, which the welcome guide sets up; other desktops keep the screen-share dialog.)
 - **New OCR engine: Screen AI.** The on-device OCR Google Chrome uses for scanned PDFs, now in Settings → OCR & Overlay on macOS, Windows and Linux. It's fast and very accurate on game text, horizontal or vertical, and nothing you scan leaves your computer. If Chrome already has it, Kimochi uses Chrome's copy; otherwise Kimochi downloads it from Google once (about 80 MB) when you choose it.
 - **GNOME 47 to 51 are supported.** The GNOME overlay extension, and with it Kimochi's own window list, the on-screen overlay, dictionary pop-ups and region selection, now works on GNOME 47, 48, 49, 50 and 51 as well as 46 (Ubuntu 24.10 and later, Fedora 41 and later). An installed extension updates itself when Kimochi starts, unless you turned it off in GNOME's Extensions app.
+- **Steam Deck in Desktop Mode: look words up with a button.** Hold the L4 back grip (or R4, if your controller menu is on L4) and move the pointer over the text with the trackpad to look words up, as if you held Shift. You can pick another button in Settings → Shortcuts & Controls → Lookup button, and it works with any controller.
+- A **maximize** button in the title bar of Kimochi's windows (or double-click the title bar).
 
 ### Changed
 
@@ -30,6 +32,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Hyprland (Omarchy):** the Scan and Controller menu shortcuts now work without editing your Hyprland config. Kimochi binds them, and Shift for the dictionary, while it runs, and leaves keys your config already uses alone.
 - **Hyprland (Omarchy):** hovering a word on the overlay looks it up again. Once Kimochi has seen Shift, the overlay lets your clicks through to the game until you hold Shift, as on Windows and macOS.
 - **Hyprland (Omarchy):** a game tiled beside Kimochi at the same size no longer asks you to link its window.
+- **Linux:** Changing the crop area brings the game to the front first, so you draw the area over the game, not over Kimochi's window.
+- **Linux:** Clicking the source preview brings the game to the front even before anything has been read from it, and on X11 it brings that window forward rather than another window of the same game.
+- **Steam Deck in Desktop Mode:** The controller menu button (R4) and other controller shortcuts work there too, whichever window has focus.
 
 ## [0.8.1] - 2026-11-10
 

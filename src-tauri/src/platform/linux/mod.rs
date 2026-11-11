@@ -146,8 +146,9 @@ fn wayland_cursor() -> Option<PointerSample> {
     wayland_pointer_feed()?;
     let (modifiers, down) = shift::read()?;
     let mut last = LAST.lock().ok()?;
-    // Any modifier: the lookup key (`overlayLookupKey`) may be Ctrl, Alt or Meta.
-    let held = modifiers.shift || modifiers.ctrl || modifiers.alt || modifiers.meta;
+    // Any modifier: the lookup key (`overlayLookupKey`) may be Ctrl, Alt or Meta. A controller's
+    // lookup button stands in for it (`gamepad::lookup_held`).
+    let held = modifiers.shift || modifiers.ctrl || modifiers.alt || modifiers.meta || crate::gamepad::lookup_held();
     let wanted = held || down || POINTER_DEMAND.load(std::sync::atomic::Ordering::Relaxed);
     let stale = last.is_none_or(|(_, _, at)| at.elapsed() >= POINTER_EVERY);
     if wanted && stale {

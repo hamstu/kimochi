@@ -224,6 +224,8 @@ export const selectedSource = () => optional('selected_source', undefined, null)
  * replace anything a scan or the auto loop holds, and it refuses with `busy:`
  * while one is capturing.
  */
+/** Bring a window source to the front (`activate_source`). */
+export const activateSource = (sourceId) => invoke('activate_source', { sourceId })
 export const sourceHoverPreview = (sourceId) =>
   optional('source_hover_preview', { sourceId }, null)
 export const placeOverlay = (rect) => invoke('place_overlay', { rect })

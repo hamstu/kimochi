@@ -2626,6 +2626,7 @@ async function editSourceRegion(target = 'ocr') {
     // (never pattern-matched on a platform name) only when the view has not caught up.
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
+    await bringSourceForward(sourceId, kind)
     const desktopCrop = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled && await gnomeCropAvailable(sourceId)
     const saved = desktopCrop ? await editGnomeRegion(sourceId, { region })
       : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
@@ -2665,6 +2666,28 @@ async function editSourceRegion(target = 'ocr') {
     // Auto OCR starts afresh here, on the new region.
     state.regionCommitting = false
     syncAutoScanner()
+  }
+}
+
+/**
+ * The region editor is drawn over the game, so on a Linux desktop the game comes to the front
+ * first: opened from Kimochi's own window, which stays in front of the game otherwise, the editor
+ * framed Kimochi instead of the game. Where the window can be brought forward at all
+ * (`sources.activateWindow`: X11, KWin's bridge, GNOME's Shell integration); Gaming Mode has its own
+ * editor. A failure leaves the editor where it was before.
+ */
+async function bringSourceForward(sourceId, kind) {
+  if (kind !== 'window' || window.__KIMOCHI_PLATFORM__?.os !== 'linux' || nativeGamescope) return
+  const caps = await native.capabilities().catch(() => null)
+  if (!caps?.sources?.activateWindow) return
+  try {
+    await native.activateSource(sourceId)
+    // The compositor restacks and the source's bounds follow a moment later (a minimized window
+    // comes back where it was).
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    log({ check: 'region-edit-activated', sourceId })
+  } catch (error) {
+    log({ check: 'region-edit-activate-failed', error: String(error?.message ?? error) })
   }
 }
 

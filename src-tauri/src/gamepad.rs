@@ -56,7 +56,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
     let service = service.clone();
     std::thread::spawn(move || {
         #[cfg(target_os = "linux")]
-        let mut deck = crate::platform::deck_input::Reader::new();
+        let mut deck = crate::platform::deck_input::Reader::with_desktop();
         #[cfg(target_os = "linux")]
         let mut previous_system_menu = false;
         let mut previous: Vec<bool> = vec![false; STANDARD.len()];
@@ -88,6 +88,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             }
             if !service.settings.get_or("gamepadSettings.enabled", true) {
                 BUTTONS_HELD.store(false, Ordering::SeqCst);
+                LOOKUP_HELD.store(false, Ordering::SeqCst);
                 hand_back_when_released(&app);
                 continue;
             }
@@ -142,17 +143,29 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 ),
                 None => (vec![false; STANDARD.len()], vec![0.0; 4]),
             };
+            // The Deck's own buttons, active or not: the lookup button is read there too.
+            #[allow(unused_mut)]
+            let mut physical: Option<Vec<bool>> = None;
             #[cfg(target_os = "linux")]
             let (devices, active, buttons, axes) = {
                 let sample = deck.poll();
                 let mut devices = devices;
                 if let Some(sample) = sample {
+                    physical = Some(sample.buttons.clone());
                     let index = devices.len();
                     // The standard 17, then the back grips and trackpad clicks (deck_input.rs).
                     devices.push(json!({"index": index, "id": "Steam Deck physical controller",
                         "connected": true, "mapping": "standard", "buttons": sample.buttons.len(),
                         "axes": 4, "timestamp": 0, "source": "steam-deck-hidraw"}));
-                    if preferred.is_none() || preferred == Some(index) {
+                    if !crate::platform::gamescope::active() {
+                        // Desktop Mode: Steam's layout already turns the standard buttons into
+                        // keys and the mouse for a desktop window, or into its virtual pad (read
+                        // above) for a game, so reading them here too would act on presses twice.
+                        // Only what the pad lacks is added after them: the back grips and the
+                        // trackpad clicks, which Steam's layouts leave unbound.
+                        let buttons = with_deck_extras(buttons, &sample.buttons);
+                        (devices, active, buttons, axes)
+                    } else if preferred.is_none() || preferred == Some(index) {
                         (devices, Some(index), sample.buttons, sample.axes)
                     } else { (devices, active, buttons, axes) }
                 } else { (devices, active, buttons, axes) }
@@ -167,6 +180,11 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 previous_system_menu = system_menu;
             }
             BUTTONS_HELD.store(buttons.contains(&true), Ordering::SeqCst);
+            let lookup: Option<usize> = service.settings.get_or("gamepadSettings.lookupButton", None);
+            LOOKUP_HELD.store(
+                !navigating() && lookup_button_held(lookup, &buttons, physical.as_deref()),
+                Ordering::SeqCst,
+            );
             hand_back_when_released(&app);
             // `overlayNavigation`: the overlay's controller menu or reading has the controller, so
             // a focused panel must not act on the same presses (ui/panel-controller.js). Opening
@@ -421,6 +439,33 @@ static NAV_RETURN: Mutex<Option<u32>> = Mutex::new(None);
 
 /// Whether any button on the active controller was down at the last poll.
 static BUTTONS_HELD: AtomicBool = AtomicBool::new(false);
+
+/// Whether the lookup button (`gamepadSettings.lookupButton`) is held: the pointer poll then
+/// reads it as the lookup key held (`overlayLookupKey`, Shift by default), so a reader with only a
+/// controller (a Steam Deck's trackpad and buttons) looks words up by holding it and moving the
+/// pointer. Never while the controller menu has the controller.
+static LOOKUP_HELD: AtomicBool = AtomicBool::new(false);
+
+pub fn lookup_held() -> bool {
+    LOOKUP_HELD.load(Ordering::Relaxed)
+}
+
+/// The active controller's standard buttons, then the Deck's own buttons after them (the back
+/// grips and trackpad clicks, `deck_input.rs`), so they can be bound in Desktop Mode too.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn with_deck_extras(mut buttons: Vec<bool>, deck: &[bool]) -> Vec<bool> {
+    buttons.resize(STANDARD.len(), false);
+    buttons.extend(deck.iter().skip(STANDARD.len()));
+    buttons
+}
+
+/// The lookup button is down on the active controller or, on a Steam Deck, on the Deck's own
+/// controller (the back grips are only there).
+fn lookup_button_held(button: Option<usize>, active: &[bool], physical: Option<&[bool]>) -> bool {
+    let Some(button) = button else { return false };
+    let down = |states: &[bool]| states.get(button).copied().unwrap_or(false);
+    down(active) || physical.is_some_and(down)
+}
 #[cfg(target_os = "windows")]
 pub fn buttons_held() -> bool { BUTTONS_HELD.load(Ordering::SeqCst) }
 /// The application to reactivate once every button is up, and when navigation ended.
@@ -786,6 +831,29 @@ mod tests {
         assert!(!delayed_scan_allowed(1, 1, true, false, false));
         assert!(!delayed_scan_allowed(1, 1, false, true, false));
         assert!(!delayed_scan_allowed(1, 1, false, false, true));
+    }
+
+    #[test]
+    fn the_lookup_button_is_read_from_either_controller() {
+        let grip = vec![false; 23].into_iter().enumerate().map(|(i, _)| i == 17).collect::<Vec<_>>();
+        assert!(lookup_button_held(Some(17), &states(&[]), Some(&grip)));
+        assert!(!lookup_button_held(Some(17), &states(&[]), None));
+        assert!(lookup_button_held(Some(5), &states(&[5]), None));
+        assert!(!lookup_button_held(None, &states(&[5]), Some(&grip)));
+        assert!(!lookup_button_held(Some(40), &states(&[5]), Some(&grip)));
+    }
+
+    #[test]
+    fn desktop_mode_adds_only_the_decks_own_buttons() {
+        let mut deck = vec![false; 23];
+        deck[0] = true; // A: Steam's layout reports it (or types a key); not read twice.
+        deck[18] = true; // R4
+        let buttons = with_deck_extras(states(&[2]), &deck);
+        assert_eq!(buttons.len(), 23);
+        assert!(!buttons[0] && buttons[2] && buttons[18]);
+        // No pad connected: the standard part is empty, the grips still read.
+        let buttons = with_deck_extras(Vec::new(), &deck);
+        assert_eq!(buttons.iter().position(|b| *b), Some(18));
     }
 
     #[test]

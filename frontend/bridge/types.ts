@@ -70,6 +70,7 @@ export type PanelAction =
   | 'drag'
   | 'place'
   | 'minimize'
+  | 'maximize'
   | 'restore'
   | 'pin'
   | 'unpin'
@@ -86,6 +87,7 @@ export interface PanelInfo {
   pinned: boolean
   focused: boolean
   resizable: boolean
+  maximized?: boolean
 }
 
 export interface PanelStateEvent {
@@ -93,6 +95,9 @@ export interface PanelStateEvent {
   visible: boolean
   pinned: boolean
   bounds: Rect
+  maximized?: boolean
+  /** The main window only: whether it is in Mini mode. */
+  mini?: boolean
 }
 
 export interface NativeSource {

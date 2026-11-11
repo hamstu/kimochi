@@ -1161,6 +1161,18 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
     // KDE Plasma: KWin raises the window the portal stream is linked to.
     #[cfg(target_os = "linux")]
     if source_id.starts_with("portal:window:") {
+        // Not linked yet (nothing has been read from it since it was chosen): link it from its
+        // current frame first, as a scan would, rather than failing the click.
+        if platform::tracking::can_activate() && platform::tracking::linked_pid(&source_id).is_none() {
+            let service = app.state::<Shared>().inner().clone();
+            let id = source_id.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                let frame = sources::hover_preview(&service, &id).ok()?;
+                let (width, height) = (frame["width"].as_u64()?, frame["height"].as_u64()?);
+                platform::tracking::frame_bounds(&id, width as u32, height as u32)
+            })
+            .await;
+        }
         if let Some(result) = platform::tracking::activate(&source_id) {
             let service = app.state::<Shared>().inner().clone();
             record(&app, &service, json!({ "check": "activate-source", "sourceId": source_id, "backend": "kwin", "error": result.as_ref().err() }));
@@ -1505,10 +1517,17 @@ async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Re
         let value = {
             let mut value = value;
             let bounds = value["width"].as_u64().zip(value["height"].as_u64())
-                .and_then(|(width, height)| platform::tracking::frame_bounds(&source_id, width as u32, height as u32));
-            if let Some(bounds) = bounds {
+                .and_then(|(width, height)| platform::tracking::frame_bounds(&source_id, width as u32, height as u32))
+                .map(|bounds| (bounds, platform::tracking::tracked(&source_id).is_some_and(|(_, visible)| visible)))
+                // A native window is named by the compositor: its bounds need no linking, so the
+                // crop editor draws over the window itself rather than over a picture of it.
+                .or_else(|| {
+                    let id = SourceId::parse(&source_id).filter(|id| id.is_window() && platform::native::is_source(&source_id))?;
+                    platform::window_bounds(&id)
+                });
+            if let Some((bounds, visible)) = bounds {
                 value["desktopBounds"] = serde_json::to_value(bounds).map_err(|e| e.to_string())?;
-                value["desktopVisible"] = json!(platform::tracking::tracked(&source_id).is_some_and(|(_, visible)| visible));
+                value["desktopVisible"] = json!(visible);
             }
             value
         };
@@ -4424,7 +4443,13 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     lookup_key = String::from("shift");
                 }
             }
-            let sample = platform::desktop_cursor();
+            // A controller's lookup button stands in for the lookup key (`gamepad::lookup_held`).
+            let sample = platform::desktop_cursor().map(|mut sample| {
+                if gamepad::lookup_held() {
+                    sample.modifiers.hold(&lookup_key);
+                }
+                sample
+            });
             let key_held = |modifiers: &Modifiers| modifiers.holds(&lookup_key);
             scanning = sample.as_ref().is_some_and(|s| key_held(&s.modifiers));
             let gate_open = {
