@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-11
+
 ### Added
 
 - 🪟 **Linux: Kimochi's own window picker.** On GNOME, KDE Plasma 6, Hyprland, Sway and COSMIC, Kimochi now lists your windows with live previews, just like on Windows and macOS. No more desktop screen-share dialog and no more 'linking': the overlay follows your game as you move, resize or full-screen it, and **Bring to front** works everywhere.
