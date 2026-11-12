@@ -104,6 +104,8 @@ export interface SceneCounters {
   staleDiscarded: number
   fingerprintSuppressed: number
   pinFailures: number
+  /** Looks whose read was skipped because the pixels were still moving. */
+  stillSkips: number
 }
 
 function emptyCounters(): SceneCounters {
@@ -134,7 +136,8 @@ function emptyCounters(): SceneCounters {
     backoffSkips: 0,
     staleDiscarded: 0,
     fingerprintSuppressed: 0,
-    pinFailures: 0
+    pinFailures: 0,
+    stillSkips: 0
   }
 }
 
@@ -149,7 +152,7 @@ interface Job<Frame> {
 }
 
 /** Longest gap between looks while anything on screen is moving or being read. */
-const ACTIVE_POLL_MS = 150
+const ACTIVE_POLL_MS = 100
 
 /**
  * Looks are at least this many watcher reads apart. A watcher on a GPU reads a frame in
@@ -166,6 +169,46 @@ const WATCH_COST_FACTOR = 3
 const CONFIRM_COST_FACTOR = 0.5
 /** However slow the watcher, look at least this often. */
 const WATCH_COST_MAX_GAP_MS = 2000
+
+/**
+ * When nothing on screen is moving, looks are paced by what they actually cost, not by what a
+ * read costs. A look at unchanged pixels is a capture and a fingerprint (the watcher's cache
+ * answers), a few milliseconds on a fast machine; a look at changed pixels is a read. Spending
+ * at most 1/IDLE_COST_FACTOR of a core on looking, a fast machine notices a new line within a
+ * tenth of a second, while a slow one (or a busy one: contention shows up as slower looks)
+ * backs off on its own, up to `adaptivePollMax`.
+ */
+const IDLE_COST_FACTOR = 10
+/** Fastest idle cadence: below this, looks are mostly scheduling overhead. */
+const IDLE_MIN_GAP_MS = 100
+/** Looks the typical look cost is the median of. */
+const LOOK_COST_WINDOW = 9
+
+/**
+ * A watcher this slow reads only pixels that have held still since the last look.
+ *
+ * Settling a line takes a read that finds it and a look that confirms it. With a slow watcher
+ * (OneOCR or Screen AI on a modest CPU: 300-500 ms) the read lands while the line is still
+ * typing or fading in, so it is read again, and again; each costs a read, and the confirming
+ * look waits behind them. Asking the watcher to read only a frame identical to the previous
+ * look's (`readIfStill`) costs one cheap look and saves those reads: nothing is read while the
+ * line moves, the first still frame is read once, and the next look confirms it from the
+ * watcher's cache. A fast watcher reads at once, where waiting would cost more than it saves.
+ */
+const STILL_GATE_READ_MS = 250
+/**
+ * The gate needs a screen that holds still between lines. One whose pixels have not matched
+ * from one look to the next for this long is animating (a background behind the text), where
+ * waiting for stillness only delays reads: the gate stays off until the screen holds still.
+ */
+const STILL_GATE_ANIMATED_MS = 3000
+/**
+ * Pixels that never hold still (a background animating behind the text) would starve the gate:
+ * after moving this long, or three reads' worth if longer, the next look reads anyway.
+ */
+const STILL_GATE_MAX_WAIT_MS = 600
+/** Gated looks are at least this many looks' cost apart (a fifth of a core, at most). */
+const GATED_LOOK_FACTOR = 5
 
 /** Shortest wait between two recognitions of a screen the observer reads nothing on. */
 const BLIND_GAP_MS = 1500
@@ -186,6 +229,22 @@ export class SceneScanner<Frame = unknown> {
   private interval: number
   /** The watcher's recent read time (moving average), which paces the looks. */
   private watchCostMs = 0
+  /**
+   * What a look typically costs from start to finish, cache hits included: the median of the
+   * last few. A median, not an average: one read among cache hits (a window repainting, a
+   * cursor blinking) should not slow every look after it, while a screen where every look is a
+   * read (a background animating under the text) makes the median a read, and keeps the pace
+   * that protects the CPU.
+   */
+  private lookCostMs = 0
+  private recentLooks: number[] = []
+  private coldLook = true
+  /** The last look's pixel fingerprint, read or not, for `readIfStill`. */
+  private seenFingerprint: string | null = null
+  /** When the pixels started moving, while reads wait for them to hold still. */
+  private movingSince: number | null = null
+  /** When two looks in a row last saw identical pixels. */
+  private stillAt = Number.NEGATIVE_INFINITY
   /** The current interval was shortened for a line waiting to be confirmed. */
   private confirming = false
   private quietStreak = 0
@@ -322,6 +381,13 @@ export class SceneScanner<Frame = unknown> {
   start(): void {
     if (this.running) return
     this.running = true
+    // The first look after starting loads the engine (Live Text took 650 ms cold against 8 ms
+    // warm): it says nothing about what looking costs, and would hold the next looks back.
+    this.recentLooks = []
+    this.coldLook = true
+    this.seenFingerprint = null
+    this.movingSince = null
+    this.stillAt = Number.NEGATIVE_INFINITY
     this.suspended = false
     this.unavailable = false
     this.unavailableReason = ''
@@ -507,8 +573,23 @@ export class SceneScanner<Frame = unknown> {
 
   private async runTick(at: number): Promise<TickOutcome> {
     let sample: CaptureSample<Frame>
+    const gate = this.stillGate(at)
+    let cold = false
     try {
-      sample = await this.deps.captureFrame()
+      const lookStarted = this.now()
+      sample = gate ? await this.deps.captureFrame({ readIfStill: gate }) : await this.deps.captureFrame()
+      // What this look cost: its round trip, or the watcher's own time if that is longer (a
+      // read reports its time; a cache hit reports next to nothing).
+      const observed = sample.observation?.durationMs
+      const look = Math.max(this.now() - lookStarted, Number.isFinite(observed) ? (observed as number) : 0)
+      cold = this.coldLook
+      if (this.coldLook) this.coldLook = false
+      else if (Number.isFinite(look) && look >= 0) {
+        this.recentLooks.push(look)
+        if (this.recentLooks.length > LOOK_COST_WINDOW) this.recentLooks.shift()
+        const sorted = [...this.recentLooks].sort((a, b) => a - b)
+        this.lookCostMs = sorted[Math.floor(sorted.length / 2)]
+      }
       this.counters.captures++
     } catch (error) {
       if (isSourceOutOfView(error)) {
@@ -540,6 +621,19 @@ export class SceneScanner<Frame = unknown> {
       if (had) await this.redraw('source', null)
     }
 
+    const fingerprintNow = sample.contentFingerprint ?? null
+    if (fingerprintNow !== null && fingerprintNow === this.seenFingerprint) this.stillAt = at
+    this.seenFingerprint = fingerprintNow
+    if (sample.observerSkipped) {
+      // Still moving: look again soon, cheaply. Nothing was read, so nothing else changes.
+      this.counters.stillSkips++
+      if (this.movingSince === null) this.movingSince = at
+      this.adapt(true, false, true)
+      return 'observed'
+    }
+    // A read of pixels that matched the last look, or one forced by pixels that never stop.
+    this.movingSince = gate || !sample.observation ? null : this.movingSince === null ? null : at
+
     if (sample.observerUnsupported) {
       this.unavailable = true
       this.unavailableReason =
@@ -550,8 +644,11 @@ export class SceneScanner<Frame = unknown> {
       return 'unavailable'
     }
     if (!sample.observation && sample.observerBusy) {
-      // Still reading an earlier frame: wait at the base backoff, never count it (#41).
-      this.backoffUntil = this.now() + this.settings.errorBackoffMs
+      // Still reading an earlier frame (a cold engine loading, a large display on a slow CPU):
+      // never counted (#41), and asked again about one read later rather than after a whole
+      // error backoff, which held the first line after Auto OCR started for two seconds.
+      const retry = this.watchCostMs > 0 ? Math.max(250, this.watchCostMs) : 500
+      this.backoffUntil = this.now() + Math.min(this.settings.errorBackoffMs, retry)
       this.emit({ type: 'skip', reason: 'observer-busy', detail: sample.observerError ?? undefined })
       return 'backoff'
     }
@@ -563,7 +660,9 @@ export class SceneScanner<Frame = unknown> {
     this.noteSuccess('observer')
     this.counters.observations++
     const cost = sample.observation.durationMs
-    if (typeof cost === 'number' && Number.isFinite(cost) && cost > 0) {
+    // Not the cold first read either: OneOCR's took 1.4 s against 500 ms warm, and three of
+    // those held the next look back two seconds, losing the session's first lines.
+    if (!cold && typeof cost === 'number' && Number.isFinite(cost) && cost > 0) {
       this.watchCostMs = this.watchCostMs ? this.watchCostMs * 0.7 + cost * 0.3 : cost
     }
 
@@ -860,12 +959,43 @@ export class SceneScanner<Frame = unknown> {
    * Never more often than the watcher can afford (`WATCH_COST_FACTOR`), except that a line
    * waiting to be confirmed gets its next look sooner (`CONFIRM_COST_FACTOR`).
    */
-  private adapt(active: boolean, confirming = false): void {
+  private adapt(active: boolean, confirming = false, skipped = false): void {
     this.adaptToScreen(active)
     this.confirming = confirming
+    if (skipped || this.gating) {
+      // With the gate on, a look at pixels that moved reads nothing, and pixels that held still
+      // are read once (the next look is the watcher's cache): reads are bounded by the screen
+      // and by the forced read in `stillGate`, so only what looks cost limits the pace.
+      this.interval = Math.max(this.interval, Math.min(this.lookCostMs * GATED_LOOK_FACTOR, WATCH_COST_MAX_GAP_MS))
+      return
+    }
+    // Reads pace the looks while something is moving (each look there is a read). On a still
+    // screen what a look actually costs does: cache hits are cheap and barely constrain it,
+    // while a background that animates under unchanged text makes every look a read, and
+    // keeps the same protection as before.
+    const cost = active || confirming ? this.watchCostMs : this.lookCostMs
     const factor = confirming ? CONFIRM_COST_FACTOR : WATCH_COST_FACTOR
-    const floor = Math.min(this.watchCostMs * factor, WATCH_COST_MAX_GAP_MS)
+    const floor = Math.min(cost * factor, WATCH_COST_MAX_GAP_MS)
     this.interval = Math.max(this.interval, floor)
+  }
+
+  /** Whether reads wait for still pixels: only for a watcher slow enough to be worth it. */
+  private get gating(): boolean {
+    // Without fingerprints there is nothing to compare pixels by, and the gate stays off.
+    return (
+      this.settings.observerMode === 'text' &&
+      this.seenFingerprint !== null &&
+      this.watchCostMs >= STILL_GATE_READ_MS &&
+      this.now() - this.stillAt <= STILL_GATE_ANIMATED_MS
+    )
+  }
+
+  /** The fingerprint to read only if still, or null to read whatever the look finds. */
+  private stillGate(at: number): string | null {
+    if (!this.gating || this.seenFingerprint === null || this.forceNext) return null
+    const limit = Math.max(STILL_GATE_MAX_WAIT_MS, this.watchCostMs * WATCH_COST_FACTOR)
+    if (this.movingSince !== null && at - this.movingSince >= limit) return null
+    return this.seenFingerprint
   }
 
   private adaptToScreen(active: boolean): void {
@@ -882,6 +1012,11 @@ export class SceneScanner<Frame = unknown> {
       return
     }
     this.quietStreak++
+    // Idle: as often as the looks themselves can afford, never slower than the ceiling.
+    if (this.lookCostMs > 0) {
+      this.interval = Math.min(adaptivePollMax, Math.max(IDLE_MIN_GAP_MS, this.lookCostMs * IDLE_COST_FACTOR))
+      return
+    }
     if (this.quietStreak >= 5) this.interval = Math.min(this.interval * 1.5, adaptivePollMax)
     else this.interval = Math.max(adaptivePollMin, Math.min(pollInterval, this.interval))
   }

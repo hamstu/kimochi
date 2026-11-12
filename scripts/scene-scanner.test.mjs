@@ -45,7 +45,7 @@ function harness({ screen, recognise, settings = {} }) {
     {
       now: () => state.time,
       generation: () => 1,
-      captureFrame: async () => {
+      captureFrame: async (options) => {
         if (state.captureError) throw state.captureError
         if (state.observerBusy) {
           return { frame: { id: ++state.frames, lines: [] }, generation: 1, hash: '0000000000000000', observation: null,
@@ -53,7 +53,28 @@ function harness({ screen, recognise, settings = {} }) {
         }
         const lines = screen(state)
         if (state.captureGate) await state.captureGate
+        // A look's own round trip (capture, fingerprint, IPC), on the injected clock.
+        if (state.lookMs) state.time += state.lookMs
         const frame = { id: ++state.frames, lines }
+        if (state.pixels) {
+          // Pixels modelled as their text: a fingerprint per screen, a skipped read when asked to
+          // read only still pixels, and the watcher's cache answering for pixels it just read.
+          const fingerprint = JSON.stringify(lines.map((l) => l.text))
+          if (options?.readIfStill && options.readIfStill !== fingerprint) {
+            state.skips = (state.skips ?? 0) + 1
+            return { frame, generation: 1, contentFingerprint: fingerprint, observation: null, observerSkipped: true }
+          }
+          const cached = fingerprint === state.lastRead
+          if (!cached) state.reads = (state.reads ?? 0) + 1
+          state.lastRead = fingerprint
+          return {
+            frame,
+            generation: 1,
+            hash: '0000000000000000',
+            contentFingerprint: fingerprint,
+            observation: { text: lines.map((l) => l.text).join('\n'), lines, durationMs: cached ? 0 : state.watchMs }
+          }
+        }
         return {
           frame,
           generation: 1,
@@ -364,4 +385,89 @@ test('a slow watcher looks again soon for a new line waiting to be confirmed, th
   for (let i = 0; i < 4; i++) await step(400)
   assert.equal(state.scenes.at(-1), '明日は雨だそうです')
   assert.ok(scanner.currentInterval >= 3 * 360 * 0.99, `read: interval ${scanner.currentInterval}`)
+})
+
+test('a still screen whose looks are cheap is watched often, and a slow look backs off on its own', async () => {
+  let screen = DIALOGUE
+  const { scanner, state, step } = harness({
+    screen: () => screen,
+    recognise: (frame) => reading(frame.lines),
+    settings: { adaptivePollingEnabled: true, adaptivePollMin: 250, adaptivePollMax: 500 }
+  })
+  // Live Text on a fast Mac: a read costs 120 ms, but a look at unchanged pixels is a cache hit.
+  state.watchMs = 120
+  await step(500)
+  await step(150)
+  state.watchMs = 0
+  state.lookMs = 8
+  for (let i = 0; i < 12; i++) await step(scanner.currentInterval)
+  assert.ok(scanner.currentInterval <= 120, `fast idle: interval ${scanner.currentInterval}`)
+
+  // A new line is noticed within one idle gap, not half a second later.
+  screen = [line('明日は雨だそうです', 396)]
+  const appeared = state.time
+  state.watchMs = 120
+  await step(scanner.currentInterval)
+  state.watchMs = 0
+  for (let i = 0; i < 4 && state.scenes.at(-1) !== '明日は雨だそうです'; i++) await step(scanner.currentInterval)
+  assert.equal(state.scenes.at(-1), '明日は雨だそうです')
+  assert.ok(state.time - appeared <= 400, `read ${state.time - appeared} ms after it appeared`)
+
+  // A slow or busy machine: the same cache hits take 45 ms, so looks spread out to the ceiling.
+  state.lookMs = 45
+  for (let i = 0; i < 12; i++) await step(scanner.currentInterval)
+  assert.ok(scanner.currentInterval >= 400, `slow idle: interval ${scanner.currentInterval}`)
+})
+
+test('a slow watcher reads a typing line once it holds still, not while it types', async () => {
+  const full = '明日は雨だそうです'
+  let shown = full.length
+  const { scanner, state, step } = harness({
+    screen: () => [line(full.slice(0, shown), 396)],
+    recognise: (frame) => reading(frame.lines),
+    settings: { adaptivePollingEnabled: true, adaptivePollMin: 250, adaptivePollMax: 500 }
+  })
+  state.pixels = true
+  state.watchMs = 450 // OneOCR on a slow CPU
+  state.lookMs = 10
+  // Learn what reading costs, then sit still.
+  for (let i = 0; i < 4; i++) await step(scanner.currentInterval)
+  for (let i = 0; i < 8; i++) await step(scanner.currentInterval)
+  const readsBefore = state.reads
+
+  // The next line types in, a character every 60 ms.
+  const started = state.time
+  shown = 0
+  const typing = 9 * 60
+  while (state.time - started < typing) {
+    shown = Math.min(full.length, Math.floor((state.time - started) / 60) + 1)
+    await step(scanner.currentInterval)
+  }
+  shown = full.length
+  assert.ok(state.reads - readsBefore <= 1, `${state.reads - readsBefore} reads while typing`)
+  assert.ok(state.skips > 0, 'looks at moving pixels skip the read')
+
+  // Typed: read once when the pixels hold still, confirmed from the cache.
+  const finished = state.time
+  for (let i = 0; i < 8 && state.scenes.at(-1) !== full; i++) await step(scanner.currentInterval)
+  assert.equal(state.scenes.at(-1), full)
+  // A gap to see it still, one read (counted on the clock by the harness's lookMs only, so
+  // add the read itself), a gap to confirm: well under two reads' worth.
+  assert.ok(state.time - finished <= 400, `settled ${state.time - finished} ms after it stopped`)
+})
+
+test('the still gate stays off on a screen that never holds still', async () => {
+  let frame = 0
+  const { scanner, state, step } = harness({
+    screen: () => [line('今日はいい天気ですね', 396), line('✦'.repeat((frame++ % 3) + 1), 40)],
+    recognise: (f) => reading(f.lines),
+    settings: { adaptivePollingEnabled: true, adaptivePollMin: 250, adaptivePollMax: 500 }
+  })
+  state.pixels = true
+  state.watchMs = 450
+  state.lookMs = 10
+  for (let i = 0; i < 30; i++) await step(scanner.currentInterval)
+  // Every look differs from the last (a sparkle animates beside the text): nothing to wait for.
+  assert.equal(state.skips ?? 0, 0, 'no look waited for still pixels')
+  assert.ok(state.scenes.some((s) => s.includes('今日はいい天気ですね')), 'the dialogue is still read')
 })

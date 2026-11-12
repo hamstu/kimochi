@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Kimochi Bench VN</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2233; font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", sans-serif; }
+  #bg { position: absolute; inset: 0; }
+  #box { position: absolute; left: 6%; right: 6%; bottom: 7%; height: 30%; background: rgba(12,16,28,.86); border: 2px solid #8aa4d6; border-radius: 14px; padding: 22px 30px; box-sizing: border-box; }
+  #name { position: absolute; top: -22px; left: 26px; background: #2b3d66; color: #fff; padding: 4px 18px; border-radius: 8px; font-size: 22px; }
+  #text { color: #f4f4f4; font-size: 34px; line-height: 1.55; white-space: pre-wrap; letter-spacing: .02em; }
+  #text.fade { animation: fade var(--fade, 400ms) ease-out both; }
+  @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+  #hud { position: absolute; top: 14px; right: 18px; color: #c9d4ee; font: 16px monospace; }
+  #cursor { display: inline-block; width: .6em; color: #8aa4d6; animation: blink 0.9s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0 } }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="hud"></div>
+<div id="box"><div id="name">ナレーター</div><div id="text"></div></div>
+<script>
+// Ground truth for the Auto OCR bench. Every line's timeline is posted to the server:
+// shownAt (first glyph painted), completeAt (whole line painted), clearedAt.
+// Parameters (query string): mode=instant|typewriter|fade, cps (typewriter speed),
+// hold (ms a finished line stays), gap (blank ms between lines), n (lines), seed, bg=still|anim,
+// lines=1|2 (one or two sentences per page), cursor=0|1 (blinking "next" marker), start (delay).
+const q = new URLSearchParams(location.search)
+const P = {
+  mode: q.get('mode') || 'instant', cps: +(q.get('cps') || 40), hold: +(q.get('hold') || 2500),
+  gap: +(q.get('gap') || 0), n: +(q.get('n') || 12), seed: +(q.get('seed') || 1), bg: q.get('bg') || 'still',
+  lines: +(q.get('lines') || 1), cursor: q.get('cursor') === '1', start: +(q.get('start') || 4000),
+  run: q.get('run') || 'run', fade: +(q.get('fade') || 400)
+}
+const SENTENCES = [
+  '今日はいい天気ですね。', '一緒に海まで散歩しませんか？', '待って！まだ話は終わってない。', 'この剣で世界を守ると誓った。',
+  '昨日の夜、不思議な夢を見たんだ。', '駅前の喫茶店で待ち合わせしよう。', '先生に宿題を忘れたと言えなかった。', 'お腹が空いたから何か作ってくれる？',
+  '窓の外では雪が静かに降っている。', 'その手紙を読んだら、涙が止まらなかった。', '明日の朝早く、山の頂上を目指す。', '彼女は小さな声で「ありがとう」と言った。',
+  '図書館の奥に古い地図が隠されていた。', '電車が遅れて、約束の時間に間に合わない。', '誰もいない教室に、ピアノの音が響いた。', '君の名前をずっと覚えているよ。',
+  '猫が屋根の上で気持ちよさそうに寝ている。', '祭りの花火が夜空いっぱいに広がった。', 'この村には昔から伝説が残っている。', '冷たい風が吹いて、思わず肩をすくめた。',
+  '本当のことを話してくれてよかった。', '森の奥から誰かが呼ぶ声が聞こえる。', 'カバンの中に鍵が見つからない。', '春になったら、また桜を見に行こう。',
+  '扉を開けると、見知らぬ部屋が広がっていた。', '兄は毎朝五時に起きて走っている。', 'そんなに急がなくても大丈夫だよ。', '星の数を数えながら眠ってしまった。',
+  '料理が苦手なのに、今日は頑張ってみた。', '港に着いた船から大勢の人が降りてきた。', '試験の結果を見るのが怖い。', '遠くの灯台が静かに光っている。',
+  '迷子の子犬を家まで送ってあげた。', '時計の針がちょうど十二時を指した。', '雨上がりの道に大きな虹がかかった。', 'あの日の約束を、まだ覚えている？',
+  '新しい靴で歩くと足が痛くなる。', '城の地下には秘密の通路があるらしい。', '会議は思ったより長引いてしまった。', 'もう一度だけ、君に会いたかった。'
+]
+let s = P.seed * 9301 + 49297
+const rand = () => ((s = (s * 9301 + 49297) % 233280) / 233280)
+const order = SENTENCES.map((t, i) => [rand(), t]).sort((a, b) => a[0] - b[0]).map((x) => x[1])
+const pages = []
+for (let i = 0; i < P.n; i++) {
+  const a = order[(i * P.lines) % order.length]
+  pages.push(P.lines === 2 ? a + '\n' + order[(i * P.lines + 1) % order.length] : a)
+}
+
+const text = document.getElementById('text'), hud = document.getElementById('hud')
+const post = (rec) => fetch('/truth', { method: 'POST', body: JSON.stringify({ run: P.run, ...rec }) }).catch(() => {})
+// The time a change is actually on screen: after the next frame has been presented.
+const painted = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(Date.now()))))
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Background: a still gradient, or a busy animated one (particles + moving light), drawn
+// behind the dialogue box the way many games animate their scenes.
+const cv = document.getElementById('bg'), cx = cv.getContext('2d')
+const fit = () => { cv.width = innerWidth; cv.height = innerHeight }
+fit(); addEventListener('resize', fit)
+const dots = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), v: 0.0006 + Math.random() * 0.002, r: 2 + Math.random() * 5 }))
+function draw(t) {
+  const g = cx.createLinearGradient(0, 0, cv.width, cv.height)
+  const k = P.bg === 'anim' ? (Math.sin(t / 1400) + 1) / 2 : 0.3
+  g.addColorStop(0, `hsl(${215 + 30 * k},45%,${22 + 8 * k}%)`); g.addColorStop(1, `hsl(${260 - 20 * k},40%,14%)`)
+  cx.fillStyle = g; cx.fillRect(0, 0, cv.width, cv.height)
+  cx.fillStyle = 'rgba(255,255,255,.35)'
+  for (const d of dots) {
+    if (P.bg === 'anim') { d.y -= d.v; if (d.y < 0) d.y = 1 }
+    cx.beginPath(); cx.arc(d.x * cv.width, d.y * cv.height * 0.62, d.r, 0, 7); cx.fill()
+  }
+  if (P.bg === 'anim') requestAnimationFrame(draw)
+}
+requestAnimationFrame(draw)
+
+async function show(page, i) {
+  const chars = [...page]
+  if (P.mode === 'typewriter') {
+    const step = 1000 / P.cps
+    const t0 = performance.now()
+    text.textContent = chars[0]
+    const shownAt = await painted()
+    for (let k = 2; k <= chars.length; k++) {
+      const due = t0 + (k - 1) * step
+      const d = due - performance.now()
+      if (d > 0) await wait(d)
+      text.textContent = chars.slice(0, k).join('')
+    }
+    if (P.cursor) text.insertAdjacentHTML('beforeend', '<span id="cursor">▼</span>')
+    const completeAt = await painted()
+    return { shownAt, completeAt }
+  }
+  text.className = P.mode === 'fade' ? 'fade' : ''
+  text.style.setProperty('--fade', P.fade + 'ms')
+  text.textContent = page
+  if (P.cursor) text.insertAdjacentHTML('beforeend', '<span id="cursor">▼</span>')
+  const shownAt = await painted()
+  if (P.mode === 'fade') await wait(P.fade)
+  const completeAt = P.mode === 'fade' ? await painted() : shownAt
+  return { shownAt, completeAt }
+}
+
+;(async () => {
+  hud.textContent = `${P.mode} ${P.mode === 'typewriter' ? P.cps + 'cps ' : ''}bg=${P.bg}`
+  post({ kind: 'begin', params: P, at: Date.now() })
+  await wait(P.start)
+  for (let i = 0; i < pages.length; i++) {
+    const t = await show(pages[i], i)
+    post({ kind: 'line', i, text: pages[i].replace(/\n/g, ''), ...t })
+    await wait(P.hold)
+    if (P.gap > 0) {
+      text.textContent = ''
+      const clearedAt = await painted()
+      post({ kind: 'clear', i, clearedAt })
+      await wait(P.gap)
+    }
+  }
+  text.textContent = ''
+  await wait(1500)
+  post({ kind: 'end', at: Date.now() })
+  hud.textContent = 'waiting for the next scenario'
+  // The runner hands out scenarios; the window (and so the capture source) stays the same.
+  for (;;) {
+    await wait(500)
+    const next = await fetch('/next?after=' + encodeURIComponent(P.run)).then((r) => r.text()).catch(() => '')
+    if (next) { location.href = '/game.html?' + next; return }
+  }
+})()
+</script>
+</body>
+</html>
