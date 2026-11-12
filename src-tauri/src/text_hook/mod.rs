@@ -382,11 +382,12 @@ fn launch(hook: &'static Hook, generation: u64, engine: &'static str, dir: &std:
     let mut command = Command::new(&exe);
     command.arg(engine).arg("--dir").arg(dir);
     // Under Wine the helper runs in the game's prefix, so it sees the game as Windows would, and
-    // takes the hooker's folder as a Windows path.
+    // takes the hooker's folder as a Windows path; both copied where the game can reach them,
+    // for a game in a sandbox that does not see Kimochi's folders.
     #[cfg(target_os = "linux")]
     if let Some(wine) = targets.first().and_then(|t| t.wine.as_ref()) {
-        command = wine::command(wine, &exe);
-        command.arg(engine).arg("--dir").arg(wine::windows_path(dir));
+        command = wine::command(wine, &wine::reachable(wine, &exe)?);
+        command.arg(engine).arg("--dir").arg(wine::windows_path(&wine::reachable_dir(wine, dir)?));
     }
     if engine == "luna" {
         let flush_ms = hook.config(&hook.lock()).flush_ms;
@@ -998,7 +999,7 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     let pid = window_pid(&source_id).ok_or("Choose an app window to hook.")?;
     #[cfg(target_os = "linux")]
     let helper = hookd_path(&hook.app);
-    let targets = tauri::async_runtime::spawn_blocking(move || {
+    let found = tauri::async_runtime::spawn_blocking(move || {
         let found = process::game_processes(pid);
         if found.is_empty() {
             return Err(process::target(pid).err().unwrap_or_else(|| "This app cannot be hooked.".into()));
@@ -1012,7 +1013,23 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         Ok(found)
     })
     .await
-    .map_err(|e| e.to_string())??;
+    .map_err(|e| e.to_string())
+    .and_then(|found| found);
+    let targets = match found {
+        Ok(targets) => targets,
+        Err(reason) => {
+            // The game's card waits on a session for its window: one that failed, with why, rather
+            // than none (which reads as still starting).
+            let mut session = hook.lock();
+            stop_child(&mut session);
+            let generation = session.generation + 1;
+            *session = Session { generation, source_id, phase: "failed", detail: Some(reason.clone()), ..Default::default() };
+            hook.publish(&session);
+            drop(session);
+            refresh_voice_hook();
+            return Err(reason);
+        }
+    };
     let generation = {
         let mut session = hook.lock();
         // The same game, already being hooked or hooked (the game started with Hook automatically
@@ -1265,7 +1282,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
         let staged = crate::sentence_audio::voice_hook::staged_dll(&dll, &base).map_err(prepare)?;
         let path = crate::sentence_audio::voice_hook::windows_under(&staged, &base, &windows_base)
             .ok_or_else(|| prepare("the staged copy is outside the prefix".into()))?;
-        let mut command = wine::command(wine, &helper);
+        let mut command = wine::command(wine, &wine::reachable(wine, &helper).map_err(prepare)?);
         command.args(["inject", "--pid", &target.pid.to_string(), "--dll", &path]);
         command
     };

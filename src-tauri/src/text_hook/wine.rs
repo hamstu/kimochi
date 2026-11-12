@@ -7,6 +7,12 @@
 //! but the prefix, the Proton build and the wineserver's socket (under `/tmp/.wine-<uid>`) are
 //! all reachable from outside it, so nothing has to enter the container.
 //!
+//! A game in a Flatpak sandbox (Bottles, Lutris, Heroic or Steam from Flathub) is different: the
+//! sandbox has its own `/tmp`, where the game's wineserver listens, and sees little of the home
+//! folder. A Wine started outside would start a second wineserver on the same prefix, see none of
+//! the game's processes, and could damage the prefix. So the programs run inside the sandbox
+//! (`flatpak enter`), from copies in the game's prefix, which both sides see.
+//!
 //! Wine's process ids are its own, not Linux's, so the game's id inside the prefix comes from the
 //! helper (`kimochi-hookd processes`), matched to the game by its Windows image path.
 #[cfg(any(target_os = "linux", test))]
@@ -28,6 +34,35 @@ pub struct Wine {
     pub env: Vec<(String, String)>,
     /// The game's Windows image path as Wine reports it (`S:\steamapps\common\Game\game.exe`).
     pub image: String,
+    /// For a game in a Flatpak sandbox, its process's (Linux) id: programs are run inside the
+    /// sandbox through it, and the paths above are as the sandbox sees them.
+    pub flatpak: Option<u32>,
+}
+
+/// `path` as a process sees it, as Kimochi can open it: through `/proc/<pid>/root`.
+#[cfg(any(target_os = "linux", test))]
+pub fn in_root(pid: u32, path: &Path) -> PathBuf {
+    PathBuf::from(format!("/proc/{pid}/root{}", path.to_string_lossy()))
+}
+
+/// The folder Wine's processes reach a prefix's wineserver in, for a prefix on device `dev` at
+/// inode `ino`, run by user `uid` (Wine's `server-<dev>-<ino>`, both in hex).
+#[cfg(any(target_os = "linux", test))]
+pub fn server_dir(uid: u32, dev: u64, ino: u64) -> PathBuf {
+    PathBuf::from(format!("/tmp/.wine-{uid}/server-{dev:x}-{ino:x}"))
+}
+
+/// A short name for a folder's contents: the same files give the same name, so a staged copy is
+/// reused until Kimochi (or the hooker) changes. FNV-1a, stable across builds and Rust versions.
+#[cfg(any(target_os = "linux", test))]
+pub fn content_key(files: &[(String, Vec<u8>)]) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for (name, bytes) in files {
+        for b in name.bytes().chain([0]).chain(bytes.iter().copied()) {
+            hash = (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    format!("{hash:016x}")
 }
 
 /// Variables that describe the game's own process rather than its prefix; a second program
@@ -214,28 +249,38 @@ mod imp {
         if !is_wine_loader(&loader) {
             return Err("Text Hooker reads Windows games running through Proton or Wine; this is a Linux app.".into());
         }
+        // In a Flatpak sandbox the paths below are the sandbox's (the Wine build may be one only
+        // it has, under /app), so they are looked at through the game's own root.
+        let flatpak = Path::new(&format!("/proc/{pid}/root/.flatpak-info")).is_file().then_some(pid);
+        let outside = |p: &Path| match flatpak {
+            Some(pid) => in_root(pid, p),
+            None => p.to_path_buf(),
+        };
         let binary = launcher_candidates(&loader)
             .into_iter()
-            .find(|p| p.is_file())
+            .find(|p| outside(p).is_file())
             .ok_or("Kimochi cannot find the Wine this game runs on.")?;
         let environ = environ(pid).ok_or("this process cannot be inspected")?;
         let var = |k: &str| environ.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
         let prefix = var("WINEPREFIX")
             .map(PathBuf::from)
             .or_else(|| var("HOME").map(|h| Path::new(&h).join(".wine")))
-            .filter(|p| p.join("dosdevices").is_dir())
+            .filter(|p| outside(&p.join("dosdevices")).is_dir())
             .ok_or("Kimochi cannot find this game's Wine prefix.")?;
         let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).map_err(|_| "this process cannot be inspected")?;
         let image = String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default()).trim().to_string();
         if !image.to_ascii_lowercase().ends_with(".exe") {
             return Err("this is part of Wine, not a game".into());
         }
-        let exe = unix_path(&prefix, &image, |p| std::fs::read_link(p).ok()).unwrap_or_else(|| PathBuf::from(&image));
+        let exe = unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok()).unwrap_or_else(|| PathBuf::from(&image));
         let lower = image.to_ascii_lowercase().replace('/', "\\");
         if lower.starts_with("c:\\windows\\") || lower.contains("\\proton") && lower.contains("\\files\\") {
             return Err("this is part of Wine, not a game".into());
         }
-        let bits = std::fs::File::open(&exe)
+        if flatpak.is_none() && !server_reachable(pid, &prefix) {
+            return Err("This game runs in a sandbox Kimochi cannot reach its Wine through.".into());
+        }
+        let bits = std::fs::File::open(outside(&exe))
             .ok()
             .and_then(|f| {
                 use std::io::Read;
@@ -245,52 +290,185 @@ mod imp {
                 super::super::process::pe_bits(&bytes)
             })
             .unwrap_or(64);
-        let env = shared_env(&environ, Path::exists);
-        Ok(Target { pid, exe, bits, wine: Some(Wine { binary, prefix, env, image }) })
+        let env = shared_env(&environ, |p| outside(p).exists());
+        Ok(Target { pid, exe, bits, wine: Some(Wine { binary, prefix, env, image, flatpak }) })
+    }
+
+    /// Whether a Wine started here reaches the game's wineserver, rather than starting a second
+    /// one on its prefix: false only when the game's is in a `/tmp` of its own (a sandbox) and
+    /// none is in ours.
+    fn server_reachable(pid: u32, prefix: &Path) -> bool {
+        use std::os::unix::fs::MetadataExt;
+        let (Ok(me), Ok(prefix)) = (std::fs::metadata("/proc/self"), std::fs::metadata(prefix)) else { return true };
+        let socket = server_dir(me.uid(), prefix.dev(), prefix.ino()).join("socket");
+        socket.exists() || !in_root(pid, &socket).exists()
+    }
+
+    /// The prefix user's folder Kimochi keeps copies in (`AppData\Local\kimochi-texthook`), as
+    /// the game sees it.
+    fn stage_base(wine: &Wine, outside: &dyn Fn(&Path) -> PathBuf) -> Result<PathBuf, String> {
+        let users = wine.prefix.join("drive_c").join("users");
+        let mut names: Vec<String> = std::fs::read_dir(outside(&users))
+            .map_err(|e| format!("the game's Wine prefix has no user folder: {e}"))?
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| !n.eq_ignore_ascii_case("public"))
+            .collect();
+        names.sort();
+        let unix_user = std::env::var("USER").ok();
+        let user = ["steamuser"]
+            .into_iter()
+            .chain(unix_user.as_deref())
+            .find(|u| names.iter().any(|n| n == u))
+            .map(str::to_owned)
+            .or_else(|| names.into_iter().next())
+            .ok_or("the game's Wine prefix has no user folder")?;
+        Ok(users.join(user).join("AppData").join("Local").join("kimochi-texthook"))
+    }
+
+    /// Kimochi's folder `dir` where the game can reach it: itself, or for a game in a sandbox that
+    /// does not see it, a copy in the game's prefix, made once per content.
+    pub fn reachable_dir(wine: &Wine, dir: &Path) -> Result<PathBuf, String> {
+        use std::os::unix::fs::MetadataExt;
+        let Some(pid) = wine.flatpak else { return Ok(dir.to_path_buf()) };
+        let outside = |p: &Path| in_root(pid, p);
+        let ours = std::fs::metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        if std::fs::metadata(outside(dir)).is_ok_and(|m| m.dev() == ours.dev() && m.ino() == ours.ino()) {
+            return Ok(dir.to_path_buf());
+        }
+        let mut files = Vec::new();
+        collect(dir, dir, &mut files)?;
+        let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let staged = stage_base(wine, &outside)?.join(format!("{name}-{}", content_key(&files)));
+        if outside(&staged).is_dir() {
+            return Ok(staged);
+        }
+        // Written under a temporary name first, so a half-written copy is never used.
+        let partial = outside(&staged.with_extension(format!("partial-{}", std::process::id())));
+        let write = || -> std::io::Result<()> {
+            for (relative, bytes) in &files {
+                let path = partial.join(relative);
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(path, bytes)?;
+            }
+            std::fs::rename(&partial, outside(&staged))
+        };
+        if let Err(e) = write() {
+            let _ = std::fs::remove_dir_all(&partial);
+            // Another Kimochi staged the same copy meanwhile.
+            if !outside(&staged).is_dir() {
+                return Err(format!("could not copy Kimochi's text hook files into the game's prefix: {e}"));
+            }
+        }
+        Ok(staged)
+    }
+
+    /// Kimochi's file `path` where the game can reach it, with the files beside it (the helper
+    /// runs its other-bitness build from its own folder).
+    pub fn reachable(wine: &Wine, path: &Path) -> Result<PathBuf, String> {
+        let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else { return Ok(path.to_path_buf()) };
+        Ok(reachable_dir(wine, dir)?.join(name))
+    }
+
+    /// Every file under `dir`, by its path relative to `base`, in a stable order.
+    fn collect(base: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> Result<(), String> {
+        let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                collect(base, &path, out)?;
+            } else if path.is_file() {
+                let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let relative = path.strip_prefix(base).unwrap_or(&path).to_string_lossy().into_owned();
+                out.push((relative, bytes));
+            }
+        }
+        Ok(())
     }
 
     /// Starts a Windows program with the game's Wine, in its prefix. The caller's own library
-    /// path (Kimochi's AppImage bundles its own libraries) must not reach Wine.
+    /// path (Kimochi's AppImage bundles its own libraries) must not reach Wine, nor `flatpak`.
+    /// `program` must be one the game can reach (`reachable`).
     pub fn command(wine: &Wine, program: &Path) -> Command {
-        let mut command = Command::new(&wine.binary);
-        command
-            .arg(windows_path(program))
-            .env_remove("LD_LIBRARY_PATH")
-            .env_remove("LD_PRELOAD")
-            .env("WINEPREFIX", &wine.prefix)
-            .env("WINEDEBUG", "-all")
-            .envs(wine.env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        let mut command = Command::new(match wine.flatpak {
+            Some(_) => Path::new("flatpak"),
+            None => wine.binary.as_path(),
+        });
+        command.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD");
+        match wine.flatpak {
+            // Inside the game's sandbox, where it starts with the game's environment: what
+            // describes only the game's own process is taken out, and the prefix's variables given.
+            Some(pid) => {
+                command.args(["enter", &pid.to_string(), "env"]);
+                for key in PROCESS_ONLY.iter().chain(&["LD_PRELOAD"]) {
+                    command.args(["-u", key]);
+                }
+                command.arg(format!("WINEPREFIX={}", wine.prefix.to_string_lossy())).arg("WINEDEBUG=-all");
+                command.args(wine.env.iter().map(|(k, v)| format!("{k}={v}")));
+                command.arg(&wine.binary);
+            }
+            None => {
+                command
+                    .env("WINEPREFIX", &wine.prefix)
+                    .env("WINEDEBUG", "-all")
+                    .envs(wine.env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+            }
+        }
+        command.arg(windows_path(program));
         command
     }
 
     /// The game's processes with Wine's ids, from the helper run inside the prefix.
     pub fn windows_targets(hookd: &Path, game: &Target) -> Result<Vec<Target>, String> {
         let wine = game.wine.as_ref().ok_or("not a Wine game")?;
-        let mut child = command(wine, hookd)
+        let hookd = reachable(wine, hookd)?;
+        let mut child = command(wine, &hookd)
             .arg("processes")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("could not start Wine ({}): {e}", wine.binary.display()))?;
+            .map_err(|e| match wine.flatpak {
+                Some(_) => format!("could not reach into the game's Flatpak sandbox (flatpak enter): {e}"),
+                None => format!("could not start Wine ({}): {e}", wine.binary.display()),
+            })?;
         let mut stdout = child.stdout.take().ok_or("no output from Wine")?;
+        let mut stderr = child.stderr.take().ok_or("no output from Wine")?;
         let reader = std::thread::spawn(move || {
             let mut text = String::new();
             let _ = std::io::Read::read_to_string(&mut stdout, &mut text);
             text
         });
+        let errors = std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = std::io::Read::read_to_string(&mut stderr, &mut text);
+            text
+        });
         let deadline = Instant::now() + Duration::from_secs(20);
-        while child.try_wait().ok().flatten().is_none() {
+        let status = loop {
+            if let Some(status) = child.try_wait().ok().flatten() {
+                break status;
+            }
             if Instant::now() > deadline {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err("Wine did not answer in time".into());
             }
             std::thread::sleep(Duration::from_millis(50));
-        }
+        };
         let listed = parse_listing(&reader.join().unwrap_or_default());
         let found = pick(&listed, &wine.image);
         if found.is_empty() {
+            // Nothing listed at all: Wine (or `flatpak enter`) did not run; say why.
+            let error = errors.join().unwrap_or_default();
+            let last = error.lines().map(str::trim).rfind(|l| !l.is_empty());
+            if let (true, false, Some(last)) = (listed.is_empty(), status.success(), last) {
+                return Err(format!("could not run the hook helper with the game's Wine: {last}"));
+            }
             return Err(format!("{} is not running in its Wine prefix", file_name(&wine.image)));
         }
         Ok(found
@@ -306,7 +484,7 @@ mod imp {
 }
 
 #[cfg(target_os = "linux")]
-pub use imp::{command, target, windows_targets};
+pub use imp::{command, reachable, reachable_dir, target, windows_targets};
 
 #[cfg(test)]
 mod tests {
@@ -364,6 +542,23 @@ mod tests {
         assert_eq!(unix_path(prefix, "C:\\Games\\vn.exe", links), Some(PathBuf::from("/pfx/dosdevices/../drive_c/Games/vn.exe")));
         assert_eq!(unix_path(prefix, "Q:\\x.exe", links), None);
         assert_eq!(windows_path(Path::new("/home/deck/hook/kimochi-hookd-x64.exe")), "Z:\\home\\deck\\hook\\kimochi-hookd-x64.exe");
+    }
+
+    #[test]
+    fn a_sandboxed_games_files_and_wineserver_are_found_where_it_sees_them() {
+        assert_eq!(in_root(4242, Path::new("/app/bin/wine")), PathBuf::from("/proc/4242/root/app/bin/wine"));
+        // Wine's own naming: dev 0x830, inode 0x13ace8 (a Bottles prefix, live).
+        assert_eq!(server_dir(1000, 0x830, 0x13ace8), PathBuf::from("/tmp/.wine-1000/server-830-13ace8"));
+    }
+
+    #[test]
+    fn a_staged_copy_is_named_by_its_content() {
+        let files = |bytes: &[u8]| vec![("kimochi-hookd-x64.exe".to_string(), bytes.to_vec()), ("x86/a.dll".to_string(), vec![1])];
+        assert_eq!(content_key(&files(b"build 1")), content_key(&files(b"build 1")));
+        assert_ne!(content_key(&files(b"build 1")), content_key(&files(b"build 2")));
+        // A file renamed is another folder too.
+        assert_ne!(content_key(&[("a".into(), b"bc".to_vec())]), content_key(&[("ab".into(), b"c".to_vec())]));
+        assert_eq!(content_key(&files(b"x")).len(), 16);
     }
 
     #[test]
