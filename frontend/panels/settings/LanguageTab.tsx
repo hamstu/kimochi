@@ -37,9 +37,9 @@ export function LanguageTab(): ReactNode {
   const currentReads = engineReadsLanguage(engines[ocrMode], language.code)
 
   return (
-    <SettingsPage title="Language" description="Choose a language to use.">
+    <SettingsPage title="Language" description="Choose the language you're learning and scanning with Kimochi.">
       <SettingsSection>
-        <SettingsRow label="Learning" description="Kimochi reads and looks up text in this language.">
+        <SettingsRow label="Language" description="Kimochi reads and looks up text in this language.">
           <LanguagePicker
             value={language.code}
             onValueChange={(code) =>
