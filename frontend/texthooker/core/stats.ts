@@ -17,6 +17,8 @@ type StatsListener = (s: Stats, runningSince: number | null) => void;
 
 let current: Stats = { ...STATS_DEFAULTS };
 let runningSince: number | null = null;
+/** When the running interval last saw a line: it counts up to here, plus at most the AFK threshold. */
+let lastActive = 0;
 let afkTimer: ReturnType<typeof setTimeout> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let dirty = false;
@@ -92,13 +94,36 @@ export async function flushStats(): Promise<void> {
   }
 }
 
-/** Fold a running interval into totalMs, clamped against laptop-sleep
- *  inflation (cap at the AFK threshold). */
+/**
+ * How long the running interval has lasted at `now`: from its first line to now, but never past
+ * the AFK threshold after its last line, so time away (or a laptop asleep before the AFK timer
+ * could fire) isn't counted as reading.
+ */
+function runningMs(now: number): number {
+  if (runningSince === null) return 0;
+  return Math.max(0, Math.min(now, runningUntil()) - runningSince);
+}
+
+/** The latest the running interval can count to: the AFK threshold after its last line. */
+function runningUntil(): number {
+  return lastActive + Math.max(10, getSettings().afkThresholdSec) * 1000;
+}
+
+/**
+ * A line or edit at `now`: it continues the running interval, or, once that has been idle past the
+ * AFK threshold (the timer had no chance to fire: the computer slept, or a hidden window's timers
+ * were held back), ends it and starts a new one.
+ */
+function noteActivity(now: number) {
+  if (runningSince !== null && now > runningUntil()) commitRunning(now);
+  if (runningSince === null) runningSince = now;
+  lastActive = now;
+}
+
+/** Fold the running interval into totalMs. */
 function commitRunning(now: number) {
   if (runningSince === null) return;
-  const afkMs = Math.max(10, getSettings().afkThresholdSec) * 1000;
-  const elapsed = Math.min(now - runningSince, afkMs);
-  if (elapsed > 0) current.totalMs += elapsed;
+  current.totalMs += runningMs(now);
   runningSince = null;
 }
 
@@ -119,9 +144,7 @@ function armAfkTimer() {
 /** Called by useIngest for every successful append. */
 export function recordLine(textLen: number) {
   const now = Date.now();
-  if (runningSince === null) {
-    runningSince = now;
-  }
+  noteActivity(now);
   current.totalChars += textLen;
   current.totalLines += 1;
   current.lastUpdateTs = now;
@@ -134,9 +157,7 @@ export function recordLine(textLen: number) {
 export function recordCharDelta(delta: number) {
   if (delta === 0) return;
   const now = Date.now();
-  if (runningSince === null) {
-    runningSince = now;
-  }
+  noteActivity(now);
   current.totalChars = Math.max(0, current.totalChars + delta);
   current.lastUpdateTs = now;
   armAfkTimer();
@@ -144,11 +165,15 @@ export function recordCharDelta(delta: number) {
   scheduleSave();
 }
 
-/** Live snapshot for the footer. Caller does its own ticking. */
-export function snapshotStats(): { stats: Stats; elapsedMs: number } {
-  const elapsedMs =
-    current.totalMs + (runningSince ? Date.now() - runningSince : 0);
-  return { stats: current, elapsedMs };
+/**
+ * Live snapshot for the footer. Caller does its own ticking. `runningLeftMs` is how much longer the
+ * running interval can grow without another line, so a window ticking a copy of this (lib/stats.ts)
+ * stops where this module would.
+ */
+export function snapshotStats(): { stats: Stats; elapsedMs: number; runningLeftMs: number } {
+  const now = Date.now();
+  const runningLeftMs = runningSince === null ? 0 : Math.max(0, runningUntil() - now);
+  return { stats: current, elapsedMs: current.totalMs + runningMs(now), runningLeftMs };
 }
 
 export function isRunning(): boolean {

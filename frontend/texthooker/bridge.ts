@@ -13,7 +13,7 @@ export interface ReaderSnapshot {
   sessions: SessionsManifest;
   lines: Line[];
   notebook: NotebookFile;
-  stats: { stats: Stats; elapsedMs: number };
+  stats: { stats: Stats; elapsedMs: number; runningLeftMs: number };
   running: boolean;
   presets: PresetsFile;
   replacements: Replacement[];
