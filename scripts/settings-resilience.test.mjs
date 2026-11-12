@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { load } from './load.mjs'
 
@@ -88,7 +88,7 @@ test('a window whose content throws shows what happened instead of going blank',
   const file = `${dir}.window-error-boundary.test-build.mjs`
   await writeFile(file, code)
   try {
-    const { WindowErrorBoundary } = await import(`${file}?${Date.now()}`)
+    const { WindowErrorBoundary } = await import(`${pathToFileURL(file).href}?${Date.now()}`)
     const failure = new TypeError("undefined is not an object (evaluating 'Is[e].name')")
     const boundary = new WindowErrorBoundary({ window: 'log', children: 'content' })
     assert.equal(boundary.render(), 'content', 'renders its children while nothing failed')
