@@ -36,22 +36,62 @@ const STANDARD: [Button; 17] = [
     Button::Mode,
 ];
 
-pub fn start(app: &tauri::AppHandle, service: &Shared) {
-    // gilrs reports a controller it cannot read (Windows.Gaming.Input's id or reading failing)
-    // only through `log`, then skips it: without this a pad that is listed but never presses
-    // leaves nothing behind.
-    install_gilrs_log();
-    let mut gilrs = match Gilrs::new() {
-        Ok(gilrs) => gilrs,
-        Err(e) => {
+#[cfg(windows)]
+#[path = "gamepad_xinput.rs"]
+mod xinput;
+
+/// What one tick read from the controllers, whichever backend read them.
+struct Tick {
+    backend: &'static str,
+    /// The `gamepads` of the `gamepad` event.
+    devices: Vec<Value>,
+    active: Option<usize>,
+    /// The active controller's standard buttons and stick axes.
+    buttons: Vec<bool>,
+    axes: Vec<f64>,
+}
+
+impl Tick {
+    /// No controller.
+    fn empty(backend: &'static str) -> Self {
+        Self { backend, devices: Vec::new(), active: None, buttons: vec![false; STANDARD.len()], axes: vec![0.0; 4] }
+    }
+}
+
+fn new_gilrs() -> Option<Gilrs> {
+    Gilrs::new()
+        .inspect_err(|e| {
             crate::debug_report::record_now(json!({
                 "check": "gamepad",
                 "status": "unavailable",
                 "detail": e.to_string(),
             }));
-            return;
-        }
-    };
+        })
+        .ok()
+}
+
+/// `gamepadSettings.xinput`: read controllers through XInput rather than gilrs's
+/// Windows.Gaming.Input (`gamepad_xinput.rs`).
+#[cfg(windows)]
+fn xinput_chosen(service: &Shared) -> bool {
+    service.settings.get_or("gamepadSettings.xinput", false)
+}
+
+pub fn start(app: &tauri::AppHandle, service: &Shared) {
+    // gilrs reports a controller it cannot read (Windows.Gaming.Input's id or reading failing)
+    // only through `log`, then skips it: without this a pad that is listed but never presses
+    // leaves nothing behind.
+    install_gilrs_log();
+    #[cfg(windows)]
+    let mut xinput = xinput_chosen(service).then(xinput::Reader::default);
+    #[cfg(windows)]
+    let mut gilrs = if xinput.is_some() { None } else { new_gilrs() };
+    // Without gilrs there is nothing to read. (On Windows the poll runs anyway: XInput can
+    // still be switched on.)
+    #[cfg(not(windows))]
+    let Some(gilrs) = new_gilrs() else { return };
+    #[cfg(not(windows))]
+    let mut gilrs = Some(gilrs);
     let app = app.clone();
     let service = service.clone();
     std::thread::spawn(move || {
@@ -70,21 +110,40 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         let mut logged_pads: Option<Vec<String>> = None;
         let mut raw = RawEventLog::default();
         loop {
-            // Wake as soon as input arrives rather than on a fixed frame, so a stick sweeping
-            // the controller menu is reported the moment it moves. The timeout keeps hotplug
-            // and settings current while nothing is pressed; MIN_TICK lets a burst of events
-            // settle into one tick instead of one tick each.
-            if let Some(event) = gilrs.next_event_blocking(Some(IDLE_TICK)) {
-                raw.note(&gilrs, &event);
+            // The switch in Settings takes effect here, without a restart. Only one backend
+            // runs at a time: dropping gilrs stops its Windows.Gaming.Input thread.
+            #[cfg(windows)]
+            if xinput_chosen(&service) != xinput.is_some() {
+                if xinput.is_some() {
+                    xinput = None;
+                    gilrs = new_gilrs();
+                } else {
+                    gilrs = None;
+                    xinput = Some(xinput::Reader::default());
+                }
+                raw = RawEventLog::default();
+                logged_pads = None;
             }
-            let since = last_tick.elapsed();
-            if since < MIN_TICK {
-                std::thread::sleep(MIN_TICK - since);
-            }
-            last_tick = Instant::now();
-            // Drain the queue so connect/disconnect and button state stay current.
-            while let Some(event) = gilrs.next_event() {
-                raw.note(&gilrs, &event);
+            if let Some(gilrs) = gilrs.as_mut() {
+                // Wake as soon as input arrives rather than on a fixed frame, so a stick sweeping
+                // the controller menu is reported the moment it moves. The timeout keeps hotplug
+                // and settings current while nothing is pressed; MIN_TICK lets a burst of events
+                // settle into one tick instead of one tick each.
+                if let Some(event) = gilrs.next_event_blocking(Some(IDLE_TICK)) {
+                    raw.note(gilrs, &event);
+                }
+                let since = last_tick.elapsed();
+                if since < MIN_TICK {
+                    std::thread::sleep(MIN_TICK - since);
+                }
+                last_tick = Instant::now();
+                // Drain the queue so connect/disconnect and button state stay current.
+                while let Some(event) = gilrs.next_event() {
+                    raw.note(gilrs, &event);
+                }
+            } else {
+                // XInput has no events to wait for: it is asked, as often as a controller reports.
+                std::thread::sleep(POLL_TICK);
             }
             if !service.settings.get_or("gamepadSettings.enabled", true) {
                 BUTTONS_HELD.store(false, Ordering::SeqCst);
@@ -96,58 +155,17 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             let preferred: Option<usize> = service
                 .settings
                 .get_or("gamepadSettings.preferredGamepadIndex", None);
-            let pads: Vec<_> = gilrs.gamepads().collect();
-            let names: Vec<String> = pads.iter().filter(|(_, pad)| pad.is_connected()).map(|(_, pad)| pad.name().to_owned()).collect();
-            if logged_pads.as_ref() != Some(&names) {
-                // Always on disk, not only in the Debug panel: which pads, and how gilrs reads
-                // each, is the first question for "listed but no button lights up".
-                crate::debug_report::record_now(json!({
-                    "check": "gamepad",
-                    "connected": names,
-                    "backend": BACKEND,
-                    "pads": pads.iter().enumerate().map(|(index, (_, pad))| describe_pad(index, pad)).collect::<Vec<_>>(),
-                }));
-                logged_pads = Some(names);
-            }
-            let devices: Vec<_> = pads
-                .iter()
-                .enumerate()
-                .map(|(index, (_, pad))| {
-                    let mut device = json!({
-                        "index": index,
-                        "id": pad.name(),
-                        "connected": pad.is_connected(),
-                        // gilrs normalises to a standard layout, which is what the
-                        // stored button indices assume.
-                        "mapping": "standard",
-                        "buttons": STANDARD.len(),
-                        "axes": 4,
-                        "timestamp": 0,
-                    });
-                    if let (Some(device), Some(raw)) = (device.as_object_mut(), raw_activity(pad, &raw.rests).as_object()) {
-                        device.extend(raw.clone());
-                    }
-                    device
-                })
-                .collect();
-            let last_pressed = raw.last_pressed.and_then(|id| pads.iter().position(|(pad, _)| *pad == id));
-            let active = pick_active(preferred, pads.len(), last_pressed);
-            raw.flush(Some(active.and_then(|index| pads.get(index)).map(|(id, _)| *id)));
-            let (buttons, axes) = match active.and_then(|index| pads.get(index)) {
-                Some((_, pad)) => (
-                    STANDARD
-                        .iter()
-                        .map(|button| pad.is_pressed(*button))
-                        .collect::<Vec<_>>(),
-                    vec![
-                        f64::from(pad.value(gilrs::Axis::LeftStickX)),
-                        f64::from(pad.value(gilrs::Axis::LeftStickY)),
-                        f64::from(pad.value(gilrs::Axis::RightStickX)),
-                        f64::from(pad.value(gilrs::Axis::RightStickY)),
-                    ],
-                ),
-                None => (vec![false; STANDARD.len()], vec![0.0; 4]),
+            let tick = match gilrs.as_ref() {
+                Some(gilrs) => read_gilrs(gilrs, &mut raw, preferred, &mut logged_pads),
+                #[cfg(windows)]
+                None => match xinput.as_mut() {
+                    Some(xinput) => xinput.read(preferred, &mut logged_pads),
+                    None => Tick::empty(BACKEND),
+                },
+                #[cfg(not(windows))]
+                None => Tick::empty(BACKEND),
             };
+            let Tick { backend, devices, active, buttons, axes } = tick;
             // The Deck's own buttons, active or not: the lookup button is read there too.
             #[allow(unused_mut)]
             let mut physical: Option<Vec<bool>> = None;
@@ -200,6 +218,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 "buttonStates": buttons,
                 "axisStates": axes.iter().map(|value| broadcast_axis(*value)).collect::<Vec<_>>(),
                 "overlayNavigation": navigating(),
+                "backend": backend,
             });
             #[cfg(target_os = "linux")]
             let state = {
@@ -259,6 +278,67 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
 
 /// The gilrs backend this build reads controllers with.
 const BACKEND: &str = if cfg!(windows) { "windows-gaming-input" } else if cfg!(target_os = "macos") { "iokit" } else { "evdev" };
+
+/// Records the connected controllers when they change. Always on disk, not only in the Debug
+/// panel: which pads, and how each is read, is the first question for "listed but no button
+/// lights up".
+fn log_pads(logged: &mut Option<Vec<String>>, names: Vec<String>, backend: &str, pads: impl FnOnce() -> Vec<Value>) {
+    if logged.as_ref() != Some(&names) {
+        crate::debug_report::record_now(json!({
+            "check": "gamepad",
+            "connected": names,
+            "backend": backend,
+            "pads": pads(),
+        }));
+        *logged = Some(names);
+    }
+}
+
+/// One tick as gilrs has it, after its events were drained into `raw`.
+fn read_gilrs(gilrs: &Gilrs, raw: &mut RawEventLog, preferred: Option<usize>, logged: &mut Option<Vec<String>>) -> Tick {
+    let pads: Vec<_> = gilrs.gamepads().collect();
+    let names: Vec<String> = pads.iter().filter(|(_, pad)| pad.is_connected()).map(|(_, pad)| pad.name().to_owned()).collect();
+    log_pads(logged, names, BACKEND, || {
+        pads.iter().enumerate().map(|(index, (_, pad))| describe_pad(index, pad)).collect()
+    });
+    let devices: Vec<_> = pads
+        .iter()
+        .enumerate()
+        .map(|(index, (_, pad))| {
+            let mut device = json!({
+                "index": index,
+                "id": pad.name(),
+                "connected": pad.is_connected(),
+                // gilrs normalises to a standard layout, which is what the
+                // stored button indices assume.
+                "mapping": "standard",
+                "buttons": STANDARD.len(),
+                "axes": 4,
+                "timestamp": 0,
+            });
+            if let (Some(device), Some(raw)) = (device.as_object_mut(), raw_activity(pad, &raw.rests).as_object()) {
+                device.extend(raw.clone());
+            }
+            device
+        })
+        .collect();
+    let last_pressed = raw.last_pressed.and_then(|id| pads.iter().position(|(pad, _)| *pad == id));
+    let active = pick_active(preferred, pads.len(), last_pressed);
+    raw.flush(Some(active.and_then(|index| pads.get(index)).map(|(id, _)| *id)));
+    let mut tick = Tick::empty(BACKEND);
+    if let Some((_, pad)) = active.and_then(|index| pads.get(index)) {
+        tick.buttons = STANDARD.iter().map(|button| pad.is_pressed(*button)).collect();
+        tick.axes = vec![
+            f64::from(pad.value(gilrs::Axis::LeftStickX)),
+            f64::from(pad.value(gilrs::Axis::LeftStickY)),
+            f64::from(pad.value(gilrs::Axis::RightStickX)),
+            f64::from(pad.value(gilrs::Axis::RightStickY)),
+        ];
+    }
+    tick.devices = devices;
+    tick.active = active;
+    tick
+}
 
 /// One controller as gilrs sees it, for the diagnostics log. The uuid and ids name the model,
 /// never the person.
@@ -571,6 +651,8 @@ fn delayed_scan_allowed(queued: u64, current: u64, focused: bool, navigation: bo
 const IDLE_TICK: Duration = Duration::from_millis(16);
 /// The shortest gap between ticks: input is picked up within this, at most 250 times a second.
 const MIN_TICK: Duration = Duration::from_millis(4);
+/// The gap between ticks without gilrs (XInput): a wired Xbox controller reports about this often.
+const POLL_TICK: Duration = Duration::from_millis(8);
 /// How often an unchanged `gamepad` state is sent again.
 const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
 /// Stick movement alone goes out at most this often; a button change goes out at once.

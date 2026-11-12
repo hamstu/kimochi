@@ -82,9 +82,10 @@ held; never on Wayland or in Gaming Mode; a machine key, never synced; see `poin
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
-`gamepadSettings.{enabled,preferredGamepadIndex,lookupButton}` (enabled defaults true; `lookupButton`, a
+`gamepadSettings.{enabled,preferredGamepadIndex,lookupButton,xinput}` (enabled defaults true; `lookupButton`, a
 button index held as the lookup key (`gamepad::lookup_held`), defaults on a Steam Deck to the first
-back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere),
+back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere; `xinput`, Windows only
+and off when absent, reads controllers through XInput instead of Windows.Gaming.Input, see below),
 `lastSelectedSource.{sourceId,type,name,appName}`,
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
@@ -622,14 +623,18 @@ unmapped".
 A change in the connected controllers is always recorded as `{check: "gamepad", connected:
 [names], backend, pads: [{name, osName, vendor, product, uuid, mapping, power}]}`, and gilrs's own
 warnings and errors (a controller it lists but cannot read) as `{check: "gamepad-backend", level,
-message}`. Kimochi does not watch
+message}`. With `gamepadSettings.xinput` on, `backend` is `xinput`, `pads` is `[{index, name, slot,
+connected}]`, `pad` in the press records is the XInput slot (0-3), `code` is XInput's name for the
+button, and verbose logging records each change of a controller's buttons as `{check:
+"gamepad-raw", event: "ButtonsChanged", pad, name, active, standardPressed}`. Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
 global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
 mouse button on macOS is the exception, above).
 
 **Gamepad is owned by Rust, not the webview.** Emits `gamepad`
-`{gamepads, activeGamepadIndex, buttonStates, axisStates}` in the shape of
-`src/renderer/src/hooks/useGamepad.ts`. The active controller is
+`{gamepads, activeGamepadIndex, buttonStates, axisStates, overlayNavigation, backend}` in the shape of
+`src/renderer/src/hooks/useGamepad.ts`; `backend` names what reads the controllers
+(`windows-gaming-input`, `xinput`, `iokit` or `evdev`). The active controller is
 `gamepadSettings.preferredGamepadIndex` while that one is connected, else the one a button was last
 pressed on, else the first (`pick_active`), so a silent virtual pad listed first (Steam Input,
 DS4Windows, ViGEm) does not hide the real one. Each of `gamepads` also carries what it sends right
@@ -640,7 +645,13 @@ layout cannot name and axes only past half way; Settings' button test shows it. 
 buttons, and dispatch is rising-edge so holding a button does not repeat. This lives
 natively because the whole point of the feature is to fire while a *game* holds focus,
 and the overlay that would host a browser gamepad module is deliberately unfocused and
-click-through — exactly where WebKit is least likely to report devices. **Unverified:**
+click-through — exactly where WebKit is least likely to report devices.
+**Windows backends.** gilrs reads controllers through Windows.Gaming.Input, which lists every kind
+of controller but can list one and then deliver none of its input. With `gamepadSettings.xinput`
+on (Settings → Shortcuts & Controls → Read controllers with XInput), `gamepad_xinput.rs` polls
+`XInputGetState` for the four XInput slots instead: Xbox-style controllers only, no Home button,
+no USB ids, read whether or not Kimochi has focus. The poll switches between the two when the
+setting changes, without a restart, and only one runs at a time. **Unverified:**
 gilrs reads HID through IOKit, and whether events arrive on a plain polling thread
 without a CFRunLoop has not been tested in-app.
 
