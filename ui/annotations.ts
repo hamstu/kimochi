@@ -253,6 +253,44 @@ function areBoxesNearby(box1: BoundingBox, box2: BoundingBox, threshold: number)
 /** Set top to bottom: Live Text says so only by `orientation`, Google Lens also by `isVertical`. */
 const isVertical = (a: Annotation): boolean => a.isVertical ?? a.orientation === 'vertical'
 
+/**
+ * A card's lines passage by passage. Proximity clusters neighbouring passages into one card (three
+ * headlines side by side a gutter apart, or two vertical passages one above the other), and line
+ * order would then read across the gutter, so a word broken at a line's end ran on into the other
+ * passage's line. A gutter is a strip at least a line thick that no box of the card crosses:
+ * running down the card between horizontal passages, across it between vertical ones. When gutters
+ * split the card into passages of text (each at least three lines' thickness long) and some
+ * passage holds more than one line, each passage is read through before the next (left to right,
+ * or top to bottom for vertical text), every passage keeping `lines`' order. Otherwise (one
+ * passage, a single line of words, a heading that bridges the gutter, scattered single characters,
+ * a narrow column of counts in a menu) `lines` comes back as it was.
+ */
+function passagesOf(lines: Annotation[], vertical: boolean): Annotation[][] {
+  if (lines.length < 2) return [lines]
+  const boxes = lines.map(getBoundingBox)
+  // Along the gutter-split axis (x for horizontal text, y for vertical), and across it.
+  const along = (box: BoundingBox): [number, number] => vertical ? [box.minY, box.maxY] : [box.minX, box.maxX]
+  const across = (box: BoundingBox): number => vertical ? box.minX : box.minY
+  // The typical line's thickness: its height, or its width for vertical text.
+  const lineThickness = median(boxes.map((box) => vertical ? box.width : box.height))
+  const spans: Array<[number, number]> = []
+  for (const [start, end] of boxes.map(along).sort((a, b) => a[0] - b[0])) {
+    const last = spans[spans.length - 1]
+    if (last && start - last[1] < lineThickness) last[1] = Math.max(last[1], end)
+    else spans.push([start, end])
+  }
+  if (spans.length < 2 || spans.some(([start, end]) => end - start < lineThickness * 3)) return [lines]
+  const passages = spans.map(([start, end]) => lines.filter((_, i) => {
+    const [from, to] = along(boxes[i])
+    return from >= start && to <= end
+  }))
+  const multiline = passages.some((passage) => {
+    const offsets = passage.map((a) => across(getBoundingBox(a)))
+    return Math.max(...offsets) - Math.min(...offsets) > lineThickness * 0.5
+  })
+  return multiline ? passages : [lines]
+}
+
 /** Union-find proximity clustering, so a paragraph becomes one readable card. */
 export function groupTextAnnotations(
   annotations: Annotation[],
@@ -307,13 +345,16 @@ export function groupTextAnnotations(
 
     // Reading order within the group: 5px tolerance decides "same line".
     const vertical=isVertical(groupAnnotations[0])
-    const sortedAnnotations = [...groupAnnotations].sort((a, b) => {
+    const rowOrder = [...groupAnnotations].sort((a, b) => {
       const aBox = getBoundingBox(a)
       const bBox = getBoundingBox(b)
       if (vertical) return Math.abs(aBox.centerX-bBox.centerX)<Math.min(aBox.width,bBox.width)*0.7 ? aBox.minY-bBox.minY : bBox.centerX-aBox.centerX
       const yDiff = aBox.minY - bBox.minY
       return Math.abs(yDiff) > 5 ? yDiff : aBox.minX - bBox.minX
     })
+    const passages = passagesOf(rowOrder, vertical)
+    const sortedAnnotations = passages.flat()
+    const passageStarts = new Set(passages.slice(1).map((passage) => passage[0]))
 
     let text = ''
     let lastCenterY = -1
@@ -321,8 +362,12 @@ export function groupTextAnnotations(
     let lastBox: BoundingBox | null=null
     sortedAnnotations.forEach((annotation, index) => {
       const box = getBoundingBox(annotation)
-      if (vertical && lastBox && Math.abs(lastBox.centerX-box.centerX)>Math.min(lastBox.width,box.width)*0.7) text+='\n'
-      if (!vertical && index > 0 && lastCenterY !== -1) {
+      if (passageStarts.has(annotation)) {
+        text += '\n'
+        lastMaxX = -1
+      } else if (vertical && lastBox && Math.abs(lastBox.centerX-box.centerX)>Math.min(lastBox.width,box.width)*0.7) {
+        text += '\n'
+      } else if (!vertical && index > 0 && lastCenterY !== -1) {
         if (box.centerY - lastCenterY > box.height * 0.5) {
           text += '\n'
           lastMaxX = -1

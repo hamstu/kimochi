@@ -168,6 +168,70 @@ test('tight kerning on one line stays a single run', () => {
   assert.equal(groupTextAnnotations([a, b], 100)[0].text, '日本')
 })
 
+test('a card over side-by-side columns reads each column through before the next', () => {
+  // Three headlines a 40 px gutter apart, close enough to cluster into one card, each wrapping a
+  // word over its line break (デジ|タル, 確|保, 関|東).
+  const columns = [
+    ['ニュースおはよう日本デジ', 'タル性暴力防ぐ'],
+    ['ニュースおはよう日本介護の担い手確', '保へ負担減と定着どう支援'],
+    ['ニュースおはよう首都圏（関', '東甲信越）']
+  ]
+  const lines = columns.flatMap((column, c) =>
+    column.map((text, row) => at(text, c * 370, row * 40, row === 0 ? 330 : 200, 30))
+  )
+  // Shuffled the way an engine might report them: row by row.
+  const groups = groupTextAnnotations([0, 2, 4, 1, 3, 5].map((i) => lines[i]), 100)
+  assert.equal(groups.length, 1)
+  assert.deepEqual(groups[0].annotations.map((a) => a.description), columns.flat())
+  assert.equal(groups[0].text, columns.flat().join('\n'))
+})
+
+test('a vertical card over passages stacked one above the other reads each passage through', () => {
+  const vertical = (description, x, y, width, height) => ({ ...at(description, x, y, width, height), isVertical: true })
+  // Two vertical passages a 40 px gap apart, each two columns read right to left, with a word
+  // broken over each column break (図書|館, アルバ|イト).
+  const top = [vertical('今日は一緒に図書', 140, 0, 30, 300), vertical('館へ行かない', 100, 0, 30, 220)]
+  const bottom = [vertical('明日はアルバ', 140, 340, 30, 220), vertical('イトがある', 100, 340, 30, 180)]
+  const stacked = groupTextAnnotations([...bottom, ...top], 100)
+  assert.equal(stacked.length, 1)
+  assert.deepEqual(stacked[0].annotations, [...top, ...bottom])
+  assert.equal(stacked[0].text, '今日は一緒に図書\n館へ行かない\n明日はアルバ\nイトがある')
+
+  // One passage, and passages side by side, read right to left column by column as before.
+  const single = groupTextAnnotations([top[1], top[0]], 100)[0]
+  assert.deepEqual(single.annotations, top)
+  assert.equal(single.text, '今日は一緒に図書\n館へ行かない')
+  const left = [vertical('明日はアルバ', 40, 0, 30, 220), vertical('イトがある', 0, 0, 30, 180)]
+  const sideBySide = groupTextAnnotations([...left, ...top], 100)
+  assert.equal(sideBySide.length, 1)
+  assert.deepEqual(sideBySide[0].annotations, [...top, ...left])
+})
+
+test('a single column keeps its row order, by line or by word', () => {
+  const japanese = [at('今日は一緒に図書館へ', 0, 0, 300, 30), at('行かない？', 0, 40, 150, 30)]
+  const japaneseGroup = groupTextAnnotations([japanese[1], japanese[0]], 100)[0]
+  assert.deepEqual(japaneseGroup.annotations, japanese)
+  assert.equal(japaneseGroup.text, '今日は一緒に図書館へ\n行かない？')
+
+  // A box per word (fragments), the breaks between them lined up on both lines: still one column.
+  const words = [
+    at('今日は', 0, 0, 60, 20), at('雨', 70, 0, 20, 20),
+    at('また', 0, 30, 40, 20), at('明日', 50, 30, 40, 20)
+  ]
+  const wordGroup = groupTextAnnotations([...words].reverse(), 100)[0]
+  assert.deepEqual(wordGroup.annotations, words)
+  assert.equal(wordGroup.text, '今日は雨\nまた明日')
+
+  // A menu's narrow column of counts is a table, read row by row.
+  const menu = [
+    at('ポーション', 0, 0, 150, 30), at('×3', 200, 0, 60, 30),
+    at('エーテル', 0, 40, 120, 30), at('×12', 200, 40, 75, 30)
+  ]
+  const menuGroup = groupTextAnnotations(menu, 100)[0]
+  assert.deepEqual(menuGroup.annotations, menu)
+  assert.equal(menuGroup.text, 'ポーション　×3\nエーテル　×12')
+})
+
 test('visibleAnnotations drops the full-text block and honours the filter switch', () => {
   const full = at('猫ほん', 0, 0, 100, 60)
   const cat = at('猫', 0, 0, 40, 40)
