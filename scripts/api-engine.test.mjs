@@ -68,6 +68,16 @@ test("the API lookup installs without Yomitan's files and splits words through t
   }
 })
 
+test("the API lookup waits for the overlay's lookup key, not always Shift", async () => {
+  const { lookupKeyProperty } = await bundle('../ui/api-lookup.js', 'api-lookup-key.mjs', ['/spike/*'])
+  assert.equal(lookupKeyProperty('shift'), 'shiftKey')
+  assert.equal(lookupKeyProperty('ctrl'), 'ctrlKey')
+  assert.equal(lookupKeyProperty('alt'), 'altKey')
+  assert.equal(lookupKeyProperty('meta'), 'metaKey')
+  assert.equal(lookupKeyProperty(undefined), 'shiftKey', 'unset is Shift')
+  assert.equal(lookupKeyProperty('hyper'), 'shiftKey', 'an unknown key is Shift, as native reads it')
+})
+
 test('the overlay starts the Yomitan API on its own, as a ready dictionary', async () => {
   const source = await readFile(new URL('../ui/overlay.js', import.meta.url), 'utf8')
   const ast = ts.createSourceFile('overlay.js', source, ts.ScriptTarget.Latest, true)

@@ -25,7 +25,7 @@
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open);
  *                    hook-card: look up ?word= (default 天気) in the card
  *   ?hints=1         overlay-words: the hint bar (ui/overlay-hints.js), under the game window
- *                    with ?windowed=1, else along the bottom
+ *                    with ?windowed=1, else along the bottom; ?hints=hover: as with Look up on hover on
  *   ?armed=1         hook-card: Shift held over the card (its bar, size buttons and corner show)
  *   ?theme=light|dark  the pop-up's, the region editor's and the controller's appearance (default:
  *                    the browser's)
@@ -536,9 +536,9 @@ async function play(): Promise<void> {
     case 'overlay-words': {
       const at = params.get('hover')?.split(',').map(Number)
       if (at?.length === 2) renderer.setPointer(at[0], at[1])
-      if (flag('hints')) {
+      if (flag('hints') || params.get('hints') === 'hover') {
         const hints = createOverlayHints(document.body, { onDismiss: () => undefined })
-        hints.sync(true, true)
+        hints.sync(true, true, 'shift', params.get('hints') === 'hover')
         hints.place(flag('windowed') ? game.area : null)
       }
       if (flag('lookup')) {

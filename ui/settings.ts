@@ -246,6 +246,8 @@ export function fullscreenDictionarySource(popupType: unknown): 'entries' | 'pop
 export interface Settings {
   overlayOpacity: number
   liveOverlayEnabled: boolean
+  /** Rest the pointer on an overlay word to look it up, no key held (native `state::HoverIntent`). */
+  overlayHoverLookup: boolean
   textOverlayGrouping: GroupingSettings
   /** How the overlay's highlights and cards look; see `OverlayStyleSettings`. */
   overlayStyle: OverlayStyleSettings
@@ -344,6 +346,7 @@ export const MAX_HISTORY_ENTRIES = 50
 export const SETTINGS_DEFAULTS: Settings = {
   overlayOpacity: 80,
   liveOverlayEnabled: false,
+  overlayHoverLookup: false,
   textOverlayGrouping: DEFAULT_GROUPING,
   overlayStyle: DEFAULT_OVERLAY_STYLE,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,

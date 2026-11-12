@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Look up on hover.** Turn it on in Settings → Shortcuts & Controls to look up a word on the overlay just by resting the pointer on it, no key held. Moving the pointer across the screen doesn't flash pop-ups at every word on the way, and clicks still go to your game. Not available on Linux Wayland yet.
+
 ### Changed
 
 - ⚡ **Auto OCR is about twice as fast with local engines.** New lines reach the overlay and the Log in roughly half the time, and Auto OCR adjusts to your computer: it checks the screen more often when that's cheap, and backs off on slower or busier machines.
@@ -29,6 +33,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Text Hooker: a word split across two lines in the card is looked up whole.** Hovering 自転 when the game breaks 自転車 as 自転 / 車 now finds 自転車, with Yomitan, Hachidori and 10ten, and Read along steps over it as one word.
 - **Windows: scans no longer get stuck on "a scan is already running"** until you restart Kimochi, after Windows fails to close the capture of a game that quit.
 - **Hovering a word on the overlay looks up the word you're pointing at after an ellipsis or a pair of brackets** (like `……` or `。」`). Before, the words after them could be up to a character and a half away from the text underneath, especially with Apple Live Text, and on Windows after closing brackets.
+- **The Yomitan API dictionary now looks words up on the overlay with the lookup key you chose** (Ctrl, Alt or Command), not only with Shift.
 
 ## [0.9.0] - 2026-11-11
 

@@ -128,3 +128,41 @@ export function scanPointerInit(
     metaKey: !!sample.meta
   }
 }
+
+/**
+ * Whether hover lookup (`overlayHoverLookup`) is on for this overlay. Not in Gaming Mode (the
+ * resting "pointer" is the Deck trackpad's mouse) and not on Wayland, where native reads the
+ * pointer only while the key is held and never says `hover`. There Settings hides the switch, so
+ * a value left from before (or written by hand) must not turn off the overlay's click-away
+ * (`catching`) or change its hint either. Only `true` turns it on.
+ */
+export function hoverLookupApplies(session: { gamescope: boolean; wayland: boolean }, setting: unknown): boolean {
+  return setting === true && !session.gamescope && !session.wayland
+}
+
+/** The lookup keys `overlayLookupKey` names, as a sample carries them. */
+export type LookupKey = 'shift' | 'ctrl' | 'alt' | 'meta'
+
+/**
+ * Hover lookup (`overlayHoverLookup`): the sample as the dictionary should hear it.
+ *
+ * Native marks a sample `hover` once the pointer has come to rest (`state::HoverIntent`). The
+ * dictionary still waits for its own key (Shift unless the reader chose another, the one
+ * `overlayLookupKey` names), so the sample is handed on with that key held. Never over a
+ * dictionary pop-up (`overPopup`), nor with a button down: resting on a definition to read it must not open a lookup of
+ * the word under the pointer inside it. Only the scan hears this: the words still let clicks
+ * through to the game, since that follows the key actually held (the gate, in native).
+ */
+export function withHoverKey<T extends PointerSample & { hover?: boolean }>(
+  sample: T,
+  enabled: boolean,
+  key: string | null | undefined,
+  overPopup: boolean
+): T {
+  // Never with a button down: Yomitan's default scan input leaves out a press (it is a click), so
+  // a keyed press would read nothing and its release would reopen what the click just closed.
+  // Native already stops `hover` while a button is down and until the pointer moves after it.
+  if (!enabled || sample.hover !== true || sample.down || overPopup) return sample
+  const held: LookupKey = key === 'ctrl' || key === 'alt' || key === 'meta' ? key : 'shift'
+  return { ...sample, [held]: true }
+}

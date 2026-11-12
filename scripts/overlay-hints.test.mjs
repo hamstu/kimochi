@@ -75,6 +75,18 @@ test('desktops say what Shift does', () => {
   assert.equal(hints.element.textContent, 'Hold Shift over a word to look it up')
 })
 
+test('hover lookup says resting looks up, and the key is left for clicking text', () => {
+  const hints = createOverlayHints(new Element('body'), { onDismiss() {} })
+  hints.sync(true, true, 'shift', true)
+  assert.equal(hints.element.textContent, 'Rest the pointer on a word to look it up · Hold Shift to click text')
+  hints.sync(true, true, 'ctrl', true)
+  assert.equal(hints.element.textContent, 'Rest the pointer on a word to look it up · Hold Ctrl to click text')
+  hints.sync(true, false, 'shift', true)
+  assert.equal(hints.element.textContent, 'Rest the pointer on a word to look it up')
+  hints.sync(true, true, 'shift', false)
+  assert.equal(hints.element.textContent, 'Hold Shift to look up words and click text')
+})
+
 test('Gaming Mode names the game-menu buttons instead of Shift, at handheld size', () => {
   const hints = createOverlayHints(new Element('body'), { onDismiss() {} })
   hints.gaming(['L4'])
