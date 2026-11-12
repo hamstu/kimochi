@@ -125,10 +125,15 @@ async function importFrom(file) {
   return import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].contents).toString('base64')}`)
 }
 
-/** The overlay's own stylesheet: the first <style> of overlay.html. */
+/**
+ * The overlay's own stylesheet: the first <style> of overlay.html, and overlay-text.css, which
+ * styles the word boxes and grouped regions (without it nothing is placed over its box).
+ */
 async function overlayCss(ui) {
   const html = await readFile(path.join(ui, 'overlay.html'), 'utf8')
-  return html.match(/<style>([\s\S]*?)<\/style>/)[1]
+  const inline = html.match(/<style>([\s\S]*?)<\/style>/)[1]
+  const text = path.join(ui, 'overlay-text.css')
+  return existsSync(text) ? `${inline}\n${await readFile(text, 'utf8')}` : inline
 }
 
 async function openPage(browser, viewport) {

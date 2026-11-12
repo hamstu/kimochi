@@ -26,6 +26,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
 - **Text Hooker: a word split across two lines in the card is looked up whole.** Hovering 自転 when the game breaks 自転車 as 自転 / 車 now finds 自転車, with Yomitan, Hachidori and 10ten, and Read along steps over it as one word.
 - **Windows: scans no longer get stuck on "a scan is already running"** until you restart Kimochi, after Windows fails to close the capture of a game that quit.
+- **Hovering a word on the overlay looks up the word you're pointing at after an ellipsis or a pair of brackets** (like `……` or `。」`). Before, the words after them could be up to a character and a half away from the text underneath, especially with Apple Live Text, and on Windows after closing brackets.
 
 ## [0.9.0] - 2026-11-11
 
