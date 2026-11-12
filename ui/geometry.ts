@@ -37,6 +37,8 @@ export interface Annotation {
   /** The typeface the overlay sets this engine's text in (TYPEFACES in ocr-result.ts). */
   typeface?: string
   groupId?: string
+  /** A speech bubble (Manga OCR's blocks): its own passage (Annotation.bubble in annotations.ts). */
+  bubble?: boolean
   /** What the box sits on (Annotation.surface in annotations.ts). */
   surface?: Surface
   boundingPoly: { vertices: { x?: number; y?: number }[] }
@@ -50,6 +52,7 @@ export type MappedBox = Rect & {
   isVertical?: boolean
   granularity?: string
   groupId?: string
+  bubble?: boolean
   lines?: Rect[]
   lineSegments?: MappedSegment[][]
   lineTexts?: string[]
@@ -157,6 +160,7 @@ export function mapAnnotations(
         ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}),
         ...(a.granularity !== undefined ? { granularity: a.granularity } : {}),
         ...(a.groupId !== undefined ? { groupId: a.groupId } : {}),
+        ...(a.bubble ? { bubble: true } : {}),
         ...(lines.length ? { lines } : {}),
         ...(lineSegments.some((words) => words.length) ? { lineSegments } : {}),
         ...(lineTexts.length ? { lineTexts } : {}),
