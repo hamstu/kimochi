@@ -86,6 +86,8 @@
   transition-duration: var(--k-fast);
 }
 .gamepad-key[data-pressed] { background: var(--k-accent); color: var(--k-accent-contrast); }
+/* Under the button test: input by raw code, for a controller whose presses light nothing up. */
+.gamepad-raw { padding-top: 0; color: var(--k-text-2); font-size: var(--k-text-xs); overflow-wrap: anywhere; }
 
 /* The gamepad capture control: a button with an optional clear button. */
 .gamepad-capture { display: inline-flex; align-items: center; gap: var(--k-space-0-5); }

@@ -598,8 +598,14 @@ Controls. Not while one of Kimochi's windows has focus (the controller works the
 while `autoScanSettings.enabled` is off. With verbose logging on, every press is recorded as
 `{check: "gamepad-press", pressed, panelFocused, outcome}`, so a debug report says what it did and
 why no scan followed, and the first raw button and axis events gilrs delivers are recorded as
-`{check: "gamepad-raw", event, button|axis, code, value?, standardPressed}` (presses that arrive
-as `Unknown` or leave `standardPressed` empty never reach a binding; `vitals` counts the rest).
+`{check: "gamepad-raw", event, pad, name, active, button|axis, code, value?, standardPressed}`
+(presses that arrive as `Unknown` or leave `standardPressed` empty never reach a binding; `active`
+false means the press was on another controller than the one read; `vitals` counts the rest).
+Always, once per controller per run, its first press is recorded as `{check: "gamepad-first-press",
+pad, name, active, button, code, standardIndex, mapping}` and its first press the standard layout
+cannot name as the same with `check: "gamepad-unmapped-press"`, so a report without verbose
+logging still tells "no input arrives" from "it arrives on another controller" from "it arrives
+unmapped".
 A change in the connected controllers is always recorded as `{check: "gamepad", connected:
 [names], backend, pads: [{name, osName, vendor, product, uuid, mapping, power}]}`, and gilrs's own
 warnings and errors (a controller it lists but cannot read) as `{check: "gamepad-backend", level,
@@ -610,7 +616,13 @@ mouse button on macOS is the exception, above).
 
 **Gamepad is owned by Rust, not the webview.** Emits `gamepad`
 `{gamepads, activeGamepadIndex, buttonStates, axisStates}` in the shape of
-`src/renderer/src/hooks/useGamepad.ts`. Buttons use the W3C standard mapping order, so
+`src/renderer/src/hooks/useGamepad.ts`. The active controller is
+`gamepadSettings.preferredGamepadIndex` while that one is connected, else the one a button was last
+pressed on, else the first (`pick_active`), so a silent virtual pad listed first (Steam Input,
+DS4Windows, ViGEm) does not hide the real one. Each of `gamepads` also carries what it sends right
+now, before the standard layout (`raw_activity`): `{name, mappingSource, vendor, product,
+rawButtons: [{code, standard}], rawAxes: [{code, name, value}]}`, `standard` null for a button the
+layout cannot name and axes only past half way; Settings' button test shows it. Buttons use the W3C standard mapping order, so
 `gamepadButton` indices stored by the Electron build keep pointing at the same physical
 buttons, and dispatch is rising-edge so holding a button does not repeat. This lives
 natively because the whole point of the feature is to fire while a *game* holds focus,

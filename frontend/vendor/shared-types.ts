@@ -190,6 +190,16 @@ export type GamepadDevice = {
   buttons: number // Number of buttons
   axes: number // Number of axes
   timestamp: number // Last update timestamp
+  // Delta, native only (gamepad.rs `raw_activity`): what the controller sends right now, before
+  // the standard layout, so the button test can show a press it cannot name.
+  /** gilrs's mapping: `SdlMappings` (a known model) or `Driver` (the built-in layout). */
+  mappingSource?: string
+  vendor?: string | null
+  product?: string | null
+  /** Buttons held, by raw code; `standard` is the index they read as, null when unmapped. */
+  rawButtons?: { code: string; standard: number | null }[]
+  /** Axes pushed past half way, by raw code, with gilrs's name for them when it has one. */
+  rawAxes?: { code: string; name: string | null; value: number }[]
 }
 
 // Gamepad settings

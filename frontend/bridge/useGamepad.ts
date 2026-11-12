@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GamepadDevice, GamepadSettings, GamepadState } from './types'
 import { useSetting } from './useSetting'
 import { onEvent } from './tauri'
+import { axesAwayFromRest } from './gamepadRest'
 
 export const GAMEPAD_BUTTON_NAMES: string[] = [
   'A',
@@ -80,7 +81,26 @@ function toDevice(gamepad: Gamepad): GamepadDevice {
     mapping: gamepad.mapping,
     buttons: gamepad.buttons.length,
     axes: gamepad.axes.length,
-    timestamp: gamepad.timestamp
+    timestamp: gamepad.timestamp,
+    // Delta: raw activity for the button test, as native reports it (gamepad.rs `raw_activity`).
+    // Indices are only standard buttons under the "standard" mapping.
+    ...browserRawActivity(gamepad)
+  }
+}
+
+/** Where each browser-reported axis rests, by `id:index`, learned the first time it is seen. */
+const browserAxisRests = new Map<string, number>()
+
+function browserRawActivity(
+  gamepad: Pick<Gamepad, 'id' | 'mapping' | 'buttons' | 'axes'>
+): Pick<GamepadDevice, 'rawButtons' | 'rawAxes'> {
+  const standard = gamepad.mapping === 'standard'
+  return {
+    rawButtons: gamepad.buttons.flatMap((button, index) =>
+      button.pressed ? [{ code: `Button ${index}`, standard: standard ? index : null }] : []
+    ),
+    // A trigger can rest at -1 (non-standard mappings): only movement away from rest is input.
+    rawAxes: axesAwayFromRest(gamepad.axes, browserAxisRests, (index) => `${gamepad.id}:${index}`)
   }
 }
 
