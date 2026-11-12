@@ -113,3 +113,42 @@ test('a modifier alone is enough: the pointer need not have moved', () => {
   assert.equal(first.clientX, second.clientX)
   assert.equal(second.shiftKey, true)
 })
+
+test('hover lookup holds the lookup key for a resting pointer, and only then', async () => {
+  const { withHoverKey } = await load('scan-input.ts')
+  const resting = sample({ hover: true })
+  const scan = (s) => scanPointerInit(s, local(s), 10000)
+  assert.equal(scan(withHoverKey(resting, true, 'shift', false)).shiftKey, true)
+  assert.equal(scan(withHoverKey(resting, true, 'ctrl', false)).ctrlKey, true, 'the key the dictionary waits for')
+  assert.equal(scan(withHoverKey(resting, true, 'ctrl', false)).shiftKey, false)
+  assert.equal(scan(withHoverKey(resting, true, 'bogus', false)).shiftKey, true, 'an unknown key is Shift')
+  assert.equal(scan(withHoverKey(resting, false, 'shift', false)).shiftKey, false, 'not with the setting off')
+  assert.equal(scan(withHoverKey(sample(), true, 'shift', false)).shiftKey, false, 'not while travelling')
+  assert.equal(scan(withHoverKey(resting, true, 'shift', true)).shiftKey, false, 'not over a pop-up')
+})
+
+test('hover lookup applies only where Settings offers it, and only when turned on', async () => {
+  const { hoverLookupApplies } = await load('scan-input.ts')
+  const desktop = { gamescope: false, wayland: false }
+  assert.equal(hoverLookupApplies(desktop, true), true)
+  assert.equal(hoverLookupApplies(desktop, false), false)
+  assert.equal(hoverLookupApplies(desktop, undefined), false, 'off by default')
+  assert.equal(hoverLookupApplies(desktop, 'true'), false, 'only a real true')
+  // Synced or left over from another computer: Wayland and Gaming Mode hide the switch, so the
+  // overlay must not act on it (its click-away and hint stay as they are).
+  assert.equal(hoverLookupApplies({ gamescope: false, wayland: true }, true), false)
+  assert.equal(hoverLookupApplies({ gamescope: true, wayland: false }, true), false)
+})
+
+test('hover lookup never keys a press: a click on resting text is a click, not a lookup', async () => {
+  const { withHoverKey } = await load('scan-input.ts')
+  const scan = (s) => scanPointerInit(s, local(s), 10000)
+  // Even if native still said `hover` (an older sample), a press goes to the dictionary unkeyed.
+  const press = scan(withHoverKey(sample({ hover: true, down: true }), true, 'shift', false))
+  assert.equal(press.buttons, 1)
+  assert.equal(press.shiftKey, false)
+  // The release native sends after a click carries no `hover` (state::HoverIntent waits for a
+  // move), so it is not keyed either and Yomitan does not reopen the pop-up the click closed.
+  const release = scan(withHoverKey(sample({ hover: false, down: false }), true, 'shift', false))
+  assert.equal(release.shiftKey, false)
+})
