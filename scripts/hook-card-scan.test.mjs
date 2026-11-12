@@ -75,6 +75,41 @@ const sibling = (node, step) =>
   node.parentNode?.childNodes[
     node.parentNode.childNodes.indexOf(node) + step
   ] ?? null;
+/** Takes `node` out of its parent, if it has one. */
+const detach = (node) => {
+  if (!node.parentNode) return;
+  node.parentNode.childNodes.splice(
+    node.parentNode.childNodes.indexOf(node),
+    1,
+  );
+  node.parentNode = null;
+};
+/** The next or previous element among `node`'s siblings. */
+const elementSibling = (node, step) => {
+  for (let next = sibling(node, step); next; next = sibling(next, step))
+    if (next.nodeType === 1) return next;
+  return null;
+};
+/** What text and element nodes share: element siblings, and moving themselves within their parent. */
+const TREE = {
+  get nextElementSibling() {
+    return elementSibling(this, 1);
+  },
+  get previousElementSibling() {
+    return elementSibling(this, -1);
+  },
+  after(...nodes) {
+    const parent = this.parentNode;
+    const next = this.nextSibling;
+    for (const node of nodes) parent.insertBefore(node, next);
+  },
+  before(...nodes) {
+    for (const node of nodes) this.parentNode.insertBefore(node, this);
+  },
+  remove() {
+    detach(this);
+  },
+};
 
 class FakeElement {
   constructor(tag) {
@@ -143,16 +178,39 @@ class FakeElement {
     return force;
   }
   append(...nodes) {
-    for (const node of nodes) {
-      const child = typeof node === "string" ? new FakeText(node) : node;
-      if (child.parentNode)
-        child.parentNode.childNodes.splice(
-          child.parentNode.childNodes.indexOf(child),
-          1,
+    for (const node of nodes) this.insertBefore(node, null);
+  }
+  /** Inserts `node` (or a string, as text) before `next`, a child of this; at the end for null. */
+  insertBefore(node, next) {
+    const child = typeof node === "string" ? new FakeText(node) : node;
+    if (child === next) return child;
+    detach(child);
+    const at = next ? this.childNodes.indexOf(next) : -1;
+    if (next && at < 0) throw Error("insertBefore: not a child");
+    if (at < 0) this.childNodes.push(child);
+    else this.childNodes.splice(at, 0, child);
+    child.parentNode = this;
+    return child;
+  }
+  get firstElementChild() {
+    return this.children[0] ?? null;
+  }
+  get lastElementChild() {
+    return this.children.at(-1) ?? null;
+  }
+  cloneNode(deep = false) {
+    const copy = new FakeElement(this.nodeName.toLowerCase());
+    copy.className = this.className;
+    copy.attributes = new Map(this.attributes);
+    copy.hidden = this.hidden;
+    if (deep)
+      for (const child of this.childNodes)
+        copy.append(
+          child.nodeType === 3
+            ? new FakeText(child.data)
+            : child.cloneNode(true),
         );
-      child.parentNode = this;
-      this.childNodes.push(child);
-    }
+    return copy;
   }
   replaceChildren(...nodes) {
     for (const child of this.childNodes) child.parentNode = null;
@@ -179,6 +237,12 @@ class FakeElement {
     return [];
   }
 }
+
+for (const kind of [FakeText, FakeElement])
+  Object.defineProperties(
+    kind.prototype,
+    Object.getOwnPropertyDescriptors(TREE),
+  );
 
 globalThis.document = { createElement: (tag) => new FakeElement(tag) };
 globalThis.innerWidth = 1280;
