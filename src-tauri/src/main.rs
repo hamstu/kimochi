@@ -4519,7 +4519,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             // Not counted as `scanning`: a pointer at rest is most of the time, and the faster
             // poll is for a key held on purpose.
             let hovering = match &sample {
-                Some(s) if hover_lookup => hover.update(s.x, s.y, Instant::now()),
+                Some(s) if hover_lookup => hover.update(s.x, s.y, s.down, Instant::now()),
                 _ => {
                     hover.reset();
                     false

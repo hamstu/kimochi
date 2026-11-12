@@ -1,6 +1,6 @@
 import './install-pointer-dedupe.js'
 import { createDictionarySetup } from './setup-dictionaries.js'
-import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm, popupAnkiConfig } from './api-lookup.js'
+import { apiTokenize, dismissApiLookup, installApiLookup, lookupKeyProperty, lookupTerm, popupAnkiConfig } from './api-lookup.js'
 import { createAnki } from './game-dictionary-anki.js'
 import { audioUrl } from './game-dictionary.js'
 import { createController } from './controller.js'
@@ -31,7 +31,7 @@ import { PopupLeave } from './popup-leave.js'
  */
 
 import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
-import { scanPointerInit, withHoverKey } from './scan-input.js'
+import { hoverLookupApplies, scanPointerInit, withHoverKey } from './scan-input.js'
 import { groupTextAnnotations, visibleAnnotations } from './annotations.js'
 import { japaneseFilterOf } from './japanese-text.js'
 import { AutoScanner } from './autoscan.js'
@@ -105,9 +105,10 @@ function clickThrough() {
  * clicks through to the game, and a pop-up no longer takes the next click (`catching`).
  */
 function hoverLookup() {
-  // Not in Gaming Mode: the pointer there is the Deck's trackpad mouse resting wherever it was.
-  return !nativeGamescope && native.getSetting('overlayHoverLookup') === true
+  return hoverLookupApplies({ gamescope: nativeGamescope, wayland: waylandSession }, native.getSetting('overlayHoverLookup'))
 }
+/** Linux on Wayland (`caps.session.backend`): hover lookup does not apply there (`hoverLookupApplies`). */
+let waylandSession = false
 /** Whether the whole overlay is taking the next click (`hitRects`, `onFreeClick`). */
 let catching = false
 /** Whether Shift's gate is open (`state::ShiftGate`), from the native pointer feed. */
@@ -4549,6 +4550,7 @@ await native.watchCapabilities(async (caps) => {
     if (gated && !shiftGated) layerPointerExit?.unsample()
     shiftGated = gated
     lookupOnHover = caps.overlay?.lookupOnHover === true
+    waylandSession = caps.session?.backend === 'wayland'
   }
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
@@ -4816,9 +4818,48 @@ window.addEventListener(
       renderer.setPointer(event.clientX, event.clientY)
       renderer.flushPointer()
     }
+    rekeyForHover(event)
   },
   true
 )
+// Hachidori reads `mousemove` (its descriptor's `pointerEvents`).
+window.addEventListener('mousemove', (event) => { if (event.isTrusted) rekeyForHover(event) }, true)
+
+/** Whether the native feed's last sample said the pointer rests (`hover`, `state::HoverIntent`). */
+let feedHover = false
+/**
+ * Hover lookup, where the overlay has the mouse itself (click-through off, or the words while the
+ * gate is open): its real moves carry no key, and 10ten closes a key-opened pop-up on a move
+ * without its key, so gliding along a line would flicker between the feed's keyed moves and these.
+ * While the feed says the pointer rests, a real move goes on with the lookup key held instead,
+ * as the feed's own samples do (`withHoverKey`: not over a pop-up, not with a button down).
+ */
+function rekeyForHover(event) {
+  if (!feedHover || !hoverLookup() || controller.drivesLookups) return
+  const property = lookupKeyProperty(native.getSetting('overlayLookupKey'))
+  if (event[property] || event.buttons !== 0) return
+  if (overPopupAt({ x: event.clientX, y: event.clientY })) return
+  event.stopImmediatePropagation()
+  const init = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    screenX: event.screenX,
+    screenY: event.screenY,
+    buttons: 0,
+    shiftKey: event.shiftKey,
+    ctrlKey: event.ctrlKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+    [property]: true
+  }
+  const keyed = event.type === 'mousemove'
+    ? new MouseEvent('mousemove', init)
+    : new PointerEvent('pointermove', { ...init, pointerType: event.pointerType, isPrimary: event.isPrimary, pointerId: event.pointerId })
+  ;(event.target ?? window).dispatchEvent(keyed)
+}
 
 /** The element at a point, looking inside open shadow roots (an engine's pop-up) as a real event would. */
 function deepElementFromPoint(doc, x, y) {
@@ -4868,6 +4909,7 @@ await native.listen('pointer', ({ payload }) => {
   // leaves them out of what takes the mouse, `View::live_regions`), so nothing lights up either.
   // Without click-through, text lights up on hover as it always has.
   gateOpen = Boolean(payload.gate ?? payload.shift)
+  feedHover = payload.hover === true
   const armed = !clickThrough() || gateOpen
   if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.

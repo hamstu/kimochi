@@ -55,6 +55,9 @@ pub const MACHINE_KEYS: &[&str] = &[
     "yomitanSettings",
     "accountBackup",
     "sentenceAudio",
+    // Look up on hover: how this computer's pointer and windowing system can be read (not on
+    // Wayland, not in Gaming Mode), so a choice made on one computer must not reach another.
+    "overlayHoverLookup",
 ];
 
 /// Settings that follow the profile but never sync: they name this computer's sessions.
@@ -297,10 +300,11 @@ mod tests {
             "windowPositions": { "log": [1, 2] },
             "scannedTextHistory": ["a"],
             "texthookerSourceSessions": { "app": "s1" },
+            "overlayHoverLookup": true,
         });
         let out = synced_part(&settings);
         let text = out.to_string();
-        for secret in ["secret-1", "secret-2", "portalRestoreToken", "apiKey", "windowPositions", "texthookerSourceSessions"] {
+        for secret in ["secret-1", "secret-2", "portalRestoreToken", "apiKey", "windowPositions", "texthookerSourceSessions", "overlayHoverLookup"] {
             assert!(!text.contains(secret), "{secret} leaked: {text}");
         }
         assert_eq!(out["superTexthooker"]["fontSizePx"], 16);

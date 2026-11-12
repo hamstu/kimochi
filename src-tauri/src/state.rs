@@ -681,6 +681,8 @@ pub struct HoverIntent {
     last: Option<(f64, f64, Instant)>,
     /// Since when the pointer has been slower than [`HoverIntent::TRAVEL_SPEED`].
     slow_since: Option<Instant>,
+    /// Where the last press was let go, until the pointer moves away from it.
+    released_at: Option<(f64, f64)>,
 }
 
 impl HoverIntent {
@@ -688,9 +690,29 @@ impl HoverIntent {
     pub const DWELL: Duration = Duration::from_millis(120);
     /// Faster than this (desktop units a second) is travelling, not reading.
     pub const TRAVEL_SPEED: f64 = 900.0;
+    /// How far the pointer has to move after a click before it reads again (desktop units).
+    pub const MOVE_AFTER_CLICK: f64 = 3.0;
 
-    /// One sample of the pointer; whether it is reading now.
-    pub fn update(&mut self, x: f64, y: f64, now: Instant) -> bool {
+    /// One sample of the pointer (`down`: a button is held); whether it is reading now.
+    ///
+    /// Never while a button is down, and not after it until the pointer has moved: a click with
+    /// the pointer resting on the text (advancing a visual novel) closes the pop-up, and the
+    /// release must not open it again at once. The dwell starts over from the move.
+    pub fn update(&mut self, x: f64, y: f64, down: bool, now: Instant) -> bool {
+        if down {
+            self.last = Some((x, y, now));
+            self.slow_since = None;
+            self.released_at = Some((x, y));
+            return false;
+        }
+        if let Some((rx, ry)) = self.released_at {
+            if (x - rx).hypot(y - ry) < Self::MOVE_AFTER_CLICK {
+                self.last = Some((x, y, now));
+                self.slow_since = None;
+                return false;
+            }
+            self.released_at = None;
+        }
         let speed = self.last.map_or(0.0, |(px, py, at)| {
             let distance = (x - px).hypot(y - py);
             let seconds = now.saturating_duration_since(at).as_secs_f64();
@@ -1547,17 +1569,17 @@ mod pointer_tests {
         let t0 = Instant::now();
         let at = |ms: u64| t0 + Duration::from_millis(ms);
         let mut hover = HoverIntent::default();
-        assert!(!hover.update(100., 100., at(0)), "not on the first sample");
-        assert!(!hover.update(100., 100., at(60)), "nor before the dwell");
-        assert!(hover.update(100., 100., at(130)), "resting on a word reads it");
-        assert!(hover.update(103., 100., at(146)), "gliding slowly along the line keeps reading");
-        assert!(!hover.update(160., 100., at(162)), "a quick move away is travelling");
-        assert!(!hover.update(400., 300., at(178)));
-        assert!(!hover.update(401., 300., at(194)), "slowing down starts the dwell over");
-        assert!(!hover.update(401., 300., at(250)));
-        assert!(hover.update(401., 300., at(320)));
+        assert!(!hover.update(100., 100., false, at(0)), "not on the first sample");
+        assert!(!hover.update(100., 100., false, at(60)), "nor before the dwell");
+        assert!(hover.update(100., 100., false, at(130)), "resting on a word reads it");
+        assert!(hover.update(103., 100., false, at(146)), "gliding slowly along the line keeps reading");
+        assert!(!hover.update(160., 100., false, at(162)), "a quick move away is travelling");
+        assert!(!hover.update(400., 300., false, at(178)));
+        assert!(!hover.update(401., 300., false, at(194)), "slowing down starts the dwell over");
+        assert!(!hover.update(401., 300., false, at(250)));
+        assert!(hover.update(401., 300., false, at(320)));
         hover.reset();
-        assert!(!hover.update(401., 300., at(330)), "a reset forgets the dwell");
+        assert!(!hover.update(401., 300., false, at(330)), "a reset forgets the dwell");
     }
 
     #[test]
@@ -1567,8 +1589,24 @@ mod pointer_tests {
         // 1500 points a second, sampled every 16 ms, for a second.
         for tick in 0..60u64 {
             let x = tick as f64 * 24.0;
-            assert!(!hover.update(x, 200., t0 + Duration::from_millis(tick * 16)), "tick {tick}");
+            assert!(!hover.update(x, 200., false, t0 + Duration::from_millis(tick * 16)), "tick {tick}");
         }
+    }
+
+    #[test]
+    fn a_click_on_resting_text_does_not_reopen_the_lookup_on_release() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut hover = HoverIntent::default();
+        assert!(!hover.update(100., 100., false, at(0)));
+        assert!(hover.update(100., 100., false, at(130)), "resting on the line reads it");
+        assert!(!hover.update(100., 100., true, at(200)), "a press stops it");
+        assert!(!hover.update(100., 100., true, at(260)), "for as long as the button is down");
+        assert!(!hover.update(100., 100., false, at(300)), "the release does not read again");
+        assert!(!hover.update(101., 100., false, at(1300)), "nor resting there, a second later");
+        assert!(!hover.update(110., 100., false, at(1316)), "a move away starts the dwell over");
+        assert!(!hover.update(110., 100., false, at(1400)));
+        assert!(hover.update(110., 100., false, at(1440)), "and then it reads the new line");
     }
 
     #[test]

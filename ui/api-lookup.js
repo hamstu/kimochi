@@ -62,6 +62,18 @@ export function popupAnkiConfig(reader) {
 }
 
 /**
+ * The pointer event property for a lookup key (`overlayLookupKey`: "shift", "ctrl", "alt" or
+ * "meta"); anything else is Shift, as native reads it (`Modifiers::holds`).
+ * @param {unknown} key
+ */
+export function lookupKeyProperty(key) {
+  if (key === 'ctrl') return 'ctrlKey'
+  if (key === 'alt') return 'altKey'
+  if (key === 'meta') return 'metaKey'
+  return 'shiftKey'
+}
+
+/**
  * `embedded`: Built-in Yomitan is loaded in this document (its own pop-up is switched off while
  * the Yomitan API is the engine). The Yomitan API on its own (`startApiEngine` in overlay.js) loads
  * none of Yomitan's files, so there is nothing to switch. `onVisibilityChange(visible)`: told when
@@ -74,6 +86,9 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
   const { invoke } = window.__TAURI__.core
   let settings = await invoke('settings_get', { key: 'yomitanSettings' })
   let reader = (await invoke('settings_get', { key: 'superTexthooker' })) || {}
+  // The overlay's lookup key (`overlayLookupKey`): the modifier the native feed and hover lookup
+  // hold for a lookup (ui/scan-input.ts `withHoverKey`). Shift unless the reader chose another.
+  let lookupKey = await invoke('settings_get', { key: 'overlayLookupKey' })
   const apiMode = () => settings?.popupType === 'custom-api'
   // Empty means the helper's default address (resolveYomitanApiUrl in yomitan-api-setup.ts).
   const baseUrl = () => settings?.customApiUrl?.trim() || 'http://127.0.0.1:19633'
@@ -130,6 +145,7 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
       if (!apiMode()) void invoke('hide_popover')
     }
     if (payload.key === 'superTexthooker') reader = payload.value || {}
+    if (payload.key === 'overlayLookupKey') lookupKey = payload.value
   })
   // Only the first pop-up is this word's; the ones nested on it close on their own.
   await window.__TAURI__.event.listen('popover:hide', ({ payload }) => {
@@ -148,7 +164,7 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     'pointermove',
     (event) => {
       if (!apiMode()) return
-      if (event.shiftKey) scanner.scan(pointOf(event))
+      if (event[lookupKeyProperty(lookupKey)]) scanner.scan(pointOf(event))
       else scanner.stop()
     },
     true

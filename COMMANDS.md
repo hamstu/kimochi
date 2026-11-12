@@ -76,7 +76,8 @@ Keys and defaults mirror `src/main/settings.ts`:
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
 `meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll),
 `overlayHoverLookup` (false: resting the pointer on an overlay word looks it up with no key
-held; never on Wayland; see `pointer` below), `scannedTextFontSize` (14),
+held; never on Wayland or in Gaming Mode; a machine key, never synced; see `pointer` below),
+`scannedTextFontSize` (14),
 `scannedTextHistory[]`, `audioSettings.voiceId`,
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
@@ -480,10 +481,14 @@ edge, and when Shift's gate (`gate`, `state::ShiftGate`) opens or shuts, which i
 pointer still (and on Wayland, positions stop being read once it has shut). `hover` is true
 only with `overlayHoverLookup` on, once the pointer has stayed slow for 120 ms
 (`state::HoverIntent`; faster than 900 units a second is travelling); it goes out when it
-flips. The overlay then hands the sample to the dictionary with the lookup key held
-(`ui/scan-input.ts` `withHoverKey`), except over a pop-up. It never opens the gate, so the
-words keep letting clicks through, and a shown pop-up no longer takes the next click
-(`catching`): the click reaches the game and native's dismiss closes the pop-up. The overlay is click-through except over
+flips. It is false while a button is down and after a release until the pointer moves 3
+units, so a click on resting text (advancing a game) closes the pop-up and the release does
+not reopen it. The overlay then hands the sample to the dictionary with the lookup key held
+(`ui/scan-input.ts` `withHoverKey`), except over a pop-up or with a button down; where the
+overlay has the mouse itself, its real moves get the key too while `hover` holds
+(`rekeyForHover`). It never opens the gate, so the words keep letting clicks through, and a
+shown pop-up no longer takes the next click (`catching`): the click reaches the game and
+native's dismiss closes the pop-up. The overlay is click-through except over
 the words themselves and the reader's own application owns both the pointer and the
 keyboard, so it sees no `mousemove` of its own until the pointer is already on a word,
 and no `keydown` at all. That costs two things: the proximity effect, whose job is to

@@ -24,6 +24,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **A setting Kimochi doesn't recognise no longer leaves a blank gray window** (for example after trying a newer version). It falls back to the default, and if a window still can't load, it says what went wrong, with **Reload window** and **Copy details**.
 - **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
+- **The Yomitan API dictionary now looks words up on the overlay with the lookup key you chose** (Ctrl, Alt or Command), not only with Shift.
 
 ## [0.9.0] - 2026-11-11
 
