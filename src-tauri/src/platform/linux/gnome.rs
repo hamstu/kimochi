@@ -12,6 +12,9 @@ static DESKTOP_POPUP: AtomicBool = AtomicBool::new(false);
 static SHARED_OVERLAY: AtomicBool = AtomicBool::new(false);
 static PANEL_PINS: AtomicBool = AtomicBool::new(false);
 static PIN_REVISION: Mutex<Option<String>> = Mutex::new(None);
+/// The Shell's last pointer sample (its `Pointer` signal, every 20 ms while the shared overlay is
+/// up and on every change): GNOME's stand-in for a global pointer, Shift and the buttons included.
+static POINTER: Mutex<Option<crate::platform::PointerSample>> = Mutex::new(None);
 
 fn eligible() -> bool {
     super::session().backend == super::Backend::Wayland
@@ -289,16 +292,29 @@ pub fn start(app: tauri::AppHandle) {
         let _ = (|| -> Result<(), String> {
             let conn = connection()?;
             let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+            let mut placed = Value::Null;
             for event in proxy.receive_signal("Pointer").map_err(|e| e.to_string())? {
                 let (text,): (String,) = event.body().deserialize().map_err(|e| e.to_string())?;
                 if text.len() <= 4096 {
                     if let Ok(payload) = serde_json::from_str::<Value>(&text) {
-                        let _ = pointer_app.emit_to("overlay", "pointer", payload);
+                        *POINTER.lock().unwrap() = sample(&payload);
+                        // Where the Shell put the surface, when that changes (samples come 50
+                        // times a second). The pointer itself reaches the overlay from the cursor
+                        // poll (`pointer_sample`), with the Shift gate's verdict. `down`: whether a
+                        // drag of the source window may still be going (ui/gnome-overlay.js).
+                        let placement = json!({"sourceId": payload["sourceId"], "origin": payload["origin"],
+                            "bounds": payload["bounds"], "visible": payload["visible"], "down": payload["down"]});
+                        if placement != placed {
+                            let _ = pointer_app.emit_to("overlay", "gnome-surface", &placement);
+                            placed = placement;
+                        }
                     }
                 }
             }
             Ok(())
         })();
+        // No Shell, no pointer: the cursor poll falls back to ungated words.
+        *POINTER.lock().unwrap() = None;
         std::thread::sleep(Duration::from_secs(2));
     });
     let action_app=app.clone();
@@ -432,6 +448,26 @@ pub fn own_frames(app: &tauri::AppHandle, labels: &[&str]) -> Option<Vec<kimochi
 
 pub fn eligible_popup_session() -> bool { eligible() }
 pub fn shared_overlay() -> bool { eligible() && SHARED_OVERLAY.load(Ordering::SeqCst) }
+
+/// The Shell's `Pointer` payload as a cursor sample (global logical points, the overlay's
+/// regions' space).
+fn sample(payload: &Value) -> Option<crate::platform::PointerSample> {
+    let flag = |key: &str| payload[key].as_bool().unwrap_or(false);
+    Some(crate::platform::PointerSample {
+        x: payload["x"].as_f64()?,
+        y: payload["y"].as_f64()?,
+        down: flag("down"),
+        modifiers: crate::platform::Modifiers { shift: flag("shift"), ctrl: flag("ctrl"), alt: flag("alt"), meta: flag("meta") },
+    })
+}
+
+/// The pointer, Shift and the buttons as GNOME Shell last reported them, while the shared overlay
+/// is up: what lets the overlay's words pass clicks to the game until Shift is held
+/// (`View::live_regions`), as on macOS, Windows and X11. A Wayland client sees none of it itself.
+pub fn pointer_sample() -> Option<crate::platform::PointerSample> {
+    if !shared_overlay() { return None; }
+    *POINTER.lock().unwrap()
+}
 pub fn pin_supported(label: &str) -> bool { matches!(label,"log"|"settings"|"diagnostics"|"dictionary"|"welcome"|"sync-log") }
 pub fn panel_pins() -> bool { eligible() && PANEL_PINS.load(Ordering::SeqCst) }
 
@@ -631,4 +667,21 @@ pub fn paired_app_icon_png(name:&str,target:isize)->Option<Vec<u8>> {
     let identity=status()["tracked"].clone();
     if identity["appName"].as_str()!=Some(name)&&identity["title"].as_str()!=Some(name){return None;}
     icon_png(identity["iconName"].as_str()?,target.clamp(16,256) as i32)
+}
+
+#[cfg(test)]
+mod pointer_tests {
+    use serde_json::json;
+
+    #[test]
+    fn a_shell_pointer_sample_carries_position_buttons_and_modifiers() {
+        let sample = super::sample(&json!({"x": 480.5, "y": 493, "down": true, "shift": true,
+            "ctrl": false, "alt": true, "meta": false, "over": true, "blocked": false})).unwrap();
+        assert_eq!((sample.x, sample.y, sample.down), (480.5, 493., true));
+        assert!(sample.modifiers.shift && sample.modifiers.alt && !sample.modifiers.ctrl && !sample.modifiers.meta);
+        // Older or partial payloads: missing flags are up, a missing position is no sample.
+        let bare = super::sample(&json!({"x": 1, "y": 2})).unwrap();
+        assert!(!bare.down && !bare.modifiers.shift);
+        assert!(super::sample(&json!({"y": 2})).is_none());
+    }
 }

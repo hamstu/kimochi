@@ -95,13 +95,16 @@ pub(crate) fn x11_session() -> bool {
 
 // ---------------------------------------------------------------- pointer
 
-/// Pointer position, primary button and held modifiers: one `QueryPointer` on X11; on Wayland
-/// the compositor's pointer and a Shift source (`wayland_pointer_feed`). `None` where there is
+/// Pointer position, primary button and held modifiers: one `QueryPointer` on X11; on GNOME the
+/// Shell's own report (`gnome::pointer_sample`) while its shared overlay is up; elsewhere on
+/// Wayland the compositor's pointer and a Shift source (`wayland_pointer_feed`). `None` where there is
 /// neither (then the overlay's text takes the mouse, Shift or not) and when the pointer is on
 /// another X screen.
 pub fn cursor() -> Option<PointerSample> {
     if on_x11() {
         x11::cursor()
+    } else if gnome::shared_overlay() {
+        gnome::pointer_sample()
     } else {
         wayland_cursor()
     }
@@ -440,8 +443,8 @@ pub fn capabilities() -> Value {
             // Whether the pointer poll reads Shift, so the words let clicks through until it is
             // held (`View::live_regions`): always on X11; on Wayland where `shift.rs` has a source
             // and the compositor reports the pointer (KDE Plasma, Hyprland).
-            "shiftGate": x11 || feed.is_some(),
-            "shiftSource": if x11 { Some("x11") } else { feed.map(shift::Source::as_str) },
+            "shiftGate": x11 || feed.is_some() || gnome::shared_overlay(),
+            "shiftSource": if x11 { Some("x11") } else if gnome::shared_overlay() { Some("gnome-shell") } else { feed.map(shift::Source::as_str) },
             // A layer overlay sees no Shift (keyboard NONE). Where nothing relays it, the overlay's
             // text looks up on hover instead (host/linux-scan-input.js): KDE Plasma with Legacy
             // X11 App Support turned off, and Hyprland until its Shift binds have delivered a

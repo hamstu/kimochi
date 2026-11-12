@@ -9,16 +9,20 @@ const source=(await readFile(new URL('../src-tauri/gnome-extension/implementatio
   .replace("import * as Config from 'resource:///org/gnome/shell/misc/config.js';\n", "const Config = {PACKAGE_VERSION: '46.0'};\n").replace(/^import .*;\n/gm,'').replace('export default class','class')+'\nKimochiOverlay'
 function shellFixture() {
   const signals=[],actors=[]
-  const context={Extension:class{},global:{get_window_actors:()=>actors,get_pointer:()=>[20,30,0]},
+  // Clutter's actor under the pointer, and what a fresh pick finds there: the same unless a test
+  // makes them disagree.
+  const stage={device:null,fresh:null,get_device_actor(){return this.device},get_actor_at_pos(){return this.fresh}}
+  const context={Extension:class{},global:{get_window_actors:()=>actors,get_pointer:()=>[20,30,0],stage},
     Shell:{WindowTracker:{get_default:()=>({get_window_app:()=>null})}},
     GLib:{get_monotonic_time:()=>100,Variant:class{constructor(_type,value){this.value=value}}},
-    Clutter:{ModifierType:{BUTTON1_MASK:1,SHIFT_MASK:2,CONTROL_MASK:4,MOD1_MASK:8,SUPER_MASK:16}},
+    Clutter:{ModifierType:{BUTTON1_MASK:1,BUTTON2_MASK:256,BUTTON3_MASK:512,SHIFT_MASK:2,CONTROL_MASK:4,MOD1_MASK:8,SUPER_MASK:16},
+      PickMode:{REACTIVE:1},get_default_backend:()=>({get_default_seat:()=>({get_pointer:()=>'pointer'})})},
     Main:{overview:{visible:false},sessionMode:{isLocked:false,isGreeter:false},wm:{skipNextEffect(){}},
       layoutManager:{monitors:[{x:0,y:0,width:1000,height:800}]}}}
   const Overlay=vm.runInNewContext(source,context),o=new Overlay()
   o._words=[{}];o._controlVisible=()=>true
   o._bus={emit_signal:(name,value)=>signals.push({name,payload:JSON.parse(value.value[0])})}
-  return {o,context,signals,actors}
+  return {o,context,signals,actors,stage}
 }
 test('shared annotations hide for capture, crop, overview, lock, and an inactive or resized linked source',()=>{
   const {o,context}=shellFixture()
@@ -182,15 +186,38 @@ test('GNOME uses the shared renderer with intact OCR segments, grouping, opacity
   }}}}
   globalThis.setInterval=()=>0
   try {
-    const renderer={clear(){calls.push({operation:'renderer-clear'})},render:args=>renders.push(args)}
-    const bridge=await installGnomeOverlay({},state,()=>true,()=>{}, {renderer,setting:key=>({textOverlayGrouping:true,overlayOpacity:.6})[key]})
+    const renderer={clear(options){calls.push({operation:'renderer-clear',fade:Boolean(options?.fade)})},render:args=>renders.push(args)}
+    const bridge=await installGnomeOverlay({},state,()=>true,()=>{}, {renderer,setting:key=>({textOverlayGrouping:true,overlayOpacity:.6})[key],settleMs:5})
     await bridge.update()
     assert.equal(bridge.shared,true);assert.equal(renders[0].annotations[0],annotation)
     assert.deepEqual(renders[0].annotations[0].segments,annotation.segments)
     assert.equal(renders[0].grouping,true);assert.equal(renders[0].opacity,.6);assert.equal(renders[0].bounds,bounds)
+    // A drag: the text fades out where it was, stays out while the window moves, and comes back
+    // once, at the window's new place, after it has been still.
+    const before=renders.length
     const moved={...bounds,x:80,y:90}
+    bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:{...bounds,x:70,y:80},visible:true})
     bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:moved,visible:true})
-    assert.deepEqual(renders.at(-1).bounds,moved)
+    assert.equal(renders.length,before,'no jumps while the window moves')
+    assert.equal(calls.filter(c=>c.operation==='renderer-clear'&&c.fade).length,1,'one fade out')
+    status.tracked.bounds=moved
+    const presents=()=>calls.filter(c=>c.operation==='present').length,presented=presents()
+    await bridge.update();assert.equal(renders.length,before);assert.equal(presents(),presented,'a publication meanwhile waits too')
+    // Still held: a drag that paused. Text comes back only once the button is up.
+    bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:moved,visible:true,down:true})
+    await new Promise(resolve=>setTimeout(resolve,30));assert.equal(renders.length,before,'not mid-drag')
+    bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:moved,visible:true,down:false})
+    await new Promise(resolve=>setTimeout(resolve,30))
+    assert.ok(renders.length>before);for(const r of renders.slice(before))assert.deepEqual(r.bounds,moved)
+    assert.equal(presents(),presented+1,'published again where it stopped')
+    // A drag that starts while a publication is in flight: the Shell refuses bounds that just went
+    // stale. The surface stays (closing it blinked all the text off and on); the next tick retries.
+    const invoke=globalThis.window.__TAURI__.core.invoke
+    globalThis.window.__TAURI__.core.invoke=async(cmd,args)=>{if(args.operation==='present'){calls.push(args);throw new Error('dev.kimochi.GnomeOverlay.InvalidAnnotations: Window annotations require the explicitly linked live source and current bounds')}return invoke(cmd,args)}
+    const closes=()=>calls.filter(c=>c.operation==='surface'&&c.payload.operation==='close').length,closed=closes()
+    await bridge.update();assert.equal(closes(),closed);assert.equal(bridge.shared,true)
+    globalThis.window.__TAURI__.core.invoke=invoke
+    status.tracked.bounds=bounds
     const count=renders.length
     bridge.pointer({sourceId:'portal:window:99',origin:monitor,bounds,visible:true});assert.equal(renders.length,count)
     await bridge.pause();assert.equal(bridge.shared,false)
@@ -239,4 +266,46 @@ test('GNOME popup transport waits for backend forwarding and relays native dicti
   receiver({payload:{from:'popup-host',to:'overlay',seq:++seq,payload:{kind:'port-close',channel:start.payload.channel}}})
   assert.equal(disconnects.length,1);assert.throws(()=>port.postMessage({}),/Disconnected/)
   shutdown();assert.equal(hub.connectRemote,undefined);assert.equal(owner.ports.size,0)
+})
+
+test('the surface makes Clutter pick again when its input region changed under a still pointer',()=>{
+  const {o,stage}=shellFixture();let relayouts=0
+  const surfaceActor={},game={},chrome={}
+  const actor={contains:a=>a===surfaceActor,queue_relayout(){relayouts++}}
+  // The pick is current: nothing to do, every 20 ms.
+  stage.device=stage.fresh=game;o._repickSurface(actor,20,30,0);assert.equal(relayouts,0)
+  // A pop-up opened: the surface now takes the whole screen, but Wayland input still goes to the game.
+  stage.fresh=surfaceActor;o._repickSurface(actor,20,30,0);assert.equal(relayouts,1)
+  // It closed: the surface gave the screen back, but it would go on taking every click.
+  stage.device=surfaceActor;stage.fresh=game;o._repickSurface(actor,20,30,0);assert.equal(relayouts,2)
+  // A press keeps the window it started on, and other windows' picks are not the surface's business.
+  o._repickSurface(actor,20,30,1);assert.equal(relayouts,2)
+  stage.device=game;stage.fresh=chrome;o._repickSurface(actor,20,30,0);assert.equal(relayouts,2)
+})
+test('a click on the surface keeps its text up and hands the focus back to the window focused last',()=>{
+  const {o,context}=shellFixture()
+  const rect={x:500,y:100,width:400,height:300}
+  const game={get_compositor_private:()=>({get_paint_visibility:()=>true,get_resource_scale:()=>1}),
+    get_pid:()=>99,get_stable_sequence:()=>7,get_buffer_rect:()=>rect,showing_on_its_workspace:()=>true,
+    get_gtk_application_id:()=>null,get_id:()=>9,get_title:()=> 'Game',minimized:false}
+  const surface={get_pid:()=>8,get_title:()=> 'Kimochi · overlay'}
+  context.global.display={focus_window:surface}
+  o._tracked={window:game,sequence:7,sourceId:'portal:window:1',pid:99}
+  o._surface={pid:8,window:surface,previousFocus:null}
+  assert.equal(o._trackedStatus().visible,true,'focus on the surface itself does not hide it')
+  let handler;context.global.display.connect=(_name,f)=>{handler=f;return 1}
+  context.Main.sessionMode.connect=()=>1;context.global.stage.connect=()=>1
+  const other={get_pid:()=>8,get_title:()=> 'Kimochi · popup-host'}
+  // Only the notify::focus-window handler is exercised: install it alone.
+  const install=o.enable.toString().match(/this\._focusSignal = global\.display\.connect\('notify::focus-window', ([\s\S]*?\n {8}\}\));/)
+  assert.ok(install,'focus handler found')
+  handler=vm.runInNewContext(`(function(){return ${install[1].slice(0,-1)}})`,context).call(o)
+  let activated=null;game.activate=()=>{activated=game}
+  context.global.display.focus_window=game;handler()
+  assert.equal(o._surface.previousFocus,game)
+  context.global.display.focus_window=other;handler()
+  assert.equal(o._surface.previousFocus,game,'never one of Kimochi’s own windows')
+  context.global.get_current_time=()=>1
+  context.global.display.focus_window=surface;handler()
+  assert.equal(activated,game)
 })

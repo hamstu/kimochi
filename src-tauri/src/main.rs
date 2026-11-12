@@ -4523,7 +4523,8 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             {
                 // Positions while the gate stays open after Shift is let go (gliding along a line).
                 platform::pointer_demand(gate_open && sample.is_some());
-                let feed = platform::wayland_pointer_feed().is_some();
+                // GNOME's Shell reports the pointer and Shift once its shared overlay is up.
+                let feed = platform::wayland_pointer_feed().is_some() || platform::gnome::shared_overlay();
                 // Capabilities went out before the feed came up (XWayland, KWin's script), or it
                 // changed since: the overlay switches between gated and ungated words.
                 if wayland_feed != Some(feed) && (wayland_feed.is_some() || feed) {

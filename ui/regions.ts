@@ -68,3 +68,43 @@ export function popupHitRects(popups: Iterable<PopupLike>, origin: Origin | null
   }
   return rects
 }
+
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * `area` less every rectangle in `holes`, as rectangles that do not overlap.
+ *
+ * GNOME: while the dictionary popup is open, the overlay takes the next click anywhere so that
+ * clicking away closes the popup without the click reaching the game. Yomitan's popup there is a
+ * window of its own, which the overlay may be stacked above, so the overlay takes everything
+ * except the popup's own rectangles, or it would take the popup's clicks too.
+ */
+export function exceptRects(area: Rect, holes: Iterable<Rect>): Rect[] {
+  let pieces: Rect[] = area.width > 0 && area.height > 0 ? [{ ...area }] : []
+  for (const hole of holes) {
+    if (!(hole.width > 0 && hole.height > 0)) continue
+    const next: Rect[] = []
+    for (const p of pieces) {
+      const left = Math.max(p.x, hole.x)
+      const top = Math.max(p.y, hole.y)
+      const right = Math.min(p.x + p.width, hole.x + hole.width)
+      const bottom = Math.min(p.y + p.height, hole.y + hole.height)
+      if (left >= right || top >= bottom) {
+        next.push(p)
+        continue
+      }
+      // Above and below the hole across the whole piece, then beside it within its rows.
+      if (top > p.y) next.push({ x: p.x, y: p.y, width: p.width, height: top - p.y })
+      if (bottom < p.y + p.height) next.push({ x: p.x, y: bottom, width: p.width, height: p.y + p.height - bottom })
+      if (left > p.x) next.push({ x: p.x, y: top, width: left - p.x, height: bottom - top })
+      if (right < p.x + p.width) next.push({ x: right, y: top, width: p.x + p.width - right, height: bottom - top })
+    }
+    pieces = next
+  }
+  return pieces
+}

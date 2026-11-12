@@ -167,6 +167,9 @@ export default class KimochiOverlay extends Extension {
                     previous.activate(global.get_current_time());
                 return;
             }
+            // What the surface hands the focus back to: the window the reader focused last,
+            // not the one that had it when the surface opened. Never one of Kimochi's own.
+            if (this._surface && win.get_pid() !== this._surface.pid) this._surface.previousFocus = win;
             if(this._controller&&win!==this._controller.previousFocus&&win!==this._controller.window&&win!==this._nativePopup&&!(win.get_pid()===this._controller.pid&&win.get_title()==='Kimochi · controller-host'))this._finishController();
             if(this._crop&&win!==this._crop.previousFocus&&win!==this._crop.window&&!(this._crop.webview&&win.get_pid()===this._crop.pid&&win.get_title()==='Kimochi · crop-host'))this._finishCrop(false,'focus-changed');
             if(this._pick&&win!==this._pick.previousFocus)this._finishPick(null,'focus-changed');
@@ -467,7 +470,10 @@ export default class KimochiOverlay extends Extension {
         const t=this._tracked,w=t?.window;if(!w)return null;
         if(!w.get_compositor_private()||w.get_stable_sequence()!==t.sequence){this._forgetTracked();return null;}
         const r=this._captureBounds(w),focused=global.display.focus_window;
-        const popup=focused===this._nativePopup||focused===this._controller?.window;
+        // The annotation surface takes focus for a moment when it is clicked (a word with
+        // Shift, or a click away from a pop-up), until the focus handler hands it back. It is
+        // being read, like the pop-up: hiding it then would drop the click it is taking.
+        const popup=focused===this._nativePopup||focused===this._controller?.window||Boolean(focused&&focused===this._surface?.window);
         const appActive=focused&&t.pid&&focused.get_pid()===t.pid&&focused!==this._surface?.window&&!popup;
         // Match the shared cover rule: only TEXT overlap hides annotations.
         // Keep these rectangles while hidden, or coverage would oscillate.
@@ -888,6 +894,24 @@ export default class KimochiOverlay extends Extension {
         this._surfacePointerTime = 0;
     }
 
+    // Clutter remembers which actor is under the pointer and asks again only when the
+    // pointer leaves the area that answer holds for, or something there redraws. The
+    // surface changes its input region (a word's with Shift, all of it while a pop-up is
+    // open) without drawing anything, so Wayland input went on to whatever was under the
+    // pointer before: a click away from a pop-up fell through to the game, and once the
+    // pop-up closed the surface kept every click on the desktop. When the pointer's actor
+    // and a fresh pick disagree about the surface, a relayout makes Clutter pick again.
+    // Not with a button down: a press keeps the window it started on.
+    _repickSurface(actor, x, y, mods) {
+        if (!actor || mods & (Clutter.ModifierType.BUTTON1_MASK | Clutter.ModifierType.BUTTON2_MASK | Clutter.ModifierType.BUTTON3_MASK)) return;
+        this._pointerDevice ??= Clutter.get_default_backend().get_default_seat().get_pointer();
+        const current = global.stage.get_device_actor(this._pointerDevice, null);
+        const fresh = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, x, y);
+        if (current === fresh) return;
+        const mine = a => Boolean(a && actor.contains(a));
+        if (mine(current) || mine(fresh)) actor.queue_relayout();
+    }
+
     _surfaceState() {
         const s = this._surface;
         if (!s) return null;
@@ -938,6 +962,7 @@ export default class KimochiOverlay extends Extension {
             if (s.visible && !s.window.is_above() && !s.window.is_override_redirect()) s.window.make_above();
         }
         const [x,y,mods] = global.get_pointer();
+        if (s.visible) this._repickSurface(actor, x, y, mods);
         const popup = this._nativePopup?.get_compositor_private()?.get_paint_visibility() ? this._nativePopup.get_frame_rect() : null;
         const blocked = Boolean(popup && x >= popup.x && y >= popup.y && x < popup.x+popup.width && y < popup.y+popup.height || this._controller);
         const pointer = {...state,sourceId:s.sourceId,x,y,over:s.visible,blocked,down:Boolean(mods&Clutter.ModifierType.BUTTON1_MASK),
