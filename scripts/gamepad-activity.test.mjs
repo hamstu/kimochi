@@ -4,7 +4,7 @@ import { load } from './load.mjs'
 
 // The button test's raw view (frontend/panels/settings/gamepadActivity.ts), fed the device shape
 // native sends (src-tauri/src/gamepad.rs `raw_activity`).
-const { describeRawInput, rawInputHint, gamepadLabel } = await load(
+const { describeRawInput, rawInputHint, gamepadLabel, layoutLabel } = await load(
   '../frontend/panels/settings/gamepadActivity.ts'
 )
 
@@ -88,4 +88,34 @@ test('an active controller whose presses have no standard button is pointed out'
 test('the label drops the vendor details in parentheses', () => {
   assert.equal(gamepadLabel(pad(0, 'Wireless Controller (STANDARD GAMEPAD)')), 'Wireless Controller')
   assert.equal(gamepadLabel(pad(2, '')), 'Gamepad 3')
+})
+
+test('the list names each mapping source, None as no layout', () => {
+  assert.equal(layoutLabel('SdlMappings'), 'known model')
+  assert.equal(layoutLabel('Driver'), 'built-in layout')
+  assert.equal(layoutLabel('None'), 'no layout')
+})
+
+// The browser fallback's axes (frontend/bridge/gamepadRest.ts), the same rule as native's.
+const { axisRest, awayFromRest, axesAwayFromRest } = await load('../frontend/bridge/gamepadRest.ts')
+
+test('a trigger resting at -1 is not input; moving it is', () => {
+  assert.equal(axisRest(-1), -1)
+  assert.equal(axisRest(0.1), 0)
+  assert.equal(axisRest(Number.NaN), 0)
+  assert.equal(awayFromRest(-1, -1), false)
+  assert.equal(awayFromRest(1, -1), true)
+  assert.equal(awayFromRest(Number.NaN, 0), false)
+
+  const rests = new Map()
+  const key = (index) => `pad:${index}`
+  // First poll: stick centred, trigger at rest at -1. Nothing to show.
+  assert.deepEqual(axesAwayFromRest([0.02, -1], rests, key), [])
+  // Stick pushed left, trigger pressed: both show.
+  assert.deepEqual(axesAwayFromRest([-1, 1], rests, key), [
+    { code: 'Axis 0', name: null, value: -1 },
+    { code: 'Axis 1', name: null, value: 1 }
+  ])
+  // Both back at rest.
+  assert.deepEqual(axesAwayFromRest([0, -1], rests, key), [])
 })

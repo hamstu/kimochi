@@ -26,6 +26,13 @@ function hasInput(device: GamepadDevice): boolean {
   return (device.rawButtons?.length ?? 0) > 0 || (device.rawAxes?.length ?? 0) > 0
 }
 
+/** gilrs's `MappingSource` (`SdlMappings`, `Driver` or `None`) as the list shows it. */
+export function layoutLabel(source: string): string {
+  if (source === 'SdlMappings') return 'known model'
+  if (source === 'Driver') return 'built-in layout'
+  return 'no layout'
+}
+
 /** The controller's name as the list shows it. */
 export function gamepadLabel(device: GamepadDevice): string {
   return device.id.split('(')[0].trim() || `Gamepad ${device.index + 1}`

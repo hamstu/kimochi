@@ -11,7 +11,7 @@ import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { gamepadChord } from '../../vendor/shared-defaults'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
-import { describeRawInput, gamepadLabel, rawInputHint } from './gamepadActivity'
+import { describeRawInput, gamepadLabel, layoutLabel, rawInputHint } from './gamepadActivity'
 import {
   DEFAULT_CONTROLLER_BUTTONS,
   effectiveControllerButtons,
@@ -314,8 +314,7 @@ export function GamepadSections(): ReactNode {
               const receiving = !active && describeRawInput(gp, getButtonName).length > 0
               // The USB ids name the model, for a report; the mapping says whether it is a known one.
               const ids = gp.vendor && gp.product ? ` · ${gp.vendor}:${gp.product}` : ''
-              const layout =
-                gp.mappingSource === 'SdlMappings' ? ' · known model' : gp.mappingSource ? ' · built-in layout' : ''
+              const layout = gp.mappingSource ? ` · ${layoutLabel(gp.mappingSource)}` : ''
               return (
                 <SettingsRow
                   key={gp.index}
