@@ -11,6 +11,7 @@ import * as presets from "./core/presets";
 import * as replacements from "./core/replacements";
 import { ingestText, preparedText } from "./core/ingest";
 import { loadSettings, getSettings } from "./lib/settings";
+import { loadLanguage } from "./core/language";
 import { acceptSnapshot, type ReaderSnapshot } from "./bridge";
 import { matchedSession, sourceKey, type SourceName } from "./source-sessions";
 import { loadProfileRoot, setWritesPaused } from "./core/profile";
@@ -299,6 +300,8 @@ export function startHost(): Promise<void> {
       // Which account's Log this is: every file path starts with its profile folder.
       await loadProfileRoot();
       await loadSettings();
+      // The language being read, which ingest's line filter needs before the first line.
+      await loadLanguage();
       await sessions.migrateIfNeeded();
       await sessions.loadSessions();
       // Each is its own file in the profile (the lines and notebook in the active session's), so

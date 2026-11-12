@@ -284,7 +284,7 @@ const { DOMTextScanner } =
 
 const none = () => {};
 /** A card in a page, showing `text` as the overlay does. */
-function cardShowing(text) {
+function cardShowing(text, spaced = false) {
   const body = new FakeElement("body");
   const card = createHookCard(body, {
     onMoved: none,
@@ -303,6 +303,7 @@ function cardShowing(text) {
     lineHeight: 1.5,
     theme: "dark",
     opacity: 1,
+    spaced,
   });
   // Something after the card in the page, as the overlay has (the hover layer, the controller).
   body.append(new FakeElement("div"));
@@ -361,6 +362,18 @@ test("the card shows each line as a row, with no line break in the page's text",
     single.children.map((row) => row.textContent),
     ["今日は自転車で行った"],
   );
+});
+
+test("in a language that spaces its words, a row ends in a space, so its last word and the next row's first are two", () => {
+  const { text } = cardShowing("Did you take\nthe bike?", true);
+  assert.deepEqual(
+    text.children.map((row) => row.textContent),
+    ["Did you take ", "the bike?"],
+  );
+  assert.match(lookupFrom(text, "take", false), /^take the bike/);
+  // A row that already ends in a space gets no second one.
+  const spaced = cardShowing("Did you take \nthe bike?", true).text;
+  assert.deepEqual(spaced.children.map((row) => row.textContent), ["Did you take ", "the bike?"]);
 });
 
 test("the rows are broken by a generated newline, which the text's white-space keeps", () => {

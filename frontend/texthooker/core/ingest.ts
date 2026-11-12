@@ -9,6 +9,7 @@ import { getSettings } from "@texthooker/lib/settings";
 import { applyReplacements } from "./replacements";
 import { recordCharDelta, recordLine } from "./stats";
 import { dropsText, japaneseFilterOf } from "@ui/japanese-text";
+import { currentLanguage } from "./language";
 import { acceptsInput } from "../input-source";
 import type { Line, LineSource } from "@texthooker/lib/types";
 
@@ -29,7 +30,8 @@ export function preparedText(text: string): string | null {
  *   3. applyReplacements
  *   4. trim again
  *   5. drop if empty
- *   6. drop if "Japanese only" drops it (ui/japanese-text.ts; the overlay applies the same)
+ *   6. drop if the line filter drops it: no text in the language being read, or (stricter) mostly
+ *      other scripts (ui/japanese-text.ts; the overlay applies the same)
  *   7. a line that replaces the last (`replaces`, its ingest id), or start-merge if enabled and
  *      prefix matches → replace last line
  *   8. drop if duplicate within last N
@@ -56,8 +58,8 @@ export const ingestText = async (
   const value = preparedText(text);
   if (!value) return;
 
-  // 6 — Japanese filter
-  if (dropsText(value, japaneseFilterOf(settings))) return;
+  // 6 — the line filter, in the language being read
+  if (dropsText(value, japaneseFilterOf(settings, currentLanguage()))) return;
 
   // 7 — the rest of the last line (the Text Hooker's typewriter, paused longer than it waits)
   const last = snapshotLines().at(-1);

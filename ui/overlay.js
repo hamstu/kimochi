@@ -34,6 +34,9 @@ import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } fro
 import { hoverLookupApplies, scanPointerInit, withHoverKey } from './scan-input.js'
 import { groupTextAnnotations, visibleAnnotations } from './annotations.js'
 import { japaneseFilterOf } from './japanese-text.js'
+import { isJapanese, languageOf } from './languages.js'
+import { hasLanguageScript } from './script-text.js'
+import { JAPANESE_WORDS } from './word-nav.js'
 import { AutoScanner } from './autoscan.js'
 import { resolveWatcher, observerModeOf } from './watcher.js'
 import { SceneScanner } from './scene-scanner.js'
@@ -207,12 +210,30 @@ const state = {
  * in: that is the Log's setting (`superTexthooker.japaneseFilter`, on unless turned off), and
  * the overlay applies the same rule to what it draws (`visibleAnnotations`). Folding it in here
  * means every reader of the grouping (drawing, click targets, GNOME's surface, what a scan
- * publishes) filters the same way.
+ * publishes) filters the same way. The language being read comes with it (`language`): the filter
+ * keeps that language's scripts, and it decides whether small text is furigana and how words join.
  */
 const setting = (key) =>
   key === 'textOverlayGrouping'
-    ? { ...(native.getSetting(key) ?? {}), ...japaneseFilterOf(native.getSetting('superTexthooker')) }
+    ? {
+        ...(native.getSetting(key) ?? {}),
+        ...japaneseFilterOf(native.getSetting('superTexthooker'), languageNow())
+      }
     : native.getSetting(key)
+
+/** The language being read: a code from languages.ts (`language`, Japanese unless chosen). */
+const languageNow = () => languageOf(native.getSetting('language')).code
+
+/**
+ * How Read along finds the words of the language being read (word-nav.js): Japanese as it always
+ * has, any other language by its scripts and its own word segmenter.
+ */
+const languageWords = () => {
+  const language = languageOf(native.getSetting('language'))
+  return isJapanese(language.code)
+    ? JAPANESE_WORDS
+    : { code: language.code, spaces: language.spaces, test: (text) => hasLanguageScript(text, language.code) }
+}
 
 
 // ---------------------------------------------------------------------------
@@ -730,6 +751,8 @@ controller = createController({
     renderer.mode === 'words' && element !== hook.card?.element ? renderer.charRects(element) : null,
   // Read along over the Text Hooker's card.
   extraUnits: () => hookCardUnits(),
+  // The language being read, whose words Read along steps through (word-nav.js).
+  languageWords,
   quietText: (quiet) => renderer.setQuiet(quiet),
   nearText: (x, y) => {
     const reach = 32
@@ -1114,7 +1137,8 @@ function hookAligned(annotations) {
   const placed = hookAnnotations(annotations, hook.line, {
     nameAt,
     apart: Boolean(game.namesApart),
-    speakers: hookSet().speakerNames
+    speakers: hookSet().speakerNames,
+    spaces: languageOf(languageNow()).spaces
   })
   const whole = placed.recall >= 0.9 && placed.precision >= 0.8
   // A name is only ever returned where it is the speaker's; the card shows what they say even when
@@ -1345,7 +1369,9 @@ function hookCardView() {
     lineHeight,
     theme,
     surface,
-    opacity: hookSet().opacity
+    opacity: hookSet().opacity,
+    // Its rows are words apart in a language that spaces its words (hook-card.js `setText`).
+    spaced: languageOf(languageNow()).spaces
   }
 }
 
@@ -2050,7 +2076,7 @@ const imageScanner = new AutoScanner({
   }
 })
 
-const sceneScanner = new SceneScanner({ ...scanDeps, onScene: applyScene })
+const sceneScanner = new SceneScanner({ ...scanDeps, onScene: applyScene, language: languageNow })
 
 /** Whichever loop the observer mode calls for; `syncAutoScanner` keeps it current. */
 let scanner = sceneScanner
@@ -4210,7 +4236,7 @@ async function processView(view) {
         dismissPopup()
         window.getSelection()?.removeAllRanges()
         if (view.scan?.ocr) {
-          const ocr = normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? ocrModeNow())
+          const ocr = normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? ocrModeNow(), languageNow())
           await applyResult(
             { ...ocr, nativeScanId: scanId },
             view.scan,

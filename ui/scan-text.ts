@@ -7,6 +7,11 @@
  * starts there (`/tokenize` over the next 16 characters), selects that word, as Yomitan does, and
  * asks the caller to show it with the word's box, so the pop-up can sit beside the word.
  *
+ * Japanese is looked up from the character under the pointer: any character may start a word. In a
+ * language that spaces its words (`spaces`) the lookup starts where the word under the pointer
+ * starts, as Yomitan's own scanner does, and reads whole words only: hovering the `d` of
+ * `reading` looks up `reading`, not `ding`.
+ *
  * Plain DOM with no imports: the overlay loads `ui/` modules as they are, without a bundler.
  */
 
@@ -22,6 +27,16 @@ const DWELL_MS = 20
 /** Characters past the pointer whose words are found ahead of it, while it rests, so moving on
     along the line finds them at once (`readAhead`). */
 const AHEAD = 8
+/** Characters read from a word's start in a language that spaces its words: room for a long
+    compound (German, Finnish) or a few words of an expression, cut back to whole words. */
+export const SPACED_SCAN_WINDOW = 32
+/** Words past the pointer's whose entries are found ahead of it, in a spaced language. */
+const AHEAD_WORDS = 2
+
+/** What a word is made of in a language that spaces its words: letters, marks, digits, and an
+    apostrophe inside it (don't, l'eau). */
+const WORD_CHARACTER = /[\p{L}\p{M}\p{N}'’]/u
+const isWordCharacter = (c: string | undefined): boolean => c !== undefined && WORD_CHARACTER.test(c)
 
 export interface ScanPoint {
   /** In the document's viewport. */
@@ -55,6 +70,9 @@ export interface ScannerOptions {
   /** A word the pop-up may soon open on (the one under the pointer, the next along the line):
       start fetching its entries now. */
   prefetch?: (term: string) => void
+  /** Whether the language being read puts spaces between words, asked at each lookup; absent or
+      false is Japanese, looked up from the character under the pointer. */
+  spaces?: () => boolean
 }
 
 interface CaretHit {
@@ -123,6 +141,83 @@ function* following(start: Text, block: Element): Generator<Text> {
     if (!passed || n.parentElement?.nodeName === 'RT') continue
     yield n as Text
   }
+}
+
+/** Where the word holding `text[offset]` starts in `text`; `offset` itself when that is no word. */
+export function wordStartIn(text: string, offset: number): number {
+  if (!isWordCharacter(text[offset])) return offset
+  let start = offset
+  while (start > 0 && isWordCharacter(text[start - 1])) start--
+  return start
+}
+
+/**
+ * `text` (read `max` characters and one more) cut back to the end of its last whole word, so the
+ * window handed to the dictionary never ends in the middle of one. A single word longer than the
+ * window is kept as far as it goes.
+ */
+export function wholeWords(text: string, max: number): string {
+  if (text.length <= max) return text
+  let end = max
+  if (isWordCharacter(text[max]) && isWordCharacter(text[max - 1])) {
+    while (end > 0 && isWordCharacter(text[end - 1])) end--
+    if (end === 0) end = max
+  }
+  return text.slice(0, end).trimEnd()
+}
+
+/** The offsets in `text` after its first character where a word starts. */
+export function wordStarts(text: string): number[] {
+  const starts: number[] = []
+  for (let i = 1; i < text.length; i++)
+    if (isWordCharacter(text[i]) && !isWordCharacter(text[i - 1])) starts.push(i)
+  return starts
+}
+
+/** The text node before `start` inside `block`, skipping ruby readings. */
+function previousText(start: Text, block: Element): Text | null {
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
+  let previous: Text | null = null
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n === start) return previous
+    if (n.parentElement?.nodeName !== 'RT') previous = n as Text
+  }
+  return null
+}
+
+/** The box of one glyph, or null when it has none. */
+function glyphBox(node: Text, index: number): DOMRect | null {
+  const range = document.createRange()
+  try {
+    range.setStart(node, index)
+    range.setEnd(node, index + 1)
+  } catch {
+    return null
+  }
+  const box = range.getBoundingClientRect()
+  return box.width || box.height ? box : null
+}
+
+/**
+ * Where the word under (node, offset) starts, in a language that spaces its words: back along its
+ * text node, and on into the text node before when the word carries on there on the same line
+ * (a highlight or a match drawn around part of a word). Lines drawn as nodes of their own (the
+ * overlay's runs) touch with no space between, so a word never runs back across a line break.
+ */
+export function wordStart(node: Text, offset: number, block: Element | null): CaretHit {
+  if (!isWordCharacter(node.data[offset])) return { node, offset }
+  let at: CaretHit = { node, offset: wordStartIn(node.data, offset) }
+  while (at.offset === 0 && block) {
+    const before = previousText(at.node, block)
+    const last = before ? before.data.length - 1 : -1
+    if (!before || !isWordCharacter(before.data[last])) break
+    const a = glyphBox(before, last)
+    const b = glyphBox(at.node, 0)
+    const sameLine = a && b && Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) < Math.min(a.height, b.height) / 2
+    if (!sameLine) break
+    at = { node: before, offset: wordStartIn(before.data, last) }
+  }
+  return at
 }
 
 /** Up to `length` characters from (start, offset), across text nodes within `block`. */
@@ -253,6 +348,20 @@ export function createScanner(options: ScannerOptions): Scanner {
    */
   async function readAhead(node: Text, offset: number, block: Element | null, term: string | null): Promise<void> {
     const run = ++aheadRun
+    if (options.spaces?.()) {
+      // Words start only after a space or a mark: the next few of them, not every character.
+      const text = readForward(node, offset, SPACED_SCAN_WINDOW * 2, block)
+      const starts = wordStarts(text).slice(0, AHEAD_WORDS)
+      const next = starts.find((start) => start >= (term?.length ?? 1))
+      for (const start of starts) {
+        if (run !== aheadRun || !active || inFlight) return
+        const windowText = wholeWords(text.slice(start, start + SPACED_SCAN_WINDOW + 1), SPACED_SCAN_WINDOW)
+        if (!windowText.trim()) continue
+        const word = await wordAt(windowText)
+        if (word && start === next && run === aheadRun && active) options.prefetch?.(word)
+      }
+      return
+    }
     const text = readForward(node, offset, SCAN_WINDOW + AHEAD, block)
     const next = term ? term.length : 1
     for (let i = 1; i <= AHEAD && i < text.length; i++) {
@@ -278,7 +387,13 @@ export function createScanner(options: ScannerOptions): Scanner {
     const hit = caretFromPoint(point.x, point.y)
     if (!hit || !hit.node.parentElement?.closest(options.region)) return
     const block = hit.node.parentElement.closest(options.block)
-    const windowText = readForward(hit.node, hit.offset, SCAN_WINDOW, block)
+    const spaced = options.spaces?.() ?? false
+    // In a language that spaces its words, from the start of the word under the pointer, and
+    // only whole words; in Japanese, from the character under it.
+    if (spaced) Object.assign(hit, wordStart(hit.node, hit.offset, block))
+    const windowText = spaced
+      ? wholeWords(readForward(hit.node, hit.offset, SPACED_SCAN_WINDOW + 1, block), SPACED_SCAN_WINDOW)
+      : readForward(hit.node, hit.offset, SCAN_WINDOW, block)
     if (!windowText.trim()) return
     const term = await wordAt(windowText)
     if (!active) return

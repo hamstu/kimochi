@@ -20,7 +20,8 @@ export function publishableText(annotations, grouping) {
   return buildFilteredText(
     annotations ?? [],
     grouping.filterSmallText ?? true,
-    grouping.filterSmallTextThreshold ?? 0.75
+    grouping.filterSmallTextThreshold ?? 0.75,
+    grouping.language
   )
 }
 

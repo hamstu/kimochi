@@ -25,6 +25,8 @@
 
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
+import { joiner } from './script-text.js'
+import { languageOf } from './languages.js'
 import { layoutParts, characterCells, chars, squeezeMargins } from './text-layout.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
 import { shownForHits } from './hit-visible.js'
@@ -493,12 +495,19 @@ export function continuations(boxes, alone = () => true) {
 /**
  * The text a lookup may run into after each box: the next `count` boxes of its paragraph in
  * reading order, joined with nothing. Japanese has no spaces between words and Yomitan ends
- * a match at whitespace, so any joiner would cut every split word back in two.
+ * a match at whitespace, so any joiner would cut every split word back in two. A language that
+ * spaces its words (`language`, absent: Japanese) is the other way round: two boxes are two
+ * words, and joined with nothing a match would run on from one into the next (`can` + `not`),
+ * so each box's text follows a space (`joiner`).
  */
-export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = LOOKAHEAD) {
-  return boxes.map((_, index) => {
+export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = LOOKAHEAD, language) {
+  return boxes.map((box, index) => {
     let text = ''
-    for (let j = next[index], n = 0; j !== -1 && n < count; j = next[j], n++) text += boxes[j].text
+    let before = box.text
+    for (let j = next[index], n = 0; j !== -1 && n < count; j = next[j], n++) {
+      text += joiner(before, boxes[j].text, language) + boxes[j].text
+      before = boxes[j].text
+    }
     return text
   })
 }
@@ -513,12 +522,17 @@ export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = L
  * the match still belongs where it was. Nothing happens when the selection does not start
  * with the box's text, or `startIndex` is not a box.
  *
+ * With `spaced` (a language that spaces its words, whose lookahead puts a space before each
+ * box's text, `lookaheadTexts`) the space the selection crosses before a box is part of the
+ * extension, and not part of the box.
+ *
  * @param {string} selectedText
  * @param {number} startIndex
  * @param {{text: string, next: number}[]} words — each box's text and reading-order successor
+ * @param {boolean} [spaced]
  * @returns {{extension: string, consumed: number[]}}
  */
-export function selectionExtension(selectedText, startIndex, words) {
+export function selectionExtension(selectedText, startIndex, words, spaced = false) {
   const start = words[startIndex]
   if (!start || !selectedText || !selectedText.startsWith(start.text))
     return { extension: '', consumed: [] }
@@ -526,6 +540,11 @@ export function selectionExtension(selectedText, startIndex, words) {
   let extension = ''
   const consumed = []
   for (let j = start.next ?? -1; j !== -1 && overflow.length > 0; j = words[j]?.next ?? -1) {
+    const space = spaced ? (/^\s+/u.exec(overflow)?.[0] ?? '') : ''
+    if (space) {
+      extension += space
+      overflow = overflow.slice(space.length)
+    }
     const text = words[j].text
     if (overflow.startsWith(text)) {
       consumed.push(j)
@@ -890,7 +909,7 @@ export class TextOverlayRenderer {
     this.mode = grouping.enabled ? 'groups' : 'words'
     const fragment = grouping.enabled
       ? this.renderGroups(filtered, info, origin, grouping, opacity, false, bounds)
-      : this.renderWords(filtered, info, origin, false, bounds)
+      : this.renderWords(filtered, info, origin, false, bounds, grouping.language)
     const available = new Map(oldChildren.map((element) => [element.renderKey, element]))
     const desired = [...fragment.children].map((fresh) => {
       let old = available.get(fresh.renderKey)
@@ -962,10 +981,12 @@ export class TextOverlayRenderer {
 
   // --- per-word mode --------------------------------------------------------
 
-  renderWords(annotations, info, origin, scanning, bounds) {
+  renderWords(annotations, info, origin, scanning, bounds, language) {
     const mapped = mapAnnotations(info, annotations, origin, bounds)
     const successors = readingSuccessors(mapped)
-    const ahead = lookaheadTexts(mapped, successors)
+    const ahead = lookaheadTexts(mapped, successors, LOOKAHEAD, language)
+    // Whether the lookahead spaces its boxes apart, which a selection running into it crosses.
+    this.spaced = languageOf(language).spaces
     const fragment = document.createDocumentFragment()
     // Every box fitted over the text it was read from, rows set at one size (text-layout.js).
     const layouts = scanning ? [] : wordLayout(mapped)
@@ -1092,7 +1113,7 @@ export class TextOverlayRenderer {
   // --- grouped mode ---------------------------------------------------------
 
   renderGroups(annotations, info, origin, grouping, opacity, scanning, bounds) {
-    const groups = groupTextAnnotations(annotations, grouping.proximityThreshold ?? 100)
+    const groups = groupTextAnnotations(annotations, grouping.proximityThreshold ?? 100, grouping.language)
     const fragment = document.createDocumentFragment()
     // Each line or word goes where OCR found it, fitted to it, every row at one size, the
     // same way word mode lays its boxes; see text-layout.js.
@@ -1343,7 +1364,7 @@ export class TextOverlayRenderer {
       const index = this.words.findIndex((word) => word.element === host)
       if (index !== -1) {
         const chain = this.words.map((word) => ({ text: word.box.text, next: word.next ?? -1 }))
-        const result = selectionExtension(selected, index, chain)
+        const result = selectionExtension(selected, index, chain, this.spaced)
         if (selected.startsWith(chain[index].text)) {
           next.add(this.words[index].index)
           for (const j of result.consumed) consumed.add(this.words[j].index)
