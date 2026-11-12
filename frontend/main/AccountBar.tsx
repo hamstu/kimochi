@@ -2,7 +2,8 @@
  * The sidebar's account switcher, in the foot of the sidebar in place of the Settings row while an
  * account is in use: one row, the account's avatar (or initial) and name (or the email before
  * "@"). Clicking opens a menu of the accounts signed in to on this computer, the active one
- * checked, and Settings (adding an account and signing out are in Settings → Account, which a
+ * checked, the language being learned (its flag is on the row too; it opens Settings → Language)
+ * and Settings (adding an account and signing out are in Settings → Account, which a
  * failed switch opens). Each account has its own
  * Log, notebook and preferences, so choosing one switches everything (native reloads the windows
  * once it is in place). Without an account in use the sidebar shows the plain Settings row instead
@@ -10,7 +11,7 @@
  * (offline, an error, conflicts).
  */
 import { useState, type JSX } from 'react'
-import { ChevronsUpDown, Settings } from 'lucide-react'
+import { ChevronsUpDown, Globe, Settings } from 'lucide-react'
 import {
   Menu,
   MenuContent,
@@ -26,7 +27,9 @@ import {
 import { accountBarName, accountLines, activeAccount, type AccountSummary } from '@ui/account'
 import { accountSwitch, useAccount } from '../bridge/account'
 import { useSync } from '../bridge/sync'
+import { useLanguage } from '../bridge/useLanguage'
 import { AccountAvatar } from '../components/AccountAvatar'
+import { LanguageFlag } from '../components/LanguageFlag'
 
 const LOCAL = 'local'
 
@@ -38,15 +41,19 @@ function detail(account: AccountSummary): string | undefined {
 
 export function AccountBar({
   onOpen,
+  onLanguage,
   onSettings
 }: {
   /** Settings → Account. */
   onOpen: () => void
+  /** Settings → Language. */
+  onLanguage: () => void
   /** Settings, on the page it was last on. */
   onSettings: () => void
 }): JSX.Element | null {
   const account = useAccount()
   const sync = useSync()
+  const [language] = useLanguage()
   const [busy, setBusy] = useState(false)
   const accounts = account.accounts ?? []
   const active = activeAccount(account)
@@ -55,7 +62,7 @@ export function AccountBar({
   const email = active.user?.email?.trim() || null
   const attention =
     sync.state === 'error' || sync.state === 'offline' || sync.conflicts.length > 0 || !active.signedIn
-  const label = `Account: ${email && email !== name ? `${name}, ${email}` : name}`
+  const label = `Account: ${email && email !== name ? `${name}, ${email}` : name}. Language: ${language.name}`
 
   const run = (work: () => Promise<unknown>): void => {
     setBusy(true)
@@ -81,6 +88,7 @@ export function AccountBar({
           trailing={
             <span className="sb-account-trailing">
               {attention && <StatusDot tone={sync.state === 'error' || !active.signedIn ? 'danger' : 'warn'} />}
+              <LanguageFlag language={language} className="sb-account-flag" />
               <ChevronsUpDown className="sb-account-chevron" />
             </span>
           }
@@ -112,6 +120,9 @@ export function AccountBar({
           </MenuRadioItem>
         </MenuRadioGroup>
         <MenuSeparator />
+        <MenuItem icon={<Globe />} onSelect={onLanguage}>
+          Language: {language.name}
+        </MenuItem>
         <MenuItem icon={<Settings />} onSelect={onSettings}>
           Settings
         </MenuItem>

@@ -44,6 +44,7 @@ import { UpdateNotice } from './UpdateNotice'
 import { activeAccount } from '@ui/account'
 import { useAccount } from '../bridge/account'
 import { AccountBar } from './AccountBar'
+import { LanguageFlag } from '../components/LanguageFlag'
 
 export type MainView = 'source' | 'log' | 'notebook' | 'anki' | 'settings'
 
@@ -273,6 +274,7 @@ export function MainSidebar({
   const { os } = useCapabilities()
   // While an account is in use, its switcher takes Settings' place in the foot.
   const signedIn = activeAccount(useAccount()) !== null
+  const [language] = useLanguage()
   const handle = (
     <ResizeHandle
       width={live ?? width}
@@ -337,11 +339,27 @@ export function MainSidebar({
       <UpdateNotice />
       <div className="sb-footer">
         {!mini && signedIn ? (
-          <AccountBar onOpen={() => onSettingsTab('account')} onSettings={() => onSettingsTab(settingsTab)} />
+          <AccountBar
+            onOpen={() => onSettingsTab('account')}
+            onLanguage={() => onSettingsTab('language')}
+            onSettings={() => onSettingsTab(settingsTab)}
+          />
         ) : (
-          <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
-            Settings
-          </Row>
+          // No account in use (and mini mode): Settings and the language share the foot.
+          <div className="sb-foot-split">
+            <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
+              Settings
+            </Row>
+            <Row
+              className="sb-foot-language"
+              icon={<LanguageFlag language={language} />}
+              onClick={() => onSettingsTab('language')}
+              aria-label={`Language: ${language.name}`}
+              title={`Language: ${language.name}`}
+            >
+              {language.name}
+            </Row>
+          </div>
         )}
       </div>
       {!mini && handle}
