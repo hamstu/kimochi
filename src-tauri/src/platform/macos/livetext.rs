@@ -65,7 +65,7 @@ pub fn recognize(image: &Image) -> Result<Value, String> {
 
 /// The cloud-compatible result (OCR.md): one authoritative group per line, a
 /// `line` annotation per line for diagnostics, and the aggregate first.
-fn value_from_lines(lines: &[TextLine], width: u32, height: u32) -> Value {
+pub fn value_from_lines(lines: &[TextLine], width: u32, height: u32) -> Value {
     let mut groups = Vec::new();
     let mut annotations = Vec::new();
     let mut texts = Vec::new();

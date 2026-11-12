@@ -1,0 +1,13 @@
+{
+  "label": "baseline",
+  "engines": ["livetext", "ppocr", "meikiocr", "vocr", "screenai"],
+  "scenarios": [
+    { "name": "instant", "query": "mode=instant&n=10&hold=2500" },
+    { "name": "tw40", "query": "mode=typewriter&cps=40&n=10&hold=2500" },
+    { "name": "tw40-anim", "query": "mode=typewriter&cps=40&n=10&hold=2500&bg=anim" },
+    { "name": "fade", "query": "mode=fade&fade=400&n=10&hold=2500" },
+    { "name": "2line-anim-cursor", "query": "mode=instant&lines=2&n=8&hold=3000&bg=anim&cursor=1" },
+    { "name": "rapid", "query": "mode=typewriter&cps=80&n=12&hold=900" },
+    { "name": "idle", "query": "mode=instant&n=1&hold=20000&start=2000" }
+  ]
+}

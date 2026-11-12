@@ -283,7 +283,7 @@ export function OcrTab(): ReactNode {
               </SettingsRow>
               <SettingsRow
                 label="Minimum time between requests"
-                description="A floor on how often the OCR engine is called. Only the latest line is kept."
+                description="A floor on how often an online engine is called. Only the latest line is kept. Local engines that watch the screen themselves aren't limited."
               >
                 <Select
                   aria-label="Minimum time between requests"

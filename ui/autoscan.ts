@@ -223,6 +223,11 @@ export interface CaptureSample<Frame = unknown> {
    */
   observerBusy?: boolean
   /**
+   * The read was skipped on purpose: `readIfStill` was asked for and the pixels differ from
+   * it, so the screen is still moving. Not a failure and not an observation.
+   */
+  observerSkipped?: boolean
+  /**
    * Exact digest of the captured pixels, from native.
    *
    * Byte-identical pixels cannot have different words on them, so a reading that
@@ -333,8 +338,11 @@ export type AutoScanEvent =
 export interface AutoScanDeps<Frame = unknown> {
   /** Injected so tests never wait on a real clock. */
   now?(): number
-  /** Capture and locally observe in one round trip. */
-  captureFrame(): Promise<CaptureSample<Frame>>
+  /**
+   * Capture and locally observe in one round trip. With `readIfStill`, the watcher reads only
+   * if the pixels' fingerprint equals it, and otherwise reports `observerSkipped`.
+   */
+  captureFrame(options?: { readIfStill?: string | null }): Promise<CaptureSample<Frame>>
   /** The accurate second pass, on a frame that has already been captured. */
   recognize(frame: Frame): Promise<OcrResult | null>
   /**

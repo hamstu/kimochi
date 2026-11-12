@@ -8,6 +8,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Changed
+
+- ⚡ **Auto OCR is about twice as fast with local engines.** New lines reach the overlay and the Log in roughly half the time, and Auto OCR adjusts to your computer: it checks the screen more often when that's cheap, and backs off on slower or busier machines.
+- **Auto OCR no longer drops lines when dialogue moves quickly** with a local engine.
+- **Slow engines (OneOCR, Screen AI on modest PCs) skip work while text is still typing out**, and read each line once it's done.
+- **Windows:** PaddleOCR and MeikiOCR use about a quarter less CPU while Auto OCR runs, with no loss in speed.
+
 ## [0.9.0] - 2026-11-11
 
 ### Added

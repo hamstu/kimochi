@@ -389,8 +389,20 @@ let ocrEngines = {}
 /** The engine that watches the screen for Auto OCR (`ui/watcher.ts`). */
 const autoWatcher = () =>
   resolveWatcher(ocrModeNow(), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto')
-/** Auto OCR's settings with the signal the watcher gives: text, or image comparison. */
-const autoSettings = () => ({ ...setting('autoOCRSettings'), observerMode: observerModeOf(autoWatcher()) })
+/**
+ * Auto OCR's settings with the signal the watcher gives: text, or image comparison.
+ *
+ * When the reader is its own watcher (a local engine reading for itself), the recognition a
+ * settled line asks for is the watcher's own reading of that frame (`observed_by` in native),
+ * which costs nothing. The minimum time between requests exists to spare an online engine; here
+ * it only made dialogue that advances faster than once every 1.2 s lose every other line.
+ */
+const autoSettings = () => {
+  const watcher = autoWatcher()
+  const settings = { ...setting('autoOCRSettings'), observerMode: observerModeOf(watcher) }
+  if (watcher.kind === 'text' && watcher.because === 'selected') settings.minRequestSpacingMs = 0
+  return settings
+}
 /** `capture_frame`'s observer arguments for the current watcher. */
 const observerArgs = () => {
   const watcher = autoWatcher()
@@ -1851,7 +1863,7 @@ const scanDeps = {
   isBusy: () => pipeline.isHeld,
   tryAcquire: () => pipeline.acquire(),
   releaseLock: () => pipeline.release(),
-  captureFrame: async () => {
+  captureFrame: async (options) => {
     const selectionStarted = performance.now()
     autoJob = await beginJob()
     const selectionMs = performance.now() - selectionStarted
@@ -1860,7 +1872,7 @@ const scanDeps = {
     trace('capture-start', { generation: autoJob.generation })
     let captured
     try {
-      captured = await native.captureFrame(autoJob.request, true, ...observerArgs())
+      captured = await native.captureFrame(autoJob.request, true, ...observerArgs(), options?.readIfStill ?? null)
     } catch (error) {
       trace('capture-failed', { durationMs: performance.now() - started })
       throw error
@@ -1897,7 +1909,8 @@ const scanDeps = {
       observation: observationFrom(captured),
       observerError: captured?.observerError ?? null,
       observerUnsupported: !!captured?.observerUnsupported,
-      observerBusy: !!captured?.observerBusy
+      observerBusy: !!captured?.observerBusy,
+      observerSkipped: !!captured?.observerSkipped
     }
   },
   recognize: async (frame) => {

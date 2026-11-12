@@ -1777,6 +1777,7 @@ async fn capture_frame(
     observe: Option<bool>,
     observer_mode: Option<String>,
     observer_engine: Option<String>,
+    read_if_still: Option<String>,
 ) -> Reply<Value> {
     if state.scanning.swap(true, Ordering::SeqCst) {
         return Err("busy: a capture is already running; retry shortly".into());
@@ -1816,6 +1817,11 @@ async fn capture_frame(
         let mut observer_error = Value::Null;
         let mut observer_unsupported = false;
         let mut observer_busy = false;
+        // The scanner asked to read only pixels that match its last look (`read_if_still`), and
+        // these don't: they are still moving (a line typing in, a fade), so the read is skipped.
+        let mut observer_skipped = false;
+        // Live Text watching for itself: its reading of these pixels is the scan's result too.
+        let mut own_scan: Option<(&'static str, Value)> = None;
         let mut hash = Value::Null;
         let mut fingerprint = Value::Null;
         // Where a look's time goes besides the engine, for the capture audit.
@@ -1824,7 +1830,9 @@ async fn capture_frame(
             let clock = std::time::Instant::now();
             fingerprint = Value::from(kimochi_capture::hash::content_fingerprint(&frame));
             fingerprint_ms = clock.elapsed().as_secs_f64() * 1000.0;
-            if observer_mode.as_deref() == Some("image") {
+            if read_if_still.as_deref().is_some_and(|still| fingerprint.as_str() != Some(still)) {
+                observer_skipped = true;
+            } else if observer_mode.as_deref() == Some("image") {
                 hash =
                     kimochi_capture::dhash_rgba(&frame.pixels, frame.info.width, frame.info.height)
                         .map_or(Value::Null, Value::from);
@@ -1842,6 +1850,13 @@ async fn capture_frame(
                 match observed {
                     Ok(read) => {
                         sentence_audio::screen_text(&app, &read.text, captured_at);
+                        #[cfg(target_os = "macos")]
+                        if read.engine == "apple-live-text" {
+                            own_scan = Some((
+                                "livetext",
+                                livetext::value_from_lines(&read.lines, frame.info.width, frame.info.height),
+                            ));
+                        }
                         observation = serde_json::to_value(&read).map_err(|e| e.to_string())?;
                         // Per line, how strongly its text stands out: what tells text that is
                         // still fading or drawing in from text that has settled.
@@ -1879,7 +1894,8 @@ async fn capture_frame(
         let observed = match (&observation, fingerprint.as_str()) {
             (Value::Object(_), Some(fingerprint)) => text_observer::scan_for(fingerprint),
             _ => None,
-        };
+        }
+        .or(own_scan);
         // One id space shared with `scan`, so `ocr_frame` can pick this exact frame up.
         let id = service
             .images
@@ -1909,6 +1925,7 @@ async fn capture_frame(
             "observerError": observer_error,
             "observerUnsupported": observer_unsupported,
             "observerBusy": observer_busy,
+            "observerSkipped": observer_skipped,
         }))
     })
     .await

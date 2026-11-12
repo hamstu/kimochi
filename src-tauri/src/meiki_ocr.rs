@@ -289,9 +289,16 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
 /// That default spreads each session over every logical core. On Linux (Ryzen 7 7800X3D,
 /// 16 threads, WSL2) it measured slower than about one thread per physical core, capped at six:
 /// PP-OCR 116 → 91 ms and MeikiOCR 172 → 95 ms per scan on the overlay-alignment fixtures, and
-/// it leaves cores to the game. Other platforms keep the default until measured there.
+/// it leaves cores to the game. On Windows (8-vCPU ARM VM, CPU only) Auto OCR watching over an
+/// animated background used 2 cores with PP-OCR at the default and 1.6 at half the logical
+/// cores, at the same latency; a quarter (2) made every read 60% slower and lost lines. macOS
+/// keeps the default: its engines run on Core ML.
 pub(crate) fn cpu_threads() -> Option<usize> {
-    if !cfg!(target_os = "linux") {
+    // `KIMOCHI_OCR_THREADS=n` overrides it, for measuring (0 keeps ONNX Runtime's default).
+    if let Some(n) = std::env::var("KIMOCHI_OCR_THREADS").ok().and_then(|v| v.trim().parse::<usize>().ok()) {
+        return (n > 0).then_some(n);
+    }
+    if !cfg!(any(target_os = "linux", target_os = "windows")) {
         return None;
     }
     let logical = std::thread::available_parallelism().map_or(2, |n| n.get());
