@@ -23,6 +23,7 @@ pub mod store;
 mod unity;
 pub mod wine;
 
+use crate::language::Language;
 use crate::state::Shared;
 use pick::{Candidate, OcrLine, Signature};
 use serde_json::{json, Value};
@@ -75,8 +76,9 @@ struct Thread {
     glyphs: u32,
     recent: VecDeque<Instant>,
     last_at: Option<Instant>,
-    /// Some text it carried read as Japanese (`pick::looks_japanese`). Sticky: the hook menu
-    /// lists the thread from then on, even while it carries other text.
+    /// Some text it carried read as the language being read (`pick::looks_japanese`; the name is
+    /// from when that was always Japanese). Sticky: the hook menu lists the thread from then on,
+    /// even while it carries other text.
     japanese: bool,
 }
 
@@ -168,13 +170,17 @@ impl Hook {
     fn publish(&self, session: &Session) {
         let _ = self.app.emit("texthook-status", status_of(session));
     }
+    /// The language being read (the `language` setting); Japanese before the app is up.
+    fn language(&self) -> &'static Language {
+        self.app.try_state::<Shared>().map_or_else(|| crate::language::get("ja"), |service| crate::language::current(&service.settings))
+    }
     /// The hooked game's settings, as they are now (Settings → Text Hooker).
     fn config(&self, session: &Session) -> clean::GameConfig {
         let settings = &self.app.state::<Shared>().inner().settings;
         let read = |path: &[&str]| settings.get_path(path).ok().flatten().unwrap_or(Value::Null);
         let defaults = read(&["textHookerDefaults"]);
         let game = session.exe.as_deref().map_or(Value::Null, |exe| read(&["textHookerGames", &game_key(exe)]));
-        clean::GameConfig::from_settings(&defaults, &game)
+        clean::GameConfig::from_settings(&defaults, &game, self.language())
     }
     /// Sends a line. One that `carries_on` the last line (the rest of a line still typing out when
     /// its burst ended) replaces it, in the Log and on the overlay. So does a piece that carries on
@@ -214,7 +220,8 @@ impl Hook {
         let piece_chars = text.chars().count();
         if !carries_on && config.join_lines && recent {
             if let Some(before) = session.last_line.as_deref() {
-                let joined = format!("{before}{text}");
+                // A language that spaces its words has a space between the rows (they come trimmed).
+                let joined = if config.spaces { format!("{before} {text}") } else { format!("{before}{text}") };
                 if clean::continues(before, &text) && !before.ends_with(&text) && joined.chars().count() <= clean::MAX_LINE_CHARS {
                     crate::debug_report::trace(&self.app, json!({ "check": "texthook-joined", "before": before, "piece": text }));
                     text = joined;
@@ -607,6 +614,7 @@ fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool
 }
 
 fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
+    let language = hook.language();
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
     // A line drawn several times over (CatSystem2) is the line once.
     let collapsed = pick::collapse_repeated_sentences(text);
@@ -634,7 +642,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let thread = &mut session.threads[index];
         thread.text = lines.last().cloned().unwrap_or_default();
-        thread.japanese |= pick::looks_japanese(&thread.text);
+        thread.japanese |= pick::looks_japanese(&thread.text, language);
         thread.count += 1;
         thread.noisy += u64::from(clean::has_codes(text));
         thread.glyphs = if pick::normalize(text).chars().count() <= 2 { thread.glyphs.saturating_add(1) } else { 0 };
@@ -644,7 +652,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             thread.recent.pop_front();
         }
     }
-    if let Some(better) = cleaner_thread(session, index) {
+    if let Some(better) = cleaner_thread(session, index, language) {
         crate::debug_report::trace(&hook.app, json!({ "check": "texthook-reselected", "from": session.selected, "to": better }));
         let thread = session.threads.iter().find(|t| t.key == better).cloned();
         if let Some(thread) = thread {
@@ -676,7 +684,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let spoken = &session.threads[index];
         let shown = pick::normalize(text);
-        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH, language) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
             session.missed = session.missed.saturating_add(1);
             session.missed_text = shown;
         }
@@ -727,7 +735,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
 /// SiglusEngine sends its dialogue through several threads, one of them with the script's asset
 /// names, its speakers' names and its ruby readings in it; when the screen is read they show the
 /// same line, and which is chosen is down to chance.
-fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
+fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Option<String> {
     let selected = session.selected.as_deref()?;
     if session.selected_by == Some("manual") {
         return None;
@@ -738,7 +746,7 @@ fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
     let spoken = &session.threads[index];
     if chosen.glyphs >= GLYPHS && spoken.key != selected && spoken.count >= 3 && spoken.glyphs == 0 && !pick::is_generic(&spoken.hookcode, &spoken.name) {
         let text = pick::normalize(&spoken.text);
-        if text.chars().count() >= PICK_MIN_MATCH && pick::japanese_ratio(&text) >= 0.3 {
+        if text.chars().count() >= PICK_MIN_MATCH && pick::reads_as(&text, language) {
             return Some(spoken.key.clone());
         }
     }
@@ -763,7 +771,7 @@ fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
             let text = pick::normalize(&t.text);
             let length = text.chars().count();
             length >= 4
-                && pick::japanese_ratio(&text) >= 0.3
+                && pick::reads_as(&text, language)
                 && 10 * length >= 7 * shown.chars().count()
                 && shown.contains(&text)
         })
@@ -807,7 +815,7 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                 .iter()
                 .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, name: &t.name, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
                 .collect();
-            pick::score(&list, &blocks)
+            pick::score(&list, &blocks, hook.language())
         });
         let mut session = hook.lock();
         if session.generation != generation || session.selected.is_some() {
@@ -847,10 +855,14 @@ fn read_screen(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec
     // The engine the page asked for (the Auto OCR watcher), else whichever local engine this
     // computer has: a hint from a page that has not loaded its capabilities yet may name an
     // engine that does not exist here.
+    // Only engines that read the language; Screen AI last for a language other than Japanese,
+    // which no engine of `OBSERVERS` may read off macOS and Windows.
+    let language = hook.language();
+    let others = (!language.is_japanese()).then_some("screenai");
     let mut tried = Vec::new();
     let mut read = None;
-    for name in engine.into_iter().chain(OBSERVERS.iter().copied()) {
-        if tried.contains(&name) {
+    for name in engine.into_iter().chain(OBSERVERS.iter().copied()).chain(others) {
+        if tried.contains(&name) || !crate::language::engine_supports(name, &language.code) {
             continue;
         }
         tried.push(name);

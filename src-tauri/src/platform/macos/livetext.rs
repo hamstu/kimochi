@@ -46,14 +46,16 @@ pub fn capability() -> Value {
     }
 }
 
-/// Recognise a captured frame. Reads the retained pixels when the image still has
-/// them, and decodes its PNG otherwise.
-pub fn recognize(image: &Image) -> Result<Value, String> {
+/// Recognise a captured frame in the language being read. Reads the retained pixels
+/// when the image still has them, and decodes its PNG otherwise.
+pub fn recognize(image: &Image, language: &crate::language::Language) -> Result<Value, String> {
     let frame = match image.frame() {
         Some(frame) => frame,
         None => std::sync::Arc::new(decode_png(&image.png()?)?),
     };
-    let observation = engine()
+    let mut engine = engine();
+    engine.set_locales(crate::language::live_text_locales(language));
+    let observation = engine
         .observe(&frame, TIMEOUT)
         .map_err(|error| format!("{}: {}", error.code, error.message))?;
     Ok(value_from_lines(

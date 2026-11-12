@@ -36,6 +36,7 @@ mod google_lens;
 mod history_merge;
 mod hotkeys;
 mod incremental;
+mod language;
 mod mouse_buttons;
 mod manga_ocr;
 mod pp_ocr;
@@ -270,10 +271,81 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     if key == "ocrMode" {
         if let Some(mode) = value.as_str() {
             model_store::on_engine_selected(app, mode);
+            remember_engine(app, settings, &language::current(settings).code, mode);
         }
         manga_ocr::prewarm(app);
         release_scan_engines(app);
     }
+    if key == "language" {
+        follow_language(app, settings, false);
+    }
+}
+
+/// The scan engine last used for each language (`{code: ocrMode}`, a machine key), so that
+/// switching back to a language brings its engine back.
+const OCR_MODE_BY_LANGUAGE: &str = "ocrModeByLanguage";
+
+/// The language the app was last reading, to know which language a change of `language` leaves.
+static LANGUAGE_IN_USE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Record `engine` as the one used for `language` (when it can read it), announced like any write.
+fn remember_engine(app: &tauri::AppHandle, settings: &Arc<Settings>, language: &str, engine: &str) {
+    if !language::engine_supports(engine, language)
+        || settings.get_path(&[OCR_MODE_BY_LANGUAGE, language]).ok().flatten() == Some(json!(engine))
+    {
+        return;
+    }
+    if settings.set_path(&[OCR_MODE_BY_LANGUAGE, language], json!(engine)).is_ok() {
+        let value = settings.get_path(&[OCR_MODE_BY_LANGUAGE]).ok().flatten().unwrap_or(Value::Null);
+        let _ = app.emit("settings:changed", json!({ "key": OCR_MODE_BY_LANGUAGE, "value": value }));
+    }
+}
+
+/// The scan engine follows the language: after a change of `language` (Settings, the welcome
+/// flow, Sync, an account switch), the engine last used for the new language comes back, and an
+/// engine that cannot read it is replaced by the first usable one that can
+/// (`language::engine_for`); at `startup`, only the second. The change is an ordinary `ocrMode`
+/// write, so every window hears it. Japanese is read by every engine, so a Japanese reader's
+/// engine never changes here.
+fn follow_language(app: &tauri::AppHandle, settings: &Arc<Settings>, startup: bool) {
+    let code = language::current(settings).code.clone();
+    let previous = LANGUAGE_IN_USE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .replace(code.clone());
+    let changed = previous.as_ref().is_some_and(|previous| *previous != code);
+    if !startup && !changed {
+        return;
+    }
+    let current = settings.get_or::<String>("ocrMode", "googlelens".into());
+    // The engine the language being left was read with, for when it comes back.
+    if let Some(previous) = previous.as_deref().filter(|_| changed) {
+        remember_engine(app, settings, previous, &current);
+    }
+    let remembered = if changed {
+        settings.get_path(&[OCR_MODE_BY_LANGUAGE, code.as_str()]).ok().flatten().and_then(|v| v.as_str().map(str::to_string))
+    } else {
+        None
+    };
+    let (app, settings) = (app.clone(), settings.clone());
+    // Off the caller's thread: the watcher's lock waits for a read in progress, and the engines'
+    // availability may probe them.
+    std::thread::spawn(move || {
+        let Some(service) = app.try_state::<Shared>().map(|state| state.inner().clone()) else { return };
+        // The Live Text watcher reads in the language it was built for.
+        if changed {
+            service.observer.lock().unwrap_or_else(std::sync::PoisonError::into_inner).close_engine("livetext");
+        }
+        if remembered.as_deref().is_none_or(|r| r == current) && language::engine_supports(&current, &code) {
+            return;
+        }
+        let capabilities = capabilities_value(&app, &service);
+        let usable = |engine: &str| capabilities["ocrEngines"][engine]["available"] == json!(true);
+        if let Some(engine) = language::engine_for(&code, &current, remembered.as_deref(), usable) {
+            debug_report::trace(&app, json!({ "check": "ocr-engine-language", "language": code, "from": current, "to": engine }));
+            let _ = apply_setting(&app, &settings, "ocrMode", json!(engine));
+        }
+    });
 }
 
 /// Whether `engine` is the selected scan engine (`ocrMode`; "local" is MeikiOCR's old name).
@@ -1843,8 +1915,10 @@ async fn capture_frame(
                     .lock()
                     // A panic during an earlier read leaves the engines usable.
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                // Which engine watches is the overlay's choice (`ui/watcher.ts`).
-                observer.select(observer_engine.as_deref().unwrap_or(text_observer::DEFAULT_ENGINE));
+                // Which engine watches is the overlay's choice (`ui/watcher.ts`), unless it cannot
+                // read the language.
+                let language = language::current(&service.settings);
+                observer.select(text_observer::engine_for(observer_engine.as_deref(), &language.code));
                 let clock = std::time::Instant::now();
                 let observed = observer.observe(&frame, OBSERVE_TIMEOUT);
                 observe_ms = clock.elapsed().as_secs_f64() * 1000.0;
@@ -2044,9 +2118,11 @@ impl Drop for ScanGuard {
 /// The legacy native scan path also honors local native OCR selections.
 fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Reply<Value> {
     let mode = settings.get_or::<String>("ocrMode", "googlelens".into());
+    let language = language::current(settings);
+    refuse_language(&mode, language)?;
     match mode.as_str() {
         #[cfg(target_os = "macos")]
-        "livetext" => return livetext::recognize(image),
+        "livetext" => return livetext::recognize(image, language),
         #[cfg(not(target_os = "macos"))]
         "livetext" => return Err("Apple Live Text is available on macOS only.".into()),
         "meikiocr" | "local" => return meiki_ocr::recognize(app, image),
@@ -2058,12 +2134,26 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
     }
     let png = image.png()?;
     match mode.as_str() {
-        "googlelens" => google_lens::recognize(&png),
+        "googlelens" => google_lens::recognize(&png, language),
         #[cfg(target_os = "windows")]
         "oneocr" => oneocr::recognize(app, &png),
         #[cfg(not(target_os = "windows"))]
         "oneocr" => Err("OneOCR is available on Windows only.".into()),
         _ => post_ocr(settings, &png),
+    }
+}
+
+/// Why `engine` may not read `language`: an engine trained on other languages would read
+/// nothing, or nonsense. The pickers and the re-pick on a language change keep this from
+/// happening; this is the last guard.
+fn refuse_language(engine: &str, language: &language::Language) -> Reply<()> {
+    if language::engine_supports(engine, &language.code) {
+        Ok(())
+    } else {
+        Err(format!(
+            "invalid: the {engine} OCR engine cannot read this language ({}); choose another engine in Settings",
+            language.code
+        ))
     }
 }
 
@@ -2092,7 +2182,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
         request = request.bearer_auth(token);
     }
     let response = request
-        .json(&json!({ "imageBase64": image }))
+        .json(&language::with_language(json!({ "imageBase64": image }), language::current(settings)))
         .send()
         .map_err(|_| "native: OCR network request failed (connection/TLS/timeout)")?;
     if token.is_some() {
@@ -2148,6 +2238,8 @@ async fn ocr_frame(
     if !native_engine_known(&engine) {
         return Err(format!("invalid: unknown native OCR engine {engine}"));
     }
+    let language = language::current(&state.settings);
+    refuse_language(&engine, language)?;
     let service = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let image = {
@@ -2195,11 +2287,11 @@ async fn ocr_frame(
             "ppocr" => pp_ocr::recognize(&app, &image),
             "screenai" => screen_ai::recognize(&app, &image),
             "vocr" => vocr::recognize(&app, &image),
-            "googlelens" => google_lens::recognize(&png),
+            "googlelens" => google_lens::recognize(&png, language),
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png),
             #[cfg(target_os = "macos")]
-            "livetext" => livetext::recognize(&image),
+            "livetext" => livetext::recognize(&image, language),
             _ => post_ocr(&service.settings, &png),
         };
         // A failing engine is what a bug report most needs to show, with its own words.
@@ -2462,6 +2554,14 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     for engine in model_store::Engine::OCR {
         if let Some(state) = model_store::gate(app, engine) {
             payload["ocrEngines"][engine.key()]["model"] = json!(state);
+        }
+    }
+    // The languages an engine reads, where it does not read them all (`language::engine_languages`).
+    if let Some(engines) = payload["ocrEngines"].as_object_mut() {
+        for (key, entry) in engines.iter_mut() {
+            if let Some(languages) = language::engine_languages(key) {
+                entry["languages"] = json!(languages);
+            }
         }
     }
     payload
@@ -4007,6 +4107,9 @@ fn finish_setup(
     // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
     // user starts it from Settings → OCR, where the button names the size.
     spawn_capabilities_watch(handle.clone(), service.clone());
+    // A language this computer's engine cannot read (chosen on another computer, or the engine's
+    // OS changed) gets one that can.
+    follow_language(&handle, &store, true);
     setup_deep_links(&handle);
     boot::mark("deferred-setup-end");
     Ok(())

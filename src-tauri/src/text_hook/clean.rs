@@ -8,6 +8,7 @@
 //! one) is dropped. Per game: script codes taken out (unless turned off), repeated characters
 //! undone (`ここここ` → `こ`), and the reader's own find-and-replace rules; and whether a line the
 //! game sends in pieces (one call per row of its text box) is joined back up ([`continues`]).
+use crate::language::Language;
 use regex::{NoExpand, Regex};
 use serde_json::Value;
 use std::sync::OnceLock;
@@ -38,8 +39,14 @@ pub struct GameConfig {
     pub repeats: Repeats,
     /// A piece that carries on a sentence the line before left unfinished is joined to it.
     pub join_lines: bool,
-    /// The script codes some engines leave in their text are taken out ([`strip_codes`]).
+    /// The script codes some engines leave in their text are taken out ([`strip_codes`]). Off by
+    /// default for a language that spaces its words, where ordinary words look like codes.
     pub strip_codes: bool,
+    /// The language has ruby: `{漢字/かんじ}`, `[漢字/かんじ]` and `漢字《かんじ》` are readings to
+    /// take out ([`strip_markup`]). Elsewhere `[he/she]` is text.
+    pub ruby: bool,
+    /// The language spaces its words: rows joined back up have a space between them.
+    pub spaces: bool,
     pub hook_codes: Vec<String>,
     pub replacements: Vec<Replacement>,
 }
@@ -51,6 +58,8 @@ impl Default for GameConfig {
             repeats: Repeats::Auto,
             join_lines: true,
             strip_codes: true,
+            ruby: true,
+            spaces: false,
             hook_codes: Vec::new(),
             replacements: Vec::new(),
         }
@@ -58,8 +67,8 @@ impl Default for GameConfig {
 }
 
 impl GameConfig {
-    /// From the defaults and the game's record (either may be null).
-    pub fn from_settings(defaults: &Value, game: &Value) -> Self {
+    /// From the defaults and the game's record (either may be null), for the language being read.
+    pub fn from_settings(defaults: &Value, game: &Value, language: &Language) -> Self {
         let pick = |key: &str| if game[key].is_null() { &defaults[key] } else { &game[key] };
         let flush_ms = pick("flushMs").as_u64().map_or(DEFAULT_FLUSH_MS, |ms| ms.clamp(20, 5000) as u32);
         let repeats = match pick("repeats") {
@@ -68,7 +77,9 @@ impl GameConfig {
             _ => Repeats::Auto,
         };
         let join_lines = pick("joinLines").as_bool().unwrap_or(true);
-        let strip_codes = pick("stripCodes").as_bool().unwrap_or(true);
+        // A setting the reader made wins; unset, on unless words are spaced (`Level10`, `user_name`
+        // and `mp3player` are words there, not codes).
+        let strip_codes = pick("stripCodes").as_bool().unwrap_or(!language.spaces);
         let hook_codes = game["hookCodes"]
             .as_array()
             .map(|codes| codes.iter().filter_map(|c| c.as_str()).map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect())
@@ -92,12 +103,12 @@ impl GameConfig {
                     .collect()
             })
             .unwrap_or_default();
-        GameConfig { flush_ms, repeats, join_lines, strip_codes, hook_codes, replacements }
+        GameConfig { flush_ms, repeats, join_lines, strip_codes, ruby: language.ruby, spaces: language.spaces, hook_codes, replacements }
     }
 
     /// The line as it is shown and logged; None when it is not one to show.
     pub fn clean(&self, text: &str) -> Option<String> {
-        let mut line = strip_markup(text);
+        let mut line = strip_markup(text, self.ruby);
         if self.strip_codes {
             line = strip_codes(&line);
         }
@@ -117,41 +128,43 @@ impl GameConfig {
     }
 }
 
-fn rules() -> &'static [(Regex, &'static str)] {
-    static RULES: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
+/// The markup rules, each with whether it is a ruby rule (taken out only for a language with ruby).
+fn rules() -> &'static [(Regex, &'static str, bool)] {
+    static RULES: OnceLock<Vec<(Regex, &'static str, bool)>> = OnceLock::new();
     RULES.get_or_init(|| {
         [
             // Ruby readings in HTML, then any tag.
-            (r"(?is)<(rt|rp)>.*?</(rt|rp)>", ""),
-            (r"</?[A-Za-z][A-Za-z0-9_-]*(?:[\s=][^<>]*)?/?>", ""),
+            (r"(?is)<(rt|rp)>.*?</(rt|rp)>", "", false),
+            (r"</?[A-Za-z][A-Za-z0-9_-]*(?:[\s=][^<>]*)?/?>", "", false),
             // {漢字/かんじ} and {漢字:かんじ}.
-            (r"\{([^{}/:]+)[/:][^{}]*\}", "$1"),
+            (r"\{([^{}/:]+)[/:][^{}]*\}", "$1", true),
             // [漢字/かんじ] (CatSystem; `[オレ/・・]` puts emphasis dots over the word).
-            (r"\[([^\[\]/]+)/[^\[\]]*\]", "$1"),
+            (r"\[([^\[\]/]+)/[^\[\]]*\]", "$1", true),
             // Ren'Py's text tags: {w}, {p=1.0}, {i}…{/i}, {color=#fff}.
-            (r"\{/?[a-z]+(?:=[^{}]*)?\}", ""),
+            (r"\{/?[a-z]+(?:=[^{}]*)?\}", "", false),
             // Tyrano's line and page breaks, and its ruby tag (the base text follows it).
-            (r#"\[(?:r|l|p|cm|er|resetfont|ruby\s+text="?[^\]"]*"?)\]"#, ""),
+            (r#"\[(?:r|l|p|cm|er|resetfont|ruby\s+text="?[^\]"]*"?)\]"#, "", false),
             // ｜漢字《かんじ》 and 漢字《かんじ》.
-            (r"[|｜]([^|｜《》]+)《[^《》]*》", "$1"),
-            (r"(\p{Han}+)《[^《》]*》", "$1"),
+            (r"[|｜]([^|｜《》]+)《[^《》]*》", "$1", true),
+            (r"(\p{Han}+)《[^《》]*》", "$1", true),
             // A speaker as CatSystem2 sends one shown under another name (`ゆかり＠？？？「…」`):
             // the name shown.
-            (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", "$1"),
+            (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", "$1", false),
             // A line break written out (`\n`) in the script's text: Unity CatSystem.
-            (r"(?:\\n)+([^A-Za-z\\]|$)", "\n$1"),
+            (r"(?:\\n)+([^A-Za-z\\]|$)", "\n$1", false),
         ]
         .into_iter()
-        .map(|(pattern, to)| (Regex::new(pattern).expect("markup rule"), to))
+        .map(|(pattern, to, ruby)| (Regex::new(pattern).expect("markup rule"), to, ruby))
         .collect()
     })
 }
 
-/// The line without markup, keeping the text it marks up.
-pub fn strip_markup(text: &str) -> String {
+/// The line without markup, keeping the text it marks up. Without `ruby` (a language that has
+/// none), the ruby forms are left as text.
+pub fn strip_markup(text: &str, ruby: bool) -> String {
     let mut line = text.to_string();
-    for (rule, to) in rules() {
-        if rule.is_match(&line) {
+    for (rule, to, is_ruby) in rules() {
+        if (ruby || !is_ruby) && rule.is_match(&line) {
             line = rule.replace_all(&line, *to).into_owned();
         }
     }
@@ -255,25 +268,29 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn ja() -> &'static Language {
+        crate::language::get("ja")
+    }
+
     #[test]
     fn markup_goes_and_its_text_stays() {
-        assert_eq!(strip_markup("<b>今日</b>は<color=#fff>晴れ</color>"), "今日は晴れ");
-        assert_eq!(strip_markup("<ruby>漢字<rt>かんじ</rt></ruby>です"), "漢字です");
-        assert_eq!(strip_markup("{漢字/かんじ}を{読:よ}む"), "漢字を読む");
-        assert_eq!(strip_markup("[僕/ぼく]は[思/おも]った"), "僕は思った");
-        assert_eq!(strip_markup("待って{w}ください{p=1.0}"), "待ってください");
-        assert_eq!(strip_markup("[ruby text=\"かんじ\"]漢字[r]次"), "漢字次");
-        assert_eq!(strip_markup("｜東京《とうきょう》へ行く。漢字《かんじ》"), "東京へ行く。漢字");
+        assert_eq!(strip_markup("<b>今日</b>は<color=#fff>晴れ</color>", true), "今日は晴れ");
+        assert_eq!(strip_markup("<ruby>漢字<rt>かんじ</rt></ruby>です", true), "漢字です");
+        assert_eq!(strip_markup("{漢字/かんじ}を{読:よ}む", true), "漢字を読む");
+        assert_eq!(strip_markup("[僕/ぼく]は[思/おも]った", true), "僕は思った");
+        assert_eq!(strip_markup("待って{w}ください{p=1.0}", true), "待ってください");
+        assert_eq!(strip_markup("[ruby text=\"かんじ\"]漢字[r]次", true), "漢字次");
+        assert_eq!(strip_markup("｜東京《とうきょう》へ行く。漢字《かんじ》", true), "東京へ行く。漢字");
         // Japanese brackets are text, not markup.
-        assert_eq!(strip_markup("〈彼〉は【アキ】「……」"), "〈彼〉は【アキ】「……」");
-        assert_eq!(strip_markup("a < b > c"), "a < b > c");
+        assert_eq!(strip_markup("〈彼〉は【アキ】「……」", true), "〈彼〉は【アキ】「……」");
+        assert_eq!(strip_markup("a < b > c", true), "a < b > c");
         // A speaker shown under another name: the name shown.
-        assert_eq!(strip_markup("ゆかり＠？？？「本当にそうかな……」"), "？？？「本当にそうかな……」");
-        assert_eq!(strip_markup("連絡先は a＠b です「はい」"), "連絡先は a＠b です「はい」");
+        assert_eq!(strip_markup("ゆかり＠？？？「本当にそうかな……」", true), "？？？「本当にそうかな……」");
+        assert_eq!(strip_markup("連絡先は a＠b です「はい」", true), "連絡先は a＠b です「はい」");
         // A line break written out is one.
-        assert_eq!(strip_markup("名前\\n「行くぞ」\\n"), "名前\n「行くぞ」\n");
-        assert_eq!(strip_markup("一行目\\n\\n二行目"), "一行目\n二行目");
-        assert_eq!(strip_markup("C:\\name"), "C:\\name");
+        assert_eq!(strip_markup("名前\\n「行くぞ」\\n", true), "名前\n「行くぞ」\n");
+        assert_eq!(strip_markup("一行目\\n\\n二行目", true), "一行目\n二行目");
+        assert_eq!(strip_markup("C:\\name", true), "C:\\name");
     }
 
     #[test]
@@ -295,7 +312,7 @@ mod tests {
         for line in ["ＰＳ５とPS5で3Dのゲーム", "OKです", "$100の時計", "＃拡散希望", "#1位", "１７時半、18時半下校", "顔文字^_^だよ", "e-mailを送る", "ああ、ああ", "………"] {
             assert_eq!(strip_codes(line), line);
         }
-        let off = GameConfig::from_settings(&json!({ "stripCodes": false }), &Value::Null);
+        let off = GameConfig::from_settings(&json!({ "stripCodes": false }), &Value::Null, ja());
         assert_eq!(off.clean("VOK_アキ「……ふぅ」").as_deref(), Some("VOK_アキ「……ふぅ」"));
         assert_eq!(GameConfig::default().clean("chr10Xakichr24"), None);
     }
@@ -315,7 +332,7 @@ mod tests {
         assert!(continues("「ふふっ。期待してますね、先輩っ", "」"));
         assert!(continues("あとになって、電話で叔母さんから", "「よろしくね」と念を押されたことも"));
         assert!(!continues("", "何か用なの？」"));
-        let off = GameConfig::from_settings(&Value::Null, &json!({ "joinLines": false }));
+        let off = GameConfig::from_settings(&Value::Null, &json!({ "joinLines": false }), ja());
         assert!(!off.join_lines && GameConfig::default().join_lines);
     }
 
@@ -333,11 +350,11 @@ mod tests {
     fn a_game_overrides_the_defaults() {
         let defaults = json!({ "flushMs": 500, "repeats": "off" });
         let game = json!({ "repeats": 2, "hookCodes": [" HS-4@1234 ", ""] });
-        let config = GameConfig::from_settings(&defaults, &game);
+        let config = GameConfig::from_settings(&defaults, &game, ja());
         assert_eq!(config.flush_ms, 500);
         assert_eq!(config.repeats, Repeats::Fixed(2));
         assert_eq!(config.hook_codes, vec!["HS-4@1234".to_string()]);
-        let none = GameConfig::from_settings(&Value::Null, &Value::Null);
+        let none = GameConfig::from_settings(&Value::Null, &Value::Null, ja());
         assert_eq!((none.flush_ms, none.repeats), (300, Repeats::Auto));
     }
 
@@ -350,10 +367,30 @@ mod tests {
             { "find": "(", "replace": "", "regex": true },
             { "find": "off", "replace": "on", "enabled": false }
         ] });
-        let config = GameConfig::from_settings(&Value::Null, &game);
+        let config = GameConfig::from_settings(&Value::Null, &game, ja());
         // The broken regex is left out.
         assert_eq!(config.replacements.len(), 3);
         assert_eq!(config.clean("アキ：$x off").as_deref(), Some("$1 off"));
+    }
+
+    #[test]
+    fn a_spaced_language_without_ruby_keeps_its_words() {
+        let en = crate::language::get("en");
+        let config = GameConfig::from_settings(&Value::Null, &Value::Null, en);
+        assert!(!config.strip_codes && !config.ruby && config.spaces);
+        // Ordinary words that look like codes, and slashes in brackets, are text.
+        let line = "Reach Level10 as user_name with your mp3player [he/she] {yes/no}";
+        assert_eq!(config.clean(line).as_deref(), Some(line));
+        // Markup is still taken out.
+        assert_eq!(config.clean("<b>Hello</b>{w} there").as_deref(), Some("Hello there"));
+        // The reader turning code removal on wins.
+        let on = GameConfig::from_settings(&json!({ "stripCodes": true }), &Value::Null, en);
+        assert!(on.strip_codes);
+        assert_eq!(on.clean("VOK_ Hello").as_deref(), Some("Hello"));
+        // Japanese is as before.
+        let ja = GameConfig::from_settings(&Value::Null, &Value::Null, ja());
+        assert!(ja.strip_codes && ja.ruby && !ja.spaces);
+        assert_eq!(ja.clean("[僕/ぼく]は{読:よ}む").as_deref(), Some("僕は読む"));
     }
 
     #[test]

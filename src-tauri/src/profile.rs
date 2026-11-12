@@ -46,6 +46,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "serverSettings",
     "endpoint",
     "ocrMode",
+    // The engine last used for each language: this computer's engines, like `ocrMode`.
+    "ocrModeByLanguage",
     "cropRegions",
     "cropScanEnabled",
     "ankiCropRegions",

@@ -19,6 +19,7 @@
 //! text as those lines joined by newlines; a `line`
 //! annotation per line; the aggregate first. Coordinates are pixels of the frame that was
 //! captured, whatever size the image was sent at.
+use crate::language::Language;
 use serde_json::{json, Value};
 use std::io::Cursor;
 use std::sync::OnceLock;
@@ -211,18 +212,18 @@ struct Upload {
     height: u32,
 }
 
-/// Recognise one captured PNG with Google Lens.
-pub fn recognize(png: &[u8]) -> Result<Value, String> {
+/// Recognise one captured PNG with Google Lens, asking in the language being read.
+pub fn recognize(png: &[u8], language: &Language) -> Result<Value, String> {
     let (width, height) = dimensions(png)?;
     let upload = prepare(png, width, height)?;
-    let bytes = post(&upload)?;
+    let bytes = post(&upload, language)?;
     let parsed = parse(&bytes)?;
     Ok(value_from_response(&parsed, &upload, width, height))
 }
 
 /// Send the image; the raw response body.
-fn post(upload: &Upload) -> Result<Vec<u8>, String> {
-    let body = prost::Message::encode_to_vec(&request(upload, random_u64(), random_bytes()));
+fn post(upload: &Upload, language: &Language) -> Result<Vec<u8>, String> {
+    let body = prost::Message::encode_to_vec(&request(upload, random_u64(), random_bytes(), language));
     let response = client()?
         .post(ENDPOINT)
         .header("Content-Type", "application/x-protobuf")
@@ -304,8 +305,10 @@ fn scaled_size(width: u32, height: u32) -> Option<(u32, u32)> {
     Some((new_width as u32, new_height as u32))
 }
 
-/// The request owocr sends: a Chromium web client asking in Japanese, with the auto filter.
-fn request(upload: &Upload, uuid: u64, analytics_id: [u8; 16]) -> proto::ServerRequest {
+/// The request owocr sends: a Chromium web client asking in Japanese, with the auto filter. For
+/// another language only the locale's language differs (`language::lens_code`); the region is
+/// the time zone owocr sends, which nothing suggests Lens reads as a language hint.
+fn request(upload: &Upload, uuid: u64, analytics_id: [u8; 16], language: &Language) -> proto::ServerRequest {
     use proto::*;
     ServerRequest {
         objects_request: Some(ObjectsRequest {
@@ -321,7 +324,7 @@ fn request(upload: &Upload, uuid: u64, analytics_id: [u8; 16]) -> proto::ServerR
                     platform: PLATFORM_WEB,
                     surface: SURFACE_CHROMIUM,
                     locale_context: Some(LocaleContext {
-                        language: "ja".into(),
+                        language: crate::language::lens_code(language).into(),
                         region: "Asia/Tokyo".into(),
                     }),
                     client_filters: Some(AppliedFilters {
@@ -587,9 +590,27 @@ mod tests {
             &upload(640, 480),
             0x0123_4567_89AB_CDEF,
             std::array::from_fn(|i| i as u8),
+            crate::language::get("ja"),
         )
         .encode_to_vec();
         assert_eq!(bytes, hex(OWOCR_REQUEST));
+    }
+
+    #[test]
+    fn another_language_asks_in_that_language_and_changes_nothing_else() {
+        let ask = |code: &str| {
+            request(&upload(640, 480), 1, [0; 16], crate::language::get(code))
+        };
+        let context = |request: &proto::ServerRequest| {
+            request.objects_request.as_ref().unwrap().request_context.as_ref().unwrap().client_context.as_ref().unwrap().locale_context.clone().unwrap()
+        };
+        let korean = ask("ko");
+        assert_eq!((context(&korean).language.as_str(), context(&korean).region.as_str()), ("ko", "Asia/Tokyo"));
+        assert_eq!(context(&ask("zh-Hans")).language, "zh-CN");
+        // Only the language field differs from the Japanese request.
+        let mut japanese = ask("ja");
+        japanese.objects_request.as_mut().unwrap().request_context.as_mut().unwrap().client_context.as_mut().unwrap().locale_context.as_mut().unwrap().language = "ko".into();
+        assert_eq!(japanese.encode_to_vec(), korean.encode_to_vec());
     }
 
     #[test]
@@ -757,7 +778,7 @@ mod tests {
         let png = std::fs::read(path).unwrap();
         let (width, height) = dimensions(&png).unwrap();
         let upload = prepare(&png, width, height).unwrap();
-        let bytes = post(&upload).unwrap();
+        let bytes = post(&upload, crate::language::get("ja")).unwrap();
         if let Ok(dump) = std::env::var("KIMOCHI_LENS_DUMP") {
             std::fs::write(dump, &bytes).unwrap();
         }

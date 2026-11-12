@@ -15,6 +15,7 @@
 //! A choice is remembered per game by `hookcode`, `ctx & 0xFFFF` and `ctx2 & 0xFFFF`
 //! ([`Signature`]), not by the hook address or the thread number: those change with every
 //! launch (address-space randomisation), while the low halves of the contexts do not.
+use crate::language::Language;
 use serde::{Deserialize, Serialize};
 
 /// What a thread is remembered by across launches.
@@ -105,23 +106,22 @@ pub fn normalize(text: &str) -> String {
     text.chars().map(fold_width).filter(|c| !ignorable(*c)).flat_map(char::to_lowercase).collect()
 }
 
-fn japanese(c: char) -> bool {
-    matches!(c as u32, 0x3040..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xFF66..=0xFF9F)
-}
-
-/// Share of a text's characters that are kana or kanji.
-pub fn japanese_ratio(normalized: &str) -> f64 {
+/// Share of a text's characters that are letters of the language's scripts (kana and kanji for
+/// Japanese). The name is from when Japanese was the only language.
+pub fn japanese_ratio(normalized: &str, language: &Language) -> f64 {
     let total = normalized.chars().count();
     if total == 0 {
         return 0.0;
     }
-    normalized.chars().filter(|c| japanese(*c)).count() as f64 / total as f64
+    normalized.chars().filter(|c| language.has(*c)).count() as f64 / total as f64
 }
 
-/// Whether a thread's text reads as Japanese, by the share automatic choice asks for: the hook menu
-/// lists such threads, and keeps the rest behind "Show all".
-pub fn looks_japanese(text: &str) -> bool {
-    japanese_ratio(&normalize(text)) >= MIN_JAPANESE
+/// Whether a thread's text reads as the language, by the share automatic choice asks for: the hook
+/// menu lists such threads, and keeps the rest behind "Show all". In a language that puts spaces
+/// between words, text with no space in it (an asset name, a path, a flag) is not a sentence.
+pub fn looks_japanese(text: &str, language: &Language) -> bool {
+    japanese_ratio(&normalize(text), language) >= MIN_JAPANESE
+        && (!language.spaces || text.trim().contains(char::is_whitespace))
 }
 
 /// Generic hooks LunaHook (and Textractor) insert on Windows APIs carry the API's module in the
@@ -219,12 +219,13 @@ fn longest_common_run(a: &str, b: &str) -> usize {
 
 /// The fewest characters that count as a match: a two-kana string is on every screen.
 const MIN_MATCH: usize = 4;
-/// The least share of kana and kanji a thread needs to be chosen automatically.
+/// The least share of the language's letters (kana and kanji for Japanese) a thread needs to be
+/// chosen automatically.
 const MIN_JAPANESE: f64 = 0.3;
 
 /// Scores every candidate against the screen's blocks; best first. A candidate that matches
 /// nothing is left out, so an empty result means "no thread is on screen yet".
-pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
+pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) -> Vec<Scored> {
     let largest = blocks
         .iter()
         .enumerate()
@@ -235,9 +236,9 @@ pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
         .filter_map(|candidate| {
             let text = normalize(candidate.text);
             let length = text.chars().count();
-            // Too short to tell apart, or not Japanese: file paths, asset names and the window
+            // Too short to tell apart, or not the language: file paths, asset names and the window
             // title also turn up in hooked threads and on screen.
-            if length < MIN_MATCH || japanese_ratio(&text) < MIN_JAPANESE {
+            if length < MIN_MATCH || japanese_ratio(&text, language) < MIN_JAPANESE {
                 return None;
             }
             // The thread's whole sentence inside a block. Where the hook holds more than the
@@ -268,7 +269,7 @@ pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
             if in_largest {
                 score *= 2.0;
             }
-            score += 4.0 * japanese_ratio(&text);
+            score += 4.0 * japanese_ratio(&text, language);
             // An engine's own hook over a generic one, even where the generic one matches more:
             // a generic hook sees every string the game handles, so it holds the line together
             // with whatever was drawn or built beside it (a speaker's name, markup).
@@ -663,11 +664,17 @@ fn same_but_breaks(sentence: &[char], rest: &[char]) -> Option<usize> {
     None
 }
 
-/// Whether `shown` (normalized) is a line of dialogue other than `before`: Japanese, `min` characters
-/// or more, and not `before` typed further or the start of it.
-pub fn another_line(before: &str, shown: &str, min: usize) -> bool {
+/// Whether `shown` (normalized) is a line of dialogue other than `before`: in the language, `min`
+/// characters or more, and not `before` typed further or the start of it.
+pub fn another_line(before: &str, shown: &str, min: usize, language: &Language) -> bool {
     let fresh = before.is_empty() || !(shown.starts_with(before) || before.starts_with(shown));
-    fresh && shown.chars().count() >= min && japanese_ratio(shown) >= MIN_JAPANESE
+    fresh && shown.chars().count() >= min && reads_as(shown, language)
+}
+
+/// Whether normalized text holds enough of the language's letters to be chosen or handed over to
+/// automatically ([`MIN_JAPANESE`]).
+pub fn reads_as(normalized: &str, language: &Language) -> bool {
+    japanese_ratio(normalized, language) >= MIN_JAPANESE
 }
 
 /// The shortest sentence `collapse_repeated_sentences` takes as drawn twice.
@@ -700,13 +707,39 @@ pub fn display_name(hookcode: &str, name: &str) -> String {
 mod tests {
     use super::*;
 
+    fn ja() -> &'static Language {
+        crate::language::get("ja")
+    }
+
     #[test]
     fn japanese_text_is_listed_and_engine_noise_is_not() {
-        assert!(looks_japanese("「おはよう」と彼は言った。"));
-        assert!(looks_japanese("Ｈ：今日はいい天気だね"));
+        assert!(looks_japanese("「おはよう」と彼は言った。", ja()));
+        assert!(looks_japanese("Ｈ：今日はいい天気だね", ja()));
         for noise in ["", "0x004A21F0", "SYSTEM_MENU_OPEN", "Loading... 42%", r"C:\Game\data.pak"] {
-            assert!(!looks_japanese(noise), "{noise:?}");
+            assert!(!looks_japanese(noise, ja()), "{noise:?}");
         }
+    }
+
+    #[test]
+    fn other_languages_read_by_their_own_scripts() {
+        let (ko, en, ru) = (crate::language::get("ko"), crate::language::get("en"), crate::language::get("ru"));
+        assert!(looks_japanese("안녕하세요, 오늘 날씨가 좋네요.", ko));
+        assert!(!looks_japanese("「おはよう」と彼は言った。", ko));
+        assert!(japanese_ratio(&normalize("안녕하세요"), ko) > 0.99);
+        assert!(japanese_ratio(&normalize("今日はいい天気だね"), ko) < 0.01);
+        assert!(looks_japanese("The quick brown fox jumps over the lazy dog.", en));
+        assert!(looks_japanese("Привет, как дела?", ru));
+        assert!(!looks_japanese("Привет, как дела?", en));
+        assert!(!looks_japanese("The quick brown fox.", ru));
+        assert!(japanese_ratio(&normalize("Привет мир"), ru) > 0.99);
+        // Japanese text no longer reads as the language, and engine noise with no space is no
+        // sentence in a spaced language.
+        assert!(!looks_japanese("今日はいい天気だね", en));
+        for noise in ["SYSTEM_MENU_OPEN", r"C:\Game\data.pak", "0x004A21F0", ""] {
+            assert!(!looks_japanese(noise, en), "{noise:?}");
+        }
+        assert!(another_line("", &normalize("Where are you going tonight?"), 6, en));
+        assert!(!another_line("", &normalize("今日はいい天気だね"), 6, en));
     }
 
     /// What LunaHook gave for one line of a Unity game that types its text out:
@@ -872,14 +905,14 @@ mod tests {
     #[test]
     fn a_line_typed_out_or_sent_twice_is_one_line() {
         let line = "それほど楽な仕事ではない。";
-        assert!(another_line("", line, 6));
-        assert!(!another_line(line, line, 6));
-        assert!(!another_line("それほど楽な", line, 6));
-        assert!(!another_line(line, "それほど楽な", 6));
-        assert!(another_line(line, "町の人たちには頼りにされている。", 6));
+        assert!(another_line("", line, 6, ja()));
+        assert!(!another_line(line, line, 6, ja()));
+        assert!(!another_line("それほど楽な", line, 6, ja()));
+        assert!(!another_line(line, "それほど楽な", 6, ja()));
+        assert!(another_line(line, "町の人たちには頼りにされている。", 6, ja()));
         // A nameplate or a code is not a line.
-        assert!(!another_line(line, "アカネ", 6));
-        assert!(!another_line(line, "se_21_140_voice", 6));
+        assert!(!another_line(line, "アカネ", 6, ja()));
+        assert!(!another_line(line, "se_21_140_voice", 6, ja()));
     }
 
     #[test]
@@ -925,7 +958,7 @@ mod tests {
             line("「旅人は夢だけの記録となってもなおその町に集まり、", 430.0, 880.0, 700.0, 32.0),
             line("お客様の約束に駆けつけたのです」", 450.0, 925.0, 450.0, 32.0),
         ];
-        let scored = score(&candidates, &blocks(&screen));
+        let scored = score(&candidates, &blocks(&screen), ja());
         assert_eq!(scored[0].key, "set_text");
     }
 
@@ -937,7 +970,7 @@ mod tests {
             line("Sample Game", 10.0, 5.0, 200.0, 20.0),
             line("「静かな港町に流れ着いた古い手紙により", 430.0, 880.0, 700.0, 32.0),
         ];
-        assert!(score(&candidates, &blocks(&screen)).is_empty());
+        assert!(score(&candidates, &blocks(&screen), ja()).is_empty());
     }
 
     #[test]
@@ -947,7 +980,7 @@ mod tests {
             Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最\n後の答えは、\nまだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
             Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最後の答えは、まだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
         ];
-        assert_eq!(score(&candidates, &blocks(&screen))[0].key, "text");
+        assert_eq!(score(&candidates, &blocks(&screen), ja())[0].key, "text");
     }
 
     #[test]
@@ -1007,7 +1040,7 @@ mod tests {
                 noise: 0.0,
             },
         ];
-        let scored = score(&candidates, &blocks(&screen()));
+        let scored = score(&candidates, &blocks(&screen()), ja());
         assert_eq!(scored[0].key, "dialogue");
         assert!(scored[0].in_largest);
         // The nameplate is too short to count at all.
@@ -1027,7 +1060,7 @@ mod tests {
         }];
         // Only the unchanged second line is on screen; it is inside the sentence, so it still
         // counts, but for its own length and never as the whole sentence.
-        let scored = score(&candidates, &blocks(&screen()));
+        let scored = score(&candidates, &blocks(&screen()), ja());
         assert!(scored.is_empty() || scored[0].matched < 20);
     }
 
@@ -1045,7 +1078,7 @@ mod tests {
             Candidate { key: "name", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: "見張りの兵士", recent: 1, count: 3, noise: 0.0 },
             Candidate { key: "line", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: line_text, recent: 1, count: 3, noise: 0.0 },
         ];
-        let scored = score(&candidates, &blocks(&screen));
+        let scored = score(&candidates, &blocks(&screen), ja());
         assert_eq!(chosen(&scored, 6.0).unwrap().key, "line");
         // A short run in common is no match.
         assert_eq!(longest_common_run("そういえば昨日", "昨日の話"), 2);
@@ -1071,7 +1104,7 @@ mod tests {
             Candidate { key: "engine", hookcode: "HS-8@1A2B3:Game.exe", name: "", text, recent: 1, count: 1, noise: 0.0 },
             Candidate { key: "flood", hookcode: "HS-4@4C5D6:Game.exe", name: "", text, recent: 40, count: 1, noise: 0.0 },
         ];
-        let scored = score(&candidates, &blocks);
+        let scored = score(&candidates, &blocks, ja());
         assert_eq!(scored.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(), ["engine", "api", "flood"]);
     }
 
@@ -1084,7 +1117,7 @@ mod tests {
             Candidate { key: "v8", hookcode: "HVX0@292530:game.exe", name: "v8::String::Write", text: "お母さんおはよう。今日も雨だね。早く晴れてくれるといいんだけど。", recent: 1, count: 16, noise: 0.0 },
             Candidate { key: "tyrano", hookcode: "EXHQXFN0@8CDC0:LunaHook64.dll", name: "tyranoscript", text: "おはよう。今日も雨だね。早く晴れてくれるといいんだけど。\n", recent: 1, count: 9, noise: 0.0 },
         ];
-        let scored = score(&candidates, &blocks(&screen));
+        let scored = score(&candidates, &blocks(&screen), ja());
         assert_eq!(scored[0].key, "tyrano");
         assert!(is_generic("HVX0@292530:game.exe", "v8::String::Length"));
         assert!(!is_generic("EXHQXFN0@8CDC0:LunaHook64.dll", "tyranoscript"));
@@ -1099,7 +1132,7 @@ mod tests {
             Candidate { key: "string", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "String.op_Inequality", text: "まるで夢を見ているようだ。", recent: 1, count: 61, noise: 0.0 },
             Candidate { key: "tmp", hookcode: "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY", name: "TMP_Text.set_text", text: "まるで夢を見ているようだ。", recent: 1, count: 61, noise: 0.0 },
         ];
-        assert_eq!(score(&candidates, &blocks(&screen))[0].key, "tmp");
+        assert_eq!(score(&candidates, &blocks(&screen), ja())[0].key, "tmp");
         assert!(is_generic("HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", "String.Substring"));
     }
 
@@ -1115,7 +1148,7 @@ mod tests {
             // The same hook in another context: the dialogue, mixed in with the script's codes.
             Candidate { key: "mixed", hookcode: "HW-4@4C5D6:Game.exe", name: "", text, recent: 1, count: 40, noise: 0.6 },
         ];
-        let order: Vec<String> = score(&candidates, &blocks).into_iter().map(|s| s.key).collect();
+        let order: Vec<String> = score(&candidates, &blocks, ja()).into_iter().map(|s| s.key).collect();
         assert_eq!(order, ["lasting", "per-line", "mixed"]);
     }
 

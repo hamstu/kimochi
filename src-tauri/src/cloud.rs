@@ -158,12 +158,13 @@ pub async fn tts_speak(
     let token = account::token().ok_or_else(|| format!("native: {NO_ACCOUNT_TTS}"))?;
     let url = format!("{}/api/v1/tts", settings::server_base(&state.settings));
     let model = tts_model(&state.settings.get_or("audioSettings.model", String::new()));
+    let body = crate::language::with_language(json!({ "text": text, "voiceId": voice_id, "model": model }), crate::language::current(&state.settings));
     tauri::async_runtime::spawn_blocking(move || {
         let client = blocking_client(Duration::from_secs(30))?;
         let response = client
             .post(url)
             .bearer_auth(&token)
-            .json(&json!({ "text": text, "voiceId": voice_id, "model": model }))
+            .json(&body)
             .send()
             .map_err(|_| "native: text-to-speech request failed (connection/TLS/timeout)")?;
         if !response.status().is_success() {
@@ -179,7 +180,8 @@ pub async fn tts_speak(
     .map_err(|e| e.to_string())?
 }
 
-/// Translate one line (Japanese to English) through the account's Kimochi cloud allowance.
+/// Translate one line (from the language being read to English) through the account's Kimochi
+/// cloud allowance.
 #[tauri::command]
 pub async fn cloud_translate(state: State<'_, Shared>, text: String) -> Result<String, String> {
     let text = text.trim().to_string();
@@ -191,12 +193,13 @@ pub async fn cloud_translate(state: State<'_, Shared>, text: String) -> Result<S
     }
     let token = account::token().ok_or_else(|| format!("native: {NO_ACCOUNT_TRANSLATE}"))?;
     let url = format!("{}/api/v1/translate", settings::server_base(&state.settings));
+    let source = crate::language::cloud_source(crate::language::current(&state.settings)).to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let client = blocking_client(Duration::from_secs(20))?;
         let response = client
             .post(url)
             .bearer_auth(&token)
-            .json(&json!({ "text": text, "sourceLang": "JA", "targetLang": "EN-US" }))
+            .json(&json!({ "text": text, "sourceLang": source, "targetLang": "EN-US" }))
             .send()
             .map_err(|_| "native: the translation request failed (connection/TLS/timeout)")?;
         if !response.status().is_success() {
@@ -251,10 +254,11 @@ pub async fn explain(
     if prompt.chars().count() > 12000 {
         return Err("The prompt is too long for Kimochi cloud (12000 characters at most). Shorten the prompt template in Explain settings.".into());
     }
-    let base = {
+    let (base, body) = {
         use tauri::Manager;
         let service = app.try_state::<Shared>().ok_or("Kimochi is still starting")?;
-        settings::server_base(&service.settings)
+        let body = crate::language::with_language(json!({ "prompt": prompt }), crate::language::current(&service.settings));
+        (settings::server_base(&service.settings), body)
     };
     let client = reqwest::Client::builder()
         .user_agent("Kimochi/0.1")
@@ -265,7 +269,7 @@ pub async fn explain(
     let mut response = client
         .post(format!("{base}/api/v1/explain"))
         .bearer_auth(&token)
-        .json(&json!({ "prompt": prompt }))
+        .json(&body)
         .send()
         .await
         .map_err(|_| "Kimochi cloud could not be reached (connection/TLS/timeout).".to_string())?;

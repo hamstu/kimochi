@@ -751,7 +751,7 @@ fn log_add(args: &Args, text: &[&str]) -> Outcome {
     }
     if result["added"] == json!(false) {
         return Err(Exit::Failed(
-            "the Log didn't take it: with Japanese only on it skips other text, and it skips a repeat of a recent line".into(),
+            "the Log didn't take it: its line filter may skip text not in the language being read, and it skips a repeat of a recent line".into(),
         ));
     }
     Ok(())
