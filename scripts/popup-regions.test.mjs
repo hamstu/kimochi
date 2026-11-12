@@ -91,3 +91,31 @@ test('several independent popups each contribute', () => {
   assert.equal(rects.length, 2)
   assert.ok(rects.every((r) => r.focus === true))
 })
+
+const { exceptRects } = await load('regions.ts')
+const area = (rects) => rects.reduce((sum, r) => sum + r.width * r.height, 0)
+const inside = (rects, x, y) => rects.some((r) => x >= r.x && y >= r.y && x < r.x + r.width && y < r.y + r.height)
+
+test('exceptRects: the area less a popup in its middle, and nothing of the popup', () => {
+  const screen = { x: 0, y: 32, width: 3440, height: 1440 }
+  const popup = { x: 491, y: 471, width: 432, height: 282 }
+  const rest = exceptRects(screen, [popup])
+  assert.equal(area(rest), area([screen]) - area([popup]))
+  assert.equal(inside(rest, 600, 600), false, 'a click on the popup is the popup’s')
+  assert.equal(inside(rest, 490, 600), true)
+  assert.equal(inside(rest, 923, 600), true)
+  assert.equal(inside(rest, 600, 470), true)
+  assert.equal(inside(rest, 600, 753), true)
+})
+
+test('exceptRects: holes at an edge, overlapping or outside, and none', () => {
+  const screen = { x: 0, y: 0, width: 100, height: 100 }
+  assert.deepEqual(exceptRects(screen, []), [screen])
+  assert.deepEqual(exceptRects(screen, [{ x: 200, y: 0, width: 10, height: 10 }]), [screen])
+  assert.deepEqual(exceptRects(screen, [{ x: -10, y: -10, width: 200, height: 200 }]), [])
+  const two = exceptRects(screen, [{ x: 0, y: 0, width: 50, height: 50 }, { x: 40, y: 40, width: 20, height: 20 }])
+  assert.equal(area(two), 10000 - 2500 - (20 * 20 - 10 * 10))
+  assert.equal(inside(two, 55, 55), false)
+  assert.equal(inside(two, 70, 20), true)
+  assert.deepEqual(exceptRects(screen, [{ x: 10, y: 10, width: 0, height: 5 }]), [screen])
+})

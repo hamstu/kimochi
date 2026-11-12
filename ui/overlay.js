@@ -69,7 +69,7 @@ import {
   resolveHostEngine,
   resolveOverlayCardAppearance
 } from './settings.js'
-import { popupHitRects } from './regions.js'
+import { exceptRects, popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
 import { openAppLane } from './app-lane.js'
@@ -105,6 +105,12 @@ let catching = false
 let gateOpen = false
 /** The rest of a press the free click took: swallowed up to its click. */
 let swallowClick = false
+/**
+ * GNOME: a free click was taken for the pop-up still showing. One click away is all a pop-up
+ * gets: if it does not go, the next click is the game's rather than the overlay's again, and a
+ * pop-up that failed to report closing cannot leave the overlay taking every click on the screen.
+ */
+let freeClickTaken = false
 
 const hub = window.__extensionHost
 const log = (value) => {
@@ -848,6 +854,8 @@ let layerPointerExit = null
 let hyprlandPointer = false
 let layerPointerPolling = false
 let remoteReadingPopup = false
+/** Where that pop-up is, in desktop points: on GNOME, the holes in a click away (`hitRects`). */
+let remoteReadingRects = []
 let apiReadingPopup = false
 const reading = new ReadingHold()
 function syncScanHold() {
@@ -4042,9 +4050,16 @@ function hitRects() {
   // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
   for (const rect of hints.rects()) add(rect, false)
   // A pop-up is open: the whole overlay takes the next click, so clicking away closes the pop-up
-  // without the click reaching the game (`onFreeClick`).
-  catching = gated && popupShown() && (controller?.mode ?? 'idle') === 'idle'
-  if (catching) add({ x: 0, y: 0, width: innerWidth, height: innerHeight }, false)
+  // without the click reaching the game (`onFreeClick`). On GNOME, Yomitan's pop-up is a window
+  // of its own (ui/popup-host.js), which this one may be stacked above: everything but it.
+  const remote = remoteReadingPopup && gnomeOverlay?.shared ? remoteReadingRects : null
+  const shown = popupShown() || remote !== null
+  if (!shown) freeClickTaken = false
+  catching = gated && shown && !(freeClickTaken && gnomeOverlay?.shared) && (controller?.mode ?? 'idle') === 'idle'
+  if (catching) {
+    const whole = { x: state.origin.x, y: state.origin.y, width: innerWidth, height: innerHeight }
+    for (const rect of exceptRects(whole, remote ?? [])) rects.push({ ...rect, focus: false, shift: false })
+  }
   return rects
 }
 
@@ -4072,6 +4087,7 @@ function onFreeClick(event) {
   event.stopImmediatePropagation()
   swallowClick = true
   catching = false
+  freeClickTaken = true
   log({ check: 'overlay-free-click' })
   dismissPopup()
   window.getSelection()?.removeAllRanges()
@@ -4699,7 +4715,12 @@ window.__kimochiOverlayState = () => ({
   info: state.info ? { source: state.info.source_id, crop: state.info.crop_pixels, bounds: state.info.source_bounds, full: [state.info.full_width, state.info.full_height] } : null,
   geometry: state.geometry,
   overlayVisible: state.flags.overlayVisible,
-  sourceBounds: state.sourceBounds
+  sourceBounds: state.sourceBounds,
+  // What takes the mouse, and why: a pop-up open makes the whole overlay take the next click.
+  popupShown: popupShown(),
+  catching,
+  gateOpen,
+  regions: hitRects().map(({ x, y, width, height, shift, focus }) => [x, y, width, height, shift ? 'shift' : focus ? 'focus' : ''].map((v) => typeof v === 'number' ? Math.round(v) : v))
 })
 
 // Gaming Mode: while the controller drives Kimochi, Steam is paused, and the Deck's controller
@@ -4919,7 +4940,9 @@ await native.listen('pointer', ({ payload }) => {
 
 await native.listen('overlay-reading-popup', ({payload}) => {
   remoteReadingPopup = payload?.visible === true
+  remoteReadingRects = remoteReadingPopup && Array.isArray(payload.rects) ? payload.rects : []
   syncReadingHold()
+  void publishRegions()
 })
 window.addEventListener('mousemove', () => syncReadingHold())
 

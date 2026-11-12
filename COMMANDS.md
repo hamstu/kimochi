@@ -2316,7 +2316,15 @@ let clicks through to the game until Shift is held, and the overlay hears them a
 `{sourceId, origin, bounds, visible}`, only when it changes. GTK refuses keyboard focus and applies only the renderer's live word input
 regions, through the widget (`gtk_widget_input_shape_combine_region`): GTK rewrites the GDK
 window's input shape from its client-side decoration on every allocation, and only a widget
-shape survives it. The original floating dictionary host owns its own popup input and focus.
+shape survives it. Clutter keeps the actor it last picked under the pointer until the pointer
+leaves the area that answer holds for or something there redraws, and a new input region
+redraws nothing, so while the surface is up the Shell compares that actor with a fresh pick
+every 20 ms and, when they disagree about the surface, relayouts it to make Clutter pick again
+(`_repickSurface`): otherwise Wayland input goes on to the window under the old region. A
+click on the surface focuses it for a moment; the Shell hands the focus straight back to the
+window the reader focused last and keeps the text up meanwhile. With a dictionary pop-up open,
+the overlay takes the next click anywhere else (`onFreeClick`), once per pop-up. The original
+floating dictionary host owns its own popup input and focus.
 `{operation:"close"}` releases the surface. Missing heartbeats, source changes/closure, owner
 loss, lock and extension disable hide it; capture suspension hides the WebView along with the
 other annotation surfaces. Native layer-shell and X11 retain the same existing renderer.
@@ -2432,8 +2440,10 @@ Automatic OCR pauses both observations and recognition application while the poi
 overlay text or a lookup from that overlay is visible. It resumes with a fresh observation
 after both have been left. Manual scans remain explicit, and source/crop changes reset the hold.
 Both text and image observer modes honor pauses that begin during a capture.
-`popup-host` sends `overlay-reading-popup` `{visible:boolean}` to `overlay` for the full
-visible desktop lookup chain; reader-only lookups do not hold the overlay. Embedded engine
+`popup-host` sends `overlay-reading-popup` `{visible:boolean, rects}` to `overlay` for the full
+visible desktop lookup chain (`rects`: its pop-ups' desktop rectangles, sent again when they
+move); reader-only lookups do not hold the overlay. On GNOME the overlay takes a click away from
+that chain everywhere except `rects`, as it does for its own pop-ups. Embedded engine
 popups and the API lookup report their visibility locally. This is shared across platforms.
 
 On GNOME, a linked portal window stream contains the selected window actor alone. Those

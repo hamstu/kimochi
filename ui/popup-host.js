@@ -229,13 +229,17 @@ function hideWindow() {
   })
 }
 
-let readingPopupVisible = false
+let readingPopupSignature = null
 async function relayout() {
   const visible = [...placed].filter(([popup]) => popup.isVisibleSync())
   const readingVisible = visible.some(([popup]) => popupSources.get(popup) === 'desktop')
-  if (readingVisible !== readingPopupVisible) {
-    readingPopupVisible = readingVisible
-    void window.__TAURI__.event.emitTo('overlay','overlay-reading-popup',{visible:readingVisible}).catch(() => {})
+  // Where they are, too: on GNOME the overlay takes a click away from them everywhere else, so
+  // that clicking away closes them without the click reaching the game (ui/overlay.js `hitRects`).
+  const readingRects = readingVisible ? visible.map(([, { x, y, width, height }]) => ({ x, y, width, height })) : []
+  const signature = JSON.stringify(readingRects)
+  if (signature !== readingPopupSignature) {
+    readingPopupSignature = signature
+    void window.__TAURI__.event.emitTo('overlay','overlay-reading-popup',{visible:readingVisible,rects:readingRects}).catch(() => {})
   }
   if (visible.length === 0) {
     scheduleHide()
