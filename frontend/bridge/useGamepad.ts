@@ -80,7 +80,26 @@ function toDevice(gamepad: Gamepad): GamepadDevice {
     mapping: gamepad.mapping,
     buttons: gamepad.buttons.length,
     axes: gamepad.axes.length,
-    timestamp: gamepad.timestamp
+    timestamp: gamepad.timestamp,
+    // Delta: raw activity for the button test, as native reports it (gamepad.rs `raw_activity`).
+    // Indices are only standard buttons under the "standard" mapping.
+    ...browserRawActivity(gamepad)
+  }
+}
+
+export function browserRawActivity(
+  gamepad: Pick<Gamepad, 'mapping' | 'buttons' | 'axes'>
+): Pick<GamepadDevice, 'rawButtons' | 'rawAxes'> {
+  const standard = gamepad.mapping === 'standard'
+  return {
+    rawButtons: gamepad.buttons.flatMap((button, index) =>
+      button.pressed ? [{ code: `Button ${index}`, standard: standard ? index : null }] : []
+    ),
+    rawAxes: gamepad.axes.flatMap((value, index) =>
+      Number.isFinite(value) && Math.abs(value) >= 0.5
+        ? [{ code: `Axis ${index}`, name: null, value: Math.round(value * 2) / 2 }]
+        : []
+    )
   }
 }
 

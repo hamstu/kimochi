@@ -112,7 +112,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 .iter()
                 .enumerate()
                 .map(|(index, (_, pad))| {
-                    json!({
+                    let mut device = json!({
                         "index": index,
                         "id": pad.name(),
                         "connected": pad.is_connected(),
@@ -122,12 +122,16 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                         "buttons": STANDARD.len(),
                         "axes": 4,
                         "timestamp": 0,
-                    })
+                    });
+                    if let (Some(device), Some(raw)) = (device.as_object_mut(), raw_activity(pad).as_object()) {
+                        device.extend(raw.clone());
+                    }
+                    device
                 })
                 .collect();
-            let active = preferred
-                .filter(|index| *index < pads.len())
-                .or_else(|| pads.iter().position(|(_, pad)| pad.is_connected()));
+            let last_pressed = raw.last_pressed.and_then(|id| pads.iter().position(|(pad, _)| *pad == id));
+            let active = pick_active(preferred, pads.len(), last_pressed);
+            raw.active = active.and_then(|index| pads.get(index)).map(|(id, _)| *id);
             let (buttons, axes) = match active.and_then(|index| pads.get(index)) {
                 Some((_, pad)) => (
                     STANDARD
@@ -271,24 +275,131 @@ fn describe_pad(index: usize, pad: &gilrs::Gamepad) -> Value {
     })
 }
 
+/// The controller the poll reads, by position among the connected ones: the primary chosen in
+/// Settings while it is connected, else the one a button was last pressed on, else the first.
+///
+/// Following the last press is what makes "listed but nothing lights up" go away when the first
+/// controller in the list is a silent one: the virtual pad of Steam Input, DS4Windows or ViGEm
+/// beside the real controller, a receiver, a wheel, or a keyboard that also reports a gamepad.
+fn pick_active(preferred: Option<usize>, count: usize, last_pressed: Option<usize>) -> Option<usize> {
+    preferred
+        .filter(|index| *index < count)
+        .or(last_pressed.filter(|index| *index < count))
+        .or((count > 0).then_some(0))
+}
+
+/// Below this an axis is at rest in the raw activity Settings shows.
+const RAW_AXIS_SHOWN: f32 = 0.5;
+
+/// What a controller is sending right now, whatever the standard layout makes of it: every button
+/// held by its raw code (with the standard index it reads as, or none), and every axis pushed past
+/// half way, rounded to a half so a resting stick does not resend the state. Settings shows it
+/// under the button test, so a press that never reaches the standard buttons is still seen.
+fn raw_activity(pad: &gilrs::Gamepad) -> Value {
+    use gilrs::ev::AxisOrBtn;
+    let mut buttons: Vec<Value> = pad
+        .state()
+        .buttons()
+        .filter(|(_, data)| data.is_pressed())
+        .map(|(code, _)| {
+            let standard = match pad.axis_or_btn_name(code) {
+                Some(AxisOrBtn::Btn(button)) => STANDARD.iter().position(|b| *b == button),
+                _ => None,
+            };
+            json!({ "code": code.to_string(), "standard": standard })
+        })
+        .collect();
+    let mut axes: Vec<Value> = pad
+        .state()
+        .axes()
+        .filter(|(_, data)| data.value().is_finite() && data.value().abs() >= RAW_AXIS_SHOWN)
+        .map(|(code, data)| {
+            let name = match pad.axis_or_btn_name(code) {
+                Some(AxisOrBtn::Axis(axis)) => Some(format!("{axis:?}")),
+                Some(AxisOrBtn::Btn(button)) => Some(format!("{button:?}")),
+                None => None,
+            };
+            json!({ "code": code.to_string(), "name": name, "value": (data.value() * 2.0).round() / 2.0 })
+        })
+        .collect();
+    // The state is a hash map: a stable order keeps an unchanged state from looking changed.
+    let by_code = |a: &Value, b: &Value| a["code"].as_str().cmp(&b["code"].as_str());
+    buttons.sort_by(by_code);
+    axes.sort_by(by_code);
+    json!({
+        "name": pad.name(),
+        "mappingSource": format!("{:?}", pad.mapping_source()),
+        "vendor": pad.vendor_id().map(|id| format!("{id:04x}")),
+        "product": pad.product_id().map(|id| format!("{id:04x}")),
+        "rawButtons": buttons,
+        "rawAxes": axes,
+    })
+}
+
 /// How many raw button and axis events verbose logging records one by one per run; after that
 /// `vitals` only counts them.
 const RAW_BUTTON_EVENTS: u32 = 40;
 const RAW_AXIS_EVENTS: u32 = 10;
 
-/// Verbose only: what gilrs itself delivers, before the standard layout. A pad whose presses
-/// arrive as `Unknown` buttons (a mapping gilrs lacks) reads as never pressed; a pad that sends
-/// nothing at all points at the backend or at something holding the controller (Steam Input,
-/// remappers).
+/// What gilrs itself delivers, before the standard layout. A pad whose presses arrive as
+/// `Unknown` buttons (a mapping gilrs lacks) reads as never pressed; a pad that sends nothing at
+/// all points at the backend or at something holding the controller (Steam Input, remappers).
+///
+/// Always: which controller was pressed last (it becomes the active one while no primary is
+/// chosen), and, once per controller, its first press and its first press the standard layout
+/// cannot name. Verbose: the first raw events one by one.
 #[derive(Default)]
 struct RawEventLog {
     buttons: u32,
     axes: u32,
+    /// The controller a button was last pressed on.
+    last_pressed: Option<gilrs::GamepadId>,
+    /// The controller the poll read at the last tick, to say whether a press reached it.
+    active: Option<gilrs::GamepadId>,
+    first_press: Vec<gilrs::GamepadId>,
+    first_unmapped: Vec<gilrs::GamepadId>,
+}
+
+/// A button press as gilrs reports it: the button it was mapped to (`Unknown` when the layout has
+/// no name for it) and its raw code. Axis-only D-pads and analog triggers arrive here too, turned
+/// into presses by gilrs's filters and mapping.
+fn pressed_button(event: &gilrs::EventType) -> Option<(Button, gilrs::ev::Code)> {
+    match *event {
+        gilrs::EventType::ButtonPressed(button, code) => Some((button, code)),
+        _ => None,
+    }
 }
 
 impl RawEventLog {
     fn note(&mut self, gilrs: &Gilrs, event: &gilrs::Event) {
         use gilrs::EventType;
+        if let Some((button, code)) = pressed_button(&event.event) {
+            self.last_pressed = Some(event.id);
+            let pad = gilrs.gamepad(event.id);
+            let unmapped = button == Button::Unknown;
+            let first = !self.first_press.contains(&event.id);
+            let first_unmapped = unmapped && !self.first_unmapped.contains(&event.id);
+            if first || first_unmapped {
+                if first {
+                    self.first_press.push(event.id);
+                }
+                if first_unmapped {
+                    self.first_unmapped.push(event.id);
+                }
+                // On disk without verbose logging: whether presses arrive at all, on which
+                // controller, and whether the standard layout can name them.
+                crate::debug_report::record_now(json!({
+                    "check": if first { "gamepad-first-press" } else { "gamepad-unmapped-press" },
+                    "pad": usize::from(event.id),
+                    "name": pad.name(),
+                    "active": self.active.is_none_or(|active| active == event.id),
+                    "button": format!("{button:?}"),
+                    "code": code.to_string(),
+                    "standardIndex": STANDARD.iter().position(|b| *b == button),
+                    "mapping": format!("{:?}", pad.mapping_source()),
+                }));
+            }
+        }
         if !crate::debug_report::verbose() {
             return;
         }
@@ -330,6 +441,8 @@ impl RawEventLog {
             "event": name.split('(').next().unwrap_or_default(),
             "pad": usize::from(event.id),
             "name": pad.name(),
+            // False: the controller pressed is not the one being read (a primary is chosen).
+            "active": self.active.is_none_or(|active| active == event.id),
             // What the standard layout reads right after it: empty while a button is down means
             // the press never reaches the buttons Kimochi binds.
             "standardPressed": STANDARD.iter().enumerate().filter(|(_, b)| pad.is_pressed(**b)).map(|(i, _)| i).collect::<Vec<_>>(),
@@ -854,6 +967,31 @@ mod tests {
         // No pad connected: the standard part is empty, the grips still read.
         let buttons = with_deck_extras(Vec::new(), &deck);
         assert_eq!(buttons.iter().position(|b| *b), Some(18));
+    }
+
+    #[test]
+    fn the_controller_pressed_last_is_read_unless_a_primary_is_chosen() {
+        // Nothing pressed yet: the first one, as before.
+        assert_eq!(pick_active(None, 2, None), Some(0));
+        // A virtual pad listed first stays silent; the real one, second, was pressed.
+        assert_eq!(pick_active(None, 2, Some(1)), Some(1));
+        // A chosen primary wins while it is connected...
+        assert_eq!(pick_active(Some(0), 2, Some(1)), Some(0));
+        // ...and when it is gone the last pressed (or the first) takes over.
+        assert_eq!(pick_active(Some(3), 2, Some(1)), Some(1));
+        assert_eq!(pick_active(Some(3), 2, None), Some(0));
+        // The pressed one was unplugged since.
+        assert_eq!(pick_active(None, 1, Some(1)), Some(0));
+        assert_eq!(pick_active(None, 0, Some(0)), None);
+        assert_eq!(pick_active(Some(0), 0, None), None);
+    }
+
+    #[test]
+    fn connecting_a_controller_does_not_make_it_the_one_in_use() {
+        // (gilrs builds raw codes only from backend events, so a press can't be made here.)
+        use gilrs::EventType;
+        assert!(pressed_button(&EventType::Connected).is_none());
+        assert!(pressed_button(&EventType::Disconnected).is_none());
     }
 
     #[test]

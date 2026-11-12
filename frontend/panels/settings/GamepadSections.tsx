@@ -5,12 +5,13 @@
  */
 import type { ReactNode } from 'react'
 import { Badge, Button, Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
-import type { AutoScanSettings, GamepadSettings } from '../../vendor/shared-types'
+import type { AutoScanSettings, GamepadDevice, GamepadSettings } from '../../vendor/shared-types'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { gamepadChord } from '../../vendor/shared-defaults'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
+import { describeRawInput, gamepadLabel, rawInputHint } from './gamepadActivity'
 import {
   DEFAULT_CONTROLLER_BUTTONS,
   effectiveControllerButtons,
@@ -231,6 +232,36 @@ function ControllerButtonSections(): ReactNode {
   )
 }
 
+/**
+ * Under the button test: every controller's input by raw code, so a press shows even when it has no
+ * standard button or arrives on a controller that isn't the active one, and a hint when either is
+ * why the test stays dark.
+ */
+function RawInput({ gamepads, activeIndex }: { gamepads: GamepadDevice[]; activeIndex: number | null }): ReactNode {
+  const hint = rawInputHint(gamepads, activeIndex)
+  const lines = gamepads
+    .map((gp) => ({ gp, input: describeRawInput(gp, getButtonName) }))
+    .filter(({ input }) => input.length > 0)
+  return (
+    <>
+      <div className="settings-note gamepad-raw" aria-live="polite">
+        {lines.length === 0
+          ? 'Raw input: nothing pressed.'
+          : lines.map(({ gp, input }) => (
+              <div key={gp.index} className="k-num">
+                Raw input{gamepads.length > 1 ? ` (${gamepadLabel(gp)})` : ''}: {input.join(', ')}
+              </div>
+            ))}
+      </div>
+      {hint && (
+        <div className="settings-note">
+          <Callout tone="warn">{hint}</Callout>
+        </div>
+      )}
+    </>
+  )
+}
+
 export function GamepadSections(): ReactNode {
   const {
     state: gamepadState,
@@ -280,14 +311,27 @@ export function GamepadSections(): ReactNode {
           ) : (
             gamepads.map((gp) => {
               const active = gp.index === gamepadState.activeGamepadIndex
+              const receiving = !active && describeRawInput(gp, getButtonName).length > 0
+              // The USB ids name the model, for a report; the mapping says whether it is a known one.
+              const ids = gp.vendor && gp.product ? ` · ${gp.vendor}:${gp.product}` : ''
+              const layout =
+                gp.mappingSource === 'SdlMappings' ? ' · known model' : gp.mappingSource ? ' · built-in layout' : ''
               return (
                 <SettingsRow
                   key={gp.index}
-                  label={gp.id.split('(')[0].trim() || `Gamepad ${gp.index + 1}`}
-                  badge={active ? <Badge tone="ok">Active</Badge> : undefined}
+                  label={gamepadLabel(gp)}
+                  badge={
+                    active ? (
+                      <Badge tone="ok">Active</Badge>
+                    ) : receiving ? (
+                      <Badge tone="warn">Receiving input</Badge>
+                    ) : undefined
+                  }
                   description={
                     <span className="k-num">
                       {gp.buttons} buttons, {gp.axes} axes
+                      {ids}
+                      {layout}
                     </span>
                   }
                 >
@@ -315,6 +359,7 @@ export function GamepadSections(): ReactNode {
               </span>
             ))}
           </div>
+          <RawInput gamepads={gamepads} activeIndex={gamepadState.activeGamepadIndex} />
         </SettingsSection>
       )}
     </>
