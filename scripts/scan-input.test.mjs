@@ -113,3 +113,16 @@ test('a modifier alone is enough: the pointer need not have moved', () => {
   assert.equal(first.clientX, second.clientX)
   assert.equal(second.shiftKey, true)
 })
+
+test('hover lookup holds the lookup key for a resting pointer, and only then', async () => {
+  const { withHoverKey } = await load('scan-input.ts')
+  const resting = sample({ hover: true })
+  const scan = (s) => scanPointerInit(s, local(s), 10000)
+  assert.equal(scan(withHoverKey(resting, true, 'shift', false)).shiftKey, true)
+  assert.equal(scan(withHoverKey(resting, true, 'ctrl', false)).ctrlKey, true, 'the key the dictionary waits for')
+  assert.equal(scan(withHoverKey(resting, true, 'ctrl', false)).shiftKey, false)
+  assert.equal(scan(withHoverKey(resting, true, 'bogus', false)).shiftKey, true, 'an unknown key is Shift')
+  assert.equal(scan(withHoverKey(resting, false, 'shift', false)).shiftKey, false, 'not with the setting off')
+  assert.equal(scan(withHoverKey(sample(), true, 'shift', false)).shiftKey, false, 'not while travelling')
+  assert.equal(scan(withHoverKey(resting, true, 'shift', true)).shiftKey, false, 'not over a pop-up')
+})

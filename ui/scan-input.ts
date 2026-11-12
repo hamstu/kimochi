@@ -128,3 +128,27 @@ export function scanPointerInit(
     metaKey: !!sample.meta
   }
 }
+
+/** The lookup keys `overlayLookupKey` names, as a sample carries them. */
+export type LookupKey = 'shift' | 'ctrl' | 'alt' | 'meta'
+
+/**
+ * Hover lookup (`overlayHoverLookup`): the sample as the dictionary should hear it.
+ *
+ * Native marks a sample `hover` once the pointer has come to rest (`state::HoverIntent`). The
+ * dictionary still waits for its own key (Shift unless the reader chose another, the one
+ * `overlayLookupKey` names), so the sample is handed on with that key held. Never over a
+ * dictionary pop-up (`overPopup`): resting on a definition to read it must not open a lookup of
+ * the word under the pointer inside it. Only the scan hears this: the words still let clicks
+ * through to the game, since that follows the key actually held (the gate, in native).
+ */
+export function withHoverKey<T extends PointerSample & { hover?: boolean }>(
+  sample: T,
+  enabled: boolean,
+  key: string | null | undefined,
+  overPopup: boolean
+): T {
+  if (!enabled || sample.hover !== true || overPopup) return sample
+  const held: LookupKey = key === 'ctrl' || key === 'alt' || key === 'meta' ? key : 'shift'
+  return { ...sample, [held]: true }
+}

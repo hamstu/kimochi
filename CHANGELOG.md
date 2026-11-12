@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Look up on hover.** Turn it on in Settings → Shortcuts & Controls to look up a word on the overlay just by resting the pointer on it, no key held. Moving the pointer across the screen doesn't flash pop-ups at every word on the way, and clicks still go to your game. Not available on Linux Wayland yet.
+
 ### Changed
 
 - ⚡ **Auto OCR is about twice as fast with local engines.** New lines reach the overlay and the Log in roughly half the time, and Auto OCR adjusts to your computer: it checks the screen more often when that's cheap, and backs off on slower or busier machines.

@@ -31,7 +31,7 @@ import { PopupLeave } from './popup-leave.js'
  */
 
 import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
-import { scanPointerInit } from './scan-input.js'
+import { scanPointerInit, withHoverKey } from './scan-input.js'
 import { groupTextAnnotations, visibleAnnotations } from './annotations.js'
 import { japaneseFilterOf } from './japanese-text.js'
 import { AutoScanner } from './autoscan.js'
@@ -98,6 +98,15 @@ let lastScanShift = false
  */
 function clickThrough() {
   return native.getSetting('overlayClickThrough') !== false
+}
+/**
+ * Whether resting the pointer on a word looks it up with no key held (`overlayHoverLookup`, off
+ * unless turned on). Native says when the pointer rests (the feed's `hover`); the words still let
+ * clicks through to the game, and a pop-up no longer takes the next click (`catching`).
+ */
+function hoverLookup() {
+  // Not in Gaming Mode: the pointer there is the Deck's trackpad mouse resting wherever it was.
+  return !nativeGamescope && native.getSetting('overlayHoverLookup') === true
 }
 /** Whether the whole overlay is taking the next click (`hitRects`, `onFreeClick`). */
 let catching = false
@@ -361,7 +370,7 @@ function syncHints() {
     (controller?.mode ?? 'idle') === 'idle' &&
     Boolean(state.origin) &&
     (renderer.hitRects(state.origin).length > 0 || (hook.card?.rects().length ?? 0) > 0)
-  hints.sync(shown, clickThrough(), native.getSetting('overlayLookupKey') ?? 'shift')
+  hints.sync(shown, clickThrough(), native.getSetting('overlayLookupKey') ?? 'shift', hoverLookup())
   if (shown) hints.place(hintArea())
 }
 
@@ -4042,10 +4051,20 @@ function hitRects() {
   // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
   for (const rect of hints.rects()) add(rect, false)
   // A pop-up is open: the whole overlay takes the next click, so clicking away closes the pop-up
-  // without the click reaching the game (`onFreeClick`).
-  catching = gated && popupShown() && (controller?.mode ?? 'idle') === 'idle'
+  // without the click reaching the game (`onFreeClick`). Not with hover lookup: a pop-up opens
+  // whenever the pointer rests on text, which is where it rests between clicks that advance the
+  // game, so the click goes to the game and closes the pop-up on the way (native's dismiss).
+  catching = gated && !hoverLookup() && popupShown() && (controller?.mode ?? 'idle') === 'idle'
   if (catching) add({ x: 0, y: 0, width: innerWidth, height: innerHeight }, false)
   return rects
+}
+
+/** Whether a point (overlay coordinates) is on a dictionary pop-up in this window. */
+function overPopupAt(local) {
+  const inside = (rect, x, y) => x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height
+  if (extensionPopupRect && inside(extensionPopupRect, local.x, local.y)) return true
+  const origin = state.origin
+  return Boolean(origin) && popupRects().some((rect) => inside(rect, local.x + origin.x, local.y + origin.y))
 }
 
 /** Whether a dictionary pop-up is showing in this window. */
@@ -4870,8 +4889,10 @@ await native.listen('pointer', ({ payload }) => {
   // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
   // somewhere else would otherwise close the controller's popup.
   if (!state.yomitan.ready || controller.drivesLookups) return
+  // Hover lookup: a resting pointer looks up as if the lookup key were held (not over a pop-up).
+  const scanned = withHoverKey(payload, hoverLookup(), native.getSetting('overlayLookupKey'), overPopupAt(local))
   const init = scanPointerInit(
-    payload,
+    scanned,
     local,
     performance.now() - lastRealPointer,
     lastRealModifiers

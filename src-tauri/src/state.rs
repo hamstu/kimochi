@@ -668,6 +668,55 @@ impl ShiftGate {
     }
 }
 
+/// Hover lookup (`overlayHoverLookup`): whether the pointer is reading or just travelling.
+///
+/// With hover lookup on, the overlay's words are looked up with no key held, but only once the
+/// pointer has stayed slow over them for [`HoverIntent::DWELL`]. Crossing the screen to click
+/// something in the game passes over text without a pop-up flashing up at every word on the
+/// way; resting on a word, or gliding slowly along a line, reads it. Nothing here takes the
+/// mouse: it only says which samples the lookup feed treats as if the lookup key were held.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HoverIntent {
+    /// The last sample: where, and when.
+    last: Option<(f64, f64, Instant)>,
+    /// Since when the pointer has been slower than [`HoverIntent::TRAVEL_SPEED`].
+    slow_since: Option<Instant>,
+}
+
+impl HoverIntent {
+    /// How long the pointer has to stay slow before it reads.
+    pub const DWELL: Duration = Duration::from_millis(120);
+    /// Faster than this (desktop units a second) is travelling, not reading.
+    pub const TRAVEL_SPEED: f64 = 900.0;
+
+    /// One sample of the pointer; whether it is reading now.
+    pub fn update(&mut self, x: f64, y: f64, now: Instant) -> bool {
+        let speed = self.last.map_or(0.0, |(px, py, at)| {
+            let distance = (x - px).hypot(y - py);
+            let seconds = now.saturating_duration_since(at).as_secs_f64();
+            if distance == 0.0 {
+                0.0
+            } else if seconds <= 0.0 {
+                f64::INFINITY
+            } else {
+                distance / seconds
+            }
+        });
+        self.last = Some((x, y, now));
+        if speed > Self::TRAVEL_SPEED {
+            self.slow_since = None;
+            return false;
+        }
+        let since = *self.slow_since.get_or_insert(now);
+        now.saturating_duration_since(since) >= Self::DWELL
+    }
+
+    /// Forgets the pointer (hover lookup turned off, or no sample to go on).
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
 pub struct Service {
     pub backend: Mutex<Box<dyn CaptureBackend>>,
     /// The local first-pass text observer, behind its own lock.
@@ -1491,6 +1540,35 @@ mod pointer_tests {
         assert!(gate.update(false, false, false, at(1200)));
         assert!(!gate.update(false, false, false, at(1200 + 351)), "off the text past the grace");
         assert!(!gate.update(false, false, true, at(1600)), "coming back needs Shift again");
+    }
+
+    #[test]
+    fn hover_reads_once_the_pointer_rests_and_not_while_it_travels() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut hover = HoverIntent::default();
+        assert!(!hover.update(100., 100., at(0)), "not on the first sample");
+        assert!(!hover.update(100., 100., at(60)), "nor before the dwell");
+        assert!(hover.update(100., 100., at(130)), "resting on a word reads it");
+        assert!(hover.update(103., 100., at(146)), "gliding slowly along the line keeps reading");
+        assert!(!hover.update(160., 100., at(162)), "a quick move away is travelling");
+        assert!(!hover.update(400., 300., at(178)));
+        assert!(!hover.update(401., 300., at(194)), "slowing down starts the dwell over");
+        assert!(!hover.update(401., 300., at(250)));
+        assert!(hover.update(401., 300., at(320)));
+        hover.reset();
+        assert!(!hover.update(401., 300., at(330)), "a reset forgets the dwell");
+    }
+
+    #[test]
+    fn hover_sweeping_across_text_never_reads() {
+        let t0 = Instant::now();
+        let mut hover = HoverIntent::default();
+        // 1500 points a second, sampled every 16 ms, for a second.
+        for tick in 0..60u64 {
+            let x = tick as f64 * 24.0;
+            assert!(!hover.update(x, 200., t0 + Duration::from_millis(tick * 16)), "tick {tick}");
+        }
     }
 
     #[test]

@@ -52,9 +52,10 @@ export function createOverlayHints(parent, hooks) {
   bar.setAttribute('data-no-scan', '')
   // One line: Hold [Shift] to … (what Shift does depends on click-through, `sync`).
   const line = make('span', 'overlay-hint')
+  const lead = document.createTextNode('Hold ')
   const rest = document.createTextNode('')
   const keyName = make('kbd', 'overlay-hint-key', lookupKeyLabel())
-  const shiftLine = [document.createTextNode('Hold '), keyName, rest]
+  const shiftLine = [lead, keyName, rest]
   line.append(...shiftLine)
   bar.append(line)
   const close = make('button', 'overlay-hints-close')
@@ -71,7 +72,8 @@ export function createOverlayHints(parent, hooks) {
   bar.append(close)
   parent.append(bar)
 
-  let gatedNow = null
+  /** What the line says now (`gated`, `hover`), so it is rewritten only when that changes. */
+  let modeNow = null
   /** Gaming Mode's menu buttons by name, or null off Gaming Mode (`gaming`). */
   let menuButtons = null
   return {
@@ -85,7 +87,7 @@ export function createOverlayHints(parent, hooks) {
       bar.classList.toggle('overlay-hints-gaming', buttons !== null)
       if (buttons === null) {
         line.replaceChildren(...shiftLine)
-        gatedNow = null
+        modeNow = null
         return
       }
       const parts = buttons.flatMap((name, index) => [
@@ -102,11 +104,22 @@ export function createOverlayHints(parent, hooks) {
      * Show the bar or not; whether it is shown. `gated`: clicks on text go to the game unless
      * the lookup key (`key`, `overlayLookupKey`) is held (`overlayClickThrough`), so it is what
      * makes text clickable too. Not gated, the dictionary's own key (Shift by default) looks up.
+     * `hover` (`overlayHoverLookup`): resting the pointer on a word looks it up, and the key is
+     * left only for clicking text (gated) or for nothing at all.
      */
-    sync(shown, gated = true, key = 'shift') {
-      if (menuButtons === null && gated !== gatedNow) {
-        gatedNow = gated
-        rest.textContent = gated ? ' to look up words and click text' : ' over a word to look it up'
+    sync(shown, gated = true, key = 'shift', hover = false) {
+      const mode = `${gated}/${hover}`
+      if (menuButtons === null && mode !== modeNow) {
+        modeNow = mode
+        if (hover) {
+          lead.textContent = gated ? 'Rest the pointer on a word to look it up · Hold ' : 'Rest the pointer on a word to look it up'
+          rest.textContent = gated ? ' to click text' : ''
+        } else {
+          lead.textContent = 'Hold '
+          rest.textContent = gated ? ' to look up words and click text' : ' over a word to look it up'
+        }
+        // Hover without click-through: no key to name.
+        line.replaceChildren(...(hover && !gated ? [lead] : shiftLine))
       }
       const label = lookupKeyLabel(gated ? key : 'shift')
       if (keyName.textContent !== label) keyName.textContent = label

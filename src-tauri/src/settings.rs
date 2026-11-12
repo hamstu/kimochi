@@ -77,6 +77,10 @@ pub fn defaults() -> Value {
         // The key held to look up through the overlay while click-through is on: "shift", "ctrl",
         // "alt" or "meta" (macOS only). Only modifiers: the pointer poll reads them globally.
         "overlayLookupKey": "shift",
+        // Look up the overlay's words by resting the pointer on them, no key held
+        // (`state::HoverIntent`). Lookups only: clicks still go to the game unless the lookup
+        // key is held. Off by default. Not on Wayland, where positions follow the key.
+        "overlayHoverLookup": false,
         // Mini mode when the watched game goes full screen on Kimochi's display (compact.rs).
         // Off: Kimochi is kept on top over the game instead, at its own size.
         "autoMiniMode": false,

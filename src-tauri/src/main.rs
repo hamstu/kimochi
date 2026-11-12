@@ -4466,6 +4466,12 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut gate = state::ShiftGate::default();
         // `overlayLookupKey`, re-read now and then rather than every tick.
         let mut lookup_key = String::from("shift");
+        // `overlayHoverLookup`, read with it: the overlay's words are looked up with no key held
+        // once the pointer rests on them (`state::HoverIntent`). Lookups only: the gate, and so
+        // whether the words take the mouse from the game, still follows the lookup key alone.
+        let mut hover_lookup = false;
+        let mut hover = state::HoverIntent::default();
+        let mut last_hover = false;
         // Shift held at the last sample: a lookup can follow the pointer, so it is read twice as
         // often and every move is sent (below). Reading words feels as quick as the samples are.
         let mut scanning = false;
@@ -4493,6 +4499,13 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 if !platform::lookup_keys_readable() {
                     lookup_key = String::from("shift");
                 }
+                hover_lookup = service.settings.get_or("overlayHoverLookup", false);
+                // Wayland: positions are read only while the lookup key is held
+                // (`platform::pointer_demand`), so there is no resting pointer to go on.
+                #[cfg(target_os = "linux")]
+                if platform::wayland_pointer_feed().is_some() {
+                    hover_lookup = false;
+                }
             }
             // A controller's lookup button stands in for the lookup key (`gamepad::lookup_held`).
             let sample = platform::desktop_cursor().map(|mut sample| {
@@ -4503,6 +4516,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             });
             let key_held = |modifiers: &Modifiers| modifiers.holds(&lookup_key);
             scanning = sample.as_ref().is_some_and(|s| key_held(&s.modifiers));
+            // Not counted as `scanning`: a pointer at rest is most of the time, and the faster
+            // poll is for a key held on purpose.
+            let hovering = match &sample {
+                Some(s) if hover_lookup => hover.update(s.x, s.y, Instant::now()),
+                _ => {
+                    hover.reset();
+                    false
+                }
+            };
             let gate_open = {
                 let mut v = service.view.lock().unwrap();
                 // No global pointer (Wayland): Shift cannot be read, so everything takes the
@@ -4661,12 +4683,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     // The gate can shut with the pointer still (its grace running out), and on
                     // Wayland positions stop being read once it has: the overlay must still hear
                     // it, or it takes the next click for a word's rather than a click away.
-                    || gate_open != last_gate;
+                    || gate_open != last_gate
+                    // The pointer came to rest on a word: its lookup goes now, not at the next move.
+                    || hovering != last_hover;
                 if due {
                     unsent_move = false;
                     last_modifiers = modifiers;
                     last_buttons = down;
                     last_gate = gate_open;
+                    last_hover = hovering;
                     #[cfg(target_os = "linux")]
                     let layer = platform::wayland_layer_overlay();
                     #[cfg(not(target_os = "linux"))]
@@ -4742,6 +4767,9 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                                 // Whether the words and the hook card take the mouse now
                                 // (`state::ShiftGate`): they light up only while it is open.
                                 "gate": gate_open,
+                                // Hover lookup: the pointer rests here, so the overlay's words
+                                // look up as if the lookup key were held (`state::HoverIntent`).
+                                "hover": hovering,
                                 "down": down,
                                 "shift": modifiers.shift,
                                 "ctrl": modifiers.ctrl,

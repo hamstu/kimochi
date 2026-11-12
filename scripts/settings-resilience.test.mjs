@@ -35,6 +35,8 @@ test('a value of the wrong type reads as the default', () => {
   assert.deepEqual(withDefaults('scannedTextHistory', { not: 'a list' }), SETTINGS_DEFAULTS.scannedTextHistory)
   assert.deepEqual(withDefaults('cardTags', 'tags'), SETTINGS_DEFAULTS.cardTags)
   assert.equal(withDefaults('overlayOpacity', 55), 55)
+  assert.equal(withDefaults('overlayHoverLookup', 'yes'), false)
+  assert.equal(withDefaults('overlayHoverLookup', true), true)
 })
 
 test("an object setting keeps its good fields and drops only the broken one", () => {
