@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - **Look up on hover.** Turn it on in Settings → Shortcuts & Controls to look up a word on the overlay just by resting the pointer on it, no key held. Moving the pointer across the screen doesn't flash pop-ups at every word on the way, and clicks still go to your game. Not available on Linux Wayland yet.
+- **Windows: a controller that is listed but whose buttons do nothing can be read with XInput instead.** Turn on **Read controllers with XInput** in Settings → Shortcuts & Controls; it takes effect right away, so the button test shows whether it helped. It works with Xbox-style (XInput) controllers only.
 
 ### Changed
 

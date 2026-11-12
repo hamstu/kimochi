@@ -264,7 +264,13 @@ export interface Settings {
   }
   audioSettings: { voiceId: string; model?: string }
   serverSettings: { mode: ServerMode }
-  gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number; lookupButton?: number | null }
+  gamepadSettings: {
+    enabled: boolean
+    preferredGamepadIndex?: number
+    lookupButton?: number | null
+    /** Windows only: read controllers through XInput (`gamepad_xinput.rs`). */
+    xinput?: boolean
+  }
   controllerButtons: ControllerButtons
   gameModeSettings: GameModeSettings
   yomitanSettings: {

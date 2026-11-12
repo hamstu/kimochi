@@ -19,6 +19,7 @@ windows = { version = "0.61", features = [
   "Win32_UI_Accessibility",           # SetWinEventHook
   "Win32_UI_HiDpi",                   # GetDpiForMonitor, GetDpiForWindow
   "Win32_UI_Input_KeyboardAndMouse",  # GetAsyncKeyState, SetFocus
+  "Win32_UI_Input_XboxController",    # XInputGetState (gamepad_xinput.rs)
   "Win32_UI_Shell",                   # SetWindowSubclass, SHDefExtractIconW, SHGetFileInfoW
   "Win32_UI_WindowsAndMessaging",
 ] }

@@ -208,6 +208,11 @@ export type GamepadSettings = {
   preferredGamepadIndex?: number // Index of preferred gamepad
   /** Held, it stands in for the lookup key (`gamepad::lookup_held`); a Steam Deck's L4 by default. */
   lookupButton?: number | null
+  /**
+   * Windows only: read controllers through XInput instead of Windows.Gaming.Input
+   * (`gamepad_xinput.rs`). Off when absent.
+   */
+  xinput?: boolean
 }
 
 // Gamepad state for UI updates
@@ -216,6 +221,8 @@ export type GamepadState = {
   activeGamepadIndex: number | null
   buttonStates: boolean[] // Current button pressed states for active gamepad
   axisStates: number[] // Current axis values for active gamepad
+  /** Delta, native only: what reads the controllers (`windows-gaming-input`, `xinput`, `iokit`, `evdev`). */
+  backend?: string
 }
 
 // Auto-OCR settings: local observation, settling, and request budgeting.

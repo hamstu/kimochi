@@ -9,6 +9,7 @@ import type { AutoScanSettings, GamepadDevice, GamepadSettings } from '../../ven
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
+import { useCapabilities } from '../../bridge/capabilities'
 import { gamepadChord } from '../../vendor/shared-defaults'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { describeRawInput, gamepadLabel, layoutLabel, rawInputHint } from './gamepadActivity'
@@ -120,6 +121,30 @@ function LookupButtonRow({ disabled }: { disabled: boolean }): ReactNode {
         onChange={(button) => void setSettings({ ...settings, lookupButton: button ?? null })}
         disabled={disabled}
         size="1"
+      />
+    </SettingsRow>
+  )
+}
+
+/**
+ * `gamepadSettings.xinput`, Windows only: native reads controllers through XInput instead of
+ * Windows.Gaming.Input, which can list a controller and then report none of its presses. The
+ * switch takes effect at once (`gamepad.rs`), so the button test below shows whether it helped.
+ */
+function XInputRow({ disabled }: { disabled: boolean }): ReactNode {
+  const [settings, setSettings] = useSetting<GamepadSettings>('gamepadSettings', { enabled: true })
+  return (
+    <SettingsRow
+      label="Read controllers with XInput"
+      controlId="gamepad-xinput"
+      disabled={disabled}
+      description="Try this if your controller is listed but its buttons don't register. Works with Xbox-style (XInput) controllers only."
+    >
+      <Switch
+        id="gamepad-xinput"
+        checked={settings.xinput === true}
+        disabled={disabled}
+        onCheckedChange={(xinput) => void setSettings({ ...settings, xinput })}
       />
     </SettingsRow>
   )
@@ -273,6 +298,7 @@ export function GamepadSections(): ReactNode {
 
   const enabled = gamepadSettings.enabled
   const gamepads = gamepadState.gamepads
+  const windows = useCapabilities().os === 'windows'
 
   return (
     <>
@@ -294,6 +320,7 @@ export function GamepadSections(): ReactNode {
           </div>
         )}
         <LookupButtonRow disabled={!enabled} />
+        {windows && <XInputRow disabled={!enabled} />}
       </SettingsSection>
 
       {/* Shown with gamepad support off too (the buttons disabled), so the bindings stay visible. */}
