@@ -12,12 +12,13 @@ import {
   SETTINGS_DEFAULTS,
   DEFAULT_VOICE_ID,
   OCR_MODES,
+  ocrModeInfo,
   withDefaults,
   type Settings,
   type OcrMode
 } from '@ui/settings'
 
-export { SETTINGS_DEFAULTS, DEFAULT_VOICE_ID, OCR_MODES, withDefaults }
+export { SETTINGS_DEFAULTS, DEFAULT_VOICE_ID, OCR_MODES, ocrModeInfo, withDefaults }
 export type { Settings, OcrMode }
 
 type Listener = (key: string, value: unknown) => void
@@ -41,7 +42,10 @@ function ensureSubscribed(): void {
   if (subscribed) return
   subscribed = onSettingsChanged((key, value) => {
     pendingReads.clear()
-    for (const listener of listeners) listener(key, value)
+    // Shaped like a read: a value set elsewhere (another window, `kimochi settings set`) is
+    // checked here too, not only when it is loaded.
+    const usable = key in SETTINGS_DEFAULTS ? withDefaults(key as keyof Settings, value) : value
+    for (const listener of listeners) listener(key, usable)
   }).then(() => undefined)
   subscribed.catch((error) => console.error('[settings] change subscription failed:', error))
 }

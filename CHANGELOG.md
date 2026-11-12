@@ -16,6 +16,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Slow engines (OneOCR, Screen AI on modest PCs) skip work while text is still typing out**, and read each line once it's done.
 - **Windows:** PaddleOCR and MeikiOCR use about a quarter less CPU while Auto OCR runs, with no loss in speed.
 
+### Fixed
+
+- **A setting Kimochi doesn't recognise no longer leaves a blank gray window** (for example after trying a newer version). It falls back to the default, and if a window still can't load, it says what went wrong, with **Reload window** and **Copy details**.
+- **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
+
 ## [0.9.0] - 2026-11-11
 
 ### Added

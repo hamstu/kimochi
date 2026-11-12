@@ -11,6 +11,7 @@ import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { reportError, reportUncaughtErrors } from "./reportErrors";
+import { WindowErrorBoundary } from "../shell/WindowErrorBoundary";
 import "../kit/kit.css";
 import "../texthooker/App.css";
 import "../shell/panel.css";
@@ -87,8 +88,10 @@ createRoot(document.getElementById("root")!, {
   onUncaughtError: (error) => reportError(label, "render", error),
 }).render(
   <StrictMode>
-    <Providers>
-      <Suspense fallback={<div role="status">Loading…</div>}>
+    {/* Outer layer, for the shell and providers themselves; PanelShell holds the inner one. */}
+    <WindowErrorBoundary window={label}>
+      <Providers>
+        <Suspense fallback={<div role="status">Loading…</div>}>
         {known === "dictionary" ? (
           // The dictionary window's title follows the active engine.
           <DictionaryPanelShell label={label} hideTitle={hideTitle}>
@@ -101,7 +104,8 @@ createRoot(document.getElementById("root")!, {
         )}
         {/* The main window's content is ready once its log has loaded (MainPanel). */}
         {known !== "log" && <BootReady label={label} />}
-      </Suspense>
-    </Providers>
+        </Suspense>
+      </Providers>
+    </WindowErrorBoundary>
   </StrictMode>,
 );

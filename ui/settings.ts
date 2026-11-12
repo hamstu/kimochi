@@ -22,18 +22,21 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode =
-  | 'googlelens'
-  | 'cloud'
-  | 'meikiocr'
-  | 'mangaocr'
-  | 'ppocr'
-  | 'screenai'
-  | 'vocr'
-  | 'livetext'
-  | 'oneocr'
+export const OCR_MODE_KEYS = [
+  'googlelens',
+  'cloud',
+  'meikiocr',
+  'mangaocr',
+  'ppocr',
+  'screenai',
+  'vocr',
+  'livetext',
+  'oneocr'
+] as const
+export type OcrMode = (typeof OCR_MODE_KEYS)[number]
 /** Window appearance. `system` follows the OS light/dark setting. */
-export type Appearance = 'system' | 'light' | 'dark'
+export const APPEARANCES = ['system', 'light', 'dark'] as const
+export type Appearance = (typeof APPEARANCES)[number]
 
 /**
  * How the overlay's text cards look (the card a hovered word turns into, and the grouped
@@ -542,6 +545,25 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
 }
 
 /**
+ * The description of an OCR engine, by key. A key this build does not know (an engine from a
+ * newer build, a scan saved by one) gets a plain stand-in named after the key, so nothing that
+ * draws an engine's name or icon can fail on it.
+ */
+export function ocrModeInfo(mode: string): OcrModeInfo {
+  return (
+    (OCR_MODES as Record<string, OcrModeInfo | undefined>)[mode] ?? {
+      label: mode,
+      name: mode,
+      tagline: '',
+      geometry: false,
+      runs: 'local',
+      description: '',
+      strengths: []
+    }
+  )
+}
+
+/**
  * What a dictionary engine is, for Settings → Dictionary's chooser, the dictionary panel and
  * onboarding. The chooser lists every key, in this order. See DICTIONARY_ENGINES.md §1.
  */
@@ -783,7 +805,57 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
  * build — or by a panel that only knew about some of the fields — still yields
  * a complete value instead of undefined properties reaching the render path.
  */
+/**
+ * The values a closed-set setting can take. Anything else stored there (an engine a newer build
+ * added, a hand edit, a typo through `kimochi settings set`) reads as the default: code indexes
+ * tables by these values, and an unknown one used to take a whole window down (0.8.1 rendered a
+ * gray main window over `ocrMode: "screenai"`, written by 0.9.0).
+ */
+const CHOICES: { [K in keyof Settings]?: readonly Settings[K][] } = {
+  ocrMode: OCR_MODE_KEYS,
+  appearance: APPEARANCES,
+  interfaceScale: Object.keys(INTERFACE_SCALES) as InterfaceScale[]
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Same kind of value as `fallback`; `null` always passes, since several settings use it for "none". */
+function sameKind(fallback: unknown, stored: unknown): boolean {
+  if (stored === null || fallback === null || fallback === undefined) return true
+  if (Array.isArray(fallback)) return Array.isArray(stored)
+  if (isPlainObject(fallback)) return isPlainObject(stored)
+  if (typeof fallback === 'number') return typeof stored === 'number' && Number.isFinite(stored)
+  return typeof stored === typeof fallback
+}
+
+/** Settings values that were not usable and read as their default, once per key and field. */
+const rejected = new Set<string>()
+function reject(where: string, stored: unknown): void {
+  if (rejected.has(where)) return
+  rejected.add(where)
+  let shown: string
+  try {
+    shown = JSON.stringify(stored)?.slice(0, 80) ?? String(stored)
+  } catch {
+    shown = String(stored)
+  }
+  console.warn(`[settings] ${where} = ${shown} isn't usable here; using the default.`)
+}
+
+/** A stored value as this build can use it: the special migrations, then `sanitized`. */
 export function withDefaults<K extends keyof Settings>(key: K, stored: unknown): Settings[K] {
+  try {
+    return migrated(key, stored)
+  } catch (error) {
+    // A migration that throws on a value it did not expect is the same as a value it cannot use.
+    reject(String(key), stored)
+    console.warn(`[settings] reading ${String(key)} failed:`, error)
+    return SETTINGS_DEFAULTS[key]
+  }
+}
+
+function migrated<K extends keyof Settings>(key: K, stored: unknown): Settings[K] {
   if (key === 'ocrMode' && stored === 'local') return 'meikiocr' as Settings[K]
   // OwOCR (the WebSocket OCR mode) was removed: a stored choice falls back to the default engine.
   if (key === 'ocrMode' && stored === 'websocket') return SETTINGS_DEFAULTS.ocrMode as Settings[K]
@@ -806,14 +878,26 @@ export function withDefaults<K extends keyof Settings>(key: K, stored: unknown):
   }
   const fallback = SETTINGS_DEFAULTS[key]
   if (stored === undefined || stored === null) return fallback
-  if (
-    typeof fallback === 'object' &&
-    fallback !== null &&
-    !Array.isArray(fallback) &&
-    typeof stored === 'object' &&
-    !Array.isArray(stored)
-  ) {
-    return { ...(fallback as object), ...(stored as object) } as Settings[K]
+  const choices = CHOICES[key] as readonly unknown[] | undefined
+  if (choices && !choices.includes(stored)) {
+    reject(String(key), stored)
+    return fallback
+  }
+  if (!sameKind(fallback, stored)) {
+    reject(String(key), stored)
+    return fallback
+  }
+  if (isPlainObject(fallback) && isPlainObject(stored)) {
+    // One level deep, field by field: a field of the wrong kind reads as its default, the rest
+    // of the object is kept.
+    const merged: Record<string, unknown> = { ...fallback, ...stored }
+    for (const [field, value] of Object.entries(fallback)) {
+      if (field in stored && !sameKind(value, stored[field])) {
+        reject(`${String(key)}.${field}`, stored[field])
+        merged[field] = value
+      }
+    }
+    return merged as Settings[K]
   }
   return stored as Settings[K]
 }

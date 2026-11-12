@@ -24,7 +24,7 @@ import {
   type Watcher,
   type WatcherChoice
 } from '../../../ui/watcher'
-import { OCR_MODES, type OcrMode } from '../../bridge/settings'
+import { OCR_MODES, ocrModeInfo, type OcrMode } from '../../bridge/settings'
 import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
 import type {
   AutoOCRSettings,
@@ -69,7 +69,7 @@ const POLL_OPTIONS = [
 
 /** What a watcher is called in Settings. */
 function watcherName(watcher: Watcher): string {
-  return watcher.kind === 'image' ? 'image comparison' : OCR_MODES[watcher.engine].name
+  return watcher.kind === 'image' ? 'image comparison' : ocrModeInfo(watcher.engine).name
 }
 
 /** The Auto OCR row's description: what watches, and what reads. */
@@ -112,7 +112,7 @@ export function OcrTab(): ReactNode {
     { value: 'auto', label: 'Automatic', detail: watcherName(best) },
     ...WATCHER_ENGINES.filter((engine) => engines[engine]?.available).map((engine) => ({
       value: engine,
-      label: OCR_MODES[engine].name
+      label: ocrModeInfo(engine).name
     })),
     { value: 'image', label: 'Image comparison', detail: 'Any change of picture' }
   ]

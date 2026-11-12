@@ -13,6 +13,7 @@ import Providers from './providers'
 import PanelShell from '../shell/PanelShell'
 import WelcomeApp from '../welcome/WelcomeApp'
 import { reportError, reportUncaughtErrors } from './reportErrors'
+import { WindowErrorBoundary } from '../shell/WindowErrorBoundary'
 
 // A blank guide is otherwise silent: its errors go to the diagnostics record, as the panels' do.
 reportUncaughtErrors('welcome')
@@ -21,12 +22,14 @@ createRoot(document.getElementById('root')!, {
   onUncaughtError: (error) => reportError('welcome', 'render', error)
 }).render(
   <StrictMode>
-    <Providers>
-      <PanelShell label="welcome" title="Welcome to Kimochi">
-        <HashRouter>
-          <WelcomeApp />
-        </HashRouter>
-      </PanelShell>
-    </Providers>
+    <WindowErrorBoundary window="welcome">
+      <Providers>
+        <PanelShell label="welcome" title="Welcome to Kimochi">
+          <HashRouter>
+            <WelcomeApp />
+          </HashRouter>
+        </PanelShell>
+      </Providers>
+    </WindowErrorBoundary>
   </StrictMode>
 )

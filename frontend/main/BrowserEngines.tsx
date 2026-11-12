@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { engineListed } from '@ui/ocr-engines'
-import { OCR_MODES, type OcrMode } from '../bridge/settings'
+import { OCR_MODES, ocrModeInfo, type OcrMode } from '../bridge/settings'
 import { useCapabilities } from '../bridge/capabilities'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { ocrPicture } from '../components/enginePictures'
@@ -62,11 +62,11 @@ export function BrowserEngines(): JSX.Element {
     void Promise.all(
       listed.map(async (mode) => ({
         id: mode,
-        name: OCR_MODES[mode].name,
+        name: ocrModeInfo(mode).name,
         // As the sidebar says it: Cloud OCR without an account is listed only while selected.
-        tagline: mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : OCR_MODES[mode].tagline,
-        runs: OCR_MODES[mode].runs,
-        icon: await iconOf(mode).catch(() => ({ monogram: OCR_MODES[mode].name.slice(0, 1) }))
+        tagline: mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : ocrModeInfo(mode).tagline,
+        runs: ocrModeInfo(mode).runs,
+        icon: await iconOf(mode).catch(() => ({ monogram: ocrModeInfo(mode).name.slice(0, 1) }))
       }))
     ).then((engines) => {
       if (live) void invoke('browser_engines', { engines, selected: ocrMode }).catch(() => undefined)

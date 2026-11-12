@@ -14,7 +14,7 @@ import { ArrowLeft, Settings } from 'lucide-react'
 import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
-import { OCR_MODES, type OcrMode } from '../bridge/settings'
+import { OCR_MODES, ocrModeInfo, type OcrMode } from '../bridge/settings'
 import { useHookStatus } from '../bridge/textHook'
 import { useHookPlacement } from './hookPlacement'
 import { useEngineSelection } from '../bridge/useEngineSelection'
@@ -56,7 +56,7 @@ const OCR_MODE_LIST = Object.keys(OCR_MODES) as OcrMode[]
 /** An engine as Settings lists it: its picture, its name and where it runs. Also the closed select. */
 function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgress | null }): JSX.Element {
   return (
-    <EngineValue picture={<OcrEngineIcon mode={mode} />} name={OCR_MODES[mode].name} runs={<OcrRunsIcon mode={mode} />} busy={busy} />
+    <EngineValue picture={<OcrEngineIcon mode={mode} />} name={ocrModeInfo(mode).name} runs={<OcrRunsIcon mode={mode} />} busy={busy} />
   )
 }
 
@@ -90,7 +90,7 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
                 value={mode}
                 description={
                   // Kimochi cloud without an account (or key) is listed only while it is still selected.
-                  mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : OCR_MODES[mode].tagline
+                  mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : ocrModeInfo(mode).tagline
                 }
               >
                 <OcrModeLabel mode={mode} />

@@ -49,7 +49,7 @@ import {
   type EngineHint
 } from '@ui/ocr-engines'
 import { listKeyTarget, ocrUseAction, activateLabel } from '@ui/engine-chooser'
-import { OCR_MODES, type OcrMode } from '../../bridge/settings'
+import { OCR_MODES, ocrModeInfo, type OcrMode } from '../../bridge/settings'
 import { OcrEngineIcon, OcrRunsIcon } from '../../components/EngineIcon'
 import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { useModelControls, useModelStatus } from '../../bridge/models'
@@ -94,7 +94,7 @@ function EngineItem({
   pending: boolean
   onView: () => void
 }): ReactNode {
-  const info = OCR_MODES[mode]
+  const info = ocrModeInfo(mode)
   const status = useModelStatus(isModelEngine(mode) ? mode : null)
   const capability = engines[mode]
   const hint: EngineHint | null = pending
@@ -151,7 +151,7 @@ function EngineDetail({
   pending: boolean
   onUse: () => void
 }): ReactNode {
-  const info = OCR_MODES[mode]
+  const info = ocrModeInfo(mode)
   const capability = engines[mode]
   const selectable = engineSelectable(capability)
   const model = useModelControls(isModelEngine(mode) ? mode : null)
