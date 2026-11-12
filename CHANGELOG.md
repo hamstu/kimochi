@@ -34,6 +34,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Windows: scans no longer get stuck on "a scan is already running"** until you restart Kimochi, after Windows fails to close the capture of a game that quit.
 - **Hovering a word on the overlay looks up the word you're pointing at after an ellipsis or a pair of brackets** (like `……` or `。」`). Before, the words after them could be up to a character and a half away from the text underneath, especially with Apple Live Text, and on Windows after closing brackets.
 - **The Yomitan API dictionary now looks words up on the overlay with the lookup key you chose** (Ctrl, Alt or Command), not only with Shift.
+- **Group text into regions:** a word that wraps onto the next line now looks up correctly when a region covers columns side by side, or blocks of vertical text one above the other (as on a manga page). Before, the lookup ran on into the other column or block.
 
 ## [0.9.0] - 2026-11-11
 
