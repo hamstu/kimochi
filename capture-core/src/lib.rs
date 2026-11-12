@@ -47,6 +47,23 @@ pub use hash::{dhash_rgba, hamming};
 pub use ids::{Platform, SourceId};
 pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver, TextSegment};
 
+/// Where a backend reports rare events a bug report should carry (a capture session Windows
+/// would not stop, #49). Without one installed they go to stderr.
+static DIAGNOSTICS: std::sync::OnceLock<fn(serde_json::Value)> = std::sync::OnceLock::new();
+
+/// Installs the app's diagnostics log. Call once at startup; later calls are ignored.
+pub fn set_diagnostics(sink: fn(serde_json::Value)) {
+    let _ = DIAGNOSTICS.set(sink);
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub(crate) fn diagnostic(value: serde_json::Value) {
+    match DIAGNOSTICS.get() {
+        Some(sink) => sink(value),
+        None => eprintln!("kimochi-capture: {value}"),
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CaptureError {
     pub code: &'static str,
