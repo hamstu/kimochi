@@ -120,8 +120,8 @@ export function uniqueProfileName(base: string, profiles: readonly ProfileInfo[]
  * Which profile `account` looks words up through, learning `language`:
  *
  * 1. Its link, made for this language, to a profile that still exists.
- * 2. Never linked, Japanese, at Yomitan's start: Yomitan is left as it is (a Japanese reader with
- *    one account never sees a change, whatever profile they keep current).
+ * 2. Never linked and Japanese: Yomitan is left as it is, whatever its profile says, unless the
+ *    profile in use was made for another account (then the rules below find this one's).
  * 3. The current profile, when it is in the language.
  * 4. Another profile in the language.
  * 5. A link whose profile was renamed or deleted: the default profile (the first).
