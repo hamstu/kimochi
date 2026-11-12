@@ -1131,7 +1131,8 @@ mod tests {
 
     #[test]
     fn work_that_panics_counts_as_finished() {
-        assert!(finish_within(Duration::from_secs(5), || panic!("stop failed")));
+        let stop = || panic!("stop failed");
+        assert!(finish_within(Duration::from_secs(5), stop));
     }
 
     #[test]
@@ -1224,4 +1225,48 @@ mod tests {
 #[ignore]
 fn border_probe() {
     eprintln!("capture border: {:?}", capture_border());
+}
+
+/// Starts and stops real WGC sessions and prints how long each stop took (#49).
+/// Read-only: thumbnails of a display and a few windows, one retained capture, then
+/// `close`. `cargo test --lib session_stop_probe -- --ignored --nocapture`
+#[cfg(all(test, target_os = "windows"))]
+#[test]
+#[ignore]
+fn session_stop_probe() {
+    use crate::{CaptureBackend, CaptureRequest};
+    use std::time::Instant;
+    let mut backend = WgcCapture::new();
+    let sources = backend.enumerate().expect("enumerate");
+    let display = sources
+        .iter()
+        .find(|s| s.kind == "display")
+        .expect("display");
+    let windows = sources.iter().filter(|s| s.kind == "window").take(4);
+    for source in std::iter::once(display).chain(windows) {
+        let start = Instant::now();
+        let outcome = match backend.thumbnail(&source.id, 320) {
+            Ok(f) => format!("{}x{}", f.info.width, f.info.height),
+            Err(e) => e.code.to_string(),
+        };
+        let ms = start.elapsed().as_millis();
+        eprintln!(
+            "thumbnail {} ({:?}): {outcome} in {ms} ms",
+            source.id, source.name
+        );
+    }
+    let request = CaptureRequest {
+        source_id: display.id.clone(),
+        crop: None,
+    };
+    let frame = backend.capture(&request).expect("capture the display");
+    eprintln!(
+        "capture {}: {}x{}",
+        display.id, frame.info.width, frame.info.height
+    );
+    let start = Instant::now();
+    backend.close();
+    let took = start.elapsed();
+    eprintln!("close: {} ms", took.as_millis());
+    assert!(took < std::time::Duration::from_secs(3));
 }
