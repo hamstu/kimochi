@@ -23,7 +23,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
-- **Linux: Text Hooker works with games in Bottles, Lutris, Heroic or Steam installed from Flathub.** Before, hooking a game running in one of these sandboxed apps stuck on "Starting…" (seen with Neko Project 21/W in Bottles). Kimochi now hooks the game from inside its sandbox. When a game can't be hooked, the Text hooking box now says why instead of staying on "Starting…".
+- **Linux: Text Hooker works with games run through Flatpak apps** like Bottles, Lutris, Heroic or Flathub's Steam, where it used to get stuck on "Starting…". If a game can't be hooked, it now says why.
 - **GNOME: the overlay no longer blocks clicks on your game and other windows.** Clicks outside the text go where you click again, and the text works as on Windows and macOS: hover with **Shift** to look words up (the highlight stays steady instead of flickering), and without Shift, clicks on the text go to the game too. With a dictionary pop-up open (Yomitan, Hachidori or 10ten), the first click anywhere else closes it without reaching the game, and the next click goes to the game. Dragging the game's window no longer makes the text jump and blink along behind it: it fades out while the window moves and back in where it stops.
 - **GNOME: setting up the GNOME extension no longer fails with "This integration supports GNOME 46–51; this is"** on a supported GNOME (seen on Ubuntu 26.04 with GNOME 50). Kimochi now asks GNOME itself which version is running, and if it ever can't tell, it says why.
 - **The Log's reading time no longer drops to a minute when you take a break.** A stretch of reading now keeps all of its time once you stop, instead of only the last minute of it.
