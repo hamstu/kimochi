@@ -100,6 +100,12 @@
   line-break: strict;
   cursor: default;
 }
+/* Each line of the text is a row (hook-card.js `setText`), broken after by this generated newline
+   rather than by a character, a `<br>` or a block: none of those is text a lookup reads, so a word
+   the game breaks across two lines is looked up whole. */
+.hook-card-row:not(:last-child)::after {
+  content: '\A';
+}
 /* The bar along the whole top: hold and drag to move. Three dots mark it. Each control lights up
    only while the pointer is over it (`data-hover`, set by hook-card.js: the overlay never gets
    :hover), as the Log's ghost buttons do, and eases in and out. */

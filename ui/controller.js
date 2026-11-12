@@ -35,6 +35,7 @@ import {
   dominantVertical,
   readingUnits,
   segmentAcross,
+  runsOnInto,
   segmentText,
   SCAN_LENGTH,
 } from "./word-nav.js";
@@ -1350,6 +1351,7 @@ export function createController(context) {
     for (let index = unitIndex; index < cursor.units.length; index++) {
       const node = cursor.units[index].node;
       if (!node.isConnected) break;
+      if (index > unitIndex && !runsOnInto(cursor.units[index - 1], cursor.units[index])) break;
       const from = index === unitIndex ? start : 0;
       const take = Math.min(node.length - from, remaining);
       range.setEnd(node, from + take);
@@ -1624,7 +1626,7 @@ export function createController(context) {
           ahead?.toString() || unit.text.slice(word.start),
           origin.x + rect.left + rect.width / 2,
           origin.y + rect.top + rect.height / 2,
-          unit.text,
+          unit.sentence ?? unit.text,
         );
         return;
       }
@@ -1637,8 +1639,9 @@ export function createController(context) {
       try {
         result = await lookupWord(ahead ?? range, {
           text: ahead?.toString() || unit.text.slice(word.start),
-          sentence: unit.text,
-          offset: word.start,
+          // A unit that is one row of a longer line (the Text Hooker card) carries the whole line.
+          sentence: unit.sentence ?? unit.text,
+          offset: (unit.sentenceOffset ?? 0) + word.start,
           rect: outlineRect(word, range),
           vertical: Boolean(unit.vertical),
         });

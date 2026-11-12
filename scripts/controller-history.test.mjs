@@ -678,3 +678,44 @@ test("Text Hooker: the panel's hooked text opens the threads, and A uses the one
   h.controller.hookChanged();
   assert.ok(h.host.textContent.includes("Hooking…"));
 });
+
+test("read along over the Text Hooker card's rows gives Anki the whole line as the sentence", async (t) => {
+  // The card shows 昨日は自転 / 車で行った, one unit per row (ui/overlay.js `hookCardUnits`).
+  const sentence = "昨日は自転車で行った";
+  const row = (text, sentenceOffset, y) => {
+    const node = new Element("#text", text);
+    node.connected = true;
+    return {
+      element: null,
+      node,
+      text,
+      sentence,
+      sentenceOffset,
+      vertical: false,
+      box: { x: 10, y, width: 200, height: 30 },
+    };
+  };
+  const asked = [];
+  const h = controllerHarness(t, async () => [], {
+    extraUnits: () => [row("昨日は自転", 0, 100), row("車で行った", 5, 140)],
+    lookupText: async (request) => {
+      asked.push({ sentence: request.sentence, offset: request.offset });
+      return { shown: true, length: 1 };
+    },
+  });
+  await h.controller.toggle();
+  await h.press(12);
+  await h.press(0);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(h.controller.mode, "words");
+  for (let i = 0; i < 6; i++) await h.press(15);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(asked.length > 1, JSON.stringify(asked));
+  // Every word, on either row, is looked up with the whole line, at its place in it.
+  for (const { sentence: given } of asked) assert.equal(given, sentence);
+  assert.equal(asked[0].offset, 0);
+  assert.ok(
+    asked.some(({ offset }) => offset >= 5),
+    "a word on the second row counts from the line's start",
+  );
+});
