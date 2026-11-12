@@ -25,6 +25,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Yomitan:** hovering the last word of a line on the overlay or the Text Hooker's card no longer looks it up without its last character (`食べまし` instead of `食べました`). Yomitan's **Layout-aware scan** stays on, so lookups and Anki sentences still stop at the edge of each bubble.
 - **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
 - **Text Hooker: a word split across two lines in the card is looked up whole.** Hovering 自転 when the game breaks 自転車 as 自転 / 車 now finds 自転車, with Yomitan, Hachidori and 10ten, and Read along steps over it as one word.
+- **Windows: scans no longer get stuck on "a scan is already running"** until you restart Kimochi, after Windows fails to close the capture of a game that quit.
 
 ## [0.9.0] - 2026-11-11
 

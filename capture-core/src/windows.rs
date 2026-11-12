@@ -57,6 +57,30 @@ pub(crate) fn image_stem(path: &str) -> Option<String> {
     (!stem.is_empty()).then(|| stem.to_string())
 }
 
+/// Runs `work` on a thread of its own and waits up to `limit` for it to finish. True
+/// when it did (or panicked); false when it is still running, in which case it is
+/// left to finish, or not, on its own.
+///
+/// Stopping a WGC session joins its thread, and that thread can wedge inside Windows'
+/// own `GraphicsCaptureSession::Close` (an RPC to the capture server that never
+/// returns, #49). The caller holds the capture backend's lock, so an unbounded join
+/// would queue every later scan and thumbnail behind it until Kimochi restarts.
+pub(crate) fn finish_within(
+    limit: std::time::Duration,
+    work: impl FnOnce() + Send + 'static,
+) -> bool {
+    let (done, finished) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        work();
+        drop(done);
+    });
+    // Nothing is ever sent: the channel disconnects when `work` returns or panics.
+    !matches!(
+        finished.recv_timeout(limit),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    )
+}
+
 /// A Win32 `RECT`, as plain values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PxRect {
@@ -158,6 +182,9 @@ mod wgc {
     };
     use windows_capture::window::Window;
 
+    /// Longest a caller waits for a session to stop before leaving it behind (#49).
+    /// A healthy stop takes a few milliseconds.
+    const STOP_WAIT: Duration = Duration::from_secs(2);
     /// A session nobody has captured from for this long is stopped.
     const SESSION_IDLE: Duration = Duration::from_secs(30);
     /// Sessions kept at once: the selected source, plus one the user is looking at.
@@ -685,7 +712,16 @@ mod wgc {
         // Take it out first: `stop` joins the session thread.
         let taken = control.lock().unwrap().take();
         if let Some(control) = taken {
-            let _ = control.stop();
+            // The join can wedge inside Windows (#49); don't let it hold the backend.
+            let stopped = super::finish_within(STOP_WAIT, move || {
+                let _ = control.stop();
+            });
+            if !stopped {
+                eprintln!(
+                    "Windows capture: a session did not stop within {} s; leaving it behind",
+                    STOP_WAIT.as_secs()
+                );
+            }
         }
     }
 
@@ -1080,6 +1116,35 @@ mod wgc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn work_that_finishes_in_time_is_reported_finished() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let ran = std::sync::Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        assert!(finish_within(Duration::from_secs(5), move || {
+            flag.store(true, Ordering::SeqCst);
+        }));
+        assert!(ran.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn work_that_panics_counts_as_finished() {
+        assert!(finish_within(Duration::from_secs(5), || panic!("stop failed")));
+    }
+
+    #[test]
+    fn a_wedged_stop_is_left_behind_instead_of_blocking_the_caller() {
+        // Stands in for a session thread stuck in `GraphicsCaptureSession::Close`.
+        let (release, wedged) = std::sync::mpsc::channel::<()>();
+        let started = std::time::Instant::now();
+        assert!(!finish_within(Duration::from_millis(100), move || {
+            let _ = wedged.recv();
+        }));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        drop(release);
+    }
 
     #[test]
     fn process_image_stems() {
