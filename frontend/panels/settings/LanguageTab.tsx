@@ -37,7 +37,7 @@ export function LanguageTab(): ReactNode {
   const currentReads = engineReadsLanguage(engines[ocrMode], language.code)
 
   return (
-    <SettingsPage title="Language" description="The language you're learning, and what reads it.">
+    <SettingsPage title="Language" description="Choose a language to use.">
       <SettingsSection>
         <SettingsRow label="Learning" description="Kimochi reads and looks up text in this language.">
           <LanguagePicker
@@ -69,8 +69,8 @@ export function LanguageTab(): ReactNode {
       )}
 
       <SettingsSection
-        title="OCR engines"
-        description={`The engines on this computer that can read ${language.name}.`}
+        title="Supported OCR engines"
+        description={`These are the engines that work with ${language.name}.`}
         footnote={others.length > 0 ? `Can't read ${language.name}: ${names(others)}.` : undefined}
       >
         {readers.map((mode) => {
