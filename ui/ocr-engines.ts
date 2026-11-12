@@ -3,7 +3,7 @@
  * each engine in the list, and how its accelerator reads. The engines themselves (names, copy)
  * are `OCR_MODES` in `ui/settings.ts`.
  */
-import type { OcrEngineCapability, PlatformOs } from './capabilities.js'
+import { engineReadsLanguage, type OcrEngineCapability, type OcrEngineKey, type PlatformOs } from './capabilities.js'
 import { percent, type ModelState, type ModelStatus } from './model-download.js'
 
 export type EngineHintTone = 'neutral' | 'progress' | 'warn' | 'muted'
@@ -78,19 +78,22 @@ export function engineOffered(mode: string, os: PlatformOs): boolean {
 }
 
 /**
- * Whether an engine appears in the pickers: offered on this OS, and Kimochi cloud only when a
- * Kimochi account is signed in (`cloudAccess`). An engine that is still the selected one stays
- * listed even when signed out, so the picker shows what is chosen (as unavailable, with its
- * reason); the setting is never changed behind the user's back.
+ * Whether an engine appears in the pickers: offered on this OS, able to read the language being
+ * learned (`language`, a code from `ui/languages.ts`; its capability's `languages`), and Kimochi
+ * cloud only when a Kimochi account is signed in (`cloudAccess`). An engine that is still the
+ * selected one stays listed whatever else holds, so the picker shows what is chosen (as
+ * unavailable, with its reason); the setting is never changed behind the user's back.
  */
 export function engineListed(
   mode: string,
-  capabilities: { os: PlatformOs; cloudAccess: boolean },
-  selected: string
+  capabilities: { os: PlatformOs; cloudAccess: boolean; ocrEngines?: Partial<Record<OcrEngineKey, OcrEngineCapability>> },
+  selected: string,
+  language: string
 ): boolean {
   if (!engineOffered(mode, capabilities.os)) return false
-  if (mode === 'cloud' && !capabilities.cloudAccess) return mode === selected
-  return true
+  if (mode === selected) return true
+  if (mode === 'cloud' && !capabilities.cloudAccess) return false
+  return engineReadsLanguage(capabilities.ocrEngines?.[mode as OcrEngineKey], language)
 }
 
 /** Whether an engine can be chosen here: anything but one this computer cannot run at all. */

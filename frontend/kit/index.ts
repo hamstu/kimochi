@@ -19,6 +19,7 @@ export {
   SelectSeparator,
   type SelectOption
 } from './Select'
+export { Combobox, type ComboboxOption } from './Combobox'
 export {
   Menu,
   MenuTrigger,

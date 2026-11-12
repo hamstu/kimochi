@@ -43,6 +43,7 @@ The shared design system for every Kimochi window. Import components from `@kit`
 | `Switch`, `Checkbox` | On/off settings use `Switch`; `Checkbox` only for multi-select lists. |
 | `Input`, `Textarea` (`mono` for URLs/keys) | Text entry. Safe for Japanese IME input: a controlled value that comes back late through an async save never resets the text being composed. Key handlers on fields skip keys that belong to a composition with `isComposing(event)`. |
 | `Select` (options list) or `SelectRoot`/`SelectTrigger`/`SelectContent`/`SelectItem` | Choosing one of many. `variant="ghost"` inside bars. |
+| `Combobox` (options with `icon`, `detail`, `description`, `keywords`; `filter`; `inline`) | Choosing one of a long list (languages): a select with a search field. `inline` shows the search and list in place, for a step whose one job is that choice. |
 | `Menu`, `MenuTrigger`, `MenuContent`, `MenuItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel` | Action menus (line actions, session menu). |
 | `Popover`, `PopoverContent` (`menu` prop for menu styling) | Anchored panels. |
 | `Tooltip` | Hover explanations; wrap one focusable child. |

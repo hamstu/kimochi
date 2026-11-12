@@ -1,0 +1,7 @@
+/* The language picker (LanguagePicker.tsx): a select wide enough for the longest name. */
+.language-picker.k-combobox-trigger {
+  min-width: 13rem;
+}
+.language-picker-inline .k-combobox-list {
+  max-height: 17rem;
+}

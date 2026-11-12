@@ -282,6 +282,13 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
         url: 'https://lucide.dev'
       },
       {
+        id: 'circle-flags',
+        name: 'circle-flags',
+        role: 'The round flags in the language picker',
+        license: 'MIT',
+        url: 'https://github.com/HatScripts/circle-flags'
+      },
+      {
         id: 'wanakana',
         name: 'WanaKana',
         role: 'Kana and romaji conversion',

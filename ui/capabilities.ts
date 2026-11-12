@@ -39,7 +39,22 @@ export interface OcrEngineCapability {
    * ~/.config/screen_ai) or a browser's name ("Google Chrome").
    */
   source?: string
+  /**
+   * The languages (codes from `ui/languages.ts`) this engine can read; absent means every
+   * language. The pickers leave an engine out when it cannot read the language being learned
+   * (`engineListed` in `ui/ocr-engines.ts`).
+   */
+  languages?: readonly string[]
 }
+
+/** Whether an engine can read a language: true unless its capability lists languages without it. */
+export function engineReadsLanguage(capability: OcrEngineCapability | undefined, code: string): boolean {
+  const languages = capability?.languages
+  return !Array.isArray(languages) || languages.includes(code)
+}
+
+/** The engines that read only Japanese, for a backend that does not say (they are trained on it). */
+const JAPANESE_ONLY: readonly string[] = Object.freeze(['ja'])
 
 export type CaptureAuthorization =
   'granted' | 'denied' | 'notRequired' | 'promptOnSelect' | 'unsupported'
@@ -167,12 +182,12 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
   ocrEngines: {
     googlelens: { available: true },
     cloud: { available: true },
-    meikiocr: { available: true },
-    mangaocr: { available: true },
+    meikiocr: { available: true, languages: JAPANESE_ONLY },
+    mangaocr: { available: true, languages: JAPANESE_ONLY },
     ppocr: { available: true },
     // Native says whether a copy was found; nothing is assumed (fields merge over this default).
     screenai: { available: false },
-    vocr: { available: true },
+    vocr: { available: true, languages: JAPANESE_ONLY },
     livetext: { available: true },
     oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },

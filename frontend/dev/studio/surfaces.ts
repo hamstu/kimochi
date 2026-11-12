@@ -3,6 +3,7 @@
  * in surfaces-overlay.ts). Every control here is a URL parameter the preview pages already read;
  * frontend/dev/preview-setup.ts and its preview-*.ts helpers document what each one does.
  */
+import { LANGUAGES } from '@ui/languages'
 import { POPOVER_SAMPLE, SOURCES } from '../demo-data'
 import type { ContextAxis, Control, ControlGroup, StudioContext, Surface } from './types'
 
@@ -31,11 +32,20 @@ export const GLOBAL_CONTROLS: readonly Control[] = [
     label: 'Interface size',
     default: 'medium',
     options: opts(['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['xlarge', 'Extra large'])
+  },
+  {
+    kind: 'select',
+    param: 'language',
+    label: 'Language',
+    default: 'ja',
+    help: 'The language being learned (the `language` setting).',
+    options: LANGUAGES.map((language) => ({ value: language.code, label: language.name }))
   }
 ]
 
 const SETTINGS_TABS = opts(
   ['general', 'General'],
+  ['language', 'Language'],
   ['sources', 'Sources'],
   ['texthooker', 'Text Hooker'],
   ['ocr', 'OCR & Overlay'],
@@ -239,6 +249,7 @@ function locateMain(frame: Window): StudioContext {
 /** The welcome guide's steps, each with what the guide needs to show it rather than skip it. */
 const WELCOME_STEPS: ContextAxis['options'] = [
   { value: 'intro', label: 'Intro' },
+  { value: 'language', label: 'Language' },
   { value: 'permission', label: 'Screen Recording', params: { permission: 'denied' } },
   { value: 'accessibility', label: 'Accessibility', params: { accessibility: 'denied' } },
   { value: 'border', label: 'Capture border', params: { platform: 'windows', border: 'denied' } },
@@ -254,6 +265,7 @@ const WELCOME_STEPS: ContextAxis['options'] = [
 /** The welcome guide's routes (WELCOME_ROUTES in preview-setup.ts), back to its `?step=`. */
 const WELCOME_ROUTE_STEPS: Record<string, string> = {
   '/': 'intro',
+  '/language': 'language',
   '/screen-recording-permission': 'permission',
   '/accessibility': 'accessibility',
   '/capture-border': 'border',

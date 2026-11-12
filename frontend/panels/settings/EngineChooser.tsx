@@ -54,6 +54,7 @@ import { OcrEngineIcon, OcrRunsIcon } from '../../components/EngineIcon'
 import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { useModelControls, useModelStatus } from '../../bridge/models'
 import { useEngineSelection } from '../../bridge/useEngineSelection'
+import { useLanguage } from '../../bridge/useLanguage'
 import { DownloadConfirmDialog } from './DownloadConfirmDialog'
 import { RemoveModelDialog } from './ModelDownload'
 import { EngineSettings } from './EngineSettings'
@@ -262,10 +263,11 @@ function EngineDetail({
 export function EngineChooser(): ReactNode {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
+  const [language] = useLanguage()
   const engines = capabilities.ocrEngines
-  // Kimochi cloud is listed only when signed in to a Kimochi account, or while it is still the
-  // selected engine.
-  const modes = MODES.filter((mode) => engineListed(mode, capabilities, ocrMode))
+  // Kimochi cloud is listed only when signed in to a Kimochi account, and an engine only when it
+  // reads the language being learned, unless it is still the selected engine.
+  const modes = MODES.filter((mode) => engineListed(mode, capabilities, ocrMode, language.code))
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
 

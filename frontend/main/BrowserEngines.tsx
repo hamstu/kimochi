@@ -12,6 +12,7 @@ import { engineListed } from '@ui/ocr-engines'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../bridge/settings'
 import { useCapabilities } from '../bridge/capabilities'
 import { useEngineSelection } from '../bridge/useEngineSelection'
+import { useLanguage } from '../bridge/useLanguage'
 import { ocrPicture } from '../components/enginePictures'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 
@@ -50,12 +51,13 @@ async function iconOf(mode: OcrMode): Promise<Icon> {
 export function BrowserEngines(): JSX.Element {
   const { ocrMode, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
+  const [language] = useLanguage()
   const chooseRef = useRef(choose)
   useEffect(() => {
     chooseRef.current = choose
   })
 
-  const listed = OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode))
+  const listed = OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode, language.code))
   const key = `${listed.join(',')}|${ocrMode}|${capabilities.cloudAccess}`
   useEffect(() => {
     let live = true

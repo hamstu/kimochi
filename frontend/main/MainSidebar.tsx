@@ -14,6 +14,7 @@ import { ArrowLeft, Settings } from 'lucide-react'
 import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
+import { useLanguage } from '../bridge/useLanguage'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../bridge/settings'
 import { useHookStatus } from '../bridge/textHook'
 import { useHookPlacement } from './hookPlacement'
@@ -67,6 +68,7 @@ function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgre
 export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
+  const [language] = useLanguage()
   const model = useOcrModelState(ocrMode)
   // Only the selected engine's model is followed; a pick still being confirmed shows plainly.
   const busy = useSteadyProgress(shown === ocrMode ? model.busy : null, ocrMode)
@@ -84,7 +86,7 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
-            {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode)).map((mode) => (
+            {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode, language.code)).map((mode) => (
               <SelectItem
                 key={mode}
                 value={mode}

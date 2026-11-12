@@ -24,6 +24,7 @@
   "react": { "logo": "react.png" },
   "radix-ui": { "logo": "radix-ui.svg" },
   "lucide": { "logo": "lucide.svg" },
+  "circle-flags": { "emoji": "🌐", "tint": "blue" },
   "wanakana": { "emoji": "🔤", "tint": "green" },
   "marked-and-dompurify": { "logo": "marked-and-dompurify.svg" },
   "figtree": { "emoji": "🖋️", "tint": "blue" },

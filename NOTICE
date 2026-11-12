@@ -207,6 +207,17 @@ only to identify the engine Kimochi talks to; this does not imply any
 affiliation with, or endorsement by, their owners.
 
 
+Language flags
+--------------
+
+The round flags beside each language in the language picker are from
+circle-flags (https://github.com/HatScripts/circle-flags, release 2.8.3),
+Copyright (c) 2026 HatScripts, MIT License. Only the files the language
+table names are bundled (frontend/components/languageFlags.ts), unmodified.
+A flag stands for a language, not a state; a language with no flag of its
+own is shown with its code.
+
+
 Sounds
 ------
 

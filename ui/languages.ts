@@ -95,7 +95,7 @@ const ROWS: readonly Row[] = [
   ['sh', 'Serbo-Croatian', 'Srpskohrvatski', ['Latn', 'Cyrl'], null],
   ['ga', 'Irish', 'Gaeilge', 'Latn', 'ie'],
   ['cy', 'Welsh', 'Cymraeg', 'Latn', 'gb-wls'],
-  ['eo', 'Esperanto', 'Esperanto', 'Latn', 'eo'],
+  ['eo', 'Esperanto', 'Esperanto', 'Latn', 'language/eo'],
   ['ka', 'Georgian', 'ქართული', 'Geor', 'ge'],
   ['hy', 'Armenian', 'Հայերեն', 'Armn', 'am'],
   ['km', 'Khmer', 'ខ្មែរ', 'Khmr', 'kh', UNSPACED],

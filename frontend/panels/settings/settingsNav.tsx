@@ -2,6 +2,7 @@
 import {
   BookOpen,
   Gamepad2,
+  Globe,
   Joystick,
   Info,
   Layers,
@@ -20,6 +21,7 @@ import type { SettingsNavItem } from './SettingsShell'
 
 export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName })[] = [
   { value: 'general', label: 'General', icon: <SlidersHorizontal /> },
+  { value: 'language', label: 'Language', icon: <Globe /> },
   { value: 'sources', label: 'Sources', icon: <Waypoints /> },
   { value: 'browser', label: 'Browser Extension', icon: <Puzzle /> },
   { value: 'texthooker', label: 'Text Hooker', icon: <Plug /> },

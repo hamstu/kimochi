@@ -29,6 +29,8 @@
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?lines=0         the Steins;Gate session starts with no lines (its Notebook is kept)
  *   ?ocr=<mode>      the selected OCR engine (e.g. meikiocr, with ?model=downloading)
+ *   ?language=<code> the language being learned (a code from ui/languages.ts, e.g. ko, es;
+ *                    default ja): Settings → Language, the engine lists, the welcome guide
  *   ?readiness=setup|failed|setup-needed  the dictionary engine plays its setup in steps, or is stuck
  *                    (see previewReadiness)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
@@ -66,7 +68,7 @@
  *                    refuses the note). Click the + to add
  *
  * Onboarding (welcome.html):
- *   ?step=intro|permission|accessibility|ocr|engine|dictionaries|dictionary-settings|steam|done|error
+ *   ?step=intro|language|permission|accessibility|ocr|engine|dictionaries|dictionary-settings|steam|done|error
  *                    open that step (error: the last step's save failed). Every step stays
  *                    navigable from there
  *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
@@ -100,6 +102,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, dictionaryEngineOf, hostEngineOf, nextOverlayToggle } from '@ui/settings'
 import { SOUND_NAMES, createSoundPlayer, soundKind, soundKindOn, type SoundName } from '@ui/sounds'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
+import { LANGUAGES } from '@ui/languages'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
 import {
   POPOVER_SAMPLE,
@@ -353,6 +356,7 @@ const settings: Record<string, unknown> = {
   // were read with) and the overlay on.
   ...(params.get('embed') === '1' ? { ocrMode: 'meikiocr', liveOverlayEnabled: true } : {}),
   ...(params.get('ocr') ? { ocrMode: params.get('ocr') } : {}),
+  ...(params.get('language') ? { language: params.get('language') } : {}),
   ...(params.get('overlay') === '1' ? { liveOverlayEnabled: true } : {}),
   // In the UI studio (frontend/dev/studio/): any stored setting, edited there as JSON.
   ...studioJson<Record<string, unknown>>('settings')
@@ -454,9 +458,15 @@ function previewCapabilities(): PlatformCapabilities {
             'Screen AI is not on this computer yet. Download it from Google, or let Google Chrome fetch it (chrome://components, Screen AI, Check for update).'
         }
       : { available: true, accelerator: 'cpu', version: '153.7', source: 'Google Chrome' }
+  // PaddleOCR reads Han, kana, Latin and Greek (not Vietnamese's full set), as native reports it.
+  const paddleScripts = new Set(['Jpan', 'Hans', 'Hant', 'Latn', 'Grek'])
+  const ppocr: PlatformCapabilities['ocrEngines']['ppocr'] = {
+    ...DEFAULT_CAPABILITIES_MACOS.ocrEngines.ppocr,
+    languages: LANGUAGES.filter((l) => l.code !== 'vi' && l.scripts.every((s) => paddleScripts.has(s))).map((l) => l.code)
+  }
   const mac: PlatformCapabilities = {
     ...DEFAULT_CAPABILITIES_MACOS,
-    ocrEngines: { ...DEFAULT_CAPABILITIES_MACOS.ocrEngines, screenai },
+    ocrEngines: { ...DEFAULT_CAPABILITIES_MACOS.ocrEngines, screenai, ppocr },
     osVersion: '15.5',
     arch: 'aarch64',
     capture: {
@@ -1656,6 +1666,7 @@ function syncDictionaryEngine(): void {
 
 const WELCOME_ROUTES: Record<string, string> = {
   intro: '/',
+  language: '/language',
   permission: '/screen-recording-permission',
   accessibility: '/accessibility',
   border: '/capture-border',

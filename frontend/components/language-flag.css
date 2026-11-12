@@ -1,0 +1,29 @@
+/*
+ * A language's round flag, or the neutral badge with its code (LanguageFlag.tsx). A hairline ring
+ * keeps white-edged flags (Japan, Korea) round on a light ground.
+ */
+:root {
+  --language-flag-size: var(--k-icon);
+}
+.language-flag {
+  flex: none;
+  width: var(--language-flag-size);
+  height: var(--language-flag-size);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--k-line);
+  user-select: none;
+}
+.language-flag-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gray-a3);
+  color: var(--k-text-2);
+  font-family: var(--k-font-ui);
+  /* Two or three letters fit the circle at any size. */
+  font-size: calc(var(--language-flag-size) * 0.36);
+  font-weight: var(--k-weight-semibold);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
