@@ -17,6 +17,8 @@ type StatsListener = (s: Stats, runningSince: number | null) => void;
 
 let current: Stats = { ...STATS_DEFAULTS };
 let runningSince: number | null = null;
+/** When the running interval last saw a line: it counts up to here, plus at most the AFK threshold. */
+let lastActive = 0;
 let afkTimer: ReturnType<typeof setTimeout> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let dirty = false;
@@ -92,13 +94,21 @@ export async function flushStats(): Promise<void> {
   }
 }
 
-/** Fold a running interval into totalMs, clamped against laptop-sleep
- *  inflation (cap at the AFK threshold). */
+/**
+ * How long the running interval has lasted at `now`: from its first line to now, but never past
+ * the AFK threshold after its last line, so time away (or a laptop asleep before the AFK timer
+ * could fire) isn't counted as reading.
+ */
+function runningMs(now: number): number {
+  if (runningSince === null) return 0;
+  const afkMs = Math.max(10, getSettings().afkThresholdSec) * 1000;
+  return Math.max(0, Math.min(now, lastActive + afkMs) - runningSince);
+}
+
+/** Fold the running interval into totalMs. */
 function commitRunning(now: number) {
   if (runningSince === null) return;
-  const afkMs = Math.max(10, getSettings().afkThresholdSec) * 1000;
-  const elapsed = Math.min(now - runningSince, afkMs);
-  if (elapsed > 0) current.totalMs += elapsed;
+  current.totalMs += runningMs(now);
   runningSince = null;
 }
 
@@ -122,6 +132,7 @@ export function recordLine(textLen: number) {
   if (runningSince === null) {
     runningSince = now;
   }
+  lastActive = now;
   current.totalChars += textLen;
   current.totalLines += 1;
   current.lastUpdateTs = now;
@@ -137,6 +148,7 @@ export function recordCharDelta(delta: number) {
   if (runningSince === null) {
     runningSince = now;
   }
+  lastActive = now;
   current.totalChars = Math.max(0, current.totalChars + delta);
   current.lastUpdateTs = now;
   armAfkTimer();
@@ -146,8 +158,7 @@ export function recordCharDelta(delta: number) {
 
 /** Live snapshot for the footer. Caller does its own ticking. */
 export function snapshotStats(): { stats: Stats; elapsedMs: number } {
-  const elapsedMs =
-    current.totalMs + (runningSince ? Date.now() - runningSince : 0);
+  const elapsedMs = current.totalMs + runningMs(Date.now());
   return { stats: current, elapsedMs };
 }
 

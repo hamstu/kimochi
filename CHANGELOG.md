@@ -18,6 +18,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **The Log's reading time no longer drops to a minute when you take a break.** A stretch of reading now keeps all of its time once you stop, instead of only the last minute of it.
 - **A setting Kimochi doesn't recognise no longer leaves a blank gray window** (for example after trying a newer version). It falls back to the default, and if a window still can't load, it says what went wrong, with **Reload window** and **Copy details**.
 - **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
 
