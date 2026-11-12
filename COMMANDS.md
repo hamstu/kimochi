@@ -2307,9 +2307,16 @@ uses for size/origin. Pointer samples and native input shapes use that same actu
 including compositor panel/dock constraints; source capture bounds remain independent.
 Placement is requested once per surface/monitor allocation, rather than repeatedly fighting
 Mutter's constraints. Shell verifies the owner
-and PID, controls stacking and visibility, and emits bounded `Pointer` samples to the shared
-DOM renderer/scanner. GTK refuses keyboard focus and applies only the renderer's word input
-regions. The original floating dictionary host owns its own popup input and focus.
+and PID, controls stacking and visibility, and emits bounded `Pointer` samples (every 20 ms
+while the surface is up, and on each change). Native keeps the last one as GNOME's desktop
+cursor (`gnome::pointer_sample`), so the cursor poll's Shift gate (`state::ShiftGate`,
+`overlay.shiftGate`, `shiftSource: "gnome-shell"`) works as on macOS, Windows and X11: the words
+let clicks through to the game until Shift is held, and the overlay hears them as ordinary
+`pointer` samples. Where the Shell placed the surface reaches the overlay as `gnome-surface`
+`{sourceId, origin, bounds, visible}`, only when it changes. GTK refuses keyboard focus and applies only the renderer's live word input
+regions, through the widget (`gtk_widget_input_shape_combine_region`): GTK rewrites the GDK
+window's input shape from its client-side decoration on every allocation, and only a widget
+shape survives it. The original floating dictionary host owns its own popup input and focus.
 `{operation:"close"}` releases the surface. Missing heartbeats, source changes/closure, owner
 loss, lock and extension disable hide it; capture suspension hides the WebView along with the
 other annotation surfaces. Native layer-shell and X11 retain the same existing renderer.

@@ -4839,8 +4839,10 @@ function noteScanFeed(payload, dispatched) {
 // synthetic moves all the time, which say nothing about the reader's devices.
 installPointerDiagnostics('overlay', { label: 'overlay', active: () => state.regionSelecting })
 
+// GNOME: where the Shell put the shared surface, sent with each of its pointer samples. The
+// pointer itself comes from the cursor poll below, like everywhere else, with the Shift gate.
+await native.listen('gnome-surface', ({ payload }) => gnomeOverlay?.pointer(payload))
 await native.listen('pointer', ({ payload }) => {
-  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
   // Wayland: the compositor feed has no buttons over a Wayland window; a press on this surface does.
   if (waylandLayer && surfaceButtonDown && !payload?.down) payload = { ...payload, down: true }
   if (!state.origin || typeof payload?.x !== 'number') return

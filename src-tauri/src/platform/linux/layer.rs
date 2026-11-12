@@ -115,6 +115,7 @@ unsafe extern "C" {
     fn gtk_widget_get_realized(widget: *mut c_void) -> c_int;
     fn gtk_widget_get_window(widget: *mut c_void) -> *mut c_void;
     fn gtk_widget_queue_draw(widget: *mut c_void);
+    fn gtk_widget_input_shape_combine_region(widget: *mut c_void, region: *mut c_void);
     fn gdk_window_input_shape_combine_region(
         window: *mut c_void,
         region: *mut c_void,
@@ -343,11 +344,16 @@ pub fn input_regions(
                     }
                     region
                 });
-                gdk_window_input_shape_combine_region(
-                    native,
+                // Through the widget, not the GdkWindow: GTK treats an undecorated Wayland toplevel
+                // as client-side decorated (GNOME's overlay) and rewrites the window's input shape
+                // from its decoration (the whole window and a resize border) whenever it is
+                // allocated, which is every few frames. A shape set on the GdkWindow lasts until
+                // then, and the overlay took every click on the desktop. The widget's own shape is
+                // intersected with the decoration's instead, so it survives. A layer surface has no
+                // decoration: there, this is the same call.
+                gtk_widget_input_shape_combine_region(
+                    gtk.as_ptr().cast(),
                     region.unwrap_or(std::ptr::null_mut()),
-                    0,
-                    0,
                 );
                 if available() || matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session() {
                     // GTK on Wayland commits a new input region with its next paint only.
