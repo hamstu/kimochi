@@ -11,11 +11,12 @@ import {
   DEFAULT_CAPABILITIES_MACOS,
   fallbackCapabilities,
   normalizeCapabilities,
+  overlayCanClickThrough,
   type PlatformCapabilities
 } from '@ui/capabilities'
 import { onEvent, platformCapabilities } from './tauri'
 
-export { DEFAULT_CAPABILITIES_MACOS }
+export { DEFAULT_CAPABILITIES_MACOS, overlayCanClickThrough }
 export type { PlatformCapabilities }
 
 let current: PlatformCapabilities = fallbackCapabilities()

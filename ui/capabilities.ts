@@ -272,3 +272,16 @@ export function normalizeCapabilities(
     gamepad: typeof raw.gamepad === 'boolean' ? raw.gamepad : base.gamepad
   }
 }
+
+/**
+ * Whether the overlay's text can let clicks through to the game until the lookup key is held
+ * (`overlayClickThrough`). That needs the key seen while another app is in front: always outside
+ * Wayland; on Wayland only where native has a source for it (`overlay.shiftGate`: KDE Plasma,
+ * Hyprland). Elsewhere the text always takes the mouse (ui/overlay.js `shiftGated`), and
+ * Settings greys the switch out.
+ */
+export function overlayCanClickThrough(
+  capabilities: Pick<PlatformCapabilities, 'os' | 'session' | 'overlay'>
+): boolean {
+  return capabilities.os !== 'linux' || capabilities.session?.backend !== 'wayland' || capabilities.overlay?.shiftGate === true
+}

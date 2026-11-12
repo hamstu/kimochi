@@ -25,7 +25,7 @@ import {
   type WatcherChoice
 } from '../../../ui/watcher'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../../bridge/settings'
-import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
+import { isGamingMode, overlayCanClickThrough, useCapabilities } from '../../bridge/capabilities'
 import type {
   AutoOCRSettings,
   TextOverlayGroupingSettings
@@ -86,8 +86,12 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
 
 export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
+  const capabilities = useCapabilities()
   // Gaming Mode always draws the overlay (ui/overlay.js `overlayTextOn`): nothing to switch.
-  const gaming = isGamingMode(useCapabilities())
+  const gaming = isGamingMode(capabilities)
+  // Wayland without a Shift source: the overlay's text always takes the mouse, so no switch.
+  const canClickThrough = overlayCanClickThrough(capabilities)
+  const lookupOnHover = capabilities.overlay?.lookupOnHover === true
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
   const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>(
@@ -173,15 +177,21 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Click through text to the game"
           controlId="ocr-click-through"
+          disabled={!canClickThrough}
           description={
-            clickThrough
-              ? 'Clicks on scanned text go to the game. Hold Shift to light up text, look words up and click them.'
-              : 'Scanned text lights up as you hover it and takes your clicks. Hold Shift to look words up.'
+            !canClickThrough
+              ? lookupOnHover
+                ? "Not available here: Kimochi can't see Shift while the game is in front, so scanned text takes your clicks and hovering a word looks it up."
+                : "Not available on this desktop: Kimochi can't see Shift while the game is in front, so scanned text always takes your clicks."
+              : clickThrough
+                ? 'Clicks on scanned text go to the game. Hold Shift to light up text, look words up and click them.'
+                : 'Scanned text lights up as you hover it and takes your clicks. Hold Shift to look words up.'
           }
         >
           <Switch
             id="ocr-click-through"
-            checked={clickThrough}
+            checked={canClickThrough && clickThrough}
+            disabled={!canClickThrough}
             onCheckedChange={(checked) => void setClickThrough(checked)}
           />
         </SettingsRow>
