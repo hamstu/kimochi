@@ -1821,6 +1821,7 @@ async fn capture_frame(
         // these don't: they are still moving (a line typing in, a fade), so the read is skipped.
         let mut observer_skipped = false;
         // Live Text watching for itself: its reading of these pixels is the scan's result too.
+        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
         let mut own_scan: Option<(&'static str, Value)> = None;
         let mut hash = Value::Null;
         let mut fingerprint = Value::Null;
