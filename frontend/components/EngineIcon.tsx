@@ -16,7 +16,7 @@
  */
 import type { ReactNode } from 'react'
 import { Cloud, Monitor } from 'lucide-react'
-import { OCR_MODES, type OcrMode } from '../bridge/settings'
+import { ocrModeInfo, type OcrMode } from '../bridge/settings'
 import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import yomitan from '../assets/engine-icons/yomitan.svg'
 import yomitanApi from '../assets/engine-icons/yomitan-api.svg'
@@ -54,7 +54,7 @@ function EngineIcon({ picture, className }: { picture: Picture; className?: stri
 
 /** Where the engine runs, as an icon: this computer, or a service across the network. */
 export function OcrRunsIcon({ mode }: { mode: OcrMode }): ReactNode {
-  const local = OCR_MODES[mode].runs === 'local'
+  const local = ocrModeInfo(mode).runs === 'local'
   return (
     <span className="engine-runs" title={local ? 'Runs on this computer' : 'Runs online'}>
       {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Online" />}

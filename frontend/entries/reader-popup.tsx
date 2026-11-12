@@ -5,8 +5,14 @@ import "../texthooker/App.css";
 import "../texthooker/popover.css";
 import Providers from "./providers";
 import PopoverApp from "../texthooker/PopoverApp";
+import { WindowErrorBoundary } from "../shell/WindowErrorBoundary";
+import { reportUncaughtErrors } from "./reportErrors";
+
+reportUncaughtErrors("reader-popup");
 createRoot(document.getElementById("root")!).render(
-  <Providers transparent>
-    <PopoverApp />
-  </Providers>,
+  <WindowErrorBoundary window="reader-popup">
+    <Providers transparent>
+      <PopoverApp />
+    </Providers>
+  </WindowErrorBoundary>,
 );

@@ -126,6 +126,28 @@ pub struct Settings {
     doc: Mutex<Value>,
 }
 
+/// Copies an unreadable settings file to `<name>.unreadable-<unix seconds>` beside it, once per
+/// distinct content (an identical copy already kept is not made again).
+fn keep_unreadable(path: &std::path::Path, bytes: &[u8]) -> Option<PathBuf> {
+    let dir = path.parent()?;
+    let name = path.file_name()?.to_string_lossy().into_owned();
+    let prefix = format!("{name}.unreadable-");
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with(&prefix)
+                && std::fs::read(entry.path()).is_ok_and(|kept| kept == bytes)
+            {
+                return Some(entry.path());
+            }
+        }
+    }
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let copy = dir.join(format!("{prefix}{seconds}"));
+    std::fs::write(&copy, bytes).ok().map(|()| copy)
+}
+
 impl Settings {
     /// Stored values win over defaults; new defaults appear for keys a user never set.
     pub fn load(path: PathBuf) -> Self {
@@ -171,9 +193,18 @@ impl Settings {
                     }
                 }
                 // A corrupt file must not wipe the user's settings silently, and must
-                // not stop the app booting. Keep defaults in memory and leave the file
-                // alone until something explicitly writes.
-                Err(e) => eprintln!("settings: ignoring unreadable {}: {e}", path.display()),
+                // not stop the app booting. Keep defaults in memory, and keep a copy of the
+                // file beside it: the next change writes the defaults over it, and whatever
+                // was still readable in it (a hand edit gone wrong, a half-written file) would
+                // be lost with nothing to restore from.
+                Err(e) => {
+                    let kept = keep_unreadable(&path, &bytes);
+                    eprintln!(
+                        "settings: ignoring unreadable {}: {e}{}",
+                        path.display(),
+                        kept.map(|copy| format!(" (kept as {})", copy.display())).unwrap_or_default()
+                    );
+                }
             }
         }
         Self {
@@ -599,6 +630,30 @@ mod tests {
             )),
             doc: Mutex::new(defaults()),
         }
+    }
+
+    #[test]
+    fn an_unreadable_file_boots_on_defaults_and_is_kept() {
+        let dir = std::env::temp_dir().join(format!("kimochi-settings-unreadable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        std::fs::write(&path, b"{\"ocrMode\": \"meikiocr\", oops").unwrap();
+
+        let settings = Settings::load(path.clone());
+        assert_eq!(settings.get("ocrMode").unwrap(), Some(defaults()["ocrMode"].clone()));
+        let kept = || {
+            std::fs::read_dir(&dir)
+                .unwrap()
+                .flatten()
+                .filter(|e| e.file_name().to_string_lossy().starts_with("settings.json.unreadable-"))
+                .count()
+        };
+        assert_eq!(kept(), 1, "a copy of the unreadable file is kept");
+        // Loading the same broken file again keeps no second copy.
+        let _ = Settings::load(path.clone());
+        assert_eq!(kept(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

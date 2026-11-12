@@ -13,6 +13,7 @@
  *    Windows (see below);
  *  - with verbose logging on, pointer diagnostics go to the log (`ui/pointer-diagnostics.js`).
  */
+import { WindowErrorBoundary } from './WindowErrorBoundary'
 import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from 'react'
 import { Copy, Minus, Pin, PinOff, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { nativeError, panel, panelContentHeight, onEvent, quitApp } from '../bridge/tauri'
@@ -266,7 +267,9 @@ export default function PanelShell({
         </div>
       )}
       <main className="native-content">
-        <TitleBarSlotContext.Provider value={slot}>{children}</TitleBarSlotContext.Provider>
+        <TitleBarSlotContext.Provider value={slot}>
+          <WindowErrorBoundary window={label}>{children}</WindowErrorBoundary>
+        </TitleBarSlotContext.Provider>
       </main>
     </div>
   )
