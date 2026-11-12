@@ -542,11 +542,12 @@ function tiles(segments, vertical, fontSize) {
  * one even pitch cannot follow a line whose own glyphs are not even (a bracket or pause set in half
  * a cell, an ellipsis, a proportional font), and the word under the pointer drifts from the hitbox
  * the reader aims at (#92). Each boxed character or word says where its glyphs are; the glyphs
- * between two such boxes are moved in proportion. A box that disagrees with the line by more than
- * SNAP of a glyph is a misread or a stray mark and is not followed. Null without boxes, or when
- * every glyph is already where its box says.
+ * between two such boxes are moved in proportion. A box that disagrees with the boxes around it by
+ * more than SNAP of a glyph is a misread or a stray mark and is not followed. Null without boxes,
+ * or when every glyph is already where its box says.
  */
 const SNAP = 0.6
+const LEAP = 2.5
 const DEADBAND = 0.12
 function snapOffsets(run, measure) {
   const segments = run.segments
@@ -563,7 +564,7 @@ function snapOffsets(run, measure) {
     advance += measure(c)
   })
   const inkOfChar = (c) => inkOf(c, measure)
-  const known = []
+  const boxed = []
   for (const segment of segments) {
     const count = chars(segment.text ?? '').length
     if (!count || typeof segment.at !== 'number' || segment.at + count > all.length) continue
@@ -573,10 +574,28 @@ function snapOffsets(run, measure) {
       ? [origins[first] - run.spacing / 2, origins[last] + f * measure(all[last]) + run.spacing / 2]
       : [origins[first] + f * inkOfChar(all[first]).start, origins[last] + f * inkOfChar(all[last]).end]
     const residual = segment.x + segment.width / 2 - (predicted[0] + predicted[1]) / 2
-    if (Math.abs(residual) <= SNAP * f) known.push([(first + last) / 2, residual])
+    boxed.push([(first + last) / 2, residual])
   }
+  boxed.sort((a, b) => a[0] - b[0])
+  // A misread or stray box disagrees with the boxes around it; a step does not. Every mark set
+  // narrower than the overlay draws it (a bracket or pause in half a cell, an ellipsis Live Text
+  // reads as six ・, each a third of a glyph wide) moves every glyph after it the same way, so
+  // further along the line glyphs can be well over SNAP of a glyph off the even pitch, and their
+  // boxes agree on where they are. Judged against the line's even pitch instead, those boxes were
+  // all dropped, and the glyphs after an ellipsis were drawn a glyph and more from their own (#92).
+  // The true median (the mean of the middle two of an even window, as next to either end): the
+  // lower one leans one way, and dropped a box beside a step at an end of the line.
+  const centre = (values) => {
+    const sorted = [...values].sort((a, b) => a - b)
+    const half = sorted.length >> 1
+    return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2
+  }
+  const local = boxed.map((_, i) => centre(boxed.slice(Math.max(0, i - 2), i + 3).map(([, r]) => r)))
+  // Nor is any box followed past LEAP glyphs from the even pitch, however many agree: a cluster of
+  // misreads that far out is likelier than a line that far off its own fit (Live Text's six ・
+  // for an ellipsis, the furthest in the corpus, come to 1.7).
+  const known = boxed.filter(([, r], i) => Math.abs(r - local[i]) <= SNAP * f && Math.abs(r) <= LEAP * f)
   if (known.length < 2) return null
-  known.sort((a, b) => a[0] - b[0])
   // Followed are steps, not wobble: one glyph's box sits a little differently in any two fonts,
   // so each residual is the median of it and its neighbours', and one under DEADBAND of a glyph
   // is taken as no move at all.

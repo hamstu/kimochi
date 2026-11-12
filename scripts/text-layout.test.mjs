@@ -554,6 +554,44 @@ test('brackets the engine boxed in half a cell are drawn in half a cell, and the
   assert.ok(Math.abs(cells[3].x - 75) < 3, `犬 at ${cells[3].x}`)
 })
 
+test('a step at either end of a line, either way, is followed', () => {
+  // Ten glyphs boxed by their ink, two at one end 0.8 of a glyph off the others' pitch: a step the
+  // boxes agree on, not a misread (#92). The two must not be judged by a window that leans away.
+  for (const [where, sign] of [['end', 1], ['end', -1], ['start', 1], ['start', -1]]) {
+    const text = '猫は犬だよ猫は犬だよ'
+    const segments = [...text].map((c, at) => {
+      const moved = where === 'end' ? at >= 8 : at <= 1
+      return { text: c, at, x: at * 30 + 2 + (moved ? sign * 24 : 0), y: 0, width: 26, height: 30.6 }
+    })
+    const run = { text, segments, rect: { x: 0, y: 0, width: 300, height: 30.6 } }
+    const fitted = fit(run, false, em)
+    const f = fitted.fontSize
+    segments.forEach((segment, k) => {
+      const centre = fitted.rect.x + fitted.lead + f * (k + 0.5) + fitted.spacing * k + (fitted.offsets?.[k] ?? 0)
+      const off = (centre - (segment.x + segment.width / 2)) / f
+      assert.ok(Math.abs(off) < 0.25, `${where} ${sign > 0 ? '+' : '-'}: glyph ${k} drawn ${off.toFixed(2)} of a glyph off`)
+    })
+  }
+})
+
+test('a cluster of boxes far off the line is not followed', () => {
+  // Three agreeing boxes three glyphs out, mid-line: a misread cluster, not a step.
+  const text = '猫は犬だよ猫は犬だよ猫は'
+  const segments = [...text].map((c, at) => ({
+    text: c,
+    at,
+    x: at * 30 + 2 + (at >= 5 && at <= 7 ? 90 : 0),
+    y: 0,
+    width: 26,
+    height: 30.6
+  }))
+  const fitted = fit({ text, segments, rect: { x: 0, y: 0, width: 360, height: 30.6 } }, false, em)
+  for (const k of [5, 6, 7]) {
+    const offset = (fitted.offsets?.[k] ?? 0) / fitted.fontSize
+    assert.ok(Math.abs(offset) < 1, `glyph ${k} moved ${offset.toFixed(2)} glyphs`)
+  }
+})
+
 test('full-width brackets in the engine boxes are left full-width', () => {
   const run = squeezeLine([['猫', 30], ['は', 30], ['「', 30], ['犬', 30], ['」', 30], ['だ', 30], ['よ', 30]])
   assert.equal(fit(run, false, em).squeeze, undefined)

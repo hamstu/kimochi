@@ -113,52 +113,68 @@ export function measureFor(typeface = 'default') {
     }
     return context
   }
-  const advances = new Map()
-  const inks = new Map()
-  const measure = (text) => {
-    const cached = advances.get(text)
-    if (cached !== undefined) return cached
-    let ems = 0
-    const drawn = canvas()
-    if (drawn) ems = drawn.measureText(text).width / 100
-    else
-      for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
-    if (advances.size > 2000) advances.clear()
-    advances.set(text, ems)
-    return ems
-  }
-  measure.ink = (text) => {
-    const cached = inks.get(text)
-    if (cached !== undefined) return cached
-    let ink = null
-    const drawn = canvas()
-    if (drawn) {
-      const m = drawn.measureText(text)
-      ink = {
-        advance: m.width / 100,
+  // Each character is measured on its own and a run is the sum of its characters, as the overlay
+  // draws it (no kerning, every mark at its full advance: overlay-text.css). A canvas measuring a
+  // whole run trims adjacent CJK punctuation as the browser's `text-spacing-trim` does (。」 is
+  // one and a half ems in Chrome and WebView2), and the layout and the drawn text then disagreed
+  // by half a glyph after every such pair (#92).
+  const glyphs = new Map()
+  const glyph = (character) => {
+    let known = glyphs.get(character)
+    if (known === undefined) {
+      const m = canvas().measureText(character)
+      const ink = {
         start: -m.actualBoundingBoxLeft / 100,
         end: m.actualBoundingBoxRight / 100,
         ascent: m.actualBoundingBoxAscent / 100,
-        descent: m.actualBoundingBoxDescent / 100,
+        descent: m.actualBoundingBoxDescent / 100
+      }
+      const inked =
+        Object.values(ink).every(Number.isFinite) && ink.end > ink.start && ink.ascent + ink.descent > 0
+      known = {
+        advance: m.width / 100,
+        ink: inked ? ink : null,
         fontAscent: m.fontBoundingBoxAscent / 100,
         fontDescent: m.fontBoundingBoxDescent / 100
       }
-      const usable =
-        Object.values(ink).every(Number.isFinite) &&
-        ink.end > ink.start &&
-        ink.ascent + ink.descent > 0 &&
-        ink.fontAscent + ink.fontDescent > 0
-      if (!usable) ink = null
+      if (glyphs.size > 4000) glyphs.clear()
+      glyphs.set(character, known)
     }
-    if (inks.size > 2000) inks.clear()
-    inks.set(text, ink)
-    return ink
+    return known
+  }
+  const measure = (text) => {
+    let ems = 0
+    if (canvas()) for (const character of text) ems += glyph(character).advance
+    else
+      for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
+    return ems
+  }
+  measure.ink = (text) => {
+    if (!canvas()) return null
+    let at = 0
+    let ink = null
+    let font = null
+    for (const character of text) {
+      const g = glyph(character)
+      font ??= g
+      if (g.ink) {
+        const { start, end, ascent, descent } = g.ink
+        ink = ink
+          ? {
+              start: Math.min(ink.start, at + start),
+              end: Math.max(ink.end, at + end),
+              ascent: Math.max(ink.ascent, ascent),
+              descent: Math.max(ink.descent, descent)
+            }
+          : { start: at + start, end: at + end, ascent, descent }
+      }
+      at += g.advance
+    }
+    if (!ink || !(font.fontAscent + font.fontDescent > 0) || !Number.isFinite(font.fontAscent + font.fontDescent)) return null
+    return { ...ink, advance: at, fontAscent: font.fontAscent, fontDescent: font.fontDescent }
   }
   // Measured before the face loaded, these are the fallback's: forget them once it has.
-  measure.forget = () => {
-    advances.clear()
-    inks.clear()
-  }
+  measure.forget = () => glyphs.clear()
   measures.set(typeface, measure)
   return measure
 }

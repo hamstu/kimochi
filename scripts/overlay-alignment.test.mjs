@@ -135,7 +135,9 @@ const LIMITS = {
   'oneocr-shape': { along: 0.06, p90: 0.1, across: 0.06 },
   // Measured 0.067 along, 0.132 p90, 0.047 across (Screen AI 153.7, its character boxes).
   screenai: { along: 0.08, p90: 0.16, across: 0.06 },
-  livetext: { along: 0.2, p90: 0.42, across: 0.1 },
+  // Measured 0.103 along, 0.222 p90 (chrono and pixel the worst, both 0.27); 0.2 and 0.42 allowed
+  // before its boxes were followed past an ellipsis (#92).
+  livetext: { along: 0.13, p90: 0.28, across: 0.1 },
   // Where its detector's line regions are clean. Its manga samples are held below.
   mangaocr: { along: 0.06, p90: 0.12, across: 0.06, samples: ['large'] }
 }
@@ -229,6 +231,27 @@ test('brackets and pauses a game sets in half a cell are drawn so, and the line 
   assert.ok(runs.some((run) => run.squeeze?.includes('「')), 'the brackets were seen as half-width')
   const row = scored.find((r) => r.sample === 'halfwidth' && r.engine === 'googlelens')
   assert.ok(row.alongMean <= 0.11, `mean along ${row.alongMean.toFixed(3)}`)
+  // Live Text reads the ellipsis in 「ええと、その……『転送装置』って何？」 as six ・, each boxed a
+  // third of a glyph wide and drawn a whole one: the glyphs after it are far off the line's even
+  // pitch, and their boxes, all agreeing, are followed (they were dropped as misreads, and 『 was
+  // drawn 1.6 glyphs from its own, 何？ 0.65 and 0.93).
+  const live = fixtures.find((f) => f.sample === 'halfwidth' && f.engine === 'livetext')
+  const line = live.truth.lines[1]
+  const middle = line.glyphs[0].y + line.size / 2
+  const glyphs = layout(live)
+    .runs.flatMap(drawn)
+    .filter((g) => Math.abs(g.cy - middle) < line.size / 2)
+    .sort((a, b) => a.cx - b.cx)
+  const read = glyphs.map((g) => g.c).join('')
+  assert.equal(read, '「ええと、その・・・・・・『転送装置」って何？」')
+  // From 『 on, drawn and true glyphs pair one to one (』 read as 」).
+  const tail = glyphs.slice(read.indexOf('『'))
+  const truths = line.glyphs.slice(line.glyphs.findIndex((g) => g.c === '『'))
+  assert.equal(tail.length, truths.length)
+  tail.forEach((g, i) => {
+    const off = (g.cx - (truths[i].ink[0] + truths[i].ink[2]) / 2) / line.size
+    assert.ok(Math.abs(off) <= 0.3, `${truths[i].c} drawn ${off.toFixed(2)} of a glyph from its own`)
+  })
   // Full-width brackets stay full-width: no other sample's runs are squeezed.
   for (const other of fixtures.filter((f) => f.sample === 'dialogue')) {
     assert.ok(layout(other).runs.every((run) => !run.squeeze), `${other.engine} squeezed full-width brackets`)

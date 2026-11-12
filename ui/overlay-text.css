@@ -87,6 +87,7 @@
     'Yu Gothic', 'Meiryo', sans-serif;
   font-weight: 400;
   font-kerning: none;
+  text-spacing-trim: space-all;
   cursor: default;
   animation: ocr-appear var(--ocr-fade) ease-out;
 }
@@ -180,6 +181,7 @@
     'Yu Gothic', 'Meiryo', sans-serif;
   font-weight: 400;
   font-kerning: none;
+  text-spacing-trim: space-all;
   color: var(--ocr-ink);
   animation: ocr-appear var(--ocr-fade) ease-out;
 }
@@ -324,7 +326,9 @@
 }
 /* Each run sits over the line or word it was read from; see text-layout.js. Glyphs are
    centred across the run by its line height (and its offset), and placed along it by its
-   offset and letter spacing. */
+   offset and letter spacing. Every glyph keeps its own advance, as the layout measured it (render.js
+   `measureFor`): no kerning, and no `text-spacing-trim`, which in Chromium (and so WebView2) halves
+   one of two adjacent CJK marks (。」, 」「) and moved every glyph after them half a glyph (#92). */
 .ocr-run {
   white-space: nowrap;
   text-align: left;
@@ -332,6 +336,7 @@
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
     'Yu Gothic', 'Meiryo', sans-serif;
   font-kerning: none;
+  text-spacing-trim: space-all;
 }
 /* Manga OCR's text, in the bundled manga face (MANGA_FONT in render.js; fonts/manga.css). Its
    weight is set per run, heavier for text big for its page. */
