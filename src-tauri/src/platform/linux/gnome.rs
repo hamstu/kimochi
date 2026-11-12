@@ -167,11 +167,45 @@ const KNOWN_METADATA: [&str; 2] = [
     "be3f1c1f49909c08dd0d462d8cea90be1555dcc259a47b7eb1ecec232fb5fdee",
 ];
 
-fn shell_supported(version: &str) -> bool {
-    version.trim().strip_prefix("GNOME Shell ")
-        .and_then(|v| v.split(['.', ' ', '-']).next())
+/// The major of a Shell version, as the Shell reports it over D-Bus (`50.1`) or as
+/// `gnome-shell --version` prints it (`GNOME Shell 50.1`).
+fn shell_major(version: &str) -> Option<u32> {
+    let version = version.trim();
+    version.strip_prefix("GNOME Shell ").unwrap_or(version)
+        .split(['.', ' ', '-']).next()
         .and_then(|major| major.parse::<u32>().ok())
-        .is_some_and(|major| SHELL_VERSIONS.contains(&major))
+}
+
+fn shell_supported(version: &str) -> bool {
+    shell_major(version).is_some_and(|major| SHELL_VERSIONS.contains(&major))
+}
+
+fn running_shell_version() -> Result<String, String> {
+    let conn = connection()?;
+    let proxy = Proxy::new(&conn, "org.gnome.Shell", "/org/gnome/Shell", "org.gnome.Shell").map_err(|e| e.to_string())?;
+    proxy.get_property::<String>("ShellVersion").map_err(|e| e.to_string())
+}
+
+/// The running Shell's version. Asked of the Shell itself (`org.gnome.Shell`'s `ShellVersion`):
+/// it is the process that will load the extension, and it answers whatever our environment is.
+/// `gnome-shell --version` is only the fallback: on a reader's Ubuntu 26.04 (GNOME 50.1) it gave
+/// the release build no output, and the install was refused as an unsupported GNOME.
+fn shell_version() -> Result<String, String> {
+    let asked = match running_shell_version() {
+        Ok(version) if shell_major(&version).is_some() => return Ok(version),
+        Ok(version) => format!("unexpected answer {version:?}"),
+        Err(error) => error,
+    };
+    let printed = match std::process::Command::new("gnome-shell").arg("--version").output() {
+        Ok(out) => {
+            let version = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+            if shell_major(&version).is_some() { return Ok(version); }
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            format!("{}, output {version:?}, errors {:?}", out.status, stderr.trim())
+        }
+        Err(error) => error.to_string(),
+    };
+    Err(format!("Kimochi couldn't find out which GNOME version this is. GNOME Shell: {asked}. gnome-shell --version: {printed}"))
 }
 
 #[cfg(test)]
@@ -183,18 +217,30 @@ mod version_tests {
             .map(|v| v.as_str().unwrap().parse().unwrap()).collect();
         assert_eq!(declared, super::SHELL_VERSIONS);
         for (text, ok) in [("GNOME Shell 46.0\n", true), ("GNOME Shell 48.8", true), ("GNOME Shell 51.1", true),
-            ("GNOME Shell 50.alpha", true), ("GNOME Shell 45.5", false), ("GNOME Shell 52.0", false), ("", false)] {
+            ("GNOME Shell 50.alpha", true), ("GNOME Shell 45.5", false), ("GNOME Shell 52.0", false), ("", false),
+            // As the Shell reports itself over D-Bus.
+            ("50.1", true), ("46.0", true), ("51.rc", true), ("45.5", false), ("52", false), ("unknown", false)] {
             assert_eq!(super::shell_supported(text), ok, "{text}");
+        }
+    }
+
+    /// In a GNOME session, the Shell answers for itself, without running `gnome-shell`.
+    #[test]
+    fn the_running_shell_reports_its_version() {
+        if std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|d| d.contains("GNOME"))
+            && std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some() {
+            let version = super::running_shell_version();
+            assert!(version.as_deref().is_ok_and(|v| super::shell_major(v).is_some()), "{version:?}");
         }
     }
 }
 
 fn install() -> Result<Value, String> {
-    let version = std::process::Command::new("gnome-shell").arg("--version").output().map_err(|e| e.to_string())?;
-    let version = String::from_utf8_lossy(&version.stdout);
+    let version = shell_version()?;
     if !shell_supported(&version) {
-        return Err(format!("This integration supports GNOME {}–{}; this is {}",
-            SHELL_VERSIONS[0], SHELL_VERSIONS[SHELL_VERSIONS.len() - 1], version.trim()));
+        return Err(format!("This integration supports GNOME {}–{}; this is GNOME {}",
+            SHELL_VERSIONS[0], SHELL_VERSIONS[SHELL_VERSIONS.len() - 1],
+            version.strip_prefix("GNOME Shell ").unwrap_or(&version)));
     }
     let dir = extension_dir()?;
     let files = [("metadata.json", METADATA),
