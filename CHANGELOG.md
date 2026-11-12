@@ -50,6 +50,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Group text into regions:** a word that wraps onto the next line now looks up correctly when a region covers columns side by side, or blocks of vertical text one above the other (as on a manga page). Before, the lookup ran on into the other column or block.
 - **Updating on Windows finishes when Kimochi was started by a launcher or a terminal.** If whatever started Kimochi closed while the update installed, the installer could stop partway and leave Kimochi unable to start ("This app can't run on your PC") until it was reinstalled. The installer now runs on its own and always finishes.
 - **Windows: the taskbar stays on top while Kimochi is open.** Windows mistook the overlay for a full-screen app and sent the taskbar behind other windows, so your game could cover it.
+- Hovering a word in text with spaces between words (Spanish, French, English and so on) now looks up the whole word, wherever in the word you point. Before, the overlay could look up only the end of it, or run a line's last word into the first word of the next line.
 
 ## [0.9.0] - 2026-11-11
 

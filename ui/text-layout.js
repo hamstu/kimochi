@@ -709,7 +709,10 @@ export function fit(run, vertical, measure, size = null) {
   const placed = squeeze
     ? { ...fitWith(run, vertical, squeezed(measure, squeeze), size), squeeze }
     : fitWith(run, vertical, measure, size)
-  const offsets = vertical || shaped(measure) ? null : snapOffsets(placed, squeezed(measure, placed.squeeze))
+  const offsets =
+    vertical || shaped(measure)
+      ? null
+      : wordOffsets(snapOffsets(placed, squeezed(measure, placed.squeeze)), placed.text)
   return offsets ? { ...placed, offsets } : placed
 }
 
@@ -801,6 +804,64 @@ function snapOffsets(run, measure) {
     return ra + ((rb - ra) * (k - a)) / (b - a)
   })
   return offsets.some((offset) => Math.abs(offset) > 0.02 * f) ? offsets : null
+}
+
+/**
+ * Japanese and what is set with it, which takes no space between words: kana and kanji, with the
+ * marks Unicode files under them (「」『』【】、。・ー々〜), the CJK marks block (U+3000–303F) and the
+ * full-width forms (U+FF00–FFEF: （）！？～，．：；, full-width letters and digits).
+ */
+const UNSPACED = /[\p{scx=Hiragana}\p{scx=Katakana}\p{scx=Han}\u3000-\u303f\uff00-\uffef]/u
+
+/**
+ * The words of `text` set with spaces between them (Spanish, French, English), as [first, last]
+ * character indices: each run of characters between spaces that has a letter, in a text with no
+ * Japanese in it (`UNSPACED`). A dictionary scans such a word whole, back from the pointer to its
+ * start, and stops at an element (Yomitan's `DOMTextScanner`), so each is moved and drawn as one
+ * piece (`wordOffsets`, render.js `appendRunText`). Japanese is scanned by character and keeps its
+ * glyphs, and so does every Latin word or number set among it ("HPが 12", "これは Apple です").
+ */
+export function wholeWords(text) {
+  if (UNSPACED.test(text)) return []
+  const words = []
+  let at = 0
+  // Words and the spaces between them, in turn; character indices, as `offsets` has them.
+  for (const piece of text.split(/(\s+)/u)) {
+    const length = chars(piece).length
+    if (/\p{L}/u.test(piece)) words.push([at, at + length - 1])
+    at += length
+  }
+  return words
+}
+
+/**
+ * What stands between the end of one line (an OCR box's text, or a line of a block) and the start
+ * of the next when a lookup reads on from one into the other. Nothing where either line has any
+ * Japanese in it (`UNSPACED`), as before: Japanese has no spaces between words and a line can split
+ * one ("食べ" | "ました"). In text set with spaces, a space where a letter or digit meets a letter or
+ * digit, or the two would read as one word ("categoría" | "de aldea" as "categoríade") and a word
+ * lookup find nothing; nothing after a mark, which already ends a word ("dona," | "objetos").
+ */
+export function boxJoiner(before, after) {
+  if (UNSPACED.test(before) || UNSPACED.test(after)) return ''
+  const letterOrDigit = (c = '') => /[\p{L}\p{N}]/u.test(c)
+  return letterOrDigit(chars(before).at(-1)) && letterOrDigit(chars(after)[0]) ? ' ' : ''
+}
+
+/**
+ * `offsets` (`snapOffsets`, which may be null) with each of the run's whole words (`wholeWords`)
+ * moved as one: by the offset at its centre, which is where its box was fitted, so the word stays
+ * one piece of text over its box.
+ */
+function wordOffsets(offsets, text) {
+  if (!offsets) return null
+  const moved = [...offsets]
+  for (const [first, last] of wholeWords(text)) {
+    // Between the two middle glyphs of a word with an even count.
+    const centre = (offsets[Math.floor((first + last) / 2)] + offsets[Math.ceil((first + last) / 2)]) / 2
+    moved.fill(centre, first, last + 1)
+  }
+  return moved
 }
 
 /**
