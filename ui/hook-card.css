@@ -36,7 +36,9 @@
   color: var(--ocr-ink);
   pointer-events: auto;
   will-change: transform;
-  z-index: 3;
+  /* Over every OCR'd box (an extended word is 3) though it comes before them in the document
+     (hook-card.js keeps it there, ahead of the text that is looked up). */
+  z-index: 4;
 }
 .hook-card::before {
   content: '';
@@ -85,7 +87,8 @@
     width 300ms cubic-bezier(0.2, 0.8, 0.2, 1),
     var(--hook-card-colours);
 }
-.hook-card-text {
+.hook-card-text,
+.hook-card-text-ghost {
   /* Full-width glyphs a whole em across, as the game's own CJK text is: what OCR measured. */
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
     'Yu Gothic', 'Meiryo', sans-serif;
@@ -281,7 +284,7 @@
 }
 /* An example, while the game menu's Text Hooker panel is open before any line has come: the
    reader's own settings, its text marked as an example in faded English ahead of it. */
-.hook-card[data-example] .hook-card-text::before {
+.hook-card[data-example] :is(.hook-card-text, .hook-card-text-ghost)::before {
   content: 'Example';
   margin-right: 0.6em;
   font-family: system-ui, sans-serif;
@@ -291,6 +294,6 @@
   vertical-align: 0.15em;
   opacity: 0.5;
 }
-.hook-card[data-example] .hook-card-text {
+.hook-card[data-example] :is(.hook-card-text, .hook-card-text-ghost) {
   opacity: 0.85;
 }

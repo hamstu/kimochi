@@ -6,7 +6,7 @@
 #controller {
   position: absolute;
   inset: 0;
-  /* Above everything else on the overlay, the Text Hooker's card (z-index 3) included. */
+  /* Above everything else on the overlay, the Text Hooker's card (z-index 4) included. */
   z-index: 10;
   pointer-events: none;
   --cm-accent: #7dd3fc;

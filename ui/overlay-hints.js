@@ -69,7 +69,9 @@ export function createOverlayHints(parent, hooks) {
     hooks.onDismiss()
   })
   bar.append(close)
-  parent.append(bar)
+  // First on the page, ahead of every text that is looked up: a read that runs out of text ends
+  // on the last node it passed, and a `data-no-scan` one there trims the word (ui/hook-card.js).
+  parent.prepend(bar)
 
   let gatedNow = null
   /** Gaming Mode's menu buttons by name, or null off Gaming Mode (`gaming`). */

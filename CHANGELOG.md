@@ -19,6 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - **A setting Kimochi doesn't recognise no longer leaves a blank gray window** (for example after trying a newer version). It falls back to the default, and if a window still can't load, it says what went wrong, with **Reload window** and **Copy details**.
+- **Yomitan:** hovering the last word of a line on the overlay or the Text Hooker's card no longer looks it up without its last character (`食べまし` instead of `食べました`). Yomitan's **Layout-aware scan** stays on, so lookups and Anki sentences still stop at the edge of each bubble.
 - **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
 
 ## [0.9.0] - 2026-11-11
