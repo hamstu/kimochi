@@ -94,3 +94,53 @@ test("time asleep isn't counted, before or after the AFK timer catches up", asyn
   assert.equal(stats.isRunning(), false)
   assert.equal(stats.snapshotStats().elapsedMs, 4 * MIN + AFK_SEC * SEC)
 })
+
+test('a line after a sleep the AFK timer missed starts a new run instead of counting the sleep', async () => {
+  const stats = await freshStats()
+  readFor(stats, 4 * MIN)
+  mock.timers.setTime(Date.now() + 60 * MIN)
+  stats.recordLine(10)
+  assert.equal(stats.snapshotStats().elapsedMs, 4 * MIN + AFK_SEC * SEC)
+  mock.timers.tick(30 * SEC)
+  stats.recordLine(10)
+  assert.equal(stats.snapshotStats().elapsedMs, 4 * MIN + AFK_SEC * SEC + 30 * SEC)
+})
+
+const client = await build({
+  entryPoints: [fileURLToPath(new URL('../frontend/texthooker/lib/stats.ts', import.meta.url))],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+  plugins: [
+    {
+      name: 'bridge-stand-in',
+      setup(builder) {
+        builder.onResolve({ filter: /^\.\.\/bridge$/ }, (args) => ({ path: args.path, namespace: 'stand-in' }))
+        builder.onLoad({ filter: /.*/, namespace: 'stand-in' }, () => ({
+          contents: `const env = globalThis[${JSON.stringify(ENV_KEY)}];
+            export const getSnapshot = () => env.snapshot, snapshotAge = () => env.age;
+            export const call = async () => {}, subscribe = () => () => {};`
+        }))
+      }
+    }
+  ]
+})
+
+/** lib/stats.ts, as a window other than the Log reads the footer: `snapshot` received `age` ago. */
+async function clientStats(snapshot, age) {
+  globalThis[ENV_KEY] = { snapshot, age }
+  const source = `${client.outputFiles[0].text}\n//${crypto.randomUUID()}`
+  const lib = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+  return lib.snapshotStats()
+}
+
+test('a window ticking a copy of the footer stops where the Log would', async () => {
+  const stats = await freshStats()
+  readFor(stats, 2 * MIN)
+  assert.equal(stats.snapshotStats().runningLeftMs, AFK_SEC * SEC)
+  const later = await clientStats({ stats: stats.snapshotStats(), running: stats.isRunning() }, 60 * MIN)
+  assert.equal(later.elapsedMs, 2 * MIN + AFK_SEC * SEC)
+  const soon = await clientStats({ stats: stats.snapshotStats(), running: stats.isRunning() }, 10 * SEC)
+  assert.equal(soon.elapsedMs, 2 * MIN + 10 * SEC)
+})

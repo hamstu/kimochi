@@ -101,8 +101,23 @@ export async function flushStats(): Promise<void> {
  */
 function runningMs(now: number): number {
   if (runningSince === null) return 0;
-  const afkMs = Math.max(10, getSettings().afkThresholdSec) * 1000;
-  return Math.max(0, Math.min(now, lastActive + afkMs) - runningSince);
+  return Math.max(0, Math.min(now, runningUntil()) - runningSince);
+}
+
+/** The latest the running interval can count to: the AFK threshold after its last line. */
+function runningUntil(): number {
+  return lastActive + Math.max(10, getSettings().afkThresholdSec) * 1000;
+}
+
+/**
+ * A line or edit at `now`: it continues the running interval, or, once that has been idle past the
+ * AFK threshold (the timer had no chance to fire: the computer slept, or a hidden window's timers
+ * were held back), ends it and starts a new one.
+ */
+function noteActivity(now: number) {
+  if (runningSince !== null && now > runningUntil()) commitRunning(now);
+  if (runningSince === null) runningSince = now;
+  lastActive = now;
 }
 
 /** Fold the running interval into totalMs. */
@@ -129,10 +144,7 @@ function armAfkTimer() {
 /** Called by useIngest for every successful append. */
 export function recordLine(textLen: number) {
   const now = Date.now();
-  if (runningSince === null) {
-    runningSince = now;
-  }
-  lastActive = now;
+  noteActivity(now);
   current.totalChars += textLen;
   current.totalLines += 1;
   current.lastUpdateTs = now;
@@ -145,10 +157,7 @@ export function recordLine(textLen: number) {
 export function recordCharDelta(delta: number) {
   if (delta === 0) return;
   const now = Date.now();
-  if (runningSince === null) {
-    runningSince = now;
-  }
-  lastActive = now;
+  noteActivity(now);
   current.totalChars = Math.max(0, current.totalChars + delta);
   current.lastUpdateTs = now;
   armAfkTimer();
@@ -156,10 +165,15 @@ export function recordCharDelta(delta: number) {
   scheduleSave();
 }
 
-/** Live snapshot for the footer. Caller does its own ticking. */
-export function snapshotStats(): { stats: Stats; elapsedMs: number } {
-  const elapsedMs = current.totalMs + runningMs(Date.now());
-  return { stats: current, elapsedMs };
+/**
+ * Live snapshot for the footer. Caller does its own ticking. `runningLeftMs` is how much longer the
+ * running interval can grow without another line, so a window ticking a copy of this (lib/stats.ts)
+ * stops where this module would.
+ */
+export function snapshotStats(): { stats: Stats; elapsedMs: number; runningLeftMs: number } {
+  const now = Date.now();
+  const runningLeftMs = runningSince === null ? 0 : Math.max(0, runningUntil() - now);
+  return { stats: current, elapsedMs: current.totalMs + runningMs(now), runningLeftMs };
 }
 
 export function isRunning(): boolean {
