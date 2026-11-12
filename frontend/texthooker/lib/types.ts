@@ -2,6 +2,7 @@
 import { API_URLS } from "../../vendor/shared-constants";
 import type { TranslationProvider } from "../../../ui/account";
 import { DEFAULT_JAPANESE_FILTER, type JapaneseFilterMode } from "../../../ui/japanese-text";
+import { defaultExplainPrompt } from "./explainPrompt";
 
 export type { TranslationProvider };
 
@@ -129,26 +130,14 @@ export interface Settings {
   explainClaudeModel: string;
   /** Model passed to `codex exec -m`. Empty = the CLI's default model. */
   explainCodexModel: string;
-  /** Prompt template; {{context}} and {{sentence}} are substituted. */
+  /** Prompt template; {{language}}, {{context}} and {{sentence}} are substituted. A default
+      (explainPrompt.ts) follows the language; anything else is sent as written. */
   explainPrompt: string;
 }
 
-export const DEFAULT_EXPLAIN_PROMPT = `You are an expert Japanese tutor helping a learner read native Japanese media. The sentence below comes from a game, comic, anime, or other Japanese media — most likely an anime or a visual novel.
-
-Explain the TARGET SENTENCE. The PREVIOUS LINES are earlier text from the same scene, given only so you can read the target in context — do not explain them.
-
-Guidelines:
-- Focus on grammar over vocabulary. The reader can look up individual words themselves; what they need from you is how the sentence fits together: grammar points, conjugations, particles, sentence-ending nuances, omitted subjects/objects, and register (casual, polite, rough, archaic, dialect).
-- Call out nuance: what the phrasing implies about the speaker's attitude, emotion, or relationship to the listener, and anything a learner would likely misread.
-- Explain any cultural references or culturally loaded expressions briefly when they matter to understanding.
-- Note on quotation marks: in visual novels, text wrapped in 「…」 or 『…』 is usually spoken dialogue, while lines without Japanese quotation marks are often the protagonist's inner thoughts or narration. This convention is specific to visual novels and may not always apply.
-- Structure the answer in Markdown. Start with a one-line natural English translation, then the grammar breakdown as a short list. Bold the Japanese fragments you discuss. Keep it tight — no filler, no restating these instructions.
-
-PREVIOUS LINES (oldest first):
-{{context}}
-
-TARGET SENTENCE:
-{{sentence}}`;
+/** The default Explain prompt as stored: the Japanese template, which follows the language
+    (explainPrompt.ts; a stored default, or the pre-language one, is treated as "default"). */
+export const DEFAULT_EXPLAIN_PROMPT = defaultExplainPrompt();
 
 /** Each row maps one field of the chosen Anki note type to a source. */
 export interface AnkiFieldMapping {
@@ -233,6 +222,14 @@ export const YOMITAN_MARKERS: readonly string[] = [
   "sentence-furigana",
 ];
 
+/** Markers Yomitan fills for Japanese only (pitch accent, sentence furigana): left out of the
+    field-mapping list and Detect's mappings for other languages. A saved mapping still works. */
+export const JAPANESE_ONLY_MARKERS: readonly string[] = ["pitch-accents", "sentence-furigana"];
+
+/** The markers offered for mapping while reading Japanese (`japanese`) or another language. */
+export const markersFor = (japanese: boolean): readonly string[] =>
+  japanese ? YOMITAN_MARKERS : YOMITAN_MARKERS.filter((m) => !JAPANESE_ONLY_MARKERS.includes(m));
+
 /** Markers a field can map to beyond YOMITAN_MARKERS, which Kimochi's pop-up fills itself. */
 export const LOCAL_MARKERS: readonly string[] = ["popup-selection-text"];
 
@@ -242,6 +239,9 @@ export interface Stats {
   version: 1;
   totalMs: number;
   totalChars: number;
+  /** Words read, counted only while reading a language that spaces its words (the footer then
+      shows words and words/h). Absent in stats from before, or only ever in Japanese. */
+  totalWords?: number;
   totalLines: number;
   lastUpdateTs: number;
 }

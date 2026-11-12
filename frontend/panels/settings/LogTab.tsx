@@ -24,6 +24,7 @@ import { DEFAULT_VOICE_ID } from '../../vendor/shared-constants'
 import { AVAILABLE_VOICES } from '../../vendor/voices'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
+import { useLanguage } from '../../bridge/useLanguage'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { NumberField } from './fields'
@@ -43,6 +44,9 @@ export function LogTab(): ReactNode {
   // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account; without one its
   // voice is moot.
   const { cloudAccess } = useCapabilities()
+  // The voices are Japanese, so read aloud (and its settings) is for Japanese only for now.
+  const [language] = useLanguage()
+  const readAloud = cloudAccess && language.code === 'ja'
 
   return (
     <SettingsPage
@@ -68,7 +72,7 @@ export function LogTab(): ReactNode {
                   onCommit={(v) => void updateSettings({ fontSizePx: v })}
                 />
               </SettingsRow>
-              {cloudAccess && (
+              {readAloud && (
                 <SettingsRow label="Read-aloud voice">
                   <Select
                     aria-label="Read-aloud voice"
@@ -78,7 +82,7 @@ export function LogTab(): ReactNode {
                   />
                 </SettingsRow>
               )}
-              {cloudAccess && (
+              {readAloud && (
                 <SettingsRow
                   label="Voice model"
                   description="Eleven v4 is newer and more expressive; v4 Turbo answers faster."

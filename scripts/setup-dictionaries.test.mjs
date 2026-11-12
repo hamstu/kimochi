@@ -178,6 +178,25 @@ test("practice uses the selected profile and reports real lookup results", async
   assert.equal(received.action, "termsFind");
   assert.equal(received.params.optionsContext.current, true);
 });
+test("practice looks up the word it is given", async () => {
+  let received;
+  const jobs = createDictionarySetup({
+    api: async (action, params) => {
+      received = params;
+      return { dictionaryEntries: [] };
+    },
+  });
+  assert.deepEqual(await jobs.handle({ command: "practice", text: " house " }), {
+    text: "house",
+    matches: 0,
+  });
+  assert.equal(received.text, "house");
+});
+test("the quick setup is Japanese's: another language is offered nothing", async () => {
+  const { jobs } = harness({ existing: [] });
+  assert.equal((await jobs.handle({ command: "catalog", language: "ja" })).catalog[0].id, "jitendex");
+  assert.deepEqual((await jobs.handle({ command: "catalog", language: "en" })).catalog, []);
+});
 test("catalog can add a second dictionary without changing job behavior", async () => {
   const enabled = [];
   const jobs = createDictionarySetup({

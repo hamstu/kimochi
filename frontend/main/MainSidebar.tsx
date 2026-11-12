@@ -21,7 +21,7 @@ import { useHookPlacement } from './hookPlacement'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { useCapabilities } from '../bridge/capabilities'
 import { DictionaryEngineIcon, DictionaryRunsIcon, OcrEngineIcon, OcrRunsIcon } from '../components/EngineIcon'
-import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
+import { DICTIONARY_ENGINES, dictionaryEngineLanguageReason, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
@@ -180,11 +180,20 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
-            {DICTIONARY_LIST.map((engine) => (
-              <SelectItem key={engine} value={engine} description={DICTIONARY_ENGINES[engine].tagline}>
-                <DictionaryLabel engine={engine} />
-              </SelectItem>
-            ))}
+            {DICTIONARY_LIST.map((engine) => {
+              // 10ten and Hachidori read Japanese only: listed, disabled, with the reason.
+              const reason = dictionaryEngineLanguageReason(engine, dictionary.language.code)
+              return (
+                <SelectItem
+                  key={engine}
+                  value={engine}
+                  disabled={reason !== null}
+                  description={reason ?? DICTIONARY_ENGINES[engine].tagline}
+                >
+                  <DictionaryLabel engine={engine} />
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </SelectRoot>
         {notice && (

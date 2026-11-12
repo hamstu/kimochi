@@ -16,12 +16,15 @@ import type { YomitanSettings } from '../../vendor/shared-types'
 import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
 import { waitForDictionarySetup } from '@ui/dictionary-setup-switch'
 import { useSetting } from '../../bridge/useSetting'
+import { useLanguage } from '../../bridge/useLanguage'
 import { setSetting } from '../../bridge/settings'
 import { nativeError, onEvent } from '../../bridge/tauri'
 import {
   applyDictionaryEngine,
   dictionaryEngineOf,
+  dictionaryEngineReads,
   documentPlaceholder,
+  effectiveDictionaryEngine,
   hostEngineOf,
   mirrorDictionaryEngine,
   popupTypeOf,
@@ -75,7 +78,12 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     setVerifyingApi(0)
     openSetup(open)
   }, [])
-  const saved = dictionaryEngineOf(yomitanSettings.popupType)
+  // What the setting names, and what is in use: Yomitan stands in for an engine that cannot read
+  // the language being learned (10ten and Hachidori read Japanese only), without the setting
+  // being rewritten, so it comes back with Japanese.
+  const [language] = useLanguage()
+  const chosen = dictionaryEngineOf(yomitanSettings.popupType)
+  const saved = effectiveDictionaryEngine(chosen, language.code)
   // The pick, shown as active from the click so the panel does not flash "Use <name>" while
   // the write goes out. Cleared once the setting agrees (or the write fails).
   const [picked, setPicked] = useState<DictionaryEngine | null>(null)
@@ -163,6 +171,8 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   const ticket = useRef(0)
   const handleChoose = useCallback(
     async (engine: DictionaryEngine): Promise<void> => {
+      // The choosers offer it disabled, with the reason.
+      if (!dictionaryEngineReads(engine, language.code)) return
       if (engine !== saved && demoStops('Switching dictionaries')) return
       const mine = ++ticket.current
       setApplyError(null)
@@ -192,7 +202,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
         )
       }
     },
-    [commit, saved]
+    [commit, saved, language.code]
   )
 
   const confirmDownload = useCallback((): void => {
@@ -276,6 +286,9 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     setYomitanSettings,
     apiUrl,
     saved,
+    /** The engine the setting names; differs from `saved` while the language rules it out. */
+    chosen,
+    language,
     active,
     pending,
     asking,

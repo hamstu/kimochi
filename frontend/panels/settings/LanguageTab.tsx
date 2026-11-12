@@ -15,6 +15,7 @@ import { OcrEngineIcon } from '../../components/EngineIcon'
 import { ExperimentalLanguageNote } from '../../components/ExperimentalLanguageNote'
 import { LanguagePicker } from '../../components/LanguagePicker'
 import { languageNotes } from './languageNotes'
+import { DictionaryProfileSection } from './DictionaryProfileSection'
 import { showSettingsTab } from './showSettingsTab'
 import './language-tab.css'
 
@@ -97,6 +98,8 @@ export function LanguageTab(): ReactNode {
           )
         })}
       </SettingsSection>
+
+      <DictionaryProfileSection readOnly />
     </SettingsPage>
   )
 }

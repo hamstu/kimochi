@@ -8,9 +8,10 @@ import { getSetting, setSetting } from '../bridge/settings'
 import { useSetting } from '../bridge/useSetting'
 import { openSettings } from '../bridge/tauri'
 import { showSettingsTab } from '../panels/settings/showSettingsTab'
+import { useLanguage } from '../bridge/useLanguage'
 import {
-  HOOK_DEFAULTS,
   gameKey,
+  hookDefaultsFor,
   hookSettings,
   type HookGame,
   type HookGames,
@@ -19,20 +20,24 @@ import {
 
 export * from '../../ui/hook-games'
 
-/** The defaults, a change to them, and one put back to how Kimochi ships. */
+/** The defaults, a change to them, one put back to how Kimochi ships, and how it ships them for
+    the language being read (`hookDefaultsFor`). */
 export function useHookDefaults(): [
   HookSettings,
   (change: Partial<HookSettings>) => Promise<void>,
-  (key: keyof HookSettings) => Promise<void>
+  (key: keyof HookSettings) => Promise<void>,
+  HookSettings
 ] {
   const [stored, setStored] = useSetting<Partial<HookSettings>>('textHookerDefaults', {})
-  const defaults = { ...HOOK_DEFAULTS, ...(stored ?? {}) }
+  const [language] = useLanguage()
+  const shipped = hookDefaultsFor(language)
+  const defaults = { ...shipped, ...(stored ?? {}) }
   const reset = (key: keyof HookSettings): Promise<void> => {
     const next = { ...(stored ?? {}) }
     delete next[key]
     return setStored(next)
   }
-  return [defaults, (change) => setStored({ ...(stored ?? {}), ...change }), reset]
+  return [defaults, (change) => setStored({ ...(stored ?? {}), ...change }), reset, shipped]
 }
 
 export function useHookGames(): HookGames {

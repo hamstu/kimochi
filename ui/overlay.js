@@ -1,5 +1,7 @@
 import './install-pointer-dedupe.js'
 import { createDictionarySetup } from './setup-dictionaries.js'
+import { followYomitanProfiles } from './yomitan-profiles.js'
+import { aDictionaryFor } from './sample-words.js'
 import { apiTokenize, dismissApiLookup, installApiLookup, lookupKeyProperty, lookupTerm, popupAnkiConfig } from './api-lookup.js'
 import { createAnki } from './game-dictionary-anki.js'
 import { audioUrl } from './game-dictionary.js'
@@ -43,7 +45,9 @@ import { SceneScanner } from './scene-scanner.js'
 import { ScanTrace } from './scan-trace.js'
 import { scanWasPublished, markScanPublished } from './scan-publication.js'
 import { annotationsInLines } from './current-lines.js'
-import { TextOverlayRenderer } from './render.js'
+import { TextOverlayRenderer, measureFor } from './render.js'
+import { applyTextStyle, textStyle } from './language-style.js'
+import { sampleFor } from './language-samples.js'
 import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
@@ -63,6 +67,7 @@ import {
   NO_ENGINE,
   NO_ENGINE_MESSAGE,
   dictionaryEngineOf,
+  effectiveDictionaryEngine,
   fullscreenDictionary,
   fullscreenDictionarySource,
   hostEngineOf,
@@ -318,9 +323,15 @@ const hook = {
 /**
  * What the card shows while the game menu's Text Hooker panel is open and no line has come yet,
  * so its place, size and look can be set: marked as an example (hook-card.css), in the reader's
- * own settings. Natsume Sōseki's opening line, long out of copyright.
+ * own settings. Natsume Sōseki's opening line, long out of copyright; in another language its
+ * sample sentence (language-samples.ts), or, with none, a plain note of what goes there.
  */
 const HOOK_EXAMPLE = '吾輩は猫である。名前はまだ無い。'
+const hookExample = () => {
+  const language = languageNow()
+  if (isJapanese(language)) return HOOK_EXAMPLE
+  return sampleFor(language)?.sentence ?? 'The game’s text appears here.'
+}
 const hookMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'hook'
 /**
  * The browser extension is the source (src-tauri/src/browser_bridge.rs): its pictures are read
@@ -425,7 +436,7 @@ function hintArea() {
 let ocrEngines = {}
 /** The engine that watches the screen for Auto OCR (`ui/watcher.ts`). */
 const autoWatcher = () =>
-  resolveWatcher(ocrModeNow(), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto')
+  resolveWatcher(ocrModeNow(), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto', languageNow())
 /**
  * Auto OCR's settings with the signal the watcher gives: text, or image comparison.
  *
@@ -475,7 +486,7 @@ async function effectiveEngine() {
   } catch {
     // Fall through to the setting.
   }
-  return hostEngineOf(dictionaryEngineOf(setting('yomitanSettings')?.popupType))
+  return hostEngineOf(effectiveDictionaryEngine(dictionaryEngineOf(setting('yomitanSettings')?.popupType), languageNow()))
 }
 
 /**
@@ -1090,10 +1101,21 @@ function measuredText(block, box, known = null) {
   const polygons = block?.linePolygons ?? []
   const widths = []
   const tops = []
+  // Proportional text (any script but CJK) is as wide as its letters are in the card's font, not a
+  // whole em each: measured in it (render.js `measureFor`), spaces and all, less the little its
+  // ink stops short of its ends.
+  const style = textStyle(languageNow())
+  const measure = style.fullWidth ? null : measureFor('default', style.code)
   polygons.forEach((p, i) => {
     const xs = p.map(([x]) => x)
     const ys = p.map(([, y]) => y)
     tops.push(Math.min(...ys))
+    if (measure) {
+      const line = ((polygons.length === 1 && known) || lines[i] || '').trim()
+      const ems = measure(line) - 0.1
+      if (line.length >= 3 && ems > 0.5) widths.push((Math.max(...xs) - Math.min(...xs)) / ems)
+      return
+    }
     const chars = [...((polygons.length === 1 && known) || lines[i] || '').replace(/\s/g, '')]
     // The ink of a closing mark (。、」) is a sliver at one side of its em, as is an opening one's
     // (「『) at the other, and every line's ink stops a little short of its first and last ems:
@@ -1352,7 +1374,7 @@ function hookCardView() {
   // On the game's text (Auto align, the line placed), the card breaks the line where the game
   // does; anywhere else it wraps to its own width.
   const example = !hook.line
-  const shownText = example ? HOOK_EXAMPLE : (hook.shown ?? hook.line)
+  const shownText = example ? hookExample() : (hook.shown ?? hook.line)
   const wrap = hook.wrap
   const gameRows =
     saved && saved === game.ocrBox && hook.placed === hook.line && wrap?.line === hook.line && wrap.shown === shownText
@@ -1371,7 +1393,9 @@ function hookCardView() {
     surface,
     opacity: hookSet().opacity,
     // Its rows are words apart in a language that spaces its words (hook-card.js `setText`).
-    spaced: languageOf(languageNow()).spaces
+    spaced: languageOf(languageNow()).spaces,
+    // In the language being read (its font: `--kimochi-text-font`, `applyTextStyle`).
+    lang: textStyle(languageNow()).lang
   }
 }
 
@@ -3390,6 +3414,8 @@ async function setOverlayText(visible) {
 async function playLatest() {
   const latest = listHistory()[0]?.text ?? ''
   if (!latest) return
+  // Read aloud has Japanese voices only, so it is off for other languages.
+  if (!isJapanese(languageNow())) return
   // Text to speech runs on Kimochi cloud, which needs a signed-in Kimochi account.
   if (!(await native.capabilities()).cloudAccess) return
   try {
@@ -3635,13 +3661,22 @@ async function startYomitan() {
       if (phase === lastReadiness) return
       lastReadiness = phase
       void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase, settingsReady: true,
-        message: phase === 'ready' ? 'Yomitan is ready.' : 'Open Yomitan settings to import and enable a Japanese dictionary.' })
+        message: phase === 'ready' ? 'Yomitan is ready.' : `Open Yomitan settings to import and enable ${aDictionaryFor(languageOf(native.getSetting('language')).name)}.` })
     } catch { /* The backend startup error is reported separately. */ }
   }
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'applicationDatabaseUpdated' || message.action === 'applicationOptionsUpdated') void refreshReadiness()
   })
   await refreshReadiness()
+  // Each account looks words up through its own Yomitan profile (ui/yomitan-profiles.ts).
+  followYomitanProfiles({
+    api,
+    native,
+    onOptionsUpdated: (callback) =>
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message.action === 'applicationOptionsUpdated') callback()
+      })
+  })
   log({
     check: 'yomitan-ready',
     dictionaries: (await api('getDictionaryInfo')).map((d) => d.title)
@@ -4533,6 +4568,8 @@ native.onCapabilityGap((command) =>
 )
 
 await native.loadSettings()
+// The learner's text in the language being read's fonts, marked with its `lang` (language-style.ts).
+applyTextStyle(languageNow())
 await mirrorDictionaryEngine({ repair: true })
 
 /**
@@ -4553,6 +4590,7 @@ applyOverlayStyle()
 systemDark.addEventListener('change', applyOverlayStyle)
 
 await native.watchSettings((key) => {
+  if (key === 'language') applyTextStyle(languageNow())
   if (key === 'hotkeys' || key.startsWith('hotkeys.')) void syncGamingHints()
   // The selected engine decides the watcher too (`autoWatcher`).
   if (

@@ -9,6 +9,7 @@ import {
   useShots,
   type Shot,
 } from "@texthooker/lib/screenshots";
+import { useTextLang } from "../../bridge/useTextLang";
 
 /**
  * A scan's screenshot, near full window (opened from a Log line's thumbnail). ◀ ▶ (and the arrow
@@ -94,6 +95,7 @@ const pct = (value: number, of: number) => `${(value / of) * 100}%`;
 
 /** The picture at its own aspect ratio, as large as fits, with what OCR read over it. */
 function ShotPicture({ shot, annotations }: { shot: Shot; annotations: boolean }) {
+  const textLang = useTextLang();
   const [failed, setFailed] = useState(false);
   const { width: w, height: h } = shot;
   return (
@@ -122,7 +124,7 @@ function ShotPicture({ shot, annotations }: { shot: Shot; annotations: boolean }
             />
           ) : null}
           {shot.marks.map((mark, i) => (
-            <Tooltip key={i} content={<span lang="ja">{mark.text}</span>} delayDuration={0}>
+            <Tooltip key={i} content={<span lang={textLang}>{mark.text}</span>} delayDuration={0}>
               <span
                 className="shot-viewer-mark"
                 style={{

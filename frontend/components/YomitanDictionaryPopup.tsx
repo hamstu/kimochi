@@ -15,6 +15,7 @@ import { useState, useEffect, type JSX } from 'react'
 import { termEntries } from '../bridge/yomitan'
 import { Badge, Spinner } from '@kit'
 import './YomitanDictionaryPopup.css'
+import { useTextLang } from '../bridge/useTextLang'
 
 interface YomitanDictionaryPopupProps {
   word: string
@@ -189,6 +190,7 @@ export default function YomitanDictionaryPopup({
   word,
   apiUrl
 }: YomitanDictionaryPopupProps): JSX.Element {
+  const textLang = useTextLang()
   const [data, setData] = useState<TermEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -257,7 +259,7 @@ export default function YomitanDictionaryPopup({
           <section key={entryIdx} className="ydp-entry">
             {/* Headword section */}
             {headword && (
-              <header className="ydp-headword" lang="ja">
+              <header className="ydp-headword" lang={textLang}>
                 <span className="ydp-term">{headword.term}</span>
                 {headword.reading && <span className="ydp-reading">{headword.reading}</span>}
                 {rules.length > 0 && (

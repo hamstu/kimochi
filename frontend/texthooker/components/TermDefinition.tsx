@@ -3,6 +3,8 @@ import { Badge, EmptyState, Spinner, Tooltip } from "@kit";
 import { displayHtml } from "../lib/html";
 import { parseInflectionChains } from "@texthooker/lib/inflection";
 import type { YomitanAnkiFields } from "@texthooker/lib/types";
+import { useLanguage } from "../../bridge/useLanguage";
+import { useTextLang } from "../../bridge/useTextLang";
 
 interface Props {
   term: string;
@@ -24,9 +26,11 @@ interface Props {
  * Yomitan renders cross-reference links in glossary HTML as
  * `<a href="#" lang="ja"><span>WORD</span></a>`. Walk up from a click target to
  * find such an anchor and return its text, or null if the click wasn't on one.
+ * `lang` is the language being read (`useTextLang`): see `isReference`.
  */
 function crossRefTargetFromEvent(
   e: React.MouseEvent<HTMLElement>,
+  lang: string,
 ): string | null {
   let node: HTMLElement | null = e.target as HTMLElement;
   const container = e.currentTarget;
@@ -36,7 +40,7 @@ function crossRefTargetFromEvent(
       // Yomitan's signature for an internal reference: a fragment href plus a
       // ja-tagged anchor. (Real external links would have a real href.)
       const href = a.getAttribute("href");
-      if (a.lang === "ja" && (href === "#" || href === null || href === "")) {
+      if (isReference(a.lang, lang) && (href === "#" || href === null || href === "")) {
         const text = (a.textContent ?? "").trim();
         return text || null;
       }
@@ -45,6 +49,19 @@ function crossRefTargetFromEvent(
     node = node.parentElement;
   }
   return null;
+}
+
+/**
+ * Whether an internal link's `lang` marks it as a headword in the language being read. Japanese:
+ * a `ja`-tagged anchor, exactly as always. Another language: an anchor tagged with that language
+ * by its first subtag (Yomitan tags both Chinese as `zh`, and Cantonese dictionaries may too), or
+ * not tagged at all, as a dictionary for another language may leave it.
+ */
+function isReference(anchor: string, lang: string): boolean {
+  if (lang === "ja") return anchor === "ja";
+  if (!anchor) return true;
+  const primary = (code: string) => code.toLowerCase().split("-")[0];
+  return primary(anchor) === primary(lang) || (lang === "yue" && primary(anchor) === "zh");
 }
 
 function splitTags(value: string | undefined): string[] {
@@ -63,6 +80,10 @@ export function TermDefinition({
   actions,
   onCrossRef,
 }: Props) {
+  // Inflection tooltips explain Japanese rules only.
+  const [language] = useLanguage();
+  // The headword and term are the learner's text; pitch accents are Japanese's own.
+  const textLang = useTextLang();
   if (state === "loading") {
     return (
       <div className="popover-status" role="status">
@@ -70,7 +91,7 @@ export function TermDefinition({
         <span>
           Looking up{" "}
           {term ? (
-            <span className="popover-status-term" lang="ja">
+            <span className="popover-status-term" lang={textLang}>
               {term}
             </span>
           ) : null}
@@ -100,7 +121,7 @@ export function TermDefinition({
         {term ? (
           <>
             No dictionary has an entry for{" "}
-            <span className="popover-status-term" lang="ja">
+            <span className="popover-status-term" lang={textLang}>
               {term}
             </span>
             .
@@ -120,13 +141,13 @@ export function TermDefinition({
     fields.dictionary && fields.dictionary !== "Unknown"
       ? fields.dictionary
       : null;
-  const inflectionChains = parseInflectionChains(fields.conjugation);
+  const inflectionChains = parseInflectionChains(fields.conjugation, language.code === "ja");
 
   return (
     <article className="popover-term">
       {/* Headword */}
       <header className="popover-headword">
-        <div className="popover-headword-text jp-text" lang="ja">
+        <div className="popover-headword-text jp-text" lang={textLang}>
           <span className="popover-expression k-selectable">{expression}</span>
           {reading && reading !== expression ? (
             <span className="popover-reading k-selectable">{reading}</span>
@@ -199,7 +220,7 @@ export function TermDefinition({
           onClick={
             onCrossRef
               ? (e) => {
-                  const target = crossRefTargetFromEvent(e);
+                  const target = crossRefTargetFromEvent(e, textLang);
                   if (target) {
                     e.preventDefault();
                     onCrossRef(target);

@@ -55,6 +55,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "texthookerIngestedHistory",
     "accountLinkServer",
     "yomitanSettings",
+    // Which Built-in Yomitan profile each account uses: this computer's Yomitan, like the engine.
+    "yomitanProfiles",
     "accountBackup",
     "sentenceAudio",
     // Look up on hover: how this computer's pointer and windowing system can be read (not on

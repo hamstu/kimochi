@@ -2,7 +2,8 @@
 @import "tailwindcss/utilities.css";
 @source "./**/*.{ts,tsx}";
 @theme {
-  --font-jp: var(--k-font-jp);
+  /* The learner's text: the language being read's fonts (--k-font-text, kit/tokens.css). */
+  --font-jp: var(--k-font-text);
   --font-ui: var(--k-font-ui);
   --font-mono: var(--k-font-mono);
 }

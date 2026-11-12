@@ -26,6 +26,11 @@
  * moved an engine's pin, its new release downloads in the background while the earlier one stays
  * in use; that update has its own progress block ("Updating to …").
  *
+ * An engine that cannot read the language being learned (10ten and Hachidori read Japanese only,
+ * `DICTIONARY_ENGINES[…].languages`) stays listed, faded with "Japanese only", and its panel's
+ * "Use" is disabled with the reason. When the setting names such an engine, Yomitan is in use in
+ * its place (`effectiveDictionaryEngine`), and a note under the frame says so.
+ *
  * Each row leads with the engine's picture (`DictionaryEngineIcon`). Copy comes from
  * `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture beside the description from
  * frontend/assets/dictionary-previews/ (`DictionaryPreview`). The decisions are
@@ -37,6 +42,7 @@ import { open as openUrl } from '@tauri-apps/plugin-shell'
 import {
   Badge,
   Button,
+  Callout,
   ConfirmDialog,
   IconButton,
   Menu,
@@ -45,7 +51,13 @@ import {
   MenuTrigger,
   Tooltip
 } from '@kit'
-import { DICTIONARY_ENGINES, type DictionaryEngine } from '../../bridge/dictionaryEngine'
+import {
+  DICTIONARY_ENGINES,
+  dictionaryEngineLanguageReason,
+  type DictionaryEngine
+} from '../../bridge/dictionaryEngine'
+import { useLanguage } from '../../bridge/useLanguage'
+import { languageOf } from '@ui/languages'
 import { useExtensionControls, useExtensionStatus, type ExtensionControls } from '../../bridge/extensions'
 import {
   canRemoveExtension,
@@ -68,16 +80,26 @@ import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 
 const ENGINES = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
 
+/** The languages an engine reads, by name ("Japanese"); every engine that has a list has one. */
+const languageNameFor = (engine: DictionaryEngine): string =>
+  (DICTIONARY_ENGINES[engine].languages ?? []).map((code) => languageOf(code).name).join(' and ')
+
+/** The row's short hint for an engine limited to some languages: "Japanese only". */
+const onlyLabel = (engine: DictionaryEngine): string => `${languageNameFor(engine)} only`
+
 function DictionaryItem({
   engine,
   id,
   viewed,
   inUse,
   recommended,
+  unsupported,
   onView
 }: {
   engine: DictionaryEngine
   id: string
+  /** Why it cannot be used for the language being learned, or null. */
+  unsupported: string | null
   /** The panel shows this engine: the listbox's selected option. */
   viewed: boolean
   /** Lookups use this engine (or the pick being saved): the check mark. */
@@ -99,6 +121,7 @@ function DictionaryItem({
       className="engine-item"
       data-viewed={viewed ? '' : undefined}
       data-in-use={inUse ? '' : undefined}
+      data-unavailable={unsupported ? '' : undefined}
       // Focus views (the arrow keys, a click); nothing here makes the engine active.
       onFocus={onView}
       onClick={(event) => event.currentTarget.focus()}
@@ -115,7 +138,14 @@ function DictionaryItem({
           )}
         </span>
         <span className="engine-item-tagline">{info.tagline}</span>
-        {recommended && (
+        {unsupported && (
+          <Tooltip content={unsupported}>
+            <span className="engine-item-hint" data-tone="muted">
+              {onlyLabel(engine)}
+            </span>
+          </Tooltip>
+        )}
+        {recommended && !unsupported && (
           <Badge tone="accent" className="engine-item-badge">
             Recommended
           </Badge>
@@ -163,12 +193,15 @@ function DictionaryDetail({
   inUse,
   pending,
   selectedDownload,
+  unsupported,
   onUse,
   children
 }: {
   engine: DictionaryEngine
   id: string
   inUse: boolean
+  /** Why it cannot be used for the language being learned, or null. */
+  unsupported: string | null
   /** A switch to this engine is waiting for its download. */
   pending: boolean
   /** The download the saved engine needs (none for the Yomitan API): it cannot be removed from here. */
@@ -184,7 +217,8 @@ function DictionaryDetail({
   const status = download.status
   // Unknown (an older backend, the preview) counts as ready: nothing to download then.
   const ready = status === null || status.state === 'ready'
-  const action = dictionaryUseAction({ inUse, pending, download: status?.state ?? null })
+  const action = dictionaryUseAction({ inUse, pending, download: status?.state ?? null, reads: !unsupported })
+  const reasonId = `${id}-reason`
   const [confirmRemove, setConfirmRemove] = useState(false)
   const update = updateDownload(status)
   const version = status?.update?.from || status?.version || info.version
@@ -201,8 +235,14 @@ function DictionaryDetail({
           <Badge tone={runtime.view.badge.tone}>{runtime.view.badge.label}</Badge>
         ) : action === 'pending' ? (
           <Badge>Switching when ready</Badge>
-        ) : action === 'use' ? (
-          <Button size="sm" variant="primary" onClick={onUse}>
+        ) : action === 'use' || action === 'unavailable' ? (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={action === 'unavailable'}
+            aria-describedby={action === 'unavailable' ? reasonId : undefined}
+            onClick={onUse}
+          >
             {activateLabel(info.name)}
           </Button>
         ) : (
@@ -252,6 +292,11 @@ function DictionaryDetail({
         <DictionaryPreview engine={engine} />
       </div>
       <p className="k-description">{info.requirements}</p>
+      {unsupported && (
+        <Callout tone="warn" id={reasonId}>
+          {unsupported} Yomitan and the Yomitan API look up words in every language Kimochi reads.
+        </Callout>
+      )}
       <p className="dictionary-detail-meta k-num">
         {/* The release in use: during an app update's background download, still the earlier one. */}
         {version && <span>Version {version}</span>}
@@ -298,10 +343,13 @@ export function DictionaryChooser({
   onChoose,
   renderSettings,
   status,
-  recommended = null
+  recommended = null,
+  chosen = null
 }: {
   /** The engine shown as chosen: the caller's pick, ahead of the saved setting. */
   active: DictionaryEngine
+  /** The engine the setting names, when the language has Yomitan stand in for it. */
+  chosen?: DictionaryEngine | null
   /** An engine whose switch waits for its download. */
   pending?: DictionaryEngine | null
   onChoose: (engine: DictionaryEngine) => void
@@ -314,6 +362,10 @@ export function DictionaryChooser({
 }): ReactNode {
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
+  const [language] = useLanguage()
+  const unsupported = (engine: DictionaryEngine): string | null =>
+    dictionaryEngineLanguageReason(engine, language.code)
+  const standIn = chosen && chosen !== active && unsupported(chosen) ? chosen : null
 
   // The viewed engine follows the active one whenever that changes (including the first load).
   const [viewed, setViewed] = useState<DictionaryEngine>(active)
@@ -370,6 +422,7 @@ export function DictionaryChooser({
               viewed={engine === viewed}
               inUse={engine === active}
               recommended={engine === recommended}
+              unsupported={unsupported(engine)}
               onView={() => setViewed(engine)}
             />
           ))}
@@ -381,11 +434,22 @@ export function DictionaryChooser({
           inUse={viewed === active}
           pending={viewed === pending}
           selectedDownload={downloadEngineFor(active)}
+          unsupported={unsupported(viewed)}
           onUse={() => use(viewed)}
         >
           {renderSettings(viewed, viewed === active)}
         </DictionaryDetail>
       </div>
+      {standIn && (
+        <div className="dictionary-chooser-status">
+          <Callout tone="neutral">
+            {DICTIONARY_ENGINES[standIn].name} is chosen on this computer, but it reads{' '}
+            {languageNameFor(standIn)} only, so {DICTIONARY_ENGINES[active].name} looks words up while
+            you learn {language.name}. {DICTIONARY_ENGINES[standIn].name} comes back when you switch to{' '}
+            {languageNameFor(standIn)}.
+          </Callout>
+        </div>
+      )}
       {status && <div className="dictionary-chooser-status">{status}</div>}
     </div>
   )

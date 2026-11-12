@@ -21,7 +21,12 @@ import {
   type OverlayStyleSettings
 } from '@ui/settings'
 import { useSetting } from '../../bridge/useSetting'
+import { useLanguage } from '../../bridge/useLanguage'
 import { usePrefs } from '../../kit/appearance-state'
+import { sampleFor } from '@ui/language-samples'
+import { textLang } from '@ui/language-style'
+import { GlyphBlocks } from '../../components/GlyphBlocks'
+import { blockShape, blockWords } from '../../components/glyphBlockShapes'
 import '@ui/overlay-text.css'
 import './overlay-look.css'
 
@@ -45,9 +50,35 @@ const CARD_CHOICES: readonly {
 /** Blend's preview: what the preview's dialogue box is, behind its words. */
 const PREVIEW_SURFACE = { top: '#1b2033', bottom: '#151a2a', ink: 'light' } as const
 
-/** The line the previews read: a word each, the third one hovered. */
-const PREVIEW_WORDS = ['今日は', 'いい', '天気', 'ですね']
-const PREVIEW_LIT = 2
+/**
+ * The line the previews read, a word each with one hovered, in the language being read: its sample
+ * (ui/language-samples.ts; Japanese's is 今日は いい 天気 ですね, 天気 hovered), or, for a language
+ * with none, glyph blocks shaped like its words.
+ */
+interface PreviewLine {
+  /** Each word's text, or its length in blocks. */
+  words: readonly (string | number)[]
+  lit: number
+  /** Set for a language other than Japanese only: the Japanese preview is as it always was. */
+  lang: string | undefined
+  shape: 'square' | 'word'
+}
+
+function usePreviewLine(): PreviewLine {
+  const [language] = useLanguage()
+  return useMemo(() => {
+    const sample = sampleFor(language.code)
+    const shape = blockShape(language.code)
+    const lang = language.code === 'ja' ? undefined : textLang(language.code)
+    return sample
+      ? { words: sample.preview, lit: sample.lit, lang, shape }
+      : { words: blockWords(language.code), lit: 1, lang, shape }
+  }, [language.code])
+}
+
+/** A preview word: its text, or blocks in its shape. */
+const previewWord = (word: string | number, shape: PreviewLine['shape']): ReactNode =>
+  typeof word === 'string' ? word : <GlyphBlocks length={word} shape={shape} />
 
 /**
  * One preview: the overlay's word boxes over a line of game text, as render.js and
@@ -59,11 +90,13 @@ function Preview({
   theme,
   colorRgb,
   strength,
-  lit = PREVIEW_LIT
+  line,
+  lit = line.lit
 }: {
   theme: 'light' | 'dark' | 'blend'
   colorRgb: string
   strength: number
+  line: PreviewLine
   /** The hovered word, or null for every box at rest. */
   lit?: number | null
 }): ReactNode {
@@ -74,10 +107,10 @@ function Preview({
       style={{ '--ocr-hl-rgb': colorRgb, '--ocr-hl-strength': strength } as CSSProperties}
       aria-hidden
     >
-      <span className="overlay-look-scene">
-        {PREVIEW_WORDS.map((word, index) => (
-          <span key={word} className="overlay-look-cell">
-            {word}
+      <span className="overlay-look-scene" lang={line.lang} data-shape={line.shape}>
+        {line.words.map((word, index) => (
+          <span key={index} className="overlay-look-cell">
+            {previewWord(word, line.shape)}
             <span
               className="ocr-word"
               data-lit={index === lit ? '' : undefined}
@@ -90,7 +123,7 @@ function Preview({
               }
             >
               <span className="ocr-word-text">
-                <span className="ocr-word-current">{word}</span>
+                <span className="ocr-word-current">{previewWord(word, line.shape)}</span>
               </span>
             </span>
           </span>
@@ -104,6 +137,7 @@ export function OverlayLook(): ReactNode {
   const [stored, setStored] = useSetting<OverlayStyleSettings>('overlayStyle', DEFAULT_OVERLAY_STYLE)
   const look = useMemo(() => overlayStyleOf(stored), [stored])
   const { resolved } = usePrefs()
+  const line = usePreviewLine()
   // The colour picker reports every movement of the pointer; the previews follow at once, the
   // setting a moment after it rests.
   const [draft, setDraft] = useState<string | null>(null)
@@ -204,7 +238,7 @@ export function OverlayLook(): ReactNode {
                   {opacity}%
                 </span>
               </div>
-              <Preview theme={resolved} colorRgb={colorRgb} strength={strength} lit={null} />
+              <Preview theme={resolved} colorRgb={colorRgb} strength={strength} line={line} lit={null} />
             </div>
           </SettingsRow>
         </div>
@@ -232,6 +266,7 @@ export function OverlayLook(): ReactNode {
                   theme={choice.value === 'app' ? resolved : choice.value}
                   colorRgb={colorRgb}
                   strength={strength}
+                  line={line}
                 />
                 <span className="k-choice-head">
                   {choice.icon}

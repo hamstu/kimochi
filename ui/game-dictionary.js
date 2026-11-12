@@ -223,6 +223,14 @@ const ALLOWED_TAGS = new Set([
   "STRONG", "SUB", "SUP", "TABLE", "TBODY", "TD", "TFOOT", "TH", "THEAD", "TR", "U", "UL", "DETAILS",
   "SUMMARY"
 ]);
+
+/**
+ * The `lang` of the learner's text (the sentence, the looked-up word, its headwords): the language
+ * being read, which overlay.js marks on the page (language-style.ts `applyTextStyle`); Japanese,
+ * which marks nothing, is `ja` as always.
+ */
+const learnerLang = () => globalThis.document?.documentElement?.dataset.textLang || "ja";
+
 const ALLOWED_ATTRIBUTES = new Set(["class", "lang", "style", "title", "colspan", "rowspan"]);
 
 /**
@@ -418,7 +426,7 @@ export class GameDictionary {
           <span class="gd-eyebrow">${escapeHtml(title || "Read along")}</span>
           <span class="gd-count" aria-live="polite"></span>
         </header>
-        <div class="gd-sentence" lang="ja"></div>
+        <div class="gd-sentence" lang="${learnerLang()}"></div>
         <div class="gd-rule" aria-hidden="true"><span class="gd-rule-mark"></span></div>
         <div class="gd-body" tabindex="-1"><article class="gd-entry"></article></div>
         <footer class="gd-bar"></footer>
@@ -863,11 +871,11 @@ export class GameDictionary {
       return;
     }
     if (state.kind === "popup") {
-      article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="ja">${escapeHtml(state.term)}</span>…</p>`;
+      article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="${learnerLang()}">${escapeHtml(state.term)}</span>…</p>`;
       return;
     }
     if (state.kind === "loading") {
-      article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="ja">${escapeHtml(state.term)}</span>…</p>`;
+      article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="${learnerLang()}">${escapeHtml(state.term)}</span>…</p>`;
       return;
     }
     if (state.kind === "error") {
@@ -876,7 +884,7 @@ export class GameDictionary {
     }
     if (state.kind === "empty") {
       article.innerHTML = state.term
-        ? `<p class="gd-status">No dictionary has an entry for <span lang="ja">${escapeHtml(state.term)}</span>.</p>`
+        ? `<p class="gd-status">No dictionary has an entry for <span lang="${learnerLang()}">${escapeHtml(state.term)}</span>.</p>`
         : `<p class="gd-status">${escapeHtml(state.message ?? "")}</p>`;
       return;
     }
@@ -896,15 +904,15 @@ export class GameDictionary {
         ? `<nav class="gd-entries" aria-label="Entries">${entries
             .map(
               (entry, index) =>
-                `<button type="button" class="gd-entry-tab${index === this.entry ? " gd-entry-current" : ""}" data-action="entry" data-entry="${index}" lang="ja">${escapeHtml(entry.expression || this.result.term)}${entry.reading && entry.reading !== entry.expression ? `<small>${escapeHtml(entry.reading)}</small>` : ""}</button>`,
+                `<button type="button" class="gd-entry-tab${index === this.entry ? " gd-entry-current" : ""}" data-action="entry" data-entry="${index}" lang="${learnerLang()}">${escapeHtml(entry.expression || this.result.term)}${entry.reading && entry.reading !== entry.expression ? `<small>${escapeHtml(entry.reading)}</small>` : ""}</button>`,
             )
             .join("")}</nav>`
         : "";
     article.innerHTML = `
       ${others}
       <header class="gd-headword">
-        <span class="gd-expression" lang="ja">${escapeHtml(expression)}</span>
-        ${reading ? `<span class="gd-reading" lang="ja">${escapeHtml(reading)}</span>` : ""}
+        <span class="gd-expression" lang="${learnerLang()}">${escapeHtml(expression)}</span>
+        ${reading ? `<span class="gd-reading" lang="${learnerLang()}">${escapeHtml(reading)}</span>` : ""}
       </header>
       ${chains.length ? `<p class="gd-inflection"><span class="gd-label">Inflected</span>${chains.map((chain) => chain.map((rule) => `<span class="gd-badge">${escapeHtml(rule)}</span>`).join('<span class="gd-sep">«</span>')).join('<span class="gd-label">or</span>')}</p>` : ""}
       ${badges.length ? `<p class="gd-badges">${badges.join("")}</p>` : ""}

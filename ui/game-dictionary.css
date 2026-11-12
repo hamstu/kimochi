@@ -28,6 +28,8 @@
   --gd-shadow-pop: var(--cm-shadow-pop, 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6));
   --gd-font: var(--cm-font, system-ui, sans-serif);
   --gd-font-jp: var(--cm-font-jp, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", sans-serif);
+  /* The learner's text, in the language being read's fonts (language-style.ts); Japanese: --gd-font-jp. */
+  --gd-font-text: var(--kimochi-text-font, var(--gd-font-jp));
   --gd-text-xs: var(--cm-text-xs, 14px);
   --gd-text-sm: var(--cm-text-sm, 16px);
   --gd-text-md: var(--cm-text-md, 17px);
@@ -151,7 +153,7 @@
   flex: 0 0 auto;
   margin: 0 -10px;
   padding: 6px 10px;
-  font-family: var(--gd-font-jp);
+  font-family: var(--gd-font-text);
   font-size: max(18px, calc(var(--gd-sentence-size) * var(--gd-sentence-scale, 1)));
   font-weight: 500;
   line-height: 1.7;
@@ -321,7 +323,7 @@
   align-items: baseline;
   gap: 8px;
   font: inherit;
-  font-family: var(--gd-font-jp);
+  font-family: var(--gd-font-text);
   font-size: var(--gd-text-md);
   color: var(--gd-text-2);
   background: var(--gd-tile);
@@ -346,7 +348,7 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 18px;
-  font-family: var(--gd-font-jp);
+  font-family: var(--gd-font-text);
 }
 .gd-expression {
   font-size: var(--gd-expression-size);
@@ -418,7 +420,7 @@
   text-decoration: none;
 }
 .gd-glossary [data-sc-content="example-sentence-a"] {
-  font-family: var(--gd-font-jp);
+  font-family: var(--gd-font-text);
   border-left: 2px solid var(--gd-accent-line);
   padding-left: 0.6em;
   margin: 0.4em 0;
@@ -469,8 +471,8 @@
   color: var(--gd-text-2);
   margin: 8px 0;
 }
-.gd-status [lang="ja"] {
-  font-family: var(--gd-font-jp);
+.gd-status [lang] {
+  font-family: var(--gd-font-text);
   color: var(--gd-text);
 }
 .gd-status-error b {

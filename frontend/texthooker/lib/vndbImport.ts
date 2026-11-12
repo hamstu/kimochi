@@ -55,6 +55,17 @@ export function splitWesternName(name: string): {
   return { family, given };
 }
 
+/** A name selected in the Log, split for a new person: Japanese (and other unspaced languages)
+ *  family first, as `splitJapaneseName`; spaced languages "Given Family", as `splitWesternName`. */
+export function splitNameFor(
+  text: string,
+  language: { code: string; spaces: boolean },
+): { family: string; given: string } {
+  return language.code === "ja" || !language.spaces
+    ? splitJapaneseName(text)
+    : splitWesternName(text);
+}
+
 /* ── Name readings ─────────────────────────────────────────────────────── */
 
 /** Convert a VNDB romanized name fragment to hiragana. VNDB uses wapuro-style
@@ -176,6 +187,7 @@ interface BuiltPersonPatch {
 function buildPatchFromCharacter(
   existing: PersonEntry | null,
   c: VndbCharacter,
+  readJapanese: boolean,
 ): BuiltPersonPatch {
   const japanese = c.original ? splitJapaneseName(c.original) : null;
   const western = splitWesternName(c.name);
@@ -209,7 +221,8 @@ function buildPatchFromCharacter(
   fillIfEmpty("family", family);
   fillIfEmpty("given", given);
 
-  const readings = deriveReadings(c);
+  // Kana readings from the romanised name: for Japanese only.
+  const readings = readJapanese ? deriveReadings(c) : {};
   fillIfEmpty("familyReading", readings.familyReading);
   fillIfEmpty("givenReading", readings.givenReading);
 
@@ -269,13 +282,15 @@ function buildPatchFromCharacter(
 
 /* ── Import ────────────────────────────────────────────────────────────── */
 
+/** `japanese`: the language being learned is Japanese, so names get kana readings. */
 export async function importVndbCharacter(
   c: VndbCharacter,
+  { japanese = true }: { japanese?: boolean } = {},
 ): Promise<ImportResult> {
   const existing = findExistingPerson(c);
 
   if (existing) {
-    const { patch, changedFields } = buildPatchFromCharacter(existing, c);
+    const { patch, changedFields } = buildPatchFromCharacter(existing, c, japanese);
     let imageAttached = false;
     if (Object.keys(patch).length > 0) {
       await updateEntry(existing.id, patch);
@@ -298,7 +313,7 @@ export async function importVndbCharacter(
   }
 
   // No match — create a fresh entry.
-  const { patch } = buildPatchFromCharacter(null, c);
+  const { patch } = buildPatchFromCharacter(null, c, japanese);
   const created = await createPerson({
     family: typeof patch.family === "string" ? patch.family : "",
     given: typeof patch.given === "string" ? patch.given : "",

@@ -10,11 +10,16 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- **Read in languages other than Japanese (experimental).** Choose the language you're learning in Settings → Language or in the welcome guide; it goes with your Kimochi account to your other computers. Japanese works just as before. Translations and AI explanations are in English, whatever the language.
+- **The OCR engine follows the language.** Engines that can't read it are left out of the list, Kimochi switches to one that can when you change language, and the engine you used for a language comes back when you return to it. Auto OCR watches the screen only with engines that read it too.
+- **Text in the language you're learning is kept.** The Log and the overlay keep its lines instead of dropping them as "not Japanese", words are joined with spaces where the language uses them, lookups start at the whole word under the pointer, and Read along and the controller step through it word by word. In a language that spaces its words, the Log's reading stats count words and words per hour. The text is drawn in that language's own fonts, sized to match the screen and wrapped between words, and Settings → OCR & Overlay previews the overlay in your language.
+- **Built-in Yomitan keeps a dictionary profile for each account.** Your first account uses Yomitan's default profile; an account set to another language gets a profile of its own, and switching account switches profile. Settings → Account lets you choose which Yomitan profile goes with the account. Your dictionaries are still shared on this computer.
 - **Look up on hover.** Turn it on in Settings → Shortcuts & Controls to look up a word on the overlay just by resting the pointer on it, no key held. Moving the pointer across the screen doesn't flash pop-ups at every word on the way, and clicks still go to your game. Not available on Linux Wayland yet.
 - **Windows: a controller that is listed but whose buttons do nothing can be read with XInput instead.** Turn on **Read controllers with XInput** in Settings → Shortcuts & Controls; it takes effect right away, so the button test shows whether it helped. It works with Xbox-style (XInput) controllers only.
 
 ### Changed
 
+- **Some features stay Japanese-only for now** and are hidden in other languages: read aloud (its voices are Japanese), word audio, and the sentence-furigana and pitch-accent card fields. Sentence audio still finds each line's clip by timing. The Hachidori and 10ten dictionaries read Japanese only and can't be chosen for another language; use Built-in Yomitan or the Yomitan API.
 - ⚡ **Auto OCR is about twice as fast with local engines.** New lines reach the overlay and the Log in roughly half the time, and Auto OCR adjusts to your computer: it checks the screen more often when that's cheap, and backs off on slower or busier machines.
 - **Auto OCR no longer drops lines when dialogue moves quickly** with a local engine.
 - **Auto OCR no longer waits up to 3 seconds for a new line when your mouse is over the text.**

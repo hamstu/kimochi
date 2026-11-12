@@ -1,8 +1,15 @@
 /* eslint @typescript-eslint/explicit-function-return-type: off */
-/** App-owned setup jobs: imports outlive the requesting panel and its relay timeout. */
+/**
+ * App-owned setup jobs: imports outlive the requesting panel and its relay timeout.
+ *
+ * The quick setup's catalogue is per language (`language`, a code from ui/languages.ts; an entry
+ * without one is offered for every language). Only Japanese has one (Jitendex): for another
+ * language the guide sends the reader to Yomitan's own dictionary list instead.
+ */
 export const RECOMMENDED_DICTIONARIES = [
   {
     id: "jitendex",
+    language: "ja",
     title: "Jitendex",
     titlePrefix: "Jitendex.org",
     description:
@@ -127,16 +134,19 @@ export function createDictionarySetup({
   }
   return {
     handles: (action) => action === "__setupDictionaries",
-    async handle({ command, id, dictionaryId } = {}) {
+    async handle({ command, id, dictionaryId, text, language } = {}) {
       if (command === "active") return running ? { ...jobs.get(running) } : null;
       if (command === "practice") {
+        // The word to try (the language's sample word, ui/sample-words.ts); Japanese by default.
+        const word =
+          typeof text === "string" && text.trim() ? text.trim().slice(0, 32) : "日本語";
         const result = await api("termsFind", {
-          text: "日本語",
+          text: word,
           details: { matchType: "exact", deinflect: true },
           optionsContext: { current: true },
         });
         return {
-          text: "日本語",
+          text: word,
           matches: result.dictionaryEntries?.length ?? 0,
         };
       }
@@ -151,8 +161,12 @@ export function createDictionarySetup({
             .filter((item) => item.enabled)
             .map((item) => item.name),
         );
+        // The quick setup for the language being learned (Japanese when none is named).
+        const learning = typeof language === "string" ? language : "ja";
         return {
-          catalog,
+          catalog: catalog.filter(
+            (entry) => !entry.language || entry.language === learning,
+          ),
           job: latest && jobs.has(latest) ? { ...jobs.get(latest) } : null,
           dictionaries: dictionaries.map((item) => ({
             ...item,

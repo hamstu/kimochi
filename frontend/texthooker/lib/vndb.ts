@@ -95,6 +95,18 @@ export function bestJapaneseTitle(vn: VndbVn): string {
   return vn.title;
 }
 
+/** The title to show a learner of `code`: for Japanese, `bestJapaneseTitle`; otherwise the title
+ *  in the language being learned when VNDB has one (`pt` also takes `pt-br`/`pt-pt`), else the
+ *  main (Latin) title. */
+export function bestTitle(vn: VndbVn, code: string): string {
+  if (code === "ja") return bestJapaneseTitle(vn);
+  const base = code.split("-")[0];
+  const own =
+    vn.titles?.find((t) => t.lang === code) ??
+    vn.titles?.find((t) => t.lang.split("-")[0] === base && !code.includes("-"));
+  return own?.title || vn.title;
+}
+
 export function romanizedTitle(vn: VndbVn): string {
   return vn.title;
 }

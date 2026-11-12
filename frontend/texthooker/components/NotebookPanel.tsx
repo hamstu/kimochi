@@ -69,6 +69,7 @@ import type {
   NotebookKind,
 } from "@texthooker/lib/types";
 import "../notebook.css";
+import { useTextLang } from "../../bridge/useTextLang";
 
 /** The editor pane's width range and default, in CSS pixels. */
 const EDITOR_MIN = 280;
@@ -588,6 +589,7 @@ function EntryRow({
   onPick: () => void;
   onDelete: (entry: NotebookEntry) => void;
 }) {
+  const textLang = useTextLang();
   const name = entryName(entry);
   const reading = entryReading(entry);
   const description = entry.description.trim().replace(/\s+/g, " ");
@@ -632,7 +634,7 @@ function EntryRow({
       >
         <span className="nb-row-title">
           {name ? (
-            <span className="nb-name" lang="ja" translate="no">
+            <span className="nb-name" lang={textLang} translate="no">
               {name}
             </span>
           ) : (
@@ -641,12 +643,12 @@ function EntryRow({
             </span>
           )}
           {reading ? (
-            <span className="nb-reading" lang="ja" translate="no">
+            <span className="nb-reading" lang={textLang} translate="no">
               {reading}
             </span>
           ) : null}
           {entry.aliases.length > 0 ? (
-            <span className="nb-aliases" lang="ja" translate="no">
+            <span className="nb-aliases" lang={textLang} translate="no">
               {entry.aliases.join("、")}
             </span>
           ) : null}

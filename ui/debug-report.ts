@@ -95,6 +95,9 @@ function details(summary: string, body: string): string[] {
 export function debugMarkdown(report: DebugReport): string {
   const { app = {}, os = {}, hardware = {}, capture = {}, ocr = {}, dictionary = {}, session = {} } = report
   const commit = app.commit ? `, commit ${String(app.commit)}` : ''
+  // The language being read changes which engines read and how text is filtered: named with the
+  // engine. Unset is Japanese; a report without settings (an older backend) cannot say.
+  const language = isObj(report.settings) ? text(report.settings.language, 'ja') : 'unknown'
   const gpus = Array.isArray(hardware.gpus) && hardware.gpus.length > 0 ? hardware.gpus.map(String).join('; ') : 'unknown'
   const lines: string[] = [
     '### Kimochi debug info',
@@ -105,7 +108,7 @@ export function debugMarkdown(report: DebugReport): string {
     `- **CPU:** ${text(hardware.cpu)} (${text(hardware.cores, '?')} threads), **memory:** ${formatBytes(hardware.memoryBytes)}`,
     `- **GPU:** ${gpus}`,
     `- **Capture:** permission ${text(capture.permission ?? capture.authorization)}, window capture ${yesNo(capture.windowCapture)}, hides its own windows ${yesNo(capture.excludesOwnWindows)}`,
-    `- **OCR engine:** ${text(ocr.selected)}${ocr.cloudAccess !== undefined ? ` (Kimochi Cloud: ${yesNo(ocr.cloudAccess)})` : ''}`,
+    `- **OCR engine:** ${text(ocr.selected)}${ocr.cloudAccess !== undefined ? ` (Kimochi Cloud: ${yesNo(ocr.cloudAccess)})` : ''}, **language:** ${language}`,
     `- **Dictionary:** ${text(dictionary.selected)}`,
     `- **Source:** ${text(session.sourceKind, 'none')}, ${focus(session.sourceFocus)}`,
     `- **Auto OCR:** ${session.autoOcr === true ? 'on' : session.autoOcr === false ? 'off' : 'unknown'}, status "${text(session.status, '')}"`,

@@ -47,6 +47,8 @@
   --cm-font: "Figtree Variable", "Figtree", system-ui, sans-serif;
   --cm-font-jp: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP Variable",
     "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  /* The learner's text, in the language being read's fonts (language-style.ts); Japanese: --cm-font-jp. */
+  --cm-font-text: var(--kimochi-text-font, var(--cm-font-jp));
   --cm-text-xs: 14px;
   --cm-text-sm: 16px;
   --cm-text-md: 17px;
@@ -332,7 +334,7 @@
   color: var(--cm-text-3);
 }
 [data-cm-variant] .cm-history-entry span {
-  font-family: var(--cm-font-jp);
+  font-family: var(--cm-font-text);
   font-size: 21px;
   line-height: 1.5;
 }
@@ -343,7 +345,7 @@
   background: var(--cm-press);
 }
 [data-cm-variant] .cm-history-text {
-  font-family: var(--cm-font-jp);
+  font-family: var(--cm-font-text);
   font-size: 30px;
 }
 [data-cm-variant] .cm-history footer,
@@ -558,9 +560,9 @@
   font: 520 var(--cm-text-xs) var(--cm-font);
   color: var(--cm-text-3);
 }
-[data-cm-variant] .cm-card-thread-text[lang="ja"],
-[data-cm-variant] .cm-card-choice-text[lang="ja"] {
-  font-family: var(--cm-font-jp);
+[data-cm-variant] .cm-card-thread-text[lang],
+[data-cm-variant] .cm-card-choice-text[lang] {
+  font-family: var(--cm-font-text);
   font-size: 19px;
 }
 [data-cm-variant] .cm-card-thread[data-busy] .cm-card-thread-text,

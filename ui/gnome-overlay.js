@@ -1,6 +1,6 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux runtime bridge. */
 import { gnomeWordCells, packGnomeWords } from './gnome-word-cells.js'
-import { measureEms } from './render.js'
+import { measureFor } from './render.js'
 import { mapAnnotations } from './geometry.js'
 import { visibleAnnotations } from './annotations.js'
 import { languageOf } from './languages.js'
@@ -91,6 +91,8 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
       const [cx, cy] = info.crop_pixels ?? [0, 0]
       // A language that spaces its words gets a cell per word, not per character.
       const spaced = languageOf(setting('language')).spaces
+      // Measured in the language's own fonts and way (render.js `measureFor`).
+      const measure = measureFor('default', setting('language'))
       const words = state.annotations.filter(a => a.granularity !== 'aggregate' && a.description && a.boundingPoly?.vertices?.length).slice(0, 500).flatMap(a => {
         const xs = a.boundingPoly.vertices.map(p => p.x)
         const ys = a.boundingPoly.vertices.map(p => p.y)
@@ -98,7 +100,7 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
         const y = monitor.y + (cy + Math.min(...ys)) * sy
         const width = (Math.max(...xs) - Math.min(...xs)) * sx
         const height = (Math.max(...ys) - Math.min(...ys)) * sy
-        return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measureEms, spaced) : []
+        return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measure, spaced) : []
       }).slice(0, 500)
       const textRects=mapAnnotations(info,visibleAnnotations(state.annotations,setting('textOverlayGrouping')),{x:0,y:0},monitor)
         .slice(0,2000).map(({x,y,width,height})=>Object.fromEntries(Object.entries({x,y,width,height}).map(([k,v])=>[k,Math.round(v*1000)/1000])))

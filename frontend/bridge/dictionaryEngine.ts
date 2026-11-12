@@ -18,7 +18,10 @@ import {
   NO_ENGINE,
   NO_ENGINE_MESSAGE,
   SETTINGS_DEFAULTS,
+  dictionaryEngineLanguageReason,
   dictionaryEngineOf,
+  dictionaryEngineReads,
+  effectiveDictionaryEngine,
   hostEngineOf,
   popupTypeOf,
   resolveHostEngine,
@@ -28,9 +31,20 @@ import {
 } from '@ui/settings'
 import type { YomitanSettings } from '../vendor/shared-types'
 import { useSetting } from './useSetting'
+import { useLanguage } from './useLanguage'
 import { panel } from './tauri'
 
-export { DICTIONARY_ENGINES, NO_ENGINE, NO_ENGINE_MESSAGE, dictionaryEngineOf, hostEngineOf, popupTypeOf }
+export {
+  DICTIONARY_ENGINES,
+  NO_ENGINE,
+  NO_ENGINE_MESSAGE,
+  dictionaryEngineLanguageReason,
+  dictionaryEngineOf,
+  dictionaryEngineReads,
+  effectiveDictionaryEngine,
+  hostEngineOf,
+  popupTypeOf
+}
 export type { DictionaryEngine, DictionaryEngineInfo, HostEngine }
 
 /** The engines the extension host runs; the others have no `__kimochiExtensionHost`. */
@@ -155,7 +169,10 @@ export function takeDictionarySection(): string | null {
   }
 }
 
-/** The engine the setting names, live. */
+/**
+ * The engine in use, live: the one the setting names, or Yomitan in its place while the language
+ * being learned is one that engine cannot read (`effectiveDictionaryEngine`).
+ */
 export function useDictionaryEngine(): [DictionaryEngine, YomitanSettings, (value: YomitanSettings) => Promise<void>] {
   // Until the setting loads, assume the engine this document's host was installed for (the
   // mirror or native's prelude) rather than the shipped default: a Hachidori user's dictionary
@@ -165,5 +182,6 @@ export function useDictionaryEngine(): [DictionaryEngine, YomitanSettings, (valu
     ...SETTINGS_DEFAULTS.yomitanSettings,
     popupType: popupTypeOf(documentPlaceholder())
   })
-  return [dictionaryEngineOf(settings.popupType), settings, setSettings]
+  const [language] = useLanguage()
+  return [effectiveDictionaryEngine(dictionaryEngineOf(settings.popupType), language.code), settings, setSettings]
 }

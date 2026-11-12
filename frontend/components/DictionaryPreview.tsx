@@ -86,7 +86,8 @@ export function DictionaryPreview({
   const pictures = previewPictures(engine);
   if (!pictures) return null;
   const name = DICTIONARY_ENGINES[engine].name;
-  const alt = `${name}'s pop-up, looking up 食べられなかった in a line of game dialogue`;
+  // The pictures show the pop-up's look, whatever the language being read: captioned as an example.
+  const alt = `An example of ${name}'s pop-up, looking up 食べられなかった in a line of game dialogue`;
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -108,7 +109,7 @@ export function DictionaryPreview({
       <DialogContent
         size="lg"
         title={`${name} pop-up`}
-        description="Looking up 食べられなかった (couldn't eat) in a game's dialogue. Entries from JMdict."
+        description="An example lookup: 食べられなかった (couldn't eat) in a game's dialogue, with entries from JMdict."
       >
         <Picture
           pictures={pictures}

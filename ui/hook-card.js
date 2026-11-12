@@ -284,6 +284,8 @@ export function createHookCard(parent, hooks) {
       card.style.setProperty('--ocr-surface-bottom', next.surface.bottom)
     } else delete card.dataset.surface
     card.style.setProperty('--hook-card-opacity', String(next.opacity ?? 1))
+    // The hooked line is in the language being read (its font: `--kimochi-text-font`, hook-card.css).
+    if (next.lang && text.lang !== next.lang) text.lang = next.lang
     for (const option of opacities.children)
       option.toggleAttribute('data-current', Number(option.dataset.opacity) === (next.opacity ?? 1))
     const previous = shown

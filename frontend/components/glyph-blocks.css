@@ -1,0 +1,55 @@
+/* GlyphBlocks.tsx: a word drawn as blocks. Everything in em, so it sits in text at that text's size;
+   in currentColor, softened, so it reads as text-shaped rather than as text or a loading bar. */
+.k-glyph-blocks {
+  display: inline-flex;
+  align-items: center;
+  height: 1em;
+  vertical-align: -0.12em;
+  pointer-events: none;
+}
+.k-glyph-blocks > i {
+  display: block;
+  flex: none;
+  background: currentColor;
+  opacity: 0.62;
+}
+
+/* Square cells, one per character, as CJK and other unspaced scripts are set. */
+.k-glyph-blocks[data-shape='square'] {
+  gap: 0.14em;
+  padding: 0 0.04em;
+}
+.k-glyph-blocks[data-shape='square'] > i {
+  width: 0.78em;
+  height: 0.78em;
+  border-radius: 0.2em;
+}
+.k-glyph-blocks[data-shape='square'] > i:nth-child(3n + 2) {
+  opacity: 0.5;
+}
+
+/* A spaced word: letters run together into one x-height body, a taller stroke where an ascender is. */
+.k-glyph-blocks[data-shape='word'] {
+  gap: 0;
+  align-items: flex-end;
+  height: 0.78em;
+  padding-bottom: 0.08em;
+  box-sizing: content-box;
+}
+.k-glyph-blocks[data-shape='word'] > i {
+  width: 0.5em;
+  height: 0.48em;
+}
+.k-glyph-blocks[data-shape='word'] > i:first-child {
+  border-top-left-radius: 0.24em;
+  border-bottom-left-radius: 0.24em;
+}
+.k-glyph-blocks[data-shape='word'] > i:last-child {
+  border-top-right-radius: 0.24em;
+  border-bottom-right-radius: 0.24em;
+}
+.k-glyph-blocks[data-shape='word'] > i[data-tall] {
+  width: 0.2em;
+  height: 0.74em;
+  border-radius: 0.1em 0.1em 0 0;
+}

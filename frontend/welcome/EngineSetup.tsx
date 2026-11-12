@@ -36,7 +36,7 @@ export const AFTER_SKIP = STEAM_ROUTE
 
 export default function EngineSetup(): JSX.Element {
   const navigate = useNavigate()
-  const { active, saved, pending, asking, confirmDownload, choose, reloading, waitingForImport, applyError } =
+  const { active, saved, chosen, pending, asking, confirmDownload, choose, reloading, waitingForImport, applyError } =
     useDictionarySwitch('settings')
   // The panel's button already says "Download · 15 MB": that click is the answer.
   useEffect(() => {
@@ -58,6 +58,7 @@ export default function EngineSetup(): JSX.Element {
     >
       <DictionaryChooser
         active={active}
+        chosen={chosen}
         pending={pending}
         recommended="yomitan"
         onChoose={(engine) => void choose(engine)}

@@ -127,6 +127,7 @@ import { useHookPlacement } from './hookPlacement'
 import type { ControllerWiring } from '../panels/useController'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { keepShape } from '@ui/preview-shape'
+import { useLanguage } from '../bridge/useLanguage'
 
 type Controller = ControllerWiring['props']
 /** The texthooker's inputs, with OCR split into a chosen window or screen and Quick Shot. */
@@ -925,8 +926,9 @@ export function SourcePanel({
   // The OCR that matches hooked text to the screen: the Auto OCR watcher, else the best one here.
   const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
   const [autoOcr] = useSetting<AutoOCRSettings | null>('autoOCRSettings', null)
-  const watcher = resolveWatcher(ocrMode, capabilities.ocrEngines, (autoOcr?.watcher ?? 'auto') as WatcherChoice)
-  const hookObserver = watcher.kind === 'text' ? watcher.engine : bestWatcher(capabilities.ocrEngines)
+  const [language] = useLanguage()
+  const watcher = resolveWatcher(ocrMode, capabilities.ocrEngines, (autoOcr?.watcher ?? 'auto') as WatcherChoice, language.code)
+  const hookObserver = watcher.kind === 'text' ? watcher.engine : bestWatcher(capabilities.ocrEngines, language.code)
   // The source the menu just started hooking, so the restore below does not start it again.
   const startedHook = useRef<string | null>(null)
   const startHook = (sourceId: string): void => {

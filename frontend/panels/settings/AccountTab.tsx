@@ -55,6 +55,7 @@ import { exportSyncedData, resolveConflict, syncNow, useSync } from '../../bridg
 import { nativeError, panel } from '../../bridge/tauri'
 import { DEV_BUILD } from '../../bridge/devBuild'
 import { AccountAvatar } from '../../components/AccountAvatar'
+import { DictionaryProfileSection } from './DictionaryProfileSection'
 import './account.css'
 
 const message = (error: unknown): string => nativeError(error).message
@@ -87,6 +88,7 @@ export function AccountTab(): ReactNode {
       )}
       {active && account.signedIn && <SignedIn account={account} />}
       {active && !active.signedIn && <NeedsSignIn summary={active} />}
+      <DictionaryProfileSection />
     </SettingsPage>
   )
 }

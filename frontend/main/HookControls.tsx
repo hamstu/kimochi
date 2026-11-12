@@ -28,6 +28,8 @@ import {
 } from '@kit'
 import { texthookSelect, type HookStatus, type HookThread } from '../bridge/textHook'
 import { SidebarNotice } from './SidebarNotice'
+import { useLanguage } from '../bridge/useLanguage'
+import { useTextLang } from '../bridge/useTextLang'
 
 const AUTO = '__auto__'
 
@@ -77,6 +79,10 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
   const failed = status.phase === 'failed' || status.phase === 'ended'
   const view = shown(status, selected)
   const [showAll, setShowAll] = useState(false)
+  // `japanese`: some of the thread's text has read as the language being read.
+  const [language] = useLanguage()
+  // The hooked line is the learner's text.
+  const textLang = useTextLang()
   const listed = showAll ? status.threads : status.threads.filter((thread) => thread.japanese || thread.selected)
   const hidden = status.threads.length - status.threads.filter((thread) => thread.japanese || thread.selected).length
   const how =
@@ -128,7 +134,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
                 ) : (
                   <MessageSquareText aria-hidden />
                 )}
-                <span className="src-hook-select-text" lang={selected ? 'ja' : undefined}>
+                <span className="src-hook-select-text" lang={selected ? textLang : undefined}>
                   {view.text}
                 </span>
               </span>
@@ -167,7 +173,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
                   onSelect={(event) => event.preventDefault()}
                   onCheckedChange={(checked) => setShowAll(checked === true)}
                 >
-                  Show all ({hidden} without Japanese)
+                  Show all ({hidden} without {language.name})
                 </MenuCheckboxItem>
               </>
             )}

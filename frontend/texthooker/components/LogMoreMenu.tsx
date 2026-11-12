@@ -16,6 +16,7 @@ import { getSettings, onSettingsChange, updateSettings } from "@texthooker/lib/s
 import type { Settings as ReaderSettings } from "@texthooker/lib/types";
 import { useLogActions } from "../../main/logActions";
 import { openSettings } from "../../bridge/tauri";
+import { useLanguage } from "../../bridge/useLanguage";
 
 const STATS = [
   { key: "statsShowTime", label: "Reading time" },
@@ -27,6 +28,8 @@ const STATS = [
 export function LogMoreMenu() {
   const [settings, setSettings] = useState(getSettings);
   const actions = useLogActions();
+  // A language that spaces its words counts words (StatsFooter).
+  const [language] = useLanguage();
   useEffect(() => onSettingsChange(setSettings), []);
 
   return (
@@ -47,7 +50,7 @@ export function LogMoreMenu() {
             onSelect={(event) => event.preventDefault()}
             onCheckedChange={(value) => void updateSettings({ [stat.key]: value })}
           >
-            {stat.label}
+            {stat.key === "statsShowChars" && language.spaces ? "Word count" : stat.label}
           </MenuCheckboxItem>
         ))}
         <MenuSeparator />

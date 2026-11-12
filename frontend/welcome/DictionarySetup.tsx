@@ -10,6 +10,9 @@ import {
   type DictionaryEngine
 } from '../bridge/dictionaryEngine'
 import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
+import { aDictionaryFor, sampleWord } from '@ui/sample-words'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
+import { useLanguage } from '../bridge/useLanguage'
 import { radioTarget } from '@ui/radio-navigation'
 import { YomitanApiWizard } from '../components/YomitanApiSetup'
 import Step from './Step'
@@ -43,6 +46,9 @@ async function request<T>(params: object): Promise<T> {
     )
   return host.toBackend({ action: '__setupDictionaries', params })
 }
+
+/** Yomitan's list of dictionaries by language, for a language with no quick setup here. */
+export const YOMITAN_DICTIONARIES_URL = 'https://yomitan.wiki/dictionaries/'
 
 /** Where the guide goes after the dictionary step. */
 const NEXT = STEAM_ROUTE
@@ -138,6 +144,9 @@ function jobLine(job: Job): { tone: Tone; text: string } {
 
 function YomitanSetup(): JSX.Element {
   const navigate = useNavigate()
+  // Japanese has a quick setup (Jitendex); another language imports its own in Yomitan's settings.
+  const [language] = useLanguage()
+  const japanese = language.code === 'ja'
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
@@ -146,10 +155,12 @@ function YomitanSetup(): JSX.Element {
   const [installed, setInstalled] = useState<Installed[] | null>(null)
   useEffect(() => {
     void request<{ catalog: CatalogItem[]; dictionaries?: Installed[]; job?: Job | null }>({
-      command: 'catalog'
+      command: 'catalog',
+      language: language.code
     })
       .then((result) => {
-        setCatalog(result.catalog)
+        // The quick setup is Japanese's alone (an older backend may not filter it).
+        setCatalog(japanese ? result.catalog : [])
         setInstalled((result.dictionaries ?? []).filter((item) => item.importSuccess !== false))
         // The setup runs in the overlay's backend and outlives this step: one started before the
         // step was left (or the window hidden or reloaded) carries on here with its progress.
@@ -159,7 +170,7 @@ function YomitanSetup(): JSX.Element {
         setError(String(caught))
         setInstalled([])
       })
-  }, [])
+  }, [language.code, japanese])
   const [starting, setStarting] = useState(false)
   // Which way to add a dictionary. Choosing a card only selects it, as on the guide's other steps;
   // the bar's primary button acts on it (installs, opens dictionary settings, or moves on).
@@ -205,7 +216,7 @@ function YomitanSetup(): JSX.Element {
   const line = job ? jobLine(job) : null
   const count = job?.progress?.count ?? 0
   // The recommended dictionary until another card is chosen.
-  const selected = choice ?? (catalog[0] ? `install:${catalog[0].id}` : LATER)
+  const selected = choice ?? (catalog[0] ? `install:${catalog[0].id}` : japanese ? LATER : OWN)
   const installing = catalog.find((item) => selected === `install:${item.id}`)
   const primary: { label: string; act: () => void; disabled?: boolean } = !offer
     ? { label: 'Continue', act: () => void navigate(NEXT) }
@@ -219,7 +230,9 @@ function YomitanSetup(): JSX.Element {
       title={offer || installed === null ? 'Set up Yomitan' : 'Your dictionaries are ready'}
       lede={
         offer || installed === null
-          ? 'Yomitan needs at least one dictionary. Choose how to add one.'
+          ? japanese
+            ? 'Yomitan needs at least one dictionary. Choose how to add one.'
+            : `Yomitan needs ${aDictionaryFor(language.name)}. Import one in Yomitan’s settings.`
           : 'Yomitan already has dictionaries. You can add or change them in Settings → Dictionary.'
       }
     >
@@ -288,8 +301,12 @@ function YomitanSetup(): JSX.Element {
             selected={selected === OWN}
             onSelect={() => setChoice(OWN)}
             icon={<Library />}
-            title="Choose your own"
-            detail="Import dictionaries or a Yomitan backup in Yomitan’s settings."
+            title={japanese ? 'Choose your own' : `Import ${aDictionaryFor(language.name)}`}
+            detail={
+              japanese
+                ? 'Import dictionaries or a Yomitan backup in Yomitan’s settings.'
+                : 'Download one from Yomitan’s dictionary list, then import it in Yomitan’s settings.'
+            }
           />
           <ChoiceCard
             selected={selected === LATER}
@@ -299,6 +316,20 @@ function YomitanSetup(): JSX.Element {
             detail="Add a dictionary later in Settings → Dictionary."
           />
         </div>
+      )}
+      {offer && !japanese && (
+        <p className={style.aside}>
+          <button
+            type="button"
+            className={`${style.inlineButton} ${style.link}`}
+            onClick={() =>
+              void openUrl(YOMITAN_DICTIONARIES_URL).catch((caught: unknown) => setError(String(caught)))
+            }
+          >
+            Yomitan’s dictionary list
+          </button>{' '}
+          has dictionaries for many languages.
+        </p>
       )}
       {line && (
         <div className={style.job}>
@@ -382,18 +413,25 @@ export function DictionaryPractice(): JSX.Element {
 }
 
 function YomitanPractice(): JSX.Element {
+  const [language] = useLanguage()
+  const word = sampleWord(language.code)
+  // A language with no sample word gets no practice lookup.
+  return word ? <YomitanPracticeWord word={word} lang={language.code} languageName={language.name} /> : <></>
+}
+
+function YomitanPracticeWord({ word, lang, languageName }: { word: string; lang: string; languageName: string }): JSX.Element {
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, setPending] = useState(false)
   async function check(): Promise<void> {
     setPending(true)
     try {
-      const found = await request<{ text: string; matches: number }>({ command: 'practice' })
+      const found = await request<{ text: string; matches: number }>({ command: 'practice', text: word })
       setResult(
         found.matches > 0
           ? { ok: true, text: `${found.text}: ${found.matches} dictionary results found.` }
           : {
               ok: false,
-              text: 'No definitions found yet. Finish importing and enable a Japanese dictionary in dictionary settings.'
+              text: `No definitions found yet. Finish importing and enable ${aDictionaryFor(languageName)} in dictionary settings.`
             }
       )
     } catch (error) {
@@ -407,7 +445,7 @@ function YomitanPractice(): JSX.Element {
       <Button disabled={pending} onClick={() => void check()}>
         {pending ? 'Checking…' : (
           <>
-            Test a lookup of <span lang="ja">日本語</span>
+            Test a lookup of <span lang={lang}>{word}</span>
           </>
         )}
       </Button>

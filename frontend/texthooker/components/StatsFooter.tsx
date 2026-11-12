@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Clock } from "lucide-react";
 import { useStats } from "@texthooker/hooks/useStats";
 import { getSettings } from "@texthooker/lib/settings";
+import { useLanguage } from "../../bridge/useLanguage";
 
 function formatTime(ms: number): string {
   if (ms < 0) ms = 0;
@@ -34,6 +35,12 @@ interface Props {
 export function StatsFooter({ lineCount }: Props) {
   const { stats, elapsedMs } = useStats();
   const s = getSettings();
+  // A language that spaces its words is read in words (counted since it was chosen); stats with
+  // no word count yet, and Japanese, in characters.
+  const [language] = useLanguage();
+  const inWords = language.spaces && stats.totalWords !== undefined;
+  const amount = inWords ? (stats.totalWords ?? 0) : stats.totalChars;
+  const unit = inWords ? "words" : "chars";
 
   const stat = (key: string, value: string, unit?: string, icon?: ReactNode) => (
     <span key={key} className="log-stat">
@@ -55,10 +62,10 @@ export function StatsFooter({ lineCount }: Props) {
       stat("lines", formatNumber(lineCount), lineCount === 1 ? "line" : "lines"),
     );
   if (s.statsShowChars)
-    bits.push(stat("chars", formatNumber(stats.totalChars), "chars"));
+    bits.push(stat("chars", formatNumber(amount), unit));
   if (s.statsShowSpeed)
     bits.push(
-      stat("speed", formatSpeed(stats.totalChars, elapsedMs), "chars/h"),
+      stat("speed", formatSpeed(amount, elapsedMs), `${unit}/h`),
     );
 
   return <span className="log-stats k-num">{bits}</span>;

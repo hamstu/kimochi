@@ -278,6 +278,9 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     }
     if key == "language" {
         follow_language(app, settings, false);
+        // Hachidori and 10ten read Japanese only: the reader windows move to the engine the new
+        // language has (`extensions::selected_engine`), and back.
+        follow_effective_engine(app);
     }
 }
 
@@ -529,6 +532,8 @@ fn report(app: tauri::AppHandle, state: State<Shared>, mut value: Value) {
 fn record(app: &tauri::AppHandle, service: &Shared, mut value: Value) {
     if dictionary_runtime::update(&mut value) {
         let _ = app.emit("dictionary-readiness", &value);
+    } else if dictionary_runtime::update_profiles(&value) {
+        let _ = app.emit("yomitan-profiles", &value);
     }
     // When it happened, for anyone reading the log from a bug report.
     if let Some(object) = value.as_object_mut() {
@@ -728,6 +733,7 @@ fn dictionary_engine_effective(state: State<Shared>) -> Value {
         .collect();
     json!({
         "selected": extensions::selected_engine(&state.settings),
+        "chosen": extensions::chosen_engine(&state.settings),
         "effective": extensions::dictionary_engine(&state.settings),
         "ready": ready,
     })
@@ -736,6 +742,13 @@ fn dictionary_engine_effective(state: State<Shared>) -> Value {
 #[tauri::command]
 fn dictionary_runtime_status(engine: String) -> Value {
     dictionary_runtime::status(&engine)
+}
+
+/// Built-in Yomitan's profiles and the active account's link, as the overlay last published them
+/// (null before Yomitan has run). Settings → Account shows them.
+#[tauri::command]
+fn yomitan_profiles() -> Value {
+    dictionary_runtime::profiles()
 }
 
 /// Makes sure the active extension engine's hidden window exists (DICTIONARY_ENGINES.md
@@ -3338,6 +3351,7 @@ fn main() {
             dictionary_engine_apply,
             dictionary_engine_effective,
             dictionary_runtime_status,
+            yomitan_profiles,
             extension_window_ensure,
             extension_store::extension_status,
             text_hook::texthook_targets,
@@ -3684,7 +3698,9 @@ fn main() {
                 // its files are missing (an app update moved its pin, or the build they upgraded
                 // from bundled it). Their dictionaries are in the WebView's storage and were never
                 // touched; lookups come back when it is ready. A first run chooses in onboarding.
-                let started = onboarded && extension_store::ensure_selected(&handle, &selected);
+                // The choice itself, not the engine it stands for in another language: a launch
+                // never downloads an engine the user did not choose.
+                let started = onboarded && extension_store::ensure_selected(&handle, &extensions::chosen_engine(&store));
                 // Engines the user downloaded that this build pins anew update in the background;
                 // the selected one keeps working on its earlier release until the new one is
                 // verified. Nothing is downloaded that was never downloaded.

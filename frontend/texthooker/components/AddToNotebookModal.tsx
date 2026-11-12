@@ -5,8 +5,10 @@ import {
   createThing,
 } from "@texthooker/lib/notebook";
 import { openEditModal } from "@texthooker/lib/editModal";
-import { splitJapaneseName } from "@texthooker/lib/vndbImport";
+import { splitNameFor } from "@texthooker/lib/vndbImport";
+import { useLanguage } from "../../bridge/useLanguage";
 import type { NotebookKind } from "@texthooker/lib/types";
+import { useTextLang } from "../../bridge/useTextLang";
 
 interface Props {
   /** Selected text to seed the new entry with, or null when closed. */
@@ -29,12 +31,14 @@ const KINDS: {
 /** Picks an entry kind for the selected text, creates the entry, then hands
  *  off to the edit modal for details and images. */
 export function AddToNotebookModal({ text, onClose }: Props) {
+  const textLang = useTextLang();
+  const [language] = useLanguage();
   const handlePick = async (kind: NotebookKind) => {
     const t = (text ?? "").trim();
     onClose();
     const entry =
       kind === "person"
-        ? await createPerson(splitJapaneseName(t))
+        ? await createPerson(splitNameFor(t, language))
         : kind === "place"
           ? await createPlace({ name: t })
           : await createThing({ name: t });
@@ -47,7 +51,7 @@ export function AddToNotebookModal({ text, onClose }: Props) {
         title="Add to notebook"
         style={{ width: "min(22rem, calc(100vw - 2rem))" }}
       >
-        <div className="log-add-term" translate="no" lang="ja">
+        <div className="log-add-term" translate="no" lang={textLang}>
           {text}
         </div>
         <p className="log-add-label">What is it?</p>

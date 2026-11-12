@@ -770,8 +770,9 @@ surface.
 | `storage_save` | `({extension?, value}) -> ()` |
 | `storage_backup` | `({extension}) -> string \| null` |
 | `dictionary_engine_apply` | `({repair?}) -> ()` |
-| `dictionary_engine_effective` | `() -> {selected, effective, ready: {yomitan, hachidori, tenten}}` |
+| `dictionary_engine_effective` | `() -> {selected, chosen, effective, ready: {yomitan, hachidori, tenten}}` |
 | `dictionary_runtime_status` | `({engine}) -> {engine, phase, settingsReady, message, progress?}` |
+| `yomitan_profiles` | `() -> {account, profiles: [{name, language}], current, link} \| null` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
 | `ext_save_file` | raw bytes, header `x-kimochi-filename` (percent-encoded) `-> {saved, path?, bytes?}` |
 
@@ -837,7 +838,35 @@ Dictionary.", and the Log and the dictionary window say the same. Native's prelu
 effective engine, and the overlay mirrors it (`dictionary_engine_effective`), so a selected
 engine whose files are missing (a removed download, a pin bump still downloading) never leaves
 a window running a dead host. `dictionary_engine_effective` answers `selected` (the setting's
-host engine), `effective`, and `ready` per engine.
+host engine for the language being learned), `chosen` (the setting's host engine as stored),
+`effective`, and `ready` per engine.
+
+**The engine follows the language.** Hachidori (at its pinned 0.3.0) and 10ten read Japanese
+only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
+computer's while `language` is the account's, so the stored choice is never rewritten: while
+`language` is not `ja`, a stored `hachidori` or `tenten` stands for Yomitan
+(`extensions::selected_engine`, `effectiveDictionaryEngine`), and Settings → Dictionary shows
+the two disabled with the reason. A `language` write (Settings, Sync, an account switch) moves
+the reader windows when that changes the effective engine, as a finished download does
+(`dictionary-engine-follow`). A launch only ever downloads the stored choice (`chosen`).
+
+**Yomitan profiles follow the account** (Built-in Yomitan only; `ui/yomitan-profiles.ts`).
+`yomitanProfiles` (machine key, unset until written) is
+`{<account key, or "local">: {profile, language, chosen?}}`: the name of the Yomitan profile the
+account uses (Yomitan gives profiles no id; a renamed or deleted one is found again by language,
+or falls back to the default profile, and the link is repaired), and the language it was made
+for. The overlay, which hosts Yomitan's backend, resolves it when Yomitan starts, when
+`language` or `yomitanProfiles` changes, and on `account-changed` after a switch: the linked
+profile; else the current profile if its `general.language` is the language's Yomitan code
+(`zh-Hans`/`zh-Hant` → `zh`); else another profile in it; else the default profile if no other
+account uses it and it has no dictionary enabled (it takes the language); else a new profile named
+after the language, a copy of the default profile's options with `general.language` and Yomitan's
+`data/recommended-settings.json` for it (dictionaries untouched). It switches `profileCurrent`
+through `modifySettings` and records the link. Never linked and Japanese at Yomitan's start, it
+does nothing. It reports `{check: 'yomitan-profile', account, language, plan, profile, index}`
+for each change and publishes the profiles through `report`
+(`check: 'yomitan-profiles'`), which native keeps for `yomitan_profiles` and re-emits as the
+`yomitan-profiles` event. Settings → Account writes a link with `chosen: true`.
 
 `dictionary_engine_apply` refuses with `invalid: <engine> is not downloaded` when the setting
 names an engine whose files are missing, so a switch never reloads the windows into a host
@@ -1550,7 +1579,9 @@ Recording not granted), `unavailable {message}` (this computer cannot record its
 PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or
 `error {message}` (retried every 5 s), each with `platform` (`macos`, `windows`, `linux`), `held`
 (seconds of audio held), `level` (0–1, the last half second), `recogniser` (the speech model in the
-listener, tagged by `state`: `absent`, `loading`, `ready` or `failed {message}`) and `last`
+listener, tagged by `state`: `absent`, `otherLanguage` (the `language` setting is not Japanese:
+the model is neither fetched nor loaded, lines are placed by timing and cards get no word audio),
+`loading`, `ready` or `failed {message}`) and `last`
 (`{at, ok, message}`: what happened to the last card's audio, or null).
 
 Where the audio comes from (`capture-core/src/audio/`): macOS, a ScreenCaptureKit display stream with

@@ -89,9 +89,10 @@
 }
 .hook-card-text,
 .hook-card-text-ghost {
-  /* Full-width glyphs a whole em across, as the game's own CJK text is: what OCR measured. */
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif;
+  /* Full-width glyphs a whole em across, as the game's own CJK text is: what OCR measured. Another
+     language's text is set in its own fonts (language-style.ts, set on the page by overlay.js). */
+  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif);
   font-weight: 400;
   font-kerning: none;
   letter-spacing: 0;
@@ -99,6 +100,11 @@
   overflow-wrap: anywhere;
   line-break: strict;
   cursor: default;
+}
+/* A language that is not set on em squares wraps between its words, never inside one (hook-card.js
+   sets the card's `lang` from the language being read). */
+.hook-card-text:not(:lang(ja)):not(:lang(zh)):not(:lang(yue)):not(:lang(ko)) {
+  overflow-wrap: break-word;
 }
 /* Each line of the text is a row (hook-card.js `setText`), broken after by this generated newline
    rather than by a character, a `<br>` or a block: none of those is text a lookup reads, so a word

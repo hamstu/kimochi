@@ -91,6 +91,30 @@ const ROW_GAP = 6
 /** Characters as the reader sees them: one per code point. */
 export const chars = (text) => [...text]
 
+/*
+ * The language a run is in comes with the measure it is set by (render.js `measureFor`), as
+ * `measure.style`: whether the script is set on a grid of em squares (`fullWidth`), spaces its
+ * words (`spaces`), or shapes its letters together (`shaped`), and how its text divides into
+ * characters (`units`, grapheme clusters outside CJK) and into pieces a line may break between
+ * (`pieces`). A measure without it (Japanese, and the tests' recorded metrics) is set exactly as
+ * this module always has: code points, one em each, Japanese line breaking.
+ */
+
+/** The characters of `text` as `measure`'s language divides it: see above. */
+export const charsOf = (text, measure) => (measure?.style?.units ?? chars)(text)
+
+/** Lines break between words, not characters: any language but Japanese and Chinese. */
+const byWords = (measure) => {
+  const style = measure?.style
+  return Boolean(style && (style.spaces || !style.fullWidth))
+}
+
+/** Proportional letters (not a grid of em squares): every script but CJK. */
+const proportional = (measure) => Boolean(measure?.style && !measure.style.fullWidth)
+
+/** Letters that shape together: never spaced, or moved, one by one. */
+const shaped = (measure) => Boolean(measure?.style?.shaped)
+
 /**
  * Share `count` characters across lines in proportion to their capacity, by the largest
  * remainder, so the totals always add up and no line with room is left empty.
@@ -129,12 +153,13 @@ export function readingOrder(rects, vertical) {
  * line's capacity is its length over its thickness — how many square glyphs it holds — and the
  * characters are shared out by capacity.
  */
-export function distribute(text, lineRects, vertical) {
+export function distribute(text, lineRects, vertical, measure = null) {
   const lines = readingOrder(lineRects, vertical)
   const broken = text.split('\n')
   if (broken.length === lines.length) {
     return lines.map((rect, index) => ({ text: broken[index], rect }))
   }
+  if (!vertical && byWords(measure)) return distributeWords(text, lines, measure)
   const all = chars(text.replace(/\n/g, ''))
   const length = (rect) => (vertical ? rect.height : rect.width)
   const thick = (rect) => Math.max(1, vertical ? rect.width : rect.height)
@@ -170,6 +195,157 @@ export function distribute(text, lineRects, vertical) {
       return { text: piece, rect: vertical ? { ...bounds, height: span } : { ...bounds, width: span } }
     })
     .filter((run) => run.text)
+}
+
+/**
+ * `distribute` for a language whose lines break between words (`byWords`): the text is shared out
+ * over the lines a word at a time, never cutting one, by how long each word is in the font it is
+ * drawn in, not by counting characters. A space at a break stays at the end of the line before it
+ * (it is drawn there, unseen, and keeps the words apart for a lookup running on from one line to
+ * the next) and counts for nothing in the line's length; so does a line break OCR kept.
+ */
+function distributeWords(text, lines, measure) {
+  const pieces = measure.style.pieces(text)
+  const shares = wordBreaks(pieces, lines.map((rect) => rect.width), measure)
+  let at = 0
+  return lines
+    .map((rect, index) => {
+      const piece = pieces.slice(at, at + shares[index]).join('')
+      at += shares[index]
+      return { text: piece, rect }
+    })
+    .filter((run) => run.text)
+}
+
+/** A line's advance in ems, without the spaces it ends in. */
+const lineAdvance = (text, measure) => measure(text.replace(/\s+$/u, ''))
+
+/**
+ * How many of `pieces` (words, each with the spaces after it) each line takes: the counts that,
+ * at the one pitch that best fits them, best explain every line's measured length, as `breaks`
+ * does for characters. Every line keeps at least one word while there are enough.
+ */
+function wordBreaks(pieces, lengths, measure) {
+  const n = pieces.length
+  const lines = lengths.length
+  if (!lines) return []
+  if (n <= lines) return lengths.map((_, index) => (index < n ? 1 : 0))
+  // The advance of pieces b..c-1 set as one line.
+  const prefix = [0]
+  for (const piece of pieces) prefix.push(prefix[prefix.length - 1] + measure(piece))
+  const trailing = pieces.map((piece) => measure(piece) - lineAdvance(piece, measure))
+  const advance = (b, c) => prefix[c] - prefix[b] - trailing[c - 1]
+  const total = lengths.reduce((sum, value) => sum + Math.max(0, value), 0)
+  if (total <= 0) return apportion(n, lengths.map(() => 1))
+  const average = total / Math.max(1e-6, advance(0, n) - (lines - 1) * 0.25)
+  const at = (scale) => {
+    const cost = Array.from({ length: lines + 1 }, () => new Array(n + 1).fill(Infinity))
+    const from = Array.from({ length: lines + 1 }, () => new Array(n + 1).fill(-1))
+    cost[0][0] = 0
+    for (let i = 1; i <= lines; i++)
+      for (let c = i; c <= n - (lines - i); c++) {
+        if (i === lines && c !== n) continue
+        for (let b = c - 1; b >= i - 1; b--) {
+          if (cost[i - 1][b] === Infinity) continue
+          const miss = lengths[i - 1] - advance(b, c) * scale
+          const value = cost[i - 1][b] + miss * miss
+          if (value < cost[i][c]) {
+            cost[i][c] = value
+            from[i][c] = b
+          }
+        }
+      }
+    const counts = new Array(lines)
+    for (let i = lines, c = n; i > 0; c = from[i][c], i--) counts[i - 1] = c - from[i][c]
+    return counts
+  }
+  const score = (counts) => {
+    let end = 0
+    const filled = counts.map((count) => advance(end, (end += count)))
+    const fitted =
+      filled.reduce((sum, value, i) => sum + value * lengths[i], 0) /
+      Math.max(1e-9, filled.reduce((sum, value) => sum + value * value, 0))
+    const scale = Math.min(average * 1.3, Math.max(average * 0.7, fitted))
+    return filled.reduce((sum, value, i) => sum + (lengths[i] - value * scale) ** 2, 0)
+  }
+  let shares = null
+  let best = Infinity
+  for (let step = 0; step <= WORD_PITCH_STEPS; step++) {
+    const counts = at(average * (0.7 + (0.6 * step) / WORD_PITCH_STEPS))
+    const value = score(counts)
+    if (value < best) {
+      best = value
+      shares = counts
+    }
+  }
+  return shares
+}
+
+/** Pitches tried when sharing words over lines (`wordBreaks`): fewer than for characters, as lines hold fewer. */
+const WORD_PITCH_STEPS = 24
+
+/**
+ * `estimate` for a language whose lines break between words: every count of lines is tried, each
+ * set as evenly as its words allow (no line longer than it must be), and the count whose glyphs
+ * come out largest in the box wins. Each line runs as far as its words do in the font they are
+ * drawn in.
+ */
+function estimateWords(text, rect, measure) {
+  const along = rect.width
+  const across = rect.height
+  const explicit = text.split('\n')
+  let rows = explicit
+  if (explicit.length === 1) {
+    const pieces = measure.style.pieces(text)
+    let best = null
+    for (let count = 1; count <= Math.max(1, Math.min(pieces.length, MAX_WORD_LINES)); count++) {
+      const set = evenRows(pieces, count, measure)
+      const longest = Math.max(0.01, ...set.map((row) => lineAdvance(row, measure)))
+      const size = Math.min(along / longest, across / (set.length + (set.length - 1) * (LEADING - 1)))
+      if (!best || size > best.size) best = { size, rows: set }
+    }
+    rows = best?.rows ?? [text]
+  }
+  const advances = rows.map((row) => Math.max(0.01, lineAdvance(row, measure)))
+  const longest = Math.max(...advances)
+  const size = Math.min(along / longest, across / (rows.length + (rows.length - 1) * (LEADING - 1)))
+  const pitch = rows.length > 1 ? (across - size) / (rows.length - 1) : 0
+  return rows
+    .map((row, index) => {
+      const offset = rows.length > 1 ? index * pitch : (across - size) / 2
+      return { text: row, rect: { x: rect.x, y: rect.y + offset, width: advances[index] * size, height: size } }
+    })
+    .filter((run) => run.text)
+}
+
+/** The most lines `estimateWords` tries. */
+const MAX_WORD_LINES = 24
+
+/**
+ * `pieces` as at most `count` lines no longer than they must be: the shortest width that, filled a
+ * word at a time, needs no more lines, found by halving.
+ */
+function evenRows(pieces, count, measure) {
+  const fill = (width) => {
+    const rows = []
+    let row = ''
+    for (const piece of pieces) {
+      if (row && lineAdvance(row + piece, measure) > width + 1e-6) {
+        rows.push(row)
+        row = piece
+      } else row += piece
+    }
+    if (row) rows.push(row)
+    return rows
+  }
+  let low = Math.max(0, ...pieces.map((piece) => lineAdvance(piece, measure)))
+  let high = Math.max(low, lineAdvance(pieces.join(''), measure))
+  for (let step = 0; step < 24 && high - low > 1e-3; step++) {
+    const middle = (low + high) / 2
+    if (fill(middle).length <= count) high = middle
+    else low = middle
+  }
+  return fill(high)
 }
 
 /**
@@ -335,7 +511,8 @@ function bestFit(count, along, across) {
   return best
 }
 
-export function estimate(text, rect, vertical) {
+export function estimate(text, rect, vertical, measure = null) {
+  if (!vertical && byWords(measure)) return estimateWords(text, rect, measure)
   const along = vertical ? rect.height : rect.width
   const across = vertical ? rect.width : rect.height
   const explicit = text.split('\n')
@@ -526,7 +703,7 @@ export function fit(run, vertical, measure, size = null) {
   const placed = squeeze
     ? { ...fitWith(run, vertical, squeezed(measure, squeeze), size), squeeze }
     : fitWith(run, vertical, measure, size)
-  const offsets = vertical ? null : snapOffsets(placed, squeezed(measure, placed.squeeze))
+  const offsets = vertical || shaped(measure) ? null : snapOffsets(placed, squeezed(measure, placed.squeeze))
   return offsets ? { ...placed, offsets } : placed
 }
 
@@ -552,21 +729,23 @@ const DEADBAND = 0.12
 function snapOffsets(run, measure) {
   const segments = run.segments
   if (!segments?.length || !run.fontSize) return null
-  const all = chars(run.text)
+  const all = charsOf(run.text, measure)
   const f = run.fontSize
   const cells = tiles(segments, false, f)
   // Where the even pitch puts glyph k's origin.
   const origins = []
   let advance = 0
+  let spaces = 0
   all.forEach((c, k) => {
     const cut = run.squeeze?.includes(c) ? SQUEEZE.get(c)[0] : 0
-    origins.push(run.rect.x + run.lead + f * (advance - cut) + run.spacing * k)
+    origins.push(run.rect.x + run.lead + f * (advance - cut) + run.spacing * k + (run.wordSpacing ?? 0) * spaces)
     advance += measure(c)
+    if (/^\s+$/u.test(c)) spaces++
   })
   const inkOfChar = (c) => inkOf(c, measure)
   const boxed = []
   for (const segment of segments) {
-    const count = chars(segment.text ?? '').length
+    const count = charsOf(segment.text ?? '', measure).length
     if (!count || typeof segment.at !== 'number' || segment.at + count > all.length) continue
     const first = segment.at
     const last = first + count - 1
@@ -688,6 +867,7 @@ export function squeezed(measure, marks) {
     return total
   }
   const result = (text) => measure(text) - cut(text)
+  if (measure.style) result.style = measure.style
   if (measure.ink) {
     result.ink = (text) => {
       const ink = measure.ink(text)
@@ -711,7 +891,8 @@ export function squeezeMargins(character, marks) {
 
 function fitWith(run, vertical, measure, size = null) {
   const { rect, text } = run
-  const count = Math.max(1, chars(text).length)
+  // Proportional text is fitted to its words' ink: spaces it ends in are drawn, unseen, past it.
+  const count = Math.max(1, proportional(measure) ? charsOf(text.replace(/\s+$/u, ''), measure).length : chars(text).length)
   const along = vertical ? rect.height : rect.width
   const across = vertical ? rect.width : rect.height
   // The engine's margins around the ink: at the start and end of the run, and before and after
@@ -733,19 +914,42 @@ function fitWith(run, vertical, measure, size = null) {
     const length = measure(text) * fontSize
     return { ...run, fontSize, spacing: 0, lead: (along - length) / 2, shift: 0, natural }
   }
-  const placed = bySegments(run, vertical, measure, fontSize, start, end)
+  // Letters that shape together are set as they are, never spaced: placed by their start.
+  const placed = shaped(measure) ? null : bySegments(run, vertical, measure, fontSize, start, end)
   if (!placed && size) fontSize = Math.max(1, Math.min(size, byAlong * OVERLAP))
   const room = along - (start + end + span) * fontSize
-  const spacing = placed ? placed.spacing : count > 1 ? room / (count - 1) : 0
-  const lead = placed ? placed.lead : (start - ink.start) * fontSize + (count > 1 ? 0 : room / 2)
+  let spacing = placed ? placed.spacing : count > 1 ? room / (count - 1) : 0
+  let lead = placed ? placed.lead : (start - ink.start) * fontSize + (count > 1 ? 0 : room / 2)
+  let wordSpacing = 0
+  if (proportional(measure) && !vertical) {
+    if (shaped(measure)) {
+      spacing = 0
+      lead = (start - ink.start) * fontSize
+    } else if (!placed) {
+      // Proportional letters are not spread apart to fill a box (a box a little long, or a font a
+      // little narrower than the game's): what letter spacing would take past a slight tracking
+      // goes between the words instead, as justified text does, and past that is left at the end.
+      const free = spacing
+      spacing = Math.min(TRACKING_MAX * fontSize, Math.max(-TRACKING_MAX * fontSize, free))
+      const gaps = (text.replace(/\s+$/u, '').match(/\s+/gu) ?? []).length
+      if (gaps && free > spacing) wordSpacing = Math.min(WORD_SPACING_MAX * fontSize, ((free - spacing) * (count - 1)) / gaps)
+    }
+  }
   // Across, in px along the page's own axis (down for a line, right for a column): from where
   // CSS centres the em box to where the ink is centred between the engine's margins.
   const centring = vertical
     ? 0
     : (ink.fontAscent - ink.fontDescent - (ink.ascent - ink.descent)) / 2
   const shift = (vertical ? after - before : before - after) * (fontSize / 2) - centring * fontSize
-  return { ...run, fontSize, spacing, lead, shift, natural }
+  return wordSpacing
+    ? { ...run, fontSize, spacing, lead, shift, natural, wordSpacing }
+    : { ...run, fontSize, spacing, lead, shift, natural }
 }
+
+/** The most letter spacing, either way, proportional text is set with, against its size. */
+const TRACKING_MAX = 0.06
+/** The most extra space between its words, against its size. */
+const WORD_SPACING_MAX = 1
 
 /**
  * Where the glyphs go when the engine boxed the run's words or characters (`run.segments`, each
@@ -758,7 +962,7 @@ function fitWith(run, vertical, measure, size = null) {
 function bySegments(run, vertical, measure, fontSize, startMargin, endMargin) {
   const segments = run.segments
   if (!segments?.length) return null
-  const all = chars(run.text)
+  const all = charsOf(run.text, measure)
   const points = []
   const fromOf = (segment) => (vertical ? segment.y : segment.x)
   const toOf = (segment) => fromOf(segment) + (vertical ? segment.height : segment.width)
@@ -769,7 +973,7 @@ function bySegments(run, vertical, measure, fontSize, startMargin, endMargin) {
     segments.length >= 3 &&
     segments.slice(1).every((segment, i) => Math.abs(fromOf(segment) - toOf(segments[i])) <= 0.05 * fontSize)
   for (const segment of segments) {
-    const count = chars(segment.text).length
+    const count = charsOf(segment.text, measure).length
     if (!count || segment.at + count > all.length) return null
     const before = measure(all.slice(0, segment.at).join(''))
     const from = fromOf(segment)
@@ -800,6 +1004,9 @@ function bySegments(run, vertical, measure, fontSize, startMargin, endMargin) {
   const kept = points.filter((_, i) => misfit[i] <= Math.max(2.5 * typical, 0.05 * fontSize))
   line = (kept.length < points.length && solve(kept)) || line
   if (line.spacing < -0.3 * fontSize || line.spacing > 3 * fontSize) return null
+  // Proportional letters keep near their own spacing; where the words sit is the offsets' to follow.
+  if (proportional(measure))
+    line.spacing = Math.min(TRACKING_MAX * fontSize, Math.max(-TRACKING_MAX * fontSize, line.spacing))
   return { lead: line.origin - (vertical ? run.rect.y : run.rect.x), spacing: line.spacing }
 }
 
@@ -942,7 +1149,7 @@ export function splitAtGaps(run, segments, vertical, measure = null) {
             : { x: lo, y: run.rect.y, width: hi - lo, height: run.rect.height },
       segments: members.map((segment, k) => ({
         ...segment,
-        at: chars(run.text.slice(begin, found[cuts[c] + k])).length
+        at: charsOf(run.text.slice(begin, found[cuts[c] + k]), measure).length
       }))
     })
   }
@@ -990,13 +1197,13 @@ export function splitPart(part, vertical, measure = null) {
     }))
     const lines = vertical && found.length ? columns(found, part.text, part.rect) : found
     if (lines?.length) {
-      runs = distribute(part.text, lines, vertical).flatMap(({ text, rect }) => {
+      runs = distribute(part.text, lines, vertical, measure).flatMap(({ text, rect }) => {
         const { segments, ...bounds } = rect
         delete bounds.extent
         delete bounds.guessed
         return splitAtGaps({ text, rect: bounds }, segments, vertical, measure)
       })
-    } else runs = anchored(estimate(part.text, part.rect, vertical), found, part.rect, vertical)
+    } else runs = anchored(estimate(part.text, part.rect, vertical, measure), found, part.rect, vertical)
   } else runs = splitAtGaps({ text: part.text, rect: part.rect }, part.segments, vertical, measure)
   return part.margin ? runs.map((run) => ({ ...run, margin: part.margin })) : runs
 }
@@ -1061,10 +1268,21 @@ export function characterCells(text, runs, vertical, measure) {
     const start = vertical ? run.rect.y : run.rect.x
     const measureRun = squeezed(measure, run.squeeze)
     let advance = 0
-    chars(run.text).forEach((character, index) => {
+    let spaces = 0
+    charsOf(run.text, measure).forEach((character, index) => {
       const cut = run.squeeze?.includes(character) ? SQUEEZE.get(character)[0] : 0
-      const before = run.lead + run.fontSize * (advance - cut) + run.spacing * index + (run.offsets?.[index] ?? 0)
-      const size = run.fontSize * measureRun(character) + run.spacing
+      const before =
+        run.lead +
+        run.fontSize * (advance - cut) +
+        run.spacing * index +
+        (run.wordSpacing ?? 0) * spaces +
+        (run.offsets?.[index] ?? 0)
+      const space = /^\s+$/u.test(character)
+      const size = run.fontSize * measureRun(character) + run.spacing + (space ? (run.wordSpacing ?? 0) : 0)
+      if (space) spaces++
+      advance += measureRun(character)
+      // A line break a line kept (a language spaced by words keeps OCR's) is not a cell.
+      if (character === '\n') return
       const from = start + before - run.spacing / 2
       queue.push({
         character,
@@ -1074,12 +1292,11 @@ export function characterCells(text, runs, vertical, measure) {
         width: vertical ? run.rect.width : size,
         height: vertical ? size : run.rect.height
       })
-      advance += measureRun(character)
     })
   })
   const cells = []
   let next = 0
-  for (const character of text) {
+  for (const character of charsOf(text, measure)) {
     const cell = character === '\n' ? null : (queue[next++] ?? null)
     for (let unit = 0; unit < character.length; unit++) cells.push(cell)
   }

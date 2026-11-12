@@ -1,5 +1,6 @@
 import { AudioPlayer } from "../../components/AudioPlayer";
 import { useCapabilities } from "../../bridge/capabilities";
+import { useLanguage } from "../../bridge/useLanguage";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   BookPlus,
@@ -102,6 +103,8 @@ function LineMenuItems({
   const audioSlot = useRef<HTMLSpanElement>(null);
   // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account.
   const { cloudAccess } = useCapabilities();
+  // The voices are Japanese, so read aloud is for Japanese only for now.
+  const [language] = useLanguage();
   const isTranslated = Boolean(line.showTranslation && line.translation);
   const displayText = isTranslated ? line.translation! : line.text;
 
@@ -110,7 +113,7 @@ function LineMenuItems({
       {/* Read aloud: the row activates the shared AudioPlayer button, which keeps its own
           playing state and error tooltip. The menu stays open while it plays. Only when signed in
           to a Kimochi account (Kimochi cloud access). */}
-      {cloudAccess && (
+      {cloudAccess && language.code === "ja" && (
         <MenuItem
           icon={
             <span

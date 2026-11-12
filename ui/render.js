@@ -27,7 +27,8 @@ import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
 import { joiner } from './script-text.js'
 import { languageOf } from './languages.js'
-import { layoutParts, characterCells, chars, squeezeMargins } from './text-layout.js'
+import { layoutParts, characterCells, charsOf, squeezeMargins } from './text-layout.js'
+import { textStyle, textUnits, wordPieces, estimateAdvance, TEXT_FONT_PROPERTY } from './language-style.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
 import { shownForHits } from './hit-visible.js'
 
@@ -66,7 +67,23 @@ const TYPEFACES = {
   default: { family: GROUP_FONT, weight: '400', bold: '700' },
   manga: { family: MANGA_FONT, weight: '500', bold: '700' }
 }
-const faceOf = (typeface) => TYPEFACES[typeface] ?? TYPEFACES.default
+/**
+ * A typeface as it is drawn for the language being read (`language`, a code from languages.ts):
+ * Japanese's as above; any other language's in its own fonts (language-style.ts `textFont`), which
+ * overlay-text.css draws with too (`--kimochi-text-font`, set on the renderer's container).
+ */
+const faceOf = (typeface, language) => {
+  const face = TYPEFACES[typeface] ?? TYPEFACES.default
+  const style = textStyle(language)
+  if (style.japanese) return face
+  return { ...face, family: typeface === 'manga' ? `'Zen Kaku Gothic Antique', ${style.font}` : style.font }
+}
+
+/** A language other than Japanese, by code, or undefined for Japanese (which measures as it always has). */
+const otherLanguage = (language) => {
+  const style = textStyle(language)
+  return style.japanese ? undefined : style.code
+}
 
 /**
  * Text at least this many times its page's typical size, and at least BOLD_SIZE px, is set in
@@ -98,11 +115,18 @@ const measures = new Map()
  * (see `inkOf` in text-layout.js), both read off a canvas set in the face at 100 px. Without a
  * canvas (tests) the advance is one em per full-width character and a little over half for the
  * rest, and the ink unknown.
+ *
+ * For a language other than Japanese (`language`) the face is the language's (`faceOf`), the
+ * fallback advance is per kind of character (language-style.ts `estimateAdvance`), a line break is
+ * measured as the space it is drawn as, and the measure carries the language's way of setting
+ * text for the layout (`style`: see text-layout.js `charsOf`).
  */
-export function measureFor(typeface = 'default') {
-  const known = measures.get(typeface)
+export function measureFor(typeface = 'default', language = undefined) {
+  const code = otherLanguage(language)
+  const key = code ? `${typeface}\u0000${code}` : typeface
+  const known = measures.get(key)
   if (known) return known
-  const face = faceOf(typeface)
+  const face = faceOf(typeface, code)
   let context = null
   const canvas = () => {
     if (context === null && typeof document !== 'undefined') {
@@ -144,12 +168,29 @@ export function measureFor(typeface = 'default') {
     }
     return known
   }
-  const measure = (text) => {
-    let ems = 0
-    if (canvas()) for (const character of text) ems += glyph(character).advance
-    else
-      for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
-    return ems
+  const measure = code
+    ? (text) => {
+        let ems = 0
+        if (canvas()) for (const character of text) ems += glyph(character === '\n' ? ' ' : character).advance
+        else ems = estimateAdvance(text.replace(/\n/g, ' '))
+        return ems
+      }
+    : (text) => {
+        let ems = 0
+        if (canvas()) for (const character of text) ems += glyph(character).advance
+        else
+          for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
+        return ems
+      }
+  measure.typeface = typeface
+  if (code) {
+    const style = textStyle(code)
+    measure.language = code
+    measure.style = {
+      ...style,
+      units: (text) => textUnits(text, code),
+      pieces: (text) => wordPieces(text, code)
+    }
   }
   measure.ink = (text) => {
     if (!canvas()) return null
@@ -177,7 +218,7 @@ export function measureFor(typeface = 'default') {
   }
   // Measured before the face loaded, these are the fallback's: forget them once it has.
   measure.forget = () => glyphs.clear()
-  measures.set(typeface, measure)
+  measures.set(key, measure)
   return measure
 }
 
@@ -204,7 +245,7 @@ function typefacesReady(annotations, done) {
   if (specs.every((spec) => document.fonts.check(spec, text))) return true
   Promise.all(specs.map((spec) => document.fonts.load(spec, text))).then(
     () => {
-      measureFor('manga').forget()
+      for (const [key, measure] of measures) if (key.split('\u0000')[0] === 'manga') measure.forget()
       done()
     },
     () => {}
@@ -221,11 +262,11 @@ function typefacesReady(annotations, done) {
  * which is the box's top-left for horizontal text, and its top-right, where a vertical-rl line
  * starts, for vertical text.
  */
-function runElement(run, origin, vertical, inline) {
+function runElement(run, origin, vertical, inline, measure) {
   const span = document.createElement('span')
   span.className = 'ocr-run'
   Object.assign(span.style, runStyle(run, origin, vertical, inline))
-  appendRunText(span, run)
+  appendRunText(span, run, measure)
   return span
 }
 
@@ -238,11 +279,12 @@ const placedGlyphs = (run) => Boolean(run.squeeze || run.offsets)
  * and each glyph the engine's boxes moved off the even pitch (`offsets`) moved by a margin before
  * it. Plain inline spans, so the text stays one flow for the engines' scanners.
  */
-function appendRunText(element, run) {
+function appendRunText(element, run, measure) {
   if (!placedGlyphs(run)) return void element.append(document.createTextNode(run.text))
   let plain = ''
   let previous = 0
-  chars(run.text).forEach((character, index) => {
+  // Characters as the layout counted them: a letter and its combining marks are one glyph.
+  charsOf(run.text, measure).forEach((character, index) => {
     const margins = squeezeMargins(character, run.squeeze)
     const offset = run.offsets?.[index] ?? 0
     const move = offset - previous
@@ -272,13 +314,13 @@ export function wordLayout(mapped, measure = measureEms) {
 }
 
 /**
- * Parts measured in their own typefaces (`part.measure`), in the overlay; a caller's own measure
- * (tests' recorded metrics) measures everything as it is.
+ * Parts measured in their own typefaces (`part.measure`), in the overlay's language; a caller's
+ * own measure (tests' recorded metrics) measures everything as it is.
  */
 function withTypefaces(parts, boxes, measure) {
-  if (measure !== measureEms) return parts
+  if (!measure.typeface) return parts
   return parts.map((part, index) =>
-    boxes[index].typeface ? { ...part, measure: measureFor(boxes[index].typeface) } : part
+    boxes[index].typeface ? { ...part, measure: measureFor(boxes[index].typeface, measure.language) } : part
   )
 }
 
@@ -304,6 +346,7 @@ function runSignature(runs) {
     run.text,
     ...[run.rect.x, run.rect.y, run.rect.width, run.rect.height].map(round),
     ...[run.fontSize, run.spacing, run.lead, run.shift].map(round),
+    ...(run.wordSpacing ? [round(run.wordSpacing)] : []),
     run.weight,
     run.squeeze ?? '',
     ...(run.offsets ?? []).map(round)
@@ -322,6 +365,8 @@ function runStyle(run, origin, vertical, inline) {
     fontSize: `${run.fontSize}px`,
     ...(run.weight ? { fontWeight: run.weight } : {}),
     letterSpacing: `${run.spacing}px`,
+    // Proportional text's leftover length, between its words (text-layout.js `fitWith`).
+    ...(run.wordSpacing ? { wordSpacing: `${run.wordSpacing}px` } : {}),
     lineHeight: `${vertical ? run.rect.width : run.rect.height}px`
   }
 }
@@ -729,7 +774,7 @@ export class TextOverlayRenderer {
     if (!word?.runs || word.runs.length !== 1 || word.runs[0].text !== word.box.text) return null
     const { box } = word
     const vertical = box.orientation === 'vertical' || box.isVertical === true
-    return characterCells(box.text, word.runs, vertical, box.typeface ? measureFor(box.typeface) : measureEms)
+    return characterCells(box.text, word.runs, vertical, measureFor(box.typeface ?? 'default', this.language))
   }
 
   /** The pointer has gone somewhere this window cannot see; let the effect fade. */
@@ -907,6 +952,7 @@ export class TextOverlayRenderer {
     this.words = []
     this.regions = []
     this.mode = grouping.enabled ? 'groups' : 'words'
+    this.setLanguage(grouping.language)
     const fragment = grouping.enabled
       ? this.renderGroups(filtered, info, origin, grouping, opacity, false, bounds)
       : this.renderWords(filtered, info, origin, false, bounds, grouping.language)
@@ -981,6 +1027,27 @@ export class TextOverlayRenderer {
 
   // --- per-word mode --------------------------------------------------------
 
+  /**
+   * The language being read (`grouping.language`): the text is measured and laid out in its fonts
+   * and its way (`measureFor`), and the container carries its `lang` and font
+   * (`--kimochi-text-font`, read by overlay-text.css). Japanese sets neither, so it is drawn
+   * exactly as it was before the language setting existed.
+   */
+  setLanguage(language) {
+    const style = textStyle(language)
+    const code = style.japanese ? undefined : style.code
+    if (code === this.language) return
+    this.language = code
+    const container = this.container
+    if (style.japanese) {
+      container.style?.removeProperty?.(TEXT_FONT_PROPERTY)
+      container.removeAttribute?.('lang')
+    } else {
+      container.style?.setProperty?.(TEXT_FONT_PROPERTY, style.font)
+      container.setAttribute?.('lang', style.lang)
+    }
+  }
+
   renderWords(annotations, info, origin, scanning, bounds, language) {
     const mapped = mapAnnotations(info, annotations, origin, bounds)
     const successors = readingSuccessors(mapped)
@@ -989,7 +1056,8 @@ export class TextOverlayRenderer {
     this.spaced = languageOf(language).spaces
     const fragment = document.createDocumentFragment()
     // Every box fitted over the text it was read from, rows set at one size (text-layout.js).
-    const layouts = scanning ? [] : wordLayout(mapped)
+    const measure = measureFor('default', language)
+    const layouts = scanning ? [] : wordLayout(mapped, measure)
 
     mapped.forEach((box, index) => {
       const element = document.createElement('div')
@@ -1066,10 +1134,10 @@ export class TextOverlayRenderer {
           width: `${runs[0].rect.width}px`,
           height: `${runs[0].rect.height}px`
         })
-        if (placedGlyphs(runs[0])) appendRunText(current, runs[0])
+        if (placedGlyphs(runs[0])) appendRunText(current, runs[0], measure)
         else current.textContent = box.text
       } else {
-        for (const run of runs) current.append(runElement(run, flow, vertical, true))
+        for (const run of runs) current.append(runElement(run, flow, vertical, true, measure))
       }
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
@@ -1127,12 +1195,13 @@ export class TextOverlayRenderer {
     const typefaces = groups.flatMap((group, index) =>
       partsOf[index].map(() => group.annotations[0]?.typeface)
     )
+    const measure = measureFor('default', grouping.language)
     const fitted = scanning
       ? []
       : weigh(
           layoutParts(
-            withTypefaces(boxes, typefaces.map((typeface) => ({ typeface })), measureEms),
-            measureEms
+            withTypefaces(boxes, typefaces.map((typeface) => ({ typeface })), measure),
+            measure
           ),
           typefaces
         )
@@ -1155,16 +1224,24 @@ export class TextOverlayRenderer {
 
       const vertical = group.orientation === 'vertical'
       const lines = text.split('\n')
-      const longest = Math.max(...lines.map((line) => line.length))
+      // A line's length in ems: near-square glyphs at CHAR_ASPECT_RATIO each, or proportional
+      // text measured in its font.
+      const proportional = Boolean(measure.style && !measure.style.fullWidth)
+      const ems = (line) => (proportional ? measure(line) : line.length * CHAR_ASPECT_RATIO)
+      const longest = Math.max(...lines.map(ems))
       const semanticBlock = group.annotations.some(a => a.granularity === 'block')
       const fontSize = Math.max(
         1,
         Math.min(
           semanticBlock && lines.length === 1
-            ? Math.sqrt(rect.width * rect.height / Math.max(1, [...text].length) / GROUP_LINE_HEIGHT)
+            ? Math.sqrt(
+                (rect.width * rect.height) /
+                  Math.max(1, proportional ? measure(text) : [...text].length) /
+                  GROUP_LINE_HEIGHT
+              )
             : Math.min(
                 (vertical ? rect.width : rect.height) / (lines.length * GROUP_LINE_HEIGHT),
-                (vertical ? rect.height : rect.width) / (longest * CHAR_ASPECT_RATIO)
+                (vertical ? rect.height : rect.width) / longest
               ),
           48
         )
@@ -1200,7 +1277,7 @@ export class TextOverlayRenderer {
         for (const line of lines) {
           stack.append(
             shimmer(
-              Math.min(line.length * fontSize * CHAR_ASPECT_RATIO, rect.width),
+              Math.min(proportional ? measure(line) * fontSize : line.length * fontSize * CHAR_ASPECT_RATIO, rect.width),
               fontSize,
               fontSize * 0.5
             )
@@ -1229,7 +1306,7 @@ export class TextOverlayRenderer {
       }
       Object.assign(body.style, { width: `${inner.width}px`, height: `${inner.height}px` })
       const flow = { x: vertical ? corner.x + inner.width : corner.x, y: corner.y }
-      for (const run of runs) body.append(runElement(run, flow, vertical, true))
+      for (const run of runs) body.append(runElement(run, flow, vertical, true, measure))
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = '' // Semantic groups must not extend a lookup into another bubble.

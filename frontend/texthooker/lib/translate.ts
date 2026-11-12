@@ -7,8 +7,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { translationRoute } from "../../../ui/account";
 import { loadAccount } from "../../bridge/account";
 import { nativeError } from "../../bridge/tauri";
+import { currentLanguage } from "../core/language";
 import { getSettings } from "./settings";
 import { setLineTranslation, setLineTranslationVisible } from "./store";
+import { translationErrorMessage } from "./translateLanguage";
 import type { Line } from "./types";
 
 /* Transient per-line translate status (NOT persisted — lives only for the
@@ -102,13 +104,20 @@ export async function showTranslation(line: Line): Promise<void> {
               throw new Error(nativeError(error).message);
             },
           )
-        : await invoke<string>("deepl_translate", { text: line.text, apiKey });
+        : await invoke<string>("deepl_translate", { text: line.text, apiKey }).catch(
+            (error: unknown) => {
+              throw new Error(nativeError(error).message);
+            },
+          );
     setStatus(line.id, null);
     if (getActiveSession().id === sessionId)
       await setLineTranslation(line.id, translated, true);
   } catch (err) {
     console.warn("translate failed", err);
-    const message = err instanceof Error ? err.message : String(err);
+    const message = translationErrorMessage(
+      err instanceof Error ? err.message : String(err),
+      currentLanguage(),
+    );
     setStatus(line.id, { state: "error", message });
   }
 }

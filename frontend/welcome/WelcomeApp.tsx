@@ -39,6 +39,7 @@ import GnomeExtensionStep from './GnomeExtensionStep'
 import { GNOME_ROUTE, useGnomeEligible, useGnomeExtension } from './gnomeExtension'
 import IntroStep from './IntroStep'
 import LanguageStep from './LanguageStep'
+import { useLanguage } from '../bridge/useLanguage'
 import { AccessibilityWhy, ScreenRecordingWhy } from './PermissionWhy'
 import SteamLibraryStep from './SteamLibraryStep'
 import { STEAM_ROUTE } from './steamRoute'
@@ -404,6 +405,7 @@ function DeckNextSteps(): JSX.Element | null {
 
 function DoneScreen(): JSX.Element {
   const capabilities = useCapabilities()
+  const [language] = useLanguage()
   const gaming =
     capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope'
   return (
@@ -424,7 +426,8 @@ function DoneScreen(): JSX.Element {
             : 'Pick a window or screen in the sidebar, then crop the area with the text.'}
         </li>
         <li>
-          <strong>Scan.</strong> Kimochi recognises the Japanese and adds each line to the Log.
+          <strong>Scan.</strong> Kimochi recognises the {language.name} and adds each line to the
+          Log.
         </li>
         <li>
           <strong>Look up.</strong> Hold Shift and hover a word, or use controller reading

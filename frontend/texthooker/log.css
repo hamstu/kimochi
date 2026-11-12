@@ -740,7 +740,7 @@ body.scan-mode .line-chip {
   border-radius: var(--k-radius-lg);
   background: var(--k-sunken);
   box-shadow: inset 0 0 0 1px var(--k-line);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: var(--k-text-xl);
   line-height: 1.5;
   overflow-wrap: anywhere;

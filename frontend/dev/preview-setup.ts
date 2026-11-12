@@ -1255,6 +1255,16 @@ const HANDLERS: Record<string, Handler> = {
   // The preview's dictionary answers from these mocks, so whichever engine is asked about is up,
   // unless ?readiness= plays a setup (previewReadiness below).
   dictionary_runtime_status: (a) => previewReadiness((a?.engine as string) ?? 'yomitan'),
+  // Built-in Yomitan's profiles as the overlay publishes them (ui/yomitan-profiles.ts).
+  yomitan_profiles: () => ({
+    account: 'local',
+    profiles: [
+      { name: 'Default', language: 'ja' },
+      { name: 'Korean', language: 'ko' }
+    ],
+    current: params.get('language') === 'ko' ? 1 : 0,
+    link: null
+  }),
 
   // anki
   anki_probe: () => 18,

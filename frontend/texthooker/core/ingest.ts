@@ -9,9 +9,23 @@ import { getSettings } from "@texthooker/lib/settings";
 import { applyReplacements } from "./replacements";
 import { recordCharDelta, recordLine } from "./stats";
 import { dropsText, japaneseFilterOf } from "@ui/japanese-text";
-import { currentLanguage } from "./language";
+import { currentLanguage, currentLanguageInfo } from "./language";
+import { countWords } from "./wordCount";
 import { acceptsInput } from "../input-source";
 import type { Line, LineSource } from "@texthooker/lib/types";
+
+/** A line's words for the stats, in a language that spaces them; undefined otherwise (Japanese
+    and the other unspaced languages count characters only). */
+function words(text: string): number | undefined {
+  const language = currentLanguageInfo();
+  return language.spaces ? countWords(text, language.code) : undefined;
+}
+
+/** How many words a line gained (or lost) becoming `next`, as `words`. */
+function wordDelta(prev: string, next: string): number | undefined {
+  const after = words(next);
+  return after === undefined ? undefined : after - (words(prev) ?? 0);
+}
 
 /** Steps 1–4 below: the text a line would be stored with, or null when nothing is left. */
 export function preparedText(text: string): string | null {
@@ -68,7 +82,7 @@ export const ingestText = async (
     const merged = replaceLastLineText(value);
     if (merged && ingestId)
       merged.ingestIds = [...(merged.ingestIds || []), ingestId];
-    recordCharDelta(value.length - prev.length);
+    recordCharDelta(value.length - prev.length, wordDelta(prev, value));
     return;
   }
 
@@ -80,7 +94,7 @@ export const ingestText = async (
       const merged = replaceLastLineText(value);
       if (merged && ingestId)
         merged.ingestIds = [...(merged.ingestIds || []), ingestId];
-      recordCharDelta(value.length - prev.length);
+      recordCharDelta(value.length - prev.length, wordDelta(prev, value));
       return;
     }
   }
@@ -92,5 +106,5 @@ export const ingestText = async (
   const line = appendLine({ text: value, source, ts, ocr });
   if (!line) return;
   if (ingestId) line.ingestIds = [ingestId];
-  recordLine(value.length);
+  recordLine(value.length, words(value));
 };

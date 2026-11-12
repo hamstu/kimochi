@@ -19,8 +19,13 @@
  *    than of text, which a moving background also trips, but which needs nothing installed.
  *
  * A watcher the user picked in Settings is used whenever it is available here.
+ *
+ * Every choice is for the language being read (`language`, Japanese unless given): an engine whose
+ * capability does not list it is passed over, and MeikiOCR, trained on Japanese, is the last
+ * fallback only for Japanese.
  */
-import type { OcrEngineCapability, OcrEngineKey } from './capabilities.js'
+import { engineReadsLanguage, type OcrEngineCapability, type OcrEngineKey } from './capabilities.js'
+import { DEFAULT_LANGUAGE, isJapanese } from './languages.js'
 
 /** The engines that can watch for any reader, and that Settings offers as the watcher. */
 export type WatcherEngine = 'ppocr' | 'livetext' | 'oneocr' | 'meikiocr'
@@ -46,17 +51,25 @@ const isWatcherEngine = (key: string): key is WatcherEngine =>
 const watchesItself = (key: string): key is ObserverEngine =>
   isWatcherEngine(key) || (SELF_WATCHER_ENGINES as readonly string[]).includes(key)
 
-const available = (engines: Engines, key: ObserverEngine): boolean => engines[key]?.available === true
+/** Here, and able to read the language. */
+const available = (engines: Engines, key: ObserverEngine, language: string = DEFAULT_LANGUAGE): boolean =>
+  engines[key]?.available === true &&
+  engineReadsLanguage(engines[key], language) &&
+  (key !== 'meikiocr' || isJapanese(language))
+
+/** Whether a watcher engine is here and reads the language: what Settings offers to pick. */
+export const watcherOffered = (engines: Engines, engine: WatcherEngine, language: string = DEFAULT_LANGUAGE): boolean =>
+  available(engines, engine, language)
 
 /** PaddleOCR on an accelerator: fast enough to watch at full cadence. */
-const paddleOnGpu = (engines: Engines): boolean =>
-  available(engines, 'ppocr') && !!engines.ppocr?.accelerator && engines.ppocr.accelerator !== 'cpu'
+const paddleOnGpu = (engines: Engines, language: string): boolean =>
+  available(engines, 'ppocr', language) && !!engines.ppocr?.accelerator && engines.ppocr.accelerator !== 'cpu'
 
-/** The best watcher here, in the order the module docs give. */
-export function bestWatcher(engines: Engines): WatcherEngine | null {
-  if (paddleOnGpu(engines)) return 'ppocr'
+/** The best watcher here for the language, in the order the module docs give. */
+export function bestWatcher(engines: Engines, language: string = DEFAULT_LANGUAGE): WatcherEngine | null {
+  if (paddleOnGpu(engines, language)) return 'ppocr'
   for (const engine of ['livetext', 'oneocr', 'ppocr', 'meikiocr'] as const) {
-    if (available(engines, engine)) return engine
+    if (available(engines, engine, language)) return engine
   }
   return null
 }
@@ -65,22 +78,23 @@ export function bestWatcher(engines: Engines): WatcherEngine | null {
 export function resolveWatcher(
   ocrMode: string,
   engines: Engines,
-  choice: WatcherChoice = 'auto'
+  choice: WatcherChoice = 'auto',
+  language: string = DEFAULT_LANGUAGE
 ): Watcher {
-  if (watchesItself(ocrMode) && available(engines, ocrMode)) {
+  if (watchesItself(ocrMode) && available(engines, ocrMode, language)) {
     return { kind: 'text', engine: ocrMode, because: 'selected' }
   }
   if (choice === 'image') return { kind: 'image', because: 'chosen' }
-  if (choice !== 'auto' && isWatcherEngine(choice) && available(engines, choice)) {
+  if (choice !== 'auto' && isWatcherEngine(choice) && available(engines, choice, language)) {
     return { kind: 'text', engine: choice, because: 'chosen' }
   }
-  const best = bestWatcher(engines)
+  const best = bestWatcher(engines, language)
   return best ? { kind: 'text', engine: best, because: 'best' } : { kind: 'image', because: 'none' }
 }
 
 /** Whether the Settings choice matters for `ocrMode` (it does not when the engine watches itself). */
-export function watcherChoiceApplies(ocrMode: string, engines: Engines): boolean {
-  return resolveWatcher(ocrMode, engines).because !== 'selected'
+export function watcherChoiceApplies(ocrMode: string, engines: Engines, language: string = DEFAULT_LANGUAGE): boolean {
+  return resolveWatcher(ocrMode, engines, 'auto', language).because !== 'selected'
 }
 
 /** The overlay's `observerMode` for a watcher: image comparison, or reading text. */

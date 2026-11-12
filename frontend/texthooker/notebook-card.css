@@ -55,7 +55,7 @@
   gap: var(--k-space-1);
 }
 .notebook-card-alias {
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
 }
 .notebook-card-description {
   margin: 0;

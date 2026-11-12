@@ -38,6 +38,8 @@ export type SentenceAudioStatus = (
   /** Whether lines are matched by their words: the speech model in the listener. */
   recogniser:
     | { state: "absent" }
+    /** The language being read is not one the model is used for (Japanese only for now). */
+    | { state: "otherLanguage" }
     | { state: "loading" }
     | { state: "ready" }
     | { state: "failed"; message: string };
