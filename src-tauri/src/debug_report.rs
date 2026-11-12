@@ -95,6 +95,7 @@ static LAST: std::sync::Mutex<Option<std::collections::HashMap<&'static str, Val
 /// turns verbose logging back on when it was on when Kimochi last stopped, less than a day ago.
 pub fn install(app: &tauri::AppHandle) {
     let _ = APP.set(app.clone());
+    kimochi_capture::set_diagnostics(record_now);
     let Some(file) = verbose_file(app) else { return };
     let Some(until) = std::fs::read_to_string(&file).ok().and_then(|text| text.trim().parse::<u64>().ok()) else {
         return;

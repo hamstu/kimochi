@@ -57,6 +57,52 @@ pub(crate) fn image_stem(path: &str) -> Option<String> {
     (!stem.is_empty()).then(|| stem.to_string())
 }
 
+/// Runs `work` on a thread of its own and waits up to `limit` for it to finish. True
+/// when it did (or panicked); false when it is still running, in which case it is
+/// left to finish, or not, on its own.
+///
+/// Stopping a WGC session joins its thread, and that thread can wedge inside Windows'
+/// own `GraphicsCaptureSession::Close` (an RPC to the capture server that never
+/// returns, #49). The caller holds the capture backend's lock, so an unbounded join
+/// would queue every later scan and thumbnail behind it until Kimochi restarts.
+pub(crate) fn finish_within(
+    limit: std::time::Duration,
+    work: impl FnOnce() + Send + 'static,
+) -> bool {
+    let (done, finished) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        work();
+        drop(done);
+    });
+    // Nothing is ever sent: the channel disconnects when `work` returns or panics.
+    !matches!(
+        finished.recv_timeout(limit),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    )
+}
+
+/// Runs `work` on a thread of its own and waits up to `limit` for its value. `None` when it
+/// panicked or is still running; a value that arrives after the caller gave up goes to
+/// `abandoned` instead (a session that started late is stopped there, not leaked running).
+///
+/// Starting a WGC session waits for its thread to begin capturing, an RPC to the same capture
+/// server a stop waits on (#49), and the caller holds the backend's lock just the same.
+pub(crate) fn within<T: Send + 'static>(
+    limit: std::time::Duration,
+    work: impl FnOnce() -> T + Send + 'static,
+    abandoned: impl FnOnce(T) + Send + 'static,
+) -> Option<T> {
+    // Zero capacity: a send completes only once the caller has taken the value, so after a
+    // timeout the value can only come back to the sender, never be lost in between.
+    let (send, receive) = std::sync::mpsc::sync_channel::<T>(0);
+    std::thread::spawn(move || {
+        if let Err(std::sync::mpsc::SendError(value)) = send.send(work()) {
+            abandoned(value);
+        }
+    });
+    receive.recv_timeout(limit).ok()
+}
+
 /// A Win32 `RECT`, as plain values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PxRect {
@@ -158,6 +204,12 @@ mod wgc {
     };
     use windows_capture::window::Window;
 
+    /// Longest a caller waits for a session to stop before leaving it behind (#49).
+    /// A healthy stop takes a few milliseconds.
+    const STOP_WAIT: Duration = Duration::from_secs(2);
+    /// Longest a caller waits for a session to start (#49). A healthy start is well under a
+    /// second, even on a slow VM.
+    const START_WAIT: Duration = Duration::from_secs(5);
     /// A session nobody has captured from for this long is stopped.
     const SESSION_IDLE: Duration = Duration::from_secs(30);
     /// Sessions kept at once: the selected source, plus one the user is looking at.
@@ -685,56 +737,46 @@ mod wgc {
         // Take it out first: `stop` joins the session thread.
         let taken = control.lock().unwrap().take();
         if let Some(control) = taken {
-            let _ = control.stop();
+            // The join can wedge inside Windows (#49); don't let it hold the backend.
+            let stopped = super::finish_within(STOP_WAIT, move || {
+                let _ = control.stop();
+            });
+            if !stopped {
+                crate::diagnostic(serde_json::json!({
+                    "check": "windows-capture-stop-timeout",
+                    "waitedMs": STOP_WAIT.as_millis() as u64,
+                }));
+            }
         }
     }
 
     fn start_session(target: Target) -> Result<Session> {
         let slot = Arc::new(Slot::default());
         slot.touch();
-        // Older Windows 10 builds lack these properties; the library refuses a
-        // non-default setting it cannot apply, so ask before setting either.
-        let cursor = if GraphicsCaptureApi::is_cursor_settings_supported().unwrap_or(false) {
-            CursorCaptureSettings::WithoutCursor
-        } else {
-            CursorCaptureSettings::Default
+        // Starting waits on Windows' capture server, which can wedge (#49): bounded, so
+        // the caller (holding the backend's lock) isn't stuck behind it.
+        let flags = slot.clone();
+        let started = super::within(
+            START_WAIT,
+            move || start_control(target, flags),
+            |late| {
+                // It started after all, with nobody to use it.
+                if let Ok(control) = late {
+                    let _ = control.stop();
+                }
+            },
+        );
+        let Some(started) = started else {
+            crate::diagnostic(serde_json::json!({
+                "check": "windows-capture-start-timeout",
+                "waitedMs": START_WAIT.as_millis() as u64,
+            }));
+            return Err(native_error(format!(
+                "Windows did not start capturing within {} s; retry",
+                START_WAIT.as_secs()
+            )));
         };
-        let interval =
-            if GraphicsCaptureApi::is_minimum_update_interval_supported().unwrap_or(false) {
-                MinimumUpdateIntervalSettings::Custom(FRAME_INTERVAL)
-            } else {
-                MinimumUpdateIntervalSettings::Default
-            };
-        // Asked per session, so turning the setting on takes effect on the next one.
-        let border = if capture_border() == CaptureBorder::Hidden {
-            DrawBorderSettings::WithoutBorder
-        } else {
-            DrawBorderSettings::Default
-        };
-        let control = match target {
-            Target::Window { hwnd: raw, .. } => Handler::start_free_threaded(Settings::new(
-                Window::from_raw_hwnd(raw as *mut c_void),
-                cursor,
-                border,
-                SecondaryWindowSettings::Default,
-                interval,
-                DirtyRegionSettings::Default,
-                ColorFormat::Bgra8,
-                slot.clone(),
-            )),
-            Target::Display { hmonitor } => Handler::start_free_threaded(Settings::new(
-                Monitor::from_raw_hmonitor(hmonitor as *mut c_void),
-                cursor,
-                border,
-                SecondaryWindowSettings::Default,
-                interval,
-                DirtyRegionSettings::Default,
-                ColorFormat::Bgra8,
-                slot.clone(),
-            )),
-        }
-        .map_err(native_error)?;
-        let control = Arc::new(Mutex::new(Some(control)));
+        let control = Arc::new(Mutex::new(Some(started.map_err(native_error)?)));
 
         // Stop the session once nobody has captured from it for a while, or reap it
         // once it has ended on its own (closed item, lost device). The timer holds the
@@ -756,6 +798,52 @@ mod wgc {
             }
         });
         Ok(Session { slot, control })
+    }
+
+    /// Starts the WGC session itself, on a thread `start_session` waits on.
+    fn start_control(target: Target, slot: Arc<Slot>) -> std::result::Result<Control, String> {
+        // Older Windows 10 builds lack these properties; the library refuses a
+        // non-default setting it cannot apply, so ask before setting either.
+        let cursor = if GraphicsCaptureApi::is_cursor_settings_supported().unwrap_or(false) {
+            CursorCaptureSettings::WithoutCursor
+        } else {
+            CursorCaptureSettings::Default
+        };
+        let interval =
+            if GraphicsCaptureApi::is_minimum_update_interval_supported().unwrap_or(false) {
+                MinimumUpdateIntervalSettings::Custom(FRAME_INTERVAL)
+            } else {
+                MinimumUpdateIntervalSettings::Default
+            };
+        // Asked per session, so turning the setting on takes effect on the next one.
+        let border = if capture_border() == CaptureBorder::Hidden {
+            DrawBorderSettings::WithoutBorder
+        } else {
+            DrawBorderSettings::Default
+        };
+        match target {
+            Target::Window { hwnd: raw, .. } => Handler::start_free_threaded(Settings::new(
+                Window::from_raw_hwnd(raw as *mut c_void),
+                cursor,
+                border,
+                SecondaryWindowSettings::Default,
+                interval,
+                DirtyRegionSettings::Default,
+                ColorFormat::Bgra8,
+                slot,
+            )),
+            Target::Display { hmonitor } => Handler::start_free_threaded(Settings::new(
+                Monitor::from_raw_hmonitor(hmonitor as *mut c_void),
+                cursor,
+                border,
+                SecondaryWindowSettings::Default,
+                interval,
+                DirtyRegionSettings::Default,
+                ColorFormat::Bgra8,
+                slot,
+            )),
+        }
+        .map_err(|e| e.to_string())
     }
 
     /// The newest frame and the part of it that is the source, with its bounds.
@@ -1080,6 +1168,71 @@ mod wgc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn work_that_finishes_in_time_is_reported_finished() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let ran = std::sync::Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        assert!(finish_within(Duration::from_secs(5), move || {
+            flag.store(true, Ordering::SeqCst);
+        }));
+        assert!(ran.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn work_that_panics_counts_as_finished() {
+        let stop = || panic!("stop failed");
+        assert!(finish_within(Duration::from_secs(5), stop));
+    }
+
+    #[test]
+    fn a_wedged_stop_is_left_behind_instead_of_blocking_the_caller() {
+        // Stands in for a session thread stuck in `GraphicsCaptureSession::Close`.
+        let (release, wedged) = std::sync::mpsc::channel::<()>();
+        let started = std::time::Instant::now();
+        assert!(!finish_within(Duration::from_millis(100), move || {
+            let _ = wedged.recv();
+        }));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        drop(release);
+    }
+
+    #[test]
+    fn a_start_in_time_hands_its_value_back() {
+        let started = within(Duration::from_secs(5), || 7, |_| panic!("not abandoned"));
+        assert_eq!(started, Some(7));
+    }
+
+    #[test]
+    fn a_start_that_panics_is_none() {
+        let work = || -> u32 { panic!("start failed") };
+        assert_eq!(within(Duration::from_secs(5), work, |_| ()), None);
+    }
+
+    #[test]
+    fn a_late_start_is_abandoned_not_leaked() {
+        // Stands in for a session that starts once a wedged capture server recovers: the
+        // caller has moved on, so the session must reach `abandoned` (which stops it).
+        let (release, wedged) = std::sync::mpsc::channel::<()>();
+        let (stopped, late) = std::sync::mpsc::channel::<u32>();
+        let started = std::time::Instant::now();
+        let result = within(
+            Duration::from_millis(100),
+            move || {
+                let _ = wedged.recv();
+                42
+            },
+            move |value| {
+                let _ = stopped.send(value);
+            },
+        );
+        assert_eq!(result, None);
+        assert!(started.elapsed() < Duration::from_secs(2));
+        drop(release);
+        assert_eq!(late.recv_timeout(Duration::from_secs(5)), Ok(42));
+    }
 
     #[test]
     fn process_image_stems() {
@@ -1159,4 +1312,48 @@ mod tests {
 #[ignore]
 fn border_probe() {
     eprintln!("capture border: {:?}", capture_border());
+}
+
+/// Starts and stops real WGC sessions and prints how long each stop took (#49).
+/// Read-only: thumbnails of a display and a few windows, one retained capture, then
+/// `close`. `cargo test --lib session_stop_probe -- --ignored --nocapture`
+#[cfg(all(test, target_os = "windows"))]
+#[test]
+#[ignore]
+fn session_stop_probe() {
+    use crate::{CaptureBackend, CaptureRequest};
+    use std::time::Instant;
+    let mut backend = WgcCapture::new();
+    let sources = backend.enumerate().expect("enumerate");
+    let display = sources
+        .iter()
+        .find(|s| s.kind == "display")
+        .expect("display");
+    let windows = sources.iter().filter(|s| s.kind == "window").take(4);
+    for source in std::iter::once(display).chain(windows) {
+        let start = Instant::now();
+        let outcome = match backend.thumbnail(&source.id, 320) {
+            Ok(f) => format!("{}x{}", f.info.width, f.info.height),
+            Err(e) => e.code.to_string(),
+        };
+        let ms = start.elapsed().as_millis();
+        eprintln!(
+            "thumbnail {} ({:?}): {outcome} in {ms} ms",
+            source.id, source.name
+        );
+    }
+    let request = CaptureRequest {
+        source_id: display.id.clone(),
+        crop: None,
+    };
+    let frame = backend.capture(&request).expect("capture the display");
+    eprintln!(
+        "capture {}: {}x{}",
+        display.id, frame.info.width, frame.info.height
+    );
+    let start = Instant::now();
+    backend.close();
+    let took = start.elapsed();
+    eprintln!("close: {} ms", took.as_millis());
+    assert!(took < std::time::Duration::from_secs(3));
 }
