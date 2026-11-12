@@ -339,6 +339,9 @@ function compareReadingOrder(vertical) {
  * but nothing guarantees it, and a column of vertical text read in the wrong order hands
  * Yomitan nonsense to match against. A paragraph is the box's `groupId` (every result
  * normalised by ocr-result.ts carries one); boxes without one are treated as one paragraph.
+ *
+ * An engine block whose line carries on in the next block (`continuations`) reads on into it:
+ * Live Text, OneOCR and Google Lens can call every line a paragraph of its own.
  */
 export function readingSuccessors(boxes) {
   const paragraphs = new Map()
@@ -354,7 +357,121 @@ export function readingSuccessors(boxes) {
     members.sort(compareReadingOrder(first.orientation === 'vertical' || first.isVertical === true))
     for (let i = 0; i + 1 < members.length; i++) next[members[i].index] = members[i + 1].index
   }
+  const alone = (box) => paragraphs.get(box.groupId || '').length === 1
+  continuations(boxes, alone).forEach((to, from) => {
+    if (to !== -1 && next[from] === -1) next[from] = to
+  })
   return next
+}
+
+/** How far outside its ink an engine draws a box, in ems, across a line: before and after. */
+const DEFAULT_INK_MARGIN = 0.05
+const isVerticalBox = (box) => box.orientation === 'vertical' || box.isVertical === true
+
+/**
+ * A block's line, as the distances `continuations` compares: along the line (where it starts and
+ * ends), across it (where it starts and ends, in the direction lines follow each other: down the
+ * page for horizontal text, leftwards for vertical), and its glyph size (`em`), its thickness
+ * less the engine's ink margins.
+ */
+function lineMetrics(rect, vertical, margin) {
+  const before = margin?.[2] ?? DEFAULT_INK_MARGIN
+  const after = margin?.[3] ?? DEFAULT_INK_MARGIN
+  const thickness = vertical ? rect.width : rect.height
+  const em = thickness / (1 + before + after)
+  return vertical
+    ? { start: rect.y, end: rect.y + rect.height, top: -(rect.x + rect.width), bottom: -rect.x, em, before, after }
+    : { start: rect.x, end: rect.x + rect.width, top: rect.y, bottom: rect.y + rect.height, em, before, after }
+}
+
+/** A block's first and last line, in reading order: its `lines`, or the box itself. */
+function edgeLines(box, vertical) {
+  const lines = box.lines?.length ? box.lines : [box]
+  const across = (line) => (vertical ? -(line.x + line.width / 2) : line.y + line.height / 2)
+  const sorted = [...lines].sort((a, b) => across(a) - across(b))
+  return { first: sorted[0], last: sorted[sorted.length - 1] }
+}
+
+/**
+ * Whether any other box's text lies between line `a` (of box `i`) and line `b` (of box `j`): a
+ * line in the gap between them, beside both, is the real next line, or something else entirely.
+ * Text much smaller than theirs (furigana over the next line) is not in the way.
+ */
+function between(boxes, i, j, a, b, vertical) {
+  const middle = (line) => (line.top + line.bottom) / 2
+  const low = middle(a)
+  const high = middle(b)
+  const start = Math.min(a.start, b.start)
+  const end = Math.max(a.end, b.end)
+  const small = Math.min(a.em, b.em) * 0.6
+  return boxes.some((box, k) => {
+    if (k === i || k === j || isVerticalBox(box) !== vertical) return false
+    const lines = box.lines?.length ? box.lines : [box]
+    return lines.some((rect) => {
+      const line = lineMetrics(rect, vertical, box.inkMargin)
+      return (
+        line.em >= small && line.bottom > low && line.top < high && line.end > start && line.start < end
+      )
+    })
+  })
+}
+
+/**
+ * For each box, the box its text carries on into on the next line, or -1: when an engine reports
+ * every line (or paragraph) as a block of its own, the block whose first line continues the
+ * paragraph this one's last line is in, so a word broken at a line's end (デジ|タル) is looked up
+ * whole.
+ *
+ * Only blocks the engine gave as paragraphs of their own (`alone`), in the same direction, never
+ * a speech bubble. The next line follows the last one as a wrapped paragraph's lines do: the same
+ * size (within 30%), less than about a line's gap between their ink (1.25 em), starting where it
+ * started (within 1.5 em, for an indent or a hanging bracket), and running no further than it did
+ * (within 1.5 em): a paragraph wraps where its lines are full, so a line that sticks out past the
+ * one before is a line of its own, as a speaker's name over their dialogue, or a longer menu entry
+ * under a shorter one, is. Each line carries on into at most one, the nearest, and is carried
+ * into from at most one.
+ */
+export function continuations(boxes, alone = () => true) {
+  const candidates = boxes.map((box) =>
+    box.granularity === 'block' && !box.bubble && alone(box) ? box : null
+  )
+  const edges = candidates.map((box) => {
+    if (!box) return null
+    const vertical = isVerticalBox(box)
+    const { first, last } = edgeLines(box, vertical)
+    return {
+      vertical,
+      first: lineMetrics(first, vertical, box.inkMargin),
+      last: lineMetrics(last, vertical, box.inkMargin)
+    }
+  })
+  const pairs = []
+  edges.forEach((from, i) => {
+    if (!from) return
+    edges.forEach((to, j) => {
+      if (!to || i === j || to.vertical !== from.vertical) return
+      const a = from.last
+      const b = to.first
+      if (Math.max(a.em, b.em) > Math.min(a.em, b.em) * 1.3) return
+      const em = (a.em + b.em) / 2
+      // The blank between the two lines' ink, in ems.
+      const gap = (b.top + b.before * b.em - (a.bottom - a.after * a.em)) / em
+      if (gap < -0.3 || gap > 1.25) return
+      if (Math.abs(a.start - b.start) > em * 1.5) return
+      if (b.end > a.end + em * 1.5) return
+      if (between(boxes, i, j, a, b, from.vertical)) return
+      pairs.push({ from: i, to: j, gap })
+    })
+  })
+  pairs.sort((p, q) => p.gap - q.gap)
+  const out = boxes.map(() => -1)
+  const taken = new Set()
+  for (const { from, to } of pairs) {
+    if (out[from] !== -1 || taken.has(to)) continue
+    out[from] = to
+    taken.add(to)
+  }
+  return out
 }
 
 /**

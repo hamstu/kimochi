@@ -784,3 +784,104 @@ test("a block drawn line by line is still one flow: a lookup runs on from one li
   const first = runs[0].childNodes[0];
   assert.equal(new DOMTextScanner(first, 3, false, true).seek(4).content, "猫である");
 });
+
+// --- engines that call every line a paragraph ----------------------------------------
+//
+// Live Text, OneOCR and Google Lens report each line as a block with its own group, so a
+// paragraph's lines are separate paragraphs to the renderer; a word wrapped at a line's end
+// (デジ|タル) carries on into the next line's block when the two are clearly one paragraph.
+
+/** One engine line: a block of its own, as normalizeOcrResult leaves Live Text's lines. */
+let lineId = 0;
+const line = (text, x, y, w, h = 30, extras = {}) =>
+  chunk(text, x, y, { groupId: `line-${lineId++}`, granularity: "block", ...extras }, w, h);
+const column = (text, x, y, h, w = 30, extras = {}) =>
+  line(text, x, y, w, h, { orientation: "vertical", isVertical: true, ...extras });
+/** Each line's lookahead, rendered in word mode. */
+function lookaheads(lines) {
+  const host = element();
+  new TextOverlayRenderer(host).render(view(lines));
+  return lines.map((l) => lookaheadOf(host, l.description));
+}
+
+test("line blocks: a wrapped paragraph's line reads on into the next line", () => {
+  assert.deepEqual(
+    lookaheads([line("ニュースおはよう日本デジ", 0, 0, 330), line("タル性暴力防ぐ", 0, 40, 200)]),
+    ["タル性暴力防ぐ", ""],
+  );
+});
+
+test("line blocks: vertical columns read on right to left", () => {
+  assert.deepEqual(
+    lookaheads([column("館へ行かない", 100, 0, 200), column("今日は一緒に図書", 140, 0, 260)]),
+    ["", "館へ行かない"],
+  );
+});
+
+test("line blocks: side-by-side headlines each read on into their own second line only", () => {
+  const columns = [
+    ["ニュースおはよう日本デジ", "タル性暴力防ぐ"],
+    ["ニュースおはよう日本介護の担い手確", "保へ負担減と定着どう支援"],
+    ["ニュースおはよう首都圏（関", "東甲信越）"],
+  ];
+  const lines = columns.flatMap((pair, c) =>
+    pair.map((text, row) => line(text, c * 370, row * 40, row === 0 ? 330 : 200)),
+  );
+  // Reported row by row, as an engine might.
+  const ahead = lookaheads([0, 2, 4, 1, 3, 5].map((i) => lines[i]));
+  assert.deepEqual(ahead, ["タル性暴力防ぐ", "保へ負担減と定着どう支援", "東甲信越）", "", "", ""]);
+});
+
+test("line blocks: lines that are not one paragraph stay apart", () => {
+  const none = ["", ""];
+  // Further apart than about a line: a list, not a paragraph.
+  assert.deepEqual(lookaheads([line("装備品を確認して", 0, 0, 240), line("ください", 0, 75, 120)]), none);
+  // A different size: a heading over its text, or furigana over a line.
+  assert.deepEqual(lookaheads([line("第三章失われた", 0, 0, 400, 60), line("記憶", 0, 70, 60)]), none);
+  // Not starting where the line above did: a centred line, or another column's.
+  assert.deepEqual(lookaheads([line("それぞれの決意を", 0, 0, 240), line("胸に", 100, 40, 60)]), none);
+  // Running past the line above: a speaker's name over their dialogue, a longer menu entry.
+  assert.deepEqual(lookaheads([line("ルッカ", 0, 0, 90), line("もう完成したよ。広場へ", 0, 40, 330)]), none);
+  // A different direction.
+  assert.deepEqual(lookaheads([line("横書きの行で", 0, 0, 180), column("縦", 10, 40, 30)]), none);
+  // Speech bubbles (Manga OCR) are passages of their own, however close.
+  assert.deepEqual(
+    lookaheads([
+      column("吹き出し", 140, 0, 120, 30, { bubble: true }),
+      column("ふたつめ", 100, 0, 120, 30, { bubble: true }),
+    ]),
+    none,
+  );
+  // A line in between is the next one, not the one past it.
+  assert.deepEqual(
+    lookaheads([line("吾輩は猫で", 0, 0, 150), line("ある", 0, 80, 60), line("名前は", 0, 40, 90)]),
+    ["名前はある", "", "ある"],
+  );
+});
+
+test("line blocks: a paragraph of several boxes keeps its own end", () => {
+  // Cloud-style words of one paragraph, and a line block under them: only blocks carry on.
+  assert.deepEqual(
+    lookaheads([
+      chunk("食べ", 0, 0, { groupId: "p" }),
+      chunk("ました", 40, 0, { groupId: "p" }),
+      line("走っている", 0, 30, 70, 20),
+    ]),
+    ["ました", "", ""],
+  );
+});
+
+test("line blocks: the vendored scanner reads a wrapped word whole from its first half", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(view([line("おはよう日本デジ", 0, 0, 240), line("タル性暴力防ぐ", 0, 40, 200)]));
+  renderer.setPointer(200, 10);
+  renderer.updateProximity();
+  const root = toDom({ ...element("div"), className: "words", style: { position: "absolute" }, children: host.children });
+  const text = find(root.childNodes[0], "ocr-word-current").childNodes[0];
+  assert.equal(text.nodeValue, "おはよう日本デジ");
+  assert.equal(new DOMTextScanner(text, 6, false, true).seek(4).content, "デジタル");
+  // The second line's own text ends its lookups: nothing runs back or on from it.
+  const second = find(root.childNodes[1], "ocr-word-current").childNodes[0];
+  assert.equal(new DOMTextScanner(second, 5, false, true).seek(16).content, "防ぐ");
+});
