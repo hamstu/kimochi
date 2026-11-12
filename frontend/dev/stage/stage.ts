@@ -691,15 +691,27 @@ async function hookCard(): Promise<void> {
   if (flag('armed')) card.pointer(left + 4, top + 4, false, true)
   if (flag('lookup')) {
     const word = params.get('word') ?? '天気'
-    const node = card.element.querySelector('.hook-card-text')?.firstChild
-    const at = node?.textContent?.indexOf(word) ?? -1
-    if (!node || at < 0) return toast(`No ${word} in the card`)
+    // The card's rows, one text node each (hook-card.js `setText`): a word may run on into the next.
+    const nodes = [...card.element.querySelectorAll('.hook-card-text .hook-card-row')]
+      .map((row) => row.firstChild)
+      .filter((node): node is Text => node?.nodeType === Node.TEXT_NODE)
+    const whole = nodes.map((node) => node.data).join('')
+    const at = whole.indexOf(word)
+    if (at < 0) return toast(`No ${word} in the card`)
+    /** The text node and offset at character `index` of the rows' text. */
+    const point = (index: number, end: boolean): [Text, number] => {
+      for (const node of nodes) {
+        if (index < node.length || (end && index === node.length)) return [node, index]
+        index -= node.length
+      }
+      return [nodes[nodes.length - 1], nodes[nodes.length - 1].length]
+    }
     const range = document.createRange()
-    range.setStart(node, at)
-    range.setEnd(node, at + word.length)
+    range.setStart(...point(at, false))
+    range.setEnd(...point(at + word.length, true))
     getSelection()?.removeAllRanges()
     getSelection()?.addRange(range)
-    await showPopup(node.textContent!.slice(at), range.getBoundingClientRect())
+    await showPopup(whole.slice(at), range.getClientRects()[0] ?? range.getBoundingClientRect())
   }
 }
 

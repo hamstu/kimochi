@@ -713,10 +713,7 @@ controller = createController({
   charRects: (element) =>
     renderer.mode === 'words' && element !== hook.card?.element ? renderer.charRects(element) : null,
   // Read along over the Text Hooker's card.
-  extraUnits: () => {
-    const unit = hookCardUnit()
-    return unit ? [unit] : []
-  },
+  extraUnits: () => hookCardUnits(),
   quietText: (quiet) => renderer.setQuiet(quiet),
   nearText: (x, y) => {
     const reach = 32
@@ -1334,15 +1331,25 @@ function hookCardView() {
   }
 }
 
-/** The card's text as Read along takes a box's (ui/controller.js `readUnits`); null while it is not shown. */
-function hookCardUnit() {
+/**
+ * The card's text as Read along takes a box's (ui/controller.js `readUnits`): a unit per row
+ * (hook-card.js `setText`), as for a block's lines, so a word the game breaks across two rows is
+ * one word. None while it is not shown.
+ */
+function hookCardUnits() {
   const element = hook.card?.element
-  const node = element && !element.hidden ? element.querySelector('.hook-card-text')?.firstChild : null
-  if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent) return null
-  const range = document.createRange()
-  range.selectNodeContents(node)
-  const { left, top, width, height } = range.getBoundingClientRect()
-  return { element, node, text: node.textContent, vertical: false, box: { x: left, y: top, width, height } }
+  const text = element && !element.hidden ? element.querySelector('.hook-card-text') : null
+  if (!text) return []
+  const units = []
+  for (const row of text.children) {
+    const node = row.firstChild
+    if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent) continue
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    const { left, top, width, height } = range.getBoundingClientRect()
+    units.push({ element, node, text: node.textContent, vertical: false, box: { x: left, y: top, width, height } })
+  }
+  return units
 }
 
 /** Shows the card as it should be now, and publishes it as somewhere the pointer may go. */

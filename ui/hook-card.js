@@ -7,7 +7,7 @@
  * It is placed with a transform and nothing about it animates, except a glide when Auto align
  * moves it (`hook-card-glide`, for that one move only). Its text is real text in the overlay's
  * document, so the dictionary looks it up and opens its pop-ups as it does over OCR'd text, and
- * Read along steps through it (ui/overlay.js `hookCardUnit`).
+ * Read along steps through it (ui/overlay.js `hookCardUnits`).
  *
  * Coordinates are the overlay's (CSS pixels from its top-left). `show` places the card's text box:
  * the text starts exactly at `x`, `y`, whatever the padding, so text placed over the game's own
@@ -125,6 +125,26 @@ export function createHookCard(parent, hooks) {
   let drag = null
   /** The controller is placing the card (`steer`): what is shown keeps its text, not its place. */
   let steered = false
+  /** The text shown, its line breaks (`\n`) included: the page's text has none (`setText`). */
+  let shown = ''
+
+  /**
+   * Shows `value`, one row per line of it. The break after each row but the last is drawn by CSS
+   * (hook-card.css), never a `\n` in the page: the dictionary reads the page's characters, so a
+   * newline there split a word the game broke across two lines (自転 / 車 looked up as 自転), and
+   * Yomitan's Layout-aware scan reads a `<br>` or a block as a newline too. Inline rows with a
+   * generated break are neither, so a lookup reads on into the next row, whatever the engine.
+   */
+  const setText = (value) => {
+    shown = value
+    text.replaceChildren(
+      ...value.split(/\r?\n/).map((line) => {
+        const row = make('span', 'hook-card-row')
+        row.textContent = line
+        return row
+      })
+    )
+  }
 
   const clampBox = (b) => {
     const width = Math.max(MIN_WIDTH, Math.min(b.width, innerWidth - PAD_X * 2))
@@ -147,10 +167,9 @@ export function createHookCard(parent, hooks) {
 
   /** How many lines the text wraps onto as laid out now. */
   const linesNow = () => {
-    const node = text.firstChild
-    if (!node) return 0
+    if (!text.textContent) return 0
     const range = document.createRange()
-    range.selectNodeContents(node)
+    range.selectNodeContents(text)
     const tops = new Set()
     for (const rect of range.getClientRects()) if (rect.width > 0) tops.add(Math.round(rect.top))
     return tops.size
@@ -163,7 +182,7 @@ export function createHookCard(parent, hooks) {
    * at a time and by at most a fifth, for this line only, until it fits.
    */
   const fit = (lines, fontPx) => {
-    const key = `${text.textContent}|${fontPx}|${box?.width}|${lines}`
+    const key = `${shown}|${fontPx}|${box?.width}|${lines}`
     if (key === fitted) return
     fitted = key
     if (!lines || !box) return
@@ -229,7 +248,7 @@ export function createHookCard(parent, hooks) {
     const wasShown = !card.hidden && view !== null
     // A line held on one line until it was placed, now placed: it wraps into its box. The same
     // words, laid out anew, so they settle softly into it rather than a row popping into view.
-    const settling = wasShown && card.hasAttribute('data-pending') && !next.pending && text.textContent === next.text
+    const settling = wasShown && card.hasAttribute('data-pending') && !next.pending && shown === next.text
     if (settling) crossfade(ghostOf(), true)
     view = next
     card.hidden = false
@@ -246,11 +265,11 @@ export function createHookCard(parent, hooks) {
     card.style.setProperty('--hook-card-opacity', String(next.opacity ?? 1))
     for (const option of opacities.children)
       option.toggleAttribute('data-current', Number(option.dataset.opacity) === (next.opacity ?? 1))
-    const previous = text.textContent
+    const previous = shown
     if (previous !== next.text) {
       // Laid out as it was, before the new text replaces it: the old text's copy fades from here.
       if (wasShown && previous) crossfade(ghostOf(), sameWords(previous, next.text))
-      text.textContent = next.text
+      setText(next.text)
     }
     text.style.lineHeight = String(next.lineHeight ?? 1.5)
     if (drag || steered) return
@@ -261,7 +280,7 @@ export function createHookCard(parent, hooks) {
       box = placed
       apply(Boolean(next.glide) && wasShown)
     }
-    const key = `${text.textContent}|${next.fontPx}|${box.width}|${next.lines}`
+    const key = `${shown}|${next.fontPx}|${box.width}|${next.lines}`
     if (key !== fitted) text.style.fontSize = `${next.fontPx}px`
     fit(next.lines, next.fontPx)
     // Held on one line (`pending`): faded at the end only where it runs past the box.

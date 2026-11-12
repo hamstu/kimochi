@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **A setting Kimochi doesn't recognise no longer leaves a blank gray window** (for example after trying a newer version). It falls back to the default, and if a window still can't load, it says what went wrong, with **Reload window** and **Copy details**.
 - **An unreadable settings file is kept** as `settings.json.unreadable-…` beside it before Kimochi starts over on defaults, instead of being overwritten by the next change.
+- **Text Hooker: a word split across two lines in the card is looked up whole.** Hovering 自転 when the game breaks 自転車 as 自転 / 車 now finds 自転車, with Yomitan, Hachidori and 10ten, and Read along steps over it as one word.
 
 ## [0.9.0] - 2026-11-11
 
