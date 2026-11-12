@@ -551,3 +551,21 @@ test('the free cursor is on the character under it, or one close by, and nothing
   assert.equal(characterAt(targets, 70, 10, 14), -1)
   assert.equal(characterAt([], 0, 0, 14), -1)
 })
+
+test("a word runs on across the card's rows, but not out of the card into other text", async () => {
+  const seen = []
+  const split = async (text) => {
+    seen.push(text)
+    return tokensFromSegmenter(text)
+  }
+  const sentence = '今日は自転車で行った'
+  await segmentAcross(
+    [{ text: 'マリエ' }, { text: '今日は自転', sentence }, { text: '車で行った', sentence }, { text: '選択肢' }],
+    split
+  )
+  assert.deepEqual(seen, ['マリエ', '今日は自転車で行った', '車で行った', '選択肢'])
+  // OCR's boxes, which say no sentence, run on into each other as before.
+  seen.length = 0
+  await segmentAcross([{ text: 'ポッシュの作' }, { text: 'った剣でも' }], split)
+  assert.deepEqual(seen, ['ポッシュの作った剣でも', 'った剣でも'])
+})

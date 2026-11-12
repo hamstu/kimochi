@@ -209,6 +209,15 @@ export function dominantVertical(units) {
 }
 
 /**
+ * Whether a word may run on from `unit` into `next`: not out of a line that says what its sentence
+ * is (the Text Hooker card's rows, ui/overlay.js `hookCardUnits`) into other text, nor into one
+ * from other text. Units without a sentence (OCR's boxes) run on into each other as ever.
+ */
+export function runsOnInto(unit, next) {
+  return (unit.sentence ?? null) === (next.sentence ?? null)
+}
+
+/**
  * Each unit's tokens, found with the text after it in reading order, so a word OCR split across
  * two boxes is found whole: its token starts in one unit and ends past it, and the next unit's
  * text it covers is no stop of its own.
@@ -219,7 +228,10 @@ export function dominantVertical(units) {
 export async function segmentAcross(units, split) {
   const ahead = (index) => {
     let text = ''
-    for (let next = index + 1; next < units.length && text.length < SCAN_LENGTH; next++) text += units[next].text
+    for (let next = index + 1; next < units.length && text.length < SCAN_LENGTH; next++) {
+      if (!runsOnInto(units[next - 1], units[next])) break
+      text += units[next].text
+    }
     return text.slice(0, SCAN_LENGTH)
   }
   const found = await Promise.all(
@@ -438,5 +450,6 @@ export default {
   isWordText,
   readingUnits,
   dominantVertical,
-  segmentAcross
+  segmentAcross,
+  runsOnInto
 }

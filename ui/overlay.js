@@ -1334,20 +1334,28 @@ function hookCardView() {
 /**
  * The card's text as Read along takes a box's (ui/controller.js `readUnits`): a unit per row
  * (hook-card.js `setText`), as for a block's lines, so a word the game breaks across two rows is
- * one word. None while it is not shown.
+ * one word. Each carries the whole line as its `sentence` (and where the row starts in it,
+ * `sentenceOffset`): the sentence a lookup gives Anki, and what keeps a word from running on out
+ * of the card into other text (word-nav.js `runsOnInto`). None while it is not shown.
  */
 function hookCardUnits() {
   const element = hook.card?.element
   const text = element && !element.hidden ? element.querySelector('.hook-card-text') : null
   if (!text) return []
+  const sentence = text.textContent
   const units = []
+  let sentenceOffset = 0
   for (const row of text.children) {
     const node = row.firstChild
-    if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent) continue
-    const range = document.createRange()
-    range.selectNodeContents(node)
-    const { left, top, width, height } = range.getBoundingClientRect()
-    units.push({ element, node, text: node.textContent, vertical: false, box: { x: left, y: top, width, height } })
+    const rowText = node?.nodeType === Node.TEXT_NODE ? node.textContent : ''
+    if (rowText) {
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      const { left, top, width, height } = range.getBoundingClientRect()
+      const box = { x: left, y: top, width, height }
+      units.push({ element, node, text: rowText, sentence, sentenceOffset, vertical: false, box })
+    }
+    sentenceOffset += rowText.length
   }
   return units
 }
