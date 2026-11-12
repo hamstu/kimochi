@@ -7,7 +7,7 @@ import { languageOf } from "../../../ui/languages";
 
 /** The app's language codes DeepL translates from. */
 export const DEEPL_SOURCES: ReadonlySet<string> = new Set([
-  "ja", "ko", "zh-Hans", "zh-Hant", "yue", "th", "vi", "en", "es", "fr", "de", "it", "pt", "ru",
+  "ja", "ko", "zh-Hans", "zh-Hant", "th", "vi", "en", "es", "fr", "de", "it", "pt", "ru",
   "id", "tr", "pl", "nl", "sv", "no", "da", "fi", "el", "uk", "cs", "hu", "ro", "bg", "et", "lv",
 ]);
 

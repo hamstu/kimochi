@@ -772,7 +772,7 @@ surface.
 | `dictionary_engine_apply` | `({repair?}) -> ()` |
 | `dictionary_engine_effective` | `() -> {selected, chosen, effective, ready: {yomitan, hachidori, tenten}}` |
 | `dictionary_runtime_status` | `({engine}) -> {engine, phase, settingsReady, message, progress?}` |
-| `yomitan_profiles` | `() -> {account, profiles: [{name, language}], current, link} \| null` |
+| `yomitan_profiles` | `() -> {check: 'yomitan-profiles', account, profiles: [{name, language}], current, link} \| null` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
 | `ext_save_file` | raw bytes, header `x-kimochi-filename` (percent-encoded) `-> {saved, path?, bytes?}` |
 

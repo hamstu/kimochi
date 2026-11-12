@@ -74,6 +74,12 @@ test('switching back to the first account brings its profile back', () => {
   })
 })
 
+test('a Japanese account never linked leaves Yomitan alone on any trigger, whatever its profile says', () => {
+  const state = { profiles: [profile('Default', 'en')], current: 0 }
+  assert.deepEqual(plan({ state, trigger: 'change' }), { kind: 'keep' })
+  assert.deepEqual(plan({ state, trigger: 'startup' }), { kind: 'keep' })
+})
+
 test('a profile already in the language is used, and a name in use is not taken twice', () => {
   const state = { profiles: [profile('Default'), profile('English', 'en')], current: 0 }
   assert.deepEqual(plan({ account: 'a', language: 'en', state, links: { local: { profile: 'Default', language: 'ja' } } }), {

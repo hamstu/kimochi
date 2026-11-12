@@ -66,13 +66,14 @@ test('with Japanese, given or not, the filter drops exactly what it always did',
   assert.deepEqual(japaneseFilterOf(null, 'ko'), { japaneseFilter: 'noJapanese', language: 'ko' })
 })
 
-test('Korean keeps Hangul (and Han), and drops lines without them', () => {
+test('Korean keeps Hangul, and drops lines without it', () => {
   const plain = japaneseFilterOf({}, 'ko')
   const strict = japaneseFilterOf({ japaneseFilter: 'mostlyNonJapanese' }, 'ko')
   assert.equal(dropsText('안녕하세요', plain), false)
-  assert.equal(dropsText('漢字', plain), false)
+  assert.equal(dropsText('漢字', plain), true)
+  assert.equal(dropsText('漢字 한자', plain), false)
   assert.equal(dropsText('Options', plain), true)
-  assert.equal(dropsText('猫が好きです', plain), false, 'kanji are Han')
+  assert.equal(dropsText('猫が好きです', plain), true, 'Japanese is not Korean')
   assert.equal(dropsText('こんにちは', plain), true, 'kana are not Korean')
   assert.equal(dropsText('Options 설정', plain), false)
   assert.equal(dropsText('Options 설정', strict), true)
@@ -125,7 +126,7 @@ test('the overlay drops the same lines in the language, and skips the furigana f
 test('Read along steps through boxes in the language: Korean, English and Russian', () => {
   const units = [{ text: '안녕하세요' }, { text: 'Hello' }, { text: 'Привет' }, { text: '猫' }, { text: '123' }]
   const kept = (words) => readingUnits(units, false, words).map((u) => u.text)
-  assert.deepEqual(kept(wordsOf('ko')), ['안녕하세요', '猫'])
+  assert.deepEqual(kept(wordsOf('ko')), ['안녕하세요'])
   assert.deepEqual(kept(wordsOf('en')), ['Hello'])
   assert.deepEqual(kept(wordsOf('ru')), ['Привет'])
   assert.deepEqual(kept(), ['猫'], 'Japanese, as before')

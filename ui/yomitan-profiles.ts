@@ -158,7 +158,12 @@ export function planYomitanProfile({
   if (linked >= 0) return use(linked, false)
   const lost = !!link && link.language === code
 
-  if (!link && trigger === 'startup' && isJapanese(code)) return { kind: 'keep' }
+  // A Japanese account never linked is how everyone starts: Yomitan is left as it is, whatever its
+  // profile says, unless the profile in use is one made for another account.
+  const anothers = Object.entries(links).some(
+    ([slot, other]) => slot !== account && other.profile === profiles[current]?.name
+  )
+  if (!link && isJapanese(code) && (trigger === 'startup' || !anothers)) return { kind: 'keep' }
 
   if (profiles[current]?.language === wanted) return use(current, !!link)
   const same = profiles.findIndex((p) => p.language === wanted)

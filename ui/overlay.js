@@ -4598,12 +4598,14 @@ await native.watchSettings((key) => {
     key === 'quickShotEnabled' ||
     key === 'superTexthooker' ||
     key === 'ocrMode' ||
+    key === 'language' ||
     key === 'textHookerGames' ||
     key === 'textHookerDefaults' ||
     key === 'textHookerShowCard'
   )
     syncAutoScanner()
   if (
+    key === 'language' ||
     key === 'textHookerGames' ||
     key === 'textHookerDefaults' ||
     key === 'superTexthooker' ||

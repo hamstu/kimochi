@@ -163,7 +163,14 @@ fn read(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<(Vec<ppocr::T
         engine.ocr(image, OcrOptions::default()).map_err(|e| format!("PaddleOCR inference: {e}"))
     })
     .map_err(ReadError::Inference)?;
-    ppocr::japanese::fix_lines(&mut lines);
+    // The fixes turn Chinese glyph forms into the Japanese ones (值 → 値): right for Japanese
+    // text, wrong for Chinese.
+    let japanese = app
+        .try_state::<crate::state::Shared>()
+        .is_none_or(|service| crate::language::current(&service.settings).is_japanese());
+    if japanese {
+        ppocr::japanese::fix_lines(&mut lines);
+    }
     let backend = serde_json::to_value(engine.backend_info()).unwrap_or(Value::Null);
     Ok((lines, backend))
 }

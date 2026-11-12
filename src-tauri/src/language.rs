@@ -231,13 +231,14 @@ pub fn cloud_source(language: &Language) -> &str {
 }
 
 /// DeepL's source language code, or None where DeepL does not translate the language: the
-/// base subtag upper-cased (Chinese and Cantonese are `ZH`, Norwegian `NB`), for DeepL's
-/// long-standing source languages plus Thai and Vietnamese. Kimochi's server maps the same way.
+/// base subtag upper-cased (Chinese is `ZH`, Norwegian `NB`), for DeepL's long-standing source
+/// languages plus Thai and Vietnamese. Cantonese has none: DeepL's Chinese is Mandarin. Kimochi's
+/// server maps the same way.
 pub fn deepl_source(language: &Language) -> Option<&'static str> {
     Some(match language.code.as_str() {
         "ja" => "JA",
         "ko" => "KO",
-        "zh-Hans" | "zh-Hant" | "yue" => "ZH",
+        "zh-Hans" | "zh-Hant" => "ZH",
         "th" => "TH",
         "vi" => "VI",
         "en" => "EN",
@@ -368,7 +369,7 @@ mod tests {
         assert_eq!(deepl_source(get("zh-Hant")), Some("ZH"));
         assert_eq!(deepl_source(get("no")), Some("NB"));
         assert_eq!(deepl_source(get("hi")), None);
-        assert_eq!(deepl_source(get("yue")), Some("ZH"));
+        assert_eq!(deepl_source(get("yue")), None);
         assert_eq!(cloud_source(get("ja")), "JA");
         assert_eq!(cloud_source(get("zh-Hant")), "zh-Hant");
         let body = serde_json::json!({ "imageBase64": "x" });

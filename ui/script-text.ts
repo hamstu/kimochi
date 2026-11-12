@@ -11,7 +11,9 @@ import { languageOf, type ScriptCode } from './languages.js'
 export const SCRIPT_PATTERNS: Readonly<Record<ScriptCode, RegExp>> = {
   // Hiragana, Katakana (full and half width), CJK Unified Ideographs and Ext A, 々 and 〆.
   Jpan: /[぀-ゟ゠-ヿㇰ-ㇿｦ-ﾟ一-鿿㐀-䶿々〆]/,
-  Kore: /[\p{Script=Hangul}\p{Script=Han}]/u,
+  // Hangul alone, as native has it (language.rs): with Han, Japanese and Chinese lines would read
+  // as Korean.
+  Kore: /\p{Script=Hangul}/u,
   Hans: /[\p{Script=Han}々〆]/u,
   Hant: /[\p{Script=Han}々〆]/u,
   Latn: /\p{Script=Latin}/u,
@@ -45,10 +47,3 @@ export function joiner(before: string, after: string, language?: string): string
   if (!before || !after || !languageOf(language).spaces) return ''
   return /\s$/u.test(before) || /^\s/u.test(after) ? '' : ' '
 }
-
-/**
- * Letters, digits and marks a word is made of, for languages that put spaces between words: what
- * the pointer may be in the middle of, and what a word cell takes in (scan-text.ts,
- * gnome-word-cells.js). An apostrophe inside a word (don't, l'eau) is part of it.
- */
-export const WORD_CHARACTER = /[\p{L}\p{M}\p{N}'’]/u
