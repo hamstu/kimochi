@@ -45,6 +45,17 @@ const ICONS = {
 const icon = (name) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`
 
+/**
+ * Puts `element` first in `parent`, after only Kimochi's own unscanned controls already there (the
+ * overlay's hint bar): ahead of every text that is looked up, so no read runs from that text into
+ * a `data-no-scan` node (see `createHookCard`).
+ */
+function placeBeforeText(parent, element) {
+  let next = parent.firstElementChild
+  while (next?.hasAttribute('data-no-scan')) next = next.nextElementSibling
+  parent.insertBefore(element, next ?? null)
+}
+
 const make = (tag, className, attributes = {}) => {
   const element = document.createElement(tag)
   element.className = className
@@ -98,8 +109,13 @@ export function createHookCard(parent, hooks) {
   // Only the line is looked up: with Shift still held after a click on ⋯, a pointer over the
   // menu or the buttons must not open a dictionary pop-up (`data-no-scan`, host/frontend-mode.js).
   for (const element of [bar, controls, corner, menu]) element.setAttribute('data-no-scan', '')
-  card.append(bar, text, controls, corner, menu)
-  parent.append(card)
+  // The line comes last, in the card and on the page: nothing marked `data-no-scan` may follow
+  // text that is looked up. A read from a line's last word runs out of text and Yomitan leaves its
+  // end on the last node it passed; a `data-no-scan` node there costs the word its last character
+  // (`食べました` → `食べまし`). Everything around the text is positioned, so this order changes
+  // nothing on screen, and the card is drawn over the OCR'd text by its z-index, not its place.
+  card.append(bar, controls, corner, menu, text)
+  placeBeforeText(parent, card)
 
   /**
    * The overlay's window never has the pointer (it passes through to the game), so nothing in it
@@ -176,12 +192,13 @@ export function createHookCard(parent, hooks) {
 
   /**
    * A copy of the text as it is laid out now, over it and taking nothing from it: no layout, no
-   * pointer, no lookups (`data-no-scan`), not read aloud. After the real text in the card, so
-   * `.hook-card-text` still finds the real one first.
+   * pointer, no lookups (`data-no-scan`), not read aloud. Before the real text, which stays the
+   * card's last child (see above), just after the bar, where it has always been drawn. Its class
+   * is its own (hook-card.css styles it as the text), so `.hook-card-text` finds only the real one.
    */
   const ghostOf = () => {
     const ghost = text.cloneNode(true)
-    ghost.classList.add('hook-card-text-ghost')
+    ghost.className = 'hook-card-text-ghost'
     ghost.setAttribute('aria-hidden', 'true')
     ghost.setAttribute('data-no-scan', '')
     ghost.style.left = `${text.offsetLeft}px`
@@ -194,7 +211,7 @@ export function createHookCard(parent, hooks) {
     ghost.style.overflow = now.overflow
     ghost.style.height = `${text.offsetHeight}px`
     ghost.style.maskImage = now.maskImage
-    text.after(ghost)
+    bar.after(ghost)
     return ghost
   }
   /**
