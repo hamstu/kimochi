@@ -70,7 +70,9 @@ left half-applied.
 
 Keys and defaults mirror `src/main/settings.ts`:
 
-`hasCompletedOnboarding`, `windowPositions.<id>`, `nativeWindowBounds.<label>`,
+`hasCompletedOnboarding`, `language` (`'ja'`: the language being learned and read, a code from
+`ui/languages.ts`; a code this build does not list reads as `'ja'`; a profile preference, so per
+account and synced), `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,

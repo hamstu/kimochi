@@ -22,6 +22,12 @@ test('an OCR engine this build does not know reads as the default engine', () =>
   assert.equal(withDefaults('ocrMode', 'local'), 'meikiocr')
 })
 
+test('a language this build does not list reads as Japanese', () => {
+  assert.equal(withDefaults('language', 'tlh'), 'ja')
+  assert.equal(withDefaults('language', 7), 'ja')
+  assert.equal(withDefaults('language', 'zh-Hant'), 'zh-Hant')
+})
+
 test('other closed-set settings fall back the same way', () => {
   assert.equal(withDefaults('appearance', 'neon'), SETTINGS_DEFAULTS.appearance)
   assert.equal(withDefaults('appearance', 'dark'), 'dark')

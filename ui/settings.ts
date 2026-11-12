@@ -19,6 +19,7 @@ import {
   type AutoScanSettings
 } from './autoscan.js'
 import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
+import { DEFAULT_LANGUAGE, LANGUAGE_CODES } from './languages.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
@@ -244,6 +245,8 @@ export function fullscreenDictionarySource(popupType: unknown): 'entries' | 'pop
 }
 
 export interface Settings {
+  /** The language being learned and read: a code from `ui/languages.ts`. Japanese unless chosen. */
+  language: string
   overlayOpacity: number
   liveOverlayEnabled: boolean
   /** Rest the pointer on an overlay word to look it up, no key held (native `state::HoverIntent`). */
@@ -350,6 +353,7 @@ export const SERVER_URLS: Record<ServerMode, string> = {
 export const MAX_HISTORY_ENTRIES = 50
 
 export const SETTINGS_DEFAULTS: Settings = {
+  language: DEFAULT_LANGUAGE,
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   overlayHoverLookup: false,
@@ -821,6 +825,7 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
  * gray main window over `ocrMode: "screenai"`, written by 0.9.0).
  */
 const CHOICES: { [K in keyof Settings]?: readonly Settings[K][] } = {
+  language: LANGUAGE_CODES,
   ocrMode: OCR_MODE_KEYS,
   appearance: APPEARANCES,
   interfaceScale: Object.keys(INTERFACE_SCALES) as InterfaceScale[]

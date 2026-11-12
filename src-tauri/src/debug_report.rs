@@ -53,6 +53,7 @@ const LOGS: &[&str] = &[
 ];
 /// The settings a report names. Never the whole file: it holds account and service tokens.
 const SETTINGS: &[&str] = &[
+    "language",
     "ocrMode",
     "yomitanSettings.popupType",
     "autoOCRSettings",
