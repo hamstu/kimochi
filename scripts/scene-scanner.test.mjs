@@ -471,3 +471,23 @@ test('the still gate stays off on a screen that never holds still', async () => 
   assert.equal(state.skips ?? 0, 0, 'no look waited for still pixels')
   assert.ok(state.scenes.some((s) => s.includes('今日はいい天気ですね')), 'the dialogue is still read')
 })
+
+test('pointing at the text does not hold back a new line, only re-reads of what is shown', async () => {
+  let screen = DIALOGUE
+  const { scanner, state, step } = harness({ screen: () => screen, recognise: (frame) => reading(frame.lines) })
+  for (let i = 0; i < 4; i++) await step()
+  const reads = state.recognitions
+  assert.ok(reads >= 1)
+
+  // The reader moves the mouse over the words: a 3 s hold, renewed as the pointer moves.
+  scanner.pauseRecognitionFor(3000)
+  for (let i = 0; i < 3; i++) await step()
+  assert.equal(state.recognitions, reads, 'nothing new on screen: nothing read')
+
+  // The game moves on while the pointer is still there: the new line is read at once.
+  screen = [line('明日は雨だそうです', 396)]
+  scanner.pauseRecognitionFor(3000)
+  for (let i = 0; i < 3 && state.scenes.at(-1) !== '明日は雨だそうです'; i++) await step()
+  assert.equal(state.scenes.at(-1), '明日は雨だそうです')
+  assert.ok(scanner.requestsHeld, 'still within the hold')
+})

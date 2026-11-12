@@ -792,7 +792,13 @@ export class SceneScanner<Frame = unknown> {
       if (reason !== 'in-flight' && reason !== 'held') this.emit({ type: 'skip', reason })
       return 'observed'
     }
-    if (at < this.requestHold && !forced) return wait('held')
+    // The pointer hold (`holdRequestsUntil`) spares the text being pointed at a redraw. A line
+    // nobody has read yet, or one already gone (a rescue), is not that text: the line under the
+    // pointer has changed. Holding it only left the overlay empty for up to three seconds while
+    // the new line, already seen, waited (measured on a real game: 5-120 ms without the hold,
+    // 0.6-3 s with it). Re-reads of text already shown still wait.
+    const firstReading = job.reason === 'settled' || job.reason === 'disappeared'
+    if (at < this.requestHold && !forced && !firstReading) return wait('held')
     if (this.inFlight) return wait('in-flight')
     if (at - this.lastRequestAt < this.settings.minRequestSpacingMs && !forced) return wait('spacing')
     if (this.deps.tryAcquire && !this.deps.tryAcquire()) {
@@ -806,7 +812,8 @@ export class SceneScanner<Frame = unknown> {
 
   private drain(at: number): boolean {
     const job = this.pending
-    if (!job || this.inFlight || at < this.requestHold) return false
+    // Only rescues wait here (text already gone), which the pointer hold does not delay.
+    if (!job || this.inFlight) return false
     if (at - this.lastRequestAt < this.settings.minRequestSpacingMs) return false
     if (job.generation !== (this.deps.generation?.() ?? job.generation)) {
       this.counters.staleDiscarded++
