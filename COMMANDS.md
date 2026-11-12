@@ -2313,7 +2313,11 @@ cursor (`gnome::pointer_sample`), so the cursor poll's Shift gate (`state::Shift
 `overlay.shiftGate`, `shiftSource: "gnome-shell"`) works as on macOS, Windows and X11: the words
 let clicks through to the game until Shift is held, and the overlay hears them as ordinary
 `pointer` samples. Where the Shell placed the surface reaches the overlay as `gnome-surface`
-`{sourceId, origin, bounds, visible}`, only when it changes. GTK refuses keyboard focus and applies only the renderer's live word input
+`{sourceId, origin, bounds, visible, down}`, only when it changes. While the source window moves,
+the text fades out and comes back at its new place once the button (`down`) is up and the window
+has been still for 250 ms; the overlay publishes nothing to the Shell meanwhile, and a `present`
+the Shell refuses because the window moved after its bounds were read keeps the surface
+(`ui/gnome-overlay.js`). GTK refuses keyboard focus and applies only the renderer's live word input
 regions, through the widget (`gtk_widget_input_shape_combine_region`): GTK rewrites the GDK
 window's input shape from its client-side decoration on every allocation, and only a widget
 shape survives it. Clutter keeps the actor it last picked under the pointer until the pointer

@@ -300,9 +300,10 @@ pub fn start(app: tauri::AppHandle) {
                         *POINTER.lock().unwrap() = sample(&payload);
                         // Where the Shell put the surface, when that changes (samples come 50
                         // times a second). The pointer itself reaches the overlay from the cursor
-                        // poll (`pointer_sample`), with the Shift gate's verdict.
+                        // poll (`pointer_sample`), with the Shift gate's verdict. `down`: whether a
+                        // drag of the source window may still be going (ui/gnome-overlay.js).
                         let placement = json!({"sourceId": payload["sourceId"], "origin": payload["origin"],
-                            "bounds": payload["bounds"], "visible": payload["visible"]});
+                            "bounds": payload["bounds"], "visible": payload["visible"], "down": payload["down"]});
                         if placement != placed {
                             let _ = pointer_app.emit_to("overlay", "gnome-surface", &placement);
                             placed = placement;

@@ -186,15 +186,38 @@ test('GNOME uses the shared renderer with intact OCR segments, grouping, opacity
   }}}}
   globalThis.setInterval=()=>0
   try {
-    const renderer={clear(){calls.push({operation:'renderer-clear'})},render:args=>renders.push(args)}
-    const bridge=await installGnomeOverlay({},state,()=>true,()=>{}, {renderer,setting:key=>({textOverlayGrouping:true,overlayOpacity:.6})[key]})
+    const renderer={clear(options){calls.push({operation:'renderer-clear',fade:Boolean(options?.fade)})},render:args=>renders.push(args)}
+    const bridge=await installGnomeOverlay({},state,()=>true,()=>{}, {renderer,setting:key=>({textOverlayGrouping:true,overlayOpacity:.6})[key],settleMs:5})
     await bridge.update()
     assert.equal(bridge.shared,true);assert.equal(renders[0].annotations[0],annotation)
     assert.deepEqual(renders[0].annotations[0].segments,annotation.segments)
     assert.equal(renders[0].grouping,true);assert.equal(renders[0].opacity,.6);assert.equal(renders[0].bounds,bounds)
+    // A drag: the text fades out where it was, stays out while the window moves, and comes back
+    // once, at the window's new place, after it has been still.
+    const before=renders.length
     const moved={...bounds,x:80,y:90}
+    bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:{...bounds,x:70,y:80},visible:true})
     bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:moved,visible:true})
-    assert.deepEqual(renders.at(-1).bounds,moved)
+    assert.equal(renders.length,before,'no jumps while the window moves')
+    assert.equal(calls.filter(c=>c.operation==='renderer-clear'&&c.fade).length,1,'one fade out')
+    status.tracked.bounds=moved
+    const presents=()=>calls.filter(c=>c.operation==='present').length,presented=presents()
+    await bridge.update();assert.equal(renders.length,before);assert.equal(presents(),presented,'a publication meanwhile waits too')
+    // Still held: a drag that paused. Text comes back only once the button is up.
+    bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:moved,visible:true,down:true})
+    await new Promise(resolve=>setTimeout(resolve,30));assert.equal(renders.length,before,'not mid-drag')
+    bridge.pointer({sourceId:state.info.source_id,origin:monitor,bounds:moved,visible:true,down:false})
+    await new Promise(resolve=>setTimeout(resolve,30))
+    assert.ok(renders.length>before);for(const r of renders.slice(before))assert.deepEqual(r.bounds,moved)
+    assert.equal(presents(),presented+1,'published again where it stopped')
+    // A drag that starts while a publication is in flight: the Shell refuses bounds that just went
+    // stale. The surface stays (closing it blinked all the text off and on); the next tick retries.
+    const invoke=globalThis.window.__TAURI__.core.invoke
+    globalThis.window.__TAURI__.core.invoke=async(cmd,args)=>{if(args.operation==='present'){calls.push(args);throw new Error('dev.kimochi.GnomeOverlay.InvalidAnnotations: Window annotations require the explicitly linked live source and current bounds')}return invoke(cmd,args)}
+    const closes=()=>calls.filter(c=>c.operation==='surface'&&c.payload.operation==='close').length,closed=closes()
+    await bridge.update();assert.equal(closes(),closed);assert.equal(bridge.shared,true)
+    globalThis.window.__TAURI__.core.invoke=invoke
+    status.tracked.bounds=bounds
     const count=renders.length
     bridge.pointer({sourceId:'portal:window:99',origin:monitor,bounds,visible:true});assert.equal(renders.length,count)
     await bridge.pause();assert.equal(bridge.shared,false)

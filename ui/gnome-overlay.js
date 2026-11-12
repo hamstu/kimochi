@@ -5,7 +5,7 @@ import { mapAnnotations } from './geometry.js'
 import { visibleAnnotations } from './annotations.js'
 
 /** GNOME places the original annotation WebView; the shared renderer owns its UI. */
-export async function installGnomeOverlay(native, state, enabled, log, { renderer, setting }) {
+export async function installGnomeOverlay(native, state, enabled, log, { renderer, setting, settleMs = 250 }) {
   if (window.__KIMOCHI_PLATFORM__?.os !== 'linux') return null
   const gnomeRequest = (operation, payload = null) => window.__TAURI__.core.invoke('gnome_overlay', { operation, payload })
   let busy = false
@@ -13,13 +13,33 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
   let shared = false
   let placement = null
   let placementSignature = null
+  // While the source window is being dragged, the Shell's samples move its text every 20 ms, a
+  // jump at a time. The text fades out where it was instead, and back in at the window's new place
+  // once the button is up and the window has been still for `settleMs`: a drag that pauses, or
+  // whose samples stall for a moment, is still a drag.
+  let moving = null
+  let held = false
+  let movedAt = 0
+  const settle = () => {
+    clearTimeout(moving)
+    moving = setTimeout(() => {
+      // A button that never reports going up (the Shell went quiet) holds the text for 3 s at most.
+      if (held && performance.now() - movedAt < 3000) { settle(); return }
+      moving = null
+      render()
+      void update()
+    }, settleMs)
+  }
   const render = () => {
     if (!shared || !placement?.visible || !enabled() || !state.geometry) { renderer.clear(); return }
+    if (moving) return
     state.origin = placement.origin
     renderer.render({annotations:state.annotations,info:state.info,origin:placement.origin,bounds:placement.bounds,
       grouping:setting('textOverlayGrouping'),opacity:setting('overlayOpacity'),scanning:state.scanning})
   }
   const closeSurface = async () => {
+    clearTimeout(moving)
+    moving = null
     renderer.clear()
     placement = null
     placementSignature = null
@@ -30,16 +50,28 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
   }
   const pointer = payload => {
     if (!shared || payload.sourceId !== state.info?.source_id || !payload.origin || !payload.bounds) return
+    const wasHeld = held
+    held = Boolean(payload.down)
     const next = {origin:payload.origin,bounds:payload.bounds,visible:payload.visible}
     const signature = JSON.stringify(next)
     if (signature !== placementSignature) {
+      const moved = placement?.visible && next.visible && placement.bounds &&
+        ['x','y','width','height'].some(k => placement.bounds[k] !== next.bounds[k])
       placement = next
       placementSignature = signature
+      if (moved) {
+        if (!moving) renderer.clear({fade:true})
+        movedAt = performance.now()
+        settle()
+        return
+      }
       render()
-    }
+    } else if (moving && wasHeld && !held) settle()
   }
   const update = async () => {
-    if (busy) return
+    // Not while the window moves: the bounds read here are stale by the time `present` checks
+    // them. Its text is published again where it stops (`settle`).
+    if (busy || moving) return
     busy = true
     try {
       const status = await gnomeRequest('status')
@@ -77,9 +109,12 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
       }
       lastError = null
     } catch (error) {
+      const message = String(error)
+      // The window moved between reading its bounds and presenting them: a drag starting. Closing
+      // the surface for that blinked all of it off and on; the next tick presents again.
+      if (moving || /current bounds/.test(message)) return
       renderer.clear()
       await closeSurface().catch(() => {})
-      const message = String(error)
       if (message !== lastError) log({ check: 'gnome-overlay-error', error: message })
       lastError = message
     } finally { busy = false }
