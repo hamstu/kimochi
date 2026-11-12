@@ -174,7 +174,9 @@ test("a hosted frame answers the parent's probe at the frame-relative point", as
   };
   assert.equal(installFrameCursorResponder(frame), true);
   assert.equal(installFrameCursorResponder(frame), false, "installed once per window");
-  assert.equal(await probeFrameCursor(iframe, 150, 90), "text");
+  // A generous wait: the app's 40 ms default is about the UI, and a slow CI runner (Windows ARM)
+  // took 52 ms to answer, which reads as "no answer". Only the reply is under test here.
+  assert.equal(await probeFrameCursor(iframe, 150, 90, 2000), "text");
   assert.deepEqual(seen, [[49, 49]]);
 });
 
