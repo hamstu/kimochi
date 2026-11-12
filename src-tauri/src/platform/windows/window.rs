@@ -530,8 +530,8 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     // Never a full-screen app, however much of the display it covers. The OCR overlay is the
     // size of the game's display, and the shell takes a window covering a monitor for a
     // full-screen app and drops that monitor's taskbar behind every window, so the game drew
-    // over it for as long as Kimochi ran. `NonRudeHWND` (documented with
-    // `ITaskbarList2::MarkFullscreenWindow`) opts out of that detection. It is read when the
+    // over it for as long as Kimochi ran. `NonRudeHWND` opts out of that detection
+    // (https://devblogs.microsoft.com/oldnewthing/20250522-00/?p=111211). It is read when the
     // shell re-evaluates the window, which the overlay's placement over the display does.
     unsafe {
         let _ = SetPropW(hwnd, w!("NonRudeHWND"), Some(HANDLE(1 as _)));
