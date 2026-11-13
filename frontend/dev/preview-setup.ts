@@ -1255,9 +1255,10 @@ const HANDLERS: Record<string, Handler> = {
   // The preview's dictionary answers from these mocks, so whichever engine is asked about is up,
   // unless ?readiness= plays a setup (previewReadiness below).
   dictionary_runtime_status: (a) => previewReadiness((a?.engine as string) ?? 'yomitan'),
-  // Built-in Yomitan's profiles as the overlay publishes them (ui/yomitan-profiles.ts).
+  // Built-in Yomitan's profiles as the overlay publishes them (ui/yomitan-profiles.ts), for the
+  // account in use (?account=), so Settings → Account shows them with a signed-in account too.
   yomitan_profiles: () => ({
-    account: 'local',
+    account: (ACCOUNT_HANDLERS.profile_current(undefined) as { key: string | null }).key ?? 'local',
     profiles: [
       { name: 'Default', language: 'ja' },
       { name: 'Korean', language: 'ko' }
