@@ -3,7 +3,6 @@ title: Japanese-only features
 description: What works only in Japanese for now, what you get instead in other languages, and the known limits of other languages.
 ---
 
-import Todo from '../../../components/Todo.astro'
 
 Kimochi was made for Japanese, and a few features rely on Japanese text, Japanese voices or
 Japanese dictionaries. In any other language they are hidden or can't be chosen, and the rest of
@@ -26,12 +25,7 @@ Kimochi works as usual.
 
 - **No right-to-left languages yet.** Arabic, Hebrew, Persian and other right-to-left languages
   aren't listed: the overlay can't lay them out.
-- **Text hooking** decodes games that don't use Unicode as Japanese (Shift-JIS), so an older game
-  in another language may come through garbled. Read it with
-  [OCR](/reading/sources/#choosing-a-window-or-screen) instead.
 - **The browser extension** hasn't been adapted yet: it reads pictures with your OCR engine, but
   draws their text over the picture spaced as it would Japanese.
 - **Word counts** (the Log's words and words per hour) aren't synced between computers yet.
 - Translations and explanations are always in English.
-
-<Todo>TODO(hamish): confirm the text hooking limit (hookd still gives LunaHook code page 932 for non-Unicode hooks) and the browser extension one (square-glyph layout in content.js) are worth stating to users, or will be fixed before release.</Todo>
