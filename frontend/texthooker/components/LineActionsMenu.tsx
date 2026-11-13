@@ -6,6 +6,8 @@ import {
   Copy,
   Languages,
   MoreHorizontal,
+  Pencil,
+  RotateCcw,
   Sparkles,
   TextSelect,
   Trash2,
@@ -22,11 +24,13 @@ import {
   MenuTrigger,
 } from "@kit";
 import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
-import { deleteLine } from "@texthooker/lib/store";
+import { deleteLine, setLineText } from "@texthooker/lib/store";
+import { editLineAfterMenu, openEditAfterMenu } from "@texthooker/lib/lineEdit";
+import { closeAutoFocusFromKeyboardOnly } from "../../kit/focus";
 import { openExplain } from "@texthooker/lib/explain";
 import { getSettings } from "@texthooker/lib/settings";
 import { showOriginal, showTranslation } from "@texthooker/lib/translate";
-import type { Line } from "@texthooker/lib/types";
+import { isNote, type Line } from "@texthooker/lib/types";
 
 const copy = async (text: string) => {
   try {
@@ -37,6 +41,11 @@ const copy = async (text: string) => {
 };
 
 const MENU_SELECTION = "kimochi-menu-selection";
+
+/** Where focus goes as a line menu closes: into the editor when Edit line was chosen. */
+const closeFocus = (event: Event) => {
+  if (!openEditAfterMenu(event)) closeAutoFocusFromKeyboardOnly(event);
+};
 
 /**
  * Draws `ranges` as the selection while the line menu is open (`::highlight` in log.css): hovering
@@ -104,13 +113,16 @@ function LineMenuItems({
   const { cloudAccess } = useCapabilities();
   const isTranslated = Boolean(line.showTranslation && line.translation);
   const displayText = isTranslated ? line.translation! : line.text;
+  // A note is the person's own: copied, edited and deleted, not read aloud, translated or
+  // explained.
+  const note = isNote(line);
 
   return (
     <>
       {/* Read aloud: the row activates the shared AudioPlayer button, which keeps its own
           playing state and error tooltip. The menu stays open while it plays. Only when signed in
           to a Kimochi account (Kimochi cloud access). */}
-      {cloudAccess && (
+      {cloudAccess && !note && (
         <MenuItem
           icon={
             <span
@@ -151,7 +163,7 @@ function LineMenuItems({
       >
         Copy {selection ? "line" : "text"}
       </MenuItem>
-      {isTranslated ? (
+      {note ? null : isTranslated ? (
         <MenuItem
           icon={<Undo2 />}
           shortcut="t"
@@ -171,15 +183,32 @@ function LineMenuItems({
         </MenuItem>
       ) : null}
       {/* Explanations from Kimochi cloud need Kimochi Cloud; the CLI providers always work. */}
-      {(cloudAccess || getSettings().explainProvider !== "kimochi") && (
+      {!note && (cloudAccess || getSettings().explainProvider !== "kimochi") && (
         <MenuItem
           icon={<Sparkles />}
-          shortcut="e"
+          shortcut="x"
           onSelect={() => openExplain(line)}
         >
           Explain
         </MenuItem>
       )}
+      {/* Corrects the text (a misread が/か); what was recorded is kept (`originalText`). The
+          editor opens once the menu has let go of focus (`closeFocus`). */}
+      <MenuItem
+        icon={<Pencil />}
+        shortcut="e"
+        onSelect={() => editLineAfterMenu(line.id)}
+      >
+        {note ? "Edit note" : "Edit line"}
+      </MenuItem>
+      {line.originalText !== undefined ? (
+        <MenuItem
+          icon={<RotateCcw />}
+          onSelect={() => void setLineText(line.id, line.originalText!)}
+        >
+          Restore original
+        </MenuItem>
+      ) : null}
       <MenuSeparator />
       <MenuItem
         icon={<Trash2 />}
@@ -187,7 +216,7 @@ function LineMenuItems({
         shortcut="d"
         onSelect={() => deleteLine(line.id)}
       >
-        Delete line
+        {note ? "Delete note" : "Delete line"}
       </MenuItem>
     </>
   );
@@ -217,7 +246,7 @@ export function LineActionsMenu({
             <MoreHorizontal />
           </IconButton>
         </MenuTrigger>
-        <MenuContent align="end" className="log-line-menu">
+        <MenuContent align="end" className="log-line-menu" onCloseAutoFocus={closeFocus}>
           <LineMenuItems line={line} translateEnabled={translateEnabled} />
         </MenuContent>
       </Menu>
@@ -329,7 +358,7 @@ export function LineContextMenu({
       <ContextMenuTrigger asChild onContextMenu={onContextMenu}>
         {children}
       </ContextMenuTrigger>
-      <MenuContent className="log-line-menu">
+      <MenuContent className="log-line-menu" onCloseAutoFocus={closeFocus}>
         {line ? (
           <LineMenuItems
             line={line}

@@ -20,7 +20,8 @@
   const Z = 2147483645
   const PROXIMITY = 300
   const MIN_SIZE = 24
-  const POLL_MS = 1500
+  // A canvas drawn on keeps drawing for a moment (tiles, a fade): read it once that settles.
+  const REDRAW_SETTLE_MS = 300
 
   /** @type {chrome.runtime.Port|null} */
   let port = null
@@ -1175,9 +1176,10 @@
    * the spot's centre and the elements around the picture there.
    */
   function replacementAt(spot, old) {
-    const x = spot.left + spot.width / 2
-    const y = spot.top + spot.height / 2
-    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return null
+    // Its centre, or the nearest point of it on screen (a spot taken while it was sliding away).
+    const x = Math.min(Math.max(spot.left + spot.width / 2, Math.max(0, spot.left)), Math.min(innerWidth, spot.right) - 1)
+    const y = Math.min(Math.max(spot.top + spot.height / 2, Math.max(0, spot.top)), Math.min(innerHeight, spot.bottom) - 1)
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight || x < spot.left || y < spot.top) return null
     const stack = document.elementsFromPoint(x, y).filter((el) => !isOurs(el))
     const found = new Set(stack)
     const picture = stack.find((el) => isPicture(el)) ?? pictureUnder(stack, x, y)
@@ -1298,6 +1300,7 @@
       type: 'scan',
       id,
       reason: p.reason ?? 'auto',
+      pic: p.id,
       // Nothing on screen to fall back on: the worker reads it even if it looks the same as before.
       fresh: !p.stashed,
       src: plan.src ?? null,
@@ -1434,8 +1437,13 @@
     }
   }
 
-  /** Class names that say what a thing is, not which one it is (no numbers: `page-12`, hashes). */
-  const stableClasses = (el) => [...el.classList].filter((c) => !/\d/.test(c)).slice(0, 6)
+  /**
+   * Class names that say what a thing is, not which one it is or what state it's in: no numbers
+   * (`page-12`, hashes), and no slider states that move to the next slide as the page turns
+   * (`is-active`, `is-prev`, `swiper-slide-active`, `slick-current`, `glide__slide--active`, …).
+   */
+  const STATE_CLASS = /^(is|has)[-_]|(^|[-_])(active|current|visible|selected|prev|previous|next|hidden|shown?|open|loaded|loading|cloned?)$/i
+  const stableClasses = (el) => [...el.classList].filter((c) => !/\d/.test(c) && !STATE_CLASS.test(c)).slice(0, 6)
 
   /** A CSS path from the nearest stable id (or the body) down to the element. */
   function cssPath(el) {
@@ -1818,19 +1826,41 @@
     })
     mutations.observe(target, { attributes: true, attributeFilter: ['src', 'srcset', 'style', 'class'], childList: true, subtree: true, characterData: true })
     watchers.push(() => mutations.disconnect())
-    // A canvas or video changes without telling the DOM: look again now and then (the worker
-    // compares a small fingerprint and only bothers Kimochi when the pixels changed).
-    const timer = setInterval(() => {
-      if (!autoOn() || busy()) return
-      for (const p of pics.values()) {
-        if (p.el instanceof HTMLCanvasElement || p.el instanceof HTMLVideoElement) {
-          p.stashed = { lines: p.lines, region: p.region }
-          enqueue(p, 'auto')
-        }
-      }
-    }, POLL_MS)
-    watchers.push(() => clearInterval(timer))
   }
+
+  // A canvas or video changes without telling the DOM. Nothing polls it: draws.js says when the
+  // page draws on a canvas, and a video is read when it stops on a frame (paused, or a seek).
+  const redrawTimers = new WeakMap()
+  function redrawn(event) {
+    const p = pics.get(event.target)
+    if (!p) return
+    clearTimeout(redrawTimers.get(p))
+    redrawTimers.set(
+      p,
+      setTimeout(() => {
+        if (pics.get(p.el) !== p) return
+        // Being read right now: once that's back, so the new picture isn't lost.
+        if (inflight?.p === p) {
+          redrawn(event)
+          return
+        }
+        if (autoOn()) {
+          // The old boxes never show over the new picture; kept aside in case it drew the same.
+          if (p.lines.length) p.stashed = { lines: p.lines, region: p.region }
+          setLines(p, [], null)
+          layout()
+          enqueue(p, 'auto')
+        } else if (p.state === 'done') {
+          p.state = 'stale'
+          setMessage('The picture changed: read it again', 'neutral')
+          render()
+        }
+      }, REDRAW_SETTLE_MS)
+    )
+  }
+  document.addEventListener('kimochi-ext-drawn', redrawn, true)
+  document.addEventListener('pause', redrawn, true)
+  document.addEventListener('seeked', redrawn, true)
 
   function unwatch() {
     for (const stopWatching of watchers) stopWatching()

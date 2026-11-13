@@ -12,6 +12,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Look up on hover.** Turn it on in Settings → Shortcuts & Controls to look up a word on the overlay just by resting the pointer on it, no key held. Moving the pointer across the screen doesn't flash pop-ups at every word on the way, and clicks still go to your game. Not available on Linux Wayland yet.
 - **Windows: a controller that is listed but whose buttons do nothing can be read with XInput instead.** Turn on **Read controllers with XInput** in Settings → Shortcuts & Controls; it takes effect right away, so the button test shows whether it helped. It works with Xbox-style (XInput) controllers only.
+- **Fix a line in the Log.** Double-click a line, choose **Edit line** from its menu, or press **E** over it to correct the text: a misread が for か, or a place name you'd rather type in than draw a new OCR region for. Press Enter to save or Esc to cancel. Kimochi keeps the text as it was read, so the next reading of the same line still isn't logged twice. **Restore original** in the menu puts back what was read. **Explain** is now **X**.
+- **Write your own notes in the Log.** Choose **Add a note** at the end of the Log, or press **A**, to add a note right where you are in the story, with the time. Notes take Markdown, stand out from the lines around them, and fold away when they're long (click to open). Your notes are in the **Notebook** too, under **Notes**: edit them there, or choose **Show in Log** to jump back to the spot. The Log's footer counts them; click the count to see them all. Notes sync like the rest of your Log.
 
 ### Changed
 
@@ -19,6 +21,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Auto OCR no longer drops lines when dialogue moves quickly** with a local engine.
 - **Auto OCR no longer waits up to 3 seconds for a new line when your mouse is over the text.**
 - **Slow engines (OneOCR, Screen AI on modest PCs) skip work while text is still typing out**, and read each line once it's done.
+- **Browser extension: Auto works properly on readers that draw pages on a canvas (like ComicWalker).** It reads each new page as you turn to it, no longer reads the same pages again and again (so the text stops flickering), and uses less CPU. With Auto off, it now tells you when the page changed.
 - **Windows:** PaddleOCR and MeikiOCR use about a quarter less CPU while Auto OCR runs, with no loss in speed.
 
 ### Fixed

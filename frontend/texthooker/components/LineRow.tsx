@@ -1,5 +1,5 @@
-import { memo, useMemo, useSyncExternalStore } from "react";
-import { Tooltip } from "@kit";
+import { memo, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { isComposing, Tooltip } from "@kit";
 import { NotebookMatchChip } from "./NotebookMatchChip";
 import { LineActionsMenu } from "./LineActionsMenu";
 import { getMatcher, matchLine, type Match } from "@texthooker/lib/nameMatch";
@@ -9,9 +9,14 @@ import {
   getTranslateStatus,
   subscribeTranslateStatus,
 } from "@texthooker/lib/translate";
-import type { Line } from "@texthooker/lib/types";
+import { isNote, type Line } from "@texthooker/lib/types";
 import { lineDate, lineTime } from "@texthooker/lib/logDays";
 import { LineMedia } from "./LineMedia";
+import { endNote, stopEditing, useLineEditing } from "@texthooker/lib/lineEdit";
+import { addNote, setLineText } from "@texthooker/lib/store";
+import { markdownHtml } from "@texthooker/lib/html";
+import { ChevronDown } from "lucide-react";
+import { followNoteLink } from "@texthooker/lib/noteNav";
 
 interface Props {
   line: Line;
@@ -47,7 +52,7 @@ function buildRenderPieces(line: Line, matches: Match[]): RenderPiece[] {
  * while the row is hovered or its menu is open. CSS draws the time from `data-time`, so it is
  * never selected, copied or looked up with the line's text.
  */
-function LineGutter({ ts }: { ts: number }) {
+export function LineGutter({ ts }: { ts: number }) {
   return (
     <>
       <span className="line-rail" aria-hidden />
@@ -64,7 +69,222 @@ function LineGutter({ ts }: { ts: number }) {
   );
 }
 
+/**
+ * A line's text in a box that grows with it, in the transcript's own type: editing a line or a
+ * note (LineEditor), or writing a new note (AddNote). Enter (not while an input method is
+ * composing) or clicking away saves; Shift+Enter starts a new line; Escape keeps things as they
+ * were. Switching to another window leaves the box open. The row has no `data-yomitan-scan`, so
+ * lookups leave the box alone.
+ */
+export function LineEditorBox({
+  lineId,
+  ts,
+  initial,
+  caret,
+  note = false,
+  label,
+  hint,
+  onFinish,
+}: {
+  lineId?: Line["id"];
+  ts: number;
+  initial: string;
+  caret: number | null;
+  note?: boolean;
+  label: string;
+  hint?: (value: string) => string | null;
+  onFinish: (save: boolean, value: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const finished = useRef(false);
+
+  const fit = () => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    fit();
+    const at = caret ?? el.value.length;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(at, at);
+    el.scrollIntoView({ block: "nearest" });
+  }, [caret]);
+
+  const finish = (save: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    onFinish(save, value);
+  };
+
+  const shown = hint?.(value);
+  return (
+    <div
+      className={`line line-editing${note ? " line-editing-note" : ""}`}
+      data-line-id={lineId}
+    >
+      <LineGutter ts={ts} />
+      <textarea
+        ref={box}
+        className="line-editor"
+        value={value}
+        rows={1}
+        spellCheck={false}
+        aria-label={label}
+        placeholder={note ? "Write a note…" : undefined}
+        onChange={(e) => {
+          setValue(e.target.value);
+          fit();
+        }}
+        onKeyDown={(e) => {
+          if (isComposing(e)) return;
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            finish(false);
+          } else if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            finish(true);
+          }
+        }}
+        onBlur={() => {
+          // The window lost focus (back to the game): keep editing.
+          if (!document.hasFocus()) return;
+          finish(true);
+        }}
+        // The box's own menu (paste, undo) rather than the line's.
+        onContextMenu={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      />
+      {shown ? <span className="line-editor-hint" lang="en">{shown}</span> : null}
+    </div>
+  );
+}
+
+const NOTE_HINT = "Markdown · Enter saves · Shift+Enter for a new line · Esc cancels";
+
+/** The line or note being edited in place. */
+function LineEditor({ line, caret }: { line: Line; caret: number | null }) {
+  const note = isNote(line);
+  return (
+    <LineEditorBox
+      lineId={line.id}
+      ts={line.ts}
+      initial={line.text}
+      caret={caret}
+      note={note}
+      label={note ? "Edit note" : "Edit line"}
+      hint={(value) =>
+        note
+          ? NOTE_HINT
+          : line.originalText !== undefined && line.originalText !== value
+            ? `Recorded as: ${line.originalText}`
+            : null
+      }
+      onFinish={(save, value) => {
+        stopEditing(line.id);
+        if (save) void setLineText(line.id, value);
+      }}
+    />
+  );
+}
+
+/** A new note at the end of the Log (`startNote`): saved as a line once it has any text. */
+export function NoteDraft({ ts }: { ts: number }) {
+  return (
+    <LineEditorBox
+      ts={ts}
+      initial=""
+      caret={null}
+      note
+      label="New note"
+      hint={() => NOTE_HINT}
+      onFinish={(save, value) => {
+        endNote();
+        if (save) void addNote(value);
+      }}
+    />
+  );
+}
+
+/**
+ * A note the person wrote: its Markdown rendered in a card that stands off the transcript. A long
+ * one is cut short until opened (a click on it, or Show more), and closes again with Show less.
+ * Links open in the browser, never in the Log.
+ */
+function NoteView({ line, translateEnabled }: Props) {
+  const html = useMemo(() => markdownHtml(line.text), [line.text]);
+  const body = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(0);
+  const [tall, setTall] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const measure = () => {
+      setFull(el.scrollHeight);
+      // Cut short (CSS caps a closed note's height): more of it than shows.
+      if (!open) setTall(el.scrollHeight > el.clientHeight + 2);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [html, open]);
+
+  const groupProps = { 'data-yomitan-scan': '' };
+  return (
+    <div
+      className="line line-own-note"
+      {...groupProps}
+      data-line-id={line.id}
+      data-line-text={line.text}
+    >
+      <LineGutter ts={line.ts} />
+      <div className="note-card" data-tall={tall ? "" : undefined} data-open={open ? "" : undefined}>
+        <div
+          ref={body}
+          className="note-body explain-markdown"
+          style={tall && open ? { maxHeight: full } : undefined}
+          dangerouslySetInnerHTML={{ __html: html }}
+          onClick={(e) => {
+            if (followNoteLink(e)) return;
+            // A click (not the end of a selection) on a cut-short note opens it.
+            if (tall && !open && window.getSelection()?.isCollapsed) setOpen(true);
+          }}
+        />
+        {tall ? (
+          <button
+            type="button"
+            className="note-toggle"
+            lang="en"
+            aria-expanded={open}
+            onClick={() => setOpen((was) => !was)}
+          >
+            <ChevronDown aria-hidden />
+            {open ? "Show less" : "Show more"}
+          </button>
+        ) : null}
+      </div>
+      <LineActionsMenu line={line} translateEnabled={translateEnabled} />
+    </div>
+  );
+}
+
 function LineRowInner({ line, translateEnabled }: Props) {
+  const editingCaret = useLineEditing(line.id);
+  if (editingCaret !== undefined) return <LineEditor line={line} caret={editingCaret} />;
+  if (isNote(line)) return <NoteView line={line} translateEnabled={translateEnabled} />;
+  return <LineView line={line} translateEnabled={translateEnabled} />;
+}
+
+function LineView({ line, translateEnabled }: Props) {
   // Subscribe so this row re-renders when notebook content changes.
   const cacheVersion = useNotebookCacheVersion();
   // Transient translate status (loading / error) for this line.
@@ -146,6 +366,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
         {...groupProps}
         data-line-id={line.id}
         data-line-text={line.text}
+        data-edited={line.originalText !== undefined ? "" : undefined}
       >
         <LineGutter ts={line.ts} />
         <span>{line.text}</span>
@@ -164,6 +385,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
       {...groupProps}
       data-line-id={line.id}
       data-line-text={line.text}
+      data-edited={line.originalText !== undefined ? "" : undefined}
     >
       <LineGutter ts={line.ts} />
       {pieces.map((piece, i) => {

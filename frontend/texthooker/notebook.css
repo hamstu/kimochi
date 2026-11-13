@@ -490,3 +490,41 @@
 .nb-skel-line { height: 0.625rem; width: 55%; }
 .nb-skel-line + .nb-skel-line { width: 35%; }
 @keyframes nb-pulse { 50% { opacity: 0.45; } }
+
+/* The person's notes (NotebookNotes.tsx): rows after the entries, and their side pane. */
+.nb-note-group:not(:first-child) { margin-top: var(--k-space-2); }
+.nb-note-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+}
+.nb-note-avatar > svg { width: 1rem; height: 1rem; }
+.nb-note-name { font-family: var(--k-font-ui); font-size: var(--k-text-md); line-height: var(--k-leading-md); }
+.nb-note-when { color: var(--k-text-3); font-size: var(--k-text-xs); white-space: nowrap; }
+.nb-note-head {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2-5);
+  padding: var(--k-space-3) var(--k-space-2) var(--k-space-3) var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+}
+.nb-note-head-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.nb-note-head-title { font-size: var(--k-text-md); font-weight: var(--k-weight-medium); color: var(--k-text); }
+.nb-note-head-when { font-size: var(--k-text-xs); color: var(--k-text-3); }
+.nb-note-text.k-field { min-height: 9rem; font-family: var(--k-font-ui); line-height: 1.6; }
+.nb-note-preview {
+  padding: var(--k-space-2) var(--k-space-3);
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+  font-size: var(--k-text-sm);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.nb-note-preview > :first-child { margin-top: 0; }
+.nb-note-preview > :last-child { margin-bottom: 0; }
+.nb-note-preview a { color: var(--k-accent-text); text-decoration: underline; }

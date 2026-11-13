@@ -842,3 +842,203 @@ body.scan-mode .line-chip {
 /* Each OCR capture is a section; its semantic units retain their own actions. */
 .line[data-ocr-index="0"]:not([data-ocr-count="1"]) { margin-top: 1.25rem; }
 
+
+/* A line being edited in place (LineRow.tsx, LineEditor): the transcript's own text in a field
+   that grows with it, inset so the text stays where it was. Below it, what was recorded, once
+   the line has been edited. */
+.log-lines .line-editing {
+  background: var(--k-hover);
+}
+.log-lines .line-editing::before,
+.log-lines .line-editing + .line::before {
+  opacity: 0;
+}
+.line-editor {
+  display: block;
+  width: calc(100% + 2 * var(--k-space-1-5));
+  margin: calc(-1 * var(--k-space-1)) calc(-1 * var(--k-space-1-5));
+  padding: var(--k-space-1) var(--k-space-1-5);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: var(--k-field);
+  box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4);
+  color: var(--k-text);
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+}
+.dark .line-editor {
+  background: var(--gray-a2);
+}
+.line-editor-hint {
+  display: block;
+  margin-top: var(--k-space-1-5);
+  color: var(--k-text-3);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The person's own note (LineRow.tsx, NoteView): its Markdown in a card raised off the
+   transcript, in the UI's type. A long one is cut short behind a fade until opened; opening and
+   closing animate its height. */
+.log-lines .line-own-note {
+  padding-block: var(--k-space-2);
+}
+.note-card {
+  position: relative;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-raised);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong), 0 1px 2px rgb(15 17 26 / 0.06);
+  padding: var(--k-space-2) var(--k-space-3);
+}
+.note-body {
+  --note-cut: 9.5em;
+  max-height: var(--note-cut);
+  overflow: hidden;
+  font-family: var(--k-font-ui);
+  font-size: 0.8em;
+  line-height: 1.6;
+  color: var(--k-text);
+  overflow-wrap: anywhere;
+  transition: max-height var(--k-base) var(--k-ease-out);
+}
+.note-card[data-tall]:not([data-open]) .note-body {
+  cursor: pointer;
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+.note-body > :first-child {
+  margin-top: 0;
+}
+.note-body > :last-child {
+  margin-bottom: 0;
+}
+.note-body a {
+  color: var(--k-accent-text, var(--k-accent));
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.note-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  margin-top: var(--k-space-1-5);
+  padding: var(--k-space-0-5, 2px) var(--k-space-1-5);
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text-2);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.note-toggle:hover {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.note-toggle:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.note-toggle > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  transition: transform var(--k-base) var(--k-ease-out);
+}
+.note-card[data-open] .note-toggle > svg {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-body,
+  .note-toggle > svg {
+    transition: none;
+  }
+}
+/* A note being written is set in the UI's type, as it shows once saved. */
+.line-editing-note .line-editor {
+  font-family: var(--k-font-ui);
+  font-size: 0.8em;
+  line-height: 1.6;
+}
+
+/* "Add a note" at the end of the Log: a quiet button on a hairline, a button only on hover. */
+.log-add-note {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  padding: var(--k-space-3) var(--k-space-4) var(--k-space-4) var(--k-space-3);
+  font-family: var(--k-font-ui);
+}
+.log-add-note::before,
+.log-add-note::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--k-line);
+}
+.log-add-note-button.k-button {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.log-add-note-button.k-button:hover {
+  color: var(--k-text);
+}
+.log-add-note-key {
+  margin-left: var(--k-space-1);
+  padding: 0 0.35em;
+  border-radius: var(--k-radius-sm);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+  font-family: var(--k-font-ui);
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: var(--k-text-3);
+}
+html[data-mini] .log-add-note {
+  display: none;
+}
+
+/* The footer's note count opens the Notebook on the notes: footer text that is a link. */
+.log-stat-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.log-stat-link:hover,
+.log-stat-link:hover .log-stat-value {
+  color: var(--k-accent-text);
+}
+.log-stat-link:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+  border-radius: var(--k-radius-sm);
+}
+
+/* Show in Log: the line asked for glows for a moment where it now sits. */
+.log-lines .line[data-flash] {
+  animation: line-flash 2s var(--k-ease-out);
+}
+@keyframes line-flash {
+  0%,
+  35% {
+    background: var(--accent-a4);
+  }
+  100% {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .log-lines .line[data-flash] {
+    animation: none;
+    background: var(--accent-a3);
+  }
+}
