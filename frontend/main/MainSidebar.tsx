@@ -11,7 +11,7 @@
  */
 import { useEffect, useState, type JSX } from 'react'
 import { ArrowLeft, Globe, Settings } from 'lucide-react'
-import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
+import { Badge, ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
 import { useLanguage } from '../bridge/useLanguage'
@@ -344,7 +344,7 @@ export function MainSidebar({
             onSettings={() => onSettingsTab(settingsTab)}
           />
         ) : (
-          // No account in use (and mini mode): Settings and the language share the foot.
+          // No account in use (and mini mode): Settings, and the language tucked in at the right.
           <div className="sb-foot-split">
             <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
               Settings
@@ -356,7 +356,7 @@ export function MainSidebar({
               aria-label={`Language: ${language.name}`}
               title={`Language: ${language.name}`}
             >
-              {language.name}
+              <Badge>{language.code.split('-')[0].toUpperCase()}</Badge>
             </Row>
           </div>
         )}
