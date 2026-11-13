@@ -48,10 +48,7 @@ export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => P
     let mounted = true
     getSetting<T>(key, defaultValueRef.current)
       .then((loaded) => {
-        if (mounted)
-          setValue(
-            remember(key, loaded !== undefined && loaded !== null ? loaded : defaultValueRef.current)
-          )
+        if (mounted) setValue(remember(key, loaded !== undefined && loaded !== null ? loaded : defaultValueRef.current))
       })
       .catch((error) => {
         console.error(`Failed to load setting "${key}":`, error)
@@ -65,12 +62,7 @@ export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => P
   useEffect(() => {
     return onSettingsChange((changedKey, newValue) => {
       if (changedKey !== key || isSettingRef.current) return
-      setValue(
-        remember(
-          key,
-          newValue !== undefined && newValue !== null ? (newValue as T) : defaultValueRef.current
-        )
-      )
+      setValue(remember(key, newValue !== undefined && newValue !== null ? (newValue as T) : defaultValueRef.current))
     })
   }, [key])
 
@@ -82,12 +74,8 @@ export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => P
         await setSetting(key, newValue)
       } catch (error) {
         console.error(`Failed to save setting "${key}":`, error)
-        const current = await getSetting<T>(key, defaultValueRef.current).catch(
-          () => defaultValueRef.current
-        )
-        setValue(
-          remember(key, current !== undefined && current !== null ? current : defaultValueRef.current)
-        )
+        const current = await getSetting<T>(key, defaultValueRef.current).catch(() => defaultValueRef.current)
+        setValue(remember(key, current !== undefined && current !== null ? current : defaultValueRef.current))
       } finally {
         setTimeout(() => {
           isSettingRef.current = false

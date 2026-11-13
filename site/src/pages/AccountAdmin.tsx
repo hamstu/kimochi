@@ -64,7 +64,9 @@ function OverviewSection() {
   const overview = useLoad(api.adminOverview)
   const o = overview.data
   const subs = (status: string, interval?: string) =>
-    (o?.subscriptions ?? []).filter((s) => s.status === status && (!interval || s.interval === interval)).reduce((n, s) => n + s.count, 0)
+    (o?.subscriptions ?? [])
+      .filter((s) => s.status === status && (!interval || s.interval === interval))
+      .reduce((n, s) => n + s.count, 0)
   return (
     <AccountSection id="overview" title="Overview" description="Accounts by plan, and the latest subscription changes.">
       {overview.error ? (
@@ -89,7 +91,17 @@ function OverviewSection() {
                 <li key={i} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-small">
                   <span className="min-w-0 text-ink break-all">{r.email ?? 'No email'}</span>
                   <span className="flex items-center gap-2 text-ink-3">
-                    <Badge tone={r.status === 'active' ? 'ok' : r.status === 'trialing' ? 'accent' : r.status === 'past_due' ? 'warn' : 'neutral'}>
+                    <Badge
+                      tone={
+                        r.status === 'active'
+                          ? 'ok'
+                          : r.status === 'trialing'
+                            ? 'accent'
+                            : r.status === 'past_due'
+                              ? 'warn'
+                              : 'neutral'
+                      }
+                    >
                       {r.status}
                     </Badge>
                     {r.interval ?? ''} · {formatDay(r.updatedAt)}
@@ -136,7 +148,10 @@ function LimitsSection() {
       for (const m of data.metrics) {
         const v = fromInput(m, draft[`${plan}.${m}`] ?? '')
         if (v === undefined) {
-          setMessage({ tone: 'danger', text: `${planLabel(plan)} · ${METRIC_LABELS[m]}: enter a number of 0 or more, or leave it blank for unlimited.` })
+          setMessage({
+            tone: 'danger',
+            text: `${planLabel(plan)} · ${METRIC_LABELS[m]}: enter a number of 0 or more, or leave it blank for unlimited.`
+          })
           return
         }
         if (v !== data.limits[plan][m]) (changes[plan] ??= {})[m] = v
@@ -262,7 +277,14 @@ function PersonSection() {
     >
       <form onSubmit={lookUp} className="flex flex-wrap items-end gap-3">
         <div className="min-w-[16rem] flex-1">
-          <Field label="Email" type="email" name="lookup" value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} />
+          <Field
+            label="Email"
+            type="email"
+            name="lookup"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={busy}
+          />
         </div>
         <SubmitButton variant="secondary" busy={busy && !found} busyLabel="Looking…">
           Look up
@@ -276,7 +298,10 @@ function PersonSection() {
       {u && found && (
         <div className="mt-6 grid gap-5 rounded-lg border border-hairline p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-ink break-all">{u.displayName ? `${u.displayName} · ` : ''}{u.email}</span>
+            <span className="text-ink break-all">
+              {u.displayName ? `${u.displayName} · ` : ''}
+              {u.email}
+            </span>
             <Badge tone={u.cloud ? 'accent' : 'neutral'}>{planLabel(u.plan)}</Badge>
             {u.status === 'suspended' && <Badge tone="warn">Suspended</Badge>}
           </div>
@@ -294,7 +319,12 @@ function PersonSection() {
           </p>
           <div className="grid gap-4">
             {(['ocr', 'translate', 'tts', 'explain'] as const).map((m) => (
-              <Meter key={m} label={METRIC_LABELS[m].replace(/ \(.*\)/, '')} used={found.usage.metrics[m].used} limit={found.usage.metrics[m].limit} />
+              <Meter
+                key={m}
+                label={METRIC_LABELS[m].replace(/ \(.*\)/, '')}
+                used={found.usage.metrics[m].used}
+                limit={found.usage.metrics[m].limit}
+              />
             ))}
             <Meter
               label="Sync storage"
@@ -305,11 +335,23 @@ function PersonSection() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {u.grant === 'cloud' ? (
-              <SubmitButton type="button" variant="secondary" busy={busy} busyLabel="Saving…" onClick={() => change({ grant: null })}>
+              <SubmitButton
+                type="button"
+                variant="secondary"
+                busy={busy}
+                busyLabel="Saving…"
+                onClick={() => change({ grant: null })}
+              >
                 Remove free Kimochi Cloud
               </SubmitButton>
             ) : u.grant !== 'owner' ? (
-              <SubmitButton type="button" variant="secondary" busy={busy} busyLabel="Saving…" onClick={() => change({ grant: 'cloud' })}>
+              <SubmitButton
+                type="button"
+                variant="secondary"
+                busy={busy}
+                busyLabel="Saving…"
+                onClick={() => change({ grant: 'cloud' })}
+              >
                 Give Kimochi Cloud for free
               </SubmitButton>
             ) : null}

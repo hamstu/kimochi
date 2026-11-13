@@ -30,16 +30,14 @@ pub fn available() -> bool {
     AVAILABLE.load(Ordering::SeqCst)
 }
 pub fn report() -> Value {
-    REPORT
-        .lock()
-        .unwrap()
-        .clone()
-        .unwrap_or(json!({"backend":"portal","pending":true}))
+    REPORT.lock().unwrap().clone().unwrap_or(json!({"backend":"portal","pending":true}))
 }
 /// What to do about shortcuts Kimochi could not bind on Hyprland (`hyprland_binds`), if any.
 pub fn hyprland_remediation() -> Option<String> {
     let report = report();
-    let failed: Vec<String> = report["failed"].as_array()?.iter()
+    let failed: Vec<String> = report["failed"]
+        .as_array()?
+        .iter()
         .filter(|f| f["hyprland"] == true)
         .filter_map(|f| Some(format!("{} ({})", f["name"].as_str()?, f["error"].as_str()?)))
         .collect();
@@ -47,16 +45,26 @@ pub fn hyprland_remediation() -> Option<String> {
         "Hyprland could not take these shortcuts: {}. Choose another key here, or bind one in your Hyprland config to the global shortcut Kimochi:dev.kimochi.app.<name>.",
         failed.join("; ")))
 }
-pub fn dispatch_gnome(app:&tauri::AppHandle,name:&str) {
-    let allowed=report();
-    if available() && allowed["backend"]=="gnome-shell" && allowed["registered"].as_array().is_some_and(|keys|keys.iter().any(|key|key==name)) && actions::ACTIONS.contains(&name) {
-        crate::record(app,&app.state::<Shared>(),json!({"check":"global-shortcut-activated","backend":"gnome-shell","action":name}));
-        actions::dispatch(app,&app.state::<Shared>(),name);
+pub fn dispatch_gnome(app: &tauri::AppHandle, name: &str) {
+    let allowed = report();
+    if available()
+        && allowed["backend"] == "gnome-shell"
+        && allowed["registered"].as_array().is_some_and(|keys| keys.iter().any(|key| key == name))
+        && actions::ACTIONS.contains(&name)
+    {
+        crate::record(
+            app,
+            &app.state::<Shared>(),
+            json!({"check":"global-shortcut-activated","backend":"gnome-shell","action":name}),
+        );
+        actions::dispatch(app, &app.state::<Shared>(), name);
     }
 }
 
 pub fn stop() {
-    if report()["backend"]=="gnome-shell" {let _=super::gnome::request("shortcuts",json!({"bindings":[]}));}
+    if report()["backend"] == "gnome-shell" {
+        let _ = super::gnome::request("shortcuts", json!({"bindings":[]}));
+    }
     super::hyprland_binds::unbind();
     GENERATION.fetch_add(1, Ordering::SeqCst);
     AVAILABLE.store(false, Ordering::SeqCst);
@@ -94,23 +102,11 @@ fn request<B: serde::Serialize + zbus::zvariant::DynamicType>(
     method: &str,
     body: &B,
 ) -> Result<Dict, String> {
-    let sender = conn
-        .unique_name()
-        .ok_or("missing bus name")?
-        .as_str()
-        .trim_start_matches(':')
-        .replace('.', "_");
+    let sender = conn.unique_name().ok_or("missing bus name")?.as_str().trim_start_matches(':').replace('.', "_");
     let path = format!("/org/freedesktop/portal/desktop/request/{sender}/{token}");
-    let request = Proxy::new(
-        conn,
-        "org.freedesktop.portal.Desktop",
-        path.as_str(),
-        "org.freedesktop.portal.Request",
-    )
-    .map_err(|e| e.to_string())?;
-    let mut responses = request
-        .receive_signal("Response")
+    let request = Proxy::new(conn, "org.freedesktop.portal.Desktop", path.as_str(), "org.freedesktop.portal.Request")
         .map_err(|e| e.to_string())?;
+    let mut responses = request.receive_signal("Response").map_err(|e| e.to_string())?;
     let returned: OwnedObjectPath = proxy.call(method, body).map_err(|e| e.to_string())?;
     if returned.as_str() != path {
         return Err("Portal returned an unexpected request handle".into());
@@ -137,18 +133,30 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
     let generation = GENERATION.load(Ordering::SeqCst);
     let mut definitions = merged_hotkeys(settings);
     // A mouse button (bound on another computer, then synced) is not a key the portal can take.
-    let mouse: Vec<String> = definitions.iter()
-        .filter(|(_, d)| d["enabled"] != false && d["accelerator"].as_str().is_some_and(|a| crate::mouse_buttons::Button::parse(a).is_some()))
-        .map(|(name, _)| name.clone()).collect();
-    let failed: Vec<Value> = mouse.iter().map(|name| {
-        let accelerator = definitions.remove(name).map(|d| d["accelerator"].clone()).unwrap_or(Value::Null);
-        json!({"name":name,"accelerator":accelerator,"error":"mouse buttons can't be shortcuts on Linux"})
-    }).collect();
+    let mouse: Vec<String> = definitions
+        .iter()
+        .filter(|(_, d)| {
+            d["enabled"] != false
+                && d["accelerator"].as_str().is_some_and(|a| crate::mouse_buttons::Button::parse(a).is_some())
+        })
+        .map(|(name, _)| name.clone())
+        .collect();
+    let failed: Vec<Value> = mouse
+        .iter()
+        .map(|name| {
+            let accelerator = definitions.remove(name).map(|d| d["accelerator"].clone()).unwrap_or(Value::Null);
+            json!({"name":name,"accelerator":accelerator,"error":"mouse buttons can't be shortcuts on Linux"})
+        })
+        .collect();
     let app = app.clone();
     let pending = json!({"registered":[],"failed":failed,"backend":"portal","pending":true});
     *REPORT.lock().unwrap() = Some(pending.clone());
     std::thread::spawn(move || {
-        let result = if super::gnome::status()["nativeShortcuts"]==true {bind_gnome(&app,definitions,generation)}else{bind(&app,definitions,generation)};
+        let result = if super::gnome::status()["nativeShortcuts"] == true {
+            bind_gnome(&app, definitions, generation)
+        } else {
+            bind(&app, definitions, generation)
+        };
         if GENERATION.load(Ordering::SeqCst) != generation {
             return;
         }
@@ -157,35 +165,53 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
             let _ = app.emit("linux-dictionary-modifier", json!({"shift":false}));
             let report = json!({"registered":[],"failed":[{"name":"Wayland shortcuts","error":error}],"backend":"portal","pending":false});
             *REPORT.lock().unwrap() = Some(report.clone());
-            crate::record(
-                &app,
-                &app.state::<Shared>(),
-                json!({"check":"global-shortcuts","report":report}),
-            );
-            let _ = app.emit(
-                "platform-capabilities",
-                crate::capabilities_value(&app, &app.state::<Shared>()),
-            );
+            crate::record(&app, &app.state::<Shared>(), json!({"check":"global-shortcuts","report":report}));
+            let _ = app.emit("platform-capabilities", crate::capabilities_value(&app, &app.state::<Shared>()));
         }
     });
     pending
 }
 
-fn gtk_trigger(accelerator:&str)->String {
-    let mut result=String::new();
+fn gtk_trigger(accelerator: &str) -> String {
+    let mut result = String::new();
     for part in accelerator.split('+') {
-        result.push_str(match part {"CommandOrControl"|"Control"|"Ctrl"=>"<Control>","Shift"=>"<Shift>","Alt"=>"<Alt>","Super"|"Meta"=>"<Super>","Space"=>"space","Enter"=>"Return",other=>other});
-    }result
+        result.push_str(match part {
+            "CommandOrControl" | "Control" | "Ctrl" => "<Control>",
+            "Shift" => "<Shift>",
+            "Alt" => "<Alt>",
+            "Super" | "Meta" => "<Super>",
+            "Space" => "space",
+            "Enter" => "Return",
+            other => other,
+        });
+    }
+    result
 }
 
-fn bind_gnome(app:&tauri::AppHandle,definitions:serde_json::Map<String,Value>,generation:u64)->Result<(),String>{
-    let bindings:Vec<Value>=definitions.into_iter().filter(|(name,d)|actions::ACTIONS.contains(&name.as_str())&&d["enabled"]!=false).filter_map(|(name,d)|d["accelerator"].as_str().filter(|s|!s.is_empty()).map(|s|json!({"name":name,"accelerator":gtk_trigger(s)}))).collect();
-    let result=super::gnome::request("shortcuts",json!({"bindings":bindings}))?;
-    if GENERATION.load(Ordering::SeqCst)!=generation{return Ok(());}
-    AVAILABLE.store(result["registered"].as_array().is_some_and(|v|!v.is_empty()),Ordering::SeqCst);
-    *REPORT.lock().unwrap()=Some(result.clone());
-    crate::record(app,&app.state::<Shared>(),json!({"check":"global-shortcuts","report":result}));
-    let _=app.emit("platform-capabilities",crate::capabilities_value(app,&app.state::<Shared>()));Ok(())
+fn bind_gnome(
+    app: &tauri::AppHandle,
+    definitions: serde_json::Map<String, Value>,
+    generation: u64,
+) -> Result<(), String> {
+    let bindings: Vec<Value> = definitions
+        .into_iter()
+        .filter(|(name, d)| actions::ACTIONS.contains(&name.as_str()) && d["enabled"] != false)
+        .filter_map(|(name, d)| {
+            d["accelerator"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(|s| json!({"name":name,"accelerator":gtk_trigger(s)}))
+        })
+        .collect();
+    let result = super::gnome::request("shortcuts", json!({"bindings":bindings}))?;
+    if GENERATION.load(Ordering::SeqCst) != generation {
+        return Ok(());
+    }
+    AVAILABLE.store(result["registered"].as_array().is_some_and(|v| !v.is_empty()), Ordering::SeqCst);
+    *REPORT.lock().unwrap() = Some(result.clone());
+    crate::record(app, &app.state::<Shared>(), json!({"check":"global-shortcuts","report":result}));
+    let _ = app.emit("platform-capabilities", crate::capabilities_value(app, &app.state::<Shared>()));
+    Ok(())
 }
 
 /// Portals require a desktop entry even for an unsandboxed development build/AppImage.
@@ -198,22 +224,17 @@ fn desktop_identity() -> Result<(), String> {
     let applications = data.join("applications");
     let entry = applications.join("Kimochi.desktop");
     let existing = std::fs::read_to_string(&entry).ok();
-    let generated = existing
-        .as_deref()
-        .is_some_and(|s| s.contains("X-Kimochi-Generated=true"));
+    let generated = existing.as_deref().is_some_and(|s| s.contains("X-Kimochi-Generated=true"));
     if existing.is_some() && !generated {
         return Ok(());
     }
-    let dirs =
-        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    let dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
     // AppImage adds its private usr/share to XDG_DATA_DIRS. The host portal
     // cannot see that mount, so it still needs the generated user entry.
     let appdir = std::env::var_os("APPDIR").map(std::path::PathBuf::from);
     if dirs.split(':').any(|d| {
         let directory = std::path::Path::new(d);
-        !appdir
-            .as_ref()
-            .is_some_and(|root| directory.starts_with(root))
+        !appdir.as_ref().is_some_and(|root| directory.starts_with(root))
             && directory.join("applications/Kimochi.desktop").exists()
     }) {
         if generated {
@@ -224,20 +245,12 @@ fn desktop_identity() -> Result<(), String> {
     let executable = std::env::var_os("APPIMAGE")
         .map(std::path::PathBuf::from)
         .unwrap_or(std::env::current_exe().map_err(|e| e.to_string())?);
-    let escaped = executable
-        .to_string_lossy()
-        .replace('\\', r"\\")
-        .replace('"', r#"\""#)
-        .replace('%', "%%");
+    let escaped = executable.to_string_lossy().replace('\\', r"\\").replace('"', r#"\""#).replace('%', "%%");
     std::fs::create_dir_all(&applications).map_err(|e| e.to_string())?;
     std::fs::write(entry, format!("[Desktop Entry]\nType=Application\nName=Kimochi\nExec=\"{escaped}\"\nIcon=kimochi\nTerminal=false\nStartupWMClass=kimochi\nCategories=Education;\nX-Kimochi-Generated=true\n")).map_err(|e| e.to_string())
 }
 
-fn bind(
-    app: &tauri::AppHandle,
-    definitions: serde_json::Map<String, Value>,
-    generation: u64,
-) -> Result<(), String> {
+fn bind(app: &tauri::AppHandle, definitions: serde_json::Map<String, Value>, generation: u64) -> Result<(), String> {
     desktop_identity()?;
     let conn = zbus::blocking::connection::Builder::session()
         .map_err(|e| e.to_string())?
@@ -286,12 +299,8 @@ fn bind(
     options.insert("handle_token".into(), text(&token));
     options.insert("session_handle_token".into(), text(&token));
     let mut result = request(&conn, &portal, &token, "CreateSession", &(options,))?;
-    let session = String::try_from(
-        result
-            .remove("session_handle")
-            .ok_or("Portal omitted shortcut session")?,
-    )
-    .map_err(|e| e.to_string())?;
+    let session = String::try_from(result.remove("session_handle").ok_or("Portal omitted shortcut session")?)
+        .map_err(|e| e.to_string())?;
     let session = OwnedObjectPath::try_from(session).map_err(|e| e.to_string())?;
     let mut bindings = Vec::new();
     // Hyprland fires these only for binds that name them (`hyprland_binds`).
@@ -322,22 +331,10 @@ fn bind(
     // Hyprland supports non-consuming modifier-only desktop bindings. Other
     // portal backends may reject modifier-only accelerators, so do not add them
     // there or advertise a raw/global keyboard watcher.
-    if super::session()
-        .compositor
-        .as_deref()
-        .unwrap_or("")
-        .to_ascii_lowercase()
-        .contains("hypr")
-    {
-        for (name, key) in [
-            ("dictionaryShiftLeft", "Shift_L"),
-            ("dictionaryShiftRight", "Shift_R"),
-        ] {
+    if super::session().compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") {
+        for (name, key) in [("dictionaryShiftLeft", "Shift_L"), ("dictionaryShiftRight", "Shift_R")] {
             let mut data = Dict::new();
-            data.insert(
-                "description".into(),
-                text("Hold Shift for dictionary lookup"),
-            );
+            data.insert("description".into(), text("Hold Shift for dictionary lookup"));
             data.insert("preferred_trigger".into(), text(key));
             keyed.push(super::hyprland_binds::Shortcut {
                 id: format!("dev.kimochi.app.{name}"),
@@ -351,13 +348,7 @@ fn bind(
     let bind_token = format!("{token}_bind");
     let mut options = Dict::new();
     options.insert("handle_token".into(), text(&bind_token));
-    let mut result = request(
-        &conn,
-        &portal,
-        &bind_token,
-        "BindShortcuts",
-        &(&session, bindings, "", options),
-    )?;
+    let mut result = request(&conn, &portal, &bind_token, "BindShortcuts", &(&session, bindings, "", options))?;
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
         .sender("org.freedesktop.portal.Desktop")
@@ -367,26 +358,15 @@ fn bind(
         .interface("org.freedesktop.portal.GlobalShortcuts")
         .map_err(|e| e.to_string())?
         .build();
-    let signals =
-        MessageIterator::for_match_rule(rule, &conn, Some(32)).map_err(|e| e.to_string())?;
+    let signals = MessageIterator::for_match_rule(rule, &conn, Some(32)).map_err(|e| e.to_string())?;
     if GENERATION.load(Ordering::SeqCst) != generation {
         return Ok(());
     }
     AVAILABLE.store(true, Ordering::SeqCst);
-    let bound: Vec<(String, Dict)> = Vec::try_from(
-        result
-            .remove("shortcuts")
-            .ok_or("Portal omitted bound shortcuts")?,
-    )
-    .map_err(|e| e.to_string())?;
-    let registered: Vec<String> = bound
-        .iter()
-        .map(|(id, _)| {
-            id.strip_prefix("dev.kimochi.app.")
-                .unwrap_or(id)
-                .to_string()
-        })
-        .collect();
+    let bound: Vec<(String, Dict)> = Vec::try_from(result.remove("shortcuts").ok_or("Portal omitted bound shortcuts")?)
+        .map_err(|e| e.to_string())?;
+    let registered: Vec<String> =
+        bound.iter().map(|(id, _)| id.strip_prefix("dev.kimochi.app.").unwrap_or(id).to_string()).collect();
     super::shift::portal_bound(registered.iter().any(|name| name.starts_with("dictionaryShift")));
     // Hyprland registers the actions but fires one only for a bind naming it: add those binds.
     let failed: Vec<Value> = if super::hyprland_binds::available() {
@@ -399,30 +379,19 @@ fn bind(
     } else {
         Vec::new()
     };
-    let registered: Vec<String> = registered.into_iter()
-        .filter(|name| !failed.iter().any(|f| f["name"] == name.as_str())).collect();
+    let registered: Vec<String> =
+        registered.into_iter().filter(|name| !failed.iter().any(|f| f["name"] == name.as_str())).collect();
     let report = json!({"backend":"portal","pending":false,"registered":registered,"failed":failed});
     *REPORT.lock().unwrap() = Some(report.clone());
-    crate::record(
-        app,
-        &app.state::<Shared>(),
-        json!({"check":"global-shortcuts","report":report}),
-    );
-    let _ = app.emit(
-        "platform-capabilities",
-        crate::capabilities_value(app, &app.state::<Shared>()),
-    );
+    crate::record(app, &app.state::<Shared>(), json!({"check":"global-shortcuts","report":report}));
+    let _ = app.emit("platform-capabilities", crate::capabilities_value(app, &app.state::<Shared>()));
     let mut modifiers = DictionaryModifiers::default();
     for signal in signals {
         if GENERATION.load(Ordering::SeqCst) != generation {
             break;
         }
         let signal = signal.map_err(|e| e.to_string())?;
-        let member = signal
-            .header()
-            .member()
-            .map(|m| m.as_str().to_owned())
-            .unwrap_or_default();
+        let member = signal.header().member().map(|m| m.as_str().to_owned()).unwrap_or_default();
         if member != "Activated" && member != "Deactivated" {
             continue;
         }
@@ -448,11 +417,7 @@ fn bind(
             if member != "Activated" {
                 continue;
             }
-            crate::record(
-                app,
-                &app.state::<Shared>(),
-                json!({"check":"global-shortcut-activated","action":action}),
-            );
+            crate::record(app, &app.state::<Shared>(), json!({"check":"global-shortcut-activated","action":action}));
             // It fired, so whatever key the user's config gave it works: no longer a failure.
             if forget_failure(action) {
                 let _ = app.emit("platform-capabilities", crate::capabilities_value(app, &app.state::<Shared>()));

@@ -125,7 +125,8 @@ export function observePopup(win, descriptor, callback) {
   const observedParts = new Set()
   const resize = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => schedule()) : null
   const inner = new win.MutationObserver(() => schedule())
-  const sameRect = (a, b) => (a === null && b === null) || (a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
+  const sameRect = (a, b) =>
+    (a === null && b === null) || (a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
   const measure = () => {
     scheduled = false
     if (stopped) return
@@ -344,9 +345,10 @@ function keydown(win, key, code) {
 export function dispatchPointer(win, descriptor, target, x, y, expando = {}) {
   for (const type of descriptor.pointerEvents) {
     const init = { clientX: x, clientY: y, buttons: 0, bubbles: true, cancelable: true, composed: true }
-    const event = type.startsWith('pointer') && typeof win.PointerEvent === 'function'
-      ? new win.PointerEvent(type, { ...init, pointerType: 'mouse' })
-      : new win.MouseEvent(type, init)
+    const event =
+      type.startsWith('pointer') && typeof win.PointerEvent === 'function'
+        ? new win.PointerEvent(type, { ...init, pointerType: 'mouse' })
+        : new win.MouseEvent(type, init)
     Object.assign(event, expando)
     target.dispatchEvent(event)
   }
@@ -382,11 +384,29 @@ function clickAway(win, descriptor) {
   const rect = popupRect(win, descriptor)
   const w = win.innerWidth || 1
   const h = win.innerHeight || 1
-  const corners = [[1, 1], [w - 2, 1], [1, h - 2], [w - 2, h - 2]]
-  const [x, y] = corners.find(([cx, cy]) => !rect || cx < rect.x || cx > rect.x + rect.width || cy < rect.y || cy > rect.y + rect.height) ?? corners[0]
+  const corners = [
+    [1, 1],
+    [w - 2, 1],
+    [1, h - 2],
+    [w - 2, h - 2]
+  ]
+  const [x, y] =
+    corners.find(
+      ([cx, cy]) => !rect || cx < rect.x || cx > rect.x + rect.width || cy < rect.y || cy > rect.y + rect.height
+    ) ?? corners[0]
   const target = win.document.documentElement
   for (const type of ['mousedown', 'mouseup']) {
-    target.dispatchEvent(new win.MouseEvent(type, { clientX: x, clientY: y, button: 0, buttons: type === 'mousedown' ? 1 : 0, bubbles: true, cancelable: true, composed: true }))
+    target.dispatchEvent(
+      new win.MouseEvent(type, {
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons: type === 'mousedown' ? 1 : 0,
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      })
+    )
   }
 }
 
@@ -467,7 +487,8 @@ function tentenFrame(win) {
     frame.dataset.frameId = String(TENTEN_FRAME_ID)
     frame.setAttribute('aria-hidden', 'true')
     frame.tabIndex = -1
-    frame.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;border:0;padding:0;margin:0;visibility:hidden;pointer-events:none'
+    frame.style.cssText =
+      'position:fixed;left:0;top:0;width:0;height:0;border:0;padding:0;margin:0;visibility:hidden;pointer-events:none'
     ;(doc.documentElement ?? doc.body).append(frame)
   }
   // As 10ten's getIframeOrigin adds it: each frame's box plus its border and padding, outwards.
@@ -510,7 +531,10 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
   let lookups = 0
   let segments = 0
   const sameRange = (a, b) =>
-    a.startContainer === b.startContainer && a.startOffset === b.startOffset && a.endContainer === b.endContainer && a.endOffset === b.endOffset
+    a.startContainer === b.startContainer &&
+    a.startOffset === b.startOffset &&
+    a.endContainer === b.endContainer &&
+    a.endOffset === b.endOffset
 
   /**
    * Where the top-level pop-up must go (`place`), as {@link fillCss} in the host's shadow root.
@@ -614,14 +638,21 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
     const start = range.startContainer
     const element = (start?.nodeType === 1 ? start : start?.parentElement) ?? win.document.body
     const key = (type) => {
-      const init = { key: 'Shift', code: 'ShiftLeft', shiftKey: type === 'keydown', bubbles: true, cancelable: true, composed: true }
+      const init = {
+        key: 'Shift',
+        code: 'ShiftLeft',
+        shiftKey: type === 'keydown',
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }
       win.dispatchEvent(new win.KeyboardEvent(type, init))
     }
     // The last word's pop-up would answer for this one: close it, so what shows next is this
     // word's (the hover's lookup is asynchronous; its pop-up replaces nothing in time).
     if (visible()) {
       await command('close')
-      for (const started = Date.now(); visible() && Date.now() - started < 300; ) {
+      for (const started = Date.now(); visible() && Date.now() - started < 300;) {
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
       if (!current()) return false
@@ -631,13 +662,24 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       withTextShown(win, element, () => {
         const target = win.document.elementFromPoint(x, y) ?? element
         for (const type of ['pointermove', 'mousemove']) {
-          const init = { clientX: x, clientY: y, shiftKey: true, buttons: 0, bubbles: true, cancelable: true, composed: true, view: win }
-          target.dispatchEvent(type === 'pointermove' && typeof win.PointerEvent === 'function'
-            ? new win.PointerEvent(type, { ...init, pointerType: 'mouse' })
-            : new win.MouseEvent(type, init))
+          const init = {
+            clientX: x,
+            clientY: y,
+            shiftKey: true,
+            buttons: 0,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            view: win
+          }
+          target.dispatchEvent(
+            type === 'pointermove' && typeof win.PointerEvent === 'function'
+              ? new win.PointerEvent(type, { ...init, pointerType: 'mouse' })
+              : new win.MouseEvent(type, init)
+          )
         }
       })
-      for (const started = Date.now(); Date.now() - started < HOVER_WAIT_MS; ) {
+      for (const started = Date.now(); Date.now() - started < HOVER_WAIT_MS;) {
         if (visible()) return true
         if (!current()) return false
         await new Promise((resolve) => setTimeout(resolve, 20))
@@ -803,7 +845,7 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
         return { answered, sent: () => sent, cancel: () => remove() }
       }
       const drawn = async () => {
-        for (const started = Date.now(); Date.now() - started < DRAW_WAIT_MS; ) {
+        for (const started = Date.now(); Date.now() - started < DRAW_WAIT_MS;) {
           if (visible() || !current()) break
           await new Promise((resolve) => setTimeout(resolve, 20))
         }
@@ -812,7 +854,10 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       const lost = { shown: false, length: null }
 
       if (engine === 'hachidori') {
-        const reader = await Promise.race([win.HDReaderReady, new Promise((resolve) => setTimeout(resolve, 500))]).catch(() => null)
+        const reader = await Promise.race([
+          win.HDReaderReady,
+          new Promise((resolve) => setTimeout(resolve, 500))
+        ]).catch(() => null)
         if (typeof reader?.kimochiLookupAt !== 'function') {
           report({ check: 'ext-host-lookup-text-unavailable', engine })
           return null
@@ -877,7 +922,9 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
         if (!current()) return lost
         if (!answer) return { shown: visible(), length: null }
         if (answer.error) return lost
-        const results = (Array.isArray(answer.reply?.results) ? answer.reply.results : []).filter((result) => result?.term)
+        const results = (Array.isArray(answer.reply?.results) ? answer.reply.results : []).filter(
+          (result) => result?.term
+        )
         if (!results.length) {
           // A notice when no dictionary is loaded, which stays; otherwise Hachidori hides a miss a
           // moment later, and the last word's pop-up is closed now rather than then.
@@ -896,7 +943,12 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
         const textBoxSizes = {}
         for (const size of [1, 4, 8, 12, 16]) {
           const box = prefixBox(range, size)
-          textBoxSizes[size] = { left: box.left - origin.x, top: box.top - origin.y, width: box.width, height: box.height }
+          textBoxSizes[size] = {
+            left: box.left - origin.x,
+            top: box.top - origin.y,
+            width: box.width,
+            height: box.height
+          }
         }
         const start = range.startContainer
         const element = (start?.nodeType === 1 ? start : start?.parentElement) ?? win.document.body
@@ -915,7 +967,11 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
             wordLookup: true,
             point: { x: point.x - origin.x, y: point.y - origin.y },
             targetProps: { textBoxSizes, contentType: 'text', isVerticalText: vertical },
-            source: { frameId: TENTEN_FRAME_ID, currentSrc: frame.src || 'about:blank', dimensions: { width: 0, height: 0 } },
+            source: {
+              frameId: TENTEN_FRAME_ID,
+              currentSrc: frame.src || 'about:blank',
+              dimensions: { width: 0, height: 0 }
+            },
             sourceContext: null
           },
           backgroundSender()
@@ -974,7 +1030,12 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
         if (!current()) return false
         const target = win.document.elementFromPoint(x, y) ?? win.document.body
         dispatchPointer(win, descriptor, target, x, y)
-        report({ check: 'ext-host-lookup-fallback', engine, via: descriptor.pointerEvents.join('+'), waitedMs: Date.now() - started })
+        report({
+          check: 'ext-host-lookup-fallback',
+          engine,
+          via: descriptor.pointerEvents.join('+'),
+          waitedMs: Date.now() - started
+        })
         return true
       }
       const start = range.startContainer
@@ -1020,7 +1081,8 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
         // once the popup is closed (clearing it while the popup shows would close the popup,
         // `onSelectionChange` → `hide()`), and only if it is still the one this driver made.
         const selection = win.getSelection()
-        if (ownSelection && selection?.rangeCount === 1 && sameRange(selection.getRangeAt(0), ownSelection)) selection.removeAllRanges()
+        if (ownSelection && selection?.rangeCount === 1 && sameRange(selection.getRangeAt(0), ownSelection))
+          selection.removeAllRanges()
         ownSelection = null
       } else {
         // The message read along's lookups open it with; Escape for one the pointer opened.

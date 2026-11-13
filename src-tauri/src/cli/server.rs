@@ -224,9 +224,10 @@ fn status(app: &tauri::AppHandle, service: &Shared) -> Value {
     let snapshot = crate::snapshot_value(service);
     let settings = &service.settings;
     let reader = settings.get("superTexthooker").ok().flatten().unwrap_or(Value::Null);
-    let input = reader["inputSource"].as_str().map(str::to_string).unwrap_or_else(|| {
-        if reader["clipboardEnabled"] == json!(true) { "clipboard" } else { "ocr" }.to_string()
-    });
+    let input = reader["inputSource"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| if reader["clipboardEnabled"] == json!(true) { "clipboard" } else { "ocr" }.to_string());
     // The dictionary in use: Hachidori and 10ten read Japanese only, so in another language the
     // windows run Built-in Yomitan in their place (`extensions::selected_engine`); the stored
     // choice is told too when it is not the one in use.
@@ -323,7 +324,10 @@ fn toggle(app: &tauri::AppHandle, service: &Shared, flag: &str, to: &str) -> Res
     }
     let now = current();
     if now != want {
-        return Err(format!("busy: {flag} did not change; is the overlay loaded? (it is {})", if now { "on" } else { "off" }));
+        return Err(format!(
+            "busy: {flag} did not change; is the overlay loaded? (it is {})",
+            if now { "on" } else { "off" }
+        ));
     }
     Ok(json!({ flag: now }))
 }
@@ -345,7 +349,8 @@ fn scan(app: &tauri::AppHandle, service: &Shared, params: &Value) -> Result<Valu
     if params["wait"] != json!(true) {
         return Ok(json!({ "started": true }));
     }
-    let limit = params["timeout"].as_f64().map(Duration::from_secs_f64).unwrap_or(Duration::from_secs(30)).min(SCAN_WAIT_MAX);
+    let limit =
+        params["timeout"].as_f64().map(Duration::from_secs_f64).unwrap_or(Duration::from_secs(30)).min(SCAN_WAIT_MAX);
     let deadline = Instant::now() + limit;
     loop {
         {
@@ -371,10 +376,7 @@ fn scan(app: &tauri::AppHandle, service: &Shared, params: &Value) -> Result<Valu
 /// How to choose a source here: by name, or where the system's own picker is the only way
 /// (Wayland, Gaming Mode), in Kimochi.
 fn choose_hint(service: &Shared) -> &'static str {
-    let picker_only = service
-        .backend
-        .lock()
-        .is_ok_and(|backend| backend.capabilities().system_picker_required);
+    let picker_only = service.backend.lock().is_ok_and(|backend| backend.capabilities().system_picker_required);
     if picker_only {
         "`kimochi source choose`, or in Kimochi."
     } else {
@@ -401,7 +403,10 @@ fn set_engine(app: &tauri::AppHandle, service: &Shared, engine: &str) -> Result<
     let known = &report["engines"][engine];
     if known.is_null() {
         let names: Vec<&String> = report["engines"].as_object().map(|m| m.keys().collect()).unwrap_or_default();
-        return Err(format!("invalid: unknown engine {engine:?}; this computer has {}", names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")));
+        return Err(format!(
+            "invalid: unknown engine {engine:?}; this computer has {}",
+            names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+        ));
     }
     // An engine held back only by its models stays selectable: choosing it downloads them.
     if known["available"] != json!(true) && known["model"].is_null() {
@@ -415,7 +420,9 @@ fn set_engine(app: &tauri::AppHandle, service: &Shared, engine: &str) -> Result<
             .as_object()
             .map(|all| {
                 all.iter()
-                    .filter(|(name, info)| info["available"] == json!(true) && crate::language::engine_supports(name, &language.code))
+                    .filter(|(name, info)| {
+                        info["available"] == json!(true) && crate::language::engine_supports(name, &language.code)
+                    })
                     .map(|(name, _)| name.as_str())
                     .collect()
             })
@@ -451,7 +458,10 @@ fn find_source(query: &str) -> Result<String, String> {
         many => Err(format!(
             "invalid: {query:?} matches {} sources; use one's id:\n{}",
             many.len(),
-            many.iter().map(|s| format!("  {}  {} ({})", field(s, "id"), field(s, "name"), field(s, "app"))).collect::<Vec<_>>().join("\n")
+            many.iter()
+                .map(|s| format!("  {}  {} ({})", field(s, "id"), field(s, "name"), field(s, "app")))
+                .collect::<Vec<_>>()
+                .join("\n")
         )),
     }
 }
@@ -479,7 +489,9 @@ fn open(app: &tauri::AppHandle, service: &Shared, view: &str, page: Option<&str>
             });
             Ok(())
         }
-        other => Err(format!("invalid: unknown view {other:?}; use log, notebook, anki, settings, sources, mini or dictionary")),
+        other => Err(format!(
+            "invalid: unknown view {other:?}; use log, notebook, anki, settings, sources, mini or dictionary"
+        )),
     }?;
     crate::tray::sync_mini(app);
     Ok(json!({ "opened": view }))
@@ -508,7 +520,8 @@ pub fn find_session(manifest: &Value, query: &str) -> Result<Value, String> {
     }
     let wanted = query.trim().to_lowercase();
     let exact: Vec<&Value> = sessions.iter().filter(|s| name(s) == wanted).collect();
-    let matches = if exact.is_empty() { sessions.iter().filter(|s| name(s).contains(&wanted)).collect() } else { exact };
+    let matches =
+        if exact.is_empty() { sessions.iter().filter(|s| name(s).contains(&wanted)).collect() } else { exact };
     match matches.as_slice() {
         [one] => Ok((*one).clone()),
         [] => Err(format!("gone: no session matches {query:?}. See `kimochi session list`.")),
@@ -561,9 +574,9 @@ fn reader_call(
         "reader:request",
         json!({ "id": id, "module": module, "method": method, "args": args, "sessionId": session_id }),
     );
-    let answer = sent.map_err(|e| format!("native: {e}")).and_then(|_| {
-        rx.recv_timeout(timeout).map_err(|_| "timeout: the Log did not answer".to_string())
-    });
+    let answer = sent
+        .map_err(|e| format!("native: {e}"))
+        .and_then(|_| rx.recv_timeout(timeout).map_err(|_| "timeout: the Log did not answer".to_string()));
     app.unlisten(listener);
     let answer = answer?;
     match answer["error"].as_str() {

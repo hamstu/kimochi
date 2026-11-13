@@ -16,10 +16,7 @@ export function EnginesVisual() {
       <MiniWindow title="Settings · OCR engine" className="w-full max-w-[18rem]">
         <ul className="py-1 text-[12px]">
           {ENGINES.map((e) => (
-            <li
-              key={e.name}
-              className={`flex h-[1.9rem] items-center gap-2.5 px-3 ${e.selected ? 'bg-press' : ''}`}
-            >
+            <li key={e.name} className={`flex h-[1.9rem] items-center gap-2.5 px-3 ${e.selected ? 'bg-press' : ''}`}>
               <span
                 className={`grid size-3 shrink-0 place-items-center rounded-full border ${
                   e.selected ? 'border-accent bg-accent' : 'border-line-strong'

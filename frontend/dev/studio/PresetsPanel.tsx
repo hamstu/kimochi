@@ -154,9 +154,16 @@ export function PresetsPanel({
                     ) : (
                       <IconButton
                         size="sm"
-                        label={current && current.next > 0 && current.status !== 'done' ? 'Play the rest' : 'Play from the start'}
+                        label={
+                          current && current.next > 0 && current.status !== 'done'
+                            ? 'Play the rest'
+                            : 'Play from the start'
+                        }
                         onClick={() =>
-                          void play(flow, current && current.next > 0 && current.status !== 'done' ? current.next : null)
+                          void play(
+                            flow,
+                            current && current.next > 0 && current.status !== 'done' ? current.next : null
+                          )
                         }
                       >
                         <Play />
@@ -181,13 +188,23 @@ export function PresetsPanel({
                   <ol className="studio-flow-steps">
                     {flow.steps.map((s, i) => {
                       const state =
-                        i < current.next ? 'done' : i === current.next && (current.status === 'waiting' || current.status === 'playing') ? 'now' : 'todo'
+                        i < current.next
+                          ? 'done'
+                          : i === current.next && (current.status === 'waiting' || current.status === 'playing')
+                            ? 'now'
+                            : 'todo'
                       // While waiting, the step that ran is still the one under way.
                       const waiting = current.status === 'waiting' && i === current.next
                       return (
                         <li key={s.label} data-state={waiting ? 'now' : state}>
                           <span className="studio-flow-mark" aria-hidden>
-                            {state === 'done' ? <Check /> : waiting ? <Spinner /> : <span className="k-num">{i + 1}</span>}
+                            {state === 'done' ? (
+                              <Check />
+                            ) : waiting ? (
+                              <Spinner />
+                            ) : (
+                              <span className="k-num">{i + 1}</span>
+                            )}
                           </span>
                           {s.label}
                         </li>
@@ -196,7 +213,11 @@ export function PresetsPanel({
                   </ol>
                 )}
                 {current?.status === 'loading' && <p className="studio-flow-note">Loading its starting state…</p>}
-                {current?.note && <p className="studio-flow-note" data-tone="danger">{current.note}</p>}
+                {current?.note && (
+                  <p className="studio-flow-note" data-tone="danger">
+                    {current.note}
+                  </p>
+                )}
               </div>
             )
           })}

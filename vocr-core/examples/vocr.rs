@@ -45,7 +45,12 @@ fn main() {
                 })
                 .collect();
             times.sort_by(f64::total_cmp);
-            eprintln!("{path}: {w}x{h} median {:.2} ms (min {:.2}, {} lines)", times[repeat / 2], times[0], lines.len());
+            eprintln!(
+                "{path}: {w}x{h} median {:.2} ms (min {:.2}, {} lines)",
+                times[repeat / 2],
+                times[0],
+                lines.len()
+            );
         }
         let out: Vec<_> = lines
             .iter()

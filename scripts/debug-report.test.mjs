@@ -10,10 +10,27 @@ const REPORT = {
   generatedAt: '2026-10-27T17:42:00Z',
   app: { version: '0.2.1', commit: '45eb5f1b55', build: 'release', tauri: '2.9.0', webview: '131.0.2903.70' },
   os: { name: 'windows', version: '10.0.26100', arch: 'x86_64', session: null },
-  hardware: { cpu: 'AMD Ryzen 7 7800X3D', cores: 16, memoryBytes: 34359738368, gpus: ['NVIDIA GeForce RTX 4070 (driver 32.0.15.6094)'] },
+  hardware: {
+    cpu: 'AMD Ryzen 7 7800X3D',
+    cores: 16,
+    memoryBytes: 34359738368,
+    gpus: ['NVIDIA GeForce RTX 4070 (driver 32.0.15.6094)']
+  },
   displays: [
-    { id: 1, source_id: 'screen:1', bounds: { x: 0, y: 0, width: 2560, height: 1440 }, work_area: {}, scale_factor: 1.5 },
-    { id: 2, source_id: 'screen:2', bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, work_area: {}, scale_factor: 1 }
+    {
+      id: 1,
+      source_id: 'screen:1',
+      bounds: { x: 0, y: 0, width: 2560, height: 1440 },
+      work_area: {},
+      scale_factor: 1.5
+    },
+    {
+      id: 2,
+      source_id: 'screen:2',
+      bounds: { x: -1920, y: 0, width: 1920, height: 1080 },
+      work_area: {},
+      scale_factor: 1
+    }
   ],
   capture: { permission: 'granted', windowCapture: true, excludesOwnWindows: true },
   ocr: {
@@ -22,10 +39,26 @@ const REPORT = {
     models: [{ engine: 'meikiocr', name: 'MeikiOCR', state: 'failed', message: 'checksum mismatch' }],
     cloudAccess: false
   },
-  dictionary: { selected: 'yomitan', downloads: [{ engine: 'yomitan', name: 'Yomitan', version: '26.10.22.0', state: 'ready' }] },
-  session: { sourceKind: 'window', sourceFocus: { focused: false, present: false, held: false, covered: false }, autoOcr: true, status: 'Paused: the game is minimised' },
+  dictionary: {
+    selected: 'yomitan',
+    downloads: [{ engine: 'yomitan', name: 'Yomitan', version: '26.10.22.0', state: 'ready' }]
+  },
+  session: {
+    sourceKind: 'window',
+    sourceFocus: { focused: false, present: false, held: false, covered: false },
+    autoOcr: true,
+    status: 'Paused: the game is minimised'
+  },
   settings: { ocrMode: 'meikiocr', 'yomitanSettings.popupType': 'builtin' },
-  windows: [{ label: 'welcome', visible: true, minimized: false, focused: true, bounds: { x: 10, y: 20, width: 720, height: 620 } }],
+  windows: [
+    {
+      label: 'welcome',
+      visible: true,
+      minimized: false,
+      focused: true,
+      bounds: { x: 10, y: 20, width: 720, height: 620 }
+    }
+  ],
   verboseLogging: true,
   recentEvents: [{ check: 'ocr-failed', engine: 'meikiocr', error: 'model failed to load', at: 1 }]
 }

@@ -3,7 +3,14 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { hashOverlapsHeaders, ldconfigLibraries, linuxGpgErrorSource, linuxLayerShellSource, spaPlugins, verifyDictionaryImages } from './linux-appimage.mjs'
+import {
+  hashOverlapsHeaders,
+  ldconfigLibraries,
+  linuxGpgErrorSource,
+  linuxLayerShellSource,
+  spaPlugins,
+  verifyDictionaryImages
+} from './linux-appimage.mjs'
 
 // Minimal ELF64 section metadata, using the real failed library's header/hash offsets.
 function elf(programHeaders, hashOffset = 0x1f0) {
@@ -46,16 +53,26 @@ const answers = (status, stdout) => (command, args) => {
   assert.match(args[1], /sample\.avif$/)
   return { status, stdout, stderr: '' }
 }
-const decoded = 'AVIF ok: sample.avif decoded to a 140-byte PNG with libavif 1.0.4 (dav1d [dec]:1.4.1, aom [enc/dec]:3.8.2)'
+const decoded =
+  'AVIF ok: sample.avif decoded to a 140-byte PNG with libavif 1.0.4 (dav1d [dec]:1.4.1, aom [enc/dec]:3.8.2)'
 
 test('an AppDir whose binary decodes AVIF with a bundled AV1 decoder passes', async (t) => {
   await verifyDictionaryImages(await appdir(t), answers(0, decoded))
 })
 
 test('an AppDir without libavif, a decode, or an AV1 decoder fails the build', async (t) => {
-  await assert.rejects(verifyDictionaryImages(await appdir(t, { libavif: false }), answers(0, decoded)), /carries no libavif/)
-  await assert.rejects(verifyDictionaryImages(await appdir(t), answers(1, 'AVIF check failed: AVIF decode failed: No codec available')), /cannot decode AVIF: .*No codec/)
-  await assert.rejects(verifyDictionaryImages(await appdir(t), answers(0, 'AVIF ok: sample.avif with libavif 1.0.4 (rav1e [enc]:0.7.1)')), /no AV1 decoder/)
+  await assert.rejects(
+    verifyDictionaryImages(await appdir(t, { libavif: false }), answers(0, decoded)),
+    /carries no libavif/
+  )
+  await assert.rejects(
+    verifyDictionaryImages(await appdir(t), answers(1, 'AVIF check failed: AVIF decode failed: No codec available')),
+    /cannot decode AVIF: .*No codec/
+  )
+  await assert.rejects(
+    verifyDictionaryImages(await appdir(t), answers(0, 'AVIF ok: sample.avif with libavif 1.0.4 (rav1e [enc]:0.7.1)')),
+    /no AV1 decoder/
+  )
 })
 
 test('the AppImage carries the PipeWire plugins an audio stream needs', () => {
@@ -65,7 +82,8 @@ test('the AppImage carries the PipeWire plugins an audio stream needs', () => {
 })
 
 // `ldconfig -p` as Ubuntu prints it, with GTK 4's layer-shell (which does not count).
-const ldconfig = (lines) => `${lines.length} libs found in cache \`/etc/ld.so.cache'\n${lines.map((line) => `\t${line}\n`).join('')}`
+const ldconfig = (lines) =>
+  `${lines.length} libs found in cache \`/etc/ld.so.cache'\n${lines.map((line) => `\t${line}\n`).join('')}`
 const gtk3Layer = 'libgtk-layer-shell.so.0 (libc6,x86-64) => /lib/x86_64-linux-gnu/libgtk-layer-shell.so.0'
 const gtk4Layer = 'libgtk4-layer-shell.so.0 (libc6,x86-64) => /usr/lib/libgtk4-layer-shell.so.0'
 
@@ -75,11 +93,17 @@ test('the AppImage bundles GTK 3 layer-shell from the build machine', () => {
 })
 
 test('a build machine without GTK 3 layer-shell fails the build, naming the package', () => {
-  assert.throws(() => linuxLayerShellSource(ldconfigLibraries(ldconfig([gtk4Layer]))), /install libgtk-layer-shell0 \(Arch: gtk-layer-shell\)/)
+  assert.throws(
+    () => linuxLayerShellSource(ldconfigLibraries(ldconfig([gtk4Layer]))),
+    /install libgtk-layer-shell0 \(Arch: gtk-layer-shell\)/
+  )
 })
 
 test('the AppImage bundles libgpg-error, which linuxdeploy excludes but NixOS lacks', () => {
   const gpgError = 'libgpg-error.so.0 (libc6,x86-64) => /lib/x86_64-linux-gnu/libgpg-error.so.0'
-  assert.equal(linuxGpgErrorSource(ldconfigLibraries(ldconfig([gtk3Layer, gpgError]))), '/lib/x86_64-linux-gnu/libgpg-error.so.0')
+  assert.equal(
+    linuxGpgErrorSource(ldconfigLibraries(ldconfig([gtk3Layer, gpgError]))),
+    '/lib/x86_64-linux-gnu/libgpg-error.so.0'
+  )
   assert.throws(() => linuxGpgErrorSource(ldconfigLibraries(ldconfig([gtk3Layer]))), /install libgpg-error0/)
 })

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { GripVertical, Plus, X } from "lucide-react";
-import { Button, IconButton, Input, SettingsRow, SettingsSection, Switch } from "@kit";
+import { useEffect, useState } from 'react'
+import { GripVertical, Plus, X } from 'lucide-react'
+import { Button, IconButton, Input, SettingsRow, SettingsSection, Switch } from '@kit'
 import {
   addReplacement,
   getReplacements,
@@ -8,35 +8,35 @@ import {
   removeReplacement,
   reorderReplacement,
   subscribeReplacements,
-  updateReplacement,
-} from "@texthooker/lib/replacements";
-import type { Replacement } from "@texthooker/lib/types";
+  updateReplacement
+} from '@texthooker/lib/replacements'
+import type { Replacement } from '@texthooker/lib/types'
 
 export function ReplacementsEditor() {
-  const [rules, setRules] = useState<Replacement[]>(getReplacements());
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [rules, setRules] = useState<Replacement[]>(getReplacements())
+  const [dragId, setDragId] = useState<string | null>(null)
 
   useEffect(() => {
-    return subscribeReplacements(setRules);
-  }, []);
+    return subscribeReplacements(setRules)
+  }, [])
 
   const onDragStart = (id: string) => (e: React.DragEvent) => {
-    setDragId(id);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", id);
-  };
+    setDragId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
 
   const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
 
   const onDrop = (targetIdx: number) => (e: React.DragEvent) => {
-    e.preventDefault();
-    if (!dragId) return;
-    reorderReplacement(dragId, targetIdx);
-    setDragId(null);
-  };
+    e.preventDefault()
+    if (!dragId) return
+    reorderReplacement(dragId, targetIdx)
+    setDragId(null)
+  }
 
   return (
     <SettingsSection
@@ -49,14 +49,11 @@ export function ReplacementsEditor() {
       }
     >
       {rules.length === 0 ? (
-        <SettingsRow
-          label="No replacements"
-          description="Add one to strip stage directions, normalize quotes, etc."
-        />
+        <SettingsRow label="No replacements" description="Add one to strip stage directions, normalize quotes, etc." />
       ) : null}
 
       {rules.map((r, idx) => {
-        const errored = isPatternErrored(r);
+        const errored = isPatternErrored(r)
         return (
           <div
             key={r.id}
@@ -66,7 +63,7 @@ export function ReplacementsEditor() {
             onDrop={onDrop(idx)}
             onDragEnd={() => setDragId(null)}
             className="k-settings-row replacement-row"
-            data-dragging={dragId === r.id ? "" : undefined}
+            data-dragging={dragId === r.id ? '' : undefined}
           >
             <GripVertical className="replacement-grip" aria-hidden />
             <Switch
@@ -107,8 +104,8 @@ export function ReplacementsEditor() {
               <X />
             </IconButton>
           </div>
-        );
+        )
       })}
     </SettingsSection>
-  );
+  )
 }

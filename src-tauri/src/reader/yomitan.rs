@@ -80,27 +80,15 @@ fn client() -> &'static reqwest::Client {
 #[tauri::command]
 pub async fn yomitan_tokenize(base_url: String, body: TokenizeBody) -> Result<Value, String> {
     let url = format!("{}/tokenize", base_url.trim_end_matches('/'));
-    let req = TokenizeRequest {
-        text: &body.text,
-        scan_length: body.scan_length,
-    };
-    let res = client()
-        .post(&url)
-        .json(&req)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let req = TokenizeRequest { text: &body.text, scan_length: body.scan_length };
+    let res = client().post(&url).json(&req).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("HTTP {}", res.status()));
     }
     res.json::<Value>().await.map_err(|e| e.to_string())
 }
 
-pub async fn ankifields_value(
-    base_url: &str,
-    text: &str,
-    include_media: bool,
-) -> Result<Value, String> {
+pub async fn ankifields_value(base_url: &str, text: &str, include_media: bool) -> Result<Value, String> {
     if include_media {
         return ankifields_first(base_url, text, include_media, MAX_ENTRIES).await;
     }
@@ -117,10 +105,8 @@ pub async fn ankifields_value(
             .1
             .clone()
     };
-    let result = cell
-        .get_or_init(|| async { ankifields_first(&key.0, &key.1, false, MAX_ENTRIES).await })
-        .await
-        .clone();
+    let result =
+        cell.get_or_init(|| async { ankifields_first(&key.0, &key.1, false, MAX_ENTRIES).await }).await.clone();
     if result.is_err() {
         // Not kept: the API may answer the next time.
         let mut cache = entries_cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -170,19 +156,8 @@ pub async fn ankifields_first(
     max_entries: u32,
 ) -> Result<Value, String> {
     let url = format!("{}/ankiFields", base_url.trim_end_matches('/'));
-    let req = AnkiFieldsRequest {
-        markers: ANKI_MARKERS,
-        max_entries,
-        field_type: "term",
-        include_media,
-        text,
-    };
-    let res = client()
-        .post(&url)
-        .json(&req)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let req = AnkiFieldsRequest { markers: ANKI_MARKERS, max_entries, field_type: "term", include_media, text };
+    let res = client().post(&url).json(&req).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("HTTP {}", res.status()));
     }
@@ -206,10 +181,7 @@ pub async fn yomitan_probe(base_url: String) -> Result<u64, String> {
     let started = std::time::Instant::now();
     let res = client()
         .post(&url)
-        .json(&TokenizeRequest {
-            text: "テスト",
-            scan_length: 10,
-        })
+        .json(&TokenizeRequest { text: "テスト", scan_length: 10 })
         .send()
         .await
         .map_err(|e| e.to_string())?;

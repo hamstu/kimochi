@@ -11,7 +11,17 @@
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type JSX } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type JSX
+} from 'react'
 import { CircleHelp, Maximize2, Minimize2, PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
 import { IconButton, Tooltip } from '@kit'
@@ -120,30 +130,33 @@ export default function MainPanel(): JSX.Element {
       setMini(enabled)
       document.documentElement.toggleAttribute('data-mini', enabled)
       setMiniError(null)
-    } catch (error) { setMiniError(String(error)) }
+    } catch (error) {
+      setMiniError(String(error))
+    }
   }, [])
   useEffect(() => {
     const pending = listen<boolean>('main:mini', ({ payload }) => {
       setMini(payload)
       document.documentElement.toggleAttribute('data-mini', payload)
     })
-    void panel('log', 'inspect').then((info) => {
-      const enabled = Boolean(info.mini)
-      setMini(enabled)
-      document.documentElement.toggleAttribute('data-mini', enabled)
-    }).catch(() => {})
+    void panel('log', 'inspect')
+      .then((info) => {
+        const enabled = Boolean(info.mini)
+        setMini(enabled)
+        document.documentElement.toggleAttribute('data-mini', enabled)
+      })
+      .catch(() => {})
     return () => void pending.then((stop) => stop())
   }, [])
   // After an engine switch the stored page is known before the setting loads: the first frame
   // shows it rather than General.
-  const [storedTab, setStoredTab] = useSetting<string>(
-    'settingsActiveTab',
-    engineSwitchRecord()?.tab ?? 'general'
-  )
+  const [storedTab, setStoredTab] = useSetting<string>('settingsActiveTab', engineSwitchRecord()?.tab ?? 'general')
   const settingsTab = settingsTabOf(storedTab)
   const [editing, setEditing] = useState<string | null>(null)
   // Where Back returns to from Settings.
-  const lastView = useRef<Exclude<MainView, 'settings'>>(engineSwitchRecord()?.back ?? (gamingAtBoot() ? 'source' : 'log'))
+  const lastView = useRef<Exclude<MainView, 'settings'>>(
+    engineSwitchRecord()?.back ?? (gamingAtBoot() ? 'source' : 'log')
+  )
   const settingsScroll = useRef<HTMLDivElement>(null)
   const { props: controller, error, dismissError } = useController()
   // What's new opens on its own once, on the first launch of a new version.
@@ -253,43 +266,45 @@ export default function MainPanel(): JSX.Element {
     <ReaderHost>
       <LogActionsProvider>
         <TitleBarPortal>
-          {!mini && !gaming &&
-          <Tooltip content={sidebar ? 'Hide sidebar' : 'Show sidebar'}>
-            <IconButton
-              label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
-              size="sm"
-              className="main-sidebar-toggle"
-              data-sound={sidebar ? 'sidebar-hide' : 'sidebar-show'}
-              onClick={() => void setSidebar(!sidebar)}
-            >
-              <PanelLeft />
+          {!mini && !gaming && (
+            <Tooltip content={sidebar ? 'Hide sidebar' : 'Show sidebar'}>
+              <IconButton
+                label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
+                size="sm"
+                className="main-sidebar-toggle"
+                data-sound={sidebar ? 'sidebar-hide' : 'sidebar-show'}
+                onClick={() => void setSidebar(!sidebar)}
+              >
+                <PanelLeft />
+              </IconButton>
+            </Tooltip>
+          )}
+          {!gaming && (
+            <IconButton label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm" onClick={() => void changeMini(!mini)}>
+              {mini ? <Maximize2 /> : <Minimize2 />}
             </IconButton>
-          </Tooltip>}
-          {!gaming && <IconButton
-            label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm"
-            onClick={() => void changeMini(!mini)}>
-            {mini ? <Maximize2 /> : <Minimize2 />}
-          </IconButton>}
+          )}
           <span className="main-title" aria-hidden="true">
             <KimochiLogo size={16} />
             <span>Kimochi</span>
           </span>
           {/* Not on the site's demo: its forms would send real reports. */}
-          {!inDemo() && <Tooltip content="Help">
-            <IconButton label="Help" size="sm" className="main-help" onClick={() => setHelp(true)}>
-              <CircleHelp />
-            </IconButton>
-          </Tooltip>}
+          {!inDemo() && (
+            <Tooltip content="Help">
+              <IconButton label="Help" size="sm" className="main-help" onClick={() => setHelp(true)}>
+                <CircleHelp />
+              </IconButton>
+            </Tooltip>
+          )}
         </TitleBarPortal>
-        {miniError && <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>{miniError}</div>}
+        {miniError && (
+          <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>
+            {miniError}
+          </div>
+        )}
         <div className="main-frame">
           {error && (
-            <div
-              className="native-panel-error"
-              role="status"
-              onClick={dismissError}
-              title="Dismiss"
-            >
+            <div className="native-panel-error" role="status" onClick={dismissError} title="Dismiss">
               {error}
             </div>
           )}
@@ -310,10 +325,14 @@ export default function MainPanel(): JSX.Element {
                   })
                 }}
                 controller={controller}
-                onOpenSourceSettings={() => { void changeMini(false).then(() => openSettings('sources')) }}
+                onOpenSourceSettings={() => {
+                  void changeMini(false).then(() => openSettings('sources'))
+                }}
                 chooseRequest={chooseRequest}
                 settingsTab={settingsTab}
-                onSettingsTab={(tab) => { void changeMini(false).then(() => openSettings(tab)) }}
+                onSettingsTab={(tab) => {
+                  void changeMini(false).then(() => openSettings(tab))
+                }}
                 // Gaming Mode: Settings is a tab, so there is nothing to go back to.
                 onBack={gaming ? undefined : () => setView(lastView.current)}
               />

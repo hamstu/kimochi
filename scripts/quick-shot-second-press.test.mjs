@@ -8,6 +8,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
+/** Source without the whitespace beside punctuation, so a pattern does not depend on formatting. */
+const compact = (source) => source.replace(/\s+/g, ' ').replace(/ (?=[^\w$])|(?<=[^\w$]) /g, '')
 
 test('a press during a Quick Shot goes to its editor before anything could open another', async () => {
   const overlay = await read('ui/overlay.js')
@@ -27,17 +29,26 @@ test('a press during a Quick Shot goes to its editor before anything could open 
 })
 
 test('GNOME forwards the press to the crop host, which hands it to its editor', async () => {
-  const crop = await read('ui/gnome-crop.js')
-  assert.match(crop, /onStart\?\.\(\{shortcutPressed:\(\)=>\{void window\.__TAURI__\.event\.emit\('gnome-crop-press',\{id\}\)/)
-  const host = await read('ui/gnome-crop-host.js')
-  assert.match(host, /listen\('gnome-crop-press',\(\{payload\}\)=>\{\s*if\(active\?\.id===payload\?\.id\)active\.selector\?\.shortcutPressed\(\)/)
+  const crop = compact(await read('ui/gnome-crop.js'))
+  assert.match(
+    crop,
+    /onStart\?\.\(\{shortcutPressed:\(\)=>\{void window\.__TAURI__\.event\.emit\('gnome-crop-press',\{id\}\)/
+  )
+  const host = compact(await read('ui/gnome-crop-host.js'))
+  assert.match(
+    host,
+    /listen\('gnome-crop-press',\(\{payload\}\)=>\{\s*if\(active\?\.id===payload\?\.id\)active\.selector\?\.shortcutPressed\(\)/
+  )
 })
 
 test('the GNOME crop host builds one editor per selection, however often the opener repeats', async () => {
   // gnome-crop.js repeats gnome-crop-open every 150 ms until the editor is up.
-  assert.match(await read('ui/gnome-crop.js'), /setInterval\(\(\)=>void window\.__TAURI__\.event\.emit\('gnome-crop-open'/)
+  assert.match(
+    compact(await read('ui/gnome-crop.js')),
+    /setInterval\(\(\)=>void window\.__TAURI__\.event\.emit\('gnome-crop-open'/
+  )
   const host = await read('ui/gnome-crop-host.js')
-  const open = host.match(/listen\('gnome-crop-open',async \(\{payload\}\)=>\{([\s\S]*?)\n {2}\}\)/)[1]
+  const open = compact(host.match(/listen\('gnome-crop-open', async \(\{ payload \}\) => \{([\s\S]*?)\n {2}\}\)/)[1])
   // The repeat is turned away by `active`, so the session is claimed before anything is awaited.
   assert.match(open, /^\s*if\(active\?\.id===payload\.id\)return/)
   const claimed = open.indexOf('active=session')

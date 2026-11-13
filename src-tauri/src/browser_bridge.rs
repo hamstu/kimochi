@@ -442,7 +442,10 @@ impl Bridge {
             ids.into_iter().filter_map(|id| inner.pending.remove(&id).map(|p| (id, p))).collect()
         };
         for (_, pending) in expired {
-            self.send_to(pending.client, json!({"type": "error", "id": pending.id, "message": "Kimochi took too long to read that"}));
+            self.send_to(
+                pending.client,
+                json!({"type": "error", "id": pending.id, "message": "Kimochi took too long to read that"}),
+            );
         }
     }
 
@@ -601,10 +604,7 @@ impl Bridge {
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64
 }
 
 /// A short name for a user agent, for Settings ("Chrome", "Edge", …).
@@ -629,11 +629,7 @@ fn browser_name(agent: &str) -> &'static str {
 /// Only the extension, on the bridge's path. (Its shape is tungstenite's handshake callback.)
 #[allow(clippy::result_large_err)]
 fn check_handshake(request: &Request, response: Response) -> Result<Response, ErrorResponse> {
-    let origin = request
-        .headers()
-        .get("origin")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
+    let origin = request.headers().get("origin").and_then(|value| value.to_str().ok()).unwrap_or_default();
     if request.uri().path() != PATH || !origin_allowed(origin) {
         let mut refusal = ErrorResponse::new(Some("Only the Kimochi extension may connect".into()));
         *refusal.status_mut() = tungstenite::http::StatusCode::FORBIDDEN;
@@ -768,11 +764,7 @@ fn extension_folder(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../browser-extension/extension");
         return repo.canonicalize().map_err(|e| format!("native: {e}"));
     }
-    let bundled = app
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?
-        .join("browser-extension");
+    let bundled = app.path().resource_dir().map_err(|e| e.to_string())?.join("browser-extension");
     let target = app.path().app_data_dir().map_err(|e| e.to_string())?.join("browser-extension");
     copy_dir(&bundled, &target).map_err(|e| format!("native: could not copy the extension: {e}"))?;
     Ok(target)
@@ -831,7 +823,8 @@ fn url_key(url: &str) -> (String, String) {
     let rest = rest.split('#').next().unwrap_or_default();
     let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
     let (host, path) = path.split_once('/').unwrap_or((path, ""));
-    let mut keys: Vec<&str> = query.split('&').filter_map(|pair| pair.split('=').next()).filter(|k| !k.is_empty()).collect();
+    let mut keys: Vec<&str> =
+        query.split('&').filter_map(|pair| pair.split('=').next()).filter(|k| !k.is_empty()).collect();
     keys.sort_unstable();
     let host = host.trim_start_matches("www.").to_lowercase();
     let path = without_numbers(path.trim_end_matches('/'));
@@ -883,7 +876,11 @@ pub fn matched_session(pages: &[PageMemory], url: &str, title: &str, live: &[Str
             2.0
         } else {
             let alike = similarity(&page_title, &title);
-            if alike >= 0.75 { 1.0 + alike / 2.0 - 0.5 } else { continue }
+            if alike >= 0.75 {
+                1.0 + alike / 2.0 - 0.5
+            } else {
+                continue;
+            }
         };
         if best.is_none_or(|(s, at, _)| score > s || (score == s && page.at > at)) {
             best = Some((score, page.at, &page.session));
@@ -912,23 +909,51 @@ mod tests {
     #[test]
     fn page_numbers_do_not_change_the_session() {
         let live = vec!["a".to_string(), "b".to_string()];
-        let pages = vec![page("https://reader.example.com/manga/123/chapter-4/page/2?lang=ja", "よつばと！ 第4話 (2/20)", "a", 1)];
-        assert_eq!(matched_session(&pages, "https://reader.example.com/manga/123/chapter-5/page/17?lang=ja", "x", &live).as_deref(), Some("a"));
-        assert_eq!(matched_session(&pages, "https://reader.example.com/view?id=9", "よつばと！ 第5話 (17/20)", &live).as_deref(), Some("a"));
-        assert_eq!(matched_session(&pages, "https://other.example.org/manga/123/chapter-5/page/17?lang=ja", "よつばと！ 第4話", &live), None);
+        let pages = vec![page(
+            "https://reader.example.com/manga/123/chapter-4/page/2?lang=ja",
+            "よつばと！ 第4話 (2/20)",
+            "a",
+            1,
+        )];
+        assert_eq!(
+            matched_session(&pages, "https://reader.example.com/manga/123/chapter-5/page/17?lang=ja", "x", &live)
+                .as_deref(),
+            Some("a")
+        );
+        assert_eq!(
+            matched_session(&pages, "https://reader.example.com/view?id=9", "よつばと！ 第5話 (17/20)", &live)
+                .as_deref(),
+            Some("a")
+        );
+        assert_eq!(
+            matched_session(
+                &pages,
+                "https://other.example.org/manga/123/chapter-5/page/17?lang=ja",
+                "よつばと！ 第4話",
+                &live
+            ),
+            None
+        );
     }
 
     #[test]
     fn a_mostly_alike_title_matches_and_a_different_one_does_not() {
         let live = vec!["a".to_string()];
         let pages = vec![page("https://site.jp/a", "ドラゴンクエスト 攻略 - 町の人の会話", "a", 1)];
-        assert_eq!(matched_session(&pages, "https://site.jp/b", "ドラゴンクエスト 攻略 - 町の人の会話集", &live).as_deref(), Some("a"));
+        assert_eq!(
+            matched_session(&pages, "https://site.jp/b", "ドラゴンクエスト 攻略 - 町の人の会話集", &live).as_deref(),
+            Some("a")
+        );
         assert_eq!(matched_session(&pages, "https://site.jp/c", "天気予報", &live), None);
     }
 
     #[test]
     fn deleted_sessions_and_older_entries_lose() {
-        let pages = vec![page("https://s.jp/x", "T", "gone", 9), page("https://s.jp/x", "T", "old", 1), page("https://s.jp/x", "T", "new", 5)];
+        let pages = vec![
+            page("https://s.jp/x", "T", "gone", 9),
+            page("https://s.jp/x", "T", "old", 1),
+            page("https://s.jp/x", "T", "new", 5),
+        ];
         let live = vec!["old".to_string(), "new".to_string()];
         assert_eq!(matched_session(&pages, "https://s.jp/x", "T", &live).as_deref(), Some("new"));
     }
@@ -937,7 +962,16 @@ mod tests {
     fn remembering_replaces_the_page_and_caps_the_list() {
         let mut pages = Vec::new();
         for i in 0..400 {
-            pages = remembered(pages, &format!("https://s.jp/work{}/x", ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"][i % 10].repeat(i / 10 + 1)), "t", "s", i as u64);
+            pages = remembered(
+                pages,
+                &format!(
+                    "https://s.jp/work{}/x",
+                    ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"][i % 10].repeat(i / 10 + 1)
+                ),
+                "t",
+                "s",
+                i as u64,
+            );
         }
         assert_eq!(pages.len(), MAX_PAGES);
         let pages = remembered(vec![page("https://s.jp/ch/1", "t", "a", 1)], "https://s.jp/ch/2", "t", "b", 2);

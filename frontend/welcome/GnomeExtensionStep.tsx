@@ -17,14 +17,12 @@ function GnomeWhy(): JSX.Element {
   return (
     <PermissionWhy title="Why Kimochi needs a GNOME extension">
       <p>
-        GNOME doesn’t let apps draw over other windows or know where those windows are on screen.
-        Kimochi’s overlay, its dictionary pop-ups over your game and choosing a crop area on the
-        desktop all need that.
+        GNOME doesn’t let apps draw over other windows or know where those windows are on screen. Kimochi’s overlay, its
+        dictionary pop-ups over your game and choosing a crop area on the desktop all need that.
       </p>
       <p>
-        A small extension, Kimochi Overlay, adds just those to GNOME Shell for Kimochi’s own
-        windows. It runs only on this computer, and Kimochi keeps it up to date. You can turn it
-        off any time in GNOME’s Extensions app.
+        A small extension, Kimochi Overlay, adds just those to GNOME Shell for Kimochi’s own windows. It runs only on
+        this computer, and Kimochi keeps it up to date. You can turn it off any time in GNOME’s Extensions app.
       </p>
       <p>Without it, scanning, the Log and lookups inside Kimochi still work.</p>
     </PermissionWhy>
@@ -59,8 +57,7 @@ export default function GnomeExtensionStep({ next }: { next: string }): JSX.Elem
       title="Set up GNOME integration"
       lede={
         <>
-          Kimochi adds a small extension to GNOME so its overlay and dictionary pop-ups can appear
-          over your game.
+          Kimochi adds a small extension to GNOME so its overlay and dictionary pop-ups can appear over your game.
           <GnomeWhy />
         </>
       }

@@ -42,19 +42,13 @@ pub const HOTKEY_ACTIONS: &[&str] = &["triggerScan", "openControllerMenu"];
 /// to do nothing. Deliberately excludes the toggles and the hover affordances: forcing
 /// the overlay open because the pointer crossed the controller's Source button would be
 /// a worse bug than the one this behaviour fixes.
-const RESTORES_OVERLAY: &[&str] = &[
-    "triggerScan",
-    "openControllerMenu",
-    "setCropArea",
-    "setAnkiCropArea",
-    "playAudio",
-    "selectAndScan",
-];
+const RESTORES_OVERLAY: &[&str] =
+    &["triggerScan", "openControllerMenu", "setCropArea", "setAnkiCropArea", "playAudio", "selectAndScan"];
 
 pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
     #[cfg(target_os = "linux")]
     if name == "openControllerMenu" && crate::platform::gamescope::controls_routed() {
-        crate::gamepad::set_navigation(app,false,false);
+        crate::gamepad::set_navigation(app, false, false);
         crate::platform::gamescope::return_to_game(app);
         return;
     }
@@ -79,7 +73,9 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
         // logical view flags; do not map/hide or change input on an unrealized
         // GTK window (Tao's CursorIgnoreEvents(true) unwraps its absent GDK window).
         None
-    } else { visibility };
+    } else {
+        visibility
+    };
     #[cfg(target_os = "linux")]
     let visibility = if crate::platform::capture::suppressed() { None } else { visibility };
     if let Some(visible) = visibility {
@@ -88,7 +84,9 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
                 overlay.show()
             } else {
                 #[cfg(target_os = "linux")]
-                if overlay.is_visible().unwrap_or(false) { crate::platform::capture::mark_hidden(); }
+                if overlay.is_visible().unwrap_or(false) {
+                    crate::platform::capture::mark_hidden();
+                }
                 overlay.hide()
             };
             if !visible {
@@ -135,10 +133,7 @@ mod tests {
             "hoverSourceOff",
         ] {
             assert!(ACTIONS.contains(&name), "{name} must be dispatchable");
-            assert!(
-                !RESTORES_OVERLAY.contains(&name),
-                "{name} must not force the overlay open"
-            );
+            assert!(!RESTORES_OVERLAY.contains(&name), "{name} must not force the overlay open");
         }
         // toggleOverlay is handled on its own branch and is not in the restore list.
         assert!(!RESTORES_OVERLAY.contains(&"toggleOverlay"));

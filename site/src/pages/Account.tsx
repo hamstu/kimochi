@@ -92,8 +92,14 @@ function useCheckoutReturn(signedIn: boolean): { tone: 'ok' | 'warn' | 'danger';
           setUser(user)
           setMessage(
             user.cloud
-              ? { tone: 'ok', text: 'Welcome to Kimochi Cloud! Sign in to the app from Settings → Account and it’s all switched on.' }
-              : { tone: 'warn', text: 'Your payment went through, but your plan hasn’t updated yet. It should in a minute; reload this page then.' }
+              ? {
+                  tone: 'ok',
+                  text: 'Welcome to Kimochi Cloud! Sign in to the app from Settings → Account and it’s all switched on.'
+                }
+              : {
+                  tone: 'warn',
+                  text: 'Your payment went through, but your plan hasn’t updated yet. It should in a minute; reload this page then.'
+                }
           )
           return
         }
@@ -156,7 +162,10 @@ export function Account() {
           </div>
           <div className="flex flex-wrap items-start gap-3 sm:justify-end">
             {user.plan === 'owner' && (
-              <Link to="/account/admin" className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-small text-ink-2 hover:bg-hover hover:text-ink">
+              <Link
+                to="/account/admin"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-small text-ink-2 hover:bg-hover hover:text-ink"
+              >
                 <Shield size={14} aria-hidden />
                 Admin
               </Link>

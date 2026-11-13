@@ -449,17 +449,12 @@ export class SceneMemory {
    * out for, which are not owed a rescue when they go. `force` takes the screen as it is now:
    * a changed line is believed on one sighting, for a reader who asked to catch up.
    */
-  observe(
-    lines: ObservedLine[],
-    at: number,
-    reading: Set<number> = new Set(),
-    force = false
-  ): ObserveOutcome {
+  observe(lines: ObservedLine[], at: number, reading: Set<number> = new Set(), force = false): ObserveOutcome {
     const o = this.options
     const shownBefore = this.shownSignature()
     const lostUnread: number[] = []
     const hadText = this.tracks.some((t) => t.present)
-    const readable =lines.filter((line) => stabilityKey(line.text) !== '' && area(line.box) > 0)
+    const readable = lines.filter((line) => stabilityKey(line.text) !== '' && area(line.box) > 0)
 
     const pairs: { line: number; track: Track; score: number }[] = []
     readable.forEach((line, index) => {
@@ -671,8 +666,7 @@ export class SceneMemory {
       Math.abs(box.width - line.box.width) > 4 ||
       Math.abs(box.height - line.box.height) > 4
     const differs = (a: number[], b: number[]): boolean =>
-      a.length !== b.length ||
-      b.some((value, i) => Math.abs(value - a[i]) > Math.max(o.inkStill, a[i] * 0.15))
+      a.length !== b.length || b.some((value, i) => Math.abs(value - a[i]) > Math.max(o.inkStill, a[i] * 0.15))
     // Drawing in only ever moves forward; ink that goes back to a state it was just in is
     // flicker (a game drawing text on alternate frames), and settles like still text.
     const flicker = track.inks.some((seen) => !differs(seen, now))
@@ -754,12 +748,7 @@ export class SceneMemory {
    * volatile lines neither hold a passage up nor make one due. A passage that never settles
    * is read anyway after `maxWaitMs`.
    */
-  readiness(
-    at: number,
-    maxWaitMs: number,
-    inFlightVersions: Set<number> = new Set(),
-    force = false
-  ): Readiness | null {
+  readiness(at: number, maxWaitMs: number, inFlightVersions: Set<number> = new Set(), force = false): Readiness | null {
     const o = this.options
     const present = this.tracks.filter((t) => t.present)
     let due: Readiness | null = null
@@ -890,7 +879,10 @@ export class SceneMemory {
       const ordered = annotations.map((a) => ({ a, box: annotationBox(a) }))
       readingOrder(ordered, vertical)
       // Pieces of one reading, in a language that spaces its words, are words apart.
-      const text = ordered.reduce((joined, { a }) => joined + joiner(joined, a.description, this.options.language) + a.description, '')
+      const text = ordered.reduce(
+        (joined, { a }) => joined + joiner(joined, a.description, this.options.language) + a.description,
+        ''
+      )
       const key = stabilityKey(text)
       if (!key) continue
       const seen = [...lines]
@@ -902,9 +894,7 @@ export class SceneMemory {
         ? agreement(key, observed) * 0.9 + (confidence ?? 0.5) * 0.1
         : 0.5 + Math.min(0.4, [...key].length / 100)
       // Only block engines' groups are bubbles to keep; line engines' groups are regrouped.
-      const groupIds = new Set(
-        annotations.filter((a) => a.granularity === 'block').map((a) => a.groupId)
-      )
+      const groupIds = new Set(annotations.filter((a) => a.granularity === 'block').map((a) => a.groupId))
       fresh.push({
         id: this.nextUnit++,
         versions: new Map(lines.map((t) => [t.id, t.version])),
@@ -935,7 +925,8 @@ export class SceneMemory {
     const orphans = this.units.filter((u) => u.versions.size === 0)
     for (const orphan of orphans) {
       const found = fresh.some((u) => u.versions.size === 0 && containment(u.box, orphan.box) >= 0.5)
-      if (!found && ++orphan.misses >= (mode === 'auto' ? o.orphanMisses : 1)) this.units = this.units.filter((u) => u !== orphan)
+      if (!found && ++orphan.misses >= (mode === 'auto' ? o.orphanMisses : 1))
+        this.units = this.units.filter((u) => u !== orphan)
     }
 
     for (const unit of fresh) {
@@ -945,14 +936,19 @@ export class SceneMemory {
       }
       // A piece of a line that has moved on is still a true reading of what it showed, and is
       // kept for when that comes back; it just is not what the line shows now.
-      const current = [...unit.versions].every(([id, version]) => this.tracks.find((t) => t.id === id)?.version.id === version)
+      const current = [...unit.versions].every(
+        ([id, version]) => this.tracks.find((t) => t.id === id)?.version.id === version
+      )
       if (!current) outcome.stale++
       const rivals = this.units.filter((u) =>
         [...unit.versions].some(([id, version]) => u.versions.get(id) === version)
       )
       const held = rivals.length
         ? rivals.reduce((sum, u) => sum + u.quality * [...u.key].length, 0) /
-          Math.max(1, rivals.reduce((sum, u) => sum + [...u.key].length, 0))
+          Math.max(
+            1,
+            rivals.reduce((sum, u) => sum + [...u.key].length, 0)
+          )
         : -1
       // A reading of fewer lines than the ones it would displace has to be clearly better:
       // replacing them leaves the lines it does not cover with nothing.
@@ -1081,9 +1077,7 @@ export class SceneMemory {
     const o = this.options
     const out: Passage[] = []
     const shown = this.shownUnits()
-    const steady = this.tracks.filter(
-      (t) => t.present && !this.blinking(t, at) && !this.volatile(t, at)
-    )
+    const steady = this.tracks.filter((t) => t.present && !this.blinking(t, at) && !this.volatile(t, at))
     for (const cluster of this.clusters(steady)) {
       const busy = cluster.some((t) => {
         const moving = t.pending !== null || t.stable < o.stableObservations
@@ -1116,9 +1110,7 @@ export class SceneMemory {
       if (!corrects) {
         // Or the same passage read again after the observer split its lines another way: close
         // to one published moments ago. Kept if it is no fuller; otherwise it takes its place.
-        const similar = this.recent.find(
-          (p) => at - p.at < o.passageMemoryMs && agreement(p.identity, identity) >= 0.8
-        )
+        const similar = this.recent.find((p) => at - p.at < o.passageMemoryMs && agreement(p.identity, identity) >= 0.8)
         if (similar && [...identity].length <= [...similar.identity].length) {
           for (const t of cluster) this.passageOf.set(t.id, similar)
           for (const unit of units) unit.published = true
@@ -1185,7 +1177,10 @@ export class SceneMemory {
  */
 export function compose(units: Unit[], engine: string, language?: string): OcrResult {
   const ordered = [...units]
-  readingOrder(ordered, ordered.some((u) => u.vertical))
+  readingOrder(
+    ordered,
+    ordered.some((u) => u.vertical)
+  )
   const blocks = ordered.flatMap((u) => u.groups.map((g) => ({ ...g, id: `u${u.id}-${g.id}` })))
   if (blocks.length) {
     return normalizeOcrResult({ groups: blocks, fullText: blocks.map((g) => g.text).join('\n') }, engine, language)
@@ -1201,10 +1196,7 @@ export function compose(units: Unit[], engine: string, language?: string): OcrRe
   return normalizeOcrResult(
     {
       fullText: ordered.map((u) => u.text).join('\n'),
-      textAnnotations: [
-        { description: '', granularity: 'aggregate', boundingPoly: words[0].boundingPoly },
-        ...words
-      ]
+      textAnnotations: [{ description: '', granularity: 'aggregate', boundingPoly: words[0].boundingPoly }, ...words]
     },
     engine,
     language

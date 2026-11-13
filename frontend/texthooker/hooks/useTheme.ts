@@ -1,15 +1,13 @@
-import { useEffect } from "react";
-import { emit } from "@tauri-apps/api/event";
-import type { ResolvedTheme, ThemePref } from "@texthooker/lib/types";
+import { useEffect } from 'react'
+import { emit } from '@tauri-apps/api/event'
+import type { ResolvedTheme, ThemePref } from '@texthooker/lib/types'
 
 function resolve(pref: ThemePref): ResolvedTheme {
-  if (pref === "system") {
-    if (typeof window === "undefined") return "dark";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+  if (pref === 'system') {
+    if (typeof window === 'undefined') return 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
-  return pref;
+  return pref
 }
 
 /**
@@ -19,18 +17,18 @@ function resolve(pref: ThemePref): ResolvedTheme {
 export function useTheme(pref: ThemePref) {
   useEffect(() => {
     const apply = (resolved: ResolvedTheme) => {
-      document.documentElement.dataset.theme = resolved;
-      void emit("popover:theme", resolved);
-    };
+      document.documentElement.dataset.theme = resolved
+      void emit('popover:theme', resolved)
+    }
 
-    apply(resolve(pref));
+    apply(resolve(pref))
 
-    if (pref !== "system") return;
+    if (pref !== 'system') return
 
     // Subscribe to system changes only while in system mode.
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => apply(resolve("system"));
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [pref]);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => apply(resolve('system'))
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [pref])
 }

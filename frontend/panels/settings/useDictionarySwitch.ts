@@ -94,7 +94,12 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   const [applyError, setApplyError] = useState<string | null>(null)
   const [waitingForImport, setWaitingForImport] = useState(false)
   const switchRequest = useRef(0)
-  useEffect(() => () => { switchRequest.current++ }, [])
+  useEffect(
+    () => () => {
+      switchRequest.current++
+    },
+    []
+  )
 
   if (picked !== null && picked === saved) setPicked(null)
 
@@ -122,15 +127,20 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
       setApplyError(null)
       setSwitchedTo(null)
       try {
-        const host = (window as unknown as {
-          __extensionHost?: { toBackend: (message: object) => Promise<{ stage: string } | null> }
-        }).__extensionHost
+        const host = (
+          window as unknown as {
+            __extensionHost?: { toBackend: (message: object) => Promise<{ stage: string } | null> }
+          }
+        ).__extensionHost
         if (saved === 'yomitan' && engine !== saved && host) {
           await waitForDictionarySetup(
-            () => request === switchRequest.current
-              ? host.toBackend({ action: '__setupDictionaries', params: { command: 'active' } })
-              : Promise.resolve(null),
-            () => { if (request === switchRequest.current) setWaitingForImport(true) }
+            () =>
+              request === switchRequest.current
+                ? host.toBackend({ action: '__setupDictionaries', params: { command: 'active' } })
+                : Promise.resolve(null),
+            () => {
+              if (request === switchRequest.current) setWaitingForImport(true)
+            }
           )
         }
         if (request !== switchRequest.current) return

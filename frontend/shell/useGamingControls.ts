@@ -55,7 +55,8 @@ export function useGamingControls(label: string): string | null {
           menuChord =
             binding?.enabled === false
               ? []
-              : (binding?.gamepadButtons ?? (Number.isInteger(binding?.gamepadButton) ? [binding.gamepadButton as number] : []))
+              : (binding?.gamepadButtons ??
+                (Number.isInteger(binding?.gamepadButton) ? [binding.gamepadButton as number] : []))
         })
         .catch(() => undefined)
     }

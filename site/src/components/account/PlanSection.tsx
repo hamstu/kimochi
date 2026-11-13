@@ -59,8 +59,10 @@ function StripeButton({
 function planStatus(user: User): { title: string; line: string | null; tone?: 'warn' } {
   const b = user.billing
   if (user.plan === 'owner') return { title: 'Owner', line: 'Everything, without limits.' }
-  if (b.source === 'grant') return { title: 'Kimochi Cloud', line: 'On the house. Thank you for being part of Kimochi.' }
-  if (b.source === 'lifetime') return { title: 'Kimochi Cloud · Lifetime', line: 'Paid once, yours for good. Thank you!' }
+  if (b.source === 'grant')
+    return { title: 'Kimochi Cloud', line: 'On the house. Thank you for being part of Kimochi.' }
+  if (b.source === 'lifetime')
+    return { title: 'Kimochi Cloud · Lifetime', line: 'Paid once, yours for good. Thank you!' }
   if (b.source === 'subscription') {
     const per = b.interval === 'year' ? '$60 a year' : '$6 a month'
     const interval = b.interval === 'year' ? 'Yearly' : 'Monthly'
@@ -70,10 +72,17 @@ function planStatus(user: User): { title: string; line: string | null; tone?: 'w
         : { title: 'Kimochi Cloud trial', line: `Free until ${formatDay(b.trialEnd)}, then ${per}.` }
     }
     if (b.status === 'past_due') {
-      return { title: `Kimochi Cloud · ${interval}`, line: 'Your last payment didn’t go through. Update your card to keep Kimochi Cloud.', tone: 'warn' }
+      return {
+        title: `Kimochi Cloud · ${interval}`,
+        line: 'Your last payment didn’t go through. Update your card to keep Kimochi Cloud.',
+        tone: 'warn'
+      }
     }
     return b.cancelAt
-      ? { title: `Kimochi Cloud · ${interval}`, line: `Cancelled. Kimochi Cloud stays on until ${formatDay(b.cancelAt)}.` }
+      ? {
+          title: `Kimochi Cloud · ${interval}`,
+          line: `Cancelled. Kimochi Cloud stays on until ${formatDay(b.cancelAt)}.`
+        }
       : { title: `Kimochi Cloud · ${interval}`, line: `${per}, renews on ${formatDay(b.periodEnd)}.` }
   }
   return { title: 'Free', line: null }
@@ -135,7 +144,8 @@ export function PlanSection({ user }: { user: User }) {
         ))}
       {user.status === 'suspended' && (
         <Notice tone="warn" className="mt-4">
-          This account is suspended, so the online services are paused. You can still see your account, and Sync keeps working.
+          This account is suspended, so the online services are paused. You can still see your account, and Sync keeps
+          working.
         </Notice>
       )}
 
@@ -153,7 +163,11 @@ export function PlanSection({ user }: { user: User }) {
             </StripeButton>
           )}
           {b.source === 'subscription' && user.cloud && (
-            <StripeButton variant="secondary" go={() => goToCheckout('lifetime', 'account')} busyLabel="Opening checkout…">
+            <StripeButton
+              variant="secondary"
+              go={() => goToCheckout('lifetime', 'account')}
+              busyLabel="Opening checkout…"
+            >
               Switch to lifetime ($125 once)
             </StripeButton>
           )}
@@ -185,7 +199,9 @@ export function PlanSection({ user }: { user: User }) {
               <div className="grid gap-5">
                 {MONTHLY.map((m) => {
                   const metric = usage.data!.metrics[m.key]
-                  return metric ? <Meter key={m.key} label={m.label} unit={m.unit} used={metric.used} limit={metric.limit} /> : null
+                  return metric ? (
+                    <Meter key={m.key} label={m.label} unit={m.unit} used={metric.used} limit={metric.limit} />
+                  ) : null
                 })}
                 {reset && (
                   <p className="text-small text-ink-3">

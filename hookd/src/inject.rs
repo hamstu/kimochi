@@ -56,8 +56,7 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), String> {
                 return Err(format!("could not write to process {pid} (error {})", GetLastError()));
             }
             let kernel32 = GetModuleHandleW(wide("kernel32.dll").as_ptr());
-            let load = GetProcAddress(kernel32, c"LoadLibraryW".as_ptr().cast())
-                .ok_or("LoadLibraryW not found")?;
+            let load = GetProcAddress(kernel32, c"LoadLibraryW".as_ptr().cast()).ok_or("LoadLibraryW not found")?;
             let start: unsafe extern "system" fn(*mut c_void) -> u32 = std::mem::transmute(load);
             let thread = CreateRemoteThread(process.0, null(), 0, Some(start), remote, 0, std::ptr::null_mut());
             if thread.is_null() {

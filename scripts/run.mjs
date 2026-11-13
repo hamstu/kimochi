@@ -49,9 +49,7 @@ if (darwin && task !== 'dev') {
 }
 const targetFlag = extra.findIndex((arg) => arg === '--target' || arg.startsWith('--target='))
 if (targetFlag >= 0) {
-  env.KIMOCHI_TARGET = extra[targetFlag].includes('=')
-    ? extra[targetFlag].split('=')[1]
-    : extra[targetFlag + 1]
+  env.KIMOCHI_TARGET = extra[targetFlag].includes('=') ? extra[targetFlag].split('=')[1] : extra[targetFlag + 1]
 }
 const run = (command, args) => spawnSync(command, args, { stdio: 'inherit', env })
 const exitOnFailure = (result) => {
@@ -74,10 +72,7 @@ if (task === 'launch') {
     exitOnFailure(run('open', ['src-tauri/target/debug/bundle/macos/Kimochi.app']))
     process.exit(0)
   }
-  const executable = path.join(
-    'src-tauri/target/debug',
-    process.platform === 'win32' ? 'kimochi.exe' : 'kimochi'
-  )
+  const executable = path.join('src-tauri/target/debug', process.platform === 'win32' ? 'kimochi.exe' : 'kimochi')
   if (!existsSync(executable)) {
     console.error(`${executable} not found; run \`npm run bundle\` (or \`npm run dev\`) first.`)
     process.exit(1)
@@ -87,12 +82,7 @@ if (task === 'launch') {
 }
 
 // Use an installed local development certificate when available. Never store key material.
-if (
-  darwin &&
-  (task === 'bundle' || task === 'release') &&
-  !env.APPLE_SIGNING_IDENTITY &&
-  !env.KIMOCHI_ADHOC
-) {
+if (darwin && (task === 'bundle' || task === 'release') && !env.APPLE_SIGNING_IDENTITY && !env.KIMOCHI_ADHOC) {
   const identities = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
     encoding: 'utf8'
   })
@@ -119,11 +109,7 @@ const ocrStaged = [
 ]
 // Each OCR script reads KIMOCHI_TARGET from the environment; they run in-process like before.
 if (env.KIMOCHI_TARGET) process.env.KIMOCHI_TARGET = env.KIMOCHI_TARGET
-if (
-  task === 'bundle' ||
-  task === 'release' ||
-  (task === 'dev' && !ocrStaged.every((file) => existsSync(file)))
-) {
+if (task === 'bundle' || task === 'release' || (task === 'dev' && !ocrStaged.every((file) => existsSync(file)))) {
   await import('./prepare-meikiocr.mjs')
   await import('./prepare-mangaocr.mjs')
   if (darwin && task !== 'dev') {
@@ -263,23 +249,13 @@ if (task === 'check' || task === 'check:all') {
     process.exit(0)
   }
   const failed = []
-  for (const triple of [
-    'x86_64-pc-windows-msvc',
-    'aarch64-pc-windows-msvc',
-    'x86_64-unknown-linux-gnu'
-  ]) {
+  for (const triple of ['x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc', 'x86_64-unknown-linux-gnu']) {
     if (!installed.stdout.split(/\r?\n/).includes(triple)) {
       console.warn(`Skipping capture-core for ${triple}: run \`rustup target add ${triple}\`.`)
       continue
     }
     console.log(`cargo check capture-core --target ${triple}`)
-    const result = run('cargo', [
-      'check',
-      '--manifest-path',
-      'capture-core/Cargo.toml',
-      '--target',
-      triple
-    ])
+    const result = run('cargo', ['check', '--manifest-path', 'capture-core/Cargo.toml', '--target', triple])
     if (result.status !== 0) failed.push(triple)
   }
   if (failed.length > 0) {
@@ -317,6 +293,16 @@ const signOverride =
       ]
     : []
 let built = node('@tauri-apps/cli', 'tauri', [
+  'build',
+  ...(task === 'release' ? [] : ['--debug']),
+  '--bundles',
+  bundles,
+  ...signOverride,
+  ...extra
+])
+// A first build may just have downloaded the GTK helper. Retry only after its known fix.
+if (built.status !== 0 && linuxBundler && (await linuxBundler.prepareLinuxBundler())) {
+  built = node('@tauri-apps/cli', 'tauri', [
     'build',
     ...(task === 'release' ? [] : ['--debug']),
     '--bundles',
@@ -324,11 +310,13 @@ let built = node('@tauri-apps/cli', 'tauri', [
     ...signOverride,
     ...extra
   ])
-// A first build may just have downloaded the GTK helper. Retry only after its known fix.
-if (built.status !== 0 && linuxBundler && await linuxBundler.prepareLinuxBundler()) {
-  built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...signOverride, ...extra])
 }
 exitOnFailure(built)
 // tauri writes under target/<triple>/ only for an explicit --target; KIMOCHI_TARGET alone (as CI
 // sets it for the OCR staging scripts) leaves the output in target/.
-if (linuxBundler) await linuxBundler.repairLinuxAppImages({ target: targetFlag >= 0 ? env.KIMOCHI_TARGET : undefined, release: task === 'release', env })
+if (linuxBundler)
+  await linuxBundler.repairLinuxAppImages({
+    target: targetFlag >= 0 ? env.KIMOCHI_TARGET : undefined,
+    release: task === 'release',
+    env
+  })

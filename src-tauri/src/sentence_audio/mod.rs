@@ -98,7 +98,12 @@ impl Default for Config {
 
 impl Config {
     pub fn load(settings: &Settings) -> Self {
-        let mut config: Config = settings.get("sentenceAudio").ok().flatten().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+        let mut config: Config = settings
+            .get("sentenceAudio")
+            .ok()
+            .flatten()
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
         config.seconds = config.seconds.clamp(10.0, 120.0);
         config.clips = config.clips.clamp(5, 100);
         config.start_offset_ms = config.start_offset_ms.clamp(-5_000.0, 5_000.0);
@@ -109,7 +114,12 @@ impl Config {
     }
 
     fn cutting(&self) -> Cutting {
-        Cutting { start_offset_ms: self.start_offset_ms, end_offset_ms: self.end_offset_ms, trim: self.trim, ..Cutting::default() }
+        Cutting {
+            start_offset_ms: self.start_offset_ms,
+            end_offset_ms: self.end_offset_ms,
+            trim: self.trim,
+            ..Cutting::default()
+        }
     }
 }
 
@@ -280,12 +290,20 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl SentenceAudio {
     pub fn new(app: tauri::AppHandle, settings: Arc<Settings>) -> Arc<Self> {
-        let clips_dir = app.path().app_local_data_dir().map(|d| d.join("sentence-audio")).unwrap_or_else(|_| std::env::temp_dir().join("kimochi-sentence-audio"));
+        let clips_dir = app
+            .path()
+            .app_local_data_dir()
+            .map(|d| d.join("sentence-audio"))
+            .unwrap_or_else(|_| std::env::temp_dir().join("kimochi-sentence-audio"));
         let (runtime_app, model_app, fetch_app, emit_app) = (app.clone(), app.clone(), app.clone(), app);
         let host = Host {
             runtime: Box::new(move || crate::meiki_ocr::onnx_runtime(&runtime_app)),
-            model_dir: Box::new(move || crate::model_store::models_dir(&model_app, crate::model_store::Engine::SenseVoice).ok()),
-            fetch_model: Box::new(move || crate::model_store::ensure_started(&fetch_app, crate::model_store::Engine::SenseVoice)),
+            model_dir: Box::new(move || {
+                crate::model_store::models_dir(&model_app, crate::model_store::Engine::SenseVoice).ok()
+            }),
+            fetch_model: Box::new(move || {
+                crate::model_store::ensure_started(&fetch_app, crate::model_store::Engine::SenseVoice)
+            }),
             emit: Box::new(move |line| {
                 let _ = emit_app.emit("sentence-audio-line", line);
             }),
@@ -354,7 +372,10 @@ impl SentenceAudio {
     fn start(self: &Arc<Self>, generation: u64) {
         *lock(&self.state) = State::Starting;
         let (ring, state, current) = (self.ring.clone(), self.state.clone(), self.generation.clone());
-        std::thread::Builder::new().name("sentence-audio".into()).spawn(move || record(generation, current, ring, state)).ok();
+        std::thread::Builder::new()
+            .name("sentence-audio".into())
+            .spawn(move || record(generation, current, ring, state))
+            .ok();
         let service = self.clone();
         std::thread::Builder::new().name("sentence-audio-listen".into()).spawn(move || service.listen(generation)).ok();
     }
@@ -377,7 +398,8 @@ impl SentenceAudio {
     }
 
     fn recording(&self) -> bool {
-        matches!(*lock(&self.state), State::Recording { .. }) || (*lock(&self.running) && !lock(&self.capture).pids.is_empty())
+        matches!(*lock(&self.state), State::Recording { .. })
+            || (*lock(&self.running) && !lock(&self.capture).pids.is_empty())
     }
 
     fn live(&self, generation: u64) -> bool {
@@ -426,7 +448,13 @@ impl SentenceAudio {
             }
         }
         let hooked = lock(&self.ears).as_ref().map(|ears| ears.hooked.report.clone()).unwrap_or_default();
-        Debug { status: self.status(), clips: lock(&self.store).all().count(), listener: report, hooked, hook_error: lock(&self.capture).error.clone() }
+        Debug {
+            status: self.status(),
+            clips: lock(&self.store).all().count(),
+            listener: report,
+            hooked,
+            hook_error: lock(&self.capture).error.clone(),
+        }
     }
 
     /// The automatic-scan observer read `text` from the screen at `at_ms`.
@@ -442,7 +470,13 @@ impl SentenceAudio {
         let mut out: Vec<LineAudio> = lock(&self.lines).iter().cloned().collect();
         for info in lock(&self.store).all() {
             if !out.iter().any(|l| l.uid == info.uid) {
-                out.push(LineAudio { uid: info.uid.clone(), state: "voiced", duration_ms: Some(info.duration_ms), how: Some(info.how.clone()), message: None });
+                out.push(LineAudio {
+                    uid: info.uid.clone(),
+                    state: "voiced",
+                    duration_ms: Some(info.duration_ms),
+                    how: Some(info.how.clone()),
+                    message: None,
+                });
             }
         }
         out
@@ -520,10 +554,17 @@ impl SentenceAudio {
                     && ears.listener.get_line(&l.uid).is_some()
                     && ears.listener.decision(&l.uid).is_none()
             });
-            let mut decisions = if undecided || ears.hooked.needs_fallback(now) { ears.listener.tick(&ears.ring, now) } else { Vec::new() };
+            let mut decisions = if undecided || ears.hooked.needs_fallback(now) {
+                ears.listener.tick(&ears.ring, now)
+            } else {
+                Vec::new()
+            };
             let listener_ms = began.elapsed().as_millis();
             for line in ears.hooked.lines() {
-                if !ears.hooked.completed(&line.uid) && !ears.hooked.waiting(&line.uid, now) && self.line_state(&line.uid).is_none() && !decisions.iter().any(|d| d.uid == line.uid)
+                if !ears.hooked.completed(&line.uid)
+                    && !ears.hooked.waiting(&line.uid, now)
+                    && self.line_state(&line.uid).is_none()
+                    && !decisions.iter().any(|d| d.uid == line.uid)
                 {
                     if let Some(decision) = ears.listener.decision(&line.uid) {
                         decisions.push(decision.clone());
@@ -554,7 +595,16 @@ impl SentenceAudio {
         // Its own speech detection: the listener's streams the recording, this one judges whole clips.
         let mut hooked = kimochi_speech::hooked::Hooked::default();
         hooked.speech = (self.host.runtime)().and_then(|()| Vad::new()).ok();
-        Ears { hooked, discovery: Default::default(), listener, ring: AudioRing::new(48_000, config.seconds), cursor: None, model: None, model_checked: None, loading: None }
+        Ears {
+            hooked,
+            discovery: Default::default(),
+            listener,
+            ring: AudioRing::new(48_000, config.seconds),
+            cursor: None,
+            model: None,
+            model_checked: None,
+            loading: None,
+        }
     }
 
     /// Load the speech model once it is downloaded; drop it once it is removed.
@@ -654,7 +704,9 @@ impl SentenceAudio {
         // another line, not its voice. A match by its words still counts. Every decision comes
         // here: the listening pass, and a card that cannot wait (`decide`).
         let silenced;
-        let decision = if ears.hooked.established() && matches!(&decision.outcome, Outcome::Voiced(v) if matches!(v.how, kimochi_speech::listener::How::Timed)) {
+        let decision = if ears.hooked.established()
+            && matches!(&decision.outcome, Outcome::Voiced(v) if matches!(v.how, kimochi_speech::listener::How::Timed))
+        {
             silenced = Decision { outcome: Outcome::Silent, ..decision.clone() };
             &silenced
         } else {
@@ -724,7 +776,11 @@ impl SentenceAudio {
             sample_rate: matched.sample_rate,
             start_ms: matched.clip.start,
         };
-        let voice = kimochi_speech::listener::Voice { from_ms: rendered.start_ms, to_ms: rendered.start_ms + rendered.duration_ms, how: kimochi_speech::listener::How::Hooked };
+        let voice = kimochi_speech::listener::Voice {
+            from_ms: rendered.start_ms,
+            to_ms: rendered.start_ms + rendered.duration_ms,
+            how: kimochi_speech::listener::How::Hooked,
+        };
         let info = lock(&self.store).put(&matched.line.uid, &matched.line.text, &voice, &rendered)?;
         let line = voiced(&matched.line.uid, info);
         let mut lines = lock(&self.lines);
@@ -774,7 +830,9 @@ impl SentenceAudio {
                 uid
             }
             (_, Some((uid, _))) => uid,
-            (None, None) if !self.recording() && lock(&self.store).all().next().is_none() => return Err("System audio is not being recorded.".into()),
+            (None, None) if !self.recording() && lock(&self.store).all().next().is_none() => {
+                return Err("System audio is not being recorded.".into())
+            }
             _ => return Err("The card's sentence is not a line with audio, so no audio was added.".into()),
         };
         // A kept clip from before this run has no line state: its clip is its state.
@@ -790,8 +848,20 @@ impl SentenceAudio {
                 let store = lock(&self.store);
                 let info = store.get(&uid).ok_or("The line's clip is no longer kept.")?;
                 let mp3 = store.read(&uid).ok_or("The line's clip is no longer kept.")?;
-                let word = if want_word && self.recognises() { word_candidates(fields, words, &info.text).into_iter().find_map(|w| store.word(&uid, &w).map(|mp3| (w, mp3))) } else { None };
-                Ok(Made { filename: format!("kimochi_{}.mp3", now_ms() as u64), mp3, duration_ms: info.duration_ms, matched: info.how == "matched", word })
+                let word = if want_word && self.recognises() {
+                    word_candidates(fields, words, &info.text)
+                        .into_iter()
+                        .find_map(|w| store.word(&uid, &w).map(|mp3| (w, mp3)))
+                } else {
+                    None
+                };
+                Ok(Made {
+                    filename: format!("kimochi_{}.mp3", now_ms() as u64),
+                    mp3,
+                    duration_ms: info.duration_ms,
+                    matched: info.how == "matched",
+                    word,
+                })
             }
             "silent" => Err(SILENT.into()),
             _ => Err(state.message.unwrap_or_else(|| "The line's audio is no longer held.".into())),
@@ -803,8 +873,15 @@ impl SentenceAudio {
     fn decide(&self, uid: &str, ts: f64) {
         // Longer while the game's own voice for the line is still expected (a long line still
         // playing, or held until the game's timing is learned): its clean clip beats the recording.
-        let hook_waiting = || lock(&self.ears).as_ref().is_some_and(|ears| ears.hooked.waiting(uid, now_ms()) || ears.hooked.pending(uid, now_ms()));
-        while self.line_state(uid).is_none() && (now_ms() - ts < MAX_WAIT_MS || (now_ms() - ts < HOOK_WAIT_MS && hook_waiting())) && self.recording() {
+        let hook_waiting = || {
+            lock(&self.ears)
+                .as_ref()
+                .is_some_and(|ears| ears.hooked.waiting(uid, now_ms()) || ears.hooked.pending(uid, now_ms()))
+        };
+        while self.line_state(uid).is_none()
+            && (now_ms() - ts < MAX_WAIT_MS || (now_ms() - ts < HOOK_WAIT_MS && hook_waiting()))
+            && self.recording()
+        {
             std::thread::sleep(Duration::from_millis(200));
         }
         if self.line_state(uid).is_none_or(|l| !matches!(l.how.as_deref(), Some("matched" | "hooked"))) {
@@ -821,22 +898,40 @@ impl SentenceAudio {
     /// configured one), and the mined word's in the word-audio field, when the note has those
     /// fields and they are empty. `fields`: the card's fields as sent (name → text), or just its
     /// sentence; `word`: the mined word, when known. Reports how it went in the status.
-    pub async fn attach(self: Arc<Self>, anki: Anki, note_id: u64, fields: Vec<(String, String)>, field: Option<String>, words: Vec<String>) {
+    pub async fn attach(
+        self: Arc<Self>,
+        anki: Anki,
+        note_id: u64,
+        fields: Vec<(String, String)>,
+        field: Option<String>,
+        words: Vec<String>,
+    ) {
         let config = self.config();
         let field = field.filter(|f| !f.trim().is_empty()).unwrap_or(config.field);
-        if let Err(message) = self.clone().attach_inner(&anki, note_id, fields, &field, &config.word_field, words).await {
+        if let Err(message) = self.clone().attach_inner(&anki, note_id, fields, &field, &config.word_field, words).await
+        {
             let ok = message == SILENT;
             self.note(ok, message);
         }
     }
 
-    async fn attach_inner(self: Arc<Self>, anki: &Anki, note_id: u64, fields: Vec<(String, String)>, field: &str, word_field: &str, words: Vec<String>) -> Result<(), String> {
+    async fn attach_inner(
+        self: Arc<Self>,
+        anki: &Anki,
+        note_id: u64,
+        fields: Vec<(String, String)>,
+        field: &str,
+        word_field: &str,
+        words: Vec<String>,
+    ) -> Result<(), String> {
         if field.is_empty() {
             return Err("No sentence-audio field is set in Settings → Anki.".into());
         }
         let info = anki.call("notesInfo", json!({ "notes": [note_id] })).await?;
         let note = info.get(0).and_then(|n| n.get("fields")).ok_or("Anki did not find the new card.")?;
-        let empty = |name: &str| note.get(name).map(|f| f.get("value").and_then(Value::as_str).is_none_or(|v| v.trim().is_empty()));
+        let empty = |name: &str| {
+            note.get(name).map(|f| f.get("value").and_then(Value::as_str).is_none_or(|v| v.trim().is_empty()))
+        };
         let Some(sentence_empty) = empty(field) else {
             return Err(format!("The card's note type has no “{field}” field, so no audio was added."));
         };
@@ -846,7 +941,9 @@ impl SentenceAudio {
             return Ok(());
         }
         let service = self.clone();
-        let made = tauri::async_runtime::spawn_blocking(move || service.make(&fields, words, word_empty)).await.map_err(|e| e.to_string())??;
+        let made = tauri::async_runtime::spawn_blocking(move || service.make(&fields, words, word_empty))
+            .await
+            .map_err(|e| e.to_string())??;
         let mut update = serde_json::Map::new();
         let mut done = Vec::new();
         if sentence_empty {
@@ -872,12 +969,25 @@ impl SentenceAudio {
         // Filled meanwhile (by hand, or another card's audio): left as it is.
         let info = anki.call("notesInfo", json!({ "notes": [note_id] })).await?;
         if let Some(now) = info.get(0).and_then(|n| n.get("fields")) {
-            update.retain(|name, _| now.get(name).and_then(|f| f.get("value")).and_then(Value::as_str).is_none_or(|v| v.trim().is_empty()));
+            update.retain(|name, _| {
+                now.get(name).and_then(|f| f.get("value")).and_then(Value::as_str).is_none_or(|v| v.trim().is_empty())
+            });
         }
         if !update.is_empty() {
             anki.call("updateNoteFields", json!({ "note": { "id": note_id, "fields": update } })).await?;
             // The Anki tab marks the card as given its audio by Kimochi.
-            let kinds: Vec<&str> = update.keys().map(|name| if name == field { crate::anki_cards::SENTENCE_AUDIO } else { crate::anki_cards::WORD_AUDIO }).collect();
+            let kinds: Vec<&str> = update
+                .keys()
+                .map(
+                    |name| {
+                        if name == field {
+                            crate::anki_cards::SENTENCE_AUDIO
+                        } else {
+                            crate::anki_cards::WORD_AUDIO
+                        }
+                    },
+                )
+                .collect();
             crate::anki_cards::enhanced(note_id, &kinds);
         }
         let how = if made.matched { "matched by its words" } else { "placed by timing" };
@@ -889,7 +999,13 @@ impl SentenceAudio {
 const SILENT: &str = "No voice was detected for the card's line, so no audio was added.";
 
 fn voiced(uid: &str, info: clips::ClipInfo) -> LineAudio {
-    LineAudio { uid: uid.to_string(), state: "voiced", duration_ms: Some(info.duration_ms), how: Some(info.how), message: None }
+    LineAudio {
+        uid: uid.to_string(),
+        state: "voiced",
+        duration_ms: Some(info.duration_ms),
+        how: Some(info.how),
+        message: None,
+    }
 }
 
 fn missed(uid: &str, message: String) -> LineAudio {
@@ -920,13 +1036,19 @@ pub(crate) fn card_word(fields: &[(String, String)], line: &str) -> Option<Strin
     let plain = |v: &str| timeline::normalize(v);
     let named = fields.iter().find(|(name, value)| {
         let name = name.to_lowercase();
-        NAMES.iter().any(|n| name == *n || name.starts_with(n)) && !plain(value).is_empty() && plain(value).chars().count() <= 15
+        NAMES.iter().any(|n| name == *n || name.starts_with(n))
+            && !plain(value).is_empty()
+            && plain(value).chars().count() <= 15
     });
     if let Some((_, value)) = named {
         return Some(plain(value));
     }
     let line = plain(line);
-    fields.iter().map(|(_, v)| plain(v)).filter(|v| (1..=15).contains(&v.chars().count()) && line.contains(v.as_str())).min_by_key(|v| v.chars().count())
+    fields
+        .iter()
+        .map(|(_, v)| plain(v))
+        .filter(|v| (1..=15).contains(&v.chars().count()) && line.contains(v.as_str()))
+        .min_by_key(|v| v.chars().count())
 }
 
 /// A card's fields as sent: (name, text).
@@ -1042,7 +1164,12 @@ pub fn after_relay(app: &tauri::AppHandle, url: &str, request: &Value, reply_sta
 
 /// The card a relayed request added: where its AnkiConnect is (the extension's address and key),
 /// its id, and its fields (name, text).
-pub(crate) fn added_card(url: &str, request: &Value, reply_status: u16, reply_body: &str) -> Option<(Anki, u64, Fields)> {
+pub(crate) fn added_card(
+    url: &str,
+    request: &Value,
+    reply_status: u16,
+    reply_body: &str,
+) -> Option<(Anki, u64, Fields)> {
     if request.get("action").and_then(Value::as_str) != Some("addNote") || reply_status != 200 {
         return None;
     }
@@ -1061,7 +1188,9 @@ pub(crate) fn added_card(url: &str, request: &Value, reply_status: u16, reply_bo
 fn added_note_id(body: &str) -> Option<u64> {
     let value: Value = serde_json::from_str(body).ok()?;
     match value.as_object() {
-        Some(o) if o.contains_key("result") => o.get("error").filter(|e| !e.is_null()).map_or(o["result"].as_u64(), |_| None),
+        Some(o) if o.contains_key("result") => {
+            o.get("error").filter(|e| !e.is_null()).map_or(o["result"].as_u64(), |_| None)
+        }
         _ => value.as_u64(),
     }
 }
@@ -1099,7 +1228,14 @@ pub fn sentence_audio_status(service: tauri::State<'_, Arc<SentenceAudio>>) -> S
 /// Unix ms. `source`: the Log's line source (`ocr`, `websocket`, `clipboard`, `webhook`).
 /// `scan`: the OCR scan it was read in (a scan's lines, a name box and the dialogue, share it).
 #[tauri::command]
-pub fn sentence_audio_line(service: tauri::State<'_, Arc<SentenceAudio>>, uid: String, text: String, ts: f64, source: String, scan: Option<String>) {
+pub fn sentence_audio_line(
+    service: tauri::State<'_, Arc<SentenceAudio>>,
+    uid: String,
+    text: String,
+    ts: f64,
+    source: String,
+    scan: Option<String>,
+) {
     service.record_line(Line { uid, text, ts, ocr: source == "ocr", appeared: None, scan });
 }
 
@@ -1161,7 +1297,9 @@ pub fn sentence_audio_attach(
             Some(word_field) => {
                 let config = service.config();
                 let field = field.filter(|f| !f.trim().is_empty()).unwrap_or(config.field);
-                if let Err(message) = service.clone().attach_inner(&anki, note_id, fields, &field, &word_field, words).await {
+                if let Err(message) =
+                    service.clone().attach_inner(&anki, note_id, fields, &field, &word_field, words).await
+                {
                     let ok = message == SILENT;
                     service.note(ok, message);
                 }
@@ -1176,7 +1314,11 @@ pub fn sentence_audio_attach(
 /// Kimochi's AnkiConnect, and its line's kept clip is put in its empty sentence-audio field (and
 /// the word's in the word-audio field). Works while recording is off: the clips are kept.
 #[tauri::command]
-pub async fn sentence_audio_add_to_note(service: tauri::State<'_, Arc<SentenceAudio>>, settings: tauri::State<'_, crate::state::Shared>, note_id: u64) -> Result<(), String> {
+pub async fn sentence_audio_add_to_note(
+    service: tauri::State<'_, Arc<SentenceAudio>>,
+    settings: tauri::State<'_, crate::state::Shared>,
+    note_id: u64,
+) -> Result<(), String> {
     let (url, key) = ankiconnect::configured(&settings.settings);
     let anki = Anki { url, key };
     let info = anki.call("notesInfo", json!({ "notes": [note_id] })).await?;
@@ -1190,7 +1332,8 @@ pub async fn sentence_audio_add_to_note(service: tauri::State<'_, Arc<SentenceAu
         .collect();
     let config = service.config();
     let service = service.inner().clone();
-    let result = service.clone().attach_inner(&anki, note_id, fields, &config.field, &config.word_field, Vec::new()).await;
+    let result =
+        service.clone().attach_inner(&anki, note_id, fields, &config.field, &config.word_field, Vec::new()).await;
     if let Err(message) = &result {
         service.note(false, message.clone());
     }
@@ -1219,7 +1362,10 @@ mod tests {
         let (anki, id, mut fields) = added_card("http://127.0.0.1:8765", &request, 200, "1234").unwrap();
         fields.sort();
         assert_eq!((anki.url.as_str(), anki.key.as_deref(), id), ("http://127.0.0.1:8765", Some("theirs"), 1234));
-        assert_eq!(fields, vec![("Sentence".to_string(), "猫が好き。".to_string()), ("Word".to_string(), "猫".to_string())]);
+        assert_eq!(
+            fields,
+            vec![("Sentence".to_string(), "猫が好き。".to_string()), ("Word".to_string(), "猫".to_string())]
+        );
         assert!(added_card("u", &request, 403, "1234").is_none(), "refused");
         assert!(added_card("u", &request, 200, r#"{"result":null,"error":"duplicate"}"#).is_none());
         let mut other = request.clone();
@@ -1231,9 +1377,18 @@ mod tests {
     fn the_cards_word_is_its_word_field_or_its_shortest_field_in_the_line() {
         let line = "今日はいい天気ですね。";
         let field = |n: &str, v: &str| (n.to_string(), v.to_string());
-        assert_eq!(card_word(&[field("Sentence", line), field("Expression", "<b>天気</b>")], line).as_deref(), Some("天気"));
-        assert_eq!(card_word(&[field("Front", "天気[てんき]"), field("Back", "weather")], line).as_deref(), Some("天気"));
-        assert_eq!(card_word(&[field("A", line), field("B", "天気"), field("C", "weather")], line).as_deref(), Some("天気"));
+        assert_eq!(
+            card_word(&[field("Sentence", line), field("Expression", "<b>天気</b>")], line).as_deref(),
+            Some("天気")
+        );
+        assert_eq!(
+            card_word(&[field("Front", "天気[てんき]"), field("Back", "weather")], line).as_deref(),
+            Some("天気")
+        );
+        assert_eq!(
+            card_word(&[field("A", line), field("B", "天気"), field("C", "weather")], line).as_deref(),
+            Some("天気")
+        );
         assert_eq!(card_word(&[field("A", "weather")], line), None);
     }
 
@@ -1252,12 +1407,18 @@ mod tests {
 
     #[test]
     fn a_cards_word_is_also_looked_for_by_its_reading() {
-        let fields =
-            vec![("Expression".to_string(), "今日は".to_string()), ("ExpressionReading".to_string(), "こんにちは".to_string()), ("Sentence".to_string(), "こんにちは".to_string())];
+        let fields = vec![
+            ("Expression".to_string(), "今日は".to_string()),
+            ("ExpressionReading".to_string(), "こんにちは".to_string()),
+            ("Sentence".to_string(), "こんにちは".to_string()),
+        ];
         assert_eq!(word_candidates(&fields, Vec::new(), "こんにちは"), vec!["今日は", "こんにちは"]);
         // The pop-up's word and reading come first, once each.
         let given = vec!["今日は".to_string(), "こんにちは".to_string()];
-        assert_eq!(word_candidates(&[("Sentence".into(), "こんにちは".into())], given, "こんにちは"), vec!["今日は", "こんにちは"]);
+        assert_eq!(
+            word_candidates(&[("Sentence".into(), "こんにちは".into())], given, "こんにちは"),
+            vec!["今日は", "こんにちは"]
+        );
     }
 
     #[test]
@@ -1269,12 +1430,25 @@ mod tests {
         std::fs::write(clips.join("clip-1.mp3"), b"ID3 kept").unwrap();
         std::fs::write(clips.join("clip-2.mp3"), b"ID3 other").unwrap();
         let info = |uid: &str, text: &str, file: &str| json!({ "uid": uid, "text": text, "file": file, "durationMs": 900.0, "how": "matched", "startMs": 0.0 });
-        std::fs::write(clips.join("clips.json"), serde_json::to_vec(&json!([info("a", "こんにちは", "clip-1.mp3"), info("b", "話はだいたい聞いてるよ。", "clip-2.mp3")])).unwrap())
-            .unwrap();
+        std::fs::write(
+            clips.join("clips.json"),
+            serde_json::to_vec(&json!([
+                info("a", "こんにちは", "clip-1.mp3"),
+                info("b", "話はだいたい聞いてるよ。", "clip-2.mp3")
+            ]))
+            .unwrap(),
+        )
+        .unwrap();
         let settings = Arc::new(Settings::load(dir.join("settings.json")));
-        let host = Host { runtime: Box::new(|| Err("no runtime in tests".into())), model_dir: Box::new(|| None), fetch_model: Box::new(|| {}), emit: Box::new(|_| {}) };
+        let host = Host {
+            runtime: Box::new(|| Err("no runtime in tests".into())),
+            model_dir: Box::new(|| None),
+            fetch_model: Box::new(|| {}),
+            emit: Box::new(|_| {}),
+        };
         let service = SentenceAudio::with_host(settings, host, clips);
-        let fields = vec![("Expression".to_string(), "今日は".to_string()), ("Sentence".to_string(), "こんにちは".to_string())];
+        let fields =
+            vec![("Expression".to_string(), "今日は".to_string()), ("Sentence".to_string(), "こんにちは".to_string())];
         let made = service.make(&fields, Vec::new(), false).map_err(|e| e.to_string()).unwrap();
         assert_eq!(made.mp3, b"ID3 kept");
         let other = vec![("Sentence".to_string(), "知らない台詞です。".to_string())];
@@ -1315,11 +1489,20 @@ mod tests {
             loading: None,
         };
         let voice = || Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
-        service.keep(&ears, &Decision { uid: "a".into(), text: "こんにちは".into(), outcome: voice(), provisional: false });
-        service.keep(&ears, &Decision { uid: "b".into(), text: "猫が好きです。".into(), outcome: voice(), provisional: false });
+        service.keep(
+            &ears,
+            &Decision { uid: "a".into(), text: "こんにちは".into(), outcome: voice(), provisional: false },
+        );
+        service.keep(
+            &ears,
+            &Decision { uid: "b".into(), text: "猫が好きです。".into(), outcome: voice(), provisional: false },
+        );
         let states: Vec<(String, &str)> = emitted.lock().unwrap().iter().map(|l| (l.uid.clone(), l.state)).collect();
         assert_eq!(states, vec![("a".to_string(), "voiced"), ("b".to_string(), "missed")]);
-        assert_eq!(service.make(&[("Sentence".into(), "こんにちは".into())], Vec::new(), false).map(|m| m.mp3).ok(), Some(b"ID3 kept".to_vec()));
+        assert_eq!(
+            service.make(&[("Sentence".into(), "こんにちは".into())], Vec::new(), false).map(|m| m.mp3).ok(),
+            Some(b"ID3 kept".to_vec())
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1346,9 +1529,26 @@ mod tests {
         hooked.add_capture(dir.join("capture"));
         hooked.remembered = Some("renpy | ogg | audio/voice/hero".into());
         assert!(hooked.established());
-        let ears = Ears { hooked, discovery: Default::default(), listener: Listener::new(None, None), ring: AudioRing::new(48_000, 30.0), cursor: None, model: None, model_checked: None, loading: None };
+        let ears = Ears {
+            hooked,
+            discovery: Default::default(),
+            listener: Listener::new(None, None),
+            ring: AudioRing::new(48_000, 30.0),
+            cursor: None,
+            model: None,
+            model_checked: None,
+            loading: None,
+        };
         let timed = Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
-        service.keep(&ears, &Decision { uid: "narration".into(), text: "彼が手を差し伸べてくる。".into(), outcome: timed, provisional: false });
+        service.keep(
+            &ears,
+            &Decision {
+                uid: "narration".into(),
+                text: "彼が手を差し伸べてくる。".into(),
+                outcome: timed,
+                provisional: false,
+            },
+        );
         let states: Vec<(String, &str)> = emitted.lock().unwrap().iter().map(|l| (l.uid.clone(), l.state)).collect();
         assert_eq!(states, vec![("narration".to_string(), "silent")]);
         let _ = std::fs::remove_dir_all(dir);
@@ -1473,7 +1673,14 @@ mod tests {
         let lines = ["今日はいい天気ですね。散歩に行きましょう。", "猫が好きです。"];
         let mut spoken_ms = Vec::new();
         for (i, (text, wav)) in lines.iter().zip(&wavs).enumerate() {
-            service.record_line(Line { uid: i.to_string(), text: text.to_string(), ts: now_ms(), ocr: false, appeared: None, scan: None });
+            service.record_line(Line {
+                uid: i.to_string(),
+                text: text.to_string(),
+                ts: now_ms(),
+                ocr: false,
+                appeared: None,
+                scan: None,
+            });
             let started = now_ms();
             play(wav);
             spoken_ms.push(now_ms() - started);
@@ -1494,7 +1701,10 @@ mod tests {
             (200, json!({ "result": result, "error": null }).to_string())
         });
         // The extension's card: its sentence field holds the first line, in markup.
-        let fields = vec![("Word".to_string(), "天気".to_string()), ("Sentence".to_string(), "<b>今日</b>はいい天気ですね。".to_string())];
+        let fields = vec![
+            ("Word".to_string(), "天気".to_string()),
+            ("Sentence".to_string(), "<b>今日</b>はいい天気ですね。".to_string()),
+        ];
         service.clone().attach(Anki { url, key: None }, 42, fields, None, Vec::new()).await;
 
         let last = service.status().last.unwrap();
@@ -1512,7 +1722,10 @@ mod tests {
         }
         let seconds = mp3.len() as f64 * 8.0 / 96_000.0;
         let first_line = spoken_ms[0] / 1000.0;
-        eprintln!("clip {seconds:.2}s; the first line played for {first_line:.2}s, the second for {:.2}s", spoken_ms[1] / 1000.0);
+        eprintln!(
+            "clip {seconds:.2}s; the first line played for {first_line:.2}s, the second for {:.2}s",
+            spoken_ms[1] / 1000.0
+        );
         assert!((seconds - first_line).abs() < 0.8, "clip {seconds:.2}s vs line {first_line:.2}s");
         let updated = body("updateNoteFields");
         let sound = updated["params"]["note"]["fields"]["SentenceAudio"].as_str().unwrap();
@@ -1528,14 +1741,47 @@ mod hooked_integration_tests {
     #[test]
     fn clean_clip_is_kept_for_cards_and_fallback_cannot_overwrite_it() {
         let dir = std::env::temp_dir().join(format!("kimochi-hook-integration-{}", std::process::id()));
-        let host = Host { runtime: Box::new(|| Err("no runtime".into())), model_dir: Box::new(|| None), fetch_model: Box::new(|| {}), emit: Box::new(|_| {}) };
-        let service = SentenceAudio::with_host(Arc::new(Settings::load(dir.join("settings.json"))), host, dir.join("clips"));
-        let line = Line { uid: "hooked".into(), text: "\u{4eca}\u{65e5}\u{306f}\u{6674}\u{308c}\u{3067}\u{3059}".into(), ts: 1000., ocr: false, appeared: None, scan: None };
-        let clip =
-            kimochi_speech::hooked::HookClip { seq: 1, stream: 1, api: "dsound".into(), start: 1000., dur: 1., file: None, source: None, fmt: None, looping: false, channel: None };
-        service.keep_hooked(&kimochi_speech::hooked::Matched { line: line.clone(), clip, samples: vec![0.2; 16000], sample_rate: 16000 }).unwrap();
+        let host = Host {
+            runtime: Box::new(|| Err("no runtime".into())),
+            model_dir: Box::new(|| None),
+            fetch_model: Box::new(|| {}),
+            emit: Box::new(|_| {}),
+        };
+        let service =
+            SentenceAudio::with_host(Arc::new(Settings::load(dir.join("settings.json"))), host, dir.join("clips"));
+        let line = Line {
+            uid: "hooked".into(),
+            text: "\u{4eca}\u{65e5}\u{306f}\u{6674}\u{308c}\u{3067}\u{3059}".into(),
+            ts: 1000.,
+            ocr: false,
+            appeared: None,
+            scan: None,
+        };
+        let clip = kimochi_speech::hooked::HookClip {
+            seq: 1,
+            stream: 1,
+            api: "dsound".into(),
+            start: 1000.,
+            dur: 1.,
+            file: None,
+            source: None,
+            fmt: None,
+            looping: false,
+            channel: None,
+        };
+        service
+            .keep_hooked(&kimochi_speech::hooked::Matched {
+                line: line.clone(),
+                clip,
+                samples: vec![0.2; 16000],
+                sample_rate: 16000,
+            })
+            .unwrap();
         let ears = service.hear();
-        service.keep(&ears, &Decision { uid: line.uid.clone(), text: line.text.clone(), outcome: Outcome::Silent, provisional: false });
+        service.keep(
+            &ears,
+            &Decision { uid: line.uid.clone(), text: line.text.clone(), outcome: Outcome::Silent, provisional: false },
+        );
         assert_eq!(service.line_state(&line.uid).unwrap().how.as_deref(), Some("hooked"));
         let made = service.make(&[("Sentence".into(), line.text)], Vec::new(), true).unwrap();
         assert!(!made.mp3.is_empty());

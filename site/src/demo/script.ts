@@ -46,7 +46,18 @@ export interface Frame {
 const TYPE_MS = 42
 
 function base(line: number): Omit<Frame, 'ms'> {
-  return { line, text: 'shown', scan: false, boxes: false, cursor: null, popup: false, menu: null, reading: null, pressed: [], hint: '' }
+  return {
+    line,
+    text: 'shown',
+    scan: false,
+    boxes: false,
+    cursor: null,
+    popup: false,
+    menu: null,
+    reading: null,
+    pressed: [],
+    hint: ''
+  }
 }
 
 function typing(line: number): number {
@@ -125,7 +136,8 @@ export function deckFrames(): Frame[] {
       { ...b, ms: 420, reading: { layer: 'text', loading: true }, emit: 'line' },
       { ...at(path[0]), ms: 1500 }
     ]
-    for (let k = 1; k < path.length; k++) frames.push({ ...at(path[k]), ms: 220, pressed: ['right'] }, { ...at(path[k]), ms: 380 })
+    for (let k = 1; k < path.length; k++)
+      frames.push({ ...at(path[k]), ms: 220, pressed: ['right'] }, { ...at(path[k]), ms: 380 })
     const word = path[path.length - 1]
     frames.push(
       { ...at(word), ms: 900 },

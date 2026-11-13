@@ -38,8 +38,7 @@ function reading(lines, engine = 'meikiocr') {
 }
 
 /** The passages published now, as plain strings. */
-const published = (scene, at) =>
-  scene.takePublishable(at).map((passage) => passage.result.fullText.replace(/\n/g, ''))
+const published = (scene, at) => scene.takePublishable(at).map((passage) => passage.result.fullText.replace(/\n/g, ''))
 
 const shownText = (scene) => scene.composite().fullText.replace(/\n/g, '')
 
@@ -93,11 +92,7 @@ test('a worse reading of the same text never replaces a better one', () => {
   hold(scene, DIALOGUE, 0)
   const snapshot = scene.snapshot(250)
   scene.apply(reading(DIALOGUE), snapshot, 300)
-  const outcome = scene.apply(
-    reading([line('今日は天気', 396), line('散歩に行きましょうか', 436)]),
-    snapshot,
-    400
-  )
+  const outcome = scene.apply(reading([line('今日は天気', 396), line('散歩に行きましょうか', 436)]), snapshot, 400)
   // Both pieces are turned away: the first is worse, the second no better.
   assert.equal(outcome.rejected, 2)
   assert.equal(shownText(scene), '今日はいい天気ですね散歩に行きましょうか')

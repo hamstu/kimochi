@@ -2,8 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const { ForegroundTracker, isSourceInForeground, getScannedAppName, shouldShowOverlay } =
-  await load('foreground.ts')
+const { ForegroundTracker, isSourceInForeground, getScannedAppName, shouldShowOverlay } = await load('foreground.ts')
 
 const window_ = { kind: 'window', app: 'Safari', name: 'A page' }
 const display = { kind: 'display', name: 'Display 1' }

@@ -59,20 +59,11 @@ hub.installNetwork = (win) => {
       if (!remote(this.url)) {
         this.native = new NativeXHR()
         this.native.open(method, url, async)
-        for (const name of [
-          'load',
-          'error',
-          'progress',
-          'abort',
-          'timeout',
-          'loadend',
-          'readystatechange'
-        ])
+        for (const name of ['load', 'error', 'progress', 'abort', 'timeout', 'loadend', 'readystatechange'])
           this.native.addEventListener(name, (e) => {
             for (const key of ['readyState', 'status', 'statusText', 'response', 'responseURL'])
               this[key] = this.native[key]
-            if (!this.responseType || this.responseType === 'text')
-              this.responseText = this.native.responseText
+            if (!this.responseType || this.responseType === 'text') this.responseText = this.native.responseText
             this.emit(
               name,
               name === 'progress'
@@ -93,9 +84,7 @@ hub.installNetwork = (win) => {
       else this.headers[name] = value
     }
     getResponseHeader(name) {
-      return this.native
-        ? this.native.getResponseHeader(name)
-        : (this.responseHeaders?.get(name) ?? null)
+      return this.native ? this.native.getResponseHeader(name) : (this.responseHeaders?.get(name) ?? null)
     }
     getAllResponseHeaders() {
       return this.native
@@ -148,10 +137,7 @@ hub.installNetwork = (win) => {
               chunks.push(value)
               loaded += value.byteLength
               this.readyState = 3
-              this.emit(
-                'progress',
-                new win.ProgressEvent('progress', { loaded, total, lengthComputable: total > 0 })
-              )
+              this.emit('progress', new win.ProgressEvent('progress', { loaded, total, lengthComputable: total > 0 }))
             }
           // Blob is constructed in the requesting frame: Yomitan uses instanceof Blob.
           const blob = new win.Blob(chunks, { type: res.headers.get('content-type') ?? '' })

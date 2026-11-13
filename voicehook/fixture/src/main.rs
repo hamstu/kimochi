@@ -11,8 +11,8 @@
 //! exactly those bytes: no BGM, no SFX, nothing missing.
 #![allow(clippy::missing_safety_doc)]
 use serde_json::{json, Value};
-use std::ffi::{c_void, CString};
 use std::f32::consts::TAU;
+use std::ffi::{c_void, CString};
 use std::process::ExitCode;
 use std::ptr::{null, null_mut};
 use std::thread::sleep;
@@ -114,7 +114,14 @@ unsafe fn ds_buffer(dev: *mut c_void, fmt: &WAVEFORMATEX, size: u32, flags: u32)
         guid3DAlgorithm: GUID::default(),
     };
     let mut buf = null_mut();
-    let hr = vcall!(dev, ds::CREATE_SOUND_BUFFER, fn(*const DSBUFFERDESC, *mut *mut c_void, *mut c_void) -> HRESULT, &desc, &mut buf, null_mut());
+    let hr = vcall!(
+        dev,
+        ds::CREATE_SOUND_BUFFER,
+        fn(*const DSBUFFERDESC, *mut *mut c_void, *mut c_void) -> HRESULT,
+        &desc,
+        &mut buf,
+        null_mut()
+    );
     if hr < 0 {
         return Err(format!("CreateSoundBuffer failed ({hr:#x})"));
     }
@@ -125,8 +132,18 @@ unsafe fn ds_buffer(dev: *mut c_void, fmt: &WAVEFORMATEX, size: u32, flags: u32)
 unsafe fn ds_write(buf: *mut c_void, offset: u32, data: &[u8], entire: bool) -> Result<(), String> {
     let (mut p1, mut n1, mut p2, mut n2) = (null_mut::<c_void>(), 0u32, null_mut::<c_void>(), 0u32);
     let flags = if entire { ds::DSBLOCK_ENTIREBUFFER } else { 0 };
-    let hr = vcall!(buf, ds::LOCK, fn(u32, u32, *mut *mut c_void, *mut u32, *mut *mut c_void, *mut u32, u32) -> HRESULT,
-        offset, data.len() as u32, &mut p1, &mut n1, &mut p2, &mut n2, flags);
+    let hr = vcall!(
+        buf,
+        ds::LOCK,
+        fn(u32, u32, *mut *mut c_void, *mut u32, *mut *mut c_void, *mut u32, u32) -> HRESULT,
+        offset,
+        data.len() as u32,
+        &mut p1,
+        &mut n1,
+        &mut p2,
+        &mut n2,
+        flags
+    );
     if hr < 0 {
         return Err(format!("Lock failed ({hr:#x})"));
     }
@@ -149,7 +166,8 @@ unsafe fn ds_write(buf: *mut c_void, offset: u32, data: &[u8], entire: bool) -> 
 unsafe fn play_ds(expected: &mut Vec<Value>) -> Result<(), String> {
     let m = LoadLibraryW(wide("dsound.dll").as_ptr());
     let create = GetProcAddress(m, c"DirectSoundCreate8".as_ptr().cast()).ok_or("no DirectSoundCreate8")?;
-    let create: unsafe extern "system" fn(*const GUID, *mut *mut c_void, *mut c_void) -> HRESULT = std::mem::transmute(create);
+    let create: unsafe extern "system" fn(*const GUID, *mut *mut c_void, *mut c_void) -> HRESULT =
+        std::mem::transmute(create);
     let mut dev = null_mut();
     let hr = create(null(), &mut dev, null_mut());
     if hr < 0 {
@@ -281,7 +299,13 @@ impl DsStream {
         c
     }
 
-    unsafe fn start(dev: *mut c_void, fmt: &WAVEFORMATEX, half_secs: f32, data: Vec<u8>, looped: bool) -> Result<Self, String> {
+    unsafe fn start(
+        dev: *mut c_void,
+        fmt: &WAVEFORMATEX,
+        half_secs: f32,
+        data: Vec<u8>,
+        looped: bool,
+    ) -> Result<Self, String> {
         let align = fmt.nBlockAlign as usize;
         let half = (fmt.nAvgBytesPerSec as f32 * half_secs) as usize / align * align;
         let flags = ds::DSBCAPS_GLOBALFOCUS | ds::DSBCAPS_CTRLVOLUME | ds::DSBCAPS_GETCURRENTPOSITION2;
@@ -334,7 +358,8 @@ impl DsStream {
 unsafe fn play_dss(expected: &mut Vec<Value>) -> Result<(), String> {
     let m = LoadLibraryW(wide("dsound.dll").as_ptr());
     let create = GetProcAddress(m, c"DirectSoundCreate8".as_ptr().cast()).ok_or("no DirectSoundCreate8")?;
-    let create: unsafe extern "system" fn(*const GUID, *mut *mut c_void, *mut c_void) -> HRESULT = std::mem::transmute(create);
+    let create: unsafe extern "system" fn(*const GUID, *mut *mut c_void, *mut c_void) -> HRESULT =
+        std::mem::transmute(create);
     let mut dev = null_mut();
     if create(null(), &mut dev, null_mut()) < 0 {
         return Err("DirectSoundCreate8 failed".into());
@@ -388,7 +413,10 @@ unsafe fn play_dss(expected: &mut Vec<Value>) -> Result<(), String> {
 
 mod wo {
     use super::*;
-    use windows_sys::Win32::Media::Audio::{waveOutClose, waveOutOpen, waveOutPrepareHeader, waveOutReset, waveOutUnprepareHeader, waveOutWrite, CALLBACK_NULL, HWAVEOUT, WAVEHDR, WAVE_MAPPER, WHDR_DONE};
+    use windows_sys::Win32::Media::Audio::{
+        waveOutClose, waveOutOpen, waveOutPrepareHeader, waveOutReset, waveOutUnprepareHeader, waveOutWrite,
+        CALLBACK_NULL, HWAVEOUT, WAVEHDR, WAVE_MAPPER, WHDR_DONE,
+    };
 
     pub struct Dev {
         h: HWAVEOUT,
@@ -511,7 +539,8 @@ unsafe fn play_wo(expected: &mut Vec<Value>) -> Result<(), String> {
 /// Expected bytes are each chunk's decoded buffer (what SDL_mixer plays), plus its file name.
 unsafe fn play_sdl(expected: &mut Vec<Value>) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let dir = exe.parent().unwrap().join("fixture-libs").join(if cfg!(target_pointer_width = "64") { "x64" } else { "x86" });
+    let dir =
+        exe.parent().unwrap().join("fixture-libs").join(if cfg!(target_pointer_width = "64") { "x64" } else { "x86" });
     let sdl = LoadLibraryW(wide(&dir.join("SDL2.dll").display().to_string()).as_ptr());
     let mix = LoadLibraryW(wide(&dir.join("SDL2_mixer.dll").display().to_string()).as_ptr());
     if sdl.is_null() || mix.is_null() {
@@ -592,8 +621,13 @@ unsafe fn play_sdl(expected: &mut Vec<Value>) -> Result<(), String> {
 unsafe fn xa_engine(ver: u8) -> Result<*mut c_void, String> {
     let mut engine = null_mut();
     if ver == 7 {
-        let hr = CoCreateInstance(&CLSID_XAUDIO2_7 as *const GUID as *const _, null_mut(), CLSCTX_INPROC_SERVER,
-            &IID_IXAUDIO2_7 as *const GUID as *const _, &mut engine);
+        let hr = CoCreateInstance(
+            &CLSID_XAUDIO2_7 as *const GUID as *const _,
+            null_mut(),
+            CLSCTX_INPROC_SERVER,
+            &IID_IXAUDIO2_7 as *const GUID as *const _,
+            &mut engine,
+        );
         if hr < 0 {
             return Err(format!("XAudio2 2.7 is not installed ({hr:#x})"));
         }
@@ -619,16 +653,31 @@ unsafe fn xa_engine(ver: u8) -> Result<*mut c_void, String> {
 
 unsafe fn xa_voice(engine: *mut c_void, v27: bool, fmt: &WAVEFORMATEX) -> Result<*mut c_void, String> {
     let mut voice = null_mut();
-    let hr = vcall!(engine, xa::create_source_voice(v27),
+    let hr = vcall!(
+        engine,
+        xa::create_source_voice(v27),
         fn(*mut *mut c_void, *const WAVEFORMATEX, u32, f32, *mut c_void, *const c_void, *const c_void) -> HRESULT,
-        &mut voice, fmt, 0, 2.0, null_mut(), null(), null());
+        &mut voice,
+        fmt,
+        0,
+        2.0,
+        null_mut(),
+        null(),
+        null()
+    );
     if hr < 0 {
         return Err(format!("CreateSourceVoice failed ({hr:#x})"));
     }
     Ok(voice)
 }
 
-unsafe fn xa_submit(voice: *mut c_void, data: &[u8], eos: bool, play: Option<(u32, u32)>, loops: u32) -> Result<(), String> {
+unsafe fn xa_submit(
+    voice: *mut c_void,
+    data: &[u8],
+    eos: bool,
+    play: Option<(u32, u32)>,
+    loops: u32,
+) -> Result<(), String> {
     let (begin, len) = play.unwrap_or((0, 0));
     let b = XAUDIO2_BUFFER {
         Flags: if eos { xa::END_OF_STREAM } else { 0 },
@@ -654,11 +703,30 @@ unsafe fn play_xa(ver: u8, expected: &mut Vec<Value>) -> Result<(), String> {
     let engine = xa_engine(ver)?;
     let mut master = null_mut();
     let hr = if v27 {
-        vcall!(engine, xa::create_mastering_voice(true), fn(*mut *mut c_void, u32, u32, u32, u32, *const c_void) -> HRESULT,
-            &mut master, 0, 0, 0, 0, null())
+        vcall!(
+            engine,
+            xa::create_mastering_voice(true),
+            fn(*mut *mut c_void, u32, u32, u32, u32, *const c_void) -> HRESULT,
+            &mut master,
+            0,
+            0,
+            0,
+            0,
+            null()
+        )
     } else {
-        vcall!(engine, xa::create_mastering_voice(false), fn(*mut *mut c_void, u32, u32, u32, *const u16, *const c_void, u32) -> HRESULT,
-            &mut master, 0, 0, 0, null(), null(), 6)
+        vcall!(
+            engine,
+            xa::create_mastering_voice(false),
+            fn(*mut *mut c_void, u32, u32, u32, *const u16, *const c_void, u32) -> HRESULT,
+            &mut master,
+            0,
+            0,
+            0,
+            null(),
+            null(),
+            6
+        )
     };
     if hr < 0 {
         return Err(format!("CreateMasteringVoice failed ({hr:#x})"));
@@ -780,7 +848,12 @@ fn check(dir: &str, expected: &str) -> Result<bool, String> {
                     }
                     let t = trim_zeros(&d);
                     let head = format!("{:016x}", fnv64(&t[..HEAD.min(t.len())]));
-                    clips.push((format!("{:016x}", fnv64(t)), f.to_string(), e["api"].as_str().unwrap_or("").into(), head));
+                    clips.push((
+                        format!("{:016x}", fnv64(t)),
+                        f.to_string(),
+                        e["api"].as_str().unwrap_or("").into(),
+                        head,
+                    ));
                 }
             }
         }
@@ -795,23 +868,42 @@ fn check(dir: &str, expected: &str) -> Result<bool, String> {
         let extra = clips.iter().filter(|c| l["head"].as_str() == Some(c.3.as_str())).count().saturating_sub(1);
         if extra > 0 && !hit.is_empty() {
             ok = false;
-            println!("FAIL  {api:<10} {:<6} recovered, but {extra} more clip(s) start like it (duplicate or fragment)", l["line"].as_str().unwrap_or(""));
+            println!(
+                "FAIL  {api:<10} {:<6} recovered, but {extra} more clip(s) start like it (duplicate or fragment)",
+                l["line"].as_str().unwrap_or("")
+            );
             continue;
         }
         if let (Some(want), Some(c)) = (l["source"].as_str(), hit.first()) {
             let got = sources.get(&c.1).cloned().unwrap_or_default();
             if !got.replace('\\', "/").ends_with(want) {
                 ok = false;
-                println!("FAIL  {api:<10} {:<6} recovered, but its source is {got:?}, not {want:?}", l["line"].as_str().unwrap_or(""));
+                println!(
+                    "FAIL  {api:<10} {:<6} recovered, but its source is {got:?}, not {want:?}",
+                    l["line"].as_str().unwrap_or("")
+                );
                 continue;
             }
         }
         match hit.first() {
             // xaudio2_8.dll is 2.9's implementation on Windows 10+, so its voices carry 2.9's label.
-            Some(c) if c.2 == api || (api.starts_with("xaudio2.") && c.2.starts_with("xaudio2.") && api != "xaudio2.7" && c.2 != "xaudio2.7") => println!("PASS  {api:<10} {:<6} -> {}", l["line"].as_str().unwrap_or(""), c.1),
+            Some(c)
+                if c.2 == api
+                    || (api.starts_with("xaudio2.")
+                        && c.2.starts_with("xaudio2.")
+                        && api != "xaudio2.7"
+                        && c.2 != "xaudio2.7") =>
+            {
+                println!("PASS  {api:<10} {:<6} -> {}", l["line"].as_str().unwrap_or(""), c.1)
+            }
             Some(c) => {
                 ok = false;
-                println!("FAIL  {api:<10} {:<6} matched a clip from {} ({})", l["line"].as_str().unwrap_or(""), c.2, c.1)
+                println!(
+                    "FAIL  {api:<10} {:<6} matched a clip from {} ({})",
+                    l["line"].as_str().unwrap_or(""),
+                    c.2,
+                    c.1
+                )
             }
             None => {
                 ok = false;
@@ -822,7 +914,12 @@ fn check(dir: &str, expected: &str) -> Result<bool, String> {
     for s in exp["skipped"].as_array().cloned().unwrap_or_default() {
         println!("SKIP  {}", s.as_str().unwrap_or(""));
     }
-    println!("{} of {} voice lines recovered exactly; {} audible clips in all", lines.len() - lines.iter().filter(|l| !clips.iter().any(|c| Some(c.0.as_str()) == l["hash"].as_str())).count(), lines.len(), clips.len());
+    println!(
+        "{} of {} voice lines recovered exactly; {} audible clips in all",
+        lines.len() - lines.iter().filter(|l| !clips.iter().any(|c| Some(c.0.as_str()) == l["hash"].as_str())).count(),
+        lines.len(),
+        clips.len()
+    );
     Ok(ok && !lines.is_empty())
 }
 
@@ -894,7 +991,11 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("play") if args.len() >= 3 => {
-            let want: Vec<&str> = if args.len() > 3 { args[3..].iter().map(String::as_str).collect() } else { vec!["ds", "dss", "xa9", "xa8", "xa7", "wo", "sdl"] };
+            let want: Vec<&str> = if args.len() > 3 {
+                args[3..].iter().map(String::as_str).collect()
+            } else {
+                vec!["ds", "dss", "xa9", "xa8", "xa7", "wo", "sdl"]
+            };
             unsafe { CoInitializeEx(null(), COINIT_MULTITHREADED as _) };
             let mut lines = Vec::new();
             let mut skipped = Vec::new();

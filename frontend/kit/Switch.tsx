@@ -7,11 +7,7 @@ export const Switch = forwardRef<
   ComponentPropsWithoutRef<typeof SwitchPrimitive.Root> & { size?: 'sm' | 'md' }
 >(function Switch({ className, size = 'md', ...props }, ref) {
   return (
-    <SwitchPrimitive.Root
-      ref={ref}
-      className={cn('k-switch', size === 'sm' && 'k-switch-sm', className)}
-      {...props}
-    >
+    <SwitchPrimitive.Root ref={ref} className={cn('k-switch', size === 'sm' && 'k-switch-sm', className)} {...props}>
       <SwitchPrimitive.Thumb className="k-switch-thumb" />
     </SwitchPrimitive.Root>
   )

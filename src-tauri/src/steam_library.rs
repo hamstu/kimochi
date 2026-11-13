@@ -59,10 +59,7 @@ pub mod vdf {
         /// A child by key, ignoring case (older Steam wrote `appname`/`exe`, newer `AppName`/`Exe`).
         pub fn get(&self, key: &str) -> Option<&Node> {
             match self {
-                Node::Map(entries) => entries
-                    .iter()
-                    .find(|(k, _)| k.eq_ignore_ascii_case(key))
-                    .map(|(_, v)| v),
+                Node::Map(entries) => entries.iter().find(|(k, _)| k.eq_ignore_ascii_case(key)).map(|(_, v)| v),
                 _ => None,
             }
         }
@@ -114,19 +111,15 @@ pub mod vdf {
             Some(b)
         }
         fn take<const N: usize>(&mut self) -> Result<[u8; N], String> {
-            let slice = self
-                .bytes
-                .get(self.at..self.at + N)
-                .ok_or_else(|| format!("truncated value at byte {}", self.at))?;
+            let slice =
+                self.bytes.get(self.at..self.at + N).ok_or_else(|| format!("truncated value at byte {}", self.at))?;
             self.at += N;
             Ok(slice.try_into().expect("slice of N bytes"))
         }
         fn cstring(&mut self) -> Result<String, String> {
             let rest = &self.bytes[self.at.min(self.bytes.len())..];
-            let end = rest
-                .iter()
-                .position(|&b| b == 0)
-                .ok_or_else(|| format!("unterminated string at byte {}", self.at))?;
+            let end =
+                rest.iter().position(|&b| b == 0).ok_or_else(|| format!("unterminated string at byte {}", self.at))?;
             let text = String::from_utf8_lossy(&rest[..end]).into_owned();
             self.at += end + 1;
             Ok(text)
@@ -139,11 +132,7 @@ pub mod vdf {
             let mut entries = Vec::new();
             loop {
                 let Some(kind) = self.byte() else {
-                    return if depth == 0 {
-                        Ok(entries)
-                    } else {
-                        Err("missing end of map".into())
-                    };
+                    return if depth == 0 { Ok(entries) } else { Err("missing end of map".into()) };
                 };
                 if kind == END || kind == END_ALT {
                     return Ok(entries);
@@ -156,9 +145,7 @@ pub mod vdf {
                     FLOAT32 => Node::Float(f32::from_le_bytes(self.take()?)),
                     UINT64 => Node::U64(u64::from_le_bytes(self.take()?)),
                     INT64 => Node::I64(i64::from_le_bytes(self.take()?)),
-                    other => {
-                        return Err(format!("unknown value type 0x{other:02x} at byte {}", self.at - 1))
-                    }
+                    other => return Err(format!("unknown value type 0x{other:02x} at byte {}", self.at - 1)),
                 };
                 entries.push((key, value));
             }
@@ -210,10 +197,7 @@ pub fn shortcuts(bytes: &[u8]) -> Result<Vec<Shortcut>, String> {
             if name.is_empty() && exe.is_empty() {
                 return None;
             }
-            let app_id = entry
-                .get("appid")
-                .and_then(vdf::Node::as_u32)
-                .unwrap_or_else(|| legacy_app_id(&exe, &name));
+            let app_id = entry.get("appid").and_then(vdf::Node::as_u32).unwrap_or_else(|| legacy_app_id(&exe, &name));
             Some(Shortcut {
                 app_id,
                 name,
@@ -335,12 +319,9 @@ pub fn most_recent_user(loginusers: &str) -> Option<u32> {
     let users = root.get("users")?.entries();
     let account = |id: &str| {
         let id: u64 = id.parse().ok()?;
-        (id > STEAM_ID64_BASE && id - STEAM_ID64_BASE <= u64::from(u32::MAX))
-            .then(|| (id - STEAM_ID64_BASE) as u32)
+        (id > STEAM_ID64_BASE && id - STEAM_ID64_BASE <= u64::from(u32::MAX)).then(|| (id - STEAM_ID64_BASE) as u32)
     };
-    let recent = users
-        .iter()
-        .find(|(_, user)| user.get("MostRecent").and_then(vdf::Node::as_str) == Some("1"));
+    let recent = users.iter().find(|(_, user)| user.get("MostRecent").and_then(vdf::Node::as_str) == Some("1"));
     match (recent, users) {
         (Some((id, _)), _) => account(id),
         // Newer clients may leave MostRecent out when only one account has signed in.
@@ -371,11 +352,9 @@ pub fn signed_in_user(registry: &str, loginusers: &str) -> Option<u32> {
     }
     let name = steam.get("AutoLoginUser")?.as_str().filter(|name| !name.is_empty())?;
     let users = text_vdf(loginusers);
-    let (id, _) = users
-        .get("users")?
-        .entries()
-        .iter()
-        .find(|(_, user)| user.get("AccountName").and_then(vdf::Node::as_str).is_some_and(|n| n.eq_ignore_ascii_case(name)))?;
+    let (id, _) = users.get("users")?.entries().iter().find(|(_, user)| {
+        user.get("AccountName").and_then(vdf::Node::as_str).is_some_and(|n| n.eq_ignore_ascii_case(name))
+    })?;
     let id: u64 = id.parse().ok()?;
     (id > STEAM_ID64_BASE && id - STEAM_ID64_BASE <= u64::from(u32::MAX)).then(|| (id - STEAM_ID64_BASE) as u32)
 }
@@ -408,8 +387,7 @@ pub fn manifest_name(acf: &str) -> Option<String> {
 /// SHA-1 (40 hex digits) as a `.jpg`, beside named art like `header.jpg`.
 pub fn cached_icon<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
     names.into_iter().find(|name| {
-        name.strip_suffix(".jpg")
-            .is_some_and(|stem| stem.len() == 40 && stem.bytes().all(|b| b.is_ascii_hexdigit()))
+        name.strip_suffix(".jpg").is_some_and(|stem| stem.len() == 40 && stem.bytes().all(|b| b.is_ascii_hexdigit()))
     })
 }
 
@@ -517,10 +495,8 @@ pub struct Layout {
 
 impl Layout {
     pub fn from_env(xdg_data_home: Option<&str>, home: &Path) -> Layout {
-        let data = xdg_data_home
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .unwrap_or_else(|| home.join(".local/share"));
+        let data =
+            xdg_data_home.map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| home.join(".local/share"));
         Layout { data }
     }
     pub fn install_dir(&self) -> PathBuf {
@@ -548,9 +524,7 @@ pub fn grid_file(app_id: u32, suffix: &str) -> String {
 
 /// Whether a grid image for `app_id` + `suffix` already exists in any format Steam accepts.
 pub fn grid_has(grid: &Path, app_id: u32, suffix: &str) -> bool {
-    ["png", "jpg", "jpeg", "webp"]
-        .iter()
-        .any(|ext| grid.join(format!("{app_id}{suffix}.{ext}")).exists())
+    ["png", "jpg", "jpeg", "webp"].iter().any(|ext| grid.join(format!("{app_id}{suffix}.{ext}")).exists())
 }
 
 // ---------------------------------------------------------------- answers
@@ -568,9 +542,7 @@ fn unsupported(reason: &str) -> Value {
 pub async fn steam_library_status() -> Value {
     #[cfg(target_os = "linux")]
     {
-        tauri::async_runtime::spawn_blocking(host::status)
-            .await
-            .unwrap_or_else(|e| unsupported(&e.to_string()))
+        tauri::async_runtime::spawn_blocking(host::status).await.unwrap_or_else(|e| unsupported(&e.to_string()))
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -738,10 +710,10 @@ mod host {
         if users.len() == 1 {
             return users.into_iter().next();
         }
-        users.into_iter().max_by_key(|dir| {
-            std::fs::metadata(dir.join("config/localconfig.vdf")).and_then(|m| m.modified()).ok()
-        })
-        .filter(|dir| dir.join("config/localconfig.vdf").is_file())
+        users
+            .into_iter()
+            .max_by_key(|dir| std::fs::metadata(dir.join("config/localconfig.vdf")).and_then(|m| m.modified()).ok())
+            .filter(|dir| dir.join("config/localconfig.vdf").is_file())
     }
 
     /// Whether this user's Steam client is running (`pgrep -x steam`, as SteamOS's script checks).
@@ -777,7 +749,9 @@ mod host {
                 let cache = root.path.join("appcache/librarycache");
                 let folder = cache.join(app_id.to_string());
                 let names: Vec<String> = std::fs::read_dir(&folder)
-                    .map(|dir| dir.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+                    .map(|dir| {
+                        dir.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect()
+                    })
                     .unwrap_or_default();
                 let icon = cached_icon(names.iter().map(String::as_str))
                     .map(|name| folder.join(name))
@@ -786,14 +760,15 @@ mod host {
             }
             let Some(user) = user_dir(&root.path) else { continue };
             let Ok(bytes) = std::fs::read(user.join("config/shortcuts.vdf")) else { continue };
-            let Some(shortcut) = shortcuts(&bytes).ok().and_then(|list| list.into_iter().find(|s| s.app_id == app_id)) else {
+            let Some(shortcut) = shortcuts(&bytes).ok().and_then(|list| list.into_iter().find(|s| s.app_id == app_id))
+            else {
                 continue;
             };
             let image = |p: &Path| {
                 p.is_file()
-                    && p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                        ["png", "jpg", "jpeg"].contains(&e.to_ascii_lowercase().as_str())
-                    })
+                    && p.extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| ["png", "jpg", "jpeg"].contains(&e.to_ascii_lowercase().as_str()))
             };
             let grid = user.join("config/grid");
             let icon = Some(PathBuf::from(shortcut.icon.trim_matches('"')))
@@ -855,11 +830,29 @@ mod host {
     fn host_command(program: &str) -> Command {
         let mut command = Command::new(program);
         for key in [
-            "LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH", "PERLLIB",
-            "GDK_PIXBUF_MODULE_FILE", "GDK_PIXBUF_MODULEDIR", "GIO_EXTRA_MODULES", "GIO_MODULE_DIR",
-            "GSETTINGS_SCHEMA_DIR", "GTK_PATH", "GTK_EXE_PREFIX", "GTK_DATA_PREFIX", "GTK_IM_MODULE_FILE",
-            "GTK_THEME", "GDK_BACKEND", "QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH",
-            "APPDIR", "APPIMAGE", "ARGV0", "OWD", "WEBKIT_DISABLE_DMABUF_RENDERER",
+            "LD_LIBRARY_PATH",
+            "LD_PRELOAD",
+            "PYTHONHOME",
+            "PYTHONPATH",
+            "PERLLIB",
+            "GDK_PIXBUF_MODULE_FILE",
+            "GDK_PIXBUF_MODULEDIR",
+            "GIO_EXTRA_MODULES",
+            "GIO_MODULE_DIR",
+            "GSETTINGS_SCHEMA_DIR",
+            "GTK_PATH",
+            "GTK_EXE_PREFIX",
+            "GTK_DATA_PREFIX",
+            "GTK_IM_MODULE_FILE",
+            "GTK_THEME",
+            "GDK_BACKEND",
+            "QT_PLUGIN_PATH",
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+            "APPDIR",
+            "APPIMAGE",
+            "ARGV0",
+            "OWD",
+            "WEBKIT_DISABLE_DMABUF_RENDERER",
         ] {
             command.env_remove(key);
         }
@@ -1019,7 +1012,11 @@ mod host {
             return reply("unsupported", "Steam is not installed for this user.", None);
         };
         let Some(user) = roots.iter().find_map(|r| user_dir(&r.path)) else {
-            return reply("failed", "Kimochi could not tell which Steam account is signed in. Open Steam and sign in, then try again.", None);
+            return reply(
+                "failed",
+                "Kimochi could not tell which Steam account is signed in. Open Steam and sign in, then try again.",
+                None,
+            );
         };
         let markers = markers(&layout, Some(&executable));
         if !launcher_current(&layout, &executable) {
@@ -1036,7 +1033,11 @@ mod host {
             return reply("added", &message, Some(existing.app_id));
         }
         if !steam_running() {
-            return reply("steamNotRunning", "Steam is not running. Open Steam, then try again, or add Kimochi by hand.", None);
+            return reply(
+                "steamNotRunning",
+                "Steam is not running. Open Steam, then try again, or add Kimochi by hand.",
+                None,
+            );
         }
         if let Err(error) = request_add(root, &layout.desktop()) {
             return reply("failed", &format!("Steam did not accept Kimochi: {error}"), None);
@@ -1048,7 +1049,11 @@ mod host {
             if let Some(added) = entry(&user, &markers) {
                 return match install_artwork(&user, added.app_id) {
                     Ok(()) => reply("added", "Kimochi is in your Steam library.", Some(added.app_id)),
-                    Err(e) => reply("added", &format!("Kimochi is in your Steam library, but its artwork could not be saved: {e}"), Some(added.app_id)),
+                    Err(e) => reply(
+                        "added",
+                        &format!("Kimochi is in your Steam library, but its artwork could not be saved: {e}"),
+                        Some(added.app_id),
+                    ),
                 };
             }
         }
@@ -1171,7 +1176,14 @@ mod tests {
     #[test]
     fn parses_shortcuts_with_negative_app_ids_and_nested_tags() {
         let bytes = file(vec![
-            entry("0", -1_996_000_000, "Google Chrome", "\"/usr/bin/flatpak\"", "run com.google.Chrome", "/var/lib/flatpak/app/com.google.Chrome.desktop"),
+            entry(
+                "0",
+                -1_996_000_000,
+                "Google Chrome",
+                "\"/usr/bin/flatpak\"",
+                "run com.google.Chrome",
+                "/var/lib/flatpak/app/com.google.Chrome.desktop",
+            ),
             entry("1", 0x7200_0001, "日本語 Game", "\"/home/deck/game.sh\"", "", ""),
         ]);
         let list = shortcuts(&bytes).unwrap();
@@ -1234,7 +1246,14 @@ mod tests {
         let desktop = "/home/deck/.local/share/applications/kimochi-gaming-mode.desktop";
         let bytes = file(vec![
             // The Steam Deck devkit shortcut is a different thing; never Kimochi's entry.
-            entry("0", 11, "Devkit Game: kimochi_steamdeck", "\"/home/deck/devkit-game/kimochi_steamdeck/launch.sh\"", "", ""),
+            entry(
+                "0",
+                11,
+                "Devkit Game: kimochi_steamdeck",
+                "\"/home/deck/devkit-game/kimochi_steamdeck/launch.sh\"",
+                "",
+                "",
+            ),
             entry("1", 22, "Kimochi", "\"/bin/sh\"", launcher, desktop),
         ]);
         let list = shortcuts(&bytes).unwrap();
@@ -1244,9 +1263,12 @@ mod tests {
         let by_hand = shortcuts(&file(vec![entry("0", 33, "Kimochi Gaming Mode", launcher, "", "")])).unwrap();
         assert_eq!(find_kimochi(&by_hand, &markers).map(|s| s.app_id), Some(33));
         // The AppImage added directly.
-        let direct = shortcuts(&file(vec![entry("0", 44, "Kimochi", "\"/home/deck/Applications/Kimochi.AppImage\"", "", "")])).unwrap();
+        let direct =
+            shortcuts(&file(vec![entry("0", 44, "Kimochi", "\"/home/deck/Applications/Kimochi.AppImage\"", "", "")]))
+                .unwrap();
         assert_eq!(find_kimochi(&direct, &markers).map(|s| s.app_id), Some(44));
-        let other = shortcuts(&file(vec![entry("0", 55, "Cemu", "\"/usr/bin/bash\"", "/home/deck/cemu.sh", "")])).unwrap();
+        let other =
+            shortcuts(&file(vec![entry("0", 55, "Cemu", "\"/usr/bin/bash\"", "/home/deck/cemu.sh", "")])).unwrap();
         assert_eq!(find_kimochi(&other, &markers), None);
         assert_eq!(find_kimochi(&other, &super::markers(&l, None)), None);
     }
@@ -1315,7 +1337,10 @@ mod tests {
         assert_eq!(detect(steamos, "Valve\n", "Jupiter\n"), Device { steam_os: true, steam_deck: true });
         assert_eq!(detect(steamos, "Valve", "Galileo"), Device { steam_os: true, steam_deck: true });
         // Bazzite and friends on a Deck: a Deck, not SteamOS.
-        assert_eq!(detect("ID=bazzite\nID_LIKE=\"fedora\"\n", "Valve", "Jupiter"), Device { steam_os: false, steam_deck: true });
+        assert_eq!(
+            detect("ID=bazzite\nID_LIKE=\"fedora\"\n", "Valve", "Jupiter"),
+            Device { steam_os: false, steam_deck: true }
+        );
         // A Legion Go running SteamOS.
         assert_eq!(detect("ID=\"steamos\"", "LENOVO", "83E1"), Device { steam_os: true, steam_deck: false });
         assert_eq!(detect("ID=ubuntu\nID_LIKE=debian\n", "ASUSTeK", "Jupiter"), Device::default());

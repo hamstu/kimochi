@@ -199,12 +199,7 @@ export function Layout() {
           <nav id="mobile-nav" aria-label="Mobile" className="border-t border-hairline lg:hidden">
             <div className="container-page flex flex-col py-2">
               {NAV_LINKS.map((l) => (
-                <Link
-                  key={l.to}
-                  to={l.to}
-                  onClick={() => setOpen(false)}
-                  className={`${navLinkClass} -mx-2.5 py-2.5`}
-                >
+                <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className={`${navLinkClass} -mx-2.5 py-2.5`}>
                   {l.label}
                 </Link>
               ))}

@@ -90,10 +90,7 @@ test('proximity clustering merges neighbours and separates distant text', () => 
   assert.deepEqual(texts, ['日本', '猫'].sort())
 
   const merged = groups.find((g) => g.text === '日本')
-  assert.deepEqual(
-    [merged.boundingBox.minX, merged.boundingBox.maxX, merged.boundingBox.height],
-    [0, 100, 40]
-  )
+  assert.deepEqual([merged.boundingBox.minX, merged.boundingBox.maxX, merged.boundingBox.height], [0, 100, 40])
 })
 
 test('grouped text uses a full-width space for word gaps and a newline for new lines', () => {
@@ -120,7 +117,14 @@ const grouped = (engine, prefix, lines) => {
     text,
     bbox: [x1, y1, x2, y2],
     orientation: 'horizontal',
-    linePolygons: [[[x1, y1], [x2, y1], [x2, y2], [x1, y2]]]
+    linePolygons: [
+      [
+        [x1, y1],
+        [x2, y1],
+        [x2, y2],
+        [x1, y2]
+      ]
+    ]
   }))
   return {
     engine,
@@ -140,13 +144,19 @@ const dialogue = [
 ]
 
 test('grouped mode makes one region of a dialogue box read by Live Text or Google Lens', () => {
-  for (const [engine, prefix] of [['livetext', 'line'], ['googlelens', 'paragraph']]) {
+  for (const [engine, prefix] of [
+    ['livetext', 'line'],
+    ['googlelens', 'paragraph']
+  ]) {
     const groups = drawnGroups(grouped(engine, prefix, dialogue), engine)
     assert.equal(groups.length, 1, engine)
     assert.equal(groups[0].text, dialogue.map(([text]) => text).join('\n'), engine)
   }
   // Overlapping boxes too, which are the plainest case of all.
-  const overlapping = [['今日は', 100, 600, 300, 650], ['いい天気', 100, 640, 340, 690]]
+  const overlapping = [
+    ['今日は', 100, 600, 300, 650],
+    ['いい天気', 100, 640, 340, 690]
+  ]
   assert.equal(drawnGroups(grouped('livetext', 'line', overlapping), 'livetext').length, 1)
   // Text far apart is still two regions.
   const apart = [dialogue[0], ['メニュー', 1500, 80, 1640, 120]]
@@ -180,9 +190,15 @@ test('a card over side-by-side columns reads each column through before the next
     column.map((text, row) => at(text, c * 370, row * 40, row === 0 ? 330 : 200, 30))
   )
   // Shuffled the way an engine might report them: row by row.
-  const groups = groupTextAnnotations([0, 2, 4, 1, 3, 5].map((i) => lines[i]), 100)
+  const groups = groupTextAnnotations(
+    [0, 2, 4, 1, 3, 5].map((i) => lines[i]),
+    100
+  )
   assert.equal(groups.length, 1)
-  assert.deepEqual(groups[0].annotations.map((a) => a.description), columns.flat())
+  assert.deepEqual(
+    groups[0].annotations.map((a) => a.description),
+    columns.flat()
+  )
   assert.equal(groups[0].text, columns.flat().join('\n'))
 })
 
@@ -215,8 +231,10 @@ test('a single column keeps its row order, by line or by word', () => {
 
   // A box per word (fragments), the breaks between them lined up on both lines: still one column.
   const words = [
-    at('今日は', 0, 0, 60, 20), at('雨', 70, 0, 20, 20),
-    at('また', 0, 30, 40, 20), at('明日', 50, 30, 40, 20)
+    at('今日は', 0, 0, 60, 20),
+    at('雨', 70, 0, 20, 20),
+    at('また', 0, 30, 40, 20),
+    at('明日', 50, 30, 40, 20)
   ]
   const wordGroup = groupTextAnnotations([...words].reverse(), 100)[0]
   assert.deepEqual(wordGroup.annotations, words)
@@ -224,8 +242,10 @@ test('a single column keeps its row order, by line or by word', () => {
 
   // A menu's narrow column of counts is a table, read row by row.
   const menu = [
-    at('ポーション', 0, 0, 150, 30), at('×3', 200, 0, 60, 30),
-    at('エーテル', 0, 40, 120, 30), at('×12', 200, 40, 75, 30)
+    at('ポーション', 0, 0, 150, 30),
+    at('×3', 200, 0, 60, 30),
+    at('エーテル', 0, 40, 120, 30),
+    at('×12', 200, 40, 75, 30)
   ]
   const menuGroup = groupTextAnnotations(menu, 100)[0]
   assert.deepEqual(menuGroup.annotations, menu)
@@ -240,22 +260,22 @@ test('visibleAnnotations drops the full-text block and honours the filter switch
   const grouping = { enabled: false, proximityThreshold: 100, filterSmallTextThreshold: 0.75 }
 
   assert.deepEqual(
-    visibleAnnotations([full, cat, other, furigana], { ...grouping, filterSmallText: true }).map(
-      (a) => a.description
-    ),
+    visibleAnnotations([full, cat, other, furigana], { ...grouping, filterSmallText: true }).map((a) => a.description),
     ['猫', '本']
   )
   assert.deepEqual(
-    visibleAnnotations([full, cat, other, furigana], { ...grouping, filterSmallText: false }).map(
-      (a) => a.description
-    ),
+    visibleAnnotations([full, cat, other, furigana], { ...grouping, filterSmallText: false }).map((a) => a.description),
     ['猫', '本', 'ほん']
   )
 })
 
 test('the filter strengths run from gentle to strict, and a stored threshold shows on its nearest', () => {
   const thresholds = FILTER_LEVELS.map((level) => level.threshold)
-  assert.deepEqual([...thresholds].sort((a, b) => a - b), thresholds, 'stronger steps remove more')
+  assert.deepEqual(
+    [...thresholds].sort((a, b) => a - b),
+    thresholds,
+    'stronger steps remove more'
+  )
   assert.equal(FILTER_LEVELS[filterLevelOf(0.75)].label, 'Balanced', 'the default is Balanced')
   // Values the old 50–95% slider could save land on a step.
   assert.equal(filterLevelOf(0.5), 0)

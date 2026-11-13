@@ -41,13 +41,7 @@ const ARROW = 'M0.5 0.5V15.5L4.5 12L7.5 18.5L10 17.5L7 11H12Z'
 
 export function BrowserDemoArt(): ReactNode {
   return (
-    <svg
-      className="browser-demo-art"
-      viewBox={`0 0 ${W} ${H}`}
-      fill="none"
-      aria-hidden
-      focusable="false"
-    >
+    <svg className="browser-demo-art" viewBox={`0 0 ${W} ${H}`} fill="none" aria-hidden focusable="false">
       <defs>
         <clipPath id="bd-window">
           <rect x={0.5} y={0.5} width={W - 1} height={H - 1} rx={10} />
@@ -89,7 +83,10 @@ export function BrowserDemoArt(): ReactNode {
             d={`M${PIC.x} 190.5L300 168.5L326 180.5L372 156.5L420 182.5L452 170.5L${PIC.x + PIC.w} 192.5V${PIC.y + PIC.h}H${PIC.x}Z`}
           />
           <path className="bd-hill-far" d={`M${PIC.x} 204.5L318 194.5L380 206.5L440 196.5L${PIC.x + PIC.w} 208.5`} />
-          <path className="bd-bubble" d="M342.5 104.5H500.5Q512.5 104.5 512.5 116.5V132.5Q512.5 144.5 500.5 144.5H378.5L356.5 158.5L362.5 144.5H342.5Q330.5 144.5 330.5 132.5V116.5Q330.5 104.5 342.5 104.5Z" />
+          <path
+            className="bd-bubble"
+            d="M342.5 104.5H500.5Q512.5 104.5 512.5 116.5V132.5Q512.5 144.5 500.5 144.5H378.5L356.5 158.5L362.5 144.5H342.5Q330.5 144.5 330.5 132.5V116.5Q330.5 104.5 342.5 104.5Z"
+          />
           <text className="bd-ink" x={xs(0, LINE.length)} y={LINE_Y} fontSize={EM}>
             {LINE}
           </text>

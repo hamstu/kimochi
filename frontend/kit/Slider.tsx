@@ -17,11 +17,7 @@ export const Slider = forwardRef<
         <SliderPrimitive.Range className="k-slider-range" />
       </SliderPrimitive.Track>
       {Array.from({ length: thumbs }, (_, index) => (
-        <SliderPrimitive.Thumb
-          key={index}
-          className="k-slider-thumb"
-          aria-valuetext={valueText?.(values[index])}
-        />
+        <SliderPrimitive.Thumb key={index} className="k-slider-thumb" aria-valuetext={valueText?.(values[index])} />
       ))}
     </SliderPrimitive.Root>
   )

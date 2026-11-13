@@ -33,7 +33,10 @@ fn contains(r: &Rect, (x, y): (f64, f64)) -> bool {
 }
 
 fn same(a: &Rect, b: &Rect) -> bool {
-    (a.x - b.x).abs() < 0.5 && (a.y - b.y).abs() < 0.5 && (a.width - b.width).abs() < 0.5 && (a.height - b.height).abs() < 0.5
+    (a.x - b.x).abs() < 0.5
+        && (a.y - b.y).abs() < 0.5
+        && (a.width - b.width).abs() < 0.5
+        && (a.height - b.height).abs() < 0.5
 }
 
 /// The outputs showing some of `screen`.
@@ -112,7 +115,10 @@ pub fn assumed(width: u32, height: u32, outputs: &[Rect]) -> Option<Rect> {
 /// A screen frame with no bounds (a portal stream without a position) given the ones its shape
 /// says it has (`assumed`), with its scale to match. Global coordinates.
 pub fn assume_bounds(frame: &mut Frame) {
-    if frame.info.source_bounds.is_some() || !super::layer::available() || !frame.info.source_id.starts_with("portal:display:") {
+    if frame.info.source_bounds.is_some()
+        || !super::layer::available()
+        || !frame.info.source_id.starts_with("portal:display:")
+    {
         return;
     }
     if let Some(bounds) = assumed(frame.info.full_width, frame.info.full_height, &super::layer::outputs()) {
@@ -142,7 +148,13 @@ pub fn enrich(frame: &mut Frame, crop: Option<&Crop>) {
     assume_bounds(frame);
     let Some(screen) = frame.info.source_bounds else {
         // Logged: the overlay then fits this screen's text to its own output.
-        eprintln!("Wayland screens: {} has no place among {} outputs ({}x{})", frame.info.source_id, super::layer::outputs().len(), frame.info.full_width, frame.info.full_height);
+        eprintln!(
+            "Wayland screens: {} has no place among {} outputs ({}x{})",
+            frame.info.source_id,
+            super::layer::outputs().len(),
+            frame.info.full_width,
+            frame.info.full_height
+        );
         return;
     };
     frame.info.source_bounds = place(&screen, crop);

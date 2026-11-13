@@ -75,12 +75,12 @@ export class WindowErrorBoundary extends Component<Props, State> {
       >
         <h2 style={{ margin: '0 0 8px' }}>This window couldn&apos;t load</h2>
         <p style={{ margin: '0 0 8px' }}>
-          Something in it failed while it was being drawn. Your Log, sessions and settings are safe:
-          nothing was changed.
+          Something in it failed while it was being drawn. Your Log, sessions and settings are safe: nothing was
+          changed.
         </p>
         <p style={{ margin: '0 0 12px' }}>
-          If you recently ran a newer version of Kimochi, it may have saved a setting this version
-          doesn&apos;t understand; updating Kimochi usually fixes it. Otherwise, reloading often does.
+          If you recently ran a newer version of Kimochi, it may have saved a setting this version doesn&apos;t
+          understand; updating Kimochi usually fixes it. Otherwise, reloading often does.
         </p>
         <pre
           style={{

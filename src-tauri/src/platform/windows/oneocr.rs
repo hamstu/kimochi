@@ -46,8 +46,7 @@ fn architecture(file: &Path) -> Result<&'static str, String> {
         return Err("OneOCR DLL is not a PE file".into());
     }
     let offset = u32::from_le_bytes(header[60..64].try_into().unwrap());
-    file.seek(SeekFrom::Start(u64::from(offset)))
-        .map_err(|e| e.to_string())?;
+    file.seek(SeekFrom::Start(u64::from(offset))).map_err(|e| e.to_string())?;
     let mut pe = [0u8; 6];
     file.read_exact(&mut pe).map_err(|e| e.to_string())?;
     if &pe[..4] != b"PE\0\0" {
@@ -56,9 +55,7 @@ fn architecture(file: &Path) -> Result<&'static str, String> {
     match u16::from_le_bytes([pe[4], pe[5]]) {
         0x8664 => Ok("x64"),
         0xaa64 => Ok("arm64"),
-        machine => Err(format!(
-            "OneOCR DLL architecture 0x{machine:04X} is unsupported; use x64 or ARM64 files"
-        )),
+        machine => Err(format!("OneOCR DLL architecture 0x{machine:04X} is unsupported; use x64 or ARM64 files")),
     }
 }
 fn assets(app: &tauri::AppHandle) -> Result<Assets, String> {
@@ -73,24 +70,17 @@ fn assets(app: &tauri::AppHandle) -> Result<Assets, String> {
     };
     let arch = architecture(&root.join("oneocr.dll"))?;
     if architecture(&root.join("onnxruntime.dll"))? != arch {
-        return Err("OneOCR DLLs have different architectures; use all three files from the same Snipping Tool package".into());
+        return Err(
+            "OneOCR DLLs have different architectures; use all three files from the same Snipping Tool package".into(),
+        );
     }
     let name = format!("kimochi-oneocr-{arch}.exe");
-    let bundled = app
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?
-        .join("oneocr")
-        .join(&name);
-    let development = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("resources/oneocr")
-        .join(&name);
+    let bundled = app.path().resource_dir().map_err(|e| e.to_string())?.join("oneocr").join(&name);
+    let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/oneocr").join(&name);
     let worker = [bundled, development]
         .into_iter()
         .find(|p| p.is_file())
-        .ok_or_else(|| {
-            format!("OneOCR {arch} helper is missing. Rebuild Kimochi with npm run bundle.")
-        })?;
+        .ok_or_else(|| format!("OneOCR {arch} helper is missing. Rebuild Kimochi with npm run bundle."))?;
     Ok(Assets { root, worker })
 }
 
@@ -126,19 +116,13 @@ impl Worker {
         let stdin = child.stdin.take().ok_or("OneOCR worker has no stdin")?;
         let stdout = child.stdout.take().ok_or("OneOCR worker has no stdout")?;
         let (send, replies) = mpsc::channel();
-        let mut worker = Self {
-            child,
-            stdin,
-            replies,
-            root: assets.root.clone(),
-        };
+        let mut worker = Self { child, stdin, replies, root: assets.root.clone() };
         std::thread::Builder::new()
             .name("oneocr-output".into())
             .spawn(move || {
                 for line in BufReader::new(stdout).lines() {
                     let value = line.map_err(|e| e.to_string()).and_then(|line| {
-                        serde_json::from_str(&line)
-                            .map_err(|e| format!("OneOCR worker protocol: {e}: {line}"))
+                        serde_json::from_str(&line).map_err(|e| format!("OneOCR worker protocol: {e}: {line}"))
                     });
                     if send.send(value).is_err() {
                         break;
@@ -153,10 +137,7 @@ impl Worker {
         Ok(worker)
     }
     fn receive(&mut self, timeout: Duration) -> Result<Value, String> {
-        let value = self
-            .replies
-            .recv_timeout(timeout)
-            .map_err(|e| format!("OneOCR worker did not respond: {e}"))??;
+        let value = self.replies.recv_timeout(timeout).map_err(|e| format!("OneOCR worker did not respond: {e}"))??;
         if let Some(error) = value["error"].as_str() {
             return Err(error.into());
         }
@@ -168,19 +149,13 @@ impl Worker {
             .and_then(|()| self.stdin.flush())
             .map_err(|e| format!("OneOCR worker input: {e}"))?;
         let reply = self.receive(Duration::from_secs(45))?;
-        reply
-            .get("ocr")
-            .cloned()
-            .ok_or_else(|| "OneOCR worker returned no OCR result".into())
+        reply.get("ocr").cloned().ok_or_else(|| "OneOCR worker returned no OCR result".into())
     }
 }
 pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
     let assets = assets(app)?;
     let mut slot = WORKER.lock().unwrap_or_else(|p| p.into_inner());
-    if slot
-        .as_ref()
-        .is_some_and(|worker| worker.root != assets.root)
-    {
+    if slot.as_ref().is_some_and(|worker| worker.root != assets.root) {
         *slot = None;
     }
     if slot.is_none() {
@@ -190,17 +165,9 @@ pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
         let runtime = if assets.root == custom_root() {
             assets.root.clone()
         } else {
-            let package = assets
-                .root
-                .parent()
-                .and_then(Path::file_name)
-                .ok_or("OneOCR Snipping Tool package has no name")?;
-            let cache = app
-                .path()
-                .app_local_data_dir()
-                .map_err(|e| e.to_string())?
-                .join("oneocr")
-                .join(package);
+            let package =
+                assets.root.parent().and_then(Path::file_name).ok_or("OneOCR Snipping Tool package has no name")?;
+            let cache = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("oneocr").join(package);
             std::fs::create_dir_all(&cache).map_err(|e| format!("OneOCR cache: {e}"))?;
             for name in FILES {
                 let source = assets.root.join(name);
@@ -210,8 +177,7 @@ pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
                     continue;
                 }
                 let staged = cache.join(format!("{name}.tmp"));
-                std::fs::copy(&source, &staged)
-                    .map_err(|e| format!("OneOCR copy {}: {e}", source.display()))?;
+                std::fs::copy(&source, &staged).map_err(|e| format!("OneOCR copy {}: {e}", source.display()))?;
                 if target.exists() {
                     std::fs::remove_file(&target).map_err(|e| e.to_string())?;
                 }

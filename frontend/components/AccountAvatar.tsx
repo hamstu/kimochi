@@ -22,7 +22,10 @@ export function AccountAvatar({
   const [failed, setFailed] = useState<string | null>(null)
   const url = user?.avatarUrl?.trim() || null
   return (
-    <span className={`k-account-avatar${local ? ' k-account-avatar-local' : ''}${className ? ` ${className}` : ''}`} aria-hidden>
+    <span
+      className={`k-account-avatar${local ? ' k-account-avatar-local' : ''}${className ? ` ${className}` : ''}`}
+      aria-hidden
+    >
       {local ? (
         <UserRound />
       ) : url && url !== failed ? (

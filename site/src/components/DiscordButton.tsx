@@ -25,7 +25,8 @@ export function DiscordButton({
     variant === 'secondary'
       ? 'group font-medium text-ink bg-field shadow-[inset_0_0_0_1px_var(--k-line-strong)] hover:bg-hover'
       : 'font-semibold text-white shadow-[0_8px_24px_-8px_rgb(88_101_242/0.6)] bg-[#5865f2] hover:bg-[#4752c4]'
-  const mark = variant === 'secondary' ? (size === 'lg' ? 'size-6' : 'size-5') : size === 'lg' ? 'size-5' : 'size-[18px]'
+  const mark =
+    variant === 'secondary' ? (size === 'lg' ? 'size-6' : 'size-5') : size === 'lg' ? 'size-5' : 'size-[18px]'
   return (
     <a
       href={DISCORD_URL}

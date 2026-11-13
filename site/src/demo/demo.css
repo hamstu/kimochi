@@ -39,17 +39,31 @@
   animation-duration: 70s;
 }
 @keyframes kd-drift {
-  from { transform: translateX(-3%); }
-  to { transform: translateX(3%); }
+  from {
+    transform: translateX(-3%);
+  }
+  to {
+    transform: translateX(3%);
+  }
 }
 .kd-flicker {
   animation: kd-flicker 5.2s steps(1, end) infinite;
 }
 @keyframes kd-flicker {
-  0%, 62%, 100% { opacity: 1; }
-  64% { opacity: 0.25; }
-  66% { opacity: 0.9; }
-  70% { opacity: 0.3; }
+  0%,
+  62%,
+  100% {
+    opacity: 1;
+  }
+  64% {
+    opacity: 0.25;
+  }
+  66% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.3;
+  }
 }
 
 /* ---------------------------------------------------------------- dialogue box */
@@ -104,7 +118,9 @@
   animation-delay: calc(var(--c) * 42ms);
 }
 @keyframes kd-char-in {
-  to { opacity: 1; }
+  to {
+    opacity: 1;
+  }
 }
 .kd-advance {
   position: absolute;
@@ -120,8 +136,15 @@
   opacity: 0;
 }
 @keyframes kd-bob {
-  0%, 100% { transform: translateY(0); opacity: 1; }
-  50% { transform: translateY(0.4cqw); opacity: 0.45; }
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(0.4cqw);
+    opacity: 0.45;
+  }
 }
 
 /* ---------------------------------------------------------------- overlay word boxes */
@@ -251,30 +274,55 @@
   right: 0;
   top: 0;
   height: 22%;
-  background: linear-gradient(180deg, transparent, rgb(140 165 255 / 0.28) 70%, rgb(200 212 255 / 0.9) 98%, transparent);
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(140 165 255 / 0.28) 70%,
+    rgb(200 212 255 / 0.9) 98%,
+    transparent
+  );
   animation: kd-sweep 0.95s cubic-bezier(0.45, 0, 0.25, 1) both;
 }
 @keyframes kd-sweep {
-  from { transform: translateY(-100%); }
-  to { transform: translateY(460%); }
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(460%);
+  }
 }
 @keyframes kd-frame {
-  0% { opacity: 0; }
-  20% { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .kd-shimmer {
   position: absolute;
   inset: 0;
   border-radius: 1.6cqw;
-  background: linear-gradient(90deg, rgb(255 255 255 / 0.05) 0%, rgb(255 255 255 / 0.2) 50%, rgb(255 255 255 / 0.05) 100%);
+  background: linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0.05) 0%,
+    rgb(255 255 255 / 0.2) 50%,
+    rgb(255 255 255 / 0.05) 100%
+  );
   background-size: 200% 100%;
   animation: kd-shimmer 0.9s ease-in-out infinite;
   pointer-events: none;
 }
 @keyframes kd-shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 /* ---------------------------------------------------------------- dictionary popup */
@@ -287,8 +335,14 @@
   animation: kd-pop 0.22s cubic-bezier(0.16, 1.2, 0.3, 1) both;
 }
 @keyframes kd-pop {
-  from { opacity: 0; transform: translateY(6px) scale(0.96); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------------------------------------------------------------- Gaming Mode (handheld) */
@@ -319,7 +373,9 @@
   --cm-accent-soft: rgb(17 68 255 / 0.2);
   --cm-accent-line: rgb(84 114 228 / 0.7);
   --cm-focus: #5472e4;
-  --cm-shadow-pop: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.3), 0 calc(12 * var(--u)) calc(32 * var(--u)) calc(-8 * var(--u)) rgb(0 0 0 / 0.6);
+  --cm-shadow-pop:
+    0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.3),
+    0 calc(12 * var(--u)) calc(32 * var(--u)) calc(-8 * var(--u)) rgb(0 0 0 / 0.6);
   --cm-scrim: rgb(0 0 0 / 0.5);
   position: absolute;
   inset: 0;
@@ -344,7 +400,9 @@
   --cm-accent-soft: rgb(0 71 241 / 0.08);
   --cm-accent-line: rgb(0 51 220 / 0.36);
   --cm-focus: #8da4ef;
-  --cm-shadow-pop: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(15 17 26 / 0.1), 0 calc(10 * var(--u)) calc(28 * var(--u)) calc(-8 * var(--u)) rgb(15 17 26 / 0.3);
+  --cm-shadow-pop:
+    0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(15 17 26 / 0.1),
+    0 calc(10 * var(--u)) calc(28 * var(--u)) calc(-8 * var(--u)) rgb(15 17 26 / 0.3);
   --cm-scrim: rgb(15 17 26 / 0.32);
 }
 /* Under the dictionary pop-up (the app's pop-up is its own window, over the overlay). */
@@ -394,7 +452,11 @@
   backdrop-filter: blur(calc(16 * var(--u))) saturate(1.3);
   -webkit-backdrop-filter: blur(calc(16 * var(--u))) saturate(1.3);
   mask-image: radial-gradient(circle closest-side, #000 calc(var(--cm-orbit) - 10 * var(--u)), transparent 100%);
-  -webkit-mask-image: radial-gradient(circle closest-side, #000 calc(var(--cm-orbit) - 10 * var(--u)), transparent 100%);
+  -webkit-mask-image: radial-gradient(
+    circle closest-side,
+    #000 calc(var(--cm-orbit) - 10 * var(--u)),
+    transparent 100%
+  );
 }
 .kd-gm .cm-wedges {
   position: absolute;
@@ -421,7 +483,9 @@
   stroke: url(#kd-cm-spoke-fade);
   stroke-width: 2;
   stroke-linecap: round;
-  transition: stroke 0.14s ease, stroke-width 0.14s ease;
+  transition:
+    stroke 0.14s ease,
+    stroke-width 0.14s ease;
 }
 .kd-gm .cm-spoke.cm-selected {
   stroke: var(--cm-accent-text);
@@ -455,7 +519,9 @@
   border-radius: calc(20 * var(--u));
   background: rgb(var(--cm-raised-rgb) / 0.72);
   box-shadow: inset 0 0 0 1px var(--cm-line-strong);
-  transition: transform 0.18s cubic-bezier(0.2, 1.4, 0.4, 1), box-shadow 0.18s ease;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 1.4, 0.4, 1),
+    box-shadow 0.18s ease;
 }
 .kd-gm .cm-icon svg {
   width: calc(36 * var(--u));
@@ -487,7 +553,9 @@
   transform: scale(1.1);
   color: var(--cm-accent-text);
   background: var(--cm-raised);
-  box-shadow: var(--cm-shadow-pop), inset 0 0 0 calc(2 * var(--u)) var(--cm-accent-line);
+  box-shadow:
+    var(--cm-shadow-pop),
+    inset 0 0 0 calc(2 * var(--u)) var(--cm-accent-line);
 }
 .kd-gm .cm-item.cm-chosen .cm-icon {
   transform: scale(1.3);
@@ -574,8 +642,13 @@
   font: 620 calc(13 * var(--u)) / 1 var(--k-font-ui);
   color: var(--cm-text);
   background: var(--cm-key);
-  box-shadow: inset 0 0 0 1px var(--cm-line-strong), inset 0 calc(-1.5 * var(--u)) 0 var(--cm-line-strong);
-  transition: transform 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  box-shadow:
+    inset 0 0 0 1px var(--cm-line-strong),
+    inset 0 calc(-1.5 * var(--u)) 0 var(--cm-line-strong);
+  transition:
+    transform 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 .kd-gm .cm-glyph.cm-confirm {
   color: var(--cm-accent-contrast);
@@ -597,7 +670,9 @@
   background: rgb(var(--cm-raised-rgb) / 0.82);
   backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
   -webkit-backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
-  box-shadow: var(--cm-shadow-pop), inset 0 0 0 1px var(--cm-line-strong);
+  box-shadow:
+    var(--cm-shadow-pop),
+    inset 0 0 0 1px var(--cm-line-strong);
   white-space: nowrap;
   transform: translateX(-50%);
   animation: cm-hud-in 0.28s cubic-bezier(0.16, 1.2, 0.3, 1) both;
@@ -670,7 +745,9 @@
   background: rgb(var(--cm-raised-rgb) / 0.82);
   backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
   -webkit-backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
-  box-shadow: var(--cm-shadow-pop), inset 0 0 0 1px var(--cm-line-strong);
+  box-shadow:
+    var(--cm-shadow-pop),
+    inset 0 0 0 1px var(--cm-line-strong);
   font-size: calc(16 * var(--u));
   font-weight: 620;
   line-height: 1.2;
@@ -764,7 +841,9 @@
 
 /* Deck body controls drawn beside the screen. */
 .kd-pad-part {
-  transition: fill 0.12s ease, filter 0.12s ease;
+  transition:
+    fill 0.12s ease,
+    filter 0.12s ease;
 }
 .kd-pad-part.kd-down {
   fill: #5472e4;
@@ -781,13 +860,23 @@
 }
 
 /* ---------------------------------------------------------------- platform colours */
-.kd-tl-close { background: #ff5f57; }
-.kd-tl-min { background: #febc2e; }
-.kd-tl-max { background: #28c840; }
-.kd-gnome-bar { background: #1e1e1e; }
+.kd-tl-close {
+  background: #ff5f57;
+}
+.kd-tl-min {
+  background: #febc2e;
+}
+.kd-tl-max {
+  background: #28c840;
+}
+.kd-gnome-bar {
+  background: #1e1e1e;
+}
 .kd-game-icon {
   background: linear-gradient(145deg, #ffb3d1, #f472b6 48%, #a78bfa);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -1px 0 rgb(0 0 0 / 0.15);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    inset 0 -1px 0 rgb(0 0 0 / 0.15);
 }
 
 /* ---------------------------------------------------------------- Steam Deck body */
@@ -806,15 +895,16 @@
 .kd-stage {
   background:
     radial-gradient(120% 80% at 12% 0%, var(--k-accent-soft), transparent 62%),
-    radial-gradient(90% 70% at 100% 100%, var(--k-hover), transparent 60%),
-    var(--k-bar);
+    radial-gradient(90% 70% at 100% 100%, var(--k-hover), transparent 60%), var(--k-bar);
 }
 
 /* Maximise / restore, in the stage's top-right corner. */
 .kd-max {
   color: var(--k-text-2);
   background: color-mix(in oklab, var(--k-bar) 70%, transparent);
-  transition: color 120ms, background-color 120ms;
+  transition:
+    color 120ms,
+    background-color 120ms;
 }
 .kd-max:hover {
   color: var(--k-text);
@@ -832,7 +922,9 @@
 .kd-max-close {
   color: var(--k-text);
   background: color-mix(in oklab, var(--k-raised) 88%, transparent);
-  box-shadow: 0 0 0 1px var(--k-line), 0 4px 14px rgb(0 0 0 / 0.25);
+  box-shadow:
+    0 0 0 1px var(--k-line),
+    0 4px 14px rgb(0 0 0 / 0.25);
   backdrop-filter: blur(8px);
 }
 .kd-max-close::after {
@@ -848,7 +940,10 @@
   visibility: visible;
   opacity: 1;
   transform: none;
-  transition: opacity 220ms ease-out, transform 260ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
+  transition:
+    opacity 220ms ease-out,
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s;
 }
 .kd-win-closed {
   visibility: hidden;
@@ -886,7 +981,9 @@
     0 16px 40px -10px rgb(0 0 0 / 0.55);
   /* Centred by Tailwind's translate property; the hover scales on its own property, from the
      centre, so the button never moves out from under the pointer. */
-  transition: scale 160ms ease-out, filter 160ms;
+  transition:
+    scale 160ms ease-out,
+    filter 160ms;
 }
 .kd-play:hover {
   scale: 1.06;
@@ -902,7 +999,14 @@
 /* A maximised window's resize grip: two short diagonal strokes in the corner. */
 .kd-resize {
   --grip: color-mix(in oklab, var(--k-text) 35%, transparent);
-  background: linear-gradient(135deg, transparent 55%, var(--grip) 55% 62%, transparent 62% 72%, var(--grip) 72% 79%, transparent 79%);
+  background: linear-gradient(
+    135deg,
+    transparent 55%,
+    var(--grip) 55% 62%,
+    transparent 62% 72%,
+    var(--grip) 72% 79%,
+    transparent 79%
+  );
 }
 /* Popup type scales with the screen so it fits a phone-sized game. */
 .kd-popup-term {
@@ -928,7 +1032,9 @@
 }
 .kd-try-later {
   color: var(--k-text-2);
-  transition: color 120ms, background-color 120ms;
+  transition:
+    color 120ms,
+    background-color 120ms;
 }
 .kd-try-later:hover {
   color: var(--k-text);
@@ -990,7 +1096,9 @@
   background: rgb(0 0 0 / 0.45);
   opacity: 0;
   translate: -4px 0;
-  transition: opacity 160ms ease-out, translate 160ms ease-out;
+  transition:
+    opacity 160ms ease-out,
+    translate 160ms ease-out;
 }
 .kd-shift-down {
   opacity: 1;
@@ -1139,7 +1247,9 @@
   border-radius: 6px;
   font: 500 11px/1 var(--k-font-ui);
   color: rgb(255 255 255 / 0.6);
-  transition: color 120ms, background-color 120ms;
+  transition:
+    color 120ms,
+    background-color 120ms;
 }
 .kd-guide-icon:hover,
 .kd-guide-skip:hover {
@@ -1156,7 +1266,10 @@
   color: #fff;
   background: rgb(255 255 255 / 0.08);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
-  transition: background-color 120ms, box-shadow 120ms, translate 120ms;
+  transition:
+    background-color 120ms,
+    box-shadow 120ms,
+    translate 120ms;
 }
 .kd-guide-choice:hover,
 .kd-guide-choice:focus-visible {
@@ -1204,7 +1317,11 @@
     0 0 0 2px #f472b6,
     0 0 0 6px rgb(244 114 182 / 0.25),
     0 0 24px 4px rgb(244 114 182 / 0.35);
-  transition: left 260ms cubic-bezier(0.2, 0.8, 0.2, 1), top 260ms cubic-bezier(0.2, 0.8, 0.2, 1), width 260ms, height 260ms;
+  transition:
+    left 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 260ms,
+    height 260ms;
   animation: kd-ring 1.4s ease-in-out infinite;
 }
 .kd-ring-arrow {
@@ -1229,22 +1346,40 @@
 }
 
 @keyframes kd-guide-in {
-  from { opacity: 0; transform: translateY(18px); }
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
 }
 @keyframes kd-guide-nudge {
-  25% { transform: translateX(-5px); }
-  50% { transform: translateX(5px); }
-  75% { transform: translateX(-3px); }
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
 }
 @keyframes kd-face {
-  from { transform: scale(1.12) translateY(6px); }
-  60% { transform: scale(1.12) translateY(-3px); }
+  from {
+    transform: scale(1.12) translateY(6px);
+  }
+  60% {
+    transform: scale(1.12) translateY(-3px);
+  }
 }
 @keyframes kd-cue {
-  50% { transform: translateY(3px); opacity: 0.6; }
+  50% {
+    transform: translateY(3px);
+    opacity: 0.6;
+  }
 }
 @keyframes kd-turn {
-  50% { box-shadow: inset 0 0 0 1px rgb(244 114 182 / 0.9); }
+  50% {
+    box-shadow: inset 0 0 0 1px rgb(244 114 182 / 0.9);
+  }
 }
 @keyframes kd-ring {
   50% {
@@ -1255,7 +1390,9 @@
   }
 }
 @keyframes kd-arrow {
-  50% { translate: 0 -5px; }
+  50% {
+    translate: 0 -5px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .kd-guide,
@@ -1334,7 +1471,10 @@
   border-radius: 0.5em;
   color: var(--k-text-2);
   box-shadow: inset 0 0 0 1px var(--k-line);
-  transition: color 120ms, background-color 120ms, box-shadow 120ms;
+  transition:
+    color 120ms,
+    background-color 120ms,
+    box-shadow 120ms;
 }
 .kd-hd-anki:not(:disabled):hover {
   color: var(--k-text);
@@ -1382,7 +1522,9 @@
   font: 13px/1.3 var(--k-font-ui);
   color: #fff;
   background: rgb(18 20 32 / 0.92);
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.12), 0 14px 30px -10px rgb(0 0 0 / 0.6);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 14px 30px -10px rgb(0 0 0 / 0.6);
   animation: kd-guide-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .kd-anki-field {
@@ -1401,7 +1543,10 @@
   overflow: hidden;
   max-width: 48px;
   animation: kd-task-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  transition: max-width 220ms ease, opacity 200ms ease, transform 220ms ease;
+  transition:
+    max-width 220ms ease,
+    opacity 200ms ease,
+    transform 220ms ease;
 }
 .kd-task-out {
   max-width: 0;
@@ -1409,11 +1554,17 @@
   transform: scale(0.6);
 }
 @keyframes kd-task-in {
-  from { max-width: 0; opacity: 0; transform: translateY(6px) scale(0.6); }
+  from {
+    max-width: 0;
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
 }
 .kd-dock {
   background: color-mix(in oklab, var(--k-raised) 55%, transparent);
-  box-shadow: 0 0 0 1px var(--k-line), 0 10px 30px -10px rgb(0 0 0 / 0.5);
+  box-shadow:
+    0 0 0 1px var(--k-line),
+    0 10px 30px -10px rgb(0 0 0 / 0.5);
   backdrop-filter: blur(14px);
 }
 
@@ -1442,7 +1593,9 @@
   text-decoration: underline;
   text-decoration-color: rgb(199 208 255 / 0.35);
   text-underline-offset: 3px;
-  transition: color 120ms, text-decoration-color 120ms;
+  transition:
+    color 120ms,
+    text-decoration-color 120ms;
 }
 .kd-guide-link:hover {
   color: #fff;

@@ -179,8 +179,12 @@ impl Mutter {
     fn logical_monitors(&self) -> Vec<LogicalMonitor> {
         let read = || -> zbus::Result<Vec<LogicalMonitor>> {
             let proxy = Proxy::new(&self.connection, DISPLAY_CONFIG, DISPLAY_CONFIG_PATH, DISPLAY_CONFIG)?;
-            let (_serial, _monitors, logical, _props): (u32, Vec<StateMonitor>, Vec<StateLogical>, HashMap<String, OwnedValue>) =
-                proxy.call("GetCurrentState", &())?;
+            let (_serial, _monitors, logical, _props): (
+                u32,
+                Vec<StateMonitor>,
+                Vec<StateLogical>,
+                HashMap<String, OwnedValue>,
+            ) = proxy.call("GetCurrentState", &())?;
             Ok(logical
                 .into_iter()
                 .map(|(x, y, scale, _transform, primary, monitors, _)| LogicalMonitor {
@@ -211,7 +215,8 @@ impl Mutter {
             .map_err(native)?;
         let stream: OwnedObjectPath = match target {
             Target::Window(w) => {
-                let id: u64 = w.handle.parse().map_err(|_| CaptureError::new("stale_source", "Not a GNOME window id"))?;
+                let id: u64 =
+                    w.handle.parse().map_err(|_| CaptureError::new("stale_source", "Not a GNOME window id"))?;
                 let mut props: HashMap<&str, Value> = HashMap::new();
                 props.insert("window-id", Value::U64(id));
                 props.insert("cursor-mode", Value::U32(CURSOR_HIDDEN));
@@ -234,16 +239,21 @@ impl Mutter {
 }
 
 /// Subscribe to the stream's node announcement, start the session, and wait for the node.
-async fn started_node(connection: &zbus::Connection, session: &OwnedObjectPath, stream: &OwnedObjectPath) -> Result<u32> {
+async fn started_node(
+    connection: &zbus::Connection,
+    session: &OwnedObjectPath,
+    stream: &OwnedObjectPath,
+) -> Result<u32> {
     use futures_util::future::{select, Either};
     use futures_util::StreamExt;
     let stream_proxy = zbus::Proxy::new(connection, SCREENCAST, stream.as_str(), "org.gnome.Mutter.ScreenCast.Stream")
         .await
         .map_err(native)?;
     let mut added = stream_proxy.receive_signal("PipeWireStreamAdded").await.map_err(native)?;
-    let session_proxy = zbus::Proxy::new(connection, SCREENCAST, session.as_str(), "org.gnome.Mutter.ScreenCast.Session")
-        .await
-        .map_err(native)?;
+    let session_proxy =
+        zbus::Proxy::new(connection, SCREENCAST, session.as_str(), "org.gnome.Mutter.ScreenCast.Session")
+            .await
+            .map_err(native)?;
     session_proxy.call_method("Start", &()).await.map_err(|e| native(format!("Mutter ScreenCast Start: {e}")))?;
     let timeout = async_io::Timer::after(STREAM_WAIT);
     match select(added.next(), timeout).await {
@@ -261,7 +271,9 @@ struct Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if let Ok(proxy) = Proxy::new(&self.connection, SCREENCAST, self.path.as_str(), "org.gnome.Mutter.ScreenCast.Session") {
+        if let Ok(proxy) =
+            Proxy::new(&self.connection, SCREENCAST, self.path.as_str(), "org.gnome.Mutter.ScreenCast.Session")
+        {
             // Already gone when the window closed or Mutter ended it: nothing to do.
             let _ = proxy.call_method("Stop", &());
         }
@@ -290,17 +302,19 @@ impl Driver for Mutter {
 pub fn probe() -> std::result::Result<Box<dyn Driver>, String> {
     let connection = Connection::session().map_err(|e| format!("no session bus: {e}"))?;
     let screencast = Proxy::new(&connection, SCREENCAST, SCREENCAST_PATH, SCREENCAST).map_err(|e| e.to_string())?;
-    let version: i32 = screencast
-        .get_property("Version")
-        .map_err(|e| format!("org.gnome.Mutter.ScreenCast is not available: {e}"))?;
+    let version: i32 =
+        screencast.get_property("Version").map_err(|e| format!("org.gnome.Mutter.ScreenCast is not available: {e}"))?;
     // RecordWindow takes `window-id` from version 3 (GNOME 3.38) on.
     if version < 3 {
         return Err(format!("Mutter's ScreenCast API is version {version}; window capture needs 3"));
     }
     let mutter = Mutter { connection };
-    let text = mutter
-        .extension(r#"{"operation":"list"}"#)
-        .map_err(|e| format!("Kimochi's GNOME Shell extension has no window list (install or update it, then log out and in): {}", e.message))?;
+    let text = mutter.extension(r#"{"operation":"list"}"#).map_err(|e| {
+        format!(
+            "Kimochi's GNOME Shell extension has no window list (install or update it, then log out and in): {}",
+            e.message
+        )
+    })?;
     serde_json::from_str::<ShellWindows>(&text).map_err(|e| format!("GNOME Shell extension answered: {e}"))?;
     Ok(Box::new(mutter))
 }
@@ -323,8 +337,20 @@ mod tests {
 
     fn logical() -> Vec<LogicalMonitor> {
         vec![
-            LogicalMonitor { x: 1920, y: 0, scale: 2.0, primary: false, monitors: vec![("eDP-1".into(), "unknown".into(), "unknown".into())] },
-            LogicalMonitor { x: 0, y: 0, scale: 1.0, primary: true, monitors: vec![("DP-1".into(), "DEL".into(), "DELL U2720Q".into())] },
+            LogicalMonitor {
+                x: 1920,
+                y: 0,
+                scale: 2.0,
+                primary: false,
+                monitors: vec![("eDP-1".into(), "unknown".into(), "unknown".into())],
+            },
+            LogicalMonitor {
+                x: 0,
+                y: 0,
+                scale: 1.0,
+                primary: true,
+                monitors: vec![("DP-1".into(), "DEL".into(), "DELL U2720Q".into())],
+            },
         ]
     }
 

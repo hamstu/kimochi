@@ -12,13 +12,21 @@
 }
 
 /* Anki settings: an icon in a narrow strip, written out once there's room for it. */
-.anki-settings-wide.k-button { display: none; }
+.anki-settings-wide.k-button {
+  display: none;
+}
 @container (min-width: 36rem) {
-  .anki-settings-icon.k-button { display: none; }
-  .anki-settings-wide.k-button { display: inline-flex; }
+  .anki-settings-icon.k-button {
+    display: none;
+  }
+  .anki-settings-wide.k-button {
+    display: inline-flex;
+  }
 }
 @container (max-width: 30rem) {
-  .anki .nb-search-end .k-kbd { display: none; }
+  .anki .nb-search-end .k-kbd {
+    display: none;
+  }
 }
 
 .anki-list {
@@ -27,7 +35,10 @@
   overflow-y: auto;
   padding: var(--k-space-1) 0 var(--k-space-2);
 }
-.anki-row.k-row { width: 100%; text-align: left; }
+.anki-row.k-row {
+  width: 100%;
+  text-align: left;
+}
 
 /* Given audio or a screenshot by Kimochi: a small ok-toned mark (like the pop-up's added check)
    beside the row's end, one icon per kind. */
@@ -43,9 +54,14 @@
   background: var(--k-ok-soft);
   color: var(--k-ok-text);
 }
-.anki-enhanced svg { width: var(--k-icon-xs); height: var(--k-icon-xs); }
+.anki-enhanced svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
 
-.anki-empty { flex: 1; }
+.anki-empty {
+  flex: 1;
+}
 .anki-checking {
   display: grid;
   flex: 1;
@@ -53,9 +69,13 @@
   color: var(--k-text-3);
 }
 
-.anki-stat-audio > svg { color: var(--k-ok-text); }
+.anki-stat-audio > svg {
+  color: var(--k-ok-text);
+}
 @container (max-width: 26rem) {
-  .anki-stat-audio { display: none; }
+  .anki-stat-audio {
+    display: none;
+  }
 }
 
 /* The delete dialog's choice: also delete the note in Anki. */

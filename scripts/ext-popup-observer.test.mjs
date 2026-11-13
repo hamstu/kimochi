@@ -11,28 +11,43 @@ test('popup observation settles after the initial resize and follows replaced po
   const root = { querySelectorAll: () => parts }
   let host = { shadowRoot: root }
   const win = {
-    document: { querySelector: () => { measurements++; return host } },
+    document: {
+      querySelector: () => {
+        measurements++
+        return host
+      }
+    },
     requestAnimationFrame: (callback) => frames.push(callback),
     addEventListener() {},
     removeEventListener() {},
     getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
     MutationObserver: class {
-      constructor(callback) { mutations.push(callback) }
+      constructor(callback) {
+        mutations.push(callback)
+      }
       observe() {}
       disconnect() {}
     },
     ResizeObserver: class {
-      constructor(callback) { this.callback = callback }
+      constructor(callback) {
+        this.callback = callback
+      }
       observe(element) {
         targets.add(element)
         // Browsers report a newly observed element's initial size.
         frames.push(() => this.callback())
       }
-      unobserve(element) { targets.delete(element) }
-      disconnect() { targets.clear() }
+      unobserve(element) {
+        targets.delete(element)
+      }
+      disconnect() {
+        targets.clear()
+      }
     }
   }
-  const part = (x) => ({ getBoundingClientRect: () => ({ left: x, top: 0, right: x + 20, bottom: 20, width: 20, height: 20 }) })
+  const part = (x) => ({
+    getBoundingClientRect: () => ({ left: x, top: 0, right: x + 20, bottom: 20, width: 20, height: 20 })
+  })
   const flush = () => {
     for (let i = 0; frames.length && i < 20; i++) frames.shift()()
     assert.equal(frames.length, 0, 'an unchanged popup must not keep scheduling measurements')

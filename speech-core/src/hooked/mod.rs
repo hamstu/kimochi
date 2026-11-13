@@ -21,8 +21,14 @@ pub struct HookClip {
 }
 impl HookClip {
     pub fn group(&self) -> String {
-        let folder = self.source.as_deref().and_then(|s| s.replace('\\', "/").rsplit_once('/').map(|(d, _)| d.to_owned()));
-        format!("{} | {} | {}", self.api, self.fmt.as_deref().unwrap_or("?"), self.channel.clone().or(folder).unwrap_or_default())
+        let folder =
+            self.source.as_deref().and_then(|s| s.replace('\\', "/").rsplit_once('/').map(|(d, _)| d.to_owned()));
+        format!(
+            "{} | {} | {}",
+            self.api,
+            self.fmt.as_deref().unwrap_or("?"),
+            self.channel.clone().or(folder).unwrap_or_default()
+        )
     }
 }
 #[derive(Debug, Clone, Default, Serialize)]
@@ -175,7 +181,8 @@ impl Hooked {
         }
     }
     pub fn needs_fallback(&self, now: f64) -> bool {
-        self.feeds.is_empty() || self.lines.iter().any(|l| now - l.ts < 30_000.0 && !self.completed(&l.uid) && !self.waiting(&l.uid, now))
+        self.feeds.is_empty()
+            || self.lines.iter().any(|l| now - l.ts < 30_000.0 && !self.completed(&l.uid) && !self.waiting(&l.uid, now))
     }
     /// The game's voices are being captured: a voice stream is established and has given lines
     /// their clips. A line it gave none is most likely unvoiced (narration), so a fallback guess
@@ -185,7 +192,8 @@ impl Hooked {
         // a sparsely voiced game (one line in eight) would otherwise never get there.
         // A game whose voice stream an earlier session established is established from the start
         // while its capture runs: narration before this session's first voice is narration too.
-        self.trusted && (self.named_voice() || self.report.matched >= 3) || (self.remembered.is_some() && !self.feeds.is_empty())
+        self.trusted && (self.named_voice() || self.report.matched >= 3)
+            || (self.remembered.is_some() && !self.feeds.is_empty())
     }
     fn named_voice(&self) -> bool {
         self.report.groups.iter().any(|g| g.named && self.voice_groups.contains(&g.group))
@@ -224,10 +232,17 @@ impl Hooked {
         let Some(line) = self.lines.iter().find(|l| l.uid == uid).map(|l| self.typed(l)) else {
             return false;
         };
-        let (from, to) = (line.anchor() - classify::lead(&line, self.report.lead_ms).max(TYPED_QUOTE_MS), line.anchor() + self.report.lag_ms);
+        let (from, to) = (
+            line.anchor() - classify::lead(&line, self.report.lead_ms).max(TYPED_QUOTE_MS),
+            line.anchor() + self.report.lag_ms,
+        );
         now - line.ts < feed::KEEP_MS
             && self.feeds.iter().any(|(dir, f)| {
-                f.clips().iter().any(|c| !self.used.contains(&(dir.clone(), c.seq)) && self.voice_groups.contains(&c.group()) && (from..=to).contains(&c.start))
+                f.clips().iter().any(|c| {
+                    !self.used.contains(&(dir.clone(), c.seq))
+                        && self.voice_groups.contains(&c.group())
+                        && (from..=to).contains(&c.start)
+                })
             })
     }
     /// Bound the wait, even for missing end events. A healthy stream gets time to finish.
@@ -246,7 +261,9 @@ impl Hooked {
         if age < self.report.lag_ms + 400.0 {
             return true;
         }
-        let in_window = |s: f64| s >= line.anchor() - classify::lead(line, self.report.lead_ms) && s <= line.anchor() + self.report.lag_ms;
+        let in_window = |s: f64| {
+            s >= line.anchor() - classify::lead(line, self.report.lead_ms) && s <= line.anchor() + self.report.lag_ms
+        };
         // A sound still being recorded, or one handed over whole as it started (Unity, Ren'Py,
         // SDL_mixer), which is matched once it has played (`tick`).
         self.feeds.values().flat_map(|f| f.open_starts(now)).any(in_window)
@@ -278,7 +295,14 @@ impl Hooked {
     /// line's: the one with clearly the most speech, else the one whose length clearly fits the
     /// line's text best. None while one of them still plays, or when none stands out. Never one of
     /// `taken` (another line's).
-    fn untie(&mut self, line: &Line, available: &[(PathBuf, HookClip)], tied: &[usize], taken: &[usize], now: f64) -> Option<usize> {
+    fn untie(
+        &mut self,
+        line: &Line,
+        available: &[(PathBuf, HookClip)],
+        tied: &[usize],
+        taken: &[usize],
+        now: f64,
+    ) -> Option<usize> {
         let tied: Vec<usize> = tied.iter().copied().filter(|j| !taken.contains(j)).collect();
         if tied.len() == 1 {
             return Some(tied[0]);
@@ -359,19 +383,42 @@ impl Hooked {
         let observed: Vec<HookClip> = if self.lines.is_empty() {
             all.clone()
         } else {
-            all.iter().filter(|c| self.lines.iter().any(|l| (c.start - l.anchor()).abs() <= OBSERVED_MS)).cloned().collect()
+            all.iter()
+                .filter(|c| self.lines.iter().any(|l| (c.start - l.anchor()).abs() <= OBSERVED_MS))
+                .cloned()
+                .collect()
         };
         let all = observed;
         // A clearly leading group can teach the lag even when its files have no names.
         let wide = classify::classify(&all, &self.lines, classify::MAX_LEAD_MS, classify::MAX_LAG_MS);
         // (A group too small to judge competes with none, as below.)
-        let learned = wide.first().filter(|v| v.clips >= 3 && v.voice > 0.85 && !wide.iter().skip(1).any(|other| (other.clips >= 3 || other.named) && v.voice - other.voice <= 0.15)).map(|v| v.group.clone());
-        let teach: Vec<&HookClip> = all.iter().filter(|c| !c.looping && c.dur <= 30.0 && (classify::name_says(&classify::clip_name(c)) > 0 || learned.as_ref().is_some_and(|g| *g == c.group()))).collect();
+        let learned = wide
+            .first()
+            .filter(|v| {
+                v.clips >= 3
+                    && v.voice > 0.85
+                    && !wide
+                        .iter()
+                        .skip(1)
+                        .any(|other| (other.clips >= 3 || other.named) && v.voice - other.voice <= 0.15)
+            })
+            .map(|v| v.group.clone());
+        let teach: Vec<&HookClip> = all
+            .iter()
+            .filter(|c| {
+                !c.looping
+                    && c.dur <= 30.0
+                    && (classify::name_says(&classify::clip_name(c)) > 0
+                        || learned.as_ref().is_some_and(|g| *g == c.group()))
+            })
+            .collect();
         // The game's own delay from an earlier session until this one has seen enough to judge.
         self.settled = teach.len() >= SETTLED_CLIPS || self.remembered_typing.is_some();
         match self.remembered_typing {
             Some(remembered) if teach.len() < SETTLED_CLIPS => self.report.typing_ms = remembered,
-            _ if teach.len() >= 3 => self.report.typing_ms = self.learn_typing(&teach.iter().map(|c| c.start).collect::<Vec<_>>()),
+            _ if teach.len() >= 3 => {
+                self.report.typing_ms = self.learn_typing(&teach.iter().map(|c| c.start).collect::<Vec<_>>())
+            }
             _ => {}
         }
         let lines: Vec<Line> = self.lines.iter().map(|l| self.typed(l)).collect();
@@ -385,7 +432,9 @@ impl Hooked {
                 .iter()
                 .map(|l| c.start - l.anchor())
                 .filter(|d| (-classify::MAX_LEAD_MS..=classify::MAX_LAG_MS).contains(d))
-                .min_by(|a, b| (if *a < 0.0 { -2.0 * a } else { *a }).total_cmp(&(if *b < 0.0 { -2.0 * b } else { *b })));
+                .min_by(|a, b| {
+                    (if *a < 0.0 { -2.0 * a } else { *a }).total_cmp(&(if *b < 0.0 { -2.0 * b } else { *b }))
+                });
             match nearest {
                 Some(d) if d >= 0.0 => late.push(d),
                 Some(d) => early.push(-d),
@@ -412,7 +461,13 @@ impl Hooked {
             .filter(|v| {
                 (self.remembered.as_ref() == Some(&v.group) && v.voice > 0.5)
                     || v.voice > 0.75
-                    && (v.named || (v.clips >= 3 && !self.report.groups.iter().any(|other| other.group != v.group && (other.clips >= 3 || other.named) && other.voice >= v.voice - 0.15)))
+                        && (v.named
+                            || (v.clips >= 3
+                                && !self.report.groups.iter().any(|other| {
+                                    other.group != v.group
+                                        && (other.clips >= 3 || other.named)
+                                        && other.voice >= v.voice - 0.15
+                                })))
             })
             .map(|v| v.group.clone())
             .collect();
@@ -422,19 +477,33 @@ impl Hooked {
             .feeds
             .iter()
             .flat_map(|(p, f)| f.clips().iter().map(move |c| (p.clone(), c.clone())))
-            .filter(|(p, c)| !self.used.contains(&(p.clone(), c.seq)) && c.file.is_some() && c.dur >= 0.15 && c.dur <= 30.0 && classify::candidate(c, &voice))
+            .filter(|(p, c)| {
+                !self.used.contains(&(p.clone(), c.seq))
+                    && c.file.is_some()
+                    && c.dur >= 0.15
+                    && c.dur <= 30.0
+                    && classify::candidate(c, &voice)
+            })
             .collect();
         // Rows that carry on a quote opened by an earlier row (KiriKiri hands over each typed row):
         // they start no voice of their own; they share the quote's, below.
         let mut order: Vec<&Line> = lines.iter().collect();
         order.sort_by(|a, b| a.ts.total_cmp(&b.ts));
-        let quote_of: BTreeMap<String, String> = (0..order.len()).filter_map(|i| quote_start(&order, i).map(|j| (order[i].uid.clone(), order[j].uid.clone()))).collect();
+        let quote_of: BTreeMap<String, String> = (0..order.len())
+            .filter_map(|i| quote_start(&order, i).map(|j| (order[i].uid.clone(), order[j].uid.clone())))
+            .collect();
         let pending: Vec<Line> = lines
             .iter()
             .filter(|l| !quote_of.contains_key(&l.uid))
             // As long as clips are kept: a pass held up (speech recognition, a busy machine) catches up.
             .filter(|l| !self.done.contains_key(&l.uid) && now - l.ts < feed::KEEP_MS)
-            .filter(|l| l.scan.as_ref().is_none_or(|scan| !lines.iter().any(|other| other.scan.as_ref() == Some(scan) && other.text.chars().count() > l.text.chars().count())))
+            .filter(|l| {
+                l.scan.as_ref().is_none_or(|scan| {
+                    !lines.iter().any(|other| {
+                        other.scan.as_ref() == Some(scan) && other.text.chars().count() > l.text.chars().count()
+                    })
+                })
+            })
             .cloned()
             .collect();
         let refs: Vec<&HookClip> = available.iter().map(|(_, c)| c).collect();
@@ -454,9 +523,18 @@ impl Hooked {
             // Clips as near the line as this one (a voice and an effect started together): the one
             // that is clearly the speech, or failing that clearly the line's length, else none yet.
             let tied: Vec<usize> = std::iter::once(i)
-                .chain(available.iter().enumerate().filter(|(j, (_, other))| {
-                    *j != i && other.start >= line.anchor() - classify::lead(&line, self.report.lead_ms) && other.start <= line.anchor() + self.report.lag_ms && (cost(other) - cost(&available[i].1)).abs() < 150.0
-                }).map(|(j, _)| j))
+                .chain(
+                    available
+                        .iter()
+                        .enumerate()
+                        .filter(|(j, (_, other))| {
+                            *j != i
+                                && other.start >= line.anchor() - classify::lead(&line, self.report.lead_ms)
+                                && other.start <= line.anchor() + self.report.lag_ms
+                                && (cost(other) - cost(&available[i].1)).abs() < 150.0
+                        })
+                        .map(|(j, _)| j),
+                )
                 .collect();
             let i = if tied.len() > 1 {
                 let others: Vec<usize> = pairs_taken.iter().copied().filter(|&j| j != i).collect();
@@ -471,10 +549,13 @@ impl Hooked {
             // A sound of the voice's own stream that started in the line's window is still playing
             // (a longer clip starting with a short one): it may be the better match, so wait for it.
             if open.iter().any(|(start, group)| {
-                voice.contains(group) && *start >= line.anchor() - classify::lead(&line, self.report.lead_ms) && *start <= line.anchor() + self.report.lag_ms && {
-                    let d = start - line.anchor();
-                    (if d < 0.0 { -2.0 * d } else { d }) < cost(clip) + 150.0
-                }
+                voice.contains(group)
+                    && *start >= line.anchor() - classify::lead(&line, self.report.lead_ms)
+                    && *start <= line.anchor() + self.report.lag_ms
+                    && {
+                        let d = start - line.anchor();
+                        (if d < 0.0 { -2.0 * d } else { d }) < cost(clip) + 150.0
+                    }
             }) {
                 continue;
             }
@@ -483,7 +564,10 @@ impl Hooked {
             if !self.settled
                 && clip.start > line.anchor()
                 && (clip.start - line.anchor() > TIGHT_LAG_MS
-                    || (!opens_quote(&line.text) && lines.iter().any(|o| opens_quote(&o.text) && o.ts > clip.start && o.ts - clip.start <= TYPED_QUOTE_MS)))
+                    || (!opens_quote(&line.text)
+                        && lines
+                            .iter()
+                            .any(|o| opens_quote(&o.text) && o.ts > clip.start && o.ts - clip.start <= TYPED_QUOTE_MS)))
             {
                 continue;
             }
@@ -534,7 +618,8 @@ impl Hooked {
                 out.push(Matched { line, clip, samples, sample_rate });
             }
         }
-        let existing: BTreeSet<_> = self.feeds.iter().flat_map(|(p, f)| f.clips().iter().map(move |c| (p.clone(), c.seq))).collect();
+        let existing: BTreeSet<_> =
+            self.feeds.iter().flat_map(|(p, f)| f.clips().iter().map(move |c| (p.clone(), c.seq))).collect();
         self.used.retain(|key| existing.contains(key));
         out
     }

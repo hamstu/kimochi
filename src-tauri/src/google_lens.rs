@@ -237,10 +237,7 @@ fn post(upload: &Upload, language: &Language) -> Result<Vec<u8>, String> {
     if !status.is_success() {
         return Err(format!("native: Google Lens HTTP {}", status.as_u16()));
     }
-    response
-        .bytes()
-        .map(|b| b.to_vec())
-        .map_err(|_| "native: Google Lens response was cut off".to_string())
+    response.bytes().map(|b| b.to_vec()).map_err(|_| "native: Google Lens response was cut off".to_string())
 }
 
 /// One HTTP client for the process, so consecutive scans reuse the connection.
@@ -273,25 +270,16 @@ fn dimensions(png: &[u8]) -> Result<(u32, u32), String> {
 /// ratio kept; anything else is sent as captured.
 fn prepare(png: &[u8], width: u32, height: u32) -> Result<Upload, String> {
     let Some((new_width, new_height)) = scaled_size(width, height) else {
-        return Ok(Upload {
-            png: png.to_vec(),
-            width,
-            height,
-        });
+        return Ok(Upload { png: png.to_vec(), width, height });
     };
     let decoded = image::load_from_memory_with_format(png, image::ImageFormat::Png)
         .map_err(|e| format!("native: unreadable capture: {e}"))?;
-    let resized =
-        decoded.resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3);
+    let resized = decoded.resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3);
     let mut out = Vec::new();
     resized
         .write_to(&mut Cursor::new(&mut out), image::ImageFormat::Png)
         .map_err(|e| format!("native: could not encode the capture: {e}"))?;
-    Ok(Upload {
-        png: out,
-        width: new_width,
-        height: new_height,
-    })
+    Ok(Upload { png: out, width: new_width, height: new_height })
 }
 
 /// The size to scale to, or None when the image is within the limit.
@@ -327,21 +315,12 @@ fn request(upload: &Upload, uuid: u64, analytics_id: [u8; 16], language: &Langua
                         language: crate::language::lens_code(language).into(),
                         region: "Asia/Tokyo".into(),
                     }),
-                    client_filters: Some(AppliedFilters {
-                        filter: vec![AppliedFilter {
-                            filter_type: AUTO_FILTER,
-                        }],
-                    }),
+                    client_filters: Some(AppliedFilters { filter: vec![AppliedFilter { filter_type: AUTO_FILTER }] }),
                 }),
             }),
             image_data: Some(ImageData {
-                payload: Some(ImagePayload {
-                    image_bytes: upload.png.clone(),
-                }),
-                image_metadata: Some(ImageMetadata {
-                    width: upload.width as i32,
-                    height: upload.height as i32,
-                }),
+                payload: Some(ImagePayload { image_bytes: upload.png.clone() }),
+                image_metadata: Some(ImageMetadata { width: upload.width as i32, height: upload.height as i32 }),
             }),
         }),
     }
@@ -351,28 +330,17 @@ fn parse(bytes: &[u8]) -> Result<proto::ServerResponse, String> {
     let response = <proto::ServerResponse as prost::Message>::decode(bytes)
         .map_err(|_| "native: Google Lens returned an unreadable response")?;
     match (&response.error, &response.objects_response) {
-        (Some(error), None) => Err(format!(
-            "native: Google Lens refused the request (error {})",
-            error.error_type
-        )),
+        (Some(error), None) => Err(format!("native: Google Lens refused the request (error {})", error.error_type)),
         _ => Ok(response),
     }
 }
 
 /// A box's four corners in pixels of the captured frame, clockwise from top left before rotation.
-fn corners(
-    geometry: Option<&proto::Geometry>,
-    upload: &Upload,
-    width: u32,
-    height: u32,
-) -> Option<[[f64; 2]; 4]> {
+fn corners(geometry: Option<&proto::Geometry>, upload: &Upload, width: u32, height: u32) -> Option<[[f64; 2]; 4]> {
     let b = geometry?.bounding_box.as_ref()?;
     // Normalised boxes scale to the frame; pixel boxes are in the uploaded image's pixels.
     let (sx, sy) = if b.coordinate_type == COORDINATE_IMAGE {
-        (
-            f64::from(width) / f64::from(upload.width.max(1)),
-            f64::from(height) / f64::from(upload.height.max(1)),
-        )
+        (f64::from(width) / f64::from(upload.width.max(1)), f64::from(height) / f64::from(upload.height.max(1)))
     } else {
         (f64::from(width), f64::from(height))
     };
@@ -384,22 +352,15 @@ fn corners(
     }
     let (sin, cos) = f64::from(b.rotation_z).sin_cos();
     let clamp = |v: f64, max: u32| v.clamp(0., f64::from(max));
-    Some([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(|[x, y]| {
-        [
-            clamp(cx + x * cos - y * sin, width),
-            clamp(cy + x * sin + y * cos, height),
-        ]
-    }))
+    Some(
+        [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]
+            .map(|[x, y]| [clamp(cx + x * cos - y * sin, width), clamp(cy + x * sin + y * cos, height)]),
+    )
 }
 
 /// The axis-aligned box around some corners: `[x1, y1, x2, y2]`.
 fn bounds<'a>(points: impl IntoIterator<Item = &'a [f64; 2]>) -> Option<[f64; 4]> {
-    let mut b = [
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    ];
+    let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     for [x, y] in points {
         b = [b[0].min(*x), b[1].min(*y), b[2].max(*x), b[3].max(*y)];
     }
@@ -433,12 +394,7 @@ fn line_words(line: &proto::Line, upload: &Upload, width: u32, height: u32) -> V
         .collect()
 }
 
-fn value_from_response(
-    response: &proto::ServerResponse,
-    upload: &Upload,
-    width: u32,
-    height: u32,
-) -> Value {
+fn value_from_response(response: &proto::ServerResponse, upload: &Upload, width: u32, height: u32) -> Value {
     let paragraphs = response
         .objects_response
         .as_ref()
@@ -452,22 +408,13 @@ fn value_from_response(
         let lines: Vec<(String, Option<[[f64; 2]; 4]>)> = paragraph
             .lines
             .iter()
-            .map(|line| {
-                (
-                    line_text(line),
-                    corners(line.geometry.as_ref(), upload, width, height),
-                )
-            })
+            .map(|line| (line_text(line), corners(line.geometry.as_ref(), upload, width, height)))
             .filter(|(text, _)| !text.is_empty())
             .collect();
         if lines.is_empty() {
             continue;
         }
-        let text = lines
-            .iter()
-            .map(|(t, _)| t.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let text = lines.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>().join("\n");
         let id = format!("googlelens-paragraph-{index}");
         let polygons: Vec<[[f64; 2]; 4]> = lines.iter().filter_map(|(_, c)| *c).collect();
         // The words on each of those lines, one list per polygon, in the same order.
@@ -475,27 +422,20 @@ fn value_from_response(
             .lines
             .iter()
             .filter(|line| {
-                !line_text(line).is_empty()
-                    && corners(line.geometry.as_ref(), upload, width, height).is_some()
+                !line_text(line).is_empty() && corners(line.geometry.as_ref(), upload, width, height).is_some()
             })
             .map(|line| line_words(line, upload, width, height))
             .collect();
-        let bbox = bounds(polygons.iter().flatten()).or_else(|| {
-            corners(paragraph.geometry.as_ref(), upload, width, height)
-                .and_then(|c| bounds(c.iter()))
-        });
+        let bbox = bounds(polygons.iter().flatten())
+            .or_else(|| corners(paragraph.geometry.as_ref(), upload, width, height).and_then(|c| bounds(c.iter())));
         // Lens says when a paragraph is set top to bottom. When it does not, columns taller
         // than they are wide still read as vertical (the rule Live Text uses), so a vertical
         // block is never laid out sideways for want of the flag.
         let tall = |c: &[[f64; 2]; 4], t: &str| {
-            bounds(c.iter())
-                .is_some_and(|b| t.chars().count() > 1 && b[3] - b[1] > (b[2] - b[0]) * 1.5)
+            bounds(c.iter()).is_some_and(|b| t.chars().count() > 1 && b[3] - b[1] > (b[2] - b[0]) * 1.5)
         };
         let vertical = paragraph.writing_direction == TOP_TO_BOTTOM
-            || (!lines.is_empty()
-                && lines
-                    .iter()
-                    .all(|(t, c)| c.as_ref().is_some_and(|c| tall(c, t))));
+            || (!lines.is_empty() && lines.iter().all(|(t, c)| c.as_ref().is_some_and(|c| tall(c, t))));
         let orientation = if vertical { "vertical" } else { "horizontal" };
         groups.push(json!({
             "id": id,
@@ -540,11 +480,7 @@ fn value_from_response(
 fn random_u64() -> u64 {
     use std::hash::{BuildHasher, Hasher};
     let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-    hasher.write_u128(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos()),
-    );
+    hasher.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
     hasher.finish()
 }
 
@@ -561,10 +497,7 @@ mod tests {
     use prost::Message;
 
     fn hex(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-            .collect()
+        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
     }
 
     /// owocr's request for the same inputs, serialised by Python protobuf from owocr's own
@@ -577,11 +510,7 @@ mod tests {
     const RESPONSE: &str = "12dc021ad9020ad2020a80021280010a221206e590bee8bca91a0022160a140d3333533f159a99993e1dcdcc4c3d25cdcccc3d0a1f1203e381af1a0022160a140d3333533f159a99993e1dcdcc4c3d25cdcccc3d0a1f1203e78cab1a0022160a140d3333533f159a99993e1dcdcc4c3d25cdcccc3d12180a160d3333533f159a99993e1dcdcc4c3d25cdcccc3e3001125f0a1f1203e381a71a0022160a140d6666463f159a99993e1dcdcc4c3d25cdcccc3d0a221206e38182e3828b1a0022160a140d6666463f159a99993e1dcdcc4c3d25cdcccc3d12180a160d6666463f159a99993e1dcdcc4c3d25cdcccc3e30011a180a160dcdcc4c3f159a99993e1dcdcccc3d25cdcccc3e300120020a4d12310a0a120548656c6c6f1a01200a091205776f726c641a0012180a160d9a99993e156666663f1dcdcccc3e25cdcc4c3d30011a180a160d9a99993e156666663f1dcdcccc3e25cdcc4c3d300112026a61";
 
     fn upload(width: u32, height: u32) -> Upload {
-        Upload {
-            png: b"PNGDATA".to_vec(),
-            width,
-            height,
-        }
+        Upload { png: b"PNGDATA".to_vec(), width, height }
     }
 
     #[test]
@@ -598,18 +527,41 @@ mod tests {
 
     #[test]
     fn another_language_asks_in_that_language_and_changes_nothing_else() {
-        let ask = |code: &str| {
-            request(&upload(640, 480), 1, [0; 16], crate::language::get(code))
-        };
+        let ask = |code: &str| request(&upload(640, 480), 1, [0; 16], crate::language::get(code));
         let context = |request: &proto::ServerRequest| {
-            request.objects_request.as_ref().unwrap().request_context.as_ref().unwrap().client_context.as_ref().unwrap().locale_context.clone().unwrap()
+            request
+                .objects_request
+                .as_ref()
+                .unwrap()
+                .request_context
+                .as_ref()
+                .unwrap()
+                .client_context
+                .as_ref()
+                .unwrap()
+                .locale_context
+                .clone()
+                .unwrap()
         };
         let korean = ask("ko");
         assert_eq!((context(&korean).language.as_str(), context(&korean).region.as_str()), ("ko", "Asia/Tokyo"));
         assert_eq!(context(&ask("zh-Hans")).language, "zh-CN");
         // Only the language field differs from the Japanese request.
         let mut japanese = ask("ja");
-        japanese.objects_request.as_mut().unwrap().request_context.as_mut().unwrap().client_context.as_mut().unwrap().locale_context.as_mut().unwrap().language = "ko".into();
+        japanese
+            .objects_request
+            .as_mut()
+            .unwrap()
+            .request_context
+            .as_mut()
+            .unwrap()
+            .client_context
+            .as_mut()
+            .unwrap()
+            .locale_context
+            .as_mut()
+            .unwrap()
+            .language = "ko".into();
         assert_eq!(japanese.encode_to_vec(), korean.encode_to_vec());
     }
 
@@ -628,38 +580,19 @@ mod tests {
         assert_eq!(groups[1]["orientation"], "horizontal");
         // Normalised boxes land in frame pixels: the first column is centred on x 825, y 150.
         let column = groups[0]["linePolygons"][0].as_array().unwrap();
-        let point = |i: usize| {
-            (
-                column[i][0].as_f64().unwrap(),
-                column[i][1].as_f64().unwrap(),
-            )
-        };
+        let point = |i: usize| (column[i][0].as_f64().unwrap(), column[i][1].as_f64().unwrap());
         let ((x1, y1), (x2, y2)) = (point(0), point(2));
-        assert!(
-            (x1 - 800.).abs() < 0.01 && (x2 - 850.).abs() < 0.01,
-            "{x1} {x2}"
-        );
-        assert!(
-            (y1 - 50.).abs() < 0.01 && (y2 - 250.).abs() < 0.01,
-            "{y1} {y2}"
-        );
+        assert!((x1 - 800.).abs() < 0.01 && (x2 - 850.).abs() < 0.01, "{x1} {x2}");
+        assert!((y1 - 50.).abs() < 0.01 && (y2 - 250.).abs() < 0.01, "{y1} {y2}");
         let bbox: Vec<f64> = serde_json::from_value(groups[0]["bbox"].clone()).unwrap();
-        assert!(
-            (bbox[0] - 750.).abs() < 0.01 && (bbox[2] - 850.).abs() < 0.01,
-            "{bbox:?}"
-        );
+        assert!((bbox[0] - 750.).abs() < 0.01 && (bbox[2] - 850.).abs() < 0.01, "{bbox:?}");
         // Each line's words come with their own boxes, one list per line polygon.
         let segments = groups[0]["lineSegments"].as_array().unwrap();
         assert_eq!(segments.len(), 2);
-        let words: Vec<&str> = segments[0]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|word| word["text"].as_str().unwrap())
-            .collect();
+        let words: Vec<&str> =
+            segments[0].as_array().unwrap().iter().map(|word| word["text"].as_str().unwrap()).collect();
         assert_eq!(words, ["吾輩", "は", "猫"]);
-        let word: Vec<f64> =
-            serde_json::from_value(segments[0][0]["bbox"].clone()).unwrap();
+        let word: Vec<f64> = serde_json::from_value(segments[0][0]["bbox"].clone()).unwrap();
         assert!(word.len() == 4 && word[0] < word[2] && word[1] < word[3], "{word:?}");
         // Words Lens gives no box for are left out, not placed anywhere.
         assert_eq!(groups[1]["lineSegments"], json!([[]]));
@@ -680,10 +613,7 @@ mod tests {
         // Sent at half size: normalised boxes still map onto the full frame.
         let value = value_from_response(&response, &upload(500, 250), 1000, 500);
         let bbox: Vec<f64> = serde_json::from_value(value["groups"][1]["bbox"].clone()).unwrap();
-        assert!(
-            (bbox[0] - 100.).abs() < 0.01 && (bbox[2] - 500.).abs() < 0.01,
-            "{bbox:?}"
-        );
+        assert!((bbox[0] - 100.).abs() < 0.01 && (bbox[2] - 500.).abs() < 0.01, "{bbox:?}");
         // Pixel boxes are in the uploaded image's pixels and scale up with it.
         let mut pixel = proto::Geometry {
             bounding_box: Some(proto::CenterRotatedBox {
@@ -702,10 +632,7 @@ mod tests {
         pixel.bounding_box.as_mut().unwrap().rotation_z = std::f32::consts::FRAC_PI_2;
         let c = corners(Some(&pixel), &upload(1000, 500), 1000, 500).unwrap();
         let b = bounds(c.iter()).unwrap();
-        assert!(
-            (b[2] - b[0] - 10.).abs() < 1e-3 && (b[3] - b[1] - 20.).abs() < 1e-3,
-            "{b:?}"
-        );
+        assert!((b[2] - b[0] - 10.).abs() < 1e-3 && (b[3] - b[1] - 20.).abs() < 1e-3, "{b:?}");
     }
 
     #[test]
@@ -719,19 +646,13 @@ mod tests {
                 ..Default::default()
             }),
         };
-        let word = |t: &str| proto::Word {
-            plain_text: t.into(),
-            ..Default::default()
-        };
+        let word = |t: &str| proto::Word { plain_text: t.into(), ..Default::default() };
         let response = proto::ServerResponse {
             objects_response: Some(proto::ObjectsResponse {
                 text: Some(proto::Text {
                     text_layout: Some(proto::TextLayout {
                         paragraphs: vec![proto::Paragraph {
-                            lines: vec![proto::Line {
-                                words: vec![word("縦書き")],
-                                geometry: Some(geometry(0.5)),
-                            }],
+                            lines: vec![proto::Line { words: vec![word("縦書き")], geometry: Some(geometry(0.5)) }],
                             ..Default::default()
                         }],
                     }),
@@ -751,11 +672,9 @@ mod tests {
         assert_eq!(value["textAnnotations"], json!([]));
         assert_eq!(value["groups"], json!([]));
         assert_eq!(value["geometry"], false);
-        let refused = proto::ServerResponse {
-            error: Some(proto::ServerError { error_type: 1 }),
-            objects_response: None,
-        }
-        .encode_to_vec();
+        let refused =
+            proto::ServerResponse { error: Some(proto::ServerError { error_type: 1 }), objects_response: None }
+                .encode_to_vec();
         assert!(parse(&refused).unwrap_err().contains("refused"));
         assert!(parse(b"\xff\xff\xff").is_err());
     }
@@ -783,10 +702,7 @@ mod tests {
             std::fs::write(dump, &bytes).unwrap();
         }
         let value = value_from_response(&parse(&bytes).unwrap(), &upload, width, height);
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&value["groups"]).unwrap()
-        );
+        println!("{}", serde_json::to_string_pretty(&value["groups"]).unwrap());
         println!("fullText:\n{}", value["fullText"].as_str().unwrap());
         assert!(!value["fullText"].as_str().unwrap().is_empty());
     }

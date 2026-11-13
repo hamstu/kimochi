@@ -20,7 +20,7 @@ test('a few pixels of difference keep the shape the preview already has', () => 
 test('a really different shape (another source, a resized window) is followed', () => {
   const shape = { width: 1280, height: 720 }
   assert.deepEqual(keepShape(shape, { width: 1024, height: 768 }), { width: 1024, height: 768 })
-  const edge = 1280 / 720 * (1 + SHAPE_TOLERANCE * 2)
+  const edge = (1280 / 720) * (1 + SHAPE_TOLERANCE * 2)
   assert.notEqual(keepShape(shape, { width: Math.round(720 * edge), height: 720 }), shape)
 })
 

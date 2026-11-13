@@ -143,12 +143,18 @@ mod imp {
         // The rights injection needs; refused for protected, anti-cheat and elevated processes.
         let inject = unsafe {
             OpenProcess(
-                PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
+                PROCESS_CREATE_THREAD
+                    | PROCESS_QUERY_INFORMATION
+                    | PROCESS_VM_OPERATION
+                    | PROCESS_VM_WRITE
+                    | PROCESS_VM_READ,
                 false,
                 pid,
             )
         }
-        .map_err(|_| "Windows does not let Kimochi into this app (it may be protected, or running as administrator)".to_string())?;
+        .map_err(|_| {
+            "Windows does not let Kimochi into this app (it may be protected, or running as administrator)".to_string()
+        })?;
         drop(Owned(inject));
         let header = std::fs::File::open(&exe).ok().and_then(|f| {
             use std::io::Read;
@@ -172,7 +178,8 @@ mod imp {
         use windows::Win32::System::SystemInformation::GetSystemTimeAsFileTime;
         use windows::Win32::System::Threading::GetProcessTimes;
         let process = Owned(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?);
-        let (mut created, mut exited, mut kernel, mut user) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
+        let (mut created, mut exited, mut kernel, mut user) =
+            (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
         unsafe { GetProcessTimes(process.0, &mut created, &mut exited, &mut kernel, &mut user) }.ok()?;
         let now = unsafe { GetSystemTimeAsFileTime() };
         let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
@@ -190,7 +197,11 @@ mod imp {
         let mut ok = unsafe { Process32FirstW(snapshot.0, &mut entry) }.is_ok();
         while ok {
             let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
-            out.push((entry.th32ProcessID, entry.th32ParentProcessID, String::from_utf16_lossy(&entry.szExeFile[..len])));
+            out.push((
+                entry.th32ProcessID,
+                entry.th32ParentProcessID,
+                String::from_utf16_lossy(&entry.szExeFile[..len]),
+            ));
             ok = unsafe { Process32NextW(snapshot.0, &mut entry) }.is_ok();
         }
         out
@@ -207,7 +218,10 @@ mod imp {
             let parent = pids[i];
             let parent_name = name_of(parent);
             for (child, ppid, name) in &all {
-                if *ppid == parent && !pids.contains(child) && (is_engine_child(Path::new(name)) || is_same_program(parent_name, name)) {
+                if *ppid == parent
+                    && !pids.contains(child)
+                    && (is_engine_child(Path::new(name)) || is_same_program(parent_name, name))
+                {
                     pids.push(*child);
                 }
             }

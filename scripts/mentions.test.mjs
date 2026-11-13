@@ -7,14 +7,35 @@ const { mentionAt, rankMentions, applyMention, fold, mentionName } = await load(
 )
 
 const person = (id, family, given, extra = {}) => ({
-  id, kind: 'person', family, given, familyReading: '', givenReading: '', aliases: [], description: '',
-  images: [], matchEnabled: true, ...extra,
+  id,
+  kind: 'person',
+  family,
+  given,
+  familyReading: '',
+  givenReading: '',
+  aliases: [],
+  description: '',
+  images: [],
+  matchEnabled: true,
+  ...extra
 })
 const place = (id, name, extra = {}) => ({
-  id, kind: 'place', name, reading: '', aliases: [], description: '', images: [], matchEnabled: true, ...extra,
+  id,
+  kind: 'place',
+  name,
+  reading: '',
+  aliases: [],
+  description: '',
+  images: [],
+  matchEnabled: true,
+  ...extra
 })
 
-const okabe = person('p1', '岡部', '倫太郎', { familyReading: 'おかべ', givenReading: 'りんたろう', aliases: ['オカリン', '鳳凰院凶真'] })
+const okabe = person('p1', '岡部', '倫太郎', {
+  familyReading: 'おかべ',
+  givenReading: 'りんたろう',
+  aliases: ['オカリン', '鳳凰院凶真']
+})
 const mayuri = person('p2', '椎名', 'まゆり', { familyReading: 'しいな' })
 const kurisu = person('p3', 'Makise', 'Kurisu')
 const lab = place('l1', '未来ガジェット研究所', { aliases: ['ラボ'] })
@@ -54,7 +75,10 @@ test('a leading match beats one in the middle, and an alias typed toward is what
 
 test('an empty query lists characters first; unnamed and unlinked entries never show', () => {
   const all = rankMentions([...ENTRIES, place('l3', '')], '')
-  assert.deepEqual(all.map((o) => o.entry.kind), ['person', 'person', 'person', 'place'])
+  assert.deepEqual(
+    all.map((o) => o.entry.kind),
+    ['person', 'person', 'person', 'place']
+  )
   assert.ok(!all.some((o) => o.entry.id === 'l2'), 'matching is off for it, so a mention would not link')
   assert.equal(rankMentions(ENTRIES, 'zzz').length, 0)
   assert.equal(rankMentions(ENTRIES, '', 2).length, 2)

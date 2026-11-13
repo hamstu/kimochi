@@ -176,11 +176,7 @@ export function OverlayLook(): ReactNode {
     <>
       <div className="overlay-look-highlight">
         <div className="overlay-look-highlight-grid">
-          <SettingsRow
-            label="Highlight colour"
-            description="The tint and outline over text you can hover."
-            stacked
-          >
+          <SettingsRow label="Highlight colour" description="The tint and outline over text you can hover." stacked>
             <div className="overlay-look-swatches">
               <ToggleGroup.Root
                 type="single"
@@ -218,11 +214,7 @@ export function OverlayLook(): ReactNode {
               </label>
             </div>
           </SettingsRow>
-          <SettingsRow
-            label="Highlight opacity"
-            description="How strongly it shows before you point at it."
-            stacked
-          >
+          <SettingsRow label="Highlight opacity" description="How strongly it shows before you point at it." stacked>
             <div className="overlay-look-opacity">
               <div className="overlay-look-opacity-control">
                 <Slider
@@ -243,11 +235,7 @@ export function OverlayLook(): ReactNode {
           </SettingsRow>
         </div>
       </div>
-      <SettingsRow
-        label="Cards"
-        description="The card hovered text turns into."
-        stacked
-      >
+      <SettingsRow label="Cards" description="The card hovered text turns into." stacked>
         <div className="overlay-look-cards-frame">
           <ToggleGroup.Root
             type="single"

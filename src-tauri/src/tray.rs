@@ -102,10 +102,7 @@ pub fn open_settings(app: &tauri::AppHandle, page: Option<&str>) -> Result<(), S
     let service = app.try_state::<Shared>().ok_or("native: not ready")?;
     if let Some(page) = page {
         service.settings.set("settingsActiveTab", serde_json::json!(page))?;
-        let _ = app.emit(
-            "settings:changed",
-            serde_json::json!({ "key": "settingsActiveTab", "value": page }),
-        );
+        let _ = app.emit("settings:changed", serde_json::json!({ "key": "settingsActiveTab", "value": page }));
     }
     panels::act_existing(app, &service.settings, panels::MAIN, "show", None)?;
     let _ = app.emit("main:show-settings", serde_json::json!({}));

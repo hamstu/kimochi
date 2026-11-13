@@ -15,7 +15,11 @@ export function HomeFaq() {
           <details key={item.id} className="group">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-heading text-ink [&::-webkit-details-marker]:hidden">
               <h3 className="text-heading">{item.q}</h3>
-              <ChevronDown size={18} aria-hidden className="shrink-0 text-ink-3 transition-transform duration-150 group-open:rotate-180" />
+              <ChevronDown
+                size={18}
+                aria-hidden
+                className="shrink-0 text-ink-3 transition-transform duration-150 group-open:rotate-180"
+              />
             </summary>
             <div className="prose-k flex flex-col gap-3 pb-5 [&>*+*]:mt-0">
               <FaqAnswer item={item} />

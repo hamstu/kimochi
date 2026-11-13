@@ -154,10 +154,7 @@ pub struct Updates {
 static UPDATES: OnceLock<Arc<Updates>> = OnceLock::new();
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 /// Whether this build checks on its own: a bundle, never a `tauri dev` binary (there is no
@@ -182,9 +179,7 @@ fn describe(error: tauri_plugin_updater::Error) -> String {
         Error::Minisign(_) | Error::Base64(_) | Error::SignatureUtf8(_) => {
             "The download did not pass its signature check.".into()
         }
-        Error::TargetsNotFound(_) | Error::TargetNotFound(_) => {
-            "This release has no build for this computer.".into()
-        }
+        Error::TargetsNotFound(_) | Error::TargetNotFound(_) => "This release has no build for this computer.".into(),
         Error::AuthenticationFailed => "The installation was not authorised.".into(),
         other => other.to_string(),
     }
@@ -192,11 +187,7 @@ fn describe(error: tauri_plugin_updater::Error) -> String {
 
 impl Updates {
     fn status(&self) -> UpdateStatus {
-        self.inner
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .status
-            .clone()
+        self.inner.lock().unwrap_or_else(|p| p.into_inner()).status.clone()
     }
 
     fn emit(&self) {
@@ -213,9 +204,7 @@ impl Updates {
             app.cleanup_before_exit();
         });
         if let Ok(endpoint) = std::env::var("KIMOCHI_UPDATE_ENDPOINT") {
-            let url = endpoint
-                .parse()
-                .map_err(|e| format!("KIMOCHI_UPDATE_ENDPOINT is not a URL: {e}"))?;
+            let url = endpoint.parse().map_err(|e| format!("KIMOCHI_UPDATE_ENDPOINT is not a URL: {e}"))?;
             builder = builder.endpoints(vec![url]).map_err(describe)?;
         }
         builder.build().map_err(describe)
@@ -229,10 +218,7 @@ impl Updates {
         {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             match inner.status.state {
-                State::Checking
-                | State::Downloading
-                | State::Ready
-                | State::Installing => return inner.status.clone(),
+                State::Checking | State::Downloading | State::Ready | State::Installing => return inner.status.clone(),
                 State::Available if !manual => return inner.status.clone(),
                 _ => {}
             }
@@ -258,9 +244,8 @@ impl Updates {
                         status.state = State::Available;
                         status.version = Some(update.version.clone());
                         status.notes = update.body.clone();
-                        status.date = update.date.and_then(|d| {
-                            d.format(&time::format_description::well_known::Rfc3339).ok()
-                        });
+                        status.date =
+                            update.date.and_then(|d| d.format(&time::format_description::well_known::Rfc3339).ok());
                         status.size = manifest_size(&update);
                         status.received_bytes = None;
                         status.total_bytes = None;
@@ -291,11 +276,7 @@ impl Updates {
                             status.fail(Stage::Check, message);
                         } else {
                             // Quietly: a laptop that is offline at launch should not nag.
-                            status.state = if status.checked_at.is_some() {
-                                State::None
-                            } else {
-                                State::Idle
-                            };
+                            status.state = if status.checked_at.is_some() { State::None } else { State::Idle };
                             (updates.report)(json!({
                                 "check": "update-check",
                                 "status": "failed",
@@ -335,9 +316,7 @@ impl Updates {
         let update = {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             match inner.status.state {
-                State::Downloading | State::Ready | State::Installing => {
-                    return Ok(inner.status.clone())
-                }
+                State::Downloading | State::Ready | State::Installing => return Ok(inner.status.clone()),
                 State::Available | State::Failed => {}
                 _ => return Err("invalid: there is no update to download".into()),
             }
@@ -365,8 +344,7 @@ impl Updates {
                         if last.elapsed() >= PROGRESS_INTERVAL {
                             last = Instant::now();
                             {
-                                let mut inner =
-                                    updates.inner.lock().unwrap_or_else(|p| p.into_inner());
+                                let mut inner = updates.inner.lock().unwrap_or_else(|p| p.into_inner());
                                 let status = &mut inner.status;
                                 status.received_bytes = Some(received);
                                 status.total_bytes = total.or(status.size);
@@ -416,10 +394,7 @@ impl Updates {
             }
             updates.emit();
         });
-        self.inner
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .download = Some(handle);
+        self.inner.lock().unwrap_or_else(|p| p.into_inner()).download = Some(handle);
         Ok(self.status())
     }
 
@@ -551,11 +526,7 @@ fn manifest_size(update: &Update) -> Option<u64> {
 
 /// Install the updates service: the shared status, and the periodic check in builds that
 /// update themselves. Before any window asks.
-pub fn install(
-    app: &tauri::AppHandle,
-    report: impl Fn(Value) + Send + Sync + 'static,
-    before_exit: fn(),
-) {
+pub fn install(app: &tauri::AppHandle, report: impl Fn(Value) + Send + Sync + 'static, before_exit: fn()) {
     let automatic = automatic();
     let updates = Arc::new(Updates {
         app: app.clone(),
@@ -585,10 +556,7 @@ pub fn install(
 }
 
 fn service() -> Result<Arc<Updates>, String> {
-    UPDATES
-        .get()
-        .cloned()
-        .ok_or_else(|| "native: updates are not available yet".to_string())
+    UPDATES.get().cloned().ok_or_else(|| "native: updates are not available yet".to_string())
 }
 
 // ---------------------------------------------------------------------------- commands

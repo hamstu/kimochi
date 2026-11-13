@@ -28,9 +28,7 @@ function mirrorSelector(selectorText: string): string {
 /** Resolves a nested selector against its parent, handling `&`. */
 function resolveSelector(selectorText: string, parent: string | null): string {
   if (!parent) return selectorText
-  return selectorText.includes('&')
-    ? selectorText.replace(/&/g, parent)
-    : `${parent} ${selectorText}`
+  return selectorText.includes('&') ? selectorText.replace(/&/g, parent) : `${parent} ${selectorText}`
 }
 
 /** Everything from the rule's opening brace onwards, i.e. its declarations AND nested rules. */
@@ -40,12 +38,7 @@ function ruleBody(rule: CSSRule): string | null {
   return brace === -1 ? null : text.slice(brace)
 }
 
-function collect(
-  rules: CSSRuleList,
-  conditions: string[],
-  parentSelector: string | null,
-  out: string[]
-): void {
+function collect(rules: CSSRuleList, conditions: string[], parentSelector: string | null, out: string[]): void {
   for (const rule of Array.from(rules)) {
     if (rule instanceof CSSStyleRule) {
       const resolved = resolveSelector(rule.selectorText, parentSelector)

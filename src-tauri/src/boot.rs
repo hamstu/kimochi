@@ -48,10 +48,7 @@ fn run_after_ready(reason: &'static str, settle: std::time::Duration) {
 /// Called first thing in `main`.
 pub fn start() {
     START.get_or_init(|| {
-        let epoch = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        let epoch = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
         (Instant::now(), epoch)
     });
 }

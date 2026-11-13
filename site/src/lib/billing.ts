@@ -22,9 +22,27 @@ export interface PriceInfo {
 }
 
 export const PRICES: Record<Choice, PriceInfo> = {
-  monthly: { choice: 'monthly', label: 'Monthly', amount: '$6', per: 'a month', note: 'Billed monthly. Cancel any time.' },
-  yearly: { choice: 'yearly', label: 'Yearly', amount: '$5', per: 'a month', note: 'Billed $60 a year. Two months free.' },
-  lifetime: { choice: 'lifetime', label: 'Lifetime', amount: '$125', per: 'once', note: 'Pay once, keep Kimochi Cloud for good.' }
+  monthly: {
+    choice: 'monthly',
+    label: 'Monthly',
+    amount: '$6',
+    per: 'a month',
+    note: 'Billed monthly. Cancel any time.'
+  },
+  yearly: {
+    choice: 'yearly',
+    label: 'Yearly',
+    amount: '$5',
+    per: 'a month',
+    note: 'Billed $60 a year. Two months free.'
+  },
+  lifetime: {
+    choice: 'lifetime',
+    label: 'Lifetime',
+    amount: '$125',
+    per: 'once',
+    note: 'Pay once, keep Kimochi Cloud for good.'
+  }
 }
 
 /**

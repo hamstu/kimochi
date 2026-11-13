@@ -21,8 +21,7 @@ const person = (id, family, given = '') => ({
 })
 const notebook = (cacheVersion, ...entries) => ({ version: 2, cacheVersion, entries })
 const line = (id, text) => ({ id, text, source: 'ocr', ts: 0 })
-const matched = (l, nb) =>
-  matchLine(l, getMatcher(nb)).map((m) => [m.entryId, l.text.slice(m.start, m.end)])
+const matched = (l, nb) => matchLine(l, getMatcher(nb)).map((m) => [m.entryId, l.text.slice(m.start, m.end)])
 
 const TEXT = 'ちなみに、タッチスクリーンを\n短くタッチすると、\n話したり調べたりもできるのよ。'
 

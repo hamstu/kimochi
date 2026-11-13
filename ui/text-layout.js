@@ -124,8 +124,7 @@ export function apportion(count, capacities) {
   if (!capacities.length) return []
   if (total <= 0) {
     const even = capacities.map(
-      (_, index) =>
-        Math.floor(count / capacities.length) + (index < count % capacities.length ? 1 : 0)
+      (_, index) => Math.floor(count / capacities.length) + (index < count % capacities.length ? 1 : 0)
     )
     return even
   }
@@ -178,9 +177,7 @@ export function distribute(text, lineRects, vertical, measure = null) {
     })
   }
   // An open line's length is a guess, so it does not count at all.
-  const weights = lines.map((rect) =>
-    rect.open ? 0 : rect.guessed || thick(rect) > BROAD * pitch ? UNSURE : 1
-  )
+  const weights = lines.map((rect) => (rect.open ? 0 : rect.guessed || thick(rect) > BROAD * pitch ? UNSURE : 1))
   const shares = breaks(all, lengths, weights)
   let at = 0
   return lines
@@ -206,7 +203,11 @@ export function distribute(text, lineRects, vertical, measure = null) {
  */
 function distributeWords(text, lines, measure) {
   const pieces = measure.style.pieces(text)
-  const shares = wordBreaks(pieces, lines.map((rect) => rect.width), measure)
+  const shares = wordBreaks(
+    pieces,
+    lines.map((rect) => rect.width),
+    measure
+  )
   let at = 0
   return lines
     .map((rect, index) => {
@@ -236,7 +237,11 @@ function wordBreaks(pieces, lengths, measure) {
   const trailing = pieces.map((piece) => measure(piece) - lineAdvance(piece, measure))
   const advance = (b, c) => prefix[c] - prefix[b] - trailing[c - 1]
   const total = lengths.reduce((sum, value) => sum + Math.max(0, value), 0)
-  if (total <= 0) return apportion(n, lengths.map(() => 1))
+  if (total <= 0)
+    return apportion(
+      n,
+      lengths.map(() => 1)
+    )
   const average = total / Math.max(1e-6, advance(0, n) - (lines - 1) * 0.25)
   const at = (scale) => {
     const cost = Array.from({ length: lines + 1 }, () => new Array(n + 1).fill(Infinity))
@@ -264,7 +269,10 @@ function wordBreaks(pieces, lengths, measure) {
     const filled = counts.map((count) => advance(end, (end += count)))
     const fitted =
       filled.reduce((sum, value, i) => sum + value * lengths[i], 0) /
-      Math.max(1e-9, filled.reduce((sum, value) => sum + value * value, 0))
+      Math.max(
+        1e-9,
+        filled.reduce((sum, value) => sum + value * value, 0)
+      )
     const scale = Math.min(average * 1.3, Math.max(average * 0.7, fitted))
     return filled.reduce((sum, value, i) => sum + (lengths[i] - value * scale) ** 2, 0)
   }
@@ -378,8 +386,7 @@ function breaks(all, lengths, weights = lengths.map(() => 1)) {
   // The cells a line of `count` characters ending at `end` fills with ink: a final 。 or 、 sits at
   // the head of its cell, so the region the detector boxed stops well short of the cell's end.
   const cells = (count, end) => count - (SHORT_END.has(all[end - 1]) ? SHORT_END_CELLS : 0)
-  const allowed = (cut) =>
-    cut === n || (!OPENING.has(all[cut - 1]) && !NO_START.has(all[cut]))
+  const allowed = (cut) => cut === n || (!OPENING.has(all[cut - 1]) && !NO_START.has(all[cut]))
   const pause = (cut) => BREAK_AFTER.has(all[cut - 1]) && !BREAK_AFTER.has(all[cut])
   // The best counts at one pitch, by dynamic programming over the breaks.
   const at = (pitch) => {
@@ -416,7 +423,10 @@ function breaks(all, lengths, weights = lengths.map(() => 1)) {
     const filled = counts.map((count) => cells(count, (end += count)))
     const fitted =
       filled.reduce((sum, count, i) => sum + weights[i] * count * lengths[i], 0) /
-      Math.max(1e-9, filled.reduce((sum, count, i) => sum + weights[i] * count * count, 0))
+      Math.max(
+        1e-9,
+        filled.reduce((sum, count, i) => sum + weights[i] * count * count, 0)
+      )
     const pitch = Math.min(average * 1.3, Math.max(average * 0.7, fitted))
     let breaksAt = 0
     return counts.reduce((sum, count, i) => {
@@ -524,10 +534,7 @@ export function estimate(text, rect, vertical, measure = null) {
     const best = bestFit(all.length, along, across)
     // Wrapped text fills every line to the edge and leaves the remainder on the last, so a
     // line holds as many cells of the chosen size as fit, not an even share of the text.
-    const perLine = Math.max(
-      Math.ceil(all.length / best.lines),
-      Math.floor(along / (best.size * PITCH) + 1e-6)
-    )
+    const perLine = Math.max(Math.ceil(all.length / best.lines), Math.floor(along / (best.size * PITCH) + 1e-6))
     rows = wrap(all, perLine, best.lines)
   }
   const longest = Math.max(1, ...rows.map((row) => chars(row).length))
@@ -591,12 +598,11 @@ export function columns(lines, text, rect) {
   const merged = []
   for (const line of lines.filter((line) => line.width >= RUBY * size)) {
     let column = { ...line, segments: [...(line.segments ?? [])] }
-    for (let joined = true; joined; ) {
+    for (let joined = true; joined;) {
       joined = false
       for (let i = 0; i < merged.length; i++) {
         const other = merged[i]
-        const overlap =
-          Math.min(column.x + column.width, other.x + other.width) - Math.max(column.x, other.x)
+        const overlap = Math.min(column.x + column.width, other.x + other.width) - Math.max(column.x, other.x)
         if (overlap <= Math.min(column.width, other.width) / 2 || parallel(column, other, size)) continue
         const x = Math.min(column.x, other.x)
         const y = Math.min(column.y, other.y)
@@ -711,7 +717,9 @@ export function fit(run, vertical, measure, size = null) {
 function tiles(segments, vertical, fontSize) {
   const from = (s) => (vertical ? s.y : s.x)
   const to = (s) => from(s) + (vertical ? s.height : s.width)
-  return segments.length >= 3 && segments.slice(1).every((s, i) => Math.abs(from(s) - to(segments[i])) <= 0.05 * fontSize)
+  return (
+    segments.length >= 3 && segments.slice(1).every((s, i) => Math.abs(from(s) - to(segments[i])) <= 0.05 * fontSize)
+  )
 }
 
 /**
@@ -849,7 +857,10 @@ function squeezeEvidence(run, candidates) {
   // cells, so the gap also holds the neighbours' side bearings: about 0.8 of a pitch around a
   // half-width mark and 1.3 around a full-width one, as measured on the corpus.
   const threshold = tiles(boxes, false, pitch) ? GAP_HALF_CELLS : GAP_HALF_INK
-  return [...votes].filter(([, gaps]) => median(gaps) < threshold).map(([c]) => c).join('')
+  return [...votes]
+    .filter(([, gaps]) => median(gaps) < threshold)
+    .map(([c]) => c)
+    .join('')
 }
 /** The gap, in glyph pitches, under which a mark is taken as half-width, between cells and inks. */
 const GAP_HALF_CELLS = 0.75
@@ -892,7 +903,10 @@ export function squeezeMargins(character, marks) {
 function fitWith(run, vertical, measure, size = null) {
   const { rect, text } = run
   // Proportional text is fitted to its words' ink: spaces it ends in are drawn, unseen, past it.
-  const count = Math.max(1, proportional(measure) ? charsOf(text.replace(/\s+$/u, ''), measure).length : chars(text).length)
+  const count = Math.max(
+    1,
+    proportional(measure) ? charsOf(text.replace(/\s+$/u, ''), measure).length : chars(text).length
+  )
   const along = vertical ? rect.height : rect.width
   const across = vertical ? rect.width : rect.height
   // The engine's margins around the ink: at the start and end of the run, and before and after
@@ -932,14 +946,13 @@ function fitWith(run, vertical, measure, size = null) {
       const free = spacing
       spacing = Math.min(TRACKING_MAX * fontSize, Math.max(-TRACKING_MAX * fontSize, free))
       const gaps = (text.replace(/\s+$/u, '').match(/\s+/gu) ?? []).length
-      if (gaps && free > spacing) wordSpacing = Math.min(WORD_SPACING_MAX * fontSize, ((free - spacing) * (count - 1)) / gaps)
+      if (gaps && free > spacing)
+        wordSpacing = Math.min(WORD_SPACING_MAX * fontSize, ((free - spacing) * (count - 1)) / gaps)
     }
   }
   // Across, in px along the page's own axis (down for a line, right for a column): from where
   // CSS centres the em box to where the ink is centred between the engine's margins.
-  const centring = vertical
-    ? 0
-    : (ink.fontAscent - ink.fontDescent - (ink.ascent - ink.descent)) / 2
+  const centring = vertical ? 0 : (ink.fontAscent - ink.fontDescent - (ink.ascent - ink.descent)) / 2
   const shift = (vertical ? after - before : before - after) * (fontSize / 2) - centring * fontSize
   return wordSpacing
     ? { ...run, fontSize, spacing, lead, shift, natural, wordSpacing }
@@ -1025,8 +1038,7 @@ export function harmonize(runs) {
     while (parent[i] !== i) i = parent[i] = parent[parent[i]]
     return i
   }
-  const centre = (run) =>
-    run.vertical ? run.rect.x + run.rect.width / 2 : run.rect.y + run.rect.height / 2
+  const centre = (run) => (run.vertical ? run.rect.x + run.rect.width / 2 : run.rect.y + run.rect.height / 2)
   // How far apart two runs are along their line: one line cut into words has gaps of a glyph or
   // two at most, while two bubbles that merely share a height (or, in columns, a left edge) are far
   // apart, and averaging their sizes shrank a big word to a small one's size, its glyphs spaced
@@ -1053,15 +1065,13 @@ export function harmonize(runs) {
     let best = -1
     runs.forEach((other, j) => {
       if (lone[j] || !together(run, other)) return
-      if (best < 0 || Math.abs(centre(other) - centre(run)) < Math.abs(centre(runs[best]) - centre(run)))
-        best = j
+      if (best < 0 || Math.abs(centre(other) - centre(run)) < Math.abs(centre(runs[best]) - centre(run))) best = j
     })
     return best
   })
   for (let i = 0; i < runs.length; i++)
     for (let j = i + 1; j < runs.length; j++)
-      if (lone[i] === lone[j] && host[i] < 0 && host[j] < 0 && together(runs[i], runs[j]))
-        parent[root(j)] = root(i)
+      if (lone[i] === lone[j] && host[i] < 0 && host[j] < 0 && together(runs[i], runs[j])) parent[root(j)] = root(i)
   host.forEach((best, i) => {
     if (best >= 0) parent[i] = root(best)
   })
@@ -1165,9 +1175,7 @@ function anchored(runs, found, rect, vertical) {
   if (!vertical || !found.length) return runs
   return runs.map((run) => {
     const { x, width, height } = run.rect
-    const under = found.find(
-      (line) => Math.min(x + width, line.x + line.width) - Math.max(x, line.x) > width / 2
-    )
+    const under = found.find((line) => Math.min(x + width, line.x + line.width) - Math.max(x, line.x) > width / 2)
     if (!under) return run
     const y = Math.max(rect.y, Math.min(under.y, rect.y + rect.height - height))
     return { ...run, rect: { ...run.rect, y } }
@@ -1185,9 +1193,7 @@ export function splitPart(part, vertical, measure = null) {
   if (said?.length && said.length === part.lines?.length) {
     // Each line read on its own: its text is set on it as it is, in the engine's reading order.
     runs = part.lines.flatMap((rect, index) =>
-      said[index]
-        ? splitAtGaps({ text: said[index], rect }, part.lineSegments?.[index], vertical, measure)
-        : []
+      said[index] ? splitAtGaps({ text: said[index], rect }, part.lineSegments?.[index], vertical, measure) : []
     )
   } else if (part.block || part.text.includes('\n')) {
     // The words found on each line travel with it through the reading-order sort.
@@ -1234,9 +1240,7 @@ export function layoutParts(parts, measure) {
     })
   )
   let next = 0
-  return pieces.map((runs, index) =>
-    runs.map((run) => fit(run, run.vertical, measureOf(index), sizes[next++]))
-  )
+  return pieces.map((runs, index) => runs.map((run) => fit(run, run.vertical, measureOf(index), sizes[next++])))
 }
 
 /**

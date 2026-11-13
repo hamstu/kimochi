@@ -2,10 +2,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { transform } from 'esbuild'
 import { readFile } from 'node:fs/promises'
-const { code } = await transform(
-  await readFile(new URL('../ui/geometry.ts', import.meta.url), 'utf8'),
-  { loader: 'ts', format: 'esm' }
-)
+const { code } = await transform(await readFile(new URL('../ui/geometry.ts', import.meta.url), 'utf8'), {
+  loader: 'ts',
+  format: 'esm'
+})
 const { boxes, sourceDisplay, displayAfterLayout } = await import(
   'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
 )
@@ -58,9 +58,7 @@ test('omitted zero coordinates retained; long Japanese words not filtered by who
       crop_pixels: [0, 0],
       source_bounds: { x: 0, y: 0, width: 640, height: 400 }
     },
-    [
-      { description: '日本語を勉強しています', boundingPoly: { vertices: [{}, { x: 200, y: 30 }] } }
-    ],
+    [{ description: '日本語を勉強しています', boundingPoly: { vertices: [{}, { x: 200, y: 30 }] } }],
     { x: 0, y: 0, width: 640, height: 400 }
   )
   assert.equal(out.length, 1)
@@ -103,20 +101,27 @@ test('Windows frames map through desktop points like a Retina frame on macOS', (
   // The same window as macOS would report it at 2× gives the same overlay box.
   const [mac] = boxes(
     { ...info, full_width: 1200, full_height: 800, crop_pixels: [0, 0, 1200, 800] },
-    [{ ...word, boundingPoly: { vertices: word.boundingPoly.vertices.map((v) => ({ x: (v.x * 4) / 3, y: (v.y * 4) / 3 })) } }],
+    [
+      {
+        ...word,
+        boundingPoly: { vertices: word.boundingPoly.vertices.map((v) => ({ x: (v.x * 4) / 3, y: (v.y * 4) / 3 })) }
+      }
+    ],
     overlay
   )
   for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(mac[key] - box[key]) < 1e-9)
 })
 
 test('after a display change the overlay covers the display it was on, as it is now (#42)', () => {
-
   // One display, its resolution halved: same origin, new size.
   const before = { x: 0, y: 0, width: 3440, height: 1440 }
   const after = [{ x: 0, y: 0, width: 1720, height: 720 }]
   assert.deepEqual(displayAfterLayout(before, after, null), after[0])
   // Two displays: the source's display wins.
-  const two = [{ x: 0, y: 0, width: 1920, height: 1080 }, { x: 1920, y: 0, width: 2560, height: 1440 }]
+  const two = [
+    { x: 0, y: 0, width: 1920, height: 1080 },
+    { x: 1920, y: 0, width: 2560, height: 1440 }
+  ]
   assert.deepEqual(displayAfterLayout(two[0], two, { x: 2400, y: 200, width: 800, height: 600 }), two[1])
   // A source off every display: where the overlay was.
   assert.deepEqual(displayAfterLayout(two[1], two, { x: 9000, y: 0, width: 10, height: 10 }), two[1])

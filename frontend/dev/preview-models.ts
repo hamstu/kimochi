@@ -59,8 +59,7 @@ const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = 
   }
 }
 
-const total = (engine: ModelEngine): number =>
-  FILES[engine].files.reduce((sum, [, size]) => sum + size, 0)
+const total = (engine: ModelEngine): number => FILES[engine].files.reduce((sum, [, size]) => sum + size, 0)
 
 function status(engine: ModelEngine, patch: Partial<ModelStatus>): ModelStatus {
   return {
@@ -105,13 +104,13 @@ const states = new Map<ModelEngine, ModelStatus>(
           : engine === 'screenai' && !seeded && new URLSearchParams(location.search).get('screenai') !== 'missing'
             ? // A browser's copy (`?screenai=missing` for none).
               { state: 'ready' as const, source: 'browser' as const, overallReceived: 0 }
-          : seeded === 'ready' || (!seeded && engine === 'meikiocr')
-            ? {
-                state: 'ready' as const,
-                source: 'downloaded' as const,
-                overallReceived: total(engine)
-              }
-            : {}
+            : seeded === 'ready' || (!seeded && engine === 'meikiocr')
+              ? {
+                  state: 'ready' as const,
+                  source: 'downloaded' as const,
+                  overallReceived: total(engine)
+                }
+              : {}
     return [engine, status(engine, seed as Partial<ModelStatus>)]
   })
 )
@@ -144,7 +143,13 @@ function start(engine: ModelEngine): ModelStatus {
       if (failing !== undefined && received >= total(engine) * failing) {
         stop(engine)
         failAt.delete(engine)
-        publish(status(engine, { state: 'failed', overallReceived: received, message: `${FAILURE} ${at(engine, received).file}` }))
+        publish(
+          status(engine, {
+            state: 'failed',
+            overallReceived: received,
+            message: `${FAILURE} ${at(engine, received).file}`
+          })
+        )
         return
       }
       if (received >= total(engine)) {
@@ -157,10 +162,7 @@ function start(engine: ModelEngine): ModelStatus {
           })
         )
         setTimeout(
-          () =>
-            publish(
-              status(engine, { state: 'ready', source: 'downloaded', overallReceived: received })
-            ),
+          () => publish(status(engine, { state: 'ready', source: 'downloaded', overallReceived: received })),
           800
         )
         return
@@ -212,10 +214,7 @@ const engineOf = (args: Record<string, unknown> | undefined): ModelEngine =>
     : 'meikiocr'
 
 /** Merged into the preview's command table. */
-export const MODEL_HANDLERS: Record<
-  string,
-  (args: Record<string, unknown> | undefined) => unknown
-> = {
+export const MODEL_HANDLERS: Record<string, (args: Record<string, unknown> | undefined) => unknown> = {
   model_status: (a) => states.get(engineOf(a)),
   model_download_start: (a) => start(engineOf(a)),
   model_download_resume: (a) => start(engineOf(a)),

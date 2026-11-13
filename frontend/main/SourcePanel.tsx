@@ -190,7 +190,15 @@ function browserDetail(status: BrowserBridgeStatus): string {
  * straight away. Shown only while cards get a screenshot (Enhance Anki cards); otherwise Change
  * source takes the whole foot.
  */
-function HookAnkiCropAction({ set, disabled, onEdit }: { set: boolean; disabled: boolean; onEdit: () => void }): ReactNode {
+function HookAnkiCropAction({
+  set,
+  disabled,
+  onEdit
+}: {
+  set: boolean
+  disabled: boolean
+  onEdit: () => void
+}): ReactNode {
   const [stored] = useSetting<CardScreenshotSettings>('cardScreenshot', SETTINGS_DEFAULTS.cardScreenshot)
   if (!{ ...SETTINGS_DEFAULTS.cardScreenshot, ...stored }.enabled) return null
   return (
@@ -267,7 +275,11 @@ function SourceRow({
   onSettings: () => void
 }): ReactNode {
   return (
-    <div className={sub ? 'k-row src-row src-row-layered src-row-sub' : 'k-row src-row src-row-layered'} data-disabled={disabled ? '' : undefined} title={title}>
+    <div
+      className={sub ? 'k-row src-row src-row-layered src-row-sub' : 'k-row src-row src-row-layered'}
+      data-disabled={disabled ? '' : undefined}
+      title={title}
+    >
       <button
         type="button"
         role="switch"
@@ -464,7 +476,9 @@ function useHookTarget(sourceId: string | null): HookTarget | null {
           if (!live) return
           const target = targets[sourceId] ?? { hookable: false }
           setFound((was) =>
-            was?.id === sourceId && JSON.stringify(was.target) === JSON.stringify(target) ? was : { id: sourceId, target }
+            was?.id === sourceId && JSON.stringify(was.target) === JSON.stringify(target)
+              ? was
+              : { id: sourceId, target }
           )
           if (!target.hookable && sourceId.startsWith('portal:window:')) timer = setTimeout(look, 3000)
         })
@@ -590,9 +604,7 @@ function useLiveFrames(
     onLoad: (id) =>
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          setFrames((current) =>
-            current.map((frame) => (frame.id === id ? { ...frame, ready: true } : frame))
-          )
+          setFrames((current) => current.map((frame) => (frame.id === id ? { ...frame, ready: true } : frame)))
           setTimeout(() => drop(id), FADE_MS + 50)
         })
       )
@@ -791,11 +803,24 @@ function SourceMenuContent({
             <TypeBody type={windowType} selected={mode === 'ocr' || mode === 'hook'} sub />
           </MenuPrimitive.SubTrigger>
           <MenuSubContent>
-            <MenuItem icon={<ScreenShare />} disabled={!currentId} onSelect={() => currentId && onChooseSource(currentId)}>
+            <MenuItem
+              icon={<ScreenShare />}
+              disabled={!currentId}
+              onSelect={() => currentId && onChooseSource(currentId)}
+            >
               Use Current Source
             </MenuItem>
-            <MenuItem icon={<Plus />} onSelect={onSystemPick}>Choose New Source…</MenuItem>
-            {onLinkWindow && <><MenuSeparator /><MenuItem icon={<AppWindow />} onSelect={onLinkWindow}>Relink window overlay…</MenuItem></>}
+            <MenuItem icon={<Plus />} onSelect={onSystemPick}>
+              Choose New Source…
+            </MenuItem>
+            {onLinkWindow && (
+              <>
+                <MenuSeparator />
+                <MenuItem icon={<AppWindow />} onSelect={onLinkWindow}>
+                  Relink window overlay…
+                </MenuItem>
+              </>
+            )}
           </MenuSubContent>
         </MenuSub>
       ) : pickerRequired ? (
@@ -820,11 +845,7 @@ function SourceMenuContent({
         </MenuSub>
       )}
       {others.map((type) => (
-        <MenuPrimitive.Item
-          key={type.mode}
-          className="src-type"
-          onSelect={() => onChooseType(type.mode)}
-        >
+        <MenuPrimitive.Item key={type.mode} className="src-type" onSelect={() => onChooseType(type.mode)}>
           <TypeBody type={type} selected={type.mode === mode} />
         </MenuPrimitive.Item>
       ))}
@@ -896,8 +917,7 @@ export function SourcePanel({
   // pick replaces the source, so what was said about the old one no longer applies.
   const [staleNote, setStaleNote] = useState<{ seq: number; message: string } | null>(null)
   const stale = staleNote?.seq === systemPick.seq ? staleNote.message : null
-  const onStale = (message: string | null): void =>
-    setStaleNote(message ? { seq: systemPick.seq, message } : null)
+  const onStale = (message: string | null): void => setStaleNote(message ? { seq: systemPick.seq, message } : null)
   // A pick selects natively; here it only switches the Log to reading the window or screen.
   const chooseRef = useRef(choose)
   useEffect(() => {
@@ -927,7 +947,12 @@ export function SourcePanel({
   const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
   const [autoOcr] = useSetting<AutoOCRSettings | null>('autoOCRSettings', null)
   const [language] = useLanguage()
-  const watcher = resolveWatcher(ocrMode, capabilities.ocrEngines, (autoOcr?.watcher ?? 'auto') as WatcherChoice, language.code)
+  const watcher = resolveWatcher(
+    ocrMode,
+    capabilities.ocrEngines,
+    (autoOcr?.watcher ?? 'auto') as WatcherChoice,
+    language.code
+  )
   const hookObserver = watcher.kind === 'text' ? watcher.engine : bestWatcher(capabilities.ocrEngines, language.code)
   // The source the menu just started hooking, so the restore below does not start it again.
   const startedHook = useRef<string | null>(null)
@@ -991,7 +1016,8 @@ export function SourcePanel({
       seenWindows.current = new Set(open.map((s) => s.id))
       if (autoHookPaused) return
       const windows = open.filter(
-        (s) => !triedAuto.current.has(s.id) && s.id !== hookSourceId && (!hookBusy || (seen !== null && !seen.has(s.id)))
+        (s) =>
+          !triedAuto.current.has(s.id) && s.id !== hookSourceId && (!hookBusy || (seen !== null && !seen.has(s.id)))
       )
       if (!windows.length) return
       const targets = await texthookTargets(windows.map((s) => s.id))
@@ -1040,7 +1066,8 @@ export function SourcePanel({
   }
   // A window shared through the portal is known to be a game only once it is linked, after it
   // was chosen: Text hooking then comes on as `chooseWindow` would have, if it is on for the game.
-  const lateHookExe = hookTarget?.hookable && source?.sourceId.startsWith('portal:window:') ? (hookTarget.exe ?? null) : null
+  const lateHookExe =
+    hookTarget?.hookable && source?.sourceId.startsWith('portal:window:') ? (hookTarget.exe ?? null) : null
   const lateHookOn = lateHookExe !== null && textHookOn(hookGames[gameKey(lateHookExe)])
   const lateHooked = useRef<string | null>(null)
   useEffect(() => {
@@ -1068,13 +1095,11 @@ export function SourcePanel({
     controller.onClearSource()
   }
   // Gaming Mode has no keyboard to press it on: Scan is in the game menu there.
-  const scanKey = hotkeys.triggerScan?.enabled && !isGamingMode(capabilities)
-    ? formatAccelerator(hotkeys.triggerScan.accelerator, keyPlatform)
-    : null
-  const overlayOn = isOverlayTextVisible(
-    controller.isOverlayModeEnabled,
-    controller.isTextOverlayVisible
-  )
+  const scanKey =
+    hotkeys.triggerScan?.enabled && !isGamingMode(capabilities)
+      ? formatAccelerator(hotkeys.triggerScan.accelerator, keyPlatform)
+      : null
+  const overlayOn = isOverlayTextVisible(controller.isOverlayModeEnabled, controller.isTextOverlayVisible)
   const crop = state.crop ?? null
   const ankiCrop = state.ankiCrop ?? null
 
@@ -1100,7 +1125,19 @@ export function SourcePanel({
       }}
       pickerRequired={pickerRequired}
       linuxPortal={capabilities.os === 'linux' && pickerRequired}
-      onLinkWindow={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && ['GNOME', 'Hyprland', 'KDE'].includes(capabilities.session.compositor ?? '') && capabilities.overlay.passive && mode === 'ocr' && source?.sourceId?.startsWith('portal:window:') ? () => {closeMenu();window.dispatchEvent(new Event('kimochi-link-window'))} : undefined}
+      onLinkWindow={
+        window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+        capabilities.session?.backend === 'wayland' &&
+        ['GNOME', 'Hyprland', 'KDE'].includes(capabilities.session.compositor ?? '') &&
+        capabilities.overlay.passive &&
+        mode === 'ocr' &&
+        source?.sourceId?.startsWith('portal:window:')
+          ? () => {
+              closeMenu()
+              window.dispatchEvent(new Event('kimochi-link-window'))
+            }
+          : undefined
+      }
       onChooseSource={(sourceId) => {
         closeMenu()
         void chooseWindow(sourceId)
@@ -1136,7 +1173,10 @@ export function SourcePanel({
     />
   )
   const onMenuOpen = (next: boolean): void => {
-    if (mini && next) { onChooseSource?.(); return }
+    if (mini && next) {
+      onChooseSource?.()
+      return
+    }
     setOpen(next)
     if (!next) setGridOpen(false)
   }
@@ -1201,10 +1241,13 @@ export function SourcePanel({
     card = (
       <div className="src-card src-card-live">
         {mini ? (
-          <button type="button" className="src-card-body" onClick={onChooseSource}
-            aria-label={`Source: ${title}. Change source`}>
-            <CardHead icon={isScreen ? <Monitor /> : <SourceIcon source={source} />}
-              title={title} />
+          <button
+            type="button"
+            className="src-card-body"
+            onClick={onChooseSource}
+            aria-label={`Source: ${title}. Change source`}
+          >
+            <CardHead icon={isScreen ? <Monitor /> : <SourceIcon source={source} />} title={title} />
           </button>
         ) : !activatable || isGamingMode(capabilities) ? (
           // Gaming Mode: Gamescope only really hands the game input when Steam switches to it, so
@@ -1214,9 +1257,7 @@ export function SourcePanel({
           <button
             type="button"
             className="src-card-body"
-            aria-label={
-              fullScreen ? `Go to ${title} in full screen` : `Bring ${title} to the front`
-            }
+            aria-label={fullScreen ? `Go to ${title} in full screen` : `Bring ${title} to the front`}
             onClick={() => controller.onActivateSource()}
             onMouseEnter={() => controller.onSourceHover(true)}
             onMouseLeave={() => controller.onSourceHover(false)}
@@ -1239,44 +1280,53 @@ export function SourcePanel({
         )}
         <div className="src-actions">
           {mode === 'hook' ? (
-            <HookAnkiCropAction set={ankiCrop != null} disabled={!controller.hasSource} onEdit={() => controller.onEditAnkiCropArea()} />
+            <HookAnkiCropAction
+              set={ankiCrop != null}
+              disabled={!controller.hasSource}
+              onEdit={() => controller.onEditAnkiCropArea()}
+            />
           ) : (
-          <Menu>
-            <MenuTrigger asChild>
-              <button type="button" className="src-action" aria-label="Crop area" data-on={crop || ankiCrop ? '' : undefined}>
-                <Crop />
-                <span className="src-action-label src-action-long">Crop area</span>
-                <span className="src-action-label src-action-short">Crop</span>
-              </button>
-            </MenuTrigger>
-            <MenuContent align="start" className="src-crop-menu">
-              <MenuItem
-                icon={<SquareDashed />}
-                disabled={!controller.hasSource}
-                onSelect={() => controller.onEditCropArea()}
-              >
-                {crop ? 'Change OCR crop area…' : 'Set OCR crop area…'}
-              </MenuItem>
-              <MenuItem
-                icon={<ImageIcon />}
-                disabled={!controller.hasSource}
-                onSelect={() => controller.onEditAnkiCropArea()}
-              >
-                {ankiCrop ? 'Change Anki crop area…' : 'Set Anki crop area…'}
-              </MenuItem>
-              {(crop || ankiCrop) && <MenuSeparator />}
-              {crop && (
-                <MenuItem icon={<X />} onSelect={() => controller.onClearCrop()}>
-                  Clear OCR crop area
+            <Menu>
+              <MenuTrigger asChild>
+                <button
+                  type="button"
+                  className="src-action"
+                  aria-label="Crop area"
+                  data-on={crop || ankiCrop ? '' : undefined}
+                >
+                  <Crop />
+                  <span className="src-action-label src-action-long">Crop area</span>
+                  <span className="src-action-label src-action-short">Crop</span>
+                </button>
+              </MenuTrigger>
+              <MenuContent align="start" className="src-crop-menu">
+                <MenuItem
+                  icon={<SquareDashed />}
+                  disabled={!controller.hasSource}
+                  onSelect={() => controller.onEditCropArea()}
+                >
+                  {crop ? 'Change OCR crop area…' : 'Set OCR crop area…'}
                 </MenuItem>
-              )}
-              {ankiCrop && (
-                <MenuItem icon={<X />} onSelect={() => controller.onClearAnkiCrop()}>
-                  Clear Anki crop area
+                <MenuItem
+                  icon={<ImageIcon />}
+                  disabled={!controller.hasSource}
+                  onSelect={() => controller.onEditAnkiCropArea()}
+                >
+                  {ankiCrop ? 'Change Anki crop area…' : 'Set Anki crop area…'}
                 </MenuItem>
-              )}
-            </MenuContent>
-          </Menu>
+                {(crop || ankiCrop) && <MenuSeparator />}
+                {crop && (
+                  <MenuItem icon={<X />} onSelect={() => controller.onClearCrop()}>
+                    Clear OCR crop area
+                  </MenuItem>
+                )}
+                {ankiCrop && (
+                  <MenuItem icon={<X />} onSelect={() => controller.onClearAnkiCrop()}>
+                    Clear Anki crop area
+                  </MenuItem>
+                )}
+              </MenuContent>
+            </Menu>
           )}
           <Menu open={open} onOpenChange={onMenuOpen}>
             <MenuTrigger asChild>
@@ -1304,18 +1354,13 @@ export function SourcePanel({
             ? browserDetail(browser)
             : websocketUrl
     card = (
-      <button
-        type="button"
-        className="src-card src-card-plain"
-        aria-label={`Source: ${type.label}. Change source`}
-      >
+      <button type="button" className="src-card src-card-plain" aria-label={`Source: ${type.label}. Change source`}>
         <CardHead icon={type.icon} title={type.label} detail={detail} />
       </button>
     )
   }
 
-  const scanDisabled =
-    mode === 'quickshot' ? controller.isScanning : !controller.hasSource || controller.isScanning
+  const scanDisabled = mode === 'quickshot' ? controller.isScanning : !controller.hasSource || controller.isScanning
 
   const scanButton = (
     <Button
@@ -1348,8 +1393,7 @@ export function SourcePanel({
     capabilities.os === 'macos' && fullScreen && overlayOn && state.overlayThrottled ? (
       <Callout tone="warn" className="src-notice">
         <span>
-          <strong>Game Mode is on.</strong> The overlay will be throttled by macOS until you turn it
-          off.
+          <strong>Game Mode is on.</strong> The overlay will be throttled by macOS until you turn it off.
         </span>
         <button
           type="button"
@@ -1362,18 +1406,23 @@ export function SourcePanel({
     ) : null
 
   const placement = useHookPlacement(mode === 'hook' ? hook.exe : null)
-  const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
+  const overlayUnavailable =
+    capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
   // A shared Wayland window is anonymous: outside GNOME (its extension) and Hyprland nothing says
   // where it is, so the overlay has nowhere to draw. A shared screen needs no tracking.
   const windowUntracked =
-    mode === 'ocr' && overlayOn && !overlayUnavailable && !isGamingMode(capabilities) &&
-    !capabilities.sources.followWindowBounds && source?.type !== 'screen' &&
+    mode === 'ocr' &&
+    overlayOn &&
+    !overlayUnavailable &&
+    !isGamingMode(capabilities) &&
+    !capabilities.sources.followWindowBounds &&
+    source?.type !== 'screen' &&
     (source?.sourceId?.startsWith('portal:window:') ?? false)
   const untrackedNotice = windowUntracked ? (
     <Callout tone="warn" className="src-notice">
       <span>
-        <strong>The overlay can&rsquo;t follow a shared window on this desktop.</strong> Try sharing your
-        whole screen instead. Words in the Log can still be looked up.
+        <strong>The overlay can&rsquo;t follow a shared window on this desktop.</strong> Try sharing your whole screen
+        instead. Words in the Log can still be looked up.
       </span>
     </Callout>
   ) : null
@@ -1414,11 +1463,9 @@ export function SourcePanel({
         </Menu>
       )}
 
-      {pickerRequired &&
-        mode === 'ocr' &&
-        (systemPick.waiting || systemPick.error || stale || !source) && (
-          <SystemPickerButton message={stale} />
-        )}
+      {pickerRequired && mode === 'ocr' && (systemPick.waiting || systemPick.error || stale || !source) && (
+        <SystemPickerButton message={stale} />
+      )}
     </>
   )
   if (parts === 'card') return <div className="src-panel">{cardPart}</div>
@@ -1452,7 +1499,13 @@ export function SourcePanel({
 
       {mode === 'ocr' && <GnomeWindowLink key={source?.sourceId} sourceId={source?.sourceId} />}
       {mode === 'ocr' && <HyprlandWindowLink key={`hypr-${source?.sourceId}`} sourceId={source?.sourceId} />}
-      <LinuxSourceCrop enabled={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell} />
+      <LinuxSourceCrop
+        enabled={
+          window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+          capabilities.session?.backend === 'wayland' &&
+          !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell
+        }
+      />
       {mode === 'quickshot' && (
         <div className="src-controls">
           {scanButton}
@@ -1493,7 +1546,11 @@ export function SourcePanel({
             className="src-scan"
             data-sound="none"
             disabled={!browser.connected || browser.reading}
-            title={browser.connected ? 'Read the picture on the page again' : 'Pick a picture with the Kimochi extension first'}
+            title={
+              browser.connected
+                ? 'Read the picture on the page again'
+                : 'Pick a picture with the Kimochi extension first'
+            }
             onClick={() => void browserRescan().catch(() => undefined)}
           >
             {browser.reading ? <Spinner /> : <ScanText />}

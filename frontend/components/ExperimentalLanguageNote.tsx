@@ -16,8 +16,8 @@ export function ExperimentalLanguageNote({ language }: { language: Language }): 
   return (
     <Callout>
       <span>
-        <strong>Heads up:</strong> Kimochi was originally made for Japanese, so not everything works
-        perfectly in other languages, and some features might be missing. If you have any issues,{' '}
+        <strong>Heads up:</strong> Kimochi was originally made for Japanese, so not everything works perfectly in other
+        languages, and some features might be missing. If you have any issues,{' '}
         {inDemo() ? (
           'reach out for support'
         ) : (

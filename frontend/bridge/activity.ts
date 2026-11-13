@@ -36,8 +36,8 @@ function start(): void {
 /** Post to every window's feed. Never throws; see `postActivity` in `ui/native.js`. */
 export function postActivity(post: ActivityPost): void {
   start()
-  invoke('activity_post', { text: post.text, tone: post.tone ?? 'info', key: post.key ?? null }).catch(
-    () => feed.post(post)
+  invoke('activity_post', { text: post.text, tone: post.tone ?? 'info', key: post.key ?? null }).catch(() =>
+    feed.post(post)
   )
 }
 

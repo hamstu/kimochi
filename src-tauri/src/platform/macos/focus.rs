@@ -75,7 +75,9 @@ fn calls() -> Option<&'static Calls> {
         .get_or_init(|| unsafe {
             Some(Calls {
                 process_for_pid: std::mem::transmute::<*mut c_void, GetProcessForPid>(find(c"GetProcessForPID")?),
-                set_front: std::mem::transmute::<*mut c_void, SetFrontProcess>(find(c"_SLPSSetFrontProcessWithOptions")?),
+                set_front: std::mem::transmute::<*mut c_void, SetFrontProcess>(find(
+                    c"_SLPSSetFrontProcessWithOptions",
+                )?),
                 post_event: std::mem::transmute::<*mut c_void, PostEventRecord>(find(c"SLPSPostEventRecordTo")?),
             })
         })
@@ -94,8 +96,7 @@ fn element_window() -> Option<GetWindow> {
 fn remote_element() -> Option<CreateWithRemoteToken> {
     static CALL: OnceLock<Option<CreateWithRemoteToken>> = OnceLock::new();
     *CALL.get_or_init(|| unsafe {
-        find(c"_AXUIElementCreateWithRemoteToken")
-            .map(|f| std::mem::transmute::<*mut c_void, CreateWithRemoteToken>(f))
+        find(c"_AXUIElementCreateWithRemoteToken").map(|f| std::mem::transmute::<*mut c_void, CreateWithRemoteToken>(f))
     })
 }
 

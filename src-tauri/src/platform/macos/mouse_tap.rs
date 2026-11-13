@@ -141,7 +141,8 @@ pub fn sync(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
         .name("kimochi-mouse-tap".into())
         .spawn(move || unsafe {
             let mask = (1u64 << OTHER_MOUSE_DOWN) | (1u64 << OTHER_MOUSE_UP);
-            let tap = CGEventTapCreate(SESSION_EVENT_TAP, HEAD_INSERT, TAP_DEFAULT, mask, callback, std::ptr::null_mut());
+            let tap =
+                CGEventTapCreate(SESSION_EVENT_TAP, HEAD_INSERT, TAP_DEFAULT, mask, callback, std::ptr::null_mut());
             if tap.is_null() {
                 let _ = ready_tx.send(Err("macOS refused the mouse button tap".into()));
                 return;
@@ -171,12 +172,10 @@ pub fn sync(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
             SENDER.with(|slot| slot.borrow_mut().take());
         })
         .map_err(|e| e.to_string())?;
-    let run_loop = ready_rx
-        .recv_timeout(Duration::from_secs(2))
-        .map_err(|_| {
-            stop.store(true, Ordering::SeqCst);
-            "the mouse button tap did not start".to_string()
-        })??;
+    let run_loop = ready_rx.recv_timeout(Duration::from_secs(2)).map_err(|_| {
+        stop.store(true, Ordering::SeqCst);
+        "the mouse button tap did not start".to_string()
+    })??;
     *running = Some((run_loop, stop));
     let app = app.clone();
     std::thread::Builder::new()

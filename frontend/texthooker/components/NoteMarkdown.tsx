@@ -7,15 +7,15 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent,
-} from "react";
-import { createPortal } from "react-dom";
-import { markdownHtml } from "@texthooker/lib/html";
-import { getMatcher, slotNames, type NameSlot } from "@texthooker/lib/nameMatch";
-import { getNotebook } from "@texthooker/lib/notebook";
-import { followNoteLink } from "@texthooker/lib/noteNav";
-import { useNotebookCacheVersion } from "@texthooker/hooks/useNotebookCacheVersion";
-import { NotebookMatchChip } from "./NotebookMatchChip";
+  type MouseEvent
+} from 'react'
+import { createPortal } from 'react-dom'
+import { markdownHtml } from '@texthooker/lib/html'
+import { getMatcher, slotNames, type NameSlot } from '@texthooker/lib/nameMatch'
+import { getNotebook } from '@texthooker/lib/notebook'
+import { followNoteLink } from '@texthooker/lib/noteNav'
+import { useNotebookCacheVersion } from '@texthooker/hooks/useNotebookCacheVersion'
+import { NotebookMatchChip } from './NotebookMatchChip'
 
 /**
  * A note's Markdown, rendered (sanitised), with the notebook's names linked as in any line: their
@@ -26,44 +26,44 @@ import { NotebookMatchChip } from "./NotebookMatchChip";
 export const NoteMarkdown = forwardRef<
   HTMLDivElement,
   {
-    text: string;
+    text: string
     /** The sentence a chip's pop-up shows for context: the note. */
-    sentence: string;
-    className?: string;
-    style?: CSSProperties;
-    lang?: string;
-    onClick?: (event: MouseEvent<HTMLDivElement>) => void;
-    onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void;
+    sentence: string
+    className?: string
+    style?: CSSProperties
+    lang?: string
+    onClick?: (event: MouseEvent<HTMLDivElement>) => void
+    onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void
   }
 >(function NoteMarkdown({ text, sentence, onClick, ...props }, ref) {
-  const html = useMemo(() => markdownHtml(text), [text]);
-  const body = useRef<HTMLDivElement>(null);
-  useImperativeHandle(ref, () => body.current as HTMLDivElement, []);
-  const cacheVersion = useNotebookCacheVersion();
-  const [names, setNames] = useState<NameSlot[]>([]);
+  const html = useMemo(() => markdownHtml(text), [text])
+  const body = useRef<HTMLDivElement>(null)
+  useImperativeHandle(ref, () => body.current as HTMLDivElement, [])
+  const cacheVersion = useNotebookCacheVersion()
+  const [names, setNames] = useState<NameSlot[]>([])
   useLayoutEffect(() => {
-    const el = body.current;
-    if (!el) return;
-    el.innerHTML = html;
-    setNames(slotNames(el, getMatcher(getNotebook())));
-  }, [html, cacheVersion]);
+    const el = body.current
+    if (!el) return
+    el.innerHTML = html
+    setNames(slotNames(el, getMatcher(getNotebook())))
+  }, [html, cacheVersion])
   return (
     <>
       <div
         ref={body}
         {...props}
         onClick={(event) => {
-          if (followNoteLink(event)) return;
-          onClick?.(event);
+          if (followNoteLink(event)) return
+          onClick?.(event)
         }}
       />
       {names.map((name, i) =>
         createPortal(
           <NotebookMatchChip entryId={name.entryId} text={name.text} sentence={sentence} />,
           name.slot,
-          `${i}:${name.entryId}`,
-        ),
+          `${i}:${name.entryId}`
+        )
       )}
     </>
-  );
-});
+  )
+})

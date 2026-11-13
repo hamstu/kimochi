@@ -30,7 +30,18 @@ pub struct Feed {
 }
 impl Feed {
     pub fn new(dir: PathBuf) -> Self {
-        Self { dir, offset: 0, partial: Vec::new(), dropping: false, streams: BTreeMap::new(), clips: VecDeque::new(), adapters: Vec::new(), clips_seen: 0, last_event: None, exe: None }
+        Self {
+            dir,
+            offset: 0,
+            partial: Vec::new(),
+            dropping: false,
+            streams: BTreeMap::new(),
+            clips: VecDeque::new(),
+            adapters: Vec::new(),
+            clips_seen: 0,
+            last_event: None,
+            exe: None,
+        }
     }
     pub fn dir(&self) -> &Path {
         &self.dir
@@ -92,13 +103,16 @@ impl Feed {
                 }
             }
             "stream" => {
-                self.streams.insert(id, Stream {
-                    channel: e["info"]["channel"].as_str().map(str::to_owned),
-                    api: e["api"].as_str().unwrap_or("").into(),
-                    fmt: e["fmt"].as_str().map(str::to_owned),
-                    last: t,
-                    ..Default::default()
-                });
+                self.streams.insert(
+                    id,
+                    Stream {
+                        channel: e["info"]["channel"].as_str().map(str::to_owned),
+                        api: e["api"].as_str().unwrap_or("").into(),
+                        fmt: e["fmt"].as_str().map(str::to_owned),
+                        last: t,
+                        ..Default::default()
+                    },
+                );
             }
             "data" | "play" => {
                 let s = self.streams.entry(id).or_default();
@@ -147,7 +161,17 @@ impl Feed {
         self.streams
             .values()
             .filter(|s| now - s.last <= 15_000.0)
-            .filter_map(|s| Some((s.start?, format!("{} | {} | {}", s.api, s.fmt.as_deref().unwrap_or("?"), s.channel.clone().unwrap_or_default()))))
+            .filter_map(|s| {
+                Some((
+                    s.start?,
+                    format!(
+                        "{} | {} | {}",
+                        s.api,
+                        s.fmt.as_deref().unwrap_or("?"),
+                        s.channel.clone().unwrap_or_default()
+                    ),
+                ))
+            })
             .collect()
     }
     fn prune(&mut self, now: f64) {
@@ -216,7 +240,8 @@ fn first_stream(bytes: Vec<u8>) -> Vec<u8> {
 pub fn decode(path: &Path) -> Result<(Vec<f32>, u32), String> {
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ogg")) {
         let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-        let mut r = lewton::inside_ogg::OggStreamReader::new(std::io::Cursor::new(first_stream(bytes))).map_err(|e| e.to_string())?;
+        let mut r = lewton::inside_ogg::OggStreamReader::new(std::io::Cursor::new(first_stream(bytes)))
+            .map_err(|e| e.to_string())?;
         let rate = r.ident_hdr.audio_sample_rate;
         let channels = usize::from(r.ident_hdr.audio_channels);
         if channels == 0 || rate == 0 {
@@ -231,7 +256,9 @@ pub fn decode(path: &Path) -> Result<(Vec<f32>, u32), String> {
                 Err(_) if !mono.is_empty() => break,
                 Err(e) => return Err(e.to_string()),
             };
-            mono.extend(p.chunks_exact(channels).map(|f| f.iter().map(|s| *s as f32 / 32768.0).sum::<f32>() / channels as f32));
+            mono.extend(
+                p.chunks_exact(channels).map(|f| f.iter().map(|s| *s as f32 / 32768.0).sum::<f32>() / channels as f32),
+            );
         }
         return Ok((mono, rate));
     }
@@ -241,7 +268,10 @@ pub fn decode(path: &Path) -> Result<(Vec<f32>, u32), String> {
         return Err("invalid WAV format".into());
     }
     let samples: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Float => r.samples::<f32>().map(|s| s.map(|v| if v.is_finite() { v.clamp(-1.0, 1.0) } else { 0.0 })).collect::<Result<_, _>>(),
+        hound::SampleFormat::Float => r
+            .samples::<f32>()
+            .map(|s| s.map(|v| if v.is_finite() { v.clamp(-1.0, 1.0) } else { 0.0 }))
+            .collect::<Result<_, _>>(),
         hound::SampleFormat::Int => {
             let scale = 2f32.powi(i32::from(spec.bits_per_sample) - 1);
             r.samples::<i32>().map(|s| s.map(|v| v as f32 / scale)).collect::<Result<_, _>>()

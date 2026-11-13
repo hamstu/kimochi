@@ -26,7 +26,14 @@ export function bridgeUrl(url, location) {
   } catch {
     return null
   }
-  if (parsed.protocol !== 'ws:' || parsed.pathname !== LINK_PATH || parsed.username || parsed.password || parsed.hostname === '') return null
+  if (
+    parsed.protocol !== 'ws:' ||
+    parsed.pathname !== LINK_PATH ||
+    parsed.username ||
+    parsed.password ||
+    parsed.hostname === ''
+  )
+    return null
   const to = parsed.port === '' ? `${parsed.host}:80` : parsed.host
   return `ws://${location.host}${BRIDGE_PATH}?to=${encodeURIComponent(to)}`
 }

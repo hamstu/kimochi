@@ -9,7 +9,19 @@
  * `sentence_audio_add_to_note`); and Delete…, which asks whether to delete the note from Anki too.
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
-import { AudioLines, ExternalLink, Image as ImageIcon, Layers, MoreHorizontal, Search, SearchX, Settings2, Trash2, Unplug, X } from 'lucide-react'
+import {
+  AudioLines,
+  ExternalLink,
+  Image as ImageIcon,
+  Layers,
+  MoreHorizontal,
+  Search,
+  SearchX,
+  Settings2,
+  Trash2,
+  Unplug,
+  X
+} from 'lucide-react'
 import {
   Bar,
   BarSpacer,
@@ -220,7 +232,14 @@ export function AnkiPanel(): JSX.Element {
             <Button variant="primary" onClick={openAnkiConnectSettings}>
               AnkiConnect settings
             </Button>
-            <Button onClick={() => { recheck(); reloadAnkiCards() }}>Try again</Button>
+            <Button
+              onClick={() => {
+                recheck()
+                reloadAnkiCards()
+              }}
+            >
+              Try again
+            </Button>
           </>
         }
       >
@@ -235,8 +254,7 @@ export function AnkiPanel(): JSX.Element {
         title="No cards yet this session"
         actions={<Button onClick={openAnkiConnectSettings}>Anki settings</Button>}
       >
-        {error ??
-          'Cards you add to Anki during this session show up here.'}
+        {error ?? 'Cards you add to Anki during this session show up here.'}
       </EmptyState>
     )
   } else {
@@ -284,7 +302,12 @@ export function AnkiPanel(): JSX.Element {
           <span className="nb-filter-divider" aria-hidden />
           {/* An icon when the strip is narrow, labelled when there's room (anki-panel.css). */}
           <Tooltip content="Anki settings">
-            <IconButton label="Anki settings" size="sm" className="anki-settings-icon" onClick={openAnkiConnectSettings}>
+            <IconButton
+              label="Anki settings"
+              size="sm"
+              className="anki-settings-icon"
+              onClick={openAnkiConnectSettings}
+            >
               <Settings2 />
             </IconButton>
           </Tooltip>

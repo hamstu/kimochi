@@ -7,13 +7,7 @@ import { DeckMark, LinuxMark } from '../components/PlatformMarks'
 import { GITHUB_URL } from '../components/Layout'
 import { useClientValue } from '../lib/client'
 import { SITE_URL } from '../lib/seo.js'
-import {
-  RELEASES_URL,
-  fetchLatestRelease,
-  formatBytes,
-  type Release,
-  useDetectedPlatform
-} from '../lib/releases'
+import { RELEASES_URL, fetchLatestRelease, formatBytes, type Release, useDetectedPlatform } from '../lib/releases'
 import {
   LINUX_SECTIONS,
   aptInstallCommand,
@@ -334,9 +328,7 @@ export function DownloadLinux() {
           <span className="text-ink-3">/</span> Linux
         </p>
         <h1 className="text-title text-ink">Install Kimochi on Linux</h1>
-        <p className="mt-4 text-lede text-ink-2">
-          Pick your system below.
-        </p>
+        <p className="mt-4 text-lede text-ink-2">Pick your system below.</p>
       </header>
 
       <div className="mt-10">
@@ -384,7 +376,8 @@ export function DownloadLinux() {
               <p>
                 You can keep using Kimochi in Desktop Mode. Or double-click{' '}
                 <strong className="font-medium text-ink">Return to Gaming Mode</strong> on the desktop and launch
-                Kimochi from your library. It runs alongside your game: press R4 (the upper right back button) to open its radial menu.
+                Kimochi from your library. It runs alongside your game: press R4 (the upper right back button) to open
+                its radial menu.
               </p>
             </Step>
           </Steps>

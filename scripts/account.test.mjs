@@ -86,28 +86,47 @@ test('the last sync reads as a relative time, and the state as a sentence', () =
   const status = normalizeSyncStatus({ state: 'offline', lastSyncAt: now - 60_000, pending: 2 })
   assert.match(syncStateLine(status, now), /^Offline: .* 2 changes waiting to sync\.$/)
   assert.equal(syncStateLine(normalizeSyncStatus({ state: 'syncing' }), now), 'Syncing…')
-  assert.equal(syncStateLine(normalizeSyncStatus({ state: 'idle', lastSyncAt: now - 60_000, pending: 1 }), now), 'Synced 1 minute ago. 1 change waiting to sync.')
+  assert.equal(
+    syncStateLine(normalizeSyncStatus({ state: 'idle', lastSyncAt: now - 60_000, pending: 1 }), now),
+    'Synced 1 minute ago. 1 change waiting to sync.'
+  )
 })
 
 test('sync status from native is read strictly', () => {
   const status = normalizeSyncStatus({
     state: 'weird',
-    conflicts: [{ id: 'c1', collection: 'sessions', recordId: 's1', data: { name: 'Novel' }, detectedAt: 5 }, { nope: 1 }, null]
+    conflicts: [
+      { id: 'c1', collection: 'sessions', recordId: 's1', data: { name: 'Novel' }, detectedAt: 5 },
+      { nope: 1 },
+      null
+    ]
   })
   assert.equal(status.state, 'off')
   assert.equal(status.conflicts.length, 1)
   assert.equal(conflictTitle(status.conflicts[0]), 'Session “Novel”')
-  assert.equal(conflictTitle({ ...status.conflicts[0], collection: 'prefs', recordId: 'superTexthooker/fontSizePx', data: 20 }), 'Setting superTexthooker.fontSizePx')
+  assert.equal(
+    conflictTitle({ ...status.conflicts[0], collection: 'prefs', recordId: 'superTexthooker/fontSizePx', data: 20 }),
+    'Setting superTexthooker.fontSizePx'
+  )
   assert.equal(normalizeSyncStatus(null).state, 'off')
 })
 
 test('the sync log is plain, timestamped and bounded', () => {
   const at = new Date(2026, 9, 17, 9, 5, 7, 42).getTime()
   assert.equal(logLine({ t: at, kind: 'push', text: 'sent' }), '2026-10-17 09:05:07.042  push     sent')
-  assert.equal(logText([{ t: at, kind: 'a', text: 'x' }, { t: at, kind: 'b', text: 'y' }]).split('\n').length, 2)
+  assert.equal(
+    logText([
+      { t: at, kind: 'a', text: 'x' },
+      { t: at, kind: 'b', text: 'y' }
+    ]).split('\n').length,
+    2
+  )
   let entries = []
   for (let i = 0; i < 10; i++) entries = appendLog(entries, { t: i, kind: 'info', text: String(i) }, 4)
-  assert.deepEqual(entries.map((e) => e.text), ['6', '7', '8', '9'])
+  assert.deepEqual(
+    entries.map((e) => e.text),
+    ['6', '7', '8', '9']
+  )
 })
 
 test('anything unexpected from native reads as signed out', () => {
@@ -130,7 +149,10 @@ test('a trial or a cancelled plan says when it ends', () => {
   const trial = { billing: { status: 'trialing', trialEnd: '2026-11-03T12:00:00Z', cancelAt: null } }
   assert.equal(planNote(trial), 'Free until Nov 3.')
   assert.equal(planNote({ billing: { ...trial.billing, cancelAt: '2026-11-03T12:00:00Z' } }), 'Trial ends Nov 3.')
-  assert.equal(planNote({ billing: { status: 'active', trialEnd: null, cancelAt: '2027-01-09T00:00:00Z' } }), 'Ends Jan 9.')
+  assert.equal(
+    planNote({ billing: { status: 'active', trialEnd: null, cancelAt: '2027-01-09T00:00:00Z' } }),
+    'Ends Jan 9.'
+  )
   assert.equal(planNote({ billing: { status: 'active', trialEnd: null, cancelAt: null } }), null)
   assert.equal(planNote(null), null)
 })
@@ -146,7 +168,10 @@ test('the accounts on this computer are read strictly, and one is in use', () =>
     ],
     profile: { key: 'cloud-u1', root: 'profiles/cloud-u1', needsSignIn: false }
   })
-  assert.deepEqual(status.accounts.map((a) => a.key), ['cloud-u1', 'local-u2'])
+  assert.deepEqual(
+    status.accounts.map((a) => a.key),
+    ['cloud-u1', 'local-u2']
+  )
   assert.equal(activeAccount(status).key, 'cloud-u1')
   assert.equal(status.accounts[1].available, false)
   assert.equal(status.accounts[0].available, true, 'available unless native says otherwise')
@@ -187,8 +212,14 @@ test('the account menu shows the name over the email, or the email alone', () =>
   const user = { id: 'u', email: 'reader@example.com', displayName: 'Hamish', plan: 'free', status: 'active' }
   assert.deepEqual(accountLines(user), { primary: 'Hamish', secondary: 'reader@example.com' })
   assert.deepEqual(accountLines({ ...user, displayName: '  ' }), { primary: 'reader@example.com', secondary: null })
-  assert.deepEqual(accountLines({ ...user, displayName: 'Hamish', email: null }), { primary: 'Hamish', secondary: null })
-  assert.deepEqual(accountLines({ ...user, displayName: null, email: null }), { primary: 'Kimochi account', secondary: null })
+  assert.deepEqual(accountLines({ ...user, displayName: 'Hamish', email: null }), {
+    primary: 'Hamish',
+    secondary: null
+  })
+  assert.deepEqual(accountLines({ ...user, displayName: null, email: null }), {
+    primary: 'Kimochi account',
+    secondary: null
+  })
   assert.equal(accountInitial(user), 'H')
   assert.equal(accountInitial({ ...user, displayName: null }), 'R')
   assert.equal(accountInitial({ ...user, displayName: 'はな' }), 'は')

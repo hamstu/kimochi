@@ -51,10 +51,7 @@ test('a nested lookup adds its own rectangle', () => {
 
 test('a child of a hidden parent is not on screen and is not defended', () => {
   const child = popup({ rect: [300, 400, 700, 650] })
-  assert.deepEqual(
-    popupHitRects([popup({ rect: [100, 200, 500, 450], visible: false, child })], ORIGIN),
-    []
-  )
+  assert.deepEqual(popupHitRects([popup({ rect: [100, 200, 500, 450], visible: false, child })], ORIGIN), [])
 })
 
 test('a hidden child stops the walk without dropping its visible parent', () => {
@@ -113,7 +110,10 @@ test('exceptRects: holes at an edge, overlapping or outside, and none', () => {
   assert.deepEqual(exceptRects(screen, []), [screen])
   assert.deepEqual(exceptRects(screen, [{ x: 200, y: 0, width: 10, height: 10 }]), [screen])
   assert.deepEqual(exceptRects(screen, [{ x: -10, y: -10, width: 200, height: 200 }]), [])
-  const two = exceptRects(screen, [{ x: 0, y: 0, width: 50, height: 50 }, { x: 40, y: 40, width: 20, height: 20 }])
+  const two = exceptRects(screen, [
+    { x: 0, y: 0, width: 50, height: 50 },
+    { x: 40, y: 40, width: 20, height: 20 }
+  ])
   assert.equal(area(two), 10000 - 2500 - (20 * 20 - 10 * 10))
   assert.equal(inside(two, 55, 55), false)
   assert.equal(inside(two, 70, 20), true)

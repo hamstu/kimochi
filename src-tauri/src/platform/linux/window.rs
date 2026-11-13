@@ -29,17 +29,11 @@ static PANELS: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static HOOKED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 fn insert(set: &Mutex<Option<HashSet<String>>>, label: &str) -> bool {
-    set.lock()
-        .unwrap()
-        .get_or_insert_with(HashSet::new)
-        .insert(label.to_string())
+    set.lock().unwrap().get_or_insert_with(HashSet::new).insert(label.to_string())
 }
 
 fn contains(set: &Mutex<Option<HashSet<String>>>, label: &str) -> bool {
-    set.lock()
-        .unwrap()
-        .as_ref()
-        .is_some_and(|s| s.contains(label))
+    set.lock().unwrap().as_ref().is_some_and(|s| s.contains(label))
 }
 
 const WAYLAND_PANEL: &str = "unsupported on Wayland: a window cannot be kept above others or made \
@@ -58,7 +52,9 @@ pub(super) fn xid(w: &tauri::WebviewWindow) -> Result<u32, String> {
 
 /// Place by Tauri's logical coordinates (desktop units on X11).
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
-    if w.label() == "overlay" { crate::debug_report::count("overlay-placed"); }
+    if w.label() == "overlay" {
+        crate::debug_report::count("overlay-placed");
+    }
     if super::gnome::pin_supported(w.label()) && super::gnome::eligible_popup_session() {
         // Set before first map, so the bridge never races the first lookup, and so the Shell
         // can say where the window is (a display capture blanks it, `gnome::own_frames`).
@@ -68,42 +64,34 @@ pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
         // A tiling compositor can allocate less than a panel's preferred minimum.
         // GTK then keeps a wider WebView than the displayed surface, squashing
         // pixels and offsetting hit targets. Resizable panels must fit their tile.
-        w.set_min_size(Some(tauri::LogicalSize::new(1., 1.)))
-            .map_err(|e| e.to_string())?;
+        w.set_min_size(Some(tauri::LogicalSize::new(1., 1.))).map_err(|e| e.to_string())?;
     }
     if super::layer::available() {
         super::layer::place(w, r)?;
-        if w.label() == "overlay" { return Ok(()); }
+        if w.label() == "overlay" {
+            return Ok(());
+        }
     }
-    w.set_position(tauri::LogicalPosition::new(r.x, r.y))
-        .map_err(|e| e.to_string())?;
-    w.set_size(tauri::LogicalSize::new(r.width, r.height))
-        .map_err(|e| e.to_string())
+    w.set_position(tauri::LogicalPosition::new(r.x, r.y)).map_err(|e| e.to_string())?;
+    w.set_size(tauri::LogicalSize::new(r.width, r.height)).map_err(|e| e.to_string())
 }
 
 pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
     // Native input shapes need the popup's mapped origin; startup must also allow
     // unmapped windows. Explicit popup-anchor queries remain strict in window_bounds.
     if matches!(w.label(), "overlay" | "popup-host") && super::gnome::desktop_popup() {
-        if let Ok(rect) = super::gnome::own_bounds(w) { return Ok(rect); }
+        if let Ok(rect) = super::gnome::own_bounds(w) {
+            return Ok(rect);
+        }
     }
     let scale = w.scale_factor().map_err(|e| e.to_string())?;
     let position = if super::layer::available() {
         tauri::LogicalPosition::new(0., 0.)
-    } else { w
-        .outer_position()
-        .map_err(|e| e.to_string())?
-        .to_logical::<f64>(scale) };
-    let size = w
-        .outer_size()
-        .map_err(|e| e.to_string())?
-        .to_logical::<f64>(scale);
-    Ok(Rect {
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
-    })
+    } else {
+        w.outer_position().map_err(|e| e.to_string())?.to_logical::<f64>(scale)
+    };
+    let size = w.outer_size().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
+    Ok(Rect { x: position.x, y: position.y, width: size.width, height: size.height })
 }
 
 /// Window-local CSS pixels of the pointer when it is over this window and nothing
@@ -115,7 +103,7 @@ pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, Str
         Backend::X11 => {
             let zoom = super::gamescope::controls_zoom(w);
             Ok(x11::pointer_in(xid(w)?).map(|(x, y)| (x / zoom, y / zoom)))
-        },
+        }
     }
 }
 
@@ -144,11 +132,10 @@ pub fn panel_cursor(_w: &tauri::WebviewWindow, _kind: &str) -> Result<(), String
 /// own click-through to work), which is the same reliance `set_ignore_cursor_events`
 /// has. `Ok(false)` on Wayland and on a server without SHAPE 1.1: the caller keeps
 /// polling.
-pub fn set_input_regions(
-    w: &tauri::WebviewWindow,
-    regions: Option<&[Rect]>,
-) -> Result<bool, String> {
-    if super::layer::available() || (matches!(w.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session()) {
+pub fn set_input_regions(w: &tauri::WebviewWindow, regions: Option<&[Rect]>) -> Result<bool, String> {
+    if super::layer::available()
+        || (matches!(w.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session())
+    {
         return super::layer::input_regions(w, regions);
     }
     if session().backend != Backend::X11 || !x11::has_input_shape() {
@@ -181,7 +168,9 @@ pub fn inspect(w: &tauri::WebviewWindow) -> Result<Value, String> {
 /// `_NET_WM_USER_TIME = 0`); the raise is a restack request, not an activation.
 pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
     crate::debug_report::count("order-front");
-    if super::gamescope::handles(w) { return super::gamescope::show(w); }
+    if super::gamescope::handles(w) {
+        return super::gamescope::show(w);
+    }
     w.show().map_err(|e| e.to_string())?;
     if session().backend == Backend::X11 {
         x11::raise(xid(w)?)?;
@@ -247,7 +236,9 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     if session().backend == Backend::Wayland {
         if matches!(w.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session() {
             use glib::object::ObjectType as _;
-            unsafe extern "C" { fn gtk_window_set_focus_on_map(window: *mut std::ffi::c_void, focus: i32); }
+            unsafe extern "C" {
+                fn gtk_window_set_focus_on_map(window: *mut std::ffi::c_void, focus: i32);
+            }
             let gtk = w.gtk_window().map_err(|e| e.to_string())?;
             // A small dictionary window may take focus on an explicit click, never on map.
             unsafe { gtk_window_set_focus_on_map(gtk.as_ptr().cast(), 0) };
@@ -256,8 +247,12 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
                 // Permanent keyboard refusal; only the shared text hit regions
                 // receive pointer events. Empty before first map.
                 w.set_focusable(false).map_err(|e| e.to_string())?;
-                unsafe extern "C" { fn gtk_widget_realize(widget: *mut std::ffi::c_void); }
-                unsafe { gtk_widget_realize(gtk.as_ptr().cast()); }
+                unsafe extern "C" {
+                    fn gtk_widget_realize(widget: *mut std::ffi::c_void);
+                }
+                unsafe {
+                    gtk_widget_realize(gtk.as_ptr().cast());
+                }
                 super::layer::input_regions(w, Some(&[]))?;
             }
             w.set_skip_taskbar(true).map_err(|e| e.to_string())?;
@@ -289,10 +284,7 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     // Best effort: the GTK half above is what keeps focus out; the window type only
     // changes how the window manager decorates and stacks it.
     if let Err(e) = xid(w).and_then(x11::mark_panel) {
-        eprintln!(
-            "platform: could not mark {} as a utility window: {e}",
-            w.label()
-        );
+        eprintln!("platform: could not mark {} as a utility window: {e}", w.label());
     }
     if super::gamescope::active() && w.label() == "overlay" {
         super::gamescope::make_overlay(w)?;
@@ -309,16 +301,13 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
 pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
     crate::debug_report::count("activate-self");
     match session().backend {
-        Backend::Wayland => Err(
-            "unsupported on Wayland: applications cannot activate themselves without an activation token"
-                .into(),
-        ),
+        Backend::Wayland => {
+            Err("unsupported on Wayland: applications cannot activate themselves without an activation token".into())
+        }
         Backend::X11 => {
             let fallback = || {
-                let window = x11::own_windows()
-                    .into_iter()
-                    .next()
-                    .ok_or("native: Kimochi has no window to activate")?;
+                let window =
+                    x11::own_windows().into_iter().next().ok_or("native: Kimochi has no window to activate")?;
                 x11::activate_window(window)
             };
             let Some(window) = prefer.filter(|w| w.is_visible().unwrap_or(false)) else {
@@ -359,12 +348,9 @@ pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<serde_json::Val
 /// Activate another process's frontmost window (returning focus to the game).
 pub fn activate_process(pid: u32) -> Result<(), String> {
     match session().backend {
-        Backend::Wayland => {
-            Err("unsupported on Wayland: other applications' windows cannot be activated".into())
-        }
+        Backend::Wayland => Err("unsupported on Wayland: other applications' windows cannot be activated".into()),
         Backend::X11 => {
-            let window = x11::front_window_of(pid)
-                .ok_or_else(|| format!("native: process {pid} has no window"))?;
+            let window = x11::front_window_of(pid).ok_or_else(|| format!("native: process {pid} has no window"))?;
             x11::activate_window(window)
         }
     }

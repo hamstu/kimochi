@@ -41,7 +41,10 @@ test('a run is measured as the sum of its characters, adjacent marks untrimmed',
   const measure = measureFor('default')
   assert.equal(measure('。」'), 2)
   assert.equal(measure('う。」マ'), 4)
-  assert.equal(measure('う。」マ'), [...'う。」マ'].reduce((sum, c) => sum + measure(c), 0))
+  assert.equal(
+    measure('う。」マ'),
+    [...'う。」マ'].reduce((sum, c) => sum + measure(c), 0)
+  )
   const ink = measure.ink('よ。」')
   assert.equal(ink.advance, 3)
   assert.equal(ink.start, 0.06)

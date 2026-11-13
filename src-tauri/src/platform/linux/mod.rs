@@ -33,33 +33,33 @@ use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
-pub mod dictionary_images;
-pub mod gnome;
-pub mod gamescope;
-pub mod gaming_sources;
-pub mod gaming_launch;
-pub mod steam_input;
-mod gamescope_touch;
-mod gamescope_focus;
-mod gamescope_handoff;
-mod input_guard;
 mod controller_neutral;
 pub mod deck_input;
+pub mod dictionary_images;
+pub mod gamescope;
+mod gamescope_focus;
+mod gamescope_handoff;
+mod gamescope_touch;
+pub mod gaming_launch;
+pub mod gaming_sources;
+pub mod gnome;
 pub mod hyprland;
 mod hyprland_binds;
-pub mod kwin;
-pub mod native;
-pub mod tracking;
-pub mod shift;
-mod layer;
-pub mod screens;
-pub mod shortcuts;
 pub mod icons;
+mod input_guard;
+pub mod kwin;
+mod layer;
+pub mod native;
 mod rules;
+pub mod screens;
+pub mod shift;
+pub mod shortcuts;
+pub mod steam_input;
+pub mod tracking;
+pub mod webkit_timers;
 mod window;
 mod workspace;
 mod x11;
-pub mod webkit_timers;
 
 use rules::{Backend, Session};
 pub use window::{
@@ -81,8 +81,12 @@ pub fn wayland_overlay_unavailable() -> bool {
     session().backend == Backend::Wayland && !layer::available()
 }
 
-pub fn initialize_wayland_overlay() { layer::initialize(); }
-pub fn wayland_layer_overlay() -> bool { layer::available() }
+pub fn initialize_wayland_overlay() {
+    layer::initialize();
+}
+pub fn wayland_layer_overlay() -> bool {
+    layer::available()
+}
 
 fn on_x11() -> bool {
     session().backend == Backend::X11
@@ -192,18 +196,8 @@ pub fn display_infos() -> Vec<DisplayInfo> {
             DisplayInfo {
                 id: m.id,
                 source_id: display_source_id(m.id),
-                bounds: Rect {
-                    x: unit(r.x),
-                    y: unit(r.y),
-                    width: unit(r.width),
-                    height: unit(r.height),
-                },
-                work_area: Rect {
-                    x: unit(x),
-                    y: unit(y),
-                    width: unit(w),
-                    height: unit(h),
-                },
+                bounds: Rect { x: unit(r.x), y: unit(r.y), width: unit(r.width), height: unit(r.height) },
+                work_area: Rect { x: unit(x), y: unit(y), width: unit(w), height: unit(h) },
                 scale_factor: scale,
             }
         })
@@ -238,9 +232,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     } else if native::active() {
         native::picker_sources()
     } else {
-        Err(format!(
-            "{WAYLAND}: sources are chosen in the system picker"
-        ))
+        Err(format!("{WAYLAND}: sources are chosen in the system picker"))
     }
 }
 
@@ -474,9 +466,15 @@ pub fn own_frames(app: &tauri::AppHandle, labels: &[&str]) -> Option<Vec<Rect>> 
     (!on_x11()).then(|| tracking::own_frames().unwrap_or_default())
 }
 
-pub fn region_editing() -> bool { gamescope::editing() || layer::region_editing() }
+pub fn region_editing() -> bool {
+    gamescope::editing() || layer::region_editing()
+}
 pub fn region_keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
-    if gamescope::active() { gamescope::region_keyboard(window, on) } else { layer::region_keyboard(window, on) }
+    if gamescope::active() {
+        gamescope::region_keyboard(window, on)
+    } else {
+        layer::region_keyboard(window, on)
+    }
 }
 
 pub mod capture;

@@ -34,7 +34,15 @@ function manifest(browser: string, method: HostMethod, exists = true): HostManif
     : `/Users/you/Library/Application Support/${browser === 'firefox' ? 'Mozilla' : browser === 'brave' ? 'BraveSoftware/Brave-Browser' : 'Google/Chrome'}/NativeMessagingHosts`
   const sep = windows ? '\\' : '/'
   const program =
-    method === 'official' ? (windows ? 'yomitan_api.bat' : 'yomitan_api.py') : method === 'kimochi' ? (windows ? 'yomitan-host.exe' : 'yomitan-host-darwin-arm64') : 'my-host'
+    method === 'official'
+      ? windows
+        ? 'yomitan_api.bat'
+        : 'yomitan_api.py'
+      : method === 'kimochi'
+        ? windows
+          ? 'yomitan-host.exe'
+          : 'yomitan-host-darwin-arm64'
+        : 'my-host'
   return {
     browser,
     browserName: BROWSERS[browser],
@@ -78,7 +86,11 @@ async function apiCheck(args: Record<string, unknown> | undefined): Promise<ApiS
     yomitan,
     yomitanVersion: yomitan ? '26.9.8.0' : null,
     latencyMs: server ? 3 : null,
-    error: yomitan ? null : server ? 'Yomitan did not answer through the host (preview)' : 'Nothing is listening at this address.'
+    error: yomitan
+      ? null
+      : server
+        ? 'Yomitan did not answer through the host (preview)'
+        : 'Nothing is listening at this address.'
   }
 }
 
@@ -87,7 +99,9 @@ async function install(): Promise<string> {
   if (seed === 'fail') throw 'Download failed with status: 404 Not Found (preview)'
   browsers = ['chrome', 'brave', 'firefox'].map((b) => manifest(b, 'kimochi'))
   if (seed === 'flow') answersFrom = Date.now() + 6000
-  return windows ? 'Host installed (preview).' : 'Installing native messaging host for all browsers on darwin...\n\nDone.'
+  return windows
+    ? 'Host installed (preview).'
+    : 'Installing native messaging host for all browsers on darwin...\n\nDone.'
 }
 
 export const YOMITAN_API_HANDLERS: Record<string, (args: Record<string, unknown> | undefined) => unknown> = {

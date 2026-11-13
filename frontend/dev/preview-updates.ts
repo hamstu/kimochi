@@ -146,7 +146,11 @@ function check(): UpdateStatus {
   stop()
   timer = setTimeout(() => {
     timer = null
-    publish(upToDate ? status({ state: 'none', checkedAt: Date.now() }) : offered({ state: 'available', checkedAt: Date.now() }))
+    publish(
+      upToDate
+        ? status({ state: 'none', checkedAt: Date.now() })
+        : offered({ state: 'available', checkedAt: Date.now() })
+    )
   }, 1200)
   return publish({ ...current, state: 'checking', message: null, stage: null })
 }
@@ -202,7 +206,11 @@ export const UPDATE_HANDLERS: Record<string, () => unknown> = {
   update_install: install,
   update_retry: () => {
     if (current.state !== 'failed') return current
-    return current.stage === 'install' ? (publish(offered({ state: 'ready', receivedBytes: SIZE, totalBytes: SIZE })), install()) : current.stage === 'download' ? download() : check()
+    return current.stage === 'install'
+      ? (publish(offered({ state: 'ready', receivedBytes: SIZE, totalBytes: SIZE })), install())
+      : current.stage === 'download'
+        ? download()
+        : check()
   },
   update_dismiss: () => publish({ ...current, dismissed: true })
 }

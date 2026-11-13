@@ -25,7 +25,15 @@ import {
   verifyExtension
 } from './sync-extension.mjs'
 import { checkDistHasNoEngines } from './prepare.mjs'
-import { createExtensionServer, createRelayBus, harnessInjectsYomitanShim, harnessTagFor, injectHostScript, HOST_SCRIPT_TAG, YOMITAN_SHIM_TAG } from './ext-dev-server.mjs'
+import {
+  createExtensionServer,
+  createRelayBus,
+  harnessInjectsYomitanShim,
+  harnessTagFor,
+  injectHostScript,
+  HOST_SCRIPT_TAG,
+  YOMITAN_SHIM_TAG
+} from './ext-dev-server.mjs'
 
 /** A minimal zip writer: `[{name, data?, method?, mode?, flags?, crc?}]`, directories end in `/`. */
 function makeZip(entries) {
@@ -109,14 +117,30 @@ test('readZip round-trips stored and deflated entries and checks CRC, symlinks a
 test('unzipTo writes the tree, strips a prefix, and writes nothing for an unsafe archive', async () => {
   const dir = await tempDir()
   try {
-    await unzipTo(makeZip([{ name: 'ext/' }, { name: 'ext/manifest.json', data: '{}' }, { name: 'ext/js/a.js', data: '1' }]), dir, {
-      stripPrefix: 'ext'
-    })
+    await unzipTo(
+      makeZip([{ name: 'ext/' }, { name: 'ext/manifest.json', data: '{}' }, { name: 'ext/js/a.js', data: '1' }]),
+      dir,
+      {
+        stripPrefix: 'ext'
+      }
+    )
     assert.deepEqual(Object.keys(await hashTree(dir)), ['js/a.js', 'manifest.json'])
-    await assert.rejects(unzipTo(makeZip([{ name: 'other.txt', data: '' }]), path.join(dir, 'p'), { stripPrefix: 'ext/' }), /outside ext/)
+    await assert.rejects(
+      unzipTo(makeZip([{ name: 'other.txt', data: '' }]), path.join(dir, 'p'), { stripPrefix: 'ext/' }),
+      /outside ext/
+    )
 
     const unsafe = path.join(dir, 'unsafe')
-    await assert.rejects(unzipTo(makeZip([{ name: 'ok.txt', data: 'x' }, { name: '../../escape.txt', data: 'x' }]), unsafe), /escapes/)
+    await assert.rejects(
+      unzipTo(
+        makeZip([
+          { name: 'ok.txt', data: 'x' },
+          { name: '../../escape.txt', data: 'x' }
+        ]),
+        unsafe
+      ),
+      /escapes/
+    )
     // The whole central directory is validated before the first write.
     assert.deepEqual(await readdir(unsafe).catch(() => []), [])
   } finally {
@@ -176,7 +200,10 @@ async function withFetch(zip, run) {
 }
 
 test('syncExtension verifies the asset hash, unpacks, records hashes and guards a non-empty target', async () => {
-  const zip = makeZip([{ name: 'manifest.json', data: '{"manifest_version":3}' }, { name: 'js/bg.js', data: 'x' }])
+  const zip = makeZip([
+    { name: 'manifest.json', data: '{"manifest_version":3}' },
+    { name: 'js/bg.js', data: 'x' }
+  ])
   const dir = await fixtureRepo(zip)
   const quiet = () => {}
   try {
@@ -205,7 +232,10 @@ test('syncExtension verifies the asset hash, unpacks, records hashes and guards 
 })
 
 test('ensureExtension downloads an absent or stale tree and leaves a matching one alone', async () => {
-  const zip = makeZip([{ name: 'manifest.json', data: '{}' }, { name: 'js/bg.js', data: 'x' }])
+  const zip = makeZip([
+    { name: 'manifest.json', data: '{}' },
+    { name: 'js/bg.js', data: 'x' }
+  ])
   const dir = await fixtureRepo(zip)
   const quiet = () => {}
   try {
@@ -260,7 +290,8 @@ test('the Yomitan harness cookie alone turns on the shim injection, first in <he
   assert.equal(harnessInjectsYomitanShim('x=1; kimochi-harness-shim=yomitanx'), false)
   assert.equal(harnessInjectsYomitanShim('kimochi-harness-shim=yomitan'), true)
   assert.equal(harnessInjectsYomitanShim('a=b; kimochi-harness-shim=yomitan; c=d'), true)
-  const page = '<!doctype html>\n<html>\n  <head>\n    <meta charset="utf-8" />\n  </head>\n  <body><script type="module" src="/sw.js"></script></body>\n</html>'
+  const page =
+    '<!doctype html>\n<html>\n  <head>\n    <meta charset="utf-8" />\n  </head>\n  <body><script type="module" src="/sw.js"></script></body>\n</html>'
   const served = injectHostScript(page, YOMITAN_SHIM_TAG)
   assert.ok(served.indexOf(YOMITAN_SHIM_TAG) < served.indexOf('/sw.js'))
   assert.ok(served.startsWith('<!doctype html>\n<html>\n  <head><script src="/spike/shim.js"></script>'))
@@ -268,14 +299,23 @@ test('the Yomitan harness cookie alone turns on the shim injection, first in <he
 
 test('injectHostScript puts the host first in <head>, never before the doctype', () => {
   const t = HOST_SCRIPT_TAG
-  assert.equal(injectHostScript('<!DOCTYPE html>\n<html>\n<head>\n<meta>'), `<!DOCTYPE html>\n<html>\n<head>${t}\n<meta>`)
-  assert.equal(injectHostScript('<!doctype html><html lang="en"><head data-x="1"><title>'), `<!doctype html><html lang="en"><head data-x="1">${t}<title>`)
+  assert.equal(
+    injectHostScript('<!DOCTYPE html>\n<html>\n<head>\n<meta>'),
+    `<!DOCTYPE html>\n<html>\n<head>${t}\n<meta>`
+  )
+  assert.equal(
+    injectHostScript('<!doctype html><html lang="en"><head data-x="1"><title>'),
+    `<!doctype html><html lang="en"><head data-x="1">${t}<title>`
+  )
   // A comment mentioning <head> is not the head; <header> is not <head>.
   assert.equal(
     injectHostScript('<!doctype html><!-- the <head> goes here --><html><body><header>'),
     `<!doctype html><!-- the <head> goes here --><html>${t}<body><header>`
   )
-  assert.equal(injectHostScript('<!doctype html>\n<!-- c -->\n<script src="a.js"></script>'), `<!doctype html>${t}\n<!-- c -->\n<script src="a.js"></script>`)
+  assert.equal(
+    injectHostScript('<!doctype html>\n<!-- c -->\n<script src="a.js"></script>'),
+    `<!doctype html>${t}\n<!-- c -->\n<script src="a.js"></script>`
+  )
   assert.equal(injectHostScript('<p>bare</p>'), `${t}<p>bare</p>`)
 })
 
@@ -285,7 +325,9 @@ function rawRequest(port, method, urlPath) {
     const req = http.request({ host: '127.0.0.1', port, method, path: urlPath }, (res) => {
       const chunks = []
       res.on('data', (chunk) => chunks.push(chunk))
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() }))
+      res.on('end', () =>
+        resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() })
+      )
     })
     req.on('error', reject)
     req.end()
@@ -305,7 +347,11 @@ test('the dev extension origin serves the tree and /__kimochi/, injects HTML, an
   const server = createExtensionServer({
     extRoot,
     spikeRoot,
-    mime: { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.idx': 'application/octet-stream' }
+    mime: {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.idx': 'application/octet-stream'
+    }
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address()
@@ -327,7 +373,18 @@ test('the dev extension origin serves the tree and /__kimochi/, injects HTML, an
     assert.equal(host.body, ';(() => {})()')
     assert.equal(host.headers['content-type'], 'text/javascript; charset=utf-8')
 
-    for (const evil of ['/../secret.txt', '/../../secret.txt', '/%2e%2e/secret.txt', '/..%2fsecret.txt', '/__kimochi/../../secret.txt', '/__kimochi/..%2f..%2fsecret.txt', '/data', '/', '/__kimochi', '/%E0%A4%A']) {
+    for (const evil of [
+      '/../secret.txt',
+      '/../../secret.txt',
+      '/%2e%2e/secret.txt',
+      '/..%2fsecret.txt',
+      '/__kimochi/../../secret.txt',
+      '/__kimochi/..%2f..%2fsecret.txt',
+      '/data',
+      '/',
+      '/__kimochi',
+      '/%E0%A4%A'
+    ]) {
       const res = await rawRequest(port, 'GET', evil)
       assert.equal(res.status, 404, evil)
       assert.notEqual(res.body, 'secret', evil)
@@ -354,7 +411,10 @@ test("the harness's extension window page gets the native stand-in first, and on
   const spikeRoot = path.join(dir, 'spike')
   await mkdir(extRoot, { recursive: true })
   await mkdir(spikeRoot, { recursive: true })
-  await writeFile(path.join(spikeRoot, 'ext-background.html'), '<!doctype html><html><head><script src="/__kimochi/ext-host.js"></script></head><body></body></html>')
+  await writeFile(
+    path.join(spikeRoot, 'ext-background.html'),
+    '<!doctype html><html><head><script src="/__kimochi/ext-host.js"></script></head><body></body></html>'
+  )
   const bus = createRelayBus()
   const seen = []
   const server = createExtensionServer({
@@ -362,16 +422,28 @@ test("the harness's extension window page gets the native stand-in first, and on
     spikeRoot,
     mime: { '.html': 'text/html; charset=utf-8' },
     harnessScript: script,
-    middleware: [(req, res, next) => { seen.push(req.url); next() }, bus.middleware]
+    middleware: [
+      (req, res, next) => {
+        seen.push(req.url)
+        next()
+      },
+      bus.middleware
+    ]
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address()
   try {
     const page = await rawRequest(port, 'GET', '/__kimochi/ext-background.html?engine=demo&window=ext-demo')
-    assert.equal(page.body, `<!doctype html><html><head>${tag}<script src="/__kimochi/ext-host.js"></script></head><body></body></html>`)
+    assert.equal(
+      page.body,
+      `<!doctype html><html><head>${tag}<script src="/__kimochi/ext-host.js"></script></head><body></body></html>`
+    )
     const plain = await rawRequest(port, 'GET', '/__kimochi/ext-background.html?engine=demo')
     assert.ok(!plain.body.includes('dictionary-harness-native'))
-    assert.deepEqual(seen, ['/__kimochi/ext-background.html?engine=demo&window=ext-demo', '/__kimochi/ext-background.html?engine=demo'])
+    assert.deepEqual(seen, [
+      '/__kimochi/ext-background.html?engine=demo&window=ext-demo',
+      '/__kimochi/ext-background.html?engine=demo'
+    ])
   } finally {
     server.close()
     await rm(dir, { recursive: true, force: true })
@@ -385,27 +457,39 @@ test('the relay bus stamps {from, to, seq} per sender, survives a reload, and re
   const { port } = server.address()
   const listen = (channel) => {
     const messages = []
-    const req = http.request({ host: '127.0.0.1', port, method: 'GET', path: `/__kimochi/relay?channel=${channel}` }, (res) => {
-      assert.equal(res.headers['content-type'], 'text/event-stream')
-      let buffer = ''
-      res.on('data', (chunk) => {
-        buffer += chunk
-        for (let at = buffer.indexOf('\n\n'); at >= 0; at = buffer.indexOf('\n\n')) {
-          const block = buffer.slice(0, at)
-          buffer = buffer.slice(at + 2)
-          if (block.startsWith('data: ')) messages.push(JSON.parse(block.slice(6)))
-        }
-      })
-    })
+    const req = http.request(
+      { host: '127.0.0.1', port, method: 'GET', path: `/__kimochi/relay?channel=${channel}` },
+      (res) => {
+        assert.equal(res.headers['content-type'], 'text/event-stream')
+        let buffer = ''
+        res.on('data', (chunk) => {
+          buffer += chunk
+          for (let at = buffer.indexOf('\n\n'); at >= 0; at = buffer.indexOf('\n\n')) {
+            const block = buffer.slice(0, at)
+            buffer = buffer.slice(at + 2)
+            if (block.startsWith('data: ')) messages.push(JSON.parse(block.slice(6)))
+          }
+        })
+      }
+    )
     req.end()
     return { messages, close: () => req.destroy() }
   }
   const post = (channel, body) =>
     new Promise((resolve, reject) => {
-      const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: `/__kimochi/relay?channel=${channel}`, headers: { 'Content-Type': 'application/json' } }, (res) => {
-        res.resume()
-        res.on('end', () => resolve(res.statusCode))
-      })
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          method: 'POST',
+          path: `/__kimochi/relay?channel=${channel}`,
+          headers: { 'Content-Type': 'application/json' }
+        },
+        (res) => {
+          res.resume()
+          res.on('end', () => resolve(res.statusCode))
+        }
+      )
       req.on('error', reject)
       req.end(typeof body === 'string' ? body : JSON.stringify(body))
     })
@@ -450,7 +534,11 @@ test('every pin names its size, and its committed record copies are the release 
   for (const id of ids) {
     const source = await loadSource(id)
     assert.ok(source.asset.size > 1_000_000, `${id} asset.size`)
-    assert.match(source.asset.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//, `${id} is pinned to an upstream GitHub release`)
+    assert.match(
+      source.asset.url,
+      /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//,
+      `${id} is pinned to an upstream GitHub release`
+    )
     // The manifest the host inlines (host/ext/engines.js) and the test fixtures are exact copies.
     assert.deepEqual(await checkRecordCopies(id), [], id)
   }
@@ -507,12 +595,19 @@ test('a version bump moves the outgoing release to the front of <id>.previous.js
     assert.deepEqual(await recordPrevious('demo', '1.0', dir), [])
     assert.deepEqual(await recordPrevious('demo', '2.0', dir), ['1.0'])
     assert.deepEqual(await previous(), [{ version: '1.0', files: { 'manifest.json': 'a'.repeat(64) } }])
-    for (const [from, to] of [['2.0', '3.0'], ['3.0', '4.0'], ['4.0', '5.0']]) {
+    for (const [from, to] of [
+      ['2.0', '3.0'],
+      ['3.0', '4.0'],
+      ['4.0', '5.0']
+    ]) {
       await records(from, { 'manifest.json': from[0].repeat(64) })
       await recordPrevious('demo', to, dir)
     }
     assert.equal(PREVIOUS_KEPT, 3)
-    assert.deepEqual((await previous()).map((r) => r.version), ['4.0', '3.0', '2.0'])
+    assert.deepEqual(
+      (await previous()).map((r) => r.version),
+      ['4.0', '3.0', '2.0']
+    )
     // Going back to an earlier pin drops it from the list (it is the pin again).
     await records('5.0', { 'manifest.json': 'f'.repeat(64) })
     assert.deepEqual(await recordPrevious('demo', '3.0', dir), ['5.0', '4.0', '2.0'])

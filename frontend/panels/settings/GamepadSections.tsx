@@ -62,12 +62,14 @@ const BUTTON_GROUPS: {
       {
         key: 'previousDefinition',
         label: 'Previous definition',
-        description: 'Jump up the dictionary pop-up to the definition before, or to the entry before in the full-screen dictionary.'
+        description:
+          'Jump up the dictionary pop-up to the definition before, or to the entry before in the full-screen dictionary.'
       },
       {
         key: 'nextDefinition',
         label: 'Next definition',
-        description: 'Jump down the dictionary pop-up to the next definition, or to the next entry in the full-screen dictionary.'
+        description:
+          'Jump down the dictionary pop-up to the next definition, or to the next entry in the full-screen dictionary.'
       },
       {
         key: 'showControls',
@@ -176,15 +178,15 @@ function ScanAfterButtonSection(): ReactNode {
       title="Scan after a button press"
       description="Automatically scan after you press a button on your gamepad."
     >
-      <SettingsRow
-        label="Button"
-        controlId="autoscan-enabled"
-        description="Choose the button that triggers a scan."
-      >
+      <SettingsRow label="Button" controlId="autoscan-enabled" description="Choose the button that triggers a scan.">
         <GamepadButtonCapture
           value={settings.gamepadButton}
           onChange={(button) =>
-            update(button === undefined ? { gamepadButton: undefined, enabled: false } : { gamepadButton: button, enabled: true })
+            update(
+              button === undefined
+                ? { gamepadButton: undefined, enabled: false }
+                : { gamepadButton: button, enabled: true }
+            )
           }
           size="1"
         />
@@ -210,10 +212,7 @@ function ScanAfterButtonSection(): ReactNode {
 
 /** The buttons Game Mode uses, by where they act; shown while gamepad input is on. */
 function ControllerButtonSections(): ReactNode {
-  const [storedButtons, setMenuButtons] = useSetting<ControllerButtons>(
-    'controllerButtons',
-    DEFAULT_CONTROLLER_BUTTONS
-  )
+  const [storedButtons, setMenuButtons] = useSetting<ControllerButtons>('controllerButtons', DEFAULT_CONTROLLER_BUTTONS)
   const menuButtons = effectiveControllerButtons(storedButtons)
   const customised = (Object.keys(DEFAULT_CONTROLLER_BUTTONS) as (keyof ControllerButtons)[]).some(
     (key) => menuButtons[key] !== DEFAULT_CONTROLLER_BUTTONS[key]
@@ -308,11 +307,7 @@ export function GamepadSections(): ReactNode {
           controlId="gamepad-enabled"
           description="Use a gamepad controller to trigger shortcuts and scans."
         >
-          <Switch
-            id="gamepad-enabled"
-            checked={enabled}
-            onCheckedChange={(checked) => setGamepadEnabled(checked)}
-          />
+          <Switch id="gamepad-enabled" checked={enabled} onCheckedChange={(checked) => setGamepadEnabled(checked)} />
         </SettingsRow>
         {enabled && gamepadSource === 'none' && (
           <div className="settings-note">
@@ -331,10 +326,7 @@ export function GamepadSections(): ReactNode {
       {enabled && (
         <SettingsSection title="Connected gamepads">
           {gamepads.length === 0 ? (
-            <SettingsRow
-              label="No gamepads detected"
-              description="Connect a controller and press any button."
-            />
+            <SettingsRow label="No gamepads detected" description="Connect a controller and press any button." />
           ) : (
             gamepads.map((gp) => {
               const active = gp.index === gamepadState.activeGamepadIndex
@@ -374,10 +366,7 @@ export function GamepadSections(): ReactNode {
       )}
 
       {enabled && gamepads.length > 0 && (
-        <SettingsSection
-          title="Button test"
-          description="Press buttons on your controller to see them light up."
-        >
+        <SettingsSection title="Button test" description="Press buttons on your controller to see them light up.">
           <div className="gamepad-test" role="group" aria-label="Button test">
             {gamepadState.buttonStates.map((pressed, index) => (
               <span key={index} className="gamepad-key" data-pressed={pressed ? '' : undefined}>

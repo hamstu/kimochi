@@ -216,7 +216,12 @@ impl Service {
         Ok(())
     }
     /// A command's answer, as JSON. (KWin passes a script's numbers as `int32`.)
-    fn reply(&self, #[zbus(header)] header: zbus::message::Header<'_>, seq: i32, json: String) -> zbus::fdo::Result<()> {
+    fn reply(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        seq: i32,
+        json: String,
+    ) -> zbus::fdo::Result<()> {
         authorize(&header)?;
         if let Some(waiter) = WAITING.lock().ok().and_then(|mut w| w.as_mut()?.remove(&seq)) {
             let _ = waiter.send(json);
@@ -388,7 +393,10 @@ fn overlay_output(snapshot: &Snapshot) -> Option<&Output> {
 }
 
 fn same_rect(a: &Rect, b: &Rect) -> bool {
-    (a.x - b.x).abs() < 0.5 && (a.y - b.y).abs() < 0.5 && (a.width - b.width).abs() < 0.5 && (a.height - b.height).abs() < 0.5
+    (a.x - b.x).abs() < 0.5
+        && (a.y - b.y).abs() < 0.5
+        && (a.width - b.width).abs() < 0.5
+        && (a.height - b.height).abs() < 0.5
 }
 
 fn output_of<'a>(snapshot: &'a Snapshot, window: &Window) -> Option<&'a Output> {
@@ -490,7 +498,12 @@ pub fn tracked(source: &str) -> Option<(Rect, bool)> {
         && !window.hidden
         && window.on_desktop
         && output.is_some_and(|o| window.output.as_ref() == Some(&o.name))
-        && output.is_some_and(|o| rect.x < o.geometry.width && rect.y < o.geometry.height && rect.x + rect.width > 0. && rect.y + rect.height > 0.);
+        && output.is_some_and(|o| {
+            rect.x < o.geometry.width
+                && rect.y < o.geometry.height
+                && rect.x + rect.width > 0.
+                && rect.y + rect.height > 0.
+        });
     Some((rect, visible))
 }
 
@@ -504,7 +517,8 @@ fn covered_by_own_window(snapshot: &Snapshot, game: &Window) -> bool {
         return false;
     }
     let Some(game_stack) = game.stack.filter(|s| *s >= 0) else { return false };
-    let overlaps = |a: &Rect, b: &Rect| a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    let overlaps =
+        |a: &Rect, b: &Rect| a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     snapshot.windows.iter().any(|w| {
         w.pid == std::process::id()
             && w.active
@@ -592,7 +606,9 @@ pub fn own_frames() -> Option<Vec<Rect>> {
         snapshot
             .windows
             .iter()
-            .filter(|w| w.pid == own && w.normal && !w.minimized && !w.hidden && w.on_desktop && w.layer.is_none_or(|l| l <= 2))
+            .filter(|w| {
+                w.pid == own && w.normal && !w.minimized && !w.hidden && w.on_desktop && w.layer.is_none_or(|l| l <= 2)
+            })
             .map(|w| Rect { x: w.frame.x - origin.x, y: w.frame.y - origin.y, ..w.frame })
             .collect(),
     )
@@ -634,7 +650,8 @@ pub fn activate(source: &str) -> Result<(), String> {
 pub fn status(source: &str) -> Value {
     let snapshot = snapshot();
     let binding = BINDING.lock().ok().and_then(|b| b.clone());
-    let linked = binding.is_some_and(|b| b.source == source && snapshot.as_ref().is_some_and(|s| resolve(s, &b).is_some()));
+    let linked =
+        binding.is_some_and(|b| b.source == source && snapshot.as_ref().is_some_and(|s| resolve(s, &b).is_some()));
     let tracked = tracked(source);
     json!({"available": snapshot.is_some(), "linked": linked,
         "bounds": tracked.map(|(bounds, _)| bounds), "visible": tracked.is_some_and(|(_, visible)| visible)})
@@ -661,7 +678,8 @@ pub fn candidates(width: u32, height: u32) -> Result<Value, String> {
 
 pub fn link(source: &str, id: &str, width: u32, height: u32) -> Result<(), String> {
     let snapshot = snapshot().ok_or("KWin window geometry is unavailable")?;
-    let window = explicit_match(&snapshot, id, width, height).ok_or("The chosen window no longer matches this shared frame. Try again.")?;
+    let window = explicit_match(&snapshot, id, width, height)
+        .ok_or("The chosen window no longer matches this shared frame. Try again.")?;
     let client = streamed_area(&snapshot, window, width, height) == Some(true);
     *BINDING.lock().map_err(|e| e.to_string())? = Some(Binding {
         source: source.to_owned(),
@@ -735,7 +753,11 @@ mod tests {
     #[test]
     fn bounds_are_relative_to_the_windows_output() {
         let mut s = sample();
-        s.outputs.push(Output { name: "HDMI-1".into(), geometry: Rect { x: 1920., y: 0., width: 2560., height: 1440. }, scale: 1. });
+        s.outputs.push(Output {
+            name: "HDMI-1".into(),
+            geometry: Rect { x: 1920., y: 0., width: 2560., height: 1440. },
+            scale: 1.,
+        });
         let r = local(&s, &s.windows[0], false).unwrap();
         assert_eq!((r.x, r.y), (100., 40.));
         s.windows[0].output = Some("HDMI-1".into());
@@ -749,7 +771,13 @@ mod tests {
     #[test]
     fn a_binding_follows_the_window_id_not_its_size() {
         let mut s = sample();
-        let binding = Binding { source: "portal:window:7".into(), id: "{a}".into(), pid: 42, bounds: s.windows[0].frame, client: false };
+        let binding = Binding {
+            source: "portal:window:7".into(),
+            id: "{a}".into(),
+            pid: 42,
+            bounds: s.windows[0].frame,
+            client: false,
+        };
         s.windows[0].frame.x = -50.;
         assert_eq!(resolve(&s, &binding).unwrap().frame.x, -50.);
         s.windows[0].pid = 7;

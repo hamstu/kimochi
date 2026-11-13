@@ -18,13 +18,8 @@ pub const MIN_HEIGHT: f64 = 60.;
 /// Window classes that are the shell itself rather than an application window: the
 /// desktop (`Progman`, `WorkerW`), the taskbars, and the host of UWP shell surfaces,
 /// which are visible, titled and uncloaked while being nothing a reader opened.
-pub const SHELL_CLASSES: [&str; 5] = [
-    "Progman",
-    "WorkerW",
-    "Shell_TrayWnd",
-    "Shell_SecondaryTrayWnd",
-    "Windows.UI.Core.CoreWindow",
-];
+pub const SHELL_CLASSES: [&str; 5] =
+    ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Windows.UI.Core.CoreWindow"];
 
 /// The frame that hosts a UWP app. With a title it is the app; untitled it is an empty
 /// frame (a suspended or closing app) with nothing to read.
@@ -87,8 +82,7 @@ pub fn owner_hides(owner_visible: bool, owner_width: f64, owner_height: f64) -> 
 
 /// A shell surface rather than an application window.
 pub fn is_shell_surface(class_name: &str, title_nonempty: bool) -> bool {
-    SHELL_CLASSES.contains(&class_name)
-        || (class_name == APPLICATION_FRAME_CLASS && !title_nonempty)
+    SHELL_CLASSES.contains(&class_name) || (class_name == APPLICATION_FRAME_CLASS && !title_nonempty)
 }
 
 /// Whether a top-level window belongs in the source list: the windows the taskbar and
@@ -155,44 +149,16 @@ mod tests {
     #[test]
     fn an_ordinary_app_window_is_listed() {
         assert!(listable(&meta()));
-        assert!(listable(&WindowMeta {
-            width: 80.,
-            height: 60.,
-            ..meta()
-        }));
+        assert!(listable(&WindowMeta { width: 80., height: 60., ..meta() }));
     }
 
     #[test]
     fn hidden_untitled_owned_cloaked_and_own_windows_are_not() {
         let cases: [(&str, WindowMeta); 5] = [
-            (
-                "invisible",
-                WindowMeta {
-                    visible: false,
-                    ..meta()
-                },
-            ),
-            (
-                "untitled",
-                WindowMeta {
-                    title_nonempty: false,
-                    ..meta()
-                },
-            ),
-            (
-                "owned",
-                WindowMeta {
-                    has_owner: true,
-                    ..meta()
-                },
-            ),
-            (
-                "cloaked",
-                WindowMeta {
-                    cloaked: true,
-                    ..meta()
-                },
-            ),
+            ("invisible", WindowMeta { visible: false, ..meta() }),
+            ("untitled", WindowMeta { title_nonempty: false, ..meta() }),
+            ("owned", WindowMeta { has_owner: true, ..meta() }),
+            ("cloaked", WindowMeta { cloaked: true, ..meta() }),
             ("ours", WindowMeta { pid: 1, ..meta() }),
         ];
         for (label, w) in cases {
@@ -203,23 +169,11 @@ mod tests {
     #[test]
     fn shell_surfaces_are_not_listed() {
         for class in SHELL_CLASSES {
-            assert!(
-                !listable(&WindowMeta {
-                    class_name: class,
-                    ..meta()
-                }),
-                "{class}"
-            );
+            assert!(!listable(&WindowMeta { class_name: class, ..meta() }), "{class}");
         }
-        let frame = WindowMeta {
-            class_name: APPLICATION_FRAME_CLASS,
-            ..meta()
-        };
+        let frame = WindowMeta { class_name: APPLICATION_FRAME_CLASS, ..meta() };
         assert!(listable(&frame), "a titled UWP frame is the app");
-        assert!(!listable(&WindowMeta {
-            title_nonempty: false,
-            ..frame
-        }));
+        assert!(!listable(&WindowMeta { title_nonempty: false, ..frame }));
         assert!(is_shell_surface(APPLICATION_FRAME_CLASS, false));
         assert!(!is_shell_surface(APPLICATION_FRAME_CLASS, true));
     }
@@ -236,9 +190,7 @@ mod tests {
     #[test]
     fn tool_windows_need_app_window_to_be_listed() {
         assert!(!listable(&meta().with_ex_style(WS_EX_TOOLWINDOW)));
-        assert!(listable(
-            &meta().with_ex_style(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW)
-        ));
+        assert!(listable(&meta().with_ex_style(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW)));
         assert!(is_tool_window(WS_EX_TOOLWINDOW));
         assert!(!is_tool_window(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW));
         assert!(!is_tool_window(0));
@@ -246,35 +198,15 @@ mod tests {
 
     #[test]
     fn tiny_windows_are_skipped_unless_minimized() {
-        assert!(!listable(&WindowMeta {
-            width: 79.,
-            ..meta()
-        }));
-        assert!(!listable(&WindowMeta {
-            height: 59.,
-            ..meta()
-        }));
-        assert!(!listable(&WindowMeta {
-            width: f64::NAN,
-            ..meta()
-        }));
-        assert!(!listable(&WindowMeta {
-            height: f64::INFINITY,
-            ..meta()
-        }));
+        assert!(!listable(&WindowMeta { width: 79., ..meta() }));
+        assert!(!listable(&WindowMeta { height: 59., ..meta() }));
+        assert!(!listable(&WindowMeta { width: f64::NAN, ..meta() }));
+        assert!(!listable(&WindowMeta { height: f64::INFINITY, ..meta() }));
         // The iconic placeholder rectangle is tiny; that is not the window's size.
-        let iconic = WindowMeta {
-            iconic: true,
-            width: 160.,
-            height: 28.,
-            ..meta()
-        };
+        let iconic = WindowMeta { iconic: true, width: 160., height: 28., ..meta() };
         assert!(listable(&iconic));
         // Minimised does not excuse a missing title.
-        assert!(!listable(&WindowMeta {
-            title_nonempty: false,
-            ..iconic
-        }));
+        assert!(!listable(&WindowMeta { title_nonempty: false, ..iconic }));
     }
 
     #[test]
@@ -294,15 +226,7 @@ mod tests {
             crate::SourceId::display(crate::Platform::Windows, hex_handle(0x10001)).to_string(),
             "windows:display:0x10001"
         );
-        for bad in [
-            "",
-            "0x",
-            "1A0B2C",
-            "0xZZ",
-            "0xnothex",
-            "0x0",
-            "0x11112222333344445",
-        ] {
+        for bad in ["", "0x", "1A0B2C", "0xZZ", "0xnothex", "0x0", "0x11112222333344445"] {
             assert_eq!(parse_hex_handle(bad), None, "{bad:?}");
         }
     }

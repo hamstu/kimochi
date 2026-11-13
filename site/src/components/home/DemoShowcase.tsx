@@ -20,8 +20,8 @@ export function DemoShowcase() {
             Preview
           </h2>
           <p className="mt-3 max-w-[44rem] text-body text-ink-2">
-            The demo game is in Japanese. Kimochi reads Korean, Chinese, Spanish, French and many other languages
-            too (experimental).
+            The demo game is in Japanese. Kimochi reads Korean, Chinese, Spanish, French and many other languages too
+            (experimental).
           </p>
         </header>
         <LiveDemo platform={desktop} />

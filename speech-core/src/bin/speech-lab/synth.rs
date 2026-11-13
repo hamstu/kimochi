@@ -72,7 +72,8 @@ pub fn main(args: &[String]) -> Result<(), String> {
     let limit: usize = crate::flag(args, "--lines").and_then(|s| s.parse().ok()).unwrap_or(usize::MAX);
     let names = crate::has(args, "--names") && mode != "hook";
     let rereads = crate::has(args, "--rereads") && mode != "hook";
-    let entries: Vec<Entry> = serde_json::from_str(&std::fs::read_to_string(dataset).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let entries: Vec<Entry> = serde_json::from_str(&std::fs::read_to_string(dataset).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
     let base = dataset.parent().unwrap_or(Path::new("."));
     let mut random = Random(seed.max(1) * 0x9E37_79B9_7F4A_7C15);
     let mut audio: Vec<f32> = Vec::new();

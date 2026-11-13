@@ -33,14 +33,9 @@ impl Default for Fbank {
 
 impl Fbank {
     pub fn new() -> Self {
-        let window = (0..FRAME)
-            .map(|i| 0.54 - 0.46 * (std::f32::consts::TAU * i as f32 / (FRAME - 1) as f32).cos())
-            .collect();
-        Self {
-            window,
-            banks: mel_banks(),
-            fft: Fft::new(FFT),
-        }
+        let window =
+            (0..FRAME).map(|i| 0.54 - 0.46 * (std::f32::consts::TAU * i as f32 / (FRAME - 1) as f32).cos()).collect();
+        Self { window, banks: mel_banks(), fft: Fft::new(FFT) }
     }
 
     /// Log mel energies for 16 kHz mono samples in -1..1, one row of `BINS` per 10 ms.
@@ -77,11 +72,7 @@ impl Fbank {
             }
             let mut row = [0f32; BINS];
             for (value, (first, weights)) in row.iter_mut().zip(&self.banks) {
-                let energy: f32 = weights
-                    .iter()
-                    .zip(&power[*first..])
-                    .map(|(w, p)| w * p)
-                    .sum();
+                let energy: f32 = weights.iter().zip(&power[*first..]).map(|(w, p)| w * p).sum();
                 *value = energy.max(f32::EPSILON).ln();
             }
             out.push(row);
@@ -212,27 +203,20 @@ mod tests {
                 r += *x as f64 * a.cos();
                 i += *x as f64 * a.sin();
             }
-            assert!(
-                (re[k] as f64 - r).abs() < 1e-3 && (im[k] as f64 - i).abs() < 1e-3,
-                "bin {k}"
-            );
+            assert!((re[k] as f64 - r).abs() < 1e-3 && (im[k] as f64 - i).abs() < 1e-3, "bin {k}");
         }
     }
 
     #[test]
     fn a_tone_lights_the_mel_bin_around_its_frequency() {
-        let tone: Vec<f32> = (0..16_000)
-            .map(|i| (i as f32 * 1_000.0 * std::f32::consts::TAU / RATE).sin() * 0.5)
-            .collect();
+        let tone: Vec<f32> =
+            (0..16_000).map(|i| (i as f32 * 1_000.0 * std::f32::consts::TAU / RATE).sin() * 0.5).collect();
         let frames = Fbank::new().compute(&tone);
         assert_eq!(frames.len(), 1 + (16_000 - FRAME) / SHIFT);
         let row = frames[50];
-        let loudest = (0..BINS)
-            .max_by(|&a, &b| row[a].total_cmp(&row[b]))
-            .unwrap();
+        let loudest = (0..BINS).max_by(|&a, &b| row[a].total_cmp(&row[b])).unwrap();
         // 1 kHz sits about a third of the way up the mel scale to 8 kHz.
-        let expected = ((mel(1_000.0) - mel(LOW_HZ))
-            / ((mel(8_000.0) - mel(LOW_HZ)) / (BINS + 1) as f32)) as usize;
+        let expected = ((mel(1_000.0) - mel(LOW_HZ)) / ((mel(8_000.0) - mel(LOW_HZ)) / (BINS + 1) as f32)) as usize;
         assert!(loudest.abs_diff(expected) <= 1, "{loudest} vs {expected}");
     }
 

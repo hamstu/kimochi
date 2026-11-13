@@ -41,9 +41,7 @@ async function request<T>(params: object): Promise<T> {
     }
   ).__extensionHost
   if (!host)
-    throw Error(
-      'Dictionary setup is unavailable. Open dictionary settings or retry after Kimochi finishes starting.'
-    )
+    throw Error('Dictionary setup is unavailable. Open dictionary settings or retry after Kimochi finishes starting.')
   return host.toBackend({ action: '__setupDictionaries', params })
 }
 
@@ -105,23 +103,26 @@ function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
     openDictionarySettings().catch((caught: unknown) => setError(nativeError(caught).message))
   }
   return (
-    <Step
-      title={`Set up ${name}`}
-      lede={`Kimochi looks words up with ${name}.`}
-    >
+    <Step title={`Set up ${name}`} lede={`Kimochi looks words up with ${name}.`}>
       <div className={style.block}>
         <p className={style.text}>{ENGINE_SETUP[engine]}</p>
         <DictionaryReadiness engine={engine} />
-        {runtime.settingsReady && <div>
-          <Button onClick={open}>
-            <ExternalLink />
-            Open {name} settings
-          </Button>
-        </div>}
+        {runtime.settingsReady && (
+          <div>
+            <Button onClick={open}>
+              <ExternalLink />
+              Open {name} settings
+            </Button>
+          </div>
+        )}
       </div>
       {error && <Callout tone="danger">{error}</Callout>}
       <StepActions>
-        {runtime.phase !== 'ready' && <Button asChild><Link to={NEXT}>Set up later</Link></Button>}
+        {runtime.phase !== 'ready' && (
+          <Button asChild>
+            <Link to={NEXT}>Set up later</Link>
+          </Button>
+        )}
         <Button variant="primary" disabled={runtime.phase !== 'ready'} onClick={() => void navigate(NEXT)}>
           Continue
         </Button>
@@ -245,8 +246,8 @@ function YomitanSetup(): JSX.Element {
         <div className={style.block}>
           <p className={style.status}>
             <StatusDot tone="ok" />
-            {ready.length === 1 ? '1 dictionary is' : `${ready.length} dictionaries are`} enabled in
-            your current profile.
+            {ready.length === 1 ? '1 dictionary is' : `${ready.length} dictionaries are`} enabled in your current
+            profile.
           </p>
           <ul className={style.dictionaries}>
             {ready.map((item) => (
@@ -257,13 +258,15 @@ function YomitanSetup(): JSX.Element {
       )}
       {offer && ready.length === 0 && (installed?.length ?? 0) > 0 && (
         <Callout tone="warn">
-          {installed?.length === 1 ? 'A dictionary is' : `${installed?.length} dictionaries are`}{' '}
-          installed, but none is enabled in your current profile. Enable one in Yomitan’s settings,
-          or install one here.
+          {installed?.length === 1 ? 'A dictionary is' : `${installed?.length} dictionaries are`} installed, but none is
+          enabled in your current profile. Enable one in Yomitan’s settings, or install one here.
         </Callout>
       )}
       {offer && (
-        <div className={style.options} role="radiogroup" aria-label="How to add a dictionary"
+        <div
+          className={style.options}
+          role="radiogroup"
+          aria-label="How to add a dictionary"
           onKeyDown={(event) => {
             const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
             const index = radios.indexOf(event.target as HTMLButtonElement)
@@ -322,9 +325,7 @@ function YomitanSetup(): JSX.Element {
           <button
             type="button"
             className={`${style.inlineButton} ${style.link}`}
-            onClick={() =>
-              void openUrl(YOMITAN_DICTIONARIES_URL).catch((caught: unknown) => setError(String(caught)))
-            }
+            onClick={() => void openUrl(YOMITAN_DICTIONARIES_URL).catch((caught: unknown) => setError(String(caught)))}
           >
             Yomitan’s dictionary list
           </button>{' '}
@@ -419,7 +420,15 @@ function YomitanPractice(): JSX.Element {
   return word ? <YomitanPracticeWord word={word} lang={language.code} languageName={language.name} /> : <></>
 }
 
-function YomitanPracticeWord({ word, lang, languageName }: { word: string; lang: string; languageName: string }): JSX.Element {
+function YomitanPracticeWord({
+  word,
+  lang,
+  languageName
+}: {
+  word: string
+  lang: string
+  languageName: string
+}): JSX.Element {
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, setPending] = useState(false)
   async function check(): Promise<void> {
@@ -443,7 +452,9 @@ function YomitanPracticeWord({ word, lang, languageName }: { word: string; lang:
   return (
     <div className={style.practice}>
       <Button disabled={pending} onClick={() => void check()}>
-        {pending ? 'Checking…' : (
+        {pending ? (
+          'Checking…'
+        ) : (
           <>
             Test a lookup of <span lang={lang}>{word}</span>
           </>

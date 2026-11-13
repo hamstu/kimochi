@@ -1,4 +1,4 @@
-@import "/node_modules/@fontsource-variable/figtree/wght.css";
+@import '/node_modules/@fontsource-variable/figtree/wght.css';
 /*
  * The docs screenshot stage: one app window on a transparent ground, with a soft frame shadow,
  * rounded corners and optional marks (glowing outlines, numbered badges, callout labels, a dimmed
@@ -14,8 +14,8 @@
   --note-text: #1c2024;
   --note-line: #00002d17;
   --frame-line: rgb(15 17 26 / 0.12);
-  --frame-shadow: 0 1px 2px rgb(15 17 26 / 0.08), 0 18px 48px -12px rgb(15 17 26 / 0.28),
-    0 40px 80px -40px rgb(15 17 26 / 0.22);
+  --frame-shadow:
+    0 1px 2px rgb(15 17 26 / 0.08), 0 18px 48px -12px rgb(15 17 26 / 0.28), 0 40px 80px -40px rgb(15 17 26 / 0.22);
   --dim: rgb(15 17 26 / 0.42);
   --title-bg: #f9f9fb;
   --title-text: #60646c;
@@ -29,8 +29,7 @@
   --note-text: #edeef0;
   --note-line: #d3edf81d;
   --frame-line: rgb(255 255 255 / 0.1);
-  --frame-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 48px -12px rgb(0 0 0 / 0.65),
-    0 40px 80px -40px rgb(0 0 0 / 0.5);
+  --frame-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 48px -12px rgb(0 0 0 / 0.65), 0 40px 80px -40px rgb(0 0 0 / 0.5);
   --dim: rgb(0 0 0 / 0.5);
   --title-bg: #18191b;
   --title-text: #b0b4ba;
@@ -112,7 +111,10 @@ body {
 .glow {
   position: absolute;
   border-radius: var(--r, 8px);
-  box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-ring), 0 0 22px 4px var(--accent-glow);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 6px var(--accent-ring),
+    0 0 22px 4px var(--accent-glow);
 }
 .focus {
   position: absolute;
@@ -151,10 +153,14 @@ body {
   font-size: 17px;
   font-weight: 620;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 0 0 2.5px #fff, 0 4px 12px rgb(15 17 26 / 0.3);
+  box-shadow:
+    0 0 0 2.5px #fff,
+    0 4px 12px rgb(15 17 26 / 0.3);
 }
 :root[data-theme='dark'] .badge {
-  box-shadow: 0 0 0 2.5px #111113, 0 4px 12px rgb(0 0 0 / 0.5);
+  box-shadow:
+    0 0 0 2.5px #111113,
+    0 4px 12px rgb(0 0 0 / 0.5);
 }
 
 /* Callout labels live on the stage (outside the window clip), so they can sit in the margin. */
@@ -171,7 +177,9 @@ body {
   background: var(--note-bg);
   color: var(--note-text);
   border: 1px solid var(--note-line);
-  box-shadow: 0 1px 2px rgb(15 17 26 / 0.08), 0 10px 28px -8px rgb(15 17 26 / 0.3);
+  box-shadow:
+    0 1px 2px rgb(15 17 26 / 0.08),
+    0 10px 28px -8px rgb(15 17 26 / 0.3);
   font-size: 13px;
   line-height: 1.35;
   font-weight: 500;

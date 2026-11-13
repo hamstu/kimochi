@@ -22,7 +22,15 @@ const tones: Record<NoticeTone, { ground: string; icon: string; Icon: typeof Inf
  * Tinted callout (no border, per DESIGN.md). Errors use role="alert" so they are announced;
  * other tones use role="status".
  */
-export function Notice({ tone = 'info', children, className = '' }: { tone?: NoticeTone; children: ReactNode; className?: string }) {
+export function Notice({
+  tone = 'info',
+  children,
+  className = ''
+}: {
+  tone?: NoticeTone
+  children: ReactNode
+  className?: string
+}) {
   const t = tones[tone]
   return (
     <div

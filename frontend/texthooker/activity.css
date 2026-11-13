@@ -31,7 +31,9 @@
   width: min(28rem, calc(100% - var(--k-space-3) * 2));
   border-radius: var(--k-radius-xl);
   background: var(--k-raised);
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a5);
   color: var(--k-text);
   font-size: var(--k-text-sm);
   line-height: var(--k-leading-sm);
@@ -53,15 +55,15 @@
     visibility 0s 400ms;
 }
 /* Auto OCR running: a small pill that says so, as narrow as its words. */
-.activity[data-mode="auto"] {
+.activity[data-mode='auto'] {
   width: max-content;
   max-width: calc(100% - var(--k-space-3) * 2);
   border-radius: 999px;
 }
-.activity[data-mode="auto"] .activity-ticker {
+.activity[data-mode='auto'] .activity-ticker {
   border-radius: 999px;
 }
-.activity[data-mode="auto"] .activity-viewport {
+.activity[data-mode='auto'] .activity-viewport {
   flex: none;
   width: max-content;
   max-width: 20rem;
@@ -90,7 +92,9 @@
   color: var(--k-text);
 }
 .dark .activity {
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a6);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a6);
 }
 
 /* ------------------------------------------------------------------ the ticker */
@@ -146,10 +150,16 @@
   animation: activity-out 200ms var(--k-ease-out) forwards;
 }
 @keyframes activity-in {
-  from { opacity: 0; transform: translateY(100%); }
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
 }
 @keyframes activity-out {
-  to { opacity: 0; transform: translateY(-100%); }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
 }
 
 .activity-dot-busy {
@@ -167,7 +177,7 @@
   background: var(--green-9);
 }
 .activity-live-dot::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   border-radius: 999px;
@@ -177,8 +187,15 @@
   animation: activity-live 2s steps(12, jump-none) infinite;
 }
 @keyframes activity-live {
-  0% { transform: scale(1); opacity: 1; }
-  70%, 100% { transform: scale(2.6); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
 }
 /* Nothing animates while the window is behind another or hidden: nobody is looking. */
 .activity[data-idle] *,
@@ -192,7 +209,10 @@
   }
 }
 @keyframes activity-pulse {
-  50% { opacity: 0.35; transform: scale(0.75); }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
 }
 
 .activity-count {
@@ -212,7 +232,10 @@
   animation: activity-open var(--k-base) var(--k-ease-out);
 }
 @keyframes activity-open {
-  from { opacity: 0; transform: translateY(0.25rem); }
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
 }
 .activity-list {
   max-height: min(50vh, 18rem);
@@ -233,7 +256,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.activity-row[data-tone="error"] .activity-row-text {
+.activity-row[data-tone='error'] .activity-row-text {
   color: var(--k-danger-text);
 }
 
@@ -267,7 +290,7 @@
   height: var(--k-icon-xs);
   transition: transform var(--k-fast) var(--k-ease-out);
 }
-.activity-disclosure[aria-expanded="true"] svg {
+.activity-disclosure[aria-expanded='true'] svg {
   transform: rotate(90deg);
 }
 

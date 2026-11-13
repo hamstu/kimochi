@@ -30,7 +30,15 @@ export interface LogDrag {
 /** What the embedded Log tells the demo (the harness's `tellEmbedder`). */
 export type LogEvent =
   | ({ type: 'drag' } & LogDrag)
-  | { type: 'state'; sourceId: string | null; autoOcr: boolean; overlay: boolean; input?: string; hookPhase?: string; autoAlign?: boolean }
+  | {
+      type: 'state'
+      sourceId: string | null
+      autoOcr: boolean
+      overlay: boolean
+      input?: string
+      hookPhase?: string
+      autoAlign?: boolean
+    }
   | { type: 'window'; action: 'mini' | 'expand' | 'minimize' | 'hide' | 'close' }
   | { type: 'activate'; sourceId: string | null }
   | { type: 'interact' }
@@ -101,7 +109,13 @@ export function LogFrame({
   const extraKey = JSON.stringify(extra ?? {})
   useEffect(() => {
     if (!load || !ok) return
-    const params = new URLSearchParams({ window: 'log', embed: '1', sidebar: '0', theme: themeRef.current, ...JSON.parse(extraKey) })
+    const params = new URLSearchParams({
+      window: 'log',
+      embed: '1',
+      sidebar: '0',
+      theme: themeRef.current,
+      ...JSON.parse(extraKey)
+    })
     if (platform !== 'macos') params.set('platform', platform)
     if (reloadKey) params.set('run', String(reloadKey))
     setLoaded(false)

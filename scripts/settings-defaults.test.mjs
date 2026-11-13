@@ -137,7 +137,11 @@ test('overlay look: the default, the Rust store, and what a stored style reads a
   assert.match(rust, /"overlayStyle": \{ "color": "#3e63dd", "appearance": "app", "opacity": 40 \}/)
   // A stored style is made whole, and anything this build cannot draw falls back to the default.
   assert.deepEqual(withDefaults('overlayStyle', undefined), DEFAULT_OVERLAY_STYLE)
-  assert.deepEqual(withDefaults('overlayStyle', { color: '#0090FF' }), { color: '#0090ff', appearance: 'app', opacity: 40 })
+  assert.deepEqual(withDefaults('overlayStyle', { color: '#0090FF' }), {
+    color: '#0090ff',
+    appearance: 'app',
+    opacity: 40
+  })
   assert.deepEqual(overlayStyleOf({ color: 'blue', appearance: 'sepia' }), DEFAULT_OVERLAY_STYLE)
   assert.deepEqual(overlayStyleOf({ appearance: 'light' }), { color: '#3e63dd', appearance: 'light', opacity: 40 })
   assert.equal(overlayStyleOf({ opacity: 140 }).opacity, 100)

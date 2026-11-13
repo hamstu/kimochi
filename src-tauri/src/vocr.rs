@@ -56,9 +56,9 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
     let probe_app = app.clone();
     let probe = move || {
         let loaded = || Loaded { accelerator: "cpu", diagnostics: Vec::new() };
-        let selected = probe_app.try_state::<crate::state::Shared>().is_some_and(|service| {
-            service.settings.get_or::<String>("ocrMode", String::new()) == "vocr"
-        });
+        let selected = probe_app
+            .try_state::<crate::state::Shared>()
+            .is_some_and(|service| service.settings.get_or::<String>("ocrMode", String::new()) == "vocr");
         if selected {
             if let Some(state) = probe_app.try_state::<VocrState>() {
                 let mut slot = state.0.lock().map_err(|_| "VOCR6 worker unavailable".to_string())?;
@@ -122,12 +122,16 @@ pub(crate) fn models_ready(app: &tauri::AppHandle) -> Result<(), String> {
 /// scans (`text_observer`): it is a few megabytes and reads a frame in milliseconds, so a scan
 /// waits at most one observation for the lock, and the frame the watcher read last is the one
 /// a scan reuses (`text_observer::scan_for`).
-pub(crate) fn read_lines(app: &tauri::AppHandle, grey: &kimochi_vocr::Grey) -> Result<Vec<meikiocr::TextLine>, crate::pp_ocr::ReadError> {
+pub(crate) fn read_lines(
+    app: &tauri::AppHandle,
+    grey: &kimochi_vocr::Grey,
+) -> Result<Vec<meikiocr::TextLine>, crate::pp_ocr::ReadError> {
     use crate::pp_ocr::ReadError;
     let state = app.state::<VocrState>();
     let mut engine = state.0.lock().map_err(|_| ReadError::Inference("VOCR6 worker unavailable".into()))?;
     if engine.is_none() {
-        *engine = Some(load_engine(app).map_err(|reason| ReadError::Unavailable(format!("VOCR6 is not ready: {reason}")))?);
+        *engine =
+            Some(load_engine(app).map_err(|reason| ReadError::Unavailable(format!("VOCR6 is not ready: {reason}")))?);
     }
     let engine = engine.as_mut().ok_or(ReadError::Inference("VOCR6 initialization failed".into()))?;
     let lines = engine_probe::guarded(|| engine.read_capture(grey).map_err(|e| format!("VOCR6 inference: {e}")))
@@ -156,7 +160,16 @@ mod tests {
 
     fn line() -> kimochi_vocr::Line {
         let c = |t: &str, x0: f32, x1: f32| kimochi_vocr::Char {
-            text: t.into(), cls: 1, f0: 0, f1: 0, x: (x0 + x1) / 2.0, x0, x1, y0: 20, y1: 50, conf: 0.9,
+            text: t.into(),
+            cls: 1,
+            f0: 0,
+            f1: 0,
+            x: (x0 + x1) / 2.0,
+            x0,
+            x1,
+            y0: 20,
+            y1: 50,
+            conf: 0.9,
         };
         kimochi_vocr::Line {
             text: "日本".into(),
@@ -192,7 +205,8 @@ mod tests {
     fn reads_a_fixture_through_the_scan_path() {
         let models = std::env::var("VOCR_MODEL_DIR").unwrap();
         let mut engine = Vocr::load(&ModelPaths::from_dir(models, TIER, MODE, true), Config::default()).unwrap();
-        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/fixtures/overlay-alignment/dialogue.png");
+        let fixture =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/fixtures/overlay-alignment/dialogue.png");
         let rgb = image::open(fixture).unwrap().to_rgb8();
         let (w, h) = (rgb.width() as usize, rgb.height() as usize);
         let grey = kimochi_vocr::Grey::from_interleaved(rgb.as_raw(), w, h, w * 3, 3);

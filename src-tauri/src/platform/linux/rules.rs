@@ -56,11 +56,7 @@ pub fn detect_session(get: impl Fn(&str) -> Option<String>) -> Session {
         set("NIRI_SOCKET").is_some(),
     );
     Session {
-        backend: if wayland {
-            Backend::Wayland
-        } else {
-            Backend::X11
-        },
+        backend: if wayland { Backend::Wayland } else { Backend::X11 },
         layer_shell: wayland && compositor.as_deref().is_some_and(layer_shell_likely),
         compositor,
         xwayland: wayland && set("DISPLAY").is_some(),
@@ -71,12 +67,7 @@ pub fn detect_session(get: impl Fn(&str) -> Option<String>) -> Session {
 /// signal (it is set by the compositor itself, not by a login manager guess); otherwise
 /// the first entry of `XDG_CURRENT_DESKTOP` (`ubuntu:GNOME` -> `GNOME`, since Ubuntu
 /// lists its flavour first).
-pub fn compositor_name(
-    current_desktop: Option<&str>,
-    hyprland: bool,
-    sway: bool,
-    niri: bool,
-) -> Option<String> {
+pub fn compositor_name(current_desktop: Option<&str>, hyprland: bool, sway: bool, niri: bool) -> Option<String> {
     if hyprland {
         return Some("Hyprland".into());
     }
@@ -86,11 +77,7 @@ pub fn compositor_name(
     if niri {
         return Some("niri".into());
     }
-    let entries: Vec<&str> = current_desktop?
-        .split(':')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
+    let entries: Vec<&str> = current_desktop?.split(':').map(str::trim).filter(|s| !s.is_empty()).collect();
     // Distribution flavours that prefix the real desktop.
     const FLAVOURS: [&str; 3] = ["ubuntu", "pop", "zorin"];
     entries
@@ -104,13 +91,21 @@ pub fn compositor_name(
 /// says it never will; unknown compositors are assumed not to.
 pub fn layer_shell_likely(compositor: &str) -> bool {
     const KNOWN: [&str; 12] = [
-        "kde", "hyprland", "sway", "niri", "wayfire", "river", "cosmic", "labwc", "hikari", "lxqt",
-        "budgie", "gamescope",
+        "kde",
+        "hyprland",
+        "sway",
+        "niri",
+        "wayfire",
+        "river",
+        "cosmic",
+        "labwc",
+        "hikari",
+        "lxqt",
+        "budgie",
+        "gamescope",
     ];
     let c = compositor.to_ascii_lowercase();
-    KNOWN
-        .iter()
-        .any(|k| c == *k || c.starts_with(&format!("{k}-")))
+    KNOWN.iter().any(|k| c == *k || c.starts_with(&format!("{k}-")))
 }
 
 // ---------------------------------------------------------------- pointer
@@ -208,11 +203,7 @@ pub struct ShapeRect {
 /// of it or it is not finite. The survivors are merged (`merge_edges`), which only
 /// shortens the request: the shape is their union whatever the overlap.
 pub fn input_shape(rects: &[[f64; 4]], scale: f64, size: (u16, u16)) -> Vec<ShapeRect> {
-    let scale = if scale.is_finite() && scale > 0. {
-        scale
-    } else {
-        1.
-    };
+    let scale = if scale.is_finite() && scale > 0. { scale } else { 1. };
     let limit = |v: u16| f64::from(v.min(i16::MAX as u16));
     let (max_x, max_y) = (limit(size.0), limit(size.1));
     let edges: Vec<[i32; 4]> = rects
@@ -243,19 +234,11 @@ pub fn input_shape(rects: &[[f64; 4]], scale: f64, size: (u16, u16)) -> Vec<Shap
 /// same rows side by side — a line of words, or the boxes of one word), repeatedly,
 /// until nothing changes. The X request is sent `UNSORTED`, so order does not matter.
 pub fn merge_edges(rects: Vec<[i32; 4]>) -> Vec<[i32; 4]> {
-    let contains =
-        |a: &[i32; 4], b: &[i32; 4]| a[0] <= b[0] && a[1] <= b[1] && a[2] >= b[2] && a[3] >= b[3];
+    let contains = |a: &[i32; 4], b: &[i32; 4]| a[0] <= b[0] && a[1] <= b[1] && a[2] >= b[2] && a[3] >= b[3];
     let joined = |a: &[i32; 4], b: &[i32; 4]| -> Option<[i32; 4]> {
         let columns = a[0] == b[0] && a[2] == b[2] && a[1] <= b[3] && b[1] <= a[3];
         let rows = a[1] == b[1] && a[3] == b[3] && a[0] <= b[2] && b[0] <= a[2];
-        (columns || rows).then(|| {
-            [
-                a[0].min(b[0]),
-                a[1].min(b[1]),
-                a[2].max(b[2]),
-                a[3].max(b[3]),
-            ]
-        })
+        (columns || rows).then(|| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])
     };
     let mut out: Vec<[i32; 4]> = Vec::with_capacity(rects.len());
     for rect in rects {
@@ -364,10 +347,7 @@ mod tests {
     use std::collections::HashMap;
 
     fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-        let map: HashMap<String, String> = pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
+        let map: HashMap<String, String> = pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         move |k: &str| map.get(k).cloned()
     }
 
@@ -431,26 +411,17 @@ mod tests {
         let sway = detect_session(env(&[("WAYLAND_DISPLAY", "w"), ("SWAYSOCK", "/run/s")]));
         assert_eq!(sway.compositor.as_deref(), Some("sway"));
         assert!(sway.layer_shell);
-        let kde = detect_session(env(&[
-            ("XDG_SESSION_TYPE", "wayland"),
-            ("XDG_CURRENT_DESKTOP", "KDE"),
-        ]));
+        let kde = detect_session(env(&[("XDG_SESSION_TYPE", "wayland"), ("XDG_CURRENT_DESKTOP", "KDE")]));
         assert!(kde.layer_shell);
     }
 
     #[test]
     fn layer_shell_is_never_claimed_on_x11() {
-        let s = detect_session(env(&[
-            ("XDG_SESSION_TYPE", "x11"),
-            ("XDG_CURRENT_DESKTOP", "KDE"),
-        ]));
+        let s = detect_session(env(&[("XDG_SESSION_TYPE", "x11"), ("XDG_CURRENT_DESKTOP", "KDE")]));
         assert!(!s.layer_shell);
         assert_eq!(compositor_name(None, false, false, false), None);
         assert_eq!(compositor_name(Some(""), false, false, false), None);
-        assert_eq!(
-            compositor_name(Some("ubuntu"), false, false, false).as_deref(),
-            Some("ubuntu")
-        );
+        assert_eq!(compositor_name(Some("ubuntu"), false, false, false).as_deref(), Some("ubuntu"));
     }
 
     #[test]
@@ -472,10 +443,7 @@ mod tests {
         assert_eq!(work_area(right, workarea), [1920, 27, 1920, 1053]);
         assert_eq!(work_area(left, None), left);
         assert_eq!(work_area(left, Some([5000, 0, 10, 10])), left);
-        assert_eq!(
-            workarea_for_desktop(&[0, 27, 3840, 1053, 1, 2, 3, 4], 1),
-            Some([1, 2, 3, 4])
-        );
+        assert_eq!(workarea_for_desktop(&[0, 27, 3840, 1053, 1, 2, 3, 4], 1), Some([1, 2, 3, 4]));
         assert_eq!(workarea_for_desktop(&[0, 27, 3840], 0), None);
     }
 
@@ -487,18 +455,9 @@ mod tests {
         data.extend(std::iter::repeat_n(2u32, 48 * 48));
         data.extend([32, 32]);
         data.extend(std::iter::repeat_n(3u32, 1024));
-        assert_eq!(
-            pick_icon(&data, 24).map(|(w, _, p)| (w, p[0])),
-            Some((32, 3))
-        );
-        assert_eq!(
-            pick_icon(&data, 64).map(|(w, _, p)| (w, p[0])),
-            Some((48, 2))
-        );
-        assert_eq!(
-            pick_icon(&data, 8).map(|(w, _, p)| (w, p[0])),
-            Some((16, 1))
-        );
+        assert_eq!(pick_icon(&data, 24).map(|(w, _, p)| (w, p[0])), Some((32, 3)));
+        assert_eq!(pick_icon(&data, 64).map(|(w, _, p)| (w, p[0])), Some((48, 2)));
+        assert_eq!(pick_icon(&data, 8).map(|(w, _, p)| (w, p[0])), Some((16, 1)));
         // Truncated trailing entry is ignored, garbage yields nothing.
         let mut cut = data.clone();
         cut.extend([64, 64, 9]);
@@ -537,31 +496,17 @@ mod tests {
     }
 
     fn shape(x: i16, y: i16, width: u16, height: u16) -> ShapeRect {
-        ShapeRect {
-            x,
-            y,
-            width,
-            height,
-        }
+        ShapeRect { x, y, width, height }
     }
 
     #[test]
     fn input_shape_scales_and_snaps_outward() {
         // Fractional CSS edges never lose a pixel.
-        assert_eq!(
-            input_shape(&[[10.4, 20.6, 5.2, 3.0]], 1., (100, 100)),
-            vec![shape(10, 20, 6, 4)]
-        );
+        assert_eq!(input_shape(&[[10.4, 20.6, 5.2, 3.0]], 1., (100, 100)), vec![shape(10, 20, 6, 4)]);
         // GDK scale 2: device pixels are twice the CSS pixels.
-        assert_eq!(
-            input_shape(&[[10., 20., 5., 3.]], 2., (100, 100)),
-            vec![shape(20, 40, 10, 6)]
-        );
+        assert_eq!(input_shape(&[[10., 20., 5., 3.]], 2., (100, 100)), vec![shape(20, 40, 10, 6)]);
         // A nonsensical scale is 1.
-        assert_eq!(
-            input_shape(&[[1., 1., 2., 2.]], 0., (100, 100)),
-            vec![shape(1, 1, 2, 2)]
-        );
+        assert_eq!(input_shape(&[[1., 1., 2., 2.]], 0., (100, 100)), vec![shape(1, 1, 2, 2)]);
     }
 
     #[test]
@@ -574,44 +519,23 @@ mod tests {
             [f64::NAN, 10., 10., 10.],     // not finite
             [10., 10., f64::INFINITY, 1.], // not finite
         ];
-        assert_eq!(
-            input_shape(&rects, 1., (100, 100)),
-            vec![shape(0, 0, 5, 5), shape(95, 90, 5, 10)]
-        );
+        assert_eq!(input_shape(&rects, 1., (100, 100)), vec![shape(0, 0, 5, 5), shape(95, 90, 5, 10)]);
         // X coordinates are 16-bit.
-        assert_eq!(
-            input_shape(&[[0., 0., 1e9, 1.]], 1., (u16::MAX, 10)),
-            vec![shape(0, 0, i16::MAX as u16, 1)]
-        );
+        assert_eq!(input_shape(&[[0., 0., 1e9, 1.]], 1., (u16::MAX, 10)), vec![shape(0, 0, i16::MAX as u16, 1)]);
         assert!(input_shape(&[], 1., (100, 100)).is_empty());
     }
 
     #[test]
     fn merge_drops_contained_and_joins_aligned() {
         // Contained either way round, and duplicates.
-        assert_eq!(
-            merge_edges(vec![[0, 0, 10, 10], [2, 2, 5, 5], [0, 0, 10, 10]]),
-            vec![[0, 0, 10, 10]]
-        );
-        assert_eq!(
-            merge_edges(vec![[2, 2, 5, 5], [0, 0, 10, 10]]),
-            vec![[0, 0, 10, 10]]
-        );
+        assert_eq!(merge_edges(vec![[0, 0, 10, 10], [2, 2, 5, 5], [0, 0, 10, 10]]), vec![[0, 0, 10, 10]]);
+        assert_eq!(merge_edges(vec![[2, 2, 5, 5], [0, 0, 10, 10]]), vec![[0, 0, 10, 10]]);
         // A line of words: same rows, touching.
-        assert_eq!(
-            merge_edges(vec![[0, 0, 10, 20], [10, 0, 25, 20], [25, 0, 30, 20]]),
-            vec![[0, 0, 30, 20]]
-        );
+        assert_eq!(merge_edges(vec![[0, 0, 10, 20], [10, 0, 25, 20], [25, 0, 30, 20]]), vec![[0, 0, 30, 20]]);
         // Stacked in the same columns, overlapping.
-        assert_eq!(
-            merge_edges(vec![[0, 0, 10, 10], [0, 5, 10, 30]]),
-            vec![[0, 0, 10, 30]]
-        );
+        assert_eq!(merge_edges(vec![[0, 0, 10, 10], [0, 5, 10, 30]]), vec![[0, 0, 10, 30]]);
         // A join that makes the result line up with an earlier rectangle.
-        assert_eq!(
-            merge_edges(vec![[0, 10, 20, 20], [0, 0, 10, 10], [10, 0, 20, 10]]),
-            vec![[0, 0, 20, 20]]
-        );
+        assert_eq!(merge_edges(vec![[0, 10, 20, 20], [0, 0, 10, 10], [10, 0, 20, 10]]), vec![[0, 0, 20, 20]]);
     }
 
     #[test]

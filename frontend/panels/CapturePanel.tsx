@@ -21,9 +21,7 @@ export default function CapturePanel(): JSX.Element {
     let timer: ReturnType<typeof setTimeout>
     const poll = async (): Promise<void> => {
       try {
-        const next = await invoke<{ frame: Preview | null; error: string | null } | null>(
-          'capture_preview'
-        )
+        const next = await invoke<{ frame: Preview | null; error: string | null } | null>('capture_preview')
         if (active) {
           setPreview(next?.frame ?? null)
           setError(next?.error ?? null)

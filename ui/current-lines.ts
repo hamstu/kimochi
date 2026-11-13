@@ -11,41 +11,33 @@ export function currentLines(
     (line) =>
       identityKey(line.text) !== '' &&
       (now ?? []).some(
-        (next) =>
-          identityKey(line.text) === identityKey(next.text) &&
-          boxesOverlap(line.box, next.box, tolerance)
+        (next) => identityKey(line.text) === identityKey(next.text) && boxesOverlap(line.box, next.box, tolerance)
       )
   )
 }
 
 /** All vertices must belong to one surviving line. A whole-page aggregate cannot pass. */
-export function annotationsInLines(
-  annotations: unknown[],
-  boxes: TextBox[],
-  tolerance = 3
-): Annotation[] {
-  const words = (annotations.length > 1 ? annotations.slice(1) : annotations).filter(
-    (value): value is Annotation => {
-      if (!value || typeof value !== 'object') return false
-      const a = value as Partial<Annotation>
-      const vertices = a.boundingPoly?.vertices
-      if (typeof a.description !== 'string' || !vertices || vertices.length < 4) return false
-      return boxes.some((box) =>
-        vertices.every((vertex) => {
-          const x = vertex.x ?? 0,
-            y = vertex.y ?? 0
-          return (
-            Number.isFinite(x) &&
-            Number.isFinite(y) &&
-            x >= box.x - tolerance &&
-            x <= box.x + box.width + tolerance &&
-            y >= box.y - tolerance &&
-            y <= box.y + box.height + tolerance
-          )
-        })
-      )
-    }
-  )
+export function annotationsInLines(annotations: unknown[], boxes: TextBox[], tolerance = 3): Annotation[] {
+  const words = (annotations.length > 1 ? annotations.slice(1) : annotations).filter((value): value is Annotation => {
+    if (!value || typeof value !== 'object') return false
+    const a = value as Partial<Annotation>
+    const vertices = a.boundingPoly?.vertices
+    if (typeof a.description !== 'string' || !vertices || vertices.length < 4) return false
+    return boxes.some((box) =>
+      vertices.every((vertex) => {
+        const x = vertex.x ?? 0,
+          y = vertex.y ?? 0
+        return (
+          Number.isFinite(x) &&
+          Number.isFinite(y) &&
+          x >= box.x - tolerance &&
+          x <= box.x + box.width + tolerance &&
+          y >= box.y - tolerance &&
+          y <= box.y + box.height + tolerance
+        )
+      })
+    )
+  })
   if (words.length < 2) return words
   const vertices = words.flatMap((word) => word.boundingPoly.vertices)
   const minX = Math.min(...vertices.map((v) => v.x ?? 0)),

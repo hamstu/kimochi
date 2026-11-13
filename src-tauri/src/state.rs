@@ -27,22 +27,12 @@ pub struct Image {
 
 impl Image {
     pub fn encoded(png: Vec<u8>, info: Value) -> Self {
-        Self {
-            png: Arc::new(OnceLock::from(Ok(png))),
-            raw: None,
-            info,
-            observed: None,
-        }
+        Self { png: Arc::new(OnceLock::from(Ok(png))), raw: None, info, observed: None }
     }
 
     /// Observations keep pixels; encode only if OCR or a preview consumes them.
     pub fn captured(frame: kimochi_capture::Frame, info: Value) -> Self {
-        Self {
-            png: Arc::new(OnceLock::new()),
-            raw: Some(Arc::new(frame)),
-            info,
-            observed: None,
-        }
+        Self { png: Arc::new(OnceLock::new()), raw: Some(Arc::new(frame)), info, observed: None }
     }
 
     /// Keep the watcher's reading of these exact pixels for the scan that follows.
@@ -90,8 +80,7 @@ impl Image {
     /// Local models read captured pixels directly. Keep encoded-only previews working too.
     pub fn rgb(&self) -> Result<image::RgbImage, String> {
         if let Some(frame) = &self.raw {
-            return crate::text_observer::rgb_image(frame)
-                .map_err(|error| format!("image: {}", error.message));
+            return crate::text_observer::rgb_image(frame).map_err(|error| format!("image: {}", error.message));
         }
         image::load_from_memory_with_format(&self.png()?, image::ImageFormat::Png)
             .map(|image| image.to_rgb8())
@@ -181,20 +170,13 @@ impl Images {
     }
 
     pub fn hover_image(&self, token: u64) -> Option<&Arc<Image>> {
-        self.hover
-            .as_ref()
-            .filter(|(known, _)| *known == token)
-            .map(|(_, image)| image)
+        self.hover.as_ref().filter(|(known, _)| *known == token).map(|(_, image)| image)
     }
 
     /// Pin a frame against eviction because its result is now on screen. Shares the
     /// existing allocation rather than copying the pixels.
     pub fn pin_published(&mut self, id: u64) -> bool {
-        if self
-            .published
-            .as_ref()
-            .is_some_and(|(known, _)| *known == id)
-        {
+        if self.published.as_ref().is_some_and(|(known, _)| *known == id) {
             return true;
         }
         match self.frame(id) {
@@ -251,10 +233,7 @@ impl Images {
         if let Some(id) = wanted.filter(|id| self.frame(*id).is_some()) {
             return Some((id, true));
         }
-        self.published
-            .as_ref()
-            .or(self.latest.as_ref())
-            .map(|(id, _)| (*id, false))
+        self.published.as_ref().or(self.latest.as_ref()).map(|(id, _)| (*id, false))
     }
 
     /// Preview ownership is separate from OCR and source-picker ownership. Two slots
@@ -272,17 +251,11 @@ impl Images {
     }
 
     pub fn live_image(&self, id: u64) -> Option<&Arc<Image>> {
-        self.live_previews
-            .iter()
-            .find(|(known, _)| *known == id)
-            .map(|(_, image)| image)
+        self.live_previews.iter().find(|(known, _)| *known == id).map(|(_, image)| image)
     }
 
     pub fn preview(&self, token: u64) -> Option<&Arc<Image>> {
-        self.previews
-            .iter()
-            .find(|(known, _)| *known == token)
-            .map(|(_, image)| image)
+        self.previews.iter().find(|(known, _)| *known == token).map(|(_, image)| image)
     }
 
     pub fn clear(&mut self) {
@@ -406,14 +379,7 @@ pub use crate::platform::Modifiers;
 /// may be published by two different windows. Only a press that no window claims
 /// closes the dictionary, and only on the edge: holding the button down is one press,
 /// not one per frame.
-pub fn dismissed(
-    regions: &Regions,
-    hidden: &[&str],
-    x: f64,
-    y: f64,
-    down: bool,
-    was_down: bool,
-) -> bool {
+pub fn dismissed(regions: &Regions, hidden: &[&str], x: f64, y: f64, down: bool, was_down: bool) -> bool {
     if !down || was_down {
         return false;
     }
@@ -521,11 +487,7 @@ pub fn source_focus(
     bounds: Option<(Rect, bool)>,
     previous: SourceFocus,
 ) -> SourceFocus {
-    let front_window = front
-        .as_ref()
-        .and_then(|f| f.window.as_ref())
-        .and_then(SourceId::handle_u32)
-        .unwrap_or(0);
+    let front_window = front.as_ref().and_then(|f| f.window.as_ref()).and_then(SourceId::handle_u32).unwrap_or(0);
     let shown = SourceFocus {
         focused: true,
         present: true,
@@ -542,13 +504,7 @@ pub fn source_focus(
     let window = match SourceId::parse(source_id).filter(SourceId::is_local) {
         Some(id) if id.is_display() => return shown,
         Some(id) => id,
-        None => {
-            return SourceFocus {
-                focused: false,
-                present: false,
-                ..shown
-            }
-        }
+        None => return SourceFocus { focused: false, present: false, ..shown },
     };
     let present = bounds.is_some_and(|(_, on_screen)| on_screen);
     let seen = SourceFocus {
@@ -563,10 +519,22 @@ pub fn source_focus(
     match front {
         None => seen,
         // An explicitly selected own window is OCR fixture content, not a reader panel.
-        Some(front) if front.pid == own_pid && window.pid() == Some(own_pid)
-            && front.window.as_ref().is_some_and(|w| w.platform() == window.platform() && w.handle() == window.handle()) => SourceFocus { focused: true, source_front: true, ..seen },
-        Some(front) if front.pid == own_pid && panel_focused && covers_text => SourceFocus { focused: false, covered: true, ..seen },
-        Some(front) if front.pid == own_pid && panel_focused => SourceFocus { focused: seen.source_front, held: true, ..seen },
+        Some(front)
+            if front.pid == own_pid
+                && window.pid() == Some(own_pid)
+                && front
+                    .window
+                    .as_ref()
+                    .is_some_and(|w| w.platform() == window.platform() && w.handle() == window.handle()) =>
+        {
+            SourceFocus { focused: true, source_front: true, ..seen }
+        }
+        Some(front) if front.pid == own_pid && panel_focused && covers_text => {
+            SourceFocus { focused: false, covered: true, ..seen }
+        }
+        Some(front) if front.pid == own_pid && panel_focused => {
+            SourceFocus { focused: seen.source_front, held: true, ..seen }
+        }
         Some(front) if front.pid == own_pid => SourceFocus { held: true, ..seen },
         Some(front) => {
             let focused = front
@@ -654,9 +622,7 @@ impl ShiftGate {
 
     /// One sample: Shift held, a button down, and the pointer over a Shift-only rectangle.
     pub fn update(&mut self, shift: bool, down: bool, over: bool, now: Instant) -> bool {
-        let lingering = self
-            .inside_at
-            .is_some_and(|at| now.saturating_duration_since(at) < Self::GRACE);
+        let lingering = self.inside_at.is_some_and(|at| now.saturating_duration_since(at) < Self::GRACE);
         let open = shift || (self.open && (down || over || lingering));
         self.inside_at = match (open, over) {
             (false, _) => None,
@@ -857,30 +823,15 @@ mod focus_tests {
     /// The front window of the frontmost application; window `0` is "no ordinary
     /// window on screen".
     fn front(window: u32, pid: u32) -> Option<FrontWindow> {
-        Some(FrontWindow {
-            window: (window != 0).then(|| SourceId::window(Platform::current(), window, pid)),
-            pid,
-        })
+        Some(FrontWindow { window: (window != 0).then(|| SourceId::window(Platform::current(), window, pid)), pid })
     }
 
     fn on_screen() -> Option<(Rect, bool)> {
-        Some((
-            Rect {
-                x: 100.,
-                y: 200.,
-                width: 512.,
-                height: 796.,
-            },
-            true,
-        ))
+        Some((Rect { x: 100., y: 200., width: 512., height: 796. }, true))
     }
 
     fn shown() -> SourceFocus {
-        SourceFocus {
-            focused: true,
-            present: true,
-            ..SourceFocus::default()
-        }
+        SourceFocus { focused: true, present: true, ..SourceFocus::default() }
     }
 
     #[test]
@@ -925,24 +876,9 @@ mod focus_tests {
 
     #[test]
     fn a_minimised_or_offscreen_window_is_not_present() {
-        let minimised = Some((
-            Rect {
-                x: 0.,
-                y: 0.,
-                width: 512.,
-                height: 796.,
-            },
-            false,
-        ));
-        let focus = source_focus(
-            Some(source().as_str()),
-            front(SOURCE_WINDOW, 9001),
-            OWN_PID,
-            false,
-            true,
-            minimised,
-            shown(),
-        );
+        let minimised = Some((Rect { x: 0., y: 0., width: 512., height: 796. }, false));
+        let focus =
+            source_focus(Some(source().as_str()), front(SOURCE_WINDOW, 9001), OWN_PID, false, true, minimised, shown());
         assert!(!focus.present);
     }
 
@@ -959,10 +895,12 @@ mod focus_tests {
         // From a false answer: before the fix an own window in front only held the previous
         // value, so starting from the default (`focused: true`) would pass without the fix.
         let previous = SourceFocus { focused: false, ..SourceFocus::default() };
-        let focus = source_focus(Some(&source), front(SOURCE_WINDOW, OWN_PID), OWN_PID, false, true, on_screen(), previous);
+        let focus =
+            source_focus(Some(&source), front(SOURCE_WINDOW, OWN_PID), OWN_PID, false, true, on_screen(), previous);
         assert!(focus.focused);
         assert!(!focus.held);
-        let panel = source_focus(Some(&source), front(SOURCE_WINDOW + 1, OWN_PID), OWN_PID, false, true, on_screen(), focus);
+        let panel =
+            source_focus(Some(&source), front(SOURCE_WINDOW + 1, OWN_PID), OWN_PID, false, true, on_screen(), focus);
         assert!(panel.focused);
         assert!(panel.held);
     }
@@ -972,15 +910,8 @@ mod focus_tests {
         // Hovering the scanned text focuses the overlay and clicking the dictionary
         // focuses the popup. Recomputing then would decide the source had lost focus,
         // hide the text being read, and close the popup that took the focus.
-        let focus = source_focus(
-            Some(source().as_str()),
-            front(1234, OWN_PID),
-            OWN_PID,
-            false,
-            true,
-            on_screen(),
-            shown(),
-        );
+        let focus =
+            source_focus(Some(source().as_str()), front(1234, OWN_PID), OWN_PID, false, true, on_screen(), shown());
         assert!(focus.focused, "the reader is still reading the same window");
         assert!(focus.held);
     }
@@ -989,17 +920,34 @@ mod focus_tests {
     fn switching_to_the_main_window_puts_the_source_behind() {
         // The reader left the game for Kimochi's main window or Settings: the game is
         // behind it now, and text drawn over the game would float over Kimochi instead.
-        let focus = source_focus(Some(source().as_str()), front(1234, OWN_PID), OWN_PID, true, true, on_screen(), shown());
+        let focus =
+            source_focus(Some(source().as_str()), front(1234, OWN_PID), OWN_PID, true, true, on_screen(), shown());
         assert!(!focus.focused);
         assert!(!focus.held);
         // Back in the game, the text returns.
-        let back = source_focus(Some(source().as_str()), front(SOURCE_WINDOW, SOURCE_PID), OWN_PID, false, true, on_screen(), focus);
+        let back = source_focus(
+            Some(source().as_str()),
+            front(SOURCE_WINDOW, SOURCE_PID),
+            OWN_PID,
+            false,
+            true,
+            on_screen(),
+            focus,
+        );
         assert!(back.focused);
     }
 
     /// The reader was in the game: what every Kimochi-in-front case below starts from.
     fn in_game() -> SourceFocus {
-        source_focus(Some(source().as_str()), front(SOURCE_WINDOW, SOURCE_PID), OWN_PID, false, false, on_screen(), SourceFocus::default())
+        source_focus(
+            Some(source().as_str()),
+            front(SOURCE_WINDOW, SOURCE_PID),
+            OWN_PID,
+            false,
+            false,
+            on_screen(),
+            SourceFocus::default(),
+        )
     }
 
     /// The main window (or mini mode, Settings…) in front, covering the text or not.
@@ -1045,7 +993,8 @@ mod focus_tests {
     fn kimochi_after_another_application_keeps_the_text_hidden() {
         // Safari came in front of the game, then the reader switched to Kimochi: the game
         // is behind Safari, so its text has nothing to sit over, wherever Kimochi is.
-        let safari = source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, false, false, on_screen(), in_game());
+        let safari =
+            source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, false, false, on_screen(), in_game());
         assert!(!safari.focused && !safari.source_front);
         let focus = in_kimochi(false, safari);
         assert!(!focus.focused);
@@ -1063,10 +1012,19 @@ mod focus_tests {
         // From the main window off to the side, the reader hovers a word (the overlay takes
         // the keyboard) and opens the dictionary: both are held, so the text stays.
         let aside = in_kimochi(false, in_game());
-        let overlay = source_focus(Some(source().as_str()), front(4321, OWN_PID), OWN_PID, false, false, on_screen(), aside);
+        let overlay =
+            source_focus(Some(source().as_str()), front(4321, OWN_PID), OWN_PID, false, false, on_screen(), aside);
         assert!(overlay.focused && overlay.held);
         // Back to the game: shown, as always.
-        let back = source_focus(Some(source().as_str()), front(SOURCE_WINDOW, SOURCE_PID), OWN_PID, false, false, on_screen(), overlay);
+        let back = source_focus(
+            Some(source().as_str()),
+            front(SOURCE_WINDOW, SOURCE_PID),
+            OWN_PID,
+            false,
+            false,
+            on_screen(),
+            overlay,
+        );
         assert!(back.focused && !back.held && back.source_front);
     }
 
@@ -1074,7 +1032,8 @@ mod focus_tests {
     fn another_application_is_never_excused_by_where_kimochi_is() {
         // The covering rule only applies to Kimochi's own windows.
         for covers in [false, true] {
-            let focus = source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, false, covers, on_screen(), in_game());
+            let focus =
+                source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, false, covers, on_screen(), in_game());
             assert!(!focus.focused);
             assert!(!focus.covered);
         }
@@ -1095,31 +1054,15 @@ mod focus_tests {
 
     #[test]
     fn holding_preserves_a_hidden_state_as_well_as_a_shown_one() {
-        let hidden = SourceFocus {
-            focused: false,
-            present: true,
-            ..SourceFocus::default()
-        };
-        let focus = source_focus(
-            Some(source().as_str()),
-            front(1234, OWN_PID),
-            OWN_PID,
-            false,
-            true,
-            on_screen(),
-            hidden,
-        );
+        let hidden = SourceFocus { focused: false, present: true, ..SourceFocus::default() };
+        let focus =
+            source_focus(Some(source().as_str()), front(1234, OWN_PID), OWN_PID, false, true, on_screen(), hidden);
         assert!(!focus.focused);
     }
 
     #[test]
     fn another_application_takes_precedence_over_a_held_answer() {
-        let held = SourceFocus {
-            focused: true,
-            present: true,
-            held: true,
-            ..SourceFocus::default()
-        };
+        let held = SourceFocus { focused: true, present: true, held: true, ..SourceFocus::default() };
         let focus = source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, false, true, on_screen(), held);
         assert!(!focus.focused);
         assert!(!focus.held);
@@ -1131,15 +1074,8 @@ mod focus_tests {
         // answer never decays while the reader interacts with the dictionary.
         let mut focus = shown();
         for _ in 0..50 {
-            focus = source_focus(
-                Some(source().as_str()),
-                front(1234, OWN_PID),
-                OWN_PID,
-                false,
-                true,
-                on_screen(),
-                focus,
-            );
+            focus =
+                source_focus(Some(source().as_str()), front(1234, OWN_PID), OWN_PID, false, true, on_screen(), focus);
         }
         assert!(focus.focused);
     }
@@ -1168,11 +1104,7 @@ mod focus_tests {
             false,
             true,
             on_screen(),
-            SourceFocus {
-                focused: false,
-                present: true,
-                ..SourceFocus::default()
-            },
+            SourceFocus { focused: false, present: true, ..SourceFocus::default() },
         );
         assert!(focus.focused, "the reader is in the captured window again");
     }
@@ -1184,15 +1116,7 @@ mod focus_tests {
         let focus = source_focus(Some(source().as_str()), front(0, 9001), OWN_PID, false, true, on_screen(), shown());
         assert!(!focus.focused);
 
-        let ours = source_focus(
-            Some(source().as_str()),
-            front(0, OWN_PID),
-            OWN_PID,
-            false,
-            true,
-            on_screen(),
-            shown(),
-        );
+        let ours = source_focus(Some(source().as_str()), front(0, OWN_PID), OWN_PID, false, true, on_screen(), shown());
         assert!(ours.held, "and ours is still recognised as ours");
         assert!(ours.focused);
     }
@@ -1250,14 +1174,7 @@ mod pointer_tests {
     use super::*;
 
     fn region(x: f64, y: f64, focus: bool) -> Region {
-        Region {
-            x,
-            y,
-            width: 100.,
-            height: 40.,
-            focus,
-            shift: false,
-        }
+        Region { x, y, width: 100., height: 40., focus, shift: false }
     }
 
     /// The overlay owns a word it drew; a separate window owns the dictionary popup
@@ -1269,25 +1186,12 @@ mod pointer_tests {
         ])
     }
 
-    fn look(
-        regions: &Regions,
-        label: &str,
-        x: f64,
-        y: f64,
-        down: bool,
-        was: PointerHistory,
-    ) -> PointerVerdict {
+    fn look(regions: &Regions, label: &str, x: f64, y: f64, down: bool, was: PointerHistory) -> PointerVerdict {
         classify_pointer(&regions[label], true, x, y, down, true, was)
     }
 
     /// The pointer has not moved since the previous sample.
-    fn resting(
-        regions: &Regions,
-        label: &str,
-        x: f64,
-        y: f64,
-        was: PointerHistory,
-    ) -> PointerVerdict {
+    fn resting(regions: &Regions, label: &str, x: f64, y: f64, was: PointerHistory) -> PointerVerdict {
         classify_pointer(&regions[label], true, x, y, false, false, was)
     }
 
@@ -1297,34 +1201,14 @@ mod pointer_tests {
         // press went to the application underneath *and* closed the dictionary.
         let regions = desktop();
         assert!(!dismissed(&regions, &[], 250., 320., true, false));
-        assert!(
-            look(
-                &regions,
-                "popup-host",
-                250.,
-                320.,
-                true,
-                PointerHistory::default()
-            )
-            .interactive
-        );
+        assert!(look(&regions, "popup-host", 250., 320., true, PointerHistory::default()).interactive);
     }
 
     #[test]
     fn a_press_on_a_different_word_changes_the_lookup_rather_than_dismissing_it() {
         let regions = desktop();
         assert!(!dismissed(&regions, &[], 250., 520., true, false));
-        assert!(
-            look(
-                &regions,
-                "overlay",
-                250.,
-                520.,
-                true,
-                PointerHistory::default()
-            )
-            .interactive
-        );
+        assert!(look(&regions, "overlay", 250., 520., true, PointerHistory::default()).interactive);
     }
 
     #[test]
@@ -1332,17 +1216,7 @@ mod pointer_tests {
         // The union is the rule. Asking only the overlay would close the dictionary
         // the moment it was clicked, because the popup belongs to another window.
         let regions = desktop();
-        assert!(
-            !look(
-                &regions,
-                "overlay",
-                250.,
-                320.,
-                true,
-                PointerHistory::default()
-            )
-            .interactive
-        );
+        assert!(!look(&regions, "overlay", 250., 320., true, PointerHistory::default()).interactive);
         assert!(!dismissed(&regions, &[], 250., 320., true, false));
     }
 
@@ -1377,40 +1251,19 @@ mod pointer_tests {
     fn a_drag_that_began_on_a_region_survives_leaving_it() {
         // Selecting text in the popup, or dragging its scrollbar, ends up outside.
         let regions = desktop();
-        let was = PointerHistory {
-            interactive: true,
-            down: true,
-            over_target: true,
-        };
+        let was = PointerHistory { interactive: true, down: true, over_target: true };
         let v = look(&regions, "popup-host", 5000., 5000., true, was);
-        assert!(
-            v.interactive,
-            "the rest of the gesture belongs to the popup"
-        );
+        assert!(v.interactive, "the rest of the gesture belongs to the popup");
         assert!(!dismissed(&regions, &[], 5000., 5000., true, true));
     }
 
     #[test]
     fn focus_is_taken_on_arrival_and_not_again_while_resting() {
         let regions = desktop();
-        let first = look(
-            &regions,
-            "overlay",
-            250.,
-            520.,
-            false,
-            PointerHistory::default(),
-        );
-        assert!(
-            first.take_focus,
-            "arriving on a word must make the window key"
-        );
+        let first = look(&regions, "overlay", 250., 520., false, PointerHistory::default());
+        assert!(first.take_focus, "arriving on a word must make the window key");
 
-        let mut was = PointerHistory {
-            interactive: first.interactive,
-            down: false,
-            over_target: first.over_target,
-        };
+        let mut was = PointerHistory { interactive: first.interactive, down: false, over_target: first.over_target };
         for _ in 0..60 {
             let v = look(&regions, "overlay", 250., 520., false, was);
             assert!(!v.take_focus, "resting on a word must not re-take focus");
@@ -1424,14 +1277,7 @@ mod pointer_tests {
         let regions = desktop();
         let mut was = PointerHistory::default();
         for step in 0..200 {
-            let v = look(
-                &regions,
-                "overlay",
-                900. + f64::from(step),
-                900.,
-                false,
-                was,
-            );
+            let v = look(&regions, "overlay", 900. + f64::from(step), 900., false, was);
             assert!(!v.take_focus);
             assert!(!v.interactive);
             was.over_target = v.over_target;
@@ -1443,41 +1289,16 @@ mod pointer_tests {
     fn the_region_select_drag_rectangle_is_not_a_focus_target() {
         // It covers the whole display: focusing on entry would mean focusing on any
         // pointer movement at all.
-        let whole_display = vec![Region {
-            x: 0.,
-            y: 0.,
-            width: 3440.,
-            height: 1440.,
-            focus: false,
-            shift: false,
-        }];
-        let v = classify_pointer(
-            &whole_display,
-            true,
-            1000.,
-            700.,
-            false,
-            true,
-            PointerHistory::default(),
-        );
-        assert!(
-            v.interactive,
-            "the drag still needs every event on the display"
-        );
+        let whole_display = vec![Region { x: 0., y: 0., width: 3440., height: 1440., focus: false, shift: false }];
+        let v = classify_pointer(&whole_display, true, 1000., 700., false, true, PointerHistory::default());
+        assert!(v.interactive, "the drag still needs every event on the display");
         assert!(!v.take_focus);
     }
 
     #[test]
     fn leaving_and_returning_takes_focus_again() {
         let regions = desktop();
-        let on = look(
-            &regions,
-            "overlay",
-            250.,
-            520.,
-            false,
-            PointerHistory::default(),
-        );
+        let on = look(&regions, "overlay", 250., 520., false, PointerHistory::default());
         assert!(on.take_focus);
         let off = look(
             &regions,
@@ -1485,11 +1306,7 @@ mod pointer_tests {
             900.,
             900.,
             false,
-            PointerHistory {
-                interactive: on.interactive,
-                down: false,
-                over_target: on.over_target,
-            },
+            PointerHistory { interactive: on.interactive, down: false, over_target: on.over_target },
         );
         assert!(!off.take_focus);
         let back = look(
@@ -1498,11 +1315,7 @@ mod pointer_tests {
             250.,
             520.,
             false,
-            PointerHistory {
-                interactive: off.interactive,
-                down: false,
-                over_target: off.over_target,
-            },
+            PointerHistory { interactive: off.interactive, down: false, over_target: off.over_target },
         );
         assert!(back.take_focus);
     }
@@ -1510,15 +1323,7 @@ mod pointer_tests {
     #[test]
     fn a_hidden_window_owns_nothing_and_focuses_nothing() {
         let regions = desktop();
-        let v = classify_pointer(
-            &regions["overlay"],
-            false,
-            250.,
-            520.,
-            true,
-            true,
-            PointerHistory::default(),
-        );
+        let v = classify_pointer(&regions["overlay"], false, 250., 520., true, true, PointerHistory::default());
         assert!(!v.interactive);
         assert!(!v.over_target);
         assert!(!v.take_focus);
@@ -1623,22 +1428,10 @@ mod pointer_tests {
     fn unusable_rectangles_are_rejected() {
         assert!(region(0., 0., true).usable());
         for bad in [
-            Region {
-                width: 0.,
-                ..region(0., 0., true)
-            },
-            Region {
-                height: -1.,
-                ..region(0., 0., true)
-            },
-            Region {
-                x: f64::NAN,
-                ..region(0., 0., true)
-            },
-            Region {
-                y: f64::INFINITY,
-                ..region(0., 0., true)
-            },
+            Region { width: 0., ..region(0., 0., true) },
+            Region { height: -1., ..region(0., 0., true) },
+            Region { x: f64::NAN, ..region(0., 0., true) },
+            Region { y: f64::INFINITY, ..region(0., 0., true) },
         ] {
             assert!(!bad.usable());
         }
@@ -1646,8 +1439,7 @@ mod pointer_tests {
 
     #[test]
     fn focus_defaults_off_for_a_payload_that_does_not_mention_it() {
-        let parsed: Region =
-            serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).expect("region");
+        let parsed: Region = serde_json::from_str(r#"{"x":1,"y":2,"width":3,"height":4}"#).expect("region");
         assert!(!parsed.focus);
     }
 
@@ -1657,25 +1449,12 @@ mod pointer_tests {
         // pointer that has not moved, the reader has not reached for it, and taking
         // the keyboard would stop them moving on to the next word.
         let regions = desktop();
-        let v = resting(
-            &regions,
-            "popup-host",
-            250.,
-            320.,
-            PointerHistory::default(),
-        );
+        let v = resting(&regions, "popup-host", 250., 320., PointerHistory::default());
         assert!(v.over_target);
         assert!(!v.take_focus);
 
         // Moving onto it is the whole difference.
-        let moved = look(
-            &regions,
-            "popup-host",
-            251.,
-            321.,
-            false,
-            PointerHistory::default(),
-        );
+        let moved = look(&regions, "popup-host", 251., 321., false, PointerHistory::default());
         assert!(moved.take_focus);
     }
 
@@ -1702,14 +1481,8 @@ mod tests {
         let pending = images.put_latest(image());
         assert!(images.pin_candidate(pending));
         images.put_latest(image());
-        assert!(
-            images.frame(in_flight).is_some(),
-            "OCR still owns the first frame"
-        );
-        assert!(
-            images.pin_published(in_flight),
-            "completed OCR must remain previewable"
-        );
+        assert!(images.frame(in_flight).is_some(), "OCR still owns the first frame");
+        assert!(images.pin_published(in_flight), "completed OCR must remain previewable");
         assert!(images.release_candidate(in_flight));
         assert!(images.frame(pending).is_some());
     }
@@ -1809,36 +1582,40 @@ mod tests {
         };
         let image = Image::captured(frame, Value::Null);
         let reader = image.clone();
-        assert!(
-            image.png.get().is_none(),
-            "storing a probe must not encode it"
-        );
+        assert!(image.png.get().is_none(), "storing a probe must not encode it");
         let png = reader.png().unwrap();
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
-        assert!(
-            image.png.get().is_some(),
-            "consumers share the one encoding"
-        );
+        assert!(image.png.get().is_some(), "consumers share the one encoding");
         drop(image);
-        assert_eq!(
-            reader.png().unwrap(),
-            png,
-            "reader retains its pixels independently"
-        );
+        assert_eq!(reader.png().unwrap(), png, "reader retains its pixels independently");
     }
 
     fn rgb_fixture(width: u32, height: u32) -> Image {
-        Image::captured(kimochi_capture::Frame {
-            info: kimochi_capture::FrameInfo {
-                source_id: "rgb-fixture".into(), width, height,
-                stride: width as usize * 4, full_width: width, full_height: height,
-                crop_pixels: [0, 0, width, height], scale_factor: 1.0,
-                source_bounds: None, pixel_format: "rgba8", color_space: "srgb",
-                resolve_ms: 0.0, acquisition_ms: 0.0, pixels_ms: 0.0, total_ms: 0.0,
+        Image::captured(
+            kimochi_capture::Frame {
+                info: kimochi_capture::FrameInfo {
+                    source_id: "rgb-fixture".into(),
+                    width,
+                    height,
+                    stride: width as usize * 4,
+                    full_width: width,
+                    full_height: height,
+                    crop_pixels: [0, 0, width, height],
+                    scale_factor: 1.0,
+                    source_bounds: None,
+                    pixel_format: "rgba8",
+                    color_space: "srgb",
+                    resolve_ms: 0.0,
+                    acquisition_ms: 0.0,
+                    pixels_ms: 0.0,
+                    total_ms: 0.0,
+                },
+                pixels: (0..width as usize * height as usize * 4)
+                    .map(|i| (i.wrapping_mul(73) ^ (i >> 8)) as u8)
+                    .collect(),
             },
-            pixels: (0..width as usize * height as usize * 4)
-                .map(|i| (i.wrapping_mul(73) ^ (i >> 8)) as u8).collect(),
-        }, Value::Null)
+            Value::Null,
+        )
     }
 
     #[test]
@@ -1861,7 +1638,9 @@ mod tests {
             assert_eq!(image.rgb().unwrap(), encoded.rgb().unwrap());
             for (name, input) in [("png-decode", &encoded), ("raw-rgb", &image)] {
                 let start = Instant::now();
-                for _ in 0..30 { black_box(input.rgb().unwrap()); }
+                for _ in 0..30 {
+                    black_box(input.rgb().unwrap());
+                }
                 println!("{width}x{height} {name}: {:.3} ms/frame", start.elapsed().as_secs_f64() * 1000.0 / 30.0);
             }
         }
@@ -1876,10 +1655,7 @@ mod tests {
         for _ in 0..5 {
             images.put_latest(image());
         }
-        assert!(
-            images.frame(published).is_some(),
-            "the Capture Preview's snapshot.scan.id must keep resolving"
-        );
+        assert!(images.frame(published).is_some(), "the Capture Preview's snapshot.scan.id must keep resolving");
         // ...and the newest frame is still addressable too.
         let newest = images.put_latest(image());
         assert!(images.frame(newest).is_some());
@@ -1917,23 +1693,11 @@ mod tests {
         let picker = images.put_preview(image());
         let first = images.put_hover(image());
         let second = images.put_hover(image());
-        assert!(
-            images.hover_image(first).is_none(),
-            "a replaced hover image must 404"
-        );
+        assert!(images.hover_image(first).is_none(), "a replaced hover image must 404");
         assert!(images.hover_image(second).is_some());
-        assert!(
-            images.frame(latest).is_some(),
-            "a hover must not evict the latest frame"
-        );
-        assert!(
-            images.preview(picker).is_some(),
-            "a hover must not evict a picker preview"
-        );
-        assert_eq!(
-            images.next_frame, latest,
-            "a hover must not consume a frame id"
-        );
+        assert!(images.frame(latest).is_some(), "a hover must not evict the latest frame");
+        assert!(images.preview(picker).is_some(), "a hover must not evict a picker preview");
+        assert_eq!(images.next_frame, latest, "a hover must not consume a frame id");
     }
 
     #[test]
@@ -1964,10 +1728,7 @@ mod tests {
 
     #[test]
     fn descriptor_prefers_app_then_title() {
-        assert_eq!(
-            descriptor_key("window", "Doc — Safari", Some("Safari")),
-            "Safari"
-        );
+        assert_eq!(descriptor_key("window", "Doc — Safari", Some("Safari")), "Safari");
         assert_eq!(descriptor_key("window", "Doc", Some("   ")), "Doc");
         // Normalised, so this key matches whether it was minted from the native kind
         // or from a restored descriptor.

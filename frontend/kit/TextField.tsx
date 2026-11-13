@@ -28,7 +28,5 @@ export const Textarea = forwardRef<
   TextareaHTMLAttributes<HTMLTextAreaElement> & { mono?: boolean }
 >(function Textarea({ className, mono, value, onChange, ...props }, ref) {
   const steady = useSteadyValue(value, onChange)
-  return (
-    <textarea ref={ref} className={cn('k-field', mono && 'k-field-mono', className)} {...props} {...steady} />
-  )
+  return <textarea ref={ref} className={cn('k-field', mono && 'k-field-mono', className)} {...props} {...steady} />
 })

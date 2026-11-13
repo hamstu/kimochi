@@ -27,8 +27,23 @@ const BITS: [u16; 17] = [
 ];
 /// XInput's names for the same buttons: the raw codes the button test and the log show.
 const NAMES: [&str; 17] = [
-    "A", "B", "X", "Y", "LeftShoulder", "RightShoulder", "LeftTrigger", "RightTrigger", "Back", "Start", "LeftThumb",
-    "RightThumb", "DPadUp", "DPadDown", "DPadLeft", "DPadRight", "Guide",
+    "A",
+    "B",
+    "X",
+    "Y",
+    "LeftShoulder",
+    "RightShoulder",
+    "LeftTrigger",
+    "RightTrigger",
+    "Back",
+    "Start",
+    "LeftThumb",
+    "RightThumb",
+    "DPadUp",
+    "DPadDown",
+    "DPadLeft",
+    "DPadRight",
+    "Guide",
 ];
 /// The sticks, as `axes` orders them: XInput's field and the name gilrs gives the same axis.
 const STICKS: [(&str, &str); 4] =
@@ -131,15 +146,19 @@ impl Reader {
             if let Some(button) = newly_pressed(before.as_ref(), &state) {
                 self.last_pressed = Some(slot);
                 if !std::mem::replace(&mut self.first_press[slot], true) {
-                    pending.push((slot, json!({
-                        "check": "gamepad-first-press",
-                        "pad": slot,
-                        "name": name(slot),
-                        "button": format!("{:?}", STANDARD[button]),
-                        "code": NAMES[button],
-                        "standardIndex": button,
-                        "mapping": "Driver",
-                    }), true));
+                    pending.push((
+                        slot,
+                        json!({
+                            "check": "gamepad-first-press",
+                            "pad": slot,
+                            "name": name(slot),
+                            "button": format!("{:?}", STANDARD[button]),
+                            "code": NAMES[button],
+                            "standardIndex": button,
+                            "mapping": "Driver",
+                        }),
+                        true,
+                    ));
                 }
             }
             let changed = before.is_none_or(|before| before.standard() != state.standard());
@@ -148,14 +167,18 @@ impl Reader {
                 if self.traced < RAW_BUTTON_EVENTS {
                     self.traced += 1;
                     let held = state.standard();
-                    pending.push((slot, json!({
-                        "check": "gamepad-raw",
-                        "event": "ButtonsChanged",
-                        "pad": slot,
-                        "name": name(slot),
-                        "standardPressed": (0..held.len()).filter(|index| held[*index]).collect::<Vec<_>>(),
-                        "last": self.traced == RAW_BUTTON_EVENTS,
-                    }), false));
+                    pending.push((
+                        slot,
+                        json!({
+                            "check": "gamepad-raw",
+                            "event": "ButtonsChanged",
+                            "pad": slot,
+                            "name": name(slot),
+                            "standardPressed": (0..held.len()).filter(|index| held[*index]).collect::<Vec<_>>(),
+                            "last": self.traced == RAW_BUTTON_EVENTS,
+                        }),
+                        false,
+                    ));
                 }
             }
         }

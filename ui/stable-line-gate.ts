@@ -25,8 +25,7 @@ export class StableLineGate {
       return { line, count: (old?.count ?? 0) + 1 }
     })
     return this.previous.some(
-      ({ line, count }) =>
-        count >= required && !currentLines([line], this.covered, tolerance).length
+      ({ line, count }) => count >= required && !currentLines([line], this.covered, tolerance).length
     )
   }
   cover(lines: ObservedLine[] | null): void {

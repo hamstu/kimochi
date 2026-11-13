@@ -354,8 +354,16 @@ mod tests {
                 text: "日本語".into(),
                 bounding_box: Rect { x: 10, y: -2, width: 90, height: 30, angle: 0. },
                 symbols: vec![
-                    Symbol { text: "日".into(), bounding_box: Rect { x: 10, y: 0, width: 30, height: 28, angle: 0. }, confidence: 0.9 },
-                    Symbol { text: "本".into(), bounding_box: Rect { x: 40, y: 0, width: 30, height: 28, angle: 0. }, confidence: 0.8 },
+                    Symbol {
+                        text: "日".into(),
+                        bounding_box: Rect { x: 10, y: 0, width: 30, height: 28, angle: 0. },
+                        confidence: 0.9,
+                    },
+                    Symbol {
+                        text: "本".into(),
+                        bounding_box: Rect { x: 40, y: 0, width: 30, height: 28, angle: 0. },
+                        confidence: 0.8,
+                    },
                 ],
                 has_space_after: true,
                 direction: Direction::LeftToRight,

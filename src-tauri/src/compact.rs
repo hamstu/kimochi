@@ -82,11 +82,7 @@ impl AutoMini {
     }
 }
 
-static AUTO: Mutex<AutoMini> = Mutex::new(AutoMini {
-    source: String::new(),
-    entered: false,
-    declined: false,
-});
+static AUTO: Mutex<AutoMini> = Mutex::new(AutoMini { source: String::new(), entered: false, declined: false });
 
 /// What keeping Kimochi over a full-screen game changed, to undo when it ends.
 struct Over {
@@ -155,15 +151,10 @@ fn set_over(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> 
         OVER_ACTIVE.store(false, Ordering::Relaxed);
         #[cfg(target_os = "macos")]
         mac_mini(window, Some(&previous.mac))?;
-        window
-            .set_always_on_top(previous.pinned)
-            .map_err(|e| e.to_string())?;
+        window.set_always_on_top(previous.pinned).map_err(|e| e.to_string())?;
     }
     let pinned = enabled || over.is_some() || window.is_always_on_top().unwrap_or(false);
-    let _ = window.emit(
-        "panel:state",
-        serde_json::json!({ "label": crate::panels::MAIN, "pinned": pinned }),
-    );
+    let _ = window.emit("panel:state", serde_json::json!({ "label": crate::panels::MAIN, "pinned": pinned }));
     Ok(())
 }
 
@@ -285,29 +276,18 @@ pub fn set(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
         });
         ACTIVE.store(true, Ordering::Relaxed);
         window.unmaximize().map_err(|e| e.to_string())?;
-        window
-            .set_min_size(Some(tauri::LogicalSize::new(280., 200.)))
-            .map_err(|e| e.to_string())?;
+        window.set_min_size(Some(tauri::LogicalSize::new(280., 200.))).map_err(|e| e.to_string())?;
         window.set_always_on_top(true).map_err(|e| e.to_string())?;
         crate::platform::desktop_place(
             window,
-            crate::platform::clamp_to_visible(Rect {
-                width: 320.,
-                height: 560.,
-                ..bounds
-            }),
+            crate::platform::clamp_to_visible(Rect { width: 320., height: 560., ..bounds }),
         )?;
     } else if let Some(previous) = saved.as_ref() {
         let spec = crate::panels::spec(crate::panels::MAIN).ok_or("main panel unavailable")?;
         window
-            .set_min_size(Some(tauri::LogicalSize::new(
-                spec.min_width,
-                spec.min_height,
-            )))
+            .set_min_size(Some(tauri::LogicalSize::new(spec.min_width, spec.min_height)))
             .map_err(|e| e.to_string())?;
-        window
-            .set_always_on_top(previous.pinned)
-            .map_err(|e| e.to_string())?;
+        window.set_always_on_top(previous.pinned).map_err(|e| e.to_string())?;
         crate::platform::desktop_place(window, crate::platform::clamp_to_visible(previous.bounds))?;
         if previous.maximized {
             window.maximize().map_err(|e| e.to_string())?;

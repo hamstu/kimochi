@@ -6,21 +6,22 @@
  * type, spacing and control heights all move together (Tailwind utilities are rem too). Colour
  * roles are drawn from Radix Themes' slate + indigo scales, which already carry light and dark.
  */
-@import "@fontsource-variable/figtree/wght.css";
-@import "@fontsource-variable/noto-sans-jp/wght.css";
+@import '@fontsource-variable/figtree/wght.css';
+@import '@fontsource-variable/noto-sans-jp/wght.css';
 
 :root {
   --ui-scale: 1;
 
   /* Type */
-  --k-font-ui: "Figtree Variable", "Figtree", system-ui, sans-serif;
-  --k-font-jp: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP Variable",
-    "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  --k-font-ui: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --k-font-jp:
+    'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP Variable', 'Noto Sans JP', 'Yu Gothic UI', 'Meiryo',
+    sans-serif;
   /* The learner's text (Log lines, looked-up words, notebook names): the language being read's
      fonts, which useTextFont sets as --kimochi-text-font (ui/language-style.ts); Japanese, which
      sets nothing, is --k-font-jp. Text that is Japanese whatever the language keeps --k-font-jp. */
   --k-font-text: var(--kimochi-text-font, var(--k-font-jp));
-  --k-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+  --k-font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, monospace;
 
   --k-text-xs: 0.6875rem; /* 11: title bars, badges, meta */
   --k-text-sm: 0.75rem; /* 12: descriptions, secondary rows, menus */

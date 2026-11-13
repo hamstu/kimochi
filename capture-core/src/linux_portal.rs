@@ -94,7 +94,9 @@ static TOKEN_STORE: Mutex<Option<Box<dyn TokenStore>>> = Mutex::new(None);
 static LAST_PICK_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 /// Native failure text for the last portal pick, without exposing the restore token.
-pub fn last_portal_pick_error() -> Option<String> { LAST_PICK_ERROR.lock().unwrap().clone() }
+pub fn last_portal_pick_error() -> Option<String> {
+    LAST_PICK_ERROR.lock().unwrap().clone()
+}
 
 /// What the last portal pick asked for and got back, for diagnostics (never the token itself).
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -126,7 +128,9 @@ pub struct PortalStreamInfo {
 static LAST_PICK_INFO: Mutex<Option<PortalPickInfo>> = Mutex::new(None);
 
 /// The record of the last portal pick (see [`PortalPickInfo`]).
-pub fn last_portal_pick_info() -> Option<PortalPickInfo> { LAST_PICK_INFO.lock().unwrap().clone() }
+pub fn last_portal_pick_info() -> Option<PortalPickInfo> {
+    LAST_PICK_INFO.lock().unwrap().clone()
+}
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn note_pick(update: impl FnOnce(&mut PortalPickInfo)) {
@@ -142,17 +146,12 @@ pub fn set_portal_token_store(store: Box<dyn TokenStore>) {
 
 fn stored_token() -> Option<String> {
     let mut guard = TOKEN_STORE.lock().unwrap();
-    guard
-        .get_or_insert_with(|| Box::new(MemoryTokenStore::default()))
-        .get()
-        .filter(|t| !t.is_empty())
+    guard.get_or_insert_with(|| Box::new(MemoryTokenStore::default())).get().filter(|t| !t.is_empty())
 }
 
 fn store_token(token: Option<&str>) {
     let mut guard = TOKEN_STORE.lock().unwrap();
-    guard
-        .get_or_insert_with(|| Box::new(MemoryTokenStore::default()))
-        .set(token);
+    guard.get_or_insert_with(|| Box::new(MemoryTokenStore::default())).set(token);
 }
 
 // ----- Streams and ids -------------------------------------------------------------------
@@ -180,14 +179,10 @@ pub(crate) struct PortalStream {
 impl PortalStream {
     pub fn source_id(&self) -> String {
         match self.kind {
-            StreamKind::Window => SourceId::Window {
-                platform: Platform::Portal,
-                handle: self.node_id.to_string(),
-                pid: None,
-            },
-            StreamKind::Monitor | StreamKind::Virtual => {
-                SourceId::display(Platform::Portal, self.node_id)
+            StreamKind::Window => {
+                SourceId::Window { platform: Platform::Portal, handle: self.node_id.to_string(), pid: None }
             }
+            StreamKind::Monitor | StreamKind::Virtual => SourceId::display(Platform::Portal, self.node_id),
         }
         .to_string()
     }
@@ -199,12 +194,7 @@ impl PortalStream {
             return None;
         }
         let ((x, y), (w, h)) = (self.position?, self.size?);
-        (w > 0 && h > 0).then(|| Rect {
-            x: f64::from(x),
-            y: f64::from(y),
-            width: f64::from(w),
-            height: f64::from(h),
-        })
+        (w > 0 && h > 0).then(|| Rect { x: f64::from(x), y: f64::from(y), width: f64::from(w), height: f64::from(h) })
     }
 
     pub fn source(&self) -> Source {
@@ -213,22 +203,13 @@ impl PortalStream {
             StreamKind::Monitor => ("display", "Shared screen"),
             StreamKind::Virtual => ("display", "Virtual screen"),
         };
-        Source {
-            id: self.source_id(),
-            kind,
-            name: name.to_string(),
-            app: None,
-            bounds: self.bounds(),
-            on_screen: None,
-        }
+        Source { id: self.source_id(), kind, name: name.to_string(), app: None, bounds: self.bounds(), on_screen: None }
     }
 }
 
 /// The PipeWire node a portal source id names, if it is one.
 pub(crate) fn parse_stream_id(id: &str) -> Option<u32> {
-    SourceId::parse(id)
-        .filter(|p| p.platform() == Platform::Portal)?
-        .handle_u32()
+    SourceId::parse(id).filter(|p| p.platform() == Platform::Portal)?.handle_u32()
 }
 
 /// Frame pixels per compositor unit: the portal's sizes are logical, frames physical.
@@ -253,12 +234,7 @@ pub(crate) enum PixelOrder {
 impl PixelOrder {
     /// Offered to the compositor in this order. BGRx first: it is what GNOME, KDE and
     /// wlroots produce for SHM screencasts, so it is never a conversion on their side.
-    pub const PREFERRED: [PixelOrder; 4] = [
-        PixelOrder::Bgrx,
-        PixelOrder::Bgra,
-        PixelOrder::Rgbx,
-        PixelOrder::Rgba,
-    ];
+    pub const PREFERRED: [PixelOrder; 4] = [PixelOrder::Bgrx, PixelOrder::Bgra, PixelOrder::Rgbx, PixelOrder::Rgba];
 
     fn swaps_red_blue(self) -> bool {
         matches!(self, PixelOrder::Bgrx | PixelOrder::Bgra)
@@ -356,13 +332,13 @@ pub(crate) fn plane_to_rgba(
 #[cfg(target_os = "linux")]
 pub(crate) mod backend {
     use super::{
-        crop_region, frame_scale, parse_stream_id, plane_layout, plane_to_rgba, store_token, stored_token,
-        PixelOrder, PortalStream, StreamKind, PICKER_TIMEOUT,
+        crop_region, frame_scale, parse_stream_id, plane_layout, plane_to_rgba, store_token, stored_token, PixelOrder,
+        PortalStream, StreamKind, PICKER_TIMEOUT,
     };
     use crate::pixels::{box_downscale, crop_pixels, fit_within, unpremultiply};
     use crate::{
-        crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop,
-        Frame, FrameInfo, Result, Source,
+        crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, FrameInfo,
+        Result, Source,
     };
     use ashpd::desktop::screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType};
     use ashpd::desktop::{PersistMode, ResponseError, Session};
@@ -396,10 +372,7 @@ pub(crate) mod backend {
         )
     }
     fn not_picked() -> CaptureError {
-        CaptureError::new(
-            "permission",
-            "Choose a screen or window to share in the system picker first.",
-        )
+        CaptureError::new("permission", "Choose a screen or window to share in the system picker first.")
     }
 
     // ----- Mailbox -----------------------------------------------------------------
@@ -475,7 +448,8 @@ pub(crate) mod backend {
             let (raw, _) = self
                 .arrived
                 .wait_timeout_while(raw, limit, |frame| {
-                    frame.as_ref().is_none_or(|frame| after.is_some_and(|after| frame.received < after)) && !self.ended.load(Ordering::SeqCst)
+                    frame.as_ref().is_none_or(|frame| after.is_some_and(|after| frame.received < after))
+                        && !self.ended.load(Ordering::SeqCst)
                 })
                 .unwrap();
             let frame = raw.as_ref().filter(|frame| after.is_none_or(|after| frame.received >= after))?;
@@ -485,12 +459,16 @@ pub(crate) mod backend {
             if let Some((_, latest)) = converted.as_ref().filter(|(made, _)| *made == generation) {
                 return Some(latest.clone());
             }
-            let pixels = plane_to_rgba(&frame.bytes, frame.offset, frame.stride, frame.width, frame.height, frame.region, frame.order)?;
-            let latest = Arc::new(LatestFrame {
-                pixels,
-                width: frame.region[2],
-                height: frame.region[3],
-            });
+            let pixels = plane_to_rgba(
+                &frame.bytes,
+                frame.offset,
+                frame.stride,
+                frame.width,
+                frame.height,
+                frame.region,
+                frame.order,
+            )?;
+            let latest = Arc::new(LatestFrame { pixels, width: frame.region[2], height: frame.region[3] });
             *converted = Some((generation, latest.clone()));
             Some(latest)
         }
@@ -519,10 +497,7 @@ pub(crate) mod backend {
     impl Cast {
         fn alive(&self) -> bool {
             !self.shared.closed.load(Ordering::SeqCst)
-                && !self
-                    .slots
-                    .iter()
-                    .all(|(_, s)| s.ended.load(Ordering::SeqCst))
+                && !self.slots.iter().all(|(_, s)| s.ended.load(Ordering::SeqCst))
         }
         fn slot(&self, node: u32) -> Option<(&PortalStream, Arc<Slot>)> {
             let stream = self.streams.iter().find(|s| s.node_id == node)?;
@@ -563,8 +538,7 @@ pub(crate) mod backend {
                 PickError::Failed("The portal refused the screen share".into())
             }
             ashpd::Error::PortalNotFound(_) => PickError::Failed(
-                "No ScreenCast portal: install xdg-desktop-portal and your desktop's portal backend"
-                    .into(),
+                "No ScreenCast portal: install xdg-desktop-portal and your desktop's portal backend".into(),
             ),
             e => PickError::Failed(e.to_string()),
         }
@@ -572,9 +546,15 @@ pub(crate) mod backend {
 
     fn type_names(types: ashpd::enumflags2::BitFlags<SourceType>) -> Vec<&'static str> {
         let mut out = Vec::new();
-        if types.contains(SourceType::Monitor) { out.push("monitor") }
-        if types.contains(SourceType::Window) { out.push("window") }
-        if types.contains(SourceType::Virtual) { out.push("virtual") }
+        if types.contains(SourceType::Monitor) {
+            out.push("monitor")
+        }
+        if types.contains(SourceType::Window) {
+            out.push("window")
+        }
+        if types.contains(SourceType::Virtual) {
+            out.push("virtual")
+        }
         out
     }
 
@@ -616,28 +596,15 @@ pub(crate) mod backend {
             outcome: "pending",
             ..Default::default()
         });
-        let mut options = SelectSourcesOptions::default()
-            .set_cursor_mode(CursorMode::Hidden)
-            .set_sources(types)
-            .set_multiple(false);
+        let mut options =
+            SelectSourcesOptions::default().set_cursor_mode(CursorMode::Hidden).set_sources(types).set_multiple(false);
         // Restore tokens and persistence arrived in ScreenCast v4.
         if version >= 4 {
-            options = options
-                .set_persist_mode(PersistMode::ExplicitlyRevoked)
-                .set_restore_token(token);
+            options = options.set_persist_mode(PersistMode::ExplicitlyRevoked).set_restore_token(token);
         }
-        proxy
-            .select_sources(session, options)
-            .await
-            .map_err(pick_error)?
-            .response()
-            .map_err(pick_error)?;
-        let response = proxy
-            .start(session, None, Default::default())
-            .await
-            .map_err(pick_error)?
-            .response()
-            .map_err(pick_error)?;
+        proxy.select_sources(session, options).await.map_err(pick_error)?.response().map_err(pick_error)?;
+        let response =
+            proxy.start(session, None, Default::default()).await.map_err(pick_error)?.response().map_err(pick_error)?;
         let streams: Vec<PortalStream> = response
             .streams()
             .iter()
@@ -659,15 +626,8 @@ pub(crate) mod backend {
             super::note_pick(|info| info.outcome = "no-streams");
             return Err(PickError::Cancelled);
         }
-        let fd = proxy
-            .open_pipe_wire_remote(session, Default::default())
-            .await
-            .map_err(pick_error)?;
-        Ok(Started {
-            streams,
-            fd,
-            token: response.restore_token().map(str::to_string),
-        })
+        let fd = proxy.open_pipe_wire_remote(session, Default::default()).await.map_err(pick_error)?;
+        Ok(Started { streams, fd, token: response.restore_token().map(str::to_string) })
     }
 
     async fn stop_requested(shared: &Shared) {
@@ -693,7 +653,8 @@ pub(crate) mod backend {
                     let app_id = "dev.kimochi.app".parse().expect("valid Kimochi AppID");
                     ashpd::register_host_app_with_connection(connection.clone(), app_id).await?;
                     Screencast::with_connection(connection).await
-                }.await
+                }
+                .await
             } else {
                 Screencast::new().await
             };
@@ -803,34 +764,15 @@ pub(crate) mod backend {
             ParamType::EnumFormat,
             spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
             spa::pod::property!(FormatProperties::MediaSubtype, Id, MediaSubtype::Raw),
-            spa::pod::property!(
-                FormatProperties::VideoFormat,
-                Choice,
-                Enum,
-                Id,
-                a,
-                a,
-                b,
-                c,
-                d
-            ),
+            spa::pod::property!(FormatProperties::VideoFormat, Choice, Enum, Id, a, a, b, c, d),
             spa::pod::property!(
                 FormatProperties::VideoSize,
                 Choice,
                 Range,
                 Rectangle,
-                Rectangle {
-                    width: 1920,
-                    height: 1080
-                },
-                Rectangle {
-                    width: 1,
-                    height: 1
-                },
-                Rectangle {
-                    width: 16384,
-                    height: 16384
-                }
+                Rectangle { width: 1920, height: 1080 },
+                Rectangle { width: 1, height: 1 },
+                Rectangle { width: 16384, height: 16384 }
             ),
             spa::pod::property!(
                 FormatProperties::VideoFramerate,
@@ -906,12 +848,10 @@ pub(crate) mod backend {
         // A portal session hands over its own connection; compositor screencast APIs (Mutter,
         // KWin) publish their nodes on the session's daemon.
         let core = match fd {
-            Some(fd) => context
-                .connect_fd_rc(fd, None)
-                .map_err(|e| format!("PipeWire refused the portal's connection: {e}"))?,
-            None => context
-                .connect_rc(None)
-                .map_err(|e| format!("PipeWire is not running: {e}"))?,
+            Some(fd) => {
+                context.connect_fd_rc(fd, None).map_err(|e| format!("PipeWire refused the portal's connection: {e}"))?
+            }
+            None => context.connect_rc(None).map_err(|e| format!("PipeWire is not running: {e}"))?,
         };
         let _core_listener = core
             .add_listener_local()
@@ -951,8 +891,8 @@ pub(crate) mod backend {
                 })
                 .state_changed(|_, data, old, new| {
                     use pw::stream::StreamState as S;
-                    let gone = matches!(new, S::Error(_))
-                        || (matches!(new, S::Unconnected) && !matches!(old, S::Unconnected));
+                    let gone =
+                        matches!(new, S::Error(_)) || (matches!(new, S::Unconnected) && !matches!(old, S::Unconnected));
                     if gone {
                         data.slot.end();
                         data.shared.closed.store(true, Ordering::SeqCst);
@@ -966,9 +906,7 @@ pub(crate) mod backend {
                     let Ok((media, sub)) = spa::param::format_utils::parse_format(param) else {
                         return;
                     };
-                    if media != spa::param::format::MediaType::Video
-                        || sub != spa::param::format::MediaSubtype::Raw
-                    {
+                    if media != spa::param::format::MediaType::Video || sub != spa::param::format::MediaSubtype::Raw {
                         return;
                     }
                     let mut info = spa::param::video::VideoInfoRaw::default();
@@ -984,10 +922,8 @@ pub(crate) mod backend {
                     let (Some(buffers), Some(meta)) = (buffers_param(), crop_meta_param()) else {
                         return;
                     };
-                    let mut params: Vec<&Pod> = [buffers.as_slice(), meta.as_slice()]
-                        .into_iter()
-                        .filter_map(Pod::from_bytes)
-                        .collect();
+                    let mut params: Vec<&Pod> =
+                        [buffers.as_slice(), meta.as_slice()].into_iter().filter_map(Pod::from_bytes).collect();
                     let _ = stream.update_params(&mut params);
                 })
                 .process(|stream, data| {
@@ -1016,16 +952,11 @@ pub(crate) mod backend {
                         return;
                     };
                     let kind = plane.type_();
-                    if kind != spa::buffer::DataType::MemPtr && kind != spa::buffer::DataType::MemFd
-                    {
+                    if kind != spa::buffer::DataType::MemPtr && kind != spa::buffer::DataType::MemFd {
                         return;
                     }
                     let chunk = plane.chunk();
-                    let (offset, size, stride) = (
-                        chunk.offset() as usize,
-                        chunk.size() as usize,
-                        chunk.stride(),
-                    );
+                    let (offset, size, stride) = (chunk.offset() as usize, chunk.size() as usize, chunk.stride());
                     if size == 0 || chunk.flags().contains(spa::buffer::ChunkFlags::CORRUPTED) {
                         return;
                     }
@@ -1061,9 +992,7 @@ pub(crate) mod backend {
                 mainloop.quit();
             }
         });
-        ready
-            .send(Ok(stop_tx))
-            .map_err(|_| "capture backend went away".to_string())?;
+        ready.send(Ok(stop_tx)).map_err(|_| "capture backend went away".to_string())?;
         mainloop.run();
         for (stream, _) in &streams {
             let _ = stream.disconnect();
@@ -1087,11 +1016,8 @@ pub(crate) mod backend {
 
     /// Start PipeWire for a picked session. On failure the portal session is closed.
     fn start_cast(started: Started, shared: Arc<Shared>, portal: JoinHandle<()>) -> Result<Cast> {
-        let slots: Vec<(u32, Arc<Slot>)> = started
-            .streams
-            .iter()
-            .map(|s| (s.node_id, Arc::new(Slot::default())))
-            .collect();
+        let slots: Vec<(u32, Arc<Slot>)> =
+            started.streams.iter().map(|s| (s.node_id, Arc::new(Slot::default()))).collect();
         let (ready_tx, ready_rx) = mpsc::channel();
         let pw = {
             let (nodes, shared) = (slots.clone(), shared.clone());
@@ -1100,13 +1026,7 @@ pub(crate) mod backend {
                 .spawn(move || pipewire_thread(Some(started.fd), nodes, shared, ready_tx))
                 .map_err(native_error)?
         };
-        let mut cast = Cast {
-            streams: started.streams,
-            slots,
-            shared,
-            pw_stop: None,
-            threads: vec![portal, pw],
-        };
+        let mut cast = Cast { streams: started.streams, slots, shared, pw_stop: None, threads: vec![portal, pw] };
         match ready_rx.recv_timeout(PIPEWIRE_START_WAIT) {
             Ok(Ok(stop)) => {
                 cast.pw_stop = Some(stop);
@@ -1188,7 +1108,11 @@ pub(crate) mod backend {
                     let _ = portal.join();
                     return match error {
                         PickError::Cancelled => {
-                            super::note_pick(|info| if info.outcome == "pending" { info.outcome = "cancelled" });
+                            super::note_pick(|info| {
+                                if info.outcome == "pending" {
+                                    info.outcome = "cancelled"
+                                }
+                            });
                             store_token(None);
                             self.fail("cancelled")
                         }
@@ -1235,7 +1159,13 @@ pub(crate) mod backend {
             Ok((stream.clone(), slot))
         }
 
-        fn grab(&self, source_id: &str, crop: Option<Crop>, edge: Option<u32>, after: Option<Instant>) -> Result<Frame> {
+        fn grab(
+            &self,
+            source_id: &str,
+            crop: Option<Crop>,
+            edge: Option<u32>,
+            after: Option<Instant>,
+        ) -> Result<Frame> {
             let start = Instant::now();
             let (stream, slot) = self.resolve(source_id)?;
             // An isolated portal window does not contain separate layer surfaces;
@@ -1254,18 +1184,12 @@ pub(crate) mod backend {
 
             let (fw, fh) = (frame.width, frame.height);
             if fw == 0 || fh == 0 || u64::from(fw) * u64::from(fh) > MAX_PIXELS {
-                return Err(CaptureError::new(
-                    "dimensions",
-                    "Invalid or larger than 64 megapixel source",
-                ));
+                return Err(CaptureError::new("dimensions", "Invalid or larger than 64 megapixel source"));
             }
             let copying = Instant::now();
             let crop = crop_rect(crop, fw, fh)?;
-            let mut pixels = if crop == [0, 0, fw, fh] {
-                frame.pixels.clone()
-            } else {
-                crop_pixels(&frame.pixels, fw, crop)
-            };
+            let mut pixels =
+                if crop == [0, 0, fw, fh] { frame.pixels.clone() } else { crop_pixels(&frame.pixels, fw, crop) };
             let base_scale = frame_scale(fw, stream.size);
             let (mut info_crop, mut full, mut scale) = (crop, (fw, fh), base_scale);
             if let Some(edge) = edge {
@@ -1329,9 +1253,7 @@ pub(crate) mod backend {
         fn enumerate(&mut self) -> Result<Vec<Source>> {
             let guard = self.cast.lock().unwrap();
             Ok(match guard.as_ref() {
-                Some(cast) if cast.alive() => {
-                    cast.streams.iter().map(PortalStream::source).collect()
-                }
+                Some(cast) if cast.alive() => cast.streams.iter().map(PortalStream::source).collect(),
                 _ => Vec::new(),
             })
         }
@@ -1380,7 +1302,6 @@ pub(crate) mod backend {
             task.join().unwrap();
         }
     }
-
 }
 
 #[cfg(test)]
@@ -1388,12 +1309,7 @@ mod tests {
     use super::*;
 
     fn monitor() -> PortalStream {
-        PortalStream {
-            node_id: 57,
-            kind: StreamKind::Monitor,
-            position: Some((-1920, 0)),
-            size: Some((1920, 1080)),
-        }
+        PortalStream { node_id: 57, kind: StreamKind::Monitor, position: Some((-1920, 0)), size: Some((1920, 1080)) }
     }
 
     #[test]
@@ -1401,10 +1317,7 @@ mod tests {
         let m = monitor();
         assert_eq!(m.source_id(), "portal:display:57");
         assert_eq!(parse_stream_id("portal:display:57"), Some(57));
-        let w = PortalStream {
-            kind: StreamKind::Window,
-            ..m
-        };
+        let w = PortalStream { kind: StreamKind::Window, ..m };
         assert_eq!(w.source_id(), "portal:window:57");
         assert_eq!(parse_stream_id(&w.source_id()), Some(57));
         assert!(SourceId::parse(&w.source_id()).unwrap().is_window());
@@ -1412,14 +1325,9 @@ mod tests {
 
     #[test]
     fn foreign_and_malformed_ids_are_not_streams() {
-        for id in [
-            "x11:display:57",
-            "macos:window:57:1",
-            "portal:stream:57",
-            "portal:display:",
-            "portal:display:node",
-            "",
-        ] {
+        for id in
+            ["x11:display:57", "macos:window:57:1", "portal:stream:57", "portal:display:", "portal:display:node", ""]
+        {
             assert_eq!(parse_stream_id(id), None, "{id:?}");
         }
     }
@@ -1430,36 +1338,21 @@ mod tests {
         assert_eq!(m.kind, "display");
         assert_eq!(m.name, "Shared screen");
         let b = m.bounds.unwrap();
-        assert_eq!(
-            (b.x, b.y, b.width, b.height),
-            (-1920.0, 0.0, 1920.0, 1080.0)
-        );
+        assert_eq!((b.x, b.y, b.width, b.height), (-1920.0, 0.0, 1920.0, 1080.0));
 
-        let w = PortalStream {
-            kind: StreamKind::Window,
-            position: Some((10, 10)),
-            ..monitor()
-        }
-        .source();
+        let w = PortalStream { kind: StreamKind::Window, position: Some((10, 10)), ..monitor() }.source();
         assert_eq!(w.kind, "window");
         assert_eq!(w.name, "Shared window");
         assert!(w.bounds.is_none());
 
         // A virtual output is captured like a monitor, but is on no screen: no bounds.
-        let v = PortalStream {
-            kind: StreamKind::Virtual,
-            ..monitor()
-        }
-        .source();
+        let v = PortalStream { kind: StreamKind::Virtual, ..monitor() }.source();
         assert_eq!(v.kind, "display");
         assert_eq!(v.name, "Virtual screen");
         assert!(v.bounds.is_none());
 
         // Half a rectangle is no rectangle.
-        let partial = PortalStream {
-            position: None,
-            ..monitor()
-        };
+        let partial = PortalStream { position: None, ..monitor() };
         assert!(partial.bounds().is_none());
     }
 
@@ -1522,16 +1415,7 @@ mod tests {
     fn short_planes_and_bad_strides_are_rejected() {
         let (data, stride) = plane(PixelOrder::Bgrx, 0);
         let full = [0, 0, 3, 2];
-        assert!(plane_to_rgba(
-            &data[..data.len() - 1],
-            0,
-            stride,
-            3,
-            2,
-            full,
-            PixelOrder::Bgrx
-        )
-        .is_none());
+        assert!(plane_to_rgba(&data[..data.len() - 1], 0, stride, 3, 2, full, PixelOrder::Bgrx).is_none());
         assert!(plane_to_rgba(&data, 0, -stride, 3, 2, full, PixelOrder::Bgrx).is_none());
         assert!(plane_to_rgba(&data, 0, 8, 3, 2, full, PixelOrder::Bgrx).is_none());
         assert!(plane_to_rgba(&data, 4, stride, 3, 2, full, PixelOrder::Bgrx).is_none());
@@ -1546,10 +1430,7 @@ mod tests {
         assert_eq!(crop_region(100, 50, Some((30, 0, 80, 40))), [0, 0, 100, 50]);
         assert_eq!(crop_region(100, 50, Some((-1, 0, 10, 10))), [0, 0, 100, 50]);
         assert_eq!(crop_region(100, 50, Some((0, 0, 0, 10))), [0, 0, 100, 50]);
-        assert_eq!(
-            crop_region(100, 50, Some((1, 1, u32::MAX, 1))),
-            [0, 0, 100, 50]
-        );
+        assert_eq!(crop_region(100, 50, Some((1, 1, u32::MAX, 1))), [0, 0, 100, 50]);
     }
 
     #[test]

@@ -13,10 +13,18 @@ function defaultStorage() {
 
 export function scanWasPublished(id, storage = defaultStorage()) {
   if (id == null || !storage) return false
-  try { return storage.getItem(KEY) === String(id) } catch { return false }
+  try {
+    return storage.getItem(KEY) === String(id)
+  } catch {
+    return false
+  }
 }
 
 export function markScanPublished(id, storage = defaultStorage()) {
   if (id == null || !storage) return
-  try { storage.setItem(KEY, String(id)) } catch { /* Storage is best-effort. */ }
+  try {
+    storage.setItem(KEY, String(id))
+  } catch {
+    /* Storage is best-effort. */
+  }
 }

@@ -24,24 +24,11 @@ pub const LAG_MS: f64 = 1500.0;
 /// The window's lag never goes past this, however late a game starts its voices.
 pub const MAX_LAG_MS: f64 = 4000.0;
 
-const VOICE_WORDS: &[&str] = &[
-    "voice",
-    "/vo/",
-    "vo_",
-    "_vo",
-    "koe",
-    "/v/",
-    "voc_",
-    "vox",
-    "serif",
-    "セリフ",
-    "ボイス",
-    "音声",
-];
+const VOICE_WORDS: &[&str] =
+    &["voice", "/vo/", "vo_", "_vo", "koe", "/v/", "voc_", "vox", "serif", "セリフ", "ボイス", "音声"];
 const NOT_VOICE_WORDS: &[&str] = &[
-    "bgm", "music", "/bgs", "bgs_", "/me/", "/se/", "se_", "se0", "se1", "sfx", "sound/",
-    "ambient", "amb_", "jingle", "/sys", "system", "click", "cursor", "decision", "buzzer",
-    "cancel",
+    "bgm", "music", "/bgs", "bgs_", "/me/", "/se/", "se_", "se0", "se1", "sfx", "sound/", "ambient", "amb_", "jingle",
+    "/sys", "system", "click", "cursor", "decision", "buzzer", "cancel",
 ];
 
 /// +1 when a name says voice, -1 when it says music or effects, 0 when it says nothing.
@@ -57,11 +44,7 @@ pub fn name_says(s: &str) -> i32 {
 }
 
 pub(crate) fn clip_name(c: &HookClip) -> String {
-    format!(
-        "{} {}",
-        c.source.as_deref().unwrap_or(""),
-        c.channel.as_deref().unwrap_or("")
-    )
+    format!("{} {}", c.source.as_deref().unwrap_or(""), c.channel.as_deref().unwrap_or(""))
 }
 
 /// How long before `line`'s anchor its voice may start, with `lead` the window's (learned) lead.
@@ -95,9 +78,7 @@ fn median(mut v: Vec<f64>) -> f64 {
 }
 
 fn near(start: f64, windows: &[(f64, f64, f64)]) -> bool {
-    windows
-        .iter()
-        .any(|(a, lead, lag)| start >= a - lead && start <= a + lag)
+    windows.iter().any(|(a, lead, lag)| start >= a - lead && start <= a + lag)
 }
 
 /// Scores every group of `clips`. Higher `voice` = more likely the voice.
@@ -137,31 +118,18 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
         } else if (1.2..=12.0).contains(&med) {
             logit += 0.5;
         }
-        if clips
-            .iter()
-            .filter(|c| c.fmt.as_deref().is_some_and(|f| f.contains("1ch")))
-            .count() as f64
-            / n
-            > 0.5
-        {
+        if clips.iter().filter(|c| c.fmt.as_deref().is_some_and(|f| f.contains("1ch"))).count() as f64 / n > 0.5 {
             logit += 0.7;
             reasons.push("mono".into());
         }
         if !windows.is_empty() {
             let rate = clips.iter().filter(|c| near(c.start, &windows)).count() as f64 / n;
-            let covered = windows
-                .iter()
-                .filter(|w| clips.iter().any(|c| near(c.start, &[**w])))
-                .count();
+            let covered = windows.iter().filter(|w| clips.iter().any(|c| near(c.start, &[**w]))).count();
             let cover = covered as f64 / windows.len() as f64;
             // A group of one or two clips says little either way.
             let weight = (n / 3.0).min(1.0);
             logit += weight * (6.0 * (rate - 0.4) + 3.0 * cover);
-            reasons.push(format!(
-                "{:.0}% start with a line, {:.0}% of lines have one",
-                rate * 100.0,
-                cover * 100.0
-            ));
+            reasons.push(format!("{:.0}% start with a line, {:.0}% of lines have one", rate * 100.0, cover * 100.0));
         }
         out.push(Verdict {
             group,
@@ -178,11 +146,7 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
 
 /// Groups taken as voice: above 0.55, or the best one if it clearly leads and is above 0.3.
 pub fn voice_groups(verdicts: &[Verdict]) -> Vec<String> {
-    let mut v: Vec<String> = verdicts
-        .iter()
-        .filter(|x| x.voice > 0.55)
-        .map(|x| x.group.clone())
-        .collect();
+    let mut v: Vec<String> = verdicts.iter().filter(|x| x.voice > 0.55).map(|x| x.group.clone()).collect();
     if v.is_empty() {
         if let Some(best) = verdicts.first().filter(|b| b.voice >= 0.3) {
             if verdicts.get(1).is_none_or(|s| best.voice - s.voice > 0.15) {
@@ -225,11 +189,7 @@ pub fn pair(lines: &[Line], clips: &[&HookClip], lead_ms: f64, lag: f64) -> Vec<
         for (ci, c) in clips.iter().enumerate() {
             let d = c.start - a;
             if (-lead..=lag).contains(&d) {
-                let short = if c.dur > 0.0 && c.dur < 0.8 {
-                    700.0
-                } else {
-                    0.0
-                };
+                let short = if c.dur > 0.0 && c.dur < 0.8 { 700.0 } else { 0.0 };
                 pairs.push((if d < 0.0 { -d * 2.0 } else { d } + short + unquoted(l), li, ci, d));
             }
         }

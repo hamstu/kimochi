@@ -17,9 +17,9 @@
 
 use crate::state::Image;
 use kimochi_capture::text::LiveTextObserver;
-use kimochi_capture::{Frame, FrameInfo, TextLine, TextObserver};
 #[cfg(test)]
 use kimochi_capture::TextSegment;
+use kimochi_capture::{Frame, FrameInfo, TextLine, TextObserver};
 use serde_json::{json, Value};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -28,13 +28,10 @@ use std::time::Duration;
 /// has its own, much shorter budget on its own instance.
 const TIMEOUT: Duration = Duration::from_secs(20);
 
-static ENGINE: LazyLock<Mutex<LiveTextObserver>> =
-    LazyLock::new(|| Mutex::new(LiveTextObserver::new()));
+static ENGINE: LazyLock<Mutex<LiveTextObserver>> = LazyLock::new(|| Mutex::new(LiveTextObserver::new()));
 
 fn engine() -> std::sync::MutexGuard<'static, LiveTextObserver> {
-    ENGINE
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    ENGINE.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// The `ocrEngines.livetext` capability: probed, so an OS that renamed the private
@@ -55,14 +52,8 @@ pub fn recognize(image: &Image, language: &crate::language::Language) -> Result<
     };
     let mut engine = engine();
     engine.set_locales(crate::language::live_text_locales(language));
-    let observation = engine
-        .observe(&frame, TIMEOUT)
-        .map_err(|error| format!("{}: {}", error.code, error.message))?;
-    Ok(value_from_lines(
-        &observation.lines,
-        frame.info.width,
-        frame.info.height,
-    ))
+    let observation = engine.observe(&frame, TIMEOUT).map_err(|error| format!("{}: {}", error.code, error.message))?;
+    Ok(value_from_lines(&observation.lines, frame.info.width, frame.info.height))
 }
 
 /// The cloud-compatible result (OCR.md): one authoritative group per line, a
@@ -79,16 +70,10 @@ pub fn value_from_lines(lines: &[TextLine], width: u32, height: u32) -> Value {
         texts.push(text.to_owned());
         let id = format!("livetext-line-{index}");
         let (x1, y1) = (line.x.max(0.), line.y.max(0.));
-        let (x2, y2) = (
-            (line.x + line.width).min(f64::from(width)),
-            (line.y + line.height).min(f64::from(height)),
-        );
+        let (x2, y2) = ((line.x + line.width).min(f64::from(width)), (line.y + line.height).min(f64::from(height)));
         let positioned = x2 > x1 && y2 > y1;
-        let orientation = if text.chars().count() > 1 && (y2 - y1) > (x2 - x1) * 1.5 {
-            "vertical"
-        } else {
-            "horizontal"
-        };
+        let orientation =
+            if text.chars().count() > 1 && (y2 - y1) > (x2 - x1) * 1.5 { "vertical" } else { "horizontal" };
         let polygon = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
         let mut group = json!({
             "id": id, "text": text,
@@ -149,27 +134,16 @@ fn character_boxes(line: &TextLine, width: u32, height: u32) -> Vec<Value> {
 fn decode_png(bytes: &[u8]) -> Result<Frame, String> {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     let mut reader = decoder.read_info().map_err(|e| format!("decode: {e}"))?;
-    let size = reader
-        .output_buffer_size()
-        .ok_or("decode: PNG too large to decode")?;
+    let size = reader.output_buffer_size().ok_or("decode: PNG too large to decode")?;
     let mut buffer = vec![0; size];
-    let info = reader
-        .next_frame(&mut buffer)
-        .map_err(|e| format!("decode: {e}"))?;
+    let info = reader.next_frame(&mut buffer).map_err(|e| format!("decode: {e}"))?;
     buffer.truncate(info.buffer_size());
     let pixels = match (info.color_type, info.bit_depth) {
         (png::ColorType::Rgba, png::BitDepth::Eight) => buffer,
-        (png::ColorType::Rgb, png::BitDepth::Eight) => buffer
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
-            .collect(),
-        (color, depth) => {
-            return Err(format!(
-                "decode: unsupported PNG layout {color:?}/{depth:?}"
-            ))
+        (png::ColorType::Rgb, png::BitDepth::Eight) => {
+            buffer.as_chunks::<3>().0.iter().flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255]).collect()
         }
+        (color, depth) => return Err(format!("decode: unsupported PNG layout {color:?}/{depth:?}")),
     };
     Ok(Frame {
         info: FrameInfo {
@@ -198,14 +172,7 @@ mod tests {
     use super::*;
 
     fn line(text: &str, x: f64, y: f64, width: f64, height: f64) -> TextLine {
-        TextLine {
-            text: text.into(),
-            x,
-            y,
-            width,
-            height,
-            segments: Vec::new(),
-        }
+        TextLine { text: text.into(), x, y, width, height, segments: Vec::new() }
     }
 
     #[test]
@@ -240,10 +207,7 @@ mod tests {
     #[test]
     fn lines_become_authoritative_groups_with_the_aggregate_first() {
         let value = value_from_lines(
-            &[
-                line("日本語のテスト", 10., 20., 260., 42.),
-                line("縦書き", 300., 10., 30., 120.),
-            ],
+            &[line("日本語のテスト", 10., 20., 260., 42.), line("縦書き", 300., 10., 30., 120.)],
             400,
             200,
         );
@@ -255,10 +219,7 @@ mod tests {
         assert_eq!(groups[0]["bbox"], json!([10., 20., 270., 62.]));
         assert_eq!(groups[0]["orientation"], "horizontal");
         assert_eq!(groups[1]["orientation"], "vertical");
-        assert_eq!(
-            groups[1]["linePolygons"],
-            json!([[[300., 10.], [330., 10.], [330., 130.], [300., 130.]]])
-        );
+        assert_eq!(groups[1]["linePolygons"], json!([[[300., 10.], [330., 10.], [330., 130.], [300., 130.]]]));
         let annotations = value["textAnnotations"].as_array().unwrap();
         assert_eq!(annotations.len(), 3);
         assert_eq!(annotations[0]["granularity"], "aggregate");
@@ -269,11 +230,7 @@ mod tests {
     #[test]
     fn boxes_are_clamped_to_the_frame_and_empty_lines_dropped() {
         let value = value_from_lines(
-            &[
-                line("  ", 0., 0., 10., 10.),
-                line("端", -5., 190., 20., 30.),
-                line("空", 50., 50., 0., 0.),
-            ],
+            &[line("  ", 0., 0., 10., 10.), line("端", -5., 190., 20., 30.), line("空", 50., 50., 0., 0.)],
             100,
             200,
         );
@@ -294,10 +251,8 @@ mod tests {
 
     #[test]
     fn png_decoding_yields_rgba_pixels() {
-        let frame = Frame {
-            info: decode_png(&rgb_png()).unwrap().info,
-            pixels: decode_png(&rgb_png()).unwrap().pixels,
-        };
+        let frame =
+            Frame { info: decode_png(&rgb_png()).unwrap().info, pixels: decode_png(&rgb_png()).unwrap().pixels };
         assert_eq!((frame.info.width, frame.info.height), (2, 1));
         assert_eq!(frame.pixels, vec![1, 2, 3, 255, 4, 5, 6, 255]);
     }

@@ -10,11 +10,7 @@ use std::{
 fn neutral(code: u16, min: i32, max: i32) -> Option<i32> {
     match code {
         2 | 5 => Some(min),
-        0 | 1 | 3 | 4 => Some(if min < 0 && max > 0 {
-            0
-        } else {
-            min + (max - min) / 2
-        }),
+        0 | 1 | 3 | 4 => Some(if min < 0 && max > 0 { 0 } else { min + (max - min) / 2 }),
         16 | 17 => Some(if min <= 0 && max >= 0 { 0 } else { min }),
         _ => None,
     }
@@ -29,8 +25,7 @@ fn eligible(bus: u16, vendor: u16, product: u16, path: &Path, name: &str) -> boo
             .is_some_and(|index| !index.is_empty() && index.bytes().all(|v| v.is_ascii_digit()))
 }
 fn query<T>(fd: i32, number: u64, value: &mut T) -> std::io::Result<()> {
-    let request =
-        0x8000_0000 | ((std::mem::size_of::<T>() as u64) << 16) | (u64::from(b'E') << 8) | number;
+    let request = 0x8000_0000 | ((std::mem::size_of::<T>() as u64) << 16) | (u64::from(b'E') << 8) | number;
     if unsafe { libc::ioctl(fd, request as libc::c_ulong, value as *mut T) } < 0 {
         return Err(std::io::Error::last_os_error());
     }
@@ -44,15 +39,7 @@ struct InputEvent {
     value: i32,
 }
 fn event(kind: u16, code: u16, value: i32) -> InputEvent {
-    InputEvent {
-        time: libc::timeval {
-            tv_sec: 0,
-            tv_usec: 0,
-        },
-        kind,
-        code,
-        value,
-    }
+    InputEvent { time: libc::timeval { tv_sec: 0, tv_usec: 0 }, kind, code, value }
 }
 pub(super) fn release() -> Result<(), String> {
     let result = || -> Result<usize, Box<dyn std::error::Error>> {
@@ -99,9 +86,7 @@ pub(super) fn release() -> Result<(), String> {
                 }
                 let mut info = [0_i32; 6];
                 query(fd, 0x40 + u64::from(code), &mut info)?;
-                if let Some(value) =
-                    neutral(code, info[1], info[2]).filter(|value| *value != info[0])
-                {
+                if let Some(value) = neutral(code, info[1], info[2]).filter(|value| *value != info[0]) {
                     events.push(event(3, code, value));
                 }
             }
@@ -109,10 +94,7 @@ pub(super) fn release() -> Result<(), String> {
                 events.push(event(0, 0, 0));
                 // repr(C), fully initialized fields, no padding on supported 64-bit Linux.
                 let bytes = unsafe {
-                    std::slice::from_raw_parts(
-                        events.as_ptr().cast::<u8>(),
-                        std::mem::size_of_val(events.as_slice()),
-                    )
+                    std::slice::from_raw_parts(events.as_ptr().cast::<u8>(), std::mem::size_of_val(events.as_slice()))
                 };
                 file.write_all(bytes)?;
             }
@@ -144,27 +126,9 @@ mod tests {
     #[test]
     fn physical_and_unrelated_devices_are_never_targeted() {
         let path = Path::new("/sys/devices/virtual/input/input42");
-        assert!(eligible(
-            3,
-            0x28de,
-            0x11ff,
-            path,
-            "Microsoft X-Box 360 pad 0"
-        ));
-        assert!(!eligible(
-            3,
-            0x28de,
-            0x1205,
-            path,
-            "Microsoft X-Box 360 pad 0"
-        ));
-        assert!(!eligible(
-            3,
-            0x28de,
-            0x11ff,
-            Path::new("/sys/devices/pci/input42"),
-            "Microsoft X-Box 360 pad 0"
-        ));
+        assert!(eligible(3, 0x28de, 0x11ff, path, "Microsoft X-Box 360 pad 0"));
+        assert!(!eligible(3, 0x28de, 0x1205, path, "Microsoft X-Box 360 pad 0"));
+        assert!(!eligible(3, 0x28de, 0x11ff, Path::new("/sys/devices/pci/input42"), "Microsoft X-Box 360 pad 0"));
         assert!(!eligible(3, 0x28de, 0x11ff, path, "Keyboard"));
     }
 }

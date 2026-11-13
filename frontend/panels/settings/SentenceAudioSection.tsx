@@ -73,7 +73,11 @@ function problem(status: SentenceAudioStatus | null): { tone: Tone; title: strin
           'macOS records system audio under the Screen Recording permission. Allow Kimochi, then quit and reopen it.'
       }
     case 'unavailable':
-      return { tone: 'warn', title: 'Not recording', detail: `${status.message} Kimochi checks again every 30 seconds.` }
+      return {
+        tone: 'warn',
+        title: 'Not recording',
+        detail: `${status.message} Kimochi checks again every 30 seconds.`
+      }
     case 'unsupported':
       return { tone: 'neutral', title: 'Not available', detail: status.message }
     case 'error':
@@ -84,8 +88,7 @@ function problem(status: SentenceAudioStatus | null): { tone: Tone; title: strin
 }
 
 /** What turning it on does. */
-const SWITCH_DESCRIPTION =
-  "Records system audio and adds each scanned line's clip to the new cards you make."
+const SWITCH_DESCRIPTION = "Records system audio and adds each scanned line's clip to the new cards you make."
 
 /** The speech model's state once downloaded, when there is something to say. */
 function recogniserNote(status: SentenceAudioStatus | null): string | null {
@@ -181,20 +184,28 @@ export function SentenceAudioSection(): ReactNode {
         <>
           <div className="settings-note">
             <Callout tone="warn" icon={<FlaskConical />}>
-              Sentence audio is experimental; a clip can be wrong. Check the Anki tab in
-              the main window to see which cards get enhanced.
+              Sentence audio is experimental; a clip can be wrong. Check the Anki tab in the main window to see which
+              cards get enhanced.
             </Callout>
           </div>
           {voiceHookable && (
-            <SettingsRow label="Audio hooking" controlId="sentence-audio-hook" description="Take each line's voice straight from a Windows game with Text hooking on, also through Proton or Wine on Linux. Where it can't, system audio is recorded instead.">
-              <Switch id="sentence-audio-hook" checked={config.voiceHook} onCheckedChange={(voiceHook) => update({ voiceHook })} />
+            <SettingsRow
+              label="Audio hooking"
+              controlId="sentence-audio-hook"
+              description="Take each line's voice straight from a Windows game with Text hooking on, also through Proton or Wine on Linux. Where it can't, system audio is recorded instead."
+            >
+              <Switch
+                id="sentence-audio-hook"
+                checked={config.voiceHook}
+                onCheckedChange={(voiceHook) => update({ voiceHook })}
+              />
             </SettingsRow>
           )}
           {!japanese && (
             <div className="settings-note">
               <p className="k-description">
-                For {language.name}, each line&apos;s clip is found by timing. Matching lines by their
-                words, and word audio, are for Japanese only for now.
+                For {language.name}, each line&apos;s clip is found by timing. Matching lines by their words, and word
+                audio, are for Japanese only for now.
               </p>
             </div>
           )}
@@ -206,14 +217,16 @@ export function SentenceAudioSection(): ReactNode {
           {japanese && !modelReady && (
             <div className="settings-note">
               <p className="k-description">
-                Clean hooked clips work without this model. The fallback uses it to match words in
-                system audio when a game cannot provide clean clips.
+                Clean hooked clips work without this model. The fallback uses it to match words in system audio when a
+                game cannot provide clean clips.
               </p>
             </div>
           )}
           {japanese && modelReady && recogniserNote(status) && (
             <div className="settings-note">
-              <Callout tone={status?.recogniser.state === 'failed' ? 'warn' : 'neutral'}>{recogniserNote(status)}</Callout>
+              <Callout tone={status?.recogniser.state === 'failed' ? 'warn' : 'neutral'}>
+                {recogniserNote(status)}
+              </Callout>
             </div>
           )}
           {trouble && (

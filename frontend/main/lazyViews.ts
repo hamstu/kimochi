@@ -33,8 +33,12 @@ export function loadView<V extends LazyView>(view: V): ViewModule<V> {
   if (!module) {
     module = (LOADERS[view] as () => ViewModule<V>)()
     module.then(
-      (m) => { loaded[view] = m.default },
-      () => { delete pending[view] }
+      (m) => {
+        loaded[view] = m.default
+      },
+      () => {
+        delete pending[view]
+      }
     )
     ;(pending as Record<V, ViewModule<V>>)[view] = module
   }

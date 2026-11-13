@@ -33,10 +33,7 @@ pub fn initialize() {
             return None;
         }
         unsafe {
-            let library = libc::dlopen(
-                c"libgtk-layer-shell.so.0".as_ptr(),
-                libc::RTLD_NOW | libc::RTLD_LOCAL,
-            );
+            let library = libc::dlopen(c"libgtk-layer-shell.so.0".as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL);
             if library.is_null() {
                 eprintln!(
                     "Wayland layer-shell unavailable: {}",
@@ -56,48 +53,19 @@ pub fn initialize() {
             }
             let supported = symbol!("gtk_layer_is_supported", unsafe extern "C" fn() -> c_int);
             if supported() == 0 {
-                eprintln!(
-                    "Wayland layer-shell unavailable: compositor does not support the protocol"
-                );
+                eprintln!("Wayland layer-shell unavailable: compositor does not support the protocol");
                 return None;
             }
             let api = Api {
-                is_layer: symbol!(
-                    "gtk_layer_is_layer_window",
-                    unsafe extern "C" fn(*mut c_void) -> c_int
-                ),
-                init: symbol!(
-                    "gtk_layer_init_for_window",
-                    unsafe extern "C" fn(*mut c_void)
-                ),
-                namespace: symbol!(
-                    "gtk_layer_set_namespace",
-                    unsafe extern "C" fn(*mut c_void, *const c_char)
-                ),
-                layer: symbol!(
-                    "gtk_layer_set_layer",
-                    unsafe extern "C" fn(*mut c_void, c_int)
-                ),
-                keyboard: symbol!(
-                    "gtk_layer_set_keyboard_mode",
-                    unsafe extern "C" fn(*mut c_void, c_int)
-                ),
-                exclusive: symbol!(
-                    "gtk_layer_set_exclusive_zone",
-                    unsafe extern "C" fn(*mut c_void, c_int)
-                ),
-                anchor: symbol!(
-                    "gtk_layer_set_anchor",
-                    unsafe extern "C" fn(*mut c_void, c_int, c_int)
-                ),
-                margin: symbol!(
-                    "gtk_layer_set_margin",
-                    unsafe extern "C" fn(*mut c_void, c_int, c_int)
-                ),
-                monitor: symbol!(
-                    "gtk_layer_set_monitor",
-                    unsafe extern "C" fn(*mut c_void, *mut c_void)
-                ),
+                is_layer: symbol!("gtk_layer_is_layer_window", unsafe extern "C" fn(*mut c_void) -> c_int),
+                init: symbol!("gtk_layer_init_for_window", unsafe extern "C" fn(*mut c_void)),
+                namespace: symbol!("gtk_layer_set_namespace", unsafe extern "C" fn(*mut c_void, *const c_char)),
+                layer: symbol!("gtk_layer_set_layer", unsafe extern "C" fn(*mut c_void, c_int)),
+                keyboard: symbol!("gtk_layer_set_keyboard_mode", unsafe extern "C" fn(*mut c_void, c_int)),
+                exclusive: symbol!("gtk_layer_set_exclusive_zone", unsafe extern "C" fn(*mut c_void, c_int)),
+                anchor: symbol!("gtk_layer_set_anchor", unsafe extern "C" fn(*mut c_void, c_int, c_int)),
+                margin: symbol!("gtk_layer_set_margin", unsafe extern "C" fn(*mut c_void, c_int, c_int)),
+                monitor: symbol!("gtk_layer_set_monitor", unsafe extern "C" fn(*mut c_void, *mut c_void)),
             };
             eprintln!("Wayland layer-shell enabled: keyboard=NONE; native input regions");
             Some(api)
@@ -116,12 +84,7 @@ unsafe extern "C" {
     fn gtk_widget_get_window(widget: *mut c_void) -> *mut c_void;
     fn gtk_widget_queue_draw(widget: *mut c_void);
     fn gtk_widget_input_shape_combine_region(widget: *mut c_void, region: *mut c_void);
-    fn gdk_window_input_shape_combine_region(
-        window: *mut c_void,
-        region: *mut c_void,
-        x: c_int,
-        y: c_int,
-    );
+    fn gdk_window_input_shape_combine_region(window: *mut c_void, region: *mut c_void, x: c_int, y: c_int);
     fn cairo_region_create() -> *mut c_void;
     fn cairo_region_union_rectangle(region: *mut c_void, rectangle: *const CairoRect) -> c_int;
     fn cairo_region_destroy(region: *mut c_void);
@@ -151,7 +114,12 @@ pub fn current_output() -> Option<Rect> {
 /// unless they are there already. The overlay's surface then has that output's size, and its
 /// origin is that output's. Returns whether a move was requested.
 pub fn follow_output(geometry: Rect) -> bool {
-    let key = (geometry.x.round() as i32, geometry.y.round() as i32, geometry.width.round() as i32, geometry.height.round() as i32);
+    let key = (
+        geometry.x.round() as i32,
+        geometry.y.round() as i32,
+        geometry.width.round() as i32,
+        geometry.height.round() as i32,
+    );
     if API.get().and_then(Option::as_ref).is_none() || OUTPUT.lock().is_ok_and(|o| *o == Some(key)) {
         return false;
     }
@@ -167,9 +135,8 @@ pub fn follow_output(geometry: Rect) -> bool {
             if display.is_null() {
                 return;
             }
-            let monitor = (0..gdk_display_get_n_monitors(display))
-                .map(|i| gdk_display_get_monitor(display, i))
-                .find(|&m| {
+            let monitor =
+                (0..gdk_display_get_n_monitors(display)).map(|i| gdk_display_get_monitor(display, i)).find(|&m| {
                     let mut r = CairoRect { x: 0, y: 0, width: 0, height: 0 };
                     gdk_monitor_get_geometry(m, &mut r);
                     (r.x, r.y, r.width, r.height) == key
@@ -229,7 +196,12 @@ pub fn outputs() -> Vec<Rect> {
     } else {
         let Some(first) = LAYERS.lock().ok().and_then(|w| w.first().cloned()) else { return Vec::new() };
         let (tx, rx) = std::sync::mpsc::channel();
-        if first.run_on_main_thread(move || { let _ = tx.send(read()); }).is_err() {
+        if first
+            .run_on_main_thread(move || {
+                let _ = tx.send(read());
+            })
+            .is_err()
+        {
             return last();
         }
         match rx.recv_timeout(Duration::from_secs(1)) {
@@ -284,10 +256,7 @@ pub fn make_panel(window: &tauri::WebviewWindow) -> Result<bool, String> {
     // Hidden Tauri windows must remain unrealized until their surface role is set.
     unsafe {
         if gtk_widget_get_realized(pointer) != 0 {
-            return Err(format!(
-                "Wayland layer-shell: {} was realized before role assignment",
-                window.label()
-            ));
+            return Err(format!("Wayland layer-shell: {} was realized before role assignment", window.label()));
         }
         (api.init)(pointer);
         (api.namespace)(pointer, c"kimochi".as_ptr());
@@ -295,11 +264,7 @@ pub fn make_panel(window: &tauri::WebviewWindow) -> Result<bool, String> {
         (api.keyboard)(pointer, 0); // NONE: never take the game's keyboard.
         (api.exclusive)(pointer, -1);
         for edge in 0..4 {
-            (api.anchor)(
-                pointer,
-                edge,
-                i32::from(window.label() == "overlay" || edge == 0 || edge == 2),
-            );
+            (api.anchor)(pointer, edge, i32::from(window.label() == "overlay" || edge == 0 || edge == 2));
         }
         // Create the native surface without mapping it, and make it click-through
         // before the first show. An empty reader must never block the desktop.
@@ -311,10 +276,7 @@ pub fn make_panel(window: &tauri::WebviewWindow) -> Result<bool, String> {
     Ok(true)
 }
 
-pub fn input_regions(
-    window: &tauri::WebviewWindow,
-    regions: Option<&[Rect]>,
-) -> Result<bool, String> {
+pub fn input_regions(window: &tauri::WebviewWindow, regions: Option<&[Rect]>) -> Result<bool, String> {
     if !(available() || matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session()) {
         return Ok(false);
     }
@@ -351,11 +313,10 @@ pub fn input_regions(
                 // then, and the overlay took every click on the desktop. The widget's own shape is
                 // intersected with the decoration's instead, so it survives. A layer surface has no
                 // decoration: there, this is the same call.
-                gtk_widget_input_shape_combine_region(
-                    gtk.as_ptr().cast(),
-                    region.unwrap_or(std::ptr::null_mut()),
-                );
-                if available() || matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session() {
+                gtk_widget_input_shape_combine_region(gtk.as_ptr().cast(), region.unwrap_or(std::ptr::null_mut()));
+                if available()
+                    || matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session()
+                {
                     // GTK on Wayland commits a new input region with its next paint only.
                     // Without damage the old shape stays: on a layer overlay whose Shift gate
                     // just closed (nothing repaints), clicks on the words land on it and go
@@ -396,9 +357,13 @@ pub fn region_keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), St
     REGION_EDITING.store(on, std::sync::atomic::Ordering::SeqCst);
     let window = window.clone();
     let handle = window.clone();
-    handle.run_on_main_thread(move || {
-        let Some(api) = API.get().and_then(Option::as_ref) else { return };
-        let Ok(gtk) = window.gtk_window() else { return };
-        unsafe { (api.keyboard)(gtk.as_ptr().cast(), if on { 2 } else { 0 }); }
-    }).map_err(|e| e.to_string())
+    handle
+        .run_on_main_thread(move || {
+            let Some(api) = API.get().and_then(Option::as_ref) else { return };
+            let Ok(gtk) = window.gtk_window() else { return };
+            unsafe {
+                (api.keyboard)(gtk.as_ptr().cast(), if on { 2 } else { 0 });
+            }
+        })
+        .map_err(|e| e.to_string())
 }

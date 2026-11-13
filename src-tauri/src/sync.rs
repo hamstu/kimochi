@@ -82,10 +82,7 @@ struct Engine {
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -231,9 +228,7 @@ impl Http {
     }
 
     fn json<T: serde::de::DeserializeOwned>(&self, request: reqwest::blocking::RequestBuilder) -> Result<T, String> {
-        self.send(request)?
-            .json::<T>()
-            .map_err(|_| "native: Kimochi cloud sent an unreadable sync answer".to_string())
+        self.send(request)?.json::<T>().map_err(|_| "native: Kimochi cloud sent an unreadable sync answer".to_string())
     }
 }
 
@@ -253,9 +248,7 @@ impl Remote for Http {
     }
     fn blobs_missing(&self, hashes: &[String]) -> Result<Vec<String>, String> {
         let answer: Value = self.json(
-            self.client
-                .post(format!("{}/api/v1/sync/blobs/missing", self.base))
-                .json(&json!({ "hashes": hashes })),
+            self.client.post(format!("{}/api/v1/sync/blobs/missing", self.base)).json(&json!({ "hashes": hashes })),
         )?;
         Ok(answer["missing"].as_array().into_iter().flatten().filter_map(|h| h.as_str().map(str::to_string)).collect())
     }
@@ -346,11 +339,8 @@ impl Prefs for LivePrefs {
             return Ok(());
         }
         let paths: Vec<Vec<&str>> = allowed.iter().map(|(p, _)| p.iter().map(String::as_str).collect()).collect();
-        let updates: Vec<(&[&str], Value)> = paths
-            .iter()
-            .zip(&allowed)
-            .map(|(p, (_, v))| (p.as_slice(), v.clone().unwrap_or(Value::Null)))
-            .collect();
+        let updates: Vec<(&[&str], Value)> =
+            paths.iter().zip(&allowed).map(|(p, (_, v))| (p.as_slice(), v.clone().unwrap_or(Value::Null))).collect();
         store.set_many(&updates)?;
         let mut tops: Vec<&str> = paths.iter().map(|p| p[0]).collect();
         tops.sort();
@@ -480,7 +470,18 @@ fn sync_profile(
             let local = sync_core::scan(dir, &doc, &engine.device_id, &engine.device_name, cache);
             let log_fn = |kind: &str, text: String| log(kind, &text);
             let now = now_ms;
-            let mut ctx = Ctx { dir, device_id: &engine.device_id, device_name: &engine.device_name, remote, host, prefs, cache, state, log: &log_fn, now: &now };
+            let mut ctx = Ctx {
+                dir,
+                device_id: &engine.device_id,
+                device_name: &engine.device_name,
+                remote,
+                host,
+                prefs,
+                cache,
+                state,
+                log: &log_fn,
+                now: &now,
+            };
             sync_core::stamp_pending(&mut ctx, &local);
             return Err(e);
         }
@@ -496,7 +497,18 @@ fn sync_profile(
     }
     let log_fn = |kind: &str, text: String| log(kind, &text);
     let now = now_ms;
-    let mut ctx = Ctx { dir, device_id: &engine.device_id, device_name: &engine.device_name, remote, host, prefs, cache, state, log: &log_fn, now: &now };
+    let mut ctx = Ctx {
+        dir,
+        device_id: &engine.device_id,
+        device_name: &engine.device_name,
+        remote,
+        host,
+        prefs,
+        cache,
+        state,
+        log: &log_fn,
+        now: &now,
+    };
     let report = sync_core::sync_once(&mut ctx)?;
     if report.pulled + report.pushed + report.conflicts > 0 {
         log(
@@ -518,7 +530,8 @@ fn sync_profile(
 pub fn initial_sync(key: &str, base: &str, token: &str, dir: &Path) -> Result<(), String> {
     let engine = ENGINE.get().ok_or("native: Sync is not ready")?;
     let remote = Http::new(base, token)?;
-    let mut prefs = sync_core::FilePrefs::open(dir.join(profile::SETTINGS_FILE), profile::profile_part(&settings::defaults()));
+    let mut prefs =
+        sync_core::FilePrefs::open(dir.join(profile::SETTINGS_FILE), profile::profile_part(&settings::defaults()));
     let mut state = sync_core::load_state(dir);
     let mut cache = ScanCache::default();
     let result = sync_profile(engine, dir, &remote, &sync_core::NoHost, &mut prefs, &mut state, &mut cache);
@@ -605,10 +618,8 @@ pub fn sync_hold_ready(id: u64) {
 #[tauri::command]
 pub fn sync_local_changed(reason: Option<String>) {
     if reason.as_deref() == Some("focus") {
-        let stale = ENGINE
-            .get()
-            .and_then(|e| *lock(&e.last_cycle))
-            .is_none_or(|at| at.elapsed() > Duration::from_secs(15));
+        let stale =
+            ENGINE.get().and_then(|e| *lock(&e.last_cycle)).is_none_or(|at| at.elapsed() > Duration::from_secs(15));
         if stale {
             kick();
         }
@@ -622,7 +633,9 @@ pub fn sync_local_changed(reason: Option<String>) {
 pub async fn sync_conflict_resolve(id: String, action: String) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         let engine = ENGINE.get().ok_or("native: Sync is not ready")?;
-        let dir = account::active_profile_dir().filter(|_| account::active_key().is_some()).ok_or("invalid: no account is in use")?;
+        let dir = account::active_profile_dir()
+            .filter(|_| account::active_key().is_some())
+            .ok_or("invalid: no account is in use")?;
         let _cycle = lock(&engine.cycle);
         match action.as_str() {
             "restore" => {
@@ -633,9 +646,13 @@ pub async fn sync_conflict_resolve(id: String, action: String) -> Result<Value, 
                 log("merge", &format!("Restored the kept version of {what}"));
             }
             "dismiss" => {
-                let mut conflicts = sync_core::load_conflicts(&dir).ok_or("native: the conflicts file is unreadable")?;
+                let mut conflicts =
+                    sync_core::load_conflicts(&dir).ok_or("native: the conflicts file is unreadable")?;
                 if conflicts.remove(&id).is_some() {
-                    profile::write_json(&sync_core::conflicts_path(&dir), &serde_json::to_value(conflicts).map_err(|e| e.to_string())?)?;
+                    profile::write_json(
+                        &sync_core::conflicts_path(&dir),
+                        &serde_json::to_value(conflicts).map_err(|e| e.to_string())?,
+                    )?;
                     log("merge", &format!("Dismissed conflict {id}"));
                 }
             }
@@ -667,7 +684,8 @@ pub async fn sync_export(path: String) -> Result<u64, String> {
             return Err(account::failure(cloud::Feature::Sync, &target.base, response));
         }
         let tmp = path.with_extension("part");
-        let mut file = std::fs::File::create(&tmp).map_err(|e| format!("native: could not write {}: {e}", tmp.display()))?;
+        let mut file =
+            std::fs::File::create(&tmp).map_err(|e| format!("native: could not write {}: {e}", tmp.display()))?;
         let written = response.copy_to(&mut file).map_err(|_| account::OFFLINE.to_string())?;
         drop(file);
         std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
@@ -729,7 +747,11 @@ mod tests {
         b.sync(&server_b);
         a.cache = ScanCache::default();
         a.sync(&server_a);
-        let name = |d: &Device| d.read("sessions.json")["sessions"].as_array().unwrap().iter().find(|s| s["id"] == json!(sid)).unwrap()["name"].clone();
+        let name = |d: &Device| {
+            d.read("sessions.json")["sessions"].as_array().unwrap().iter().find(|s| s["id"] == json!(sid)).unwrap()
+                ["name"]
+                .clone()
+        };
         assert_eq!(name(&a), "B's name");
         assert_eq!(name(&b), "B's name");
         assert!(a.conflicts().values().any(|c| c["data"]["name"] == "A's name"));
@@ -738,7 +760,10 @@ mod tests {
         // Tombstone: A deletes a line; B loses it.
         let uid = format!("a{tag}");
         let kept: Vec<Value> = a.lines(&sid).into_iter().filter(|l| l["uid"] != json!(uid)).collect();
-        a.write(&format!("sessions/{sid}/lines.json"), json!({ "version": 1, "lines": kept, "deleted": [{ "uid": uid }] }));
+        a.write(
+            &format!("sessions/{sid}/lines.json"),
+            json!({ "version": 1, "lines": kept, "deleted": [{ "uid": uid }] }),
+        );
         a.cache = ScanCache::default();
         a.sync(&server_a);
         b.cache = ScanCache::default();
@@ -751,7 +776,9 @@ mod tests {
             let server_c = Http::new(&base, &other).unwrap();
             let mut c = Device::new(&format!("C{tag}"), "e2e");
             c.sync(&server_c);
-            assert!(c.read("sessions.json")["sessions"].as_array().is_none_or(|s| s.iter().all(|s| s["id"] != json!(sid))));
+            assert!(c.read("sessions.json")["sessions"]
+                .as_array()
+                .is_none_or(|s| s.iter().all(|s| s["id"] != json!(sid))));
             println!("isolation ok");
         }
     }

@@ -73,7 +73,8 @@ impl CharLm {
             return Err(Error::Model("not a VOLM blob".into()));
         }
         let h: Vec<u32> = (0..7).map(|i| u32_at(b, 4 + 4 * i)).collect();
-        let (version, total, order, v, crc, voc_off) = (h[0], h[1] as usize, h[2] as usize, h[3] as i64, h[5], h[6] as usize);
+        let (version, total, order, v, crc, voc_off) =
+            (h[0], h[1] as usize, h[2] as usize, h[3] as i64, h[5], h[6] as usize);
         if version != 1 || total != b.len() || !(2..=MAX_ORDER).contains(&order) || v < FIRST {
             return Err(Error::Model("unsupported VOLM header".into()));
         }
@@ -81,7 +82,8 @@ impl CharLm {
             return Err(Error::Model("VOLM CRC mismatch".into()));
         }
         let n_cp = (v - FIRST) as usize;
-        let codepoints = slice(b, voc_off, 4 * n_cp)?.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
+        let codepoints =
+            slice(b, voc_off, 4 * n_cp)?.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
         let mut levels = Vec::with_capacity(order);
         for k in 1..=order {
             let o = 64 + (k - 1) * 32;
@@ -99,7 +101,10 @@ impl CharLm {
                 prob: slice(b, op, n)?.to_vec(),
                 bo: if upper { slice(b, ob, n)?.to_vec() } else { Vec::new() },
                 child: if upper {
-                    slice(b, oc, 4 * (n + 1))?.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
+                    slice(b, oc, 4 * (n + 1))?
+                        .chunks_exact(4)
+                        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+                        .collect()
                 } else {
                     Vec::new()
                 },
@@ -201,7 +206,14 @@ impl CharLm {
 
     /// `vocr_lm_decode`: the classes of the best prefix, from each frame's top-K logits and classes
     /// (`k` per frame) and its blank logit.
-    pub fn decode_classes(&mut self, vocab: &[String], topv: &[f32], topc: &[i64], k_per: usize, blank: Option<&[f32]>) -> Result<Vec<i64>, Error> {
+    pub fn decode_classes(
+        &mut self,
+        vocab: &[String],
+        topv: &[f32],
+        topc: &[i64],
+        k_per: usize,
+        blank: Option<&[f32]>,
+    ) -> Result<Vec<i64>, Error> {
         let t_len = topv.len().checked_div(k_per).unwrap_or(0);
         if t_len > MAX_FRAMES {
             return Err(Error::Input(format!("{t_len} frames: the decoder takes at most {MAX_FRAMES}")));
@@ -265,7 +277,11 @@ impl CharLm {
                     }
                     let h = hs[n].wrapping_mul(0x9E3779B1).wrapping_add(c as u32).wrapping_add(1);
                     let found = hyps.iter().position(|&(m, _, _)| {
-                        m != 0 && cls[m] == c && ln[m] == ln[n] + 1 && hs[m] == h && same_prefix(&par, &cls, par[m], n as i64)
+                        m != 0
+                            && cls[m] == c
+                            && ln[m] == ln[n] + 1
+                            && hs[m] == h
+                            && same_prefix(&par, &cls, par[m], n as i64)
                     });
                     let (lmq, nst) = if use_lm {
                         let (lp, nst) = self.score(&st[n], cmap[c as usize]);

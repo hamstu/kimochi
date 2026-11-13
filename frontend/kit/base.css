@@ -38,7 +38,7 @@ button {
 }
 input,
 textarea,
-[contenteditable="true"],
+[contenteditable='true'],
 .k-selectable {
   -webkit-user-select: text;
   user-select: text;
@@ -90,4 +90,3 @@ textarea,
     transition-duration: 1ms !important;
   }
 }
-

@@ -5,12 +5,7 @@
  */
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import {
-  normalizeModelStatus,
-  type ModelAction,
-  type ModelEngine,
-  type ModelStatus
-} from '@ui/model-download'
+import { normalizeModelStatus, type ModelAction, type ModelEngine, type ModelStatus } from '@ui/model-download'
 import { nativeError, onEvent } from './tauri'
 
 export type { ModelAction, ModelEngine, ModelStatus }
@@ -30,9 +25,7 @@ function watch(): void {
   if (watching) return
   watching = true
   try {
-    onEvent<unknown>('model-download', (payload) => set(normalizeModelStatus(payload))).catch(
-      () => undefined
-    )
+    onEvent<unknown>('model-download', (payload) => set(normalizeModelStatus(payload))).catch(() => undefined)
   } catch {
     // No event bridge (a plain browser): the fetched status stands.
   }

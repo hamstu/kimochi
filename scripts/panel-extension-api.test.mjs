@@ -86,7 +86,10 @@ test('this window keeps a tab identity of its own, distinct from the overlay', a
 
 test('the native label, not the shared panel pathname, decides that identity', async () => {
   const context = panelWindow()
-  const withLabel = await vm.runInContext(`chrome.runtime.sendMessage({action:'frameInformationGet',params:{}})`, context)
+  const withLabel = await vm.runInContext(
+    `chrome.runtime.sendMessage({action:'frameInformationGet',params:{}})`,
+    context
+  )
   // Re-evaluating with a different label must land on a different tab id; every panel
   // shares one URL, so the pathname cannot be the discriminator.
   const second = vm.createContext({ URL, EventTarget, Event, console, structuredClone, Promise })
@@ -104,10 +107,7 @@ test('the native label, not the shared panel pathname, decides that identity', a
     second
   )
   vm.runInContext(shim, second)
-  const settings = await vm.runInContext(
-    `chrome.runtime.sendMessage({action:'frameInformationGet',params:{}})`,
-    second
-  )
+  const settings = await vm.runInContext(`chrome.runtime.sendMessage({action:'frameInformationGet',params:{}})`, second)
   assert.notEqual(withLabel.result.tabId, settings.result.tabId)
 })
 
@@ -133,11 +133,7 @@ test('the popup handshake actions stay local and never reach the overlay', async
   )
   const relayed = vm.runInContext('relayed.filter(([cmd]) => cmd === "ext_relay")', context)
   const requests = relayed.filter(([, args]) => args?.payload?.kind === 'request')
-  assert.equal(
-    requests.length,
-    0,
-    "relaying the handshake would ask the overlay about the overlay's own frames"
-  )
+  assert.equal(requests.length, 0, "relaying the handshake would ask the overlay about the overlay's own frames")
 })
 
 /**

@@ -140,7 +140,9 @@ unsafe fn rd<T: Copy>(base: usize, off: usize) -> T {
 
 /// Whether `[p, p + len)` is committed, readable memory.
 unsafe fn readable(p: usize, len: usize) -> bool {
-    use windows_sys::Win32::System::Memory::{VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS};
+    use windows_sys::Win32::System::Memory::{
+        VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS,
+    };
     let mut at = p;
     while at < p + len {
         let mut info: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
@@ -197,7 +199,8 @@ unsafe fn walk_imports(base: usize, mut f: impl FnMut(&str, &[u8], *mut usize)) 
     let w = std::mem::size_of::<usize>();
     let mut desc = base + imp_rva;
     while desc + 20 <= end && readable(desc, 20) {
-        let (oft, name_rva, ft) = (rd::<u32>(desc, 0) as usize, rd::<u32>(desc, 12) as usize, rd::<u32>(desc, 16) as usize);
+        let (oft, name_rva, ft) =
+            (rd::<u32>(desc, 0) as usize, rd::<u32>(desc, 12) as usize, rd::<u32>(desc, 16) as usize);
         if name_rva == 0 || ft == 0 {
             break;
         }
@@ -298,12 +301,63 @@ pub fn rescan() {
 
 fn is_system(name: &str) -> bool {
     const SYS: &[&str] = &[
-        "ntdll", "kernel32", "kernelbase", "user32", "gdi32", "win32u", "combase", "rpcrt4", "ole32", "oleaut32",
-        "advapi32", "sechost", "msvcrt", "ucrtbase", "msvcp_win", "xtajit", "apphelp", "shell32", "shlwapi",
-        "dsound", "xaudio2", "audioses", "mmdevapi", "winmmbase", "windows.", "api-ms-", "ext-ms-", "bcrypt",
-        "cfgmgr32", "powrprof", "umpdc", "devobj", "clbcatq", "imm32", "msctf", "uxtheme", "dwmapi", "d3d", "dxgi",
-        "dxcore", "nvoglv", "nvwgf", "igd", "amdx", "atiu", "opengl32", "glu32", "wintypes", "coremessaging",
-        "textinputframework", "inputhost", "crypt", "wldp", "profapi", "kernel.appcore", "msasn1", "ntmarta",
+        "ntdll",
+        "kernel32",
+        "kernelbase",
+        "user32",
+        "gdi32",
+        "win32u",
+        "combase",
+        "rpcrt4",
+        "ole32",
+        "oleaut32",
+        "advapi32",
+        "sechost",
+        "msvcrt",
+        "ucrtbase",
+        "msvcp_win",
+        "xtajit",
+        "apphelp",
+        "shell32",
+        "shlwapi",
+        "dsound",
+        "xaudio2",
+        "audioses",
+        "mmdevapi",
+        "winmmbase",
+        "windows.",
+        "api-ms-",
+        "ext-ms-",
+        "bcrypt",
+        "cfgmgr32",
+        "powrprof",
+        "umpdc",
+        "devobj",
+        "clbcatq",
+        "imm32",
+        "msctf",
+        "uxtheme",
+        "dwmapi",
+        "d3d",
+        "dxgi",
+        "dxcore",
+        "nvoglv",
+        "nvwgf",
+        "igd",
+        "amdx",
+        "atiu",
+        "opengl32",
+        "glu32",
+        "wintypes",
+        "coremessaging",
+        "textinputframework",
+        "inputhost",
+        "crypt",
+        "wldp",
+        "profapi",
+        "kernel.appcore",
+        "msasn1",
+        "ntmarta",
     ];
     SYS.iter().any(|s| name.starts_with(s))
 }

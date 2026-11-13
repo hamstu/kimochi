@@ -5,12 +5,7 @@
  */
 import { useState, type JSX } from 'react'
 import { Callout } from '@kit'
-import {
-  awaitingLogin,
-  installGnomeExtension,
-  useGnomeExtension,
-  type InstallResult
-} from '../welcome/gnomeExtension'
+import { awaitingLogin, installGnomeExtension, useGnomeExtension, type InstallResult } from '../welcome/gnomeExtension'
 
 export function GnomeExtensionNotice(): JSX.Element | null {
   const [status, refresh] = useGnomeExtension(false)
@@ -47,8 +42,8 @@ export function GnomeExtensionNotice(): JSX.Element | null {
           </>
         ) : (
           <>
-            <strong>The overlay needs Kimochi&rsquo;s GNOME extension.</strong> It also adds dictionary
-            pop-ups over your game and region selection on the desktop.
+            <strong>The overlay needs Kimochi&rsquo;s GNOME extension.</strong> It also adds dictionary pop-ups over
+            your game and region selection on the desktop.
           </>
         )}
       </span>

@@ -278,7 +278,10 @@ function popupFrame(): Promise<void> {
 }
 
 /** Show the pop-up for a lookup of `text` (and on), beside `rect` as Yomitan places it. */
-async function showPopup(text: string, rect: { left: number; top: number; right: number; bottom: number }): Promise<void> {
+async function showPopup(
+  text: string,
+  rect: { left: number; top: number; right: number; bottom: number }
+): Promise<void> {
   const { term, word } = lookupWord(script, text)
   log.push({ check: 'stage-lookup', text, term })
   const width = 380
@@ -298,7 +301,12 @@ async function showPopup(text: string, rect: { left: number; top: number; right:
   Object.assign(
     popup.style,
     popupTarget
-      ? { left: `${popupTarget.x}px`, top: `${popupTarget.y}px`, width: `${popupTarget.width}px`, height: `${popupTarget.height}px` }
+      ? {
+          left: `${popupTarget.x}px`,
+          top: `${popupTarget.y}px`,
+          width: `${popupTarget.width}px`,
+          height: `${popupTarget.height}px`
+        }
       : { left: `${left}px`, top: `${top}px`, width: '', height: '' }
   )
   await popupFrame()
@@ -349,7 +357,9 @@ words.addEventListener('mousedown', (event) => {
   const range = document.createRange()
   range.setStart(node, caret.startOffset)
   range.setEnd(node, node.textContent.length)
-  const rect = (event.target as HTMLElement).closest('.ocr-word, .ocr-group')?.getBoundingClientRect() ?? range.getBoundingClientRect()
+  const rect =
+    (event.target as HTMLElement).closest('.ocr-word, .ocr-group')?.getBoundingClientRect() ??
+    range.getBoundingClientRect()
   void showPopup(range.toString(), rect)
 })
 document.addEventListener('keydown', (event) => {
@@ -567,7 +577,14 @@ async function play(): Promise<void> {
         showCropRegion: flag('crop'),
         windowImage: null,
         bounds: area,
-        crop: { x: area.width * 0.05, y: area.height * 0.62, width: area.width * 0.9, height: area.height * 0.34, reference_width: area.width, reference_height: area.height },
+        crop: {
+          x: area.width * 0.05,
+          y: area.height * 0.62,
+          width: area.width * 0.9,
+          height: area.height * 0.34,
+          reference_width: area.width,
+          reference_height: area.height
+        },
         origin: { x: 0, y: 0 }
       })
       return
@@ -619,7 +636,15 @@ async function play(): Promise<void> {
       // Along the text: down a column of vertical text, right along a line.
       const along = params.get('game') === 'manga' ? 'down' : 'right'
       for (let i = 0; i < steps; i++)
-        await send(fullDictionary ? (input === 'keys' ? 'key:ArrowRight' : 'right') : input === 'keys' ? `key:Arrow${along === 'down' ? 'Down' : 'Right'}` : along)
+        await send(
+          fullDictionary
+            ? input === 'keys'
+              ? 'key:ArrowRight'
+              : 'right'
+            : input === 'keys'
+              ? `key:Arrow${along === 'down' ? 'Down' : 'Right'}`
+              : along
+        )
       if (fullDictionary) {
         await pause(200)
         for (let i = 0; i < Number(params.get('entry') ?? 0); i++) await send('rb')
@@ -683,7 +708,13 @@ async function hookCard(): Promise<void> {
   // Each row's text centred where the game's is.
   const top = rects[0].top + rects[0].height / 2 - (fontPx * lineHeight) / 2
   const none = (): void => undefined
-  const card = createHookCard(document.body, { onMoved: none, onDrag: none, onTextSize: none, onOpacity: none, onSettings: none })
+  const card = createHookCard(document.body, {
+    onMoved: none,
+    onDrag: none,
+    onTextSize: none,
+    onOpacity: none,
+    onSettings: none
+  })
   const cards = params.get('cards')
   const look = cards === 'light' || cards === 'dark' || cards === 'blend' ? cards : theme
   card.show({

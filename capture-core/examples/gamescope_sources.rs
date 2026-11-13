@@ -24,9 +24,23 @@ fn main() {
                     let name = source.id.replace(':', "_");
                     let path = dir.join(format!("{name}-{round}.png"));
                     std::fs::write(&path, frame.png().unwrap()).unwrap();
-                    println!("round {round} {}: {}x{} scale {:.2} in {:.0} ms -> {}", source.id, frame.info.width, frame.info.height, frame.info.scale_factor, start.elapsed().as_secs_f64() * 1000., path.display());
+                    println!(
+                        "round {round} {}: {}x{} scale {:.2} in {:.0} ms -> {}",
+                        source.id,
+                        frame.info.width,
+                        frame.info.height,
+                        frame.info.scale_factor,
+                        start.elapsed().as_secs_f64() * 1000.,
+                        path.display()
+                    );
                 }
-                Err(e) => println!("round {round} {}: {} ({}) after {:.0} ms", source.id, e.message, e.code, start.elapsed().as_secs_f64() * 1000.),
+                Err(e) => println!(
+                    "round {round} {}: {} ({}) after {:.0} ms",
+                    source.id,
+                    e.message,
+                    e.code,
+                    start.elapsed().as_secs_f64() * 1000.
+                ),
             }
         }
     }

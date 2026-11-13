@@ -33,9 +33,7 @@ pub async fn bug_report_send(
     report: BugReport,
 ) -> Result<Value, String> {
     let service = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || send(&app, &service, report))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || send(&app, &service, report)).await.map_err(|e| e.to_string())?
 }
 
 fn platform() -> String {
@@ -62,15 +60,12 @@ fn send(app: &tauri::AppHandle, service: &Shared, report: BugReport) -> Result<V
         if zip.len() > MAX_BUNDLE {
             return Err("native: The debug data is too large to send. Turn off Attach debug data and send the report without it.".into());
         }
-        let part = Part::bytes(zip)
-            .file_name("kimochi-debug.zip")
-            .mime_str("application/zip")
-            .map_err(|e| e.to_string())?;
+        let part =
+            Part::bytes(zip).file_name("kimochi-debug.zip").mime_str("application/zip").map_err(|e| e.to_string())?;
         form = form.part("debug", part);
     }
-    let mut request = crate::account::client(Duration::from_secs(60))?
-        .post(format!("{base}/api/v1/bug-reports"))
-        .multipart(form);
+    let mut request =
+        crate::account::client(Duration::from_secs(60))?.post(format!("{base}/api/v1/bug-reports")).multipart(form);
     if let Some(token) = crate::account::token() {
         request = request.bearer_auth(token);
     }
@@ -93,7 +88,9 @@ fn refusal(status: u16, body: &Value) -> String {
     match status {
         429 => "You've sent several reports in a short time. Please wait a while and try again.".into(),
         400 | 413 => "The report couldn't be accepted. Check the fields and try again.".into(),
-        _ => format!("The report couldn't be sent (the server answered {status}). Try again later, or tell me on Discord."),
+        _ => format!(
+            "The report couldn't be sent (the server answered {status}). Try again later, or tell me on Discord."
+        ),
     }
 }
 

@@ -19,7 +19,8 @@ use windows_sys::Win32::Foundation::HMODULE;
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 static STARTED: AtomicBool = AtomicBool::new(false);
 /// Last file started per channel number.
-static LAST_FILE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, String>>> = std::sync::LazyLock::new(Default::default);
+static LAST_FILE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<usize, String>>> =
+    std::sync::LazyLock::new(Default::default);
 
 /// The Python side. `{OUT}` and `{DLL}` are filled in. Python 2 and 3 compatible.
 const PATCH: &str = r#####"
@@ -126,7 +127,8 @@ pub fn on_python(m: HMODULE, name: &str) {
         return;
     }
     let sym = |n: &CStr| unsafe { crate::iat::real_gpa(m, n) };
-    let (a, b, c, d) = (sym(c"Py_IsInitialized"), sym(c"PyGILState_Ensure"), sym(c"PyGILState_Release"), sym(c"PyRun_SimpleString"));
+    let (a, b, c, d) =
+        (sym(c"Py_IsInitialized"), sym(c"PyGILState_Ensure"), sym(c"PyGILState_Release"), sym(c"PyRun_SimpleString"));
     if a == 0 || b == 0 || c == 0 || d == 0 {
         return; // librenpython.dll and friends: not the interpreter
     }
@@ -178,8 +180,13 @@ pub unsafe extern "C" fn voicehook_emit(meta: *const c_char, data: *const u8, le
         let op = meta["op"].as_str().unwrap_or("").to_string();
         if op == "installed" {
             INSTALLED.store(true, Ordering::SeqCst);
-            log(&format!("renpy: installed (Ren'Py {}, Python {}), channels {}", meta["renpy"], meta["python"], meta["channels"]));
-            sink::send(Ev::Note(json!({"ev": "adapter", "adapter": "renpy", "renpy": meta["renpy"], "python": meta["python"], "channels": meta["channels"]})));
+            log(&format!(
+                "renpy: installed (Ren'Py {}, Python {}), channels {}",
+                meta["renpy"], meta["python"], meta["channels"]
+            ));
+            sink::send(Ev::Note(
+                json!({"ev": "adapter", "adapter": "renpy", "renpy": meta["renpy"], "python": meta["python"], "channels": meta["channels"]}),
+            ));
             return;
         }
         let number = meta["number"].as_u64().unwrap_or(0) as usize;

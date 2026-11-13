@@ -118,17 +118,26 @@ pub fn on_cri(m: HMODULE, name: &str) {
     }
     let api = unsafe {
         let f = |n: &CStr| crate::iat::real_gpa(m, n);
-        let (c, a, d) = (f(c"criAtomExOutputAnalyzer_Create"), f(c"criAtomExOutputAnalyzer_AttachExPlayer"), f(c"criAtomExOutputAnalyzer_ExecuteQueuedPcmCapturerCallbacks"));
+        let (c, a, d) = (
+            f(c"criAtomExOutputAnalyzer_Create"),
+            f(c"criAtomExOutputAnalyzer_AttachExPlayer"),
+            f(c"criAtomExOutputAnalyzer_ExecuteQueuedPcmCapturerCallbacks"),
+        );
         if c == 0 || a == 0 || d == 0 {
             log(&format!("cri: {name} has no output analyzer; adapter off"));
             return;
         }
-        Api { analyzer_create: std::mem::transmute(c), analyzer_attach: std::mem::transmute(a), analyzer_drain: std::mem::transmute(d) }
+        Api {
+            analyzer_create: std::mem::transmute(c),
+            analyzer_attach: std::mem::transmute(a),
+            analyzer_drain: std::mem::transmute(d),
+        }
     };
     let _ = API.set(api);
     log(&format!("cri: output analyzer found in {name}"));
     // Calls the game's code already looked up: their addresses, kept in GameAssembly's data.
-    let game = unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleA(c"GameAssembly.dll".as_ptr().cast()) };
+    let game =
+        unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleA(c"GameAssembly.dll".as_ptr().cast()) };
     let data = if game.is_null() { Vec::new() } else { unsafe { crate::il2cpp::writable_sections(game as usize) } };
     for (fname, hook, orig) in hooks() {
         let cname = std::ffi::CString::new(fname).unwrap();
@@ -176,9 +185,17 @@ unsafe fn watch(player: usize) {
     (api.analyzer_attach)(analyzer as P, player as P);
     let cue = lock(&PENDING_CUES).remove(&player);
     lock(&PLAYERS).insert(player, Player { analyzer, cue, samples: 0, first_data: None, rate_logged: false });
-    let rate = match MEASURED.load(Ordering::SeqCst) { 0 => RATE, r => r as u32 };
+    let rate = match MEASURED.load(Ordering::SeqCst) {
+        0 => RATE,
+        r => r as u32,
+    };
     let channel = format!("player{}", NEXT_CHANNEL.fetch_add(1, Ordering::SeqCst));
-    sink::send(Ev::Create { key: key(player), api: "cri", fmt: crate::unity::float_fmt(2, rate), info: json!({"analyzer": hex(analyzer), "channel": channel}) });
+    sink::send(Ev::Create {
+        key: key(player),
+        api: "cri",
+        fmt: crate::unity::float_fmt(2, rate),
+        info: json!({"analyzer": hex(analyzer), "channel": channel}),
+    });
     lock(&CHANNELS).insert(player, channel);
     log(&format!("cri: watching player {} (analyzer {})", hex(player), hex(analyzer)));
 }
@@ -200,7 +217,8 @@ unsafe fn drain_due() {
 
 unsafe fn drain() {
     let Some(api) = API.get() else { return };
-    let list: Vec<(usize, usize)> = lock(&PLAYERS).iter().filter(|(_, p)| p.analyzer != 0).map(|(&k, p)| (k, p.analyzer)).collect();
+    let list: Vec<(usize, usize)> =
+        lock(&PLAYERS).iter().filter(|(_, p)| p.analyzer != 0).map(|(&k, p)| (k, p.analyzer)).collect();
     for (player, analyzer) in list {
         DRAINING.store(player, Ordering::SeqCst);
         (api.analyzer_drain)(analyzer as P, captured);
@@ -229,7 +247,14 @@ unsafe extern "C" fn captured(left: *const f32, right: *const f32, channels: i32
             let Some(first) = p.first_data else {
                 p.first_data = Some(now);
                 drop(players);
-                sink::send(Ev::Data { key: key(player), bytes, eos: false, looping: false, region: None, info: serde_json::Value::Null });
+                sink::send(Ev::Data {
+                    key: key(player),
+                    bytes,
+                    eos: false,
+                    looping: false,
+                    region: None,
+                    info: serde_json::Value::Null,
+                });
                 return;
             };
             p.samples += n as u64;
@@ -239,17 +264,31 @@ unsafe extern "C" fn captured(left: *const f32, right: *const f32, channels: i32
                 let per_second = p.samples as f64 * 1000.0 / (now - first);
                 log(&format!("cri: player {} gave {per_second:.0} samples/s", hex(player)));
                 let Some(rate) = standard_rate(per_second) else { return };
-                if MEASURED.compare_exchange(0, rate as usize, Ordering::SeqCst, Ordering::SeqCst).is_ok() && rate != RATE {
+                if MEASURED.compare_exchange(0, rate as usize, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+                    && rate != RATE
+                {
                     log(&format!("cri: mixer rate {rate} Hz"));
                     // Players announced before the rate was known: their format again.
                     let channels = lock(&CHANNELS).clone();
                     for (pl, channel) in channels {
-                        sink::send(Ev::Create { key: key(pl), api: "cri", fmt: crate::unity::float_fmt(2, rate), info: json!({"channel": channel, "measured": true}) });
+                        sink::send(Ev::Create {
+                            key: key(pl),
+                            api: "cri",
+                            fmt: crate::unity::float_fmt(2, rate),
+                            info: json!({"channel": channel, "measured": true}),
+                        });
                     }
                 }
             }
         }
-        sink::send(Ev::Data { key: key(player), bytes, eos: false, looping: false, region: None, info: serde_json::Value::Null });
+        sink::send(Ev::Data {
+            key: key(player),
+            bytes,
+            eos: false,
+            looping: false,
+            region: None,
+            info: serde_json::Value::Null,
+        });
     });
 }
 
@@ -267,12 +306,23 @@ unsafe extern "C" fn start(player: P) -> u32 {
         // Its clips go with the shape of their cue's name (`Aki_S00park_000001`: `a_a9a_9`), else
         // the cue sheet they come from: games play each voice line on a player, even a sheet, of
         // its own, and name every voice cue alike.
-        let group = cue.as_deref().map(|c| format!("cue:{}", shape(c))).or_else(|| lock(&PLAYER_SHEETS).get(&(player as usize)).cloned());
+        let group = cue
+            .as_deref()
+            .map(|c| format!("cue:{}", shape(c)))
+            .or_else(|| lock(&PLAYER_SHEETS).get(&(player as usize)).cloned());
         if let Some(sheet) = group {
             let changed = lock(&CHANNELS).insert(player as usize, sheet.clone()).as_deref() != Some(sheet.as_str());
             if changed {
-                let rate = match MEASURED.load(Ordering::SeqCst) { 0 => RATE, r => r as u32 };
-                sink::send(Ev::Create { key: key(player as usize), api: "cri", fmt: crate::unity::float_fmt(2, rate), info: json!({"channel": sheet}) });
+                let rate = match MEASURED.load(Ordering::SeqCst) {
+                    0 => RATE,
+                    r => r as u32,
+                };
+                sink::send(Ev::Create {
+                    key: key(player as usize),
+                    api: "cri",
+                    fmt: crate::unity::float_fmt(2, rate),
+                    info: json!({"channel": sheet}),
+                });
             }
         }
         sink::send(Ev::Source { key: key(player as usize), source: cue.clone() });
@@ -320,7 +370,13 @@ static PLAYER_SHEETS: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(De
 pub(crate) fn shape(name: &str) -> String {
     let mut out = String::new();
     for c in name.chars() {
-        let class = if c.is_ascii_digit() { '9' } else if c.is_alphabetic() { 'a' } else { c };
+        let class = if c.is_ascii_digit() {
+            '9'
+        } else if c.is_alphabetic() {
+            'a'
+        } else {
+            c
+        };
         if out.chars().last() != Some(class) || !(class == 'a' || class == '9') {
             out.push(class);
         }

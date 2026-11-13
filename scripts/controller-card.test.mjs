@@ -17,7 +17,10 @@ test('the card panel steps through values, held at the ends, and looks go round'
 
 test('the right stick is reported whole, for sizing the card, as well as its scroll', () => {
   const commands = []
-  const controls = new ControllerInput((command) => commands.push(command), { setTimeout: () => 0, clearTimeout: () => {} })
+  const controls = new ControllerInput((command) => commands.push(command), {
+    setTimeout: () => 0,
+    clearTimeout: () => {}
+  })
   const nav = (rstick) => controls.nav({ pressed: [], released: [], held: [], stick: { x: 0, y: 0 }, rstick })
   nav({ x: 0.8, y: 0 })
   nav({ x: 0.8, y: -0.5 })
@@ -28,7 +31,10 @@ test('the right stick is reported whole, for sizing the card, as well as its scr
       { type: 'rstick', x: 0.8, y: -0.5 }
     ]
   )
-  assert.deepEqual(commands.filter((c) => c.type === 'scroll'), [{ type: 'scroll', y: -0.5 }])
+  assert.deepEqual(
+    commands.filter((c) => c.type === 'scroll'),
+    [{ type: 'scroll', y: -0.5 }]
+  )
 })
 
 test('the hooked text says what the hook is doing, as the sidebar does', () => {
@@ -56,7 +62,11 @@ test('the hooked text says what the hook is doing, as the sidebar does', () => {
       ['The game has closed.', false, true, false]
     ]
   )
-  const chosen = hookSummary({ phase: 'hooked', selectedBy: 'saved', threads: [{ key: 'a', name: 'N', preview: ' 吾輩は\n猫 ', selected: true }] })
+  const chosen = hookSummary({
+    phase: 'hooked',
+    selectedBy: 'saved',
+    threads: [{ key: 'a', name: 'N', preview: ' 吾輩は\n猫 ', selected: true }]
+  })
   assert.deepEqual([chosen.text, chosen.ja, chosen.how], ['吾輩は 猫', true, 'Remembered for this game'])
 })
 
@@ -76,5 +86,8 @@ test('the list of threads marks automatic, or the thread chosen by hand', () => 
   )
   assert.equal(auto[0].detail, 'Matched to the screen')
   const manual = threadChoices({ selectedBy: 'manual', threads })
-  assert.deepEqual(manual.map((c) => c.current), [false, true, false])
+  assert.deepEqual(
+    manual.map((c) => c.current),
+    [false, true, false]
+  )
 })

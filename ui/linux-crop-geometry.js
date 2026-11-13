@@ -15,6 +15,9 @@ export function cropForFrame(crop, frame) {
   if (!crop || crop.reference_width <= 0 || crop.reference_height <= 0) return null
   const sx = frame.width / crop.reference_width
   const sy = frame.height / crop.reference_height
-  return cropFromPoints({ x: crop.x * sx, y: crop.y * sy },
-    { x: (crop.x + crop.width) * sx, y: (crop.y + crop.height) * sy }, frame)
+  return cropFromPoints(
+    { x: crop.x * sx, y: crop.y * sy },
+    { x: (crop.x + crop.width) * sx, y: (crop.y + crop.height) * sy },
+    frame
+  )
 }

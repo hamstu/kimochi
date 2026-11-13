@@ -207,7 +207,9 @@ async function shoot(page, servers, shot, theme) {
   const config = { ...shot, theme, url: pageUrl(shot, theme) }
   await setTheme(page, theme)
   const loaded = page.once('Page.loadEventFired', { timeout: 60000 })
-  await page.send('Page.navigate', { url: `${base}/__shots/stage.html?shot=${encodeURIComponent(JSON.stringify(config))}` })
+  await page.send('Page.navigate', {
+    url: `${base}/__shots/stage.html?shot=${encodeURIComponent(JSON.stringify(config))}`
+  })
   await loaded
   await evaluate(page, '__stage.ready')
   await act(page, shot.actions)
@@ -248,7 +250,12 @@ function shownWidths(asked = [], natural) {
 
 /** The shot again at `scale` device pixels per CSS pixel, the page left as it is. */
 async function rescale(page, scale) {
-  await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: scale, mobile: false })
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 2400,
+    height: 1600,
+    deviceScaleFactor: scale,
+    mobile: false
+  })
   await sleep(300)
   return capture(page, await evaluate(page, '__stage.clip()'))
 }
@@ -271,7 +278,12 @@ async function setupPage(browser) {
   await page.send('Emulation.setTimezoneOverride', { timezoneId: 'UTC' })
   await page.send('Emulation.setLocaleOverride', { locale: 'en-US' })
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK, runImmediately: true })
-  await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 2400,
+    height: 1600,
+    deviceScaleFactor: SCALE,
+    mobile: false
+  })
   return page
 }
 
@@ -288,15 +300,25 @@ async function render(page, servers, shot, theme, used) {
       sized.push([name, await rescale(page, (density * shown) / natural)])
     }
   }
-  await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 2400,
+    height: 1600,
+    deviceScaleFactor: SCALE,
+    mobile: false
+  })
   // In an object: an async function's returned promise would be waited for.
   const done = (async () => {
     // Sizes a page no longer asks for go with the old capture.
     const sizedName = /^(.+)\.w\d+x\d\.webp$/
     const keep = new Set(sized.map(([name]) => path.basename(name)))
-    for (const old of (await readdir(OUT)).filter((f) => f.match(sizedName)?.[1] === `${shot.id}-${theme}` && !keep.has(f)))
+    for (const old of (await readdir(OUT)).filter(
+      (f) => f.match(sizedName)?.[1] === `${shot.id}-${theme}` && !keep.has(f)
+    ))
       await rm(path.join(OUT, old))
-    const [main, ...outs] = await Promise.all([write(file, png), ...sized.map(([name, shotPng]) => write(name, shotPng))])
+    const [main, ...outs] = await Promise.all([
+      write(file, png),
+      ...sized.map(([name, shotPng]) => write(name, shotPng))
+    ])
     const lines = [`✓ ${path.relative(root, file)}  ${main.width}×${main.height}  ${Math.round(main.bytes / 1024)} KB`]
     sized.forEach(([name], i) => lines.push(`  ↳ ${path.basename(name)}  ${outs[i].width}×${outs[i].height}`))
     console.log(lines.join('\n'))
@@ -322,9 +344,13 @@ async function main() {
   const jobs = []
   for (const shot of shots)
     for (const theme of shot.themes ?? themes) if (themes.includes(theme)) jobs.push({ shot, theme })
-  for (const card of OG) if (!opts.only || opts.only.includes(card.id)) jobs.push({ shot: card, theme: 'light', og: true })
+  for (const card of OG)
+    if (!opts.only || opts.only.includes(card.id)) jobs.push({ shot: card, theme: 'light', og: true })
 
-  const servers = await startServers(opts.port, jobs.some((j) => j.shot.server === 'site'))
+  const servers = await startServers(
+    opts.port,
+    jobs.some((j) => j.shot.server === 'site')
+  )
   const browser = await launchChrome({ args: ['--force-color-profile=srgb', '--font-render-hinting=none'] })
   const used = await usages()
   const writes = []
@@ -337,11 +363,28 @@ async function main() {
         const { shot, theme, og } = jobs[next++]
         try {
           if (og) {
-            await page.send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 630, deviceScaleFactor: 1, mobile: false })
+            await page.send('Emulation.setDeviceMetricsOverride', {
+              width: 1200,
+              height: 630,
+              deviceScaleFactor: 1,
+              mobile: false
+            })
             const png = await shoot(page, servers, shot, 'light')
-            await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+            await page.send('Emulation.setDeviceMetricsOverride', {
+              width: 2400,
+              height: 1600,
+              deviceScaleFactor: SCALE,
+              mobile: false
+            })
             const out = path.join(root, shot.out)
-            await writeFile(out, await sharp(png).resize(1200, 630).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toBuffer())
+            await writeFile(
+              out,
+              await sharp(png)
+                .resize(1200, 630)
+                .flatten({ background: '#ffffff' })
+                .png({ compressionLevel: 9 })
+                .toBuffer()
+            )
             console.log(`✓ ${path.relative(root, out)}  1200×630`)
           } else {
             const { done } = await render(page, servers, shot, theme, used)

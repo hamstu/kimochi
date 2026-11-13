@@ -20,9 +20,8 @@ export async function installLinuxDictionaryImages(win) {
   const { DictionaryImporterMediaLoader } = await import('/js/dictionary/dictionary-importer-media-loader.js')
   const prototype = DictionaryImporterMediaLoader.prototype
   if (prototype.kimochiLinuxImages) return
-  prototype.getImageDetails = linuxImageLoader(
-    prototype.getImageDetails,
-    (command, args) => win.__TAURI__.core.invoke(command, args)
+  prototype.getImageDetails = linuxImageLoader(prototype.getImageDetails, (command, args) =>
+    win.__TAURI__.core.invoke(command, args)
   )
   prototype.kimochiLinuxImages = true
 }

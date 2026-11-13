@@ -13,48 +13,96 @@ fn kde() -> bool {
 }
 
 pub fn available() -> bool {
-    if kde() { kwin::available() } else { hyprland::available() }
+    if kde() {
+        kwin::available()
+    } else {
+        hyprland::available()
+    }
 }
 pub fn pointer() -> Option<Value> {
-    if kde() { kwin::pointer() } else { hyprland::pointer() }
+    if kde() {
+        kwin::pointer()
+    } else {
+        hyprland::pointer()
+    }
 }
 /// The cursor in the compositor's global logical coordinates (where its outputs are), unlike
 /// [`pointer`], which is relative to the overlay's output.
 pub fn pointer_global() -> Option<(f64, f64)> {
-    if kde() { kwin::pointer_global() } else { hyprland::pointer_global() }
+    if kde() {
+        kwin::pointer_global()
+    } else {
+        hyprland::pointer_global()
+    }
 }
 /// Kimochi's own ordinary windows, overlay-local, where the compositor bridge knows them.
 pub fn own_frames() -> Option<Vec<Rect>> {
-    if kde() { kwin::own_frames() } else { hyprland::own_frames() }
+    if kde() {
+        kwin::own_frames()
+    } else {
+        hyprland::own_frames()
+    }
 }
 pub fn clear() {
     kwin::clear();
     hyprland::clear();
 }
 pub fn tracked(source: &str) -> Option<(Rect, bool)> {
-    if kde() { kwin::tracked(source) } else { hyprland::tracked(source) }
+    if kde() {
+        kwin::tracked(source)
+    } else {
+        hyprland::tracked(source)
+    }
 }
 pub fn frame_bounds(source: &str, width: u32, height: u32) -> Option<Rect> {
-    if kde() { kwin::frame_bounds(source, width, height) } else { hyprland::frame_bounds(source, width, height) }
+    if kde() {
+        kwin::frame_bounds(source, width, height)
+    } else {
+        hyprland::frame_bounds(source, width, height)
+    }
 }
 pub fn enrich(frame: &mut Frame) {
-    if kde() { kwin::enrich(frame) } else { hyprland::enrich(frame) }
+    if kde() {
+        kwin::enrich(frame)
+    } else {
+        hyprland::enrich(frame)
+    }
 }
 pub fn identity(source: &str) -> Option<Value> {
-    if kde() { kwin::identity(source) } else { hyprland::identity(source) }
+    if kde() {
+        kwin::identity(source)
+    } else {
+        hyprland::identity(source)
+    }
 }
 /// The process of the window a portal stream is linked to, once it is.
 pub fn linked_pid(source: &str) -> Option<u32> {
-    if kde() { kwin::linked_pid(source) } else { hyprland::linked_pid(source) }
+    if kde() {
+        kwin::linked_pid(source)
+    } else {
+        hyprland::linked_pid(source)
+    }
 }
 pub fn status(source: &str) -> Value {
-    if kde() { kwin::status(source) } else { hyprland::status(source) }
+    if kde() {
+        kwin::status(source)
+    } else {
+        hyprland::status(source)
+    }
 }
 pub fn candidates(width: u32, height: u32) -> Result<Value, String> {
-    if kde() { kwin::candidates(width, height) } else { hyprland::candidates(width, height) }
+    if kde() {
+        kwin::candidates(width, height)
+    } else {
+        hyprland::candidates(width, height)
+    }
 }
 pub fn link(source: &str, window: &str, width: u32, height: u32) -> Result<(), String> {
-    if kde() { kwin::link(source, window, width, height) } else { hyprland::link(source, window, width, height) }
+    if kde() {
+        kwin::link(source, window, width, height)
+    } else {
+        hyprland::link(source, window, width, height)
+    }
 }
 /// A linked window's own stream (KWin renders the window alone, as GNOME does), which Kimochi's
 /// overlay and pop-ups cannot appear in: no need to hide them for its captures.

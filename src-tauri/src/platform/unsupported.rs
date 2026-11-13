@@ -32,28 +32,15 @@ pub fn with_pool<R>(f: impl FnOnce() -> R) -> R {
 /// Ordinary windows still have to be placeable without native help, so placement and
 /// bounds go through Tauri's own (physical-pixel) window API.
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
-    w.set_position(tauri::LogicalPosition::new(r.x, r.y))
-        .map_err(|e| e.to_string())?;
-    w.set_size(tauri::LogicalSize::new(r.width, r.height))
-        .map_err(|e| e.to_string())
+    w.set_position(tauri::LogicalPosition::new(r.x, r.y)).map_err(|e| e.to_string())?;
+    w.set_size(tauri::LogicalSize::new(r.width, r.height)).map_err(|e| e.to_string())
 }
 
 pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
     let scale = w.scale_factor().map_err(|e| e.to_string())?;
-    let position = w
-        .outer_position()
-        .map_err(|e| e.to_string())?
-        .to_logical::<f64>(scale);
-    let size = w
-        .outer_size()
-        .map_err(|e| e.to_string())?
-        .to_logical::<f64>(scale);
-    Ok(Rect {
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
-    })
+    let position = w.outer_position().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
+    let size = w.outer_size().map_err(|e| e.to_string())?.to_logical::<f64>(scale);
+    Ok(Rect { x: position.x, y: position.y, width: size.width, height: size.height })
 }
 
 pub fn panel_pointer(_w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, String> {
@@ -76,10 +63,7 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 /// No native input regions: the shared cursor poll toggles click-through.
-pub fn set_input_regions(
-    _w: &tauri::WebviewWindow,
-    _regions: Option<&[Rect]>,
-) -> Result<bool, String> {
+pub fn set_input_regions(_w: &tauri::WebviewWindow, _regions: Option<&[Rect]>) -> Result<bool, String> {
     Ok(false)
 }
 

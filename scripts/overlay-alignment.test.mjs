@@ -71,11 +71,18 @@ function drawn(run) {
     // A squeezed mark (text-layout.js SQUEEZE) is drawn with its blank half cut by margins.
     const [cutBefore, cutAfter] = run.squeeze?.includes(c) ? SQUEEZE.get(c) : [0, 0]
     before -= cutBefore
-    const origin = (run.vertical ? run.rect.y : run.rect.x) + run.lead + f * before + run.spacing * i + (run.offsets?.[i] ?? 0)
+    const origin =
+      (run.vertical ? run.rect.y : run.rect.x) + run.lead + f * before + run.spacing * i + (run.offsets?.[i] ?? 0)
     before += advance(c) - cutAfter
     if (!c.trim()) return
     if (run.vertical) {
-      out.push({ c, cx: run.rect.x + run.rect.width / 2 + run.shift, cy: origin + (f * advance(c)) / 2, ink: null, fontSize: f })
+      out.push({
+        c,
+        cx: run.rect.x + run.rect.width / 2 + run.shift,
+        cy: origin + (f * advance(c)) / 2,
+        ink: null,
+        fontSize: f
+      })
       return
     }
     const { fontAscent: a, fontDescent: d } = recorded.font
@@ -105,7 +112,10 @@ function layout(fixture) {
   const { width, height } = fixture.truth
   const bounds = { x: 0, y: 0, width: width / scale, height: height / scale }
   const info = { full_width: width, full_height: height, crop_pixels: [0, 0, width, height], source_bounds: bounds }
-  const annotations = visibleAnnotations(withInkMargins(fixture.ocr.textAnnotations, fixture.ocr.engine), DEFAULT_GROUPING)
+  const annotations = visibleAnnotations(
+    withInkMargins(fixture.ocr.textAnnotations, fixture.ocr.engine),
+    DEFAULT_GROUPING
+  )
   const mapped = mapAnnotations(info, annotations, bounds)
   return { mapped, runs: wordLayout(mapped, measure).flat(), scale }
 }
@@ -114,7 +124,12 @@ const scored = fixtures
   .filter((fixture) => fixture.truth.lines.length)
   .map((fixture) => {
     const { runs, scale } = layout(fixture)
-    return { sample: fixture.sample, engine: fixture.engine, mode: 'words', ...alignmentMetrics(fixture.truth, runs.flatMap(drawn), scale) }
+    return {
+      sample: fixture.sample,
+      engine: fixture.engine,
+      mode: 'words',
+      ...alignmentMetrics(fixture.truth, runs.flatMap(drawn), scale)
+    }
   })
 
 test('the corpus covers every engine', () => {
@@ -159,7 +174,10 @@ for (const [engine, limit] of Object.entries(LIMITS)) {
 
 test('every line is set at one size', () => {
   for (const row of scored)
-    assert.ok(row.sizeSpread <= 0.02, `${row.sample}.${row.engine}: sizes on one line vary ${(row.sizeSpread * 100).toFixed(1)}%`)
+    assert.ok(
+      row.sizeSpread <= 0.02,
+      `${row.sample}.${row.engine}: sizes on one line vary ${(row.sizeSpread * 100).toFixed(1)}%`
+    )
 })
 
 test('a line read without word boxes still spans its box: single-line engines', () => {
@@ -180,7 +198,10 @@ test('every box, from every engine, is laid out inside itself with finite number
       // The ink runs from the box's start to its end: no glyph is drawn far outside it.
       for (const g of drawn(run)) {
         const at = (run.vertical ? g.cy - run.rect.y : g.cx - run.rect.x) / run.fontSize
-        assert.ok(at > -0.75 && at < along / run.fontSize + 0.75, `${fixture.sample}.${fixture.engine}: ${g.c} of ${run.text} at ${at.toFixed(2)}`)
+        assert.ok(
+          at > -0.75 && at < along / run.fontSize + 0.75,
+          `${fixture.sample}.${fixture.engine}: ${g.c} of ${run.text} at ${at.toFixed(2)}`
+        )
       }
     }
   }
@@ -198,24 +219,39 @@ test('Manga OCR: a speech bubble is lettered as columns at one size, over its ow
   const fixture = fixtures.find((f) => f.sample === 'bubble' && f.engine === 'mangaocr')
   const { mapped, runs } = layout(fixture)
   const size = fixture.truth.lines[0].size
-  assert.ok(runs.every((run) => run.vertical), 'every run is a column')
+  assert.ok(
+    runs.every((run) => run.vertical),
+    'every run is a column'
+  )
   // The first block's regions are good enough to find its two columns, and the break between them.
-  assert.deepEqual(runs.slice(0, 2).map((run) => run.text), ['遥太郎くんの', '偏差値は３５。'])
+  assert.deepEqual(
+    runs.slice(0, 2).map((run) => run.text),
+    ['遥太郎くんの', '偏差値は３５。']
+  )
   // One size per block; the bubble's two blocks within a quarter of each other and of the truth.
   const blockSizes = wordLayout(mapped, measure).map((block, index) => {
     const own = block.map((run) => run.fontSize)
     assert.ok(Math.max(...own) - Math.min(...own) < 0.01, `block ${index}: sizes ${own.map((s) => s.toFixed(1))}`)
     return own[0]
   })
-  assert.ok(Math.max(...blockSizes) / Math.min(...blockSizes) <= 1.25, `block sizes ${blockSizes.map((s) => s.toFixed(1))}`)
+  assert.ok(
+    Math.max(...blockSizes) / Math.min(...blockSizes) <= 1.25,
+    `block sizes ${blockSizes.map((s) => s.toFixed(1))}`
+  )
   for (const s of blockSizes) assert.ok(s / size >= 0.85 && s / size <= 1.15, `size ${s.toFixed(1)} against ${size}`)
   // Every glyph is drawn over the bubble's text, none out past it.
   const truth = fixture.truth.lines.flatMap((line) => line.glyphs)
   const [x0, y0] = [Math.min(...truth.map((g) => g.x)), Math.min(...truth.map((g) => g.y))]
   const [x1, y1] = [Math.max(...truth.map((g) => g.x + g.w)), Math.max(...truth.map((g) => g.y + g.h))]
   for (const g of runs.flatMap(drawn))
-    assert.ok(g.cx > x0 - size / 2 && g.cx < x1 + size / 2 && g.cy > y0 - size / 2 && g.cy < y1 + size / 2, `${g.c} at ${g.cx.toFixed(0)},${g.cy.toFixed(0)}`)
-  for (const [sample, along] of [['bubble', 0.8], ['vertical', 0.12]]) {
+    assert.ok(
+      g.cx > x0 - size / 2 && g.cx < x1 + size / 2 && g.cy > y0 - size / 2 && g.cy < y1 + size / 2,
+      `${g.c} at ${g.cx.toFixed(0)},${g.cy.toFixed(0)}`
+    )
+  for (const [sample, along] of [
+    ['bubble', 0.8],
+    ['vertical', 0.12]
+  ]) {
     const row = scored.find((r) => r.sample === sample && r.engine === 'mangaocr')
     assert.ok(row.coverage >= 0.6, `${sample}: coverage ${row.coverage.toFixed(2)}`)
     assert.ok(row.alongMean <= along, `${sample}: mean along ${row.alongMean.toFixed(3)}`)
@@ -228,7 +264,10 @@ test('brackets and pauses a game sets in half a cell are drawn so, and the line 
   // pushed the rest of its line half a glyph along: Google Lens's glyphs were 0.2 of a glyph out.
   const fixture = fixtures.find((f) => f.sample === 'halfwidth' && f.engine === 'googlelens')
   const { runs } = layout(fixture)
-  assert.ok(runs.some((run) => run.squeeze?.includes('「')), 'the brackets were seen as half-width')
+  assert.ok(
+    runs.some((run) => run.squeeze?.includes('「')),
+    'the brackets were seen as half-width'
+  )
   const row = scored.find((r) => r.sample === 'halfwidth' && r.engine === 'googlelens')
   assert.ok(row.alongMean <= 0.11, `mean along ${row.alongMean.toFixed(3)}`)
   // Live Text reads the ellipsis in 「ええと、その……『転送装置』って何？」 as six ・, each boxed a
@@ -254,6 +293,9 @@ test('brackets and pauses a game sets in half a cell are drawn so, and the line 
   })
   // Full-width brackets stay full-width: no other sample's runs are squeezed.
   for (const other of fixtures.filter((f) => f.sample === 'dialogue')) {
-    assert.ok(layout(other).runs.every((run) => !run.squeeze), `${other.engine} squeezed full-width brackets`)
+    assert.ok(
+      layout(other).runs.every((run) => !run.squeeze),
+      `${other.engine} squeezed full-width brackets`
+    )
   }
 })

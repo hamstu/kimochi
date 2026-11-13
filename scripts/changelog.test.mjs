@@ -50,7 +50,10 @@ test('a changelog splits into its preamble and sections, newest first', () => {
 test('a malformed version heading is an error, not part of the section above', () => {
   assert.throws(() => parseChangelog('## [Unreleased]\n\n## 0.2.0\n'), /unrecognised changelog heading: ## 0.2.0/)
   assert.throws(() => parseChangelog('## [0.2.0]\n\n- x\n'), /without a date/)
-  assert.throws(() => parseChangelog('## [0.2.0] - 2026-10-13\n## [0.2.0] - 2026-10-14\n'), /two changelog sections for 0.2.0/)
+  assert.throws(
+    () => parseChangelog('## [0.2.0] - 2026-10-13\n## [0.2.0] - 2026-10-14\n'),
+    /two changelog sections for 0.2.0/
+  )
 })
 
 test("a version's section is its markdown, and a missing one throws", () => {

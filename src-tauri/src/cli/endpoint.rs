@@ -113,7 +113,9 @@ impl Connection {
         let mut line = String::new();
         match self.reader.read_line(&mut line) {
             Ok(0) => None,
-            Ok(_) => Some(serde_json::from_str(&line).map_err(|e| CallError::Failed(format!("bad reply from Kimochi: {e}")))),
+            Ok(_) => {
+                Some(serde_json::from_str(&line).map_err(|e| CallError::Failed(format!("bad reply from Kimochi: {e}"))))
+            }
             Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
                 Some(Err(CallError::Timeout))
             }
@@ -211,7 +213,8 @@ mod tests {
     #[test]
     fn nothing_listening_is_unreachable() {
         let port = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap().port();
-        let gone = Endpoint { port, token: "x".into(), pid: 1, version: "0".into(), flavor: "dev".into(), protocol: PROTOCOL };
+        let gone =
+            Endpoint { port, token: "x".into(), pid: 1, version: "0".into(), flavor: "dev".into(), protocol: PROTOCOL };
         assert!(matches!(call(&gone, "ping", Value::Null, Duration::from_secs(1)), Err(CallError::Unreachable(_))));
     }
 

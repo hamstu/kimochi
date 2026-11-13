@@ -10,7 +10,13 @@ import { scanOf } from './capture.js'
 import { installCaretPosition } from './caret.js'
 import { installShadowSelection } from './selection.js'
 import { createExtensionContext } from './chrome-api.js'
-import { createDriver, injectContentScripts, installScope, observePopup as watchPopup, tentenPopupSize } from './content.js'
+import {
+  createDriver,
+  injectContentScripts,
+  installScope,
+  observePopup as watchPopup,
+  tentenPopupSize
+} from './content.js'
 import { Hub } from './hub.js'
 import { loadMessages } from './i18n.js'
 import { Router, connectRelay, localUpstream, serveRelay } from './links.js'
@@ -40,7 +46,16 @@ export function installApp(win, { engine, descriptor }) {
   }
 
   const network = createNetworkServer(win, { denied: descriptor.deniedHosts, report })
-  const router = new Router({ win, engine, descriptor, origin, label: label ?? 'overlay', report, network, save: (name, bytes) => saveDownload(win, name, bytes) })
+  const router = new Router({
+    win,
+    engine,
+    descriptor,
+    origin,
+    label: label ?? 'overlay',
+    report,
+    network,
+    save: (name, bytes) => saveDownload(win, name, bytes)
+  })
   router.acceptChildren()
 
   const api = {
@@ -125,7 +140,13 @@ export function installApp(win, { engine, descriptor }) {
     report({ check: 'dictionary-readiness', ...status })
     void relayServer?.broadcast({ type: 'setup', setup: status })
   }
-  if (isHubWindow) report({ check: 'dictionary-readiness', phase: 'starting', settingsReady: false, message: `Starting ${descriptor.name}…` })
+  if (isHubWindow)
+    report({
+      check: 'dictionary-readiness',
+      phase: 'starting',
+      settingsReady: false,
+      message: `Starting ${descriptor.name}…`
+    })
 
   /**
    * The engine's background and offscreen documents live in its hidden extension window
@@ -141,7 +162,12 @@ export function installApp(win, { engine, descriptor }) {
     } catch (error) {
       throw Error(`The ${descriptor.name} background window could not be opened: ${describe(error)}`)
     }
-    report({ check: 'ext-host-window', action: answer?.action ?? null, label: answer?.label ?? `ext-${engine}`, reload })
+    report({
+      check: 'ext-host-window',
+      action: answer?.action ?? null,
+      label: answer?.label ?? `ext-${engine}`,
+      reload
+    })
   }
 
   async function startHub() {
@@ -159,13 +185,24 @@ export function installApp(win, { engine, descriptor }) {
         if (failed()) throw Error(failed())
         return hub.readyContext(kind)
       }
-      await hub.until(up('background'), START_TIMEOUT_MS, `The ${descriptor.name} background did not start within ${START_TIMEOUT_MS / 1000}s`)
+      await hub.until(
+        up('background'),
+        START_TIMEOUT_MS,
+        `The ${descriptor.name} background did not start within ${START_TIMEOUT_MS / 1000}s`
+      )
       if (descriptor.offscreen) {
-        await hub.until(up('offscreen'), START_TIMEOUT_MS, `The ${descriptor.name} offscreen document did not load within ${START_TIMEOUT_MS / 1000}s`)
+        await hub.until(
+          up('offscreen'),
+          START_TIMEOUT_MS,
+          `The ${descriptor.name} offscreen document did not load within ${START_TIMEOUT_MS / 1000}s`
+        )
       }
     } catch (error) {
       hub.engineError = describe(error)
-      publishReadiness({ phase: 'failed', message: `${descriptor.name} could not start. Open its settings or choose the engine again to retry.` })
+      publishReadiness({
+        phase: 'failed',
+        message: `${descriptor.name} could not start. Open its settings or choose the engine again to retry.`
+      })
       report({ check: 'ext-host-ready', ready: false, error: hub.engineError, ...hub.status() })
       throw error
     }
@@ -175,8 +212,15 @@ export function installApp(win, { engine, descriptor }) {
     report({ check: 'ext-host-ready', ready: true, ...hub.status() })
     await ensureContentLink()
     stopReadiness?.()
-    stopReadiness = watchReadiness({ win, engine, chrome: context.chrome, publish: publishReadiness,
-      subscribe: (observe) => { hub.observeMessage = observe } })
+    stopReadiness = watchReadiness({
+      win,
+      engine,
+      chrome: context.chrome,
+      publish: publishReadiness,
+      subscribe: (observe) => {
+        hub.observeMessage = observe
+      }
+    })
   }
 
   // ---------------------------------------------------------------- client (Log)
@@ -270,13 +314,15 @@ export function installApp(win, { engine, descriptor }) {
   let starting = null
   let hubStarted = null
   const ensureHub = () => {
-    hubStarted ??= within(startHub(), START_TIMEOUT_MS + 5000, `The ${descriptor.name} host did not start`).catch((error) => {
-      // Nothing of a failed hub survives, so a retry starts clean, in a fresh extension window.
-      hubStarted = null
-      hub = null
-      reloadWindow = true
-      throw error
-    })
+    hubStarted ??= within(startHub(), START_TIMEOUT_MS + 5000, `The ${descriptor.name} host did not start`).catch(
+      (error) => {
+        // Nothing of a failed hub survives, so a retry starts clean, in a fresh extension window.
+        hubStarted = null
+        hub = null
+        reloadWindow = true
+        throw error
+      }
+    )
     return hubStarted
   }
   api.start = (options = {}) => {
@@ -287,7 +333,12 @@ export function installApp(win, { engine, descriptor }) {
         if (host) await ensureHub()
         else await startClient()
         await startContent(options.scope)
-        report({ check: 'ext-host-started', host: Boolean(host), scope: options.scope ?? null, content: contentRunning })
+        report({
+          check: 'ext-host-started',
+          host: Boolean(host),
+          scope: options.scope ?? null,
+          content: contentRunning
+        })
         return { ready: true }
       } catch (error) {
         const message = describe(error)
@@ -380,7 +431,9 @@ export function installApp(win, { engine, descriptor }) {
 export async function saveDownload(win, name, bytes) {
   const tauri = win.__TAURI__
   if (tauri?.core?.invoke) {
-    return tauri.core.invoke('ext_save_file', new Uint8Array(bytes), { headers: { 'x-kimochi-filename': encodeURIComponent(name) } })
+    return tauri.core.invoke('ext_save_file', new Uint8Array(bytes), {
+      headers: { 'x-kimochi-filename': encodeURIComponent(name) }
+    })
   }
   const url = win.URL.createObjectURL(new win.Blob([bytes]))
   const anchor = win.document.createElement('a')

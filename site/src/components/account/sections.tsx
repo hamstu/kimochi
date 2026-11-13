@@ -95,14 +95,18 @@ export function ProfileSection({ user }: { user: User }) {
           )}
           {user.email && !user.emailVerified && (
             <div className="mt-3 grid gap-2">
-              <p className="text-small text-ink-2">
-                Check your inbox for a confirmation link. It works for 24 hours.
-              </p>
+              <p className="text-small text-ink-2">Check your inbox for a confirmation link. It works for 24 hours.</p>
               {resend === 'sent' ? (
                 <StatusLine>A new link is on its way to {user.email}.</StatusLine>
               ) : (
                 <div>
-                  <SubmitButton type="button" variant="secondary" busy={resend === 'busy'} busyLabel="Sending…" onClick={onResend}>
+                  <SubmitButton
+                    type="button"
+                    variant="secondary"
+                    busy={resend === 'busy'}
+                    busyLabel="Sending…"
+                    onClick={onResend}
+                  >
                     Resend confirmation email
                   </SubmitButton>
                 </div>
@@ -195,13 +199,16 @@ function PasswordForm({ user, onDone }: { user: User; onDone: (saved?: string) =
     if (errs.current || errs.next) return
     setBusy(true)
     try {
-      await api.changePassword(user.hasPassword ? { currentPassword: current, newPassword: next } : { newPassword: next })
+      await api.changePassword(
+        user.hasPassword ? { currentPassword: current, newPassword: next } : { newPassword: next }
+      )
       const had = user.hasPassword
       await refresh()
       onDone(had ? 'Password changed.' : 'Password set. You can now sign in with your email.')
     } catch (err) {
       setBusy(false)
-      if (err instanceof ApiError && err.code === 'unauthorized') setErrors({ current: 'That isn’t your current password.' })
+      if (err instanceof ApiError && err.code === 'unauthorized')
+        setErrors({ current: 'That isn’t your current password.' })
       else setFormError(errorText(err))
     }
   }
@@ -267,7 +274,9 @@ export function SignInMethodsSection({ user }: { user: User }) {
             <div>
               <p className="font-medium text-ink">Password</p>
               <p className="text-small text-ink-2">
-                {user.hasPassword ? 'Sign in with your email and a password.' : 'Not set. Add one to sign in with your email.'}
+                {user.hasPassword
+                  ? 'Sign in with your email and a password.'
+                  : 'Not set. Add one to sign in with your email.'}
               </p>
             </div>
             {!editing && (
@@ -292,7 +301,11 @@ export function SignInMethodsSection({ user }: { user: User }) {
               }}
             />
           )}
-          {saved && <div className="mt-3"><StatusLine>{saved}</StatusLine></div>}
+          {saved && (
+            <div className="mt-3">
+              <StatusLine>{saved}</StatusLine>
+            </div>
+          )}
         </li>
         {PROVIDERS.map((p) => {
           const linked = user.providers.includes(p.id)
@@ -314,7 +327,9 @@ export function SignInMethodsSection({ user }: { user: User }) {
               {linked ? (
                 <ConfirmButton
                   label="Disconnect"
-                  question={<>Disconnect {p.label}? You won&rsquo;t be able to sign in with it until you connect it again.</>}
+                  question={
+                    <>Disconnect {p.label}? You won&rsquo;t be able to sign in with it until you connect it again.</>
+                  }
                   confirmLabel="Disconnect"
                   busyLabel="Disconnecting…"
                   disabled={last}
@@ -441,7 +456,15 @@ export function DeleteAccountSection({ user }: { user: User }) {
     >
       <form onSubmit={onDelete} className="grid gap-3">
         <Field
-          label={user.email ? <>Type <span className="break-all">{user.email}</span> to confirm</> : <>Type &ldquo;delete&rdquo; to confirm</>}
+          label={
+            user.email ? (
+              <>
+                Type <span className="break-all">{user.email}</span> to confirm
+              </>
+            ) : (
+              <>Type &ldquo;delete&rdquo; to confirm</>
+            )
+          }
           name="confirm-delete"
           autoComplete="off"
           autoCapitalize="none"
@@ -452,7 +475,13 @@ export function DeleteAccountSection({ user }: { user: User }) {
         />
         {error && <Notice tone="danger">{error}</Notice>}
         <div>
-          <SubmitButton variant="secondary" className={dangerButtonExtra} busy={busy} busyLabel="Deleting…" disabled={!ok}>
+          <SubmitButton
+            variant="secondary"
+            className={dangerButtonExtra}
+            busy={busy}
+            busyLabel="Deleting…"
+            disabled={!ok}
+          >
             Delete my account
           </SubmitButton>
         </div>

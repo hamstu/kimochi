@@ -14,7 +14,13 @@ export { ChromeEvent, describe, json, platformInfo, resolveEngine, sleep, tabIdF
 export function randomId(prefix = '') {
   const bytes = new Uint8Array(12)
   crypto.getRandomValues(bytes)
-  return prefix + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+  return (
+    prefix +
+    [...bytes]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase()
+  )
 }
 
 /**

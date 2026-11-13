@@ -125,7 +125,12 @@ impl Vocr {
     /// `read_region`: the spotter on the region (the whole frame for `None`) at the frame's scale, then
     /// every horizontal box (or those of `tags`), cut from the region's grey and read with its dark flag.
     /// Boxes and cells in frame px, in reading order.
-    pub fn read_frame(&mut self, frame: &Grey, region: Option<(i64, i64, i64, i64)>, tags: Option<&[usize]>) -> Result<Vec<Line>, Error> {
+    pub fn read_frame(
+        &mut self,
+        frame: &Grey,
+        region: Option<(i64, i64, i64, i64)>,
+        tags: Option<&[usize]>,
+    ) -> Result<Vec<Line>, Error> {
         let (w, h) = (frame.width as i64, frame.height as i64);
         let (rx, ry, rw, rh) = region.unwrap_or((0, 0, w, h));
         let (x0, y0) = (rx.clamp(0, w), ry.clamp(0, h));

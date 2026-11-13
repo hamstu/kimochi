@@ -1,0 +1,5 @@
+# Commits git blame skips (git config blame.ignoreRevsFile .git-blame-ignore-revs; GitHub
+# reads this file on its own).
+
+# Format everything with oxfmt and rustfmt
+03eb852a39b8fcfee80f30d0a6932483f1bcba67

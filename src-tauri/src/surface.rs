@@ -89,7 +89,11 @@ fn strip(pixels: &Pixels, x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<[u8; 3]> {
 /// sRGB channel to linear light, for relative luminance.
 fn linear(channel: f64) -> f64 {
     let c = channel / 255.;
-    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 fn luminance(color: [f64; 3]) -> f64 {
@@ -191,7 +195,11 @@ mod tests {
         let rgba = frame(200, 100, |x, y| {
             let glyph = (40..160).contains(&x) && (40..60).contains(&y) && x % 6 < 2;
             let furigana = (40..160).contains(&x) && (33..36).contains(&y) && x % 9 == 0;
-            if glyph || furigana { [255, 255, 255] } else { [20, 30, 70] }
+            if glyph || furigana {
+                [255, 255, 255]
+            } else {
+                [20, 30, 70]
+            }
         });
         let surface = surface_of(&pixels(&rgba, 200, 100), [40., 40., 160., 60.]).unwrap();
         assert_eq!(surface["top"], "#141e46");
@@ -217,9 +225,7 @@ mod tests {
     #[test]
     fn annotations_and_groups_get_surfaces_and_the_aggregate_does_not() {
         let rgba = frame(200, 100, |_, _| [240, 240, 240]);
-        let poly = |x1: f64, y1: f64, x2: f64, y2: f64| {
-            json!({"vertices": [{"x": x1, "y": y1}, {"x": x2, "y": y1}, {"x": x2, "y": y2}, {"x": x1, "y": y2}]})
-        };
+        let poly = |x1: f64, y1: f64, x2: f64, y2: f64| json!({"vertices": [{"x": x1, "y": y1}, {"x": x2, "y": y1}, {"x": x2, "y": y2}, {"x": x1, "y": y2}]});
         let mut result = json!({
             "textAnnotations": [
                 {"description": "全部", "granularity": "aggregate", "boundingPoly": poly(0., 0., 200., 100.)},

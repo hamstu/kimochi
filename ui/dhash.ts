@@ -33,8 +33,7 @@ export function hashFromRgba(pixels: ArrayLike<number>): string {
   if (pixels.length < expected) {
     throw new Error(`Expected ${expected} RGBA bytes for a ${HASH_WIDTH}x${HASH_HEIGHT} hash`)
   }
-  const gray = (index: number): number =>
-    pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114
+  const gray = (index: number): number => pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114
 
   let bits = ''
   for (let y = 0; y < HASH_HEIGHT; y++) {
@@ -80,9 +79,7 @@ export function levenshteinDistance(str1: string, str2: string): number {
     current[0] = i
     for (let j = 1; j <= n; j++) {
       current[j] =
-        str1[i - 1] === str2[j - 1]
-          ? previous[j - 1]
-          : 1 + Math.min(previous[j], current[j - 1], previous[j - 1])
+        str1[i - 1] === str2[j - 1] ? previous[j - 1] : 1 + Math.min(previous[j], current[j - 1], previous[j - 1])
     }
     const swap = previous
     previous = current

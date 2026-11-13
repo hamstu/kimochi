@@ -32,7 +32,10 @@ test('the hooked line replaces the dialogue box, not the nameplate, HUD or menu'
   const placed = placeHookedLine(screen(), HOOKED)
   assert.equal(placed.matched, 'hook:dialogue')
   const box = placed.groups.find((g) => g.id === placed.matched)
-  assert.deepEqual(box.lines, ['「旅人は夢だけの記録となってもなおその町に集まり、', '　お客様の約束に駆けつけたのです」'])
+  assert.deepEqual(box.lines, [
+    '「旅人は夢だけの記録となってもなおその町に集まり、',
+    '　お客様の約束に駆けつけたのです」'
+  ])
   assert.deepEqual(placed.groups.map((g) => g.id).sort(), ['hook:dialogue', 'hud', 'menu', 'name'])
 })
 
@@ -51,25 +54,39 @@ test('a dialogue box OCR split in two is matched as one', () => {
   const placed = placeHookedLine(groups, '駅で傘を忘れちゃったんだけど、\nその後の帰り道がかなり大変で、覚えてない。')
   assert.equal(placed.matched, 'hook:a+b')
   assert.equal(placed.groups.length, 1)
-  assert.deepEqual(placed.groups[0].lines, ['駅で傘を忘れちゃったんだけど、', 'その後の帰り道がかなり大変で、覚えてない。'])
+  assert.deepEqual(placed.groups[0].lines, [
+    '駅で傘を忘れちゃったんだけど、',
+    'その後の帰り道がかなり大変で、覚えてない。'
+  ])
 })
 
 test('a line that is only some lines of one block (two paragraphs read as one) is just those lines', () => {
   const groups = [
-    group('page', [
-      '小さな町には大きな川と古い橋があって、',
-      '朝になると多くの人がその橋を渡っている。',
-      '言うまでもなく、雨の日には足元に気をつけなければならない。',
-      '町の人たちは必ず、少し遠回りをして駅へ向かっている。'
-    ], 545, 200)
+    group(
+      'page',
+      [
+        '小さな町には大きな川と古い橋があって、',
+        '朝になると多くの人がその橋を渡っている。',
+        '言うまでもなく、雨の日には足元に気をつけなければならない。',
+        '町の人たちは必ず、少し遠回りをして駅へ向かっている。'
+      ],
+      545,
+      200
+    )
   ]
-  const placed = placeHookedLine(groups, '言うまでもなく、雨の日には足元に気をつけなければならない。町の人たちは必ず、少し遠回りをして駅へ向かっている。')
+  const placed = placeHookedLine(
+    groups,
+    '言うまでもなく、雨の日には足元に気をつけなければならない。町の人たちは必ず、少し遠回りをして駅へ向かっている。'
+  )
   assert.equal(placed.matched, 'hook:page#2-3')
   assert.equal(placed.recall, 1)
   assert.equal(placed.precision, 1)
   const box = placed.groups.find((g) => g.id === placed.matched)
   assert.equal(box.bbox[1], 200 + 2 * 30 * 1.4)
-  assert.deepEqual(box.lines, ['言うまでもなく、雨の日には足元に気をつけなければならない。', '町の人たちは必ず、少し遠回りをして駅へ向かっている。'])
+  assert.deepEqual(box.lines, [
+    '言うまでもなく、雨の日には足元に気をつけなければならない。',
+    '町の人たちは必ず、少し遠回りをして駅へ向かっている。'
+  ])
 })
 
 test('nothing on screen is the line: no match, groups untouched', () => {
@@ -90,7 +107,14 @@ test('splitting keeps every character and puts punctuation with the earlier line
 })
 
 const { hookAnnotations, annotationGroups } = await load('hook-match.ts')
-const rect = (x0, y0, x1, y1) => ({ vertices: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }] })
+const rect = (x0, y0, x1, y1) => ({
+  vertices: [
+    { x: x0, y: y0 },
+    { x: x1, y: y0 },
+    { x: x1, y: y1 },
+    { x: x0, y: y1 }
+  ]
+})
 const aggregate = { description: 'all', granularity: 'aggregate', boundingPoly: rect(0, 0, 1, 1) }
 
 test('block annotations: only the hooked block is drawn, with the hooked text on its lines', () => {
@@ -98,8 +122,19 @@ test('block annotations: only the hooked block is drawn, with the hooked text on
     aggregate,
     { description: 'サクラ', granularity: 'block', groupId: 'g1', boundingPoly: rect(430, 840, 520, 870) },
     {
-      description: '「うっ……ま、だ……！」', granularity: 'block', groupId: 'g2', inkMargin: [0.1, 0, 0.05, 0],
-      linePolygons: [[[430, 880], [700, 880], [700, 910], [430, 910]]], boundingPoly: rect(430, 880, 700, 910)
+      description: '「うっ……ま、だ……！」',
+      granularity: 'block',
+      groupId: 'g2',
+      inkMargin: [0.1, 0, 0.05, 0],
+      linePolygons: [
+        [
+          [430, 880],
+          [700, 880],
+          [700, 910],
+          [430, 910]
+        ]
+      ],
+      boundingPoly: rect(430, 880, 700, 910)
     },
     { description: 'AUTO SKIP LOG', granularity: 'block', groupId: 'g3', boundingPoly: rect(1290, 820, 1600, 845) }
   ]
@@ -111,7 +146,12 @@ test('block annotations: only the hooked block is drawn, with the hooked text on
 })
 
 test('word fragments of one group are gathered into rows before matching', () => {
-  const word = (t, x0, y0) => ({ description: t, granularity: 'fragment', groupId: 'w', boundingPoly: rect(x0, y0, x0 + t.length * 30, y0 + 30) })
+  const word = (t, x0, y0) => ({
+    description: t,
+    granularity: 'fragment',
+    groupId: 'w',
+    boundingPoly: rect(x0, y0, x0 + t.length * 30, y0 + 30)
+  })
   const annotations = [aggregate, word('今日は', 50, 500), word('猫と学校へ', 140, 502), word('行きます', 50, 545)]
   const groups = annotationGroups(annotations)
   assert.deepEqual(groups[0].lines, ['今日は猫と学校へ', '行きます'])
@@ -120,7 +160,10 @@ test('word fragments of one group are gathered into rows before matching', () =>
 })
 
 test('no match draws nothing', () => {
-  const hooked = hookAnnotations([aggregate, { description: 'AUTO SKIP LOG', granularity: 'block', boundingPoly: rect(0, 0, 100, 20) }], '今日は猫と学校へ行きます。')
+  const hooked = hookAnnotations(
+    [aggregate, { description: 'AUTO SKIP LOG', granularity: 'block', boundingPoly: rect(0, 0, 100, 20) }],
+    '今日は猫と学校へ行きます。'
+  )
   assert.deepEqual(hooked.annotations, [])
   assert.equal(hooked.box, null)
 })
@@ -128,10 +171,16 @@ test('no match draws nothing', () => {
 const { splitSpeaker } = await load('hook-match.ts')
 
 test('a line its speaker leads splits into name and quote; narration does not', () => {
-  assert.deepEqual(splitSpeaker('アキ「―――海辺の町、ミナト・ハーバー」'), { name: 'アキ', body: '「―――海辺の町、ミナト・ハーバー」' })
+  assert.deepEqual(splitSpeaker('アキ「―――海辺の町、ミナト・ハーバー」'), {
+    name: 'アキ',
+    body: '「―――海辺の町、ミナト・ハーバー」'
+  })
   assert.deepEqual(splitSpeaker('【アキ】「はい」'), { name: 'アキ', body: '「はい」' })
   assert.deepEqual(splitSpeaker('アキ：『はい』'), { name: 'アキ', body: '『はい』' })
-  assert.deepEqual(splitSpeaker('女性の声12「ふふっ。もう、ちょっと……待ってよ……」'), { name: '女性の声12', body: '「ふふっ。もう、ちょっと……待ってよ……」' })
+  assert.deepEqual(splitSpeaker('女性の声12「ふふっ。もう、ちょっと……待ってよ……」'), {
+    name: '女性の声12',
+    body: '「ふふっ。もう、ちょっと……待ってよ……」'
+  })
   assert.deepEqual(splitSpeaker('？？？「誰？」'), { name: '？？？', body: '「誰？」' })
   assert.equal(splitSpeaker('「はい」'), null)
   assert.equal(splitSpeaker('彼は「はい」と言った。'), null)
@@ -157,7 +206,12 @@ const lines = (id, texts, x, y, size = 30) => ({
   groupId: id,
   surface: { ink: 'light', top: '#000', bottom: '#111' },
   lineTexts: texts,
-  linePolygons: texts.map((t, i) => [[x, y + i * 50], [x + t.length * size, y + i * 50], [x + t.length * size, y + i * 50 + size], [x, y + i * 50 + size]]),
+  linePolygons: texts.map((t, i) => [
+    [x, y + i * 50],
+    [x + t.length * size, y + i * 50],
+    [x + t.length * size, y + i * 50 + size],
+    [x, y + i * 50 + size]
+  ]),
   boundingPoly: rect(x, y, x + Math.max(...texts.map((t) => t.length)) * size, y + (texts.length - 1) * 50 + size)
 })
 
@@ -179,7 +233,10 @@ test('a speaker shown on a nameplate: the card is the quote, the name is OCR tex
 test('a name the game sends after the quote: the same card and nameplate, the plate above or below', () => {
   const quote = ['（ん？　あ、鍵が落ちてる……！', '　もしかして、さっきの人のかな……？）']
   const sent = `${quote.join('\n')}\n蒼`
-  for (const [plate, y] of [[lines('n', ['蒼'], 600, 1300), 1300], [lines('n', ['蒼'], 600, 1460), 1460]]) {
+  for (const [plate, y] of [
+    [lines('n', ['蒼'], 600, 1300), 1300],
+    [lines('n', ['蒼'], 600, 1460), 1460]
+  ]) {
     const hooked = hookAnnotations([aggregate, plate, lines('d', quote, 545, 1350)], sent)
     assert.equal(hooked.shown, quote.join('\n'))
     assert.equal(hooked.box[1], 1350)
@@ -205,16 +262,26 @@ test('a name the game shows inline, or narration that looks like a speech, stays
   const inline = hookAnnotations([aggregate, lines('d', [`アキ${DIALOGUE}`], 545, 1350)], `アキ${DIALOGUE}`)
   assert.equal(inline.shown, `アキ${DIALOGUE}`)
   assert.deepEqual(inline.names, [])
-  const narration = hookAnnotations([aggregate, lines('d', ['そして「さようなら」'], 545, 1350)], 'そして「さようなら」')
+  const narration = hookAnnotations(
+    [aggregate, lines('d', ['そして「さようなら」'], 545, 1350)],
+    'そして「さようなら」'
+  )
   assert.equal(narration.shown, 'そして「さようなら」')
   assert.deepEqual(narration.names, [])
 })
 
 test('the name elsewhere on screen (a menu, another line) is not the speaker’s', () => {
-  const far = hookAnnotations([aggregate, lines('n', ['アキ'], 2400, 100), lines('d', [DIALOGUE], 545, 1350)], `アキ${DIALOGUE}`)
+  const far = hookAnnotations(
+    [aggregate, lines('n', ['アキ'], 2400, 100), lines('d', [DIALOGUE], 545, 1350)],
+    `アキ${DIALOGUE}`
+  )
   assert.equal(far.shown, `アキ${DIALOGUE}`)
   // Where the game showed a name before, it is.
-  const known = hookAnnotations([aggregate, lines('n', ['アキ'], 2400, 100), lines('d', [DIALOGUE], 545, 1350)], `アキ${DIALOGUE}`, { nameAt: [2400, 100, 2460, 130] })
+  const known = hookAnnotations(
+    [aggregate, lines('n', ['アキ'], 2400, 100), lines('d', [DIALOGUE], 545, 1350)],
+    `アキ${DIALOGUE}`,
+    { nameAt: [2400, 100, 2460, 130] }
+  )
   assert.equal(known.shown, DIALOGUE)
   // A game known to show names apart: the quote alone, even where OCR missed the name.
   const missed = hookAnnotations([aggregate, lines('d', [DIALOGUE], 545, 1350)], `アキ${DIALOGUE}`, { apart: true })
@@ -230,7 +297,9 @@ test('a quote of nothing but dots: the name says where it is, the dots under it 
   assert.deepEqual(hooked.box, [545, 1350, 605, 1380])
   assert.equal(hooked.names[0].description, 'アキ')
   // OCR missed the dots: the name is still drawn, and the card shows the quote where it is.
-  const missed = hookAnnotations([aggregate, lines('n', ['アキ'], 600, 1300)], 'アキ「……」', { nameAt: [600, 1300, 660, 1330] })
+  const missed = hookAnnotations([aggregate, lines('n', ['アキ'], 600, 1300)], 'アキ「……」', {
+    nameAt: [600, 1300, 660, 1330]
+  })
   assert.equal(missed.shown, '「……」')
   assert.equal(missed.box, null)
   assert.equal(missed.names[0].description, 'アキ')

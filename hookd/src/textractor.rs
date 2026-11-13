@@ -27,10 +27,16 @@ pub struct Textractor {
 
 impl Textractor {
     pub fn new(dir: &Path) -> Result<Self, String> {
-        if !dir.join("x64").join("TextractorCLI.exe").is_file() && !dir.join("x86").join("TextractorCLI.exe").is_file() {
+        if !dir.join("x64").join("TextractorCLI.exe").is_file() && !dir.join("x86").join("TextractorCLI.exe").is_file()
+        {
             return Err(format!("no TextractorCLI.exe under {}", dir.display()));
         }
-        Ok(Textractor { dir: dir.to_path_buf(), clis: [None, None], seen: Default::default(), bits_of: Default::default() })
+        Ok(Textractor {
+            dir: dir.to_path_buf(),
+            clis: [None, None],
+            seen: Default::default(),
+            bits_of: Default::default(),
+        })
     }
 
     fn cli(&mut self, bits: u32) -> Result<&mut Cli, String> {
@@ -103,7 +109,10 @@ fn read_output(mut stdout: impl Read, seen: Arc<Mutex<HashSet<Thread>>>) {
         pending.extend(bytes.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)));
         while let Some(end) = pending.iter().position(|&c| c == u16::from(b'\n')) {
             let line: Vec<u16> = pending.drain(..=end).collect();
-            let line = String::from_utf16_lossy(&line).trim_end_matches(['\r', '\n']).trim_start_matches('\u{feff}').to_string();
+            let line = String::from_utf16_lossy(&line)
+                .trim_end_matches(['\r', '\n'])
+                .trim_start_matches('\u{feff}')
+                .to_string();
             match parse_textractor_line(&line) {
                 Some(parsed) => {
                     flush(&mut current);

@@ -52,7 +52,8 @@ export function popupAnkiConfig(reader) {
   if (!reader?.ankiEnabled || !reader.ankiDeckName || !reader.ankiModelName) return null
   if (!Array.isArray(reader.ankiModelFields) || reader.ankiModelFields.length === 0) return null
   return {
-    ankiConnectUrl: (typeof reader.ankiConnectUrl === 'string' && reader.ankiConnectUrl.trim()) || DEFAULT_ANKI_CONNECT_URL,
+    ankiConnectUrl:
+      (typeof reader.ankiConnectUrl === 'string' && reader.ankiConnectUrl.trim()) || DEFAULT_ANKI_CONNECT_URL,
     deck: reader.ankiDeckName,
     model: reader.ankiModelName,
     modelFields: reader.ankiModelFields,
@@ -81,9 +82,7 @@ export function lookupKeyProperty(key) {
  * this word's pop-up opens or closes, so automatic OCR can hold still while it's read.
  */
 export async function installApiLookup({ embedded = true, onVisibilityChange = () => {} } = {}) {
-  const { setEmbeddedEnabled } = embedded
-    ? await import('/spike/frontend-mode.js')
-    : { setEmbeddedEnabled: () => {} }
+  const { setEmbeddedEnabled } = embedded ? await import('/spike/frontend-mode.js') : { setEmbeddedEnabled: () => {} }
   const { invoke } = window.__TAURI__.core
   let settings = await invoke('settings_get', { key: 'yomitanSettings' })
   let reader = (await invoke('settings_get', { key: 'superTexthooker' })) || {}
@@ -176,8 +175,7 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
   )
 
   showTerm = open
-  tokenizeText = (text) =>
-    invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: 16 } })
+  tokenizeText = (text) => invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: 16 } })
   hideTerm = () => {
     if (!apiMode()) return
     scanner.stop()

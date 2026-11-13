@@ -25,9 +25,7 @@ fn owns_input() -> bool {
     super::gamescope_focus::owns_input(std::process::id())
 }
 fn update(active: bool) -> Result<(), String> {
-    let mut lease = LEASE
-        .lock()
-        .map_err(|_| "Gamescope touch lease lock poisoned")?;
+    let mut lease = LEASE.lock().map_err(|_| "Gamescope touch lease lock poisoned")?;
     let available = super::x11::desktop().is_some_and(|desktop| {
         desktop
             .conn
@@ -35,12 +33,7 @@ fn update(active: bool) -> Result<(), String> {
             .ok()
             .and_then(|cookie| cookie.reply().ok())
             .filter(|reply| reply.atom != 0)
-            .and_then(|reply| {
-                desktop
-                    .conn
-                    .get_property(false, desktop.root, reply.atom, AtomEnum::CARDINAL, 0, 1)
-                    .ok()
-            })
+            .and_then(|reply| desktop.conn.get_property(false, desktop.root, reply.atom, AtomEnum::CARDINAL, 0, 1).ok())
             .and_then(|cookie| cookie.reply().ok())
             .and_then(|reply| reply.value32().and_then(|mut values| values.next()))
             .is_some()
@@ -49,10 +42,7 @@ fn update(active: bool) -> Result<(), String> {
         *lease = None;
         return Ok(());
     }
-    if lease
-        .as_mut()
-        .is_some_and(|lease| lease.child.try_wait().ok().flatten().is_some())
-    {
+    if lease.as_mut().is_some_and(|lease| lease.child.try_wait().ok().flatten().is_some()) {
         *lease = None;
     }
     if lease.is_none() {
@@ -109,13 +99,7 @@ impl Restore {
     }
     fn write(&self, value: u32) -> Result<(), String> {
         self.conn
-            .change_property32(
-                PropMode::REPLACE,
-                self.root,
-                self.atom,
-                AtomEnum::CARDINAL,
-                &[value],
-            )
+            .change_property32(PropMode::REPLACE, self.root, self.atom, AtomEnum::CARDINAL, &[value])
             .map_err(|e| e.to_string())?
             .check()
             .map_err(|e| e.to_string())?;
@@ -138,21 +122,14 @@ impl Drop for Restore {
             .ok()
             .and_then(|cookie| cookie.reply().ok())
             .filter(|reply| reply.atom != 0)
-            .and_then(|reply| {
-                self.conn
-                    .get_property(false, self.root, reply.atom, AtomEnum::CARDINAL, 0, 1)
-                    .ok()
-            })
+            .and_then(|reply| self.conn.get_property(false, self.root, reply.atom, AtomEnum::CARDINAL, 0, 1).ok())
             .and_then(|cookie| cookie.reply().ok())
             .and_then(|reply| reply.value32().and_then(|mut values| values.next()))
             == Some(769);
         if self.read() == Some(TOUCH_MODE) && !steam_focus {
             let _ = self.write(self.original);
         }
-        eprintln!(
-            "Gamescope touch watchdog: released override (saved mode {})",
-            self.original
-        );
+        eprintln!("Gamescope touch watchdog: released override (saved mode {})", self.original);
     }
 }
 pub fn run_watchdog() {
@@ -178,21 +155,12 @@ pub fn run_watchdog() {
     let Some(original) = original else {
         return;
     };
-    let mut restore = Restore {
-        conn,
-        root,
-        atom,
-        original,
-    };
+    let mut restore = Restore { conn, root, atom, original };
     loop {
         if super::steam_input::STOP.load(Ordering::Relaxed) {
             break;
         }
-        let mut poll = libc::pollfd {
-            fd: 0,
-            events: libc::POLLIN,
-            revents: 0,
-        };
+        let mut poll = libc::pollfd { fd: 0, events: libc::POLLIN, revents: 0 };
         if unsafe { libc::poll(&mut poll, 1, 2500) } <= 0 {
             break;
         }

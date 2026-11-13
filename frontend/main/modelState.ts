@@ -21,7 +21,8 @@ export function useOcrModelState(engine: string): ModelState {
   if (!status || !kind) return { busy: null, notice: null }
   const title = badgeLabel(status)
   if (kind === 'progress') {
-    if (status.state === 'verifying') return { busy: { value: 100, exact: false, short: 'Verifying…', title }, notice: null }
+    if (status.state === 'verifying')
+      return { busy: { value: 100, exact: false, short: 'Verifying…', title }, notice: null }
     const value = percent(status.overallReceived, status.overallTotal)
     return { busy: { value, exact: true, short: `${value}%`, title }, notice: null }
   }

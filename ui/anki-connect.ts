@@ -48,10 +48,8 @@ export function normalizeAnkiConnectUrl(input: string): AnkiAddress {
   if (url.protocol !== 'http:' && url.protocol !== 'https:')
     return { ok: false, error: `The address must start with http:// or https://. ${example}` }
   if (!url.hostname) return { ok: false, error: `The address has no host. ${example}` }
-  if (url.username || url.password)
-    return { ok: false, error: 'The address must not contain a user name or password.' }
-  if (url.search || url.hash)
-    return { ok: false, error: `The address must not have a query or fragment. ${example}` }
+  if (url.username || url.password) return { ok: false, error: 'The address must not contain a user name or password.' }
+  if (url.search || url.hash) return { ok: false, error: `The address must not have a query or fragment. ${example}` }
   // `URL` drops a scheme's default port, so "http://host:80" reads as no port, as in Rust.
   if (!url.port && url.protocol === 'http:')
     return {

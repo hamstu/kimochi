@@ -170,19 +170,9 @@ fn joins(a: &Raw, b: &Raw) -> bool {
         return false;
     }
     let (ov, gap, sa, sb) = if a.4 != 0 {
-        (
-            (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1),
-            a.0.max(b.0) - (a.0 + a.2).min(b.0 + b.2),
-            a.2,
-            b.2,
-        )
+        ((a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1), a.0.max(b.0) - (a.0 + a.2).min(b.0 + b.2), a.2, b.2)
     } else {
-        (
-            (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0),
-            a.1.max(b.1) - (a.1 + a.3).min(b.1 + b.3),
-            a.3,
-            b.3,
-        )
+        ((a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0), a.1.max(b.1) - (a.1 + a.3).min(b.1 + b.3), a.3, b.3)
     };
     ov > 0 && gap <= sa.max(sb) && 2 * sa.max(sb) <= 3 * sa.min(sb)
 }
@@ -218,13 +208,7 @@ fn rows<T: Copy, K1: Ord, K2: Ord>(
 
 fn order_block(members: &[Raw]) -> Vec<Raw> {
     if members[0].4 != 0 {
-        rows(
-            members,
-            |b| (-(b.0 + b.2), b.1, b.0, b.2, b.3),
-            |b| b.0,
-            |b| b.2,
-            |b| (b.1, -(b.0 + b.2), b.3, b.2),
-        )
+        rows(members, |b| (-(b.0 + b.2), b.1, b.0, b.2, b.3), |b| b.0, |b| b.2, |b| (b.1, -(b.0 + b.2), b.3, b.2))
     } else {
         rows(members, |b| (b.1, b.0, b.3, b.2), |b| b.1, |b| b.3, |b| (b.0, b.1, b.3, b.2))
     }

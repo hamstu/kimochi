@@ -40,7 +40,11 @@ export interface YomitanApiSetup {
  */
 export function useYomitanApiSetup(
   url: string,
-  { active = true, apiEveryMs = 1000, hostEveryMs = 3000 }: { active?: boolean; apiEveryMs?: number; hostEveryMs?: number } = {}
+  {
+    active = true,
+    apiEveryMs = 1000,
+    hostEveryMs = 3000
+  }: { active?: boolean; apiEveryMs?: number; hostEveryMs?: number } = {}
 ): YomitanApiSetup {
   const [host, setHost] = useState<HostStatus | null>(null)
   const [api, setApi] = useState<ApiStatus | null>(null)

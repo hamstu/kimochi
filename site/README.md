@@ -21,7 +21,7 @@ npm --prefix site run typecheck
 Hosting: serve `site/dist` from the domain root. Every route is a file (`/compare` →
 `compare.html`, `/account/sign-in` → `account/sign-in.html`), and unknown paths should get
 `404.html` with status 404, not an SPA fallback. `public/_headers` sets an immutable cache on
-`/assets/*` and `X-Robots-Tag: noindex` on account pages (Cloudflare Workers Static Assets reads it). Root `eslint` ignores
+`/assets/*` and `X-Robots-Tag: noindex` on account pages (Cloudflare Workers Static Assets reads it). Root `oxlint` ignores
 `site/**`; the site has its own `tsconfig.json` (strict, `noUnusedLocals`, `checkJs`).
 
 ## Layout

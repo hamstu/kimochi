@@ -22,7 +22,10 @@ const durations = new Map<string, number>()
 /** A demo voice's length, from its size (fetched once). */
 async function voiceMs(url: string): Promise<number> {
   if (!durations.has(url)) {
-    const bytes = await fetch(url).then((r) => r.arrayBuffer(), () => null)
+    const bytes = await fetch(url).then(
+      (r) => r.arrayBuffer(),
+      () => null
+    )
     durations.set(url, bytes ? bytes.byteLength / MP3_BYTES_PER_MS : 2000)
   }
   return durations.get(url)!
@@ -61,15 +64,15 @@ function tone(): string {
 }
 
 const status = () => ({
-    state: ON ? 'recording' : 'off',
-    source: 'Everything this Mac plays',
-    excludesOwnAudio: true,
-    platform: 'macos',
-    held: ON ? 30 : 0,
-    level: ON ? 0.35 : 0,
-    recogniser: { state: ON ? 'ready' : 'absent' },
-    last: null
-  })
+  state: ON ? 'recording' : 'off',
+  source: 'Everything this Mac plays',
+  excludesOwnAudio: true,
+  platform: 'macos',
+  held: ON ? 30 : 0,
+  level: ON ? 0.35 : 0,
+  recogniser: { state: ON ? 'ready' : 'absent' },
+  last: null
+})
 
 /** The listener's view of a few lines (a scan with a name box among them), as
     `sentence_audio_debug` gives it. */
@@ -84,22 +87,50 @@ function debug(): unknown {
     note: string,
     extra: Record<string, unknown> = {}
   ) => ({
-    uid, text, ts: now - ago, appeared: null, scan: null, outcome, how: null, score: null, heard: null,
-    clip: null, provisional: false, window: null, decidedAt: now - ago + 2000, changes: 1, note, ...extra
+    uid,
+    text,
+    ts: now - ago,
+    appeared: null,
+    scan: null,
+    outcome,
+    how: null,
+    score: null,
+    heard: null,
+    clip: null,
+    provisional: false,
+    window: null,
+    decidedAt: now - ago + 2000,
+    changes: 1,
+    note,
+    ...extra
   })
   const matched = (ago: number, heard: string, score: number, from: number, to: number) => ({
-    how: 'matched', score, heard, clip: [now - ago - from, now - ago + to]
+    how: 'matched',
+    score,
+    heard,
+    clip: [now - ago - from, now - ago + to]
   })
   const lines = [
     line('a6', 'フリッツ先生、このお店ですか？', 2_000, 'waiting', 'waiting: speech is under way', { scan: 's3' }),
     line('a5', 'シーア', 2_000, 'waiting', 'waiting: speech is under way', { scan: 's3' }),
-    line('a4', 'うん。地図を描いてもらったからここで間違いないはずだよ。', 14_000, 'voiced',
+    line(
+      'a4',
+      'うん。地図を描いてもらったからここで間違いないはずだよ。',
+      14_000,
+      'voiced',
       'matched 94% by its words: heard “うん地図を描いてもらったからここで間違いないはずだよ”',
-      { scan: 's2', ...matched(14_000, 'うん地図を描いてもらったからここで間違いないはずだよ', 0.94, 6_100, 400) }),
+      { scan: 's2', ...matched(14_000, 'うん地図を描いてもらったからここで間違いないはずだよ', 0.94, 6_100, 400) }
+    ),
     line('a3', 'フリッツ', 14_000, 'silent', 'a name box: never voiced', { scan: 's2' }),
     line('a2', '……っ', 24_000, 'silent', 'no match in “あ”', { changes: 2 }),
-    line('a1', 'はいっ！', 31_000, 'voiced', 'matched 100% by its words: heard “はい”',
-      matched(31_000, 'はい', 1, 1_900, 300))
+    line(
+      'a1',
+      'はいっ！',
+      31_000,
+      'voiced',
+      'matched 100% by its words: heard “はい”',
+      matched(31_000, 'はい', 1, 1_900, 300)
+    )
   ]
   return {
     status: status(),
@@ -175,7 +206,13 @@ export function demoLineAdded(
     }
     if (shot) void emit('screenshot-added', shot(scan, line.ts, [text]))
     const url = VOICES ? demoVoice(text) : undefined
-    if (url) void emit('sentence-audio-line', { uid: line.uid, state: 'voiced', durationMs: await voiceMs(url), how: 'matched' })
+    if (url)
+      void emit('sentence-audio-line', {
+        uid: line.uid,
+        state: 'voiced',
+        durationMs: await voiceMs(url),
+        how: 'matched'
+      })
   }
   setTimeout(() => void announce(20), 150)
 }

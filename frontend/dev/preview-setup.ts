@@ -99,7 +99,13 @@
 import { setPreviewIpc } from './preview-ipc'
 import { mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
-import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, dictionaryEngineOf, hostEngineOf, nextOverlayToggle } from '@ui/settings'
+import {
+  DICTIONARY_ENGINE_KEY,
+  SETTINGS_DEFAULTS,
+  dictionaryEngineOf,
+  hostEngineOf,
+  nextOverlayToggle
+} from '@ui/settings'
 import { SOUND_NAMES, createSoundPlayer, soundKind, soundKindOn, type SoundName } from '@ui/sounds'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { LANGUAGES } from '@ui/languages'
@@ -153,7 +159,11 @@ function reportReadiness(engine: string, patch: Record<string, unknown>): Record
 }
 
 const READINESS_STUCK: Record<string, Record<string, unknown>> = {
-  failed: { phase: 'failed', settingsReady: false, message: 'The engine could not start: its background page did not answer.' },
+  failed: {
+    phase: 'failed',
+    settingsReady: false,
+    message: 'The engine could not start: its background page did not answer.'
+  },
   'setup-needed': { phase: 'setup-needed', message: 'Open the engine settings to install or import a dictionary.' },
   ready: { phase: 'ready', message: 'Ready.' }
 }
@@ -161,18 +171,29 @@ const READINESS_STUCK: Record<string, Record<string, unknown>> = {
 /** Starting, the dictionary data downloading, installing, then `end` (failing on the way at `failAt`). */
 function playReadiness(
   engine: string,
-  { end = 'ready', failAt, delay = 0 }: { end?: 'ready' | 'failed' | 'setup-needed'; failAt?: number; delay?: number } = {}
+  {
+    end = 'ready',
+    failAt,
+    delay = 0
+  }: { end?: 'ready' | 'failed' | 'setup-needed'; failAt?: number; delay?: number } = {}
 ): Record<string, unknown> {
   for (const timer of readinessTimers.get(engine) ?? []) clearTimeout(timer)
   const steps: [number, Record<string, unknown>][] = []
   for (let p = 0; p <= 100; p += 5) {
     if (failAt !== undefined && p >= failAt * 100) {
-      steps.push([1800 + p * 45, { ...READINESS_STUCK.failed, message: `Downloading dictionary data failed at ${p}%: the server closed the connection.` }])
+      steps.push([
+        1800 + p * 45,
+        {
+          ...READINESS_STUCK.failed,
+          message: `Downloading dictionary data failed at ${p}%: the server closed the connection.`
+        }
+      ])
       break
     }
     steps.push([1800 + p * 45, { phase: 'downloading', progress: p, message: `Downloading dictionary data: ${p}%` }])
   }
-  if (failAt === undefined) steps.push([6600, { phase: 'installing', message: 'Installing dictionaries…' }], [8200, READINESS_STUCK[end]])
+  if (failAt === undefined)
+    steps.push([6600, { phase: 'installing', message: 'Installing dictionaries…' }], [8200, READINESS_STUCK[end]])
   readinessTimers.set(
     engine,
     steps.map(([at, patch]) => setTimeout(() => reportReadiness(engine, patch), delay + at))
@@ -191,7 +212,8 @@ function previewReadiness(engine: string): Record<string, unknown> {
 /** The studio's handle on dictionary readiness (`window.__kimochiPreview.readiness`, preview-control.ts). */
 export const readinessControl = {
   phase: (engine: string): string => String(previewReadiness(hostEngineOf(engine as never)).phase),
-  play: (engine: string, options?: Parameters<typeof playReadiness>[1]): void => void playReadiness(hostEngineOf(engine as never), options),
+  play: (engine: string, options?: Parameters<typeof playReadiness>[1]): void =>
+    void playReadiness(hostEngineOf(engine as never), options),
   set(engine: string, phase: 'ready' | 'failed' | 'setup-needed'): void {
     const host = hostEngineOf(engine as never)
     for (const timer of readinessTimers.get(host) ?? []) clearTimeout(timer)
@@ -227,8 +249,7 @@ function catalog(): DemoSource[] {
   return ALL_SOURCES.filter((s) => s.kind === 'display' || (openWindows ?? ['window:101']).includes(s.id))
 }
 
-const CURRENT_SOURCE =
-  SOURCES.find((s) => s.id === params.get('source')) ?? SOURCES.find((s) => s.id === 'window:101')!
+const CURRENT_SOURCE = SOURCES.find((s) => s.id === params.get('source')) ?? SOURCES.find((s) => s.id === 'window:101')!
 
 /** `?capture=<source id>`: a fake last capture of that source; otherwise none yet. */
 function demoCapture(): unknown {
@@ -246,14 +267,50 @@ function demoCapture(): unknown {
 // ---------------------------------------------------------------- text hooker
 
 const HOOK_THREADS = [
-  { key: '1:1:503a:0', name: 'KiriKiri', hookcode: 'HS-8@1A2B3:Game.exe',
+  {
+    key: '1:1:503a:0',
+    name: 'KiriKiri',
+    hookcode: 'HS-8@1A2B3:Game.exe',
     // Embedded in the site's demo, the game's own first line.
-    preview: EMBED ? (DEMO_CONTENT.lines.find((l) => l.play)?.text ?? '') : '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。',
-    count: 12, japanese: true, generic: false, selected: true },
-  { key: '1:2:4f2b:0', name: 'DrawTextW', hookcode: 'HQ-24@0:user32.dll:DrawTextW', preview: 'ミサキ', count: 12, japanese: true, generic: true, selected: false },
-  { key: '1:3:5164:0', name: 'DrawTextExW', hookcode: 'HQ-24@0:user32.dll:DrawTextExW', preview: 'オート　スキップ　セーブ', count: 3, japanese: true, generic: true, selected: false },
+    preview: EMBED
+      ? (DEMO_CONTENT.lines.find((l) => l.play)?.text ?? '')
+      : '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。',
+    count: 12,
+    japanese: true,
+    generic: false,
+    selected: true
+  },
+  {
+    key: '1:2:4f2b:0',
+    name: 'DrawTextW',
+    hookcode: 'HQ-24@0:user32.dll:DrawTextW',
+    preview: 'ミサキ',
+    count: 12,
+    japanese: true,
+    generic: true,
+    selected: false
+  },
+  {
+    key: '1:3:5164:0',
+    name: 'DrawTextExW',
+    hookcode: 'HQ-24@0:user32.dll:DrawTextExW',
+    preview: 'オート　スキップ　セーブ',
+    count: 3,
+    japanese: true,
+    generic: true,
+    selected: false
+  },
   // Engine noise: listed only under "Show all".
-  { key: '1:4:61a0:0', name: 'GetGlyphOutlineW', hookcode: 'HQ-24@0:gdi32.dll:GetGlyphOutlineW', preview: 'data/scenario/ch01.ks', count: 40, japanese: false, generic: true, selected: false }
+  {
+    key: '1:4:61a0:0',
+    name: 'GetGlyphOutlineW',
+    hookcode: 'HQ-24@0:gdi32.dll:GetGlyphOutlineW',
+    preview: 'data/scenario/ch01.ks',
+    count: 40,
+    japanese: false,
+    generic: true,
+    selected: false
+  }
 ]
 /** The hooked game of `?input=hook` (Settings → Text Hooker's first game). */
 const PRESET_EXE = 'C:/Games/Moonlit Harbor/Game.exe'
@@ -401,7 +458,10 @@ const ANKI_CARD = params.get('ankicard')
 /** The sample pop-up, with an Anki deck and an audio clip per entry under `?ankicard=`. */
 function previewPopover(): typeof POPOVER_SAMPLE | Record<string, unknown> {
   if (!ANKI_CARD) return POPOVER_SAMPLE
-  const audioMedia = POPOVER_SAMPLE.entries.map((_, i) => ({ ankiFilename: `preview_audio_${i}.mp3`, contentBase64: 'AAAA' }))
+  const audioMedia = POPOVER_SAMPLE.entries.map((_, i) => ({
+    ankiFilename: `preview_audio_${i}.mp3`,
+    contentBase64: 'AAAA'
+  }))
   return {
     ...POPOVER_SAMPLE,
     entries: POPOVER_SAMPLE.entries.map((entry, i) => ({ ...entry, audio: `[sound:preview_audio_${i}.mp3]` })),
@@ -462,7 +522,9 @@ function previewCapabilities(): PlatformCapabilities {
   const paddleScripts = new Set(['Jpan', 'Hans', 'Hant', 'Latn', 'Grek'])
   const ppocr: PlatformCapabilities['ocrEngines']['ppocr'] = {
     ...DEFAULT_CAPABILITIES_MACOS.ocrEngines.ppocr,
-    languages: LANGUAGES.filter((l) => l.code !== 'vi' && l.scripts.every((s) => paddleScripts.has(s))).map((l) => l.code)
+    languages: LANGUAGES.filter((l) => l.code !== 'vi' && l.scripts.every((s) => paddleScripts.has(s))).map(
+      (l) => l.code
+    )
   }
   const mac: PlatformCapabilities = {
     ...DEFAULT_CAPABILITIES_MACOS,
@@ -525,7 +587,13 @@ function previewCapabilities(): PlatformCapabilities {
         windowCapture: false,
         excludesOwnWindows: false
       },
-      sources: { catalog: false, thumbnails: false, icons: false, followWindowBounds: false, foregroundTracking: false },
+      sources: {
+        catalog: false,
+        thumbnails: false,
+        icons: false,
+        followWindowBounds: false,
+        foregroundTracking: false
+      },
       // Gamescope lists its apps itself, with previews, and needs no portal picker.
       ...(gamescope
         ? {
@@ -538,7 +606,13 @@ function previewCapabilities(): PlatformCapabilities {
               windowCapture: true,
               excludesOwnWindows: true
             },
-            sources: { catalog: true, thumbnails: true, icons: true, followWindowBounds: false, foregroundTracking: true }
+            sources: {
+              catalog: true,
+              thumbnails: true,
+              icons: true,
+              followWindowBounds: false,
+              foregroundTracking: true
+            }
           }
         : {}),
       overlay: { passive: false, inputRegions: 'wholeWindowOnly', nonActivating: false, nativeHoverWorkaround: false },
@@ -863,9 +937,7 @@ function listenForPopover(): void {
   window.addEventListener('message', (event: MessageEvent) => {
     const data = event.data as { type?: string; theme?: string; payload?: unknown } | null
     if (data?.type !== 'kimochi-preview-popover') return
-    void emit('popover:theme', data.theme === 'dark' ? 'dark' : 'light').then(() =>
-      emit('popover:show', data.payload)
-    )
+    void emit('popover:theme', data.theme === 'dark' ? 'dark' : 'light').then(() => emit('popover:show', data.payload))
   })
   // The notebook card's "Notebook →" asks the main window to open the entry, then hides the pop-up;
   // embedded, both go to the page that opened this one (`showEmbeddedPopover`).
@@ -881,7 +953,10 @@ const cliCommand = (installed: boolean): Record<string, unknown> => ({
   installed,
   builtIn: false,
   stale: false,
-  path: CAPABILITIES.os === 'windows' ? 'C:\\Users\\you\\AppData\\Local\\dev.kimochi.app\\bin\\kimochi.exe' : '/usr/local/bin/kimochi',
+  path:
+    CAPABILITIES.os === 'windows'
+      ? 'C:\\Users\\you\\AppData\\Local\\dev.kimochi.app\\bin\\kimochi.exe'
+      : '/usr/local/bin/kimochi',
   target: '/Applications/Kimochi.app/Contents/MacOS/kimochi',
   onPath: true,
   note: null
@@ -965,7 +1040,15 @@ const HANDLERS: Record<string, Handler> = {
     app: { version: '0.2.0', commit: null, build: 'debug', tauri: '2', webview: 'preview' },
     os: { name: 'macos', version: '26.0', arch: 'aarch64', session: null },
     hardware: { cpu: 'Apple M2', cores: 8, memoryBytes: 17179869184, gpus: ['Apple M2'] },
-    displays: [{ id: 1, source_id: 'display:1', bounds: { x: 0, y: 0, width: 1512, height: 982 }, work_area: {}, scale_factor: 2 }],
+    displays: [
+      {
+        id: 1,
+        source_id: 'display:1',
+        bounds: { x: 0, y: 0, width: 1512, height: 982 },
+        work_area: {},
+        scale_factor: 2
+      }
+    ],
     capture: { authorization: 'granted', windowCapture: true, excludesOwnWindows: true },
     ocr: { selected: 'meikiocr', engines: { meikiocr: { available: true } }, models: [], cloudAccess: false },
     dictionary: { selected: 'yomitan', downloads: [] },
@@ -1016,7 +1099,13 @@ const HANDLERS: Record<string, Handler> = {
     ),
   texthook_status: () => HOOK_STATUS,
   texthook_game: () => ({ thread: 'HS-4@1A2B3:Game.exe' }),
-  texthook_game_icon: (a) => appIcon(String(a?.exe ?? '').split(/[\\/]/).pop()!.replace(/\.exe$/i, '')),
+  texthook_game_icon: (a) =>
+    appIcon(
+      String(a?.exe ?? '')
+        .split(/[\\/]/)
+        .pop()!
+        .replace(/\.exe$/i, '')
+    ),
   texthook_forget: () => null,
   texthook_insert: () => null,
   texthook_start: (a) => {
@@ -1131,8 +1220,7 @@ const HANDLERS: Record<string, Handler> = {
               ? {
                   picked: false,
                   reason: 'cancelled',
-                  message:
-                    'Nothing was shared. The system picker was closed, timed out or could not open; try again.'
+                  message: 'Nothing was shared. The system picker was closed, timed out or could not open; try again.'
                 }
               : {
                   picked: true,
@@ -1186,7 +1274,8 @@ const HANDLERS: Record<string, Handler> = {
         liveOverlayEnabled: Boolean(settings.liveOverlayEnabled),
         textOverlayVisible: live.textOverlayVisible
       })
-      if (next.liveOverlayEnabled !== settings.liveOverlayEnabled) publish('liveOverlayEnabled', next.liveOverlayEnabled)
+      if (next.liveOverlayEnabled !== settings.liveOverlayEnabled)
+        publish('liveOverlayEnabled', next.liveOverlayEnabled)
       live.textOverlayVisible = next.textOverlayVisible
       pushState()
     }
@@ -1217,7 +1306,8 @@ const HANDLERS: Record<string, Handler> = {
   },
   hide_popover: () => {
     hideEmbeddedPopover()
-    if (params.get('popover') === 'message') window.parent.postMessage({ type: 'kimochi-preview-popover-hide' }, location.origin)
+    if (params.get('popover') === 'message')
+      window.parent.postMessage({ type: 'kimochi-preview-popover-hide' }, location.origin)
     return null
   },
   reader_popup_ready: () => {
@@ -1246,7 +1336,9 @@ const HANDLERS: Record<string, Handler> = {
     return word ? [{ content: [[{ text: word, headwords: [] }]] }] : []
   },
   yomitan_ankifields: (a) => ({
-    fields: POPOVER_SAMPLE.entries.slice(1).map((entry) => ({ ...entry, expression: String(a?.text ?? ''), reading: '' })),
+    fields: POPOVER_SAMPLE.entries
+      .slice(1)
+      .map((entry) => ({ ...entry, expression: String(a?.text ?? ''), reading: '' })),
     audioMedia: [],
     dictionaryMedia: []
   }),
@@ -1272,7 +1364,9 @@ const HANDLERS: Record<string, Handler> = {
   anki_deck_names: () => ['Default', 'Mining', 'Japanese::VN'],
   anki_model_names: () => ['Basic', 'Lapis', 'Kiku'],
   anki_model_field_names: (a) =>
-    a?.modelName === 'Basic' ? ['Front', 'Back'] : ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence', 'ExpressionAudio', 'Picture'],
+    a?.modelName === 'Basic'
+      ? ['Front', 'Back']
+      : ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence', 'ExpressionAudio', 'Picture'],
   // Detect's searches: Lapis notes, most of them in Mining. Anything else (the pop-up's "In Anki"
   // check) finds nothing.
   anki_find_notes: (a) => {
@@ -1300,33 +1394,31 @@ const HANDLERS: Record<string, Handler> = {
 const warned = new Set<string>()
 
 function installIpc(label: string): void {
-  setPreviewIpc(
-    (cmd, args) => {
-      const handler = HANDLERS[cmd]
-      if (EMBED) {
-        const feature = stoppedFeature(cmd, args as Args, Boolean(handler))
-        if (feature) {
-          // A stopped setting snaps back to what it was, once `useSetting` listens again (it
-          // ignores changes for 100 ms after its own write).
-          if (cmd === 'settings_set') {
-            const key = String((args as Args)?.key)
-            setTimeout(() => publish(key, settings[key]), 150)
-          }
-          return demoStop(feature)
+  setPreviewIpc((cmd, args) => {
+    const handler = HANDLERS[cmd]
+    if (EMBED) {
+      const feature = stoppedFeature(cmd, args as Args, Boolean(handler))
+      if (feature) {
+        // A stopped setting snaps back to what it was, once `useSetting` listens again (it
+        // ignores changes for 100 ms after its own write).
+        if (cmd === 'settings_set') {
+          const key = String((args as Args)?.key)
+          setTimeout(() => publish(key, settings[key]), 150)
         }
+        return demoStop(feature)
       }
-      if (handler) return handler(args as Args, label)
-      if (cmd === 'plugin:window|is_visible') return true
-      if (cmd === 'plugin:window|is_focused') return true
-      if (cmd === 'plugin:window|scale_factor') return devicePixelRatio
-      if (cmd.startsWith('plugin:')) return null
-      if (!warned.has(cmd)) {
-        warned.add(cmd)
-        console.warn(`[preview] unmocked command "${cmd}" resolved null`, args)
-      }
-      return null
     }
-  )
+    if (handler) return handler(args as Args, label)
+    if (cmd === 'plugin:window|is_visible') return true
+    if (cmd === 'plugin:window|is_focused') return true
+    if (cmd === 'plugin:window|scale_factor') return devicePixelRatio
+    if (cmd.startsWith('plugin:')) return null
+    if (!warned.has(cmd)) {
+      warned.add(cmd)
+      console.warn(`[preview] unmocked command "${cmd}" resolved null`, args)
+    }
+    return null
+  })
 }
 
 // ---------------------------------------------------------------- activity script
@@ -1489,23 +1581,42 @@ function listenToEmbedder(): void {
       scriptStopped = true
       const scanId = `embed-${++embedScan}`
       // OCR lines skip the host's text dedupe (native dedupes scans), so a looping demo keeps adding.
-      const ocr = { scanId, groupId: `${scanId}:0`, groupIndex: 0, groupCount: 1, engine: 'meikiocr', orientation: 'horizontal' }
+      const ocr = {
+        scanId,
+        groupId: `${scanId}:0`,
+        groupIndex: 0,
+        groupCount: 1,
+        engine: 'meikiocr',
+        orientation: 'horizontal'
+      }
       void emit('reader:request', {
         id: scanId,
         module: 'host',
         method: 'ingest',
         args: [message.text, 'ocr', Date.now(), scanId, ocr]
       })
-      demoLineAdded(message.text, scanId, emit, SCREENSHOTS_ON ? (scan, at, texts) => shotOf(scan, at, texts, embedScan) : null)
+      demoLineAdded(
+        message.text,
+        scanId,
+        emit,
+        SCREENSHOTS_ON ? (scan, at, texts) => shotOf(scan, at, texts, embedScan) : null
+      )
       void emit('activity', { text: 'Added 1 line', tone: 'ok', key: 'scan', at: Date.now() })
       // An automatic scan's lines: the chime the overlay plays for them (`outcomeSound`).
       embedSound('scan-done', { auto: true })
     } else if (message.type === 'hook-line') {
       // A hooked game's line, as native sends it (src-tauri/src/text_hook): no scan, it just arrives.
       scriptStopped = true
-      void emit('texthook-line', { text: message.text, key: HOOK_STATUS.selected, at: Date.now(), id: `embed-hook-${++embedScan}` })
+      void emit('texthook-line', {
+        text: message.text,
+        key: HOOK_STATUS.selected,
+        at: Date.now(),
+        id: `embed-hook-${++embedScan}`
+      })
       // The thread's preview is the line it just read (the Text hooking box's hooked text select).
-      HOOK_STATUS.threads = HOOK_STATUS.threads.map((t) => (t.key === HOOK_STATUS.selected ? { ...t, preview: message.text, count: t.count + 1 } : t))
+      HOOK_STATUS.threads = HOOK_STATUS.threads.map((t) =>
+        t.key === HOOK_STATUS.selected ? { ...t, preview: message.text, count: t.count + 1 } : t
+      )
       pushHookStatus()
     } else if (message.type === 'theme') {
       publish('appearance', message.value)
@@ -1641,7 +1752,9 @@ addEventListener('keydown', (event) => {
 // follows this load's setting, and for Hachidori or 10ten a ready host that looks nothing up stands
 // in for native's, as the Yomitan stub does.
 function syncDictionaryEngine(): void {
-  const engine = hostEngineOf(dictionaryEngineOf((settings.yomitanSettings as { popupType?: unknown } | undefined)?.popupType))
+  const engine = hostEngineOf(
+    dictionaryEngineOf((settings.yomitanSettings as { popupType?: unknown } | undefined)?.popupType)
+  )
   try {
     localStorage.setItem(DICTIONARY_ENGINE_KEY, engine)
   } catch {
@@ -1703,7 +1816,11 @@ function installDictionarySetup(): void {
     if (t < 4500 || fail) {
       if (fail && t >= 2500)
         return { id: 'job-1', stage: 'failed', error: 'Dictionary import failed: the archive is incomplete (preview).' }
-      return { id: 'job-1', stage: 'importing', progress: { index: Math.min(12, Math.round((t - 1500) / 250)), count: 12 } }
+      return {
+        id: 'job-1',
+        stage: 'importing',
+        progress: { index: Math.min(12, Math.round((t - 1500) / 250)), count: 12 }
+      }
     }
     if (t < 5200) return { id: 'job-1', stage: 'verifying' }
     if (t < 5800) return { id: 'job-1', stage: 'enabling' }
@@ -1784,7 +1901,8 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
     quietWebSockets()
     // Keep on top means nothing on a page.
     const style = document.createElement('style')
-    style.textContent = 'button[aria-label="Keep on top"], button[aria-label="Unpin window"] { display: none !important; }'
+    style.textContent =
+      'button[aria-label="Keep on top"], button[aria-label="Unpin window"] { display: none !important; }'
     document.head.append(style)
     tellEmbedderState()
   }

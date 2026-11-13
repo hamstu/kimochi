@@ -5,8 +5,7 @@
 import { nativeError, panel } from '../bridge/tauri'
 import { setSetting } from '../bridge/settings'
 
-const report = (what: string) => (error: unknown) =>
-  console.error(`${what} failed:`, nativeError(error).message)
+const report = (what: string) => (error: unknown) => console.error(`${what} failed:`, nativeError(error).message)
 
 /**
  * Electron's `yomitan-settings-backup`: opens the active dictionary engine's settings in their own
@@ -28,9 +27,7 @@ export async function completeOnboarding(): Promise<void> {
     await setSetting('hasCompletedOnboarding', true)
   } catch (error) {
     report('Complete onboarding')(error)
-    throw new Error(
-      `Couldn't save your setup: ${nativeError(error).message}. Try again.`
-    )
+    throw new Error(`Couldn't save your setup: ${nativeError(error).message}. Try again.`)
   }
   await panel('log', 'show').catch(report('Show Kimochi'))
   await panel('welcome', 'hide').catch(report('Close onboarding'))

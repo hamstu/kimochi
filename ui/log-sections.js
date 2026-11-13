@@ -9,15 +9,15 @@
  */
 
 /** A scan's sections, as the Log's lines: each group with text, or the whole text as one. */
-export function logSections(groups, text = "") {
+export function logSections(groups, text = '') {
   const sections = (Array.isArray(groups) ? groups : [])
-    .map((group) => (typeof group?.text === "string" ? group.text : ""))
-    .filter((value) => value.trim());
-  if (sections.length) return sections;
-  return typeof text === "string" && text.trim() ? [text] : [];
+    .map((group) => (typeof group?.text === 'string' ? group.text : ''))
+    .filter((value) => value.trim())
+  if (sections.length) return sections
+  return typeof text === 'string' && text.trim() ? [text] : []
 }
 
-const CJK = /[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
+const CJK = /[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/u
 
 /**
  * One section as one run of text: the OCR line breaks inside it (`logicalGroups` puts one between
@@ -27,22 +27,22 @@ const CJK = /[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]
  * kept as the Log has them.
  */
 export function sectionText(text) {
-  const lines = String(text ?? "")
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
+  const lines = String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean);
-  let joined = "";
+    .filter(Boolean)
+  let joined = ''
   for (const line of lines) {
-    if (joined && !CJK.test(joined.slice(-1)) && !CJK.test(line[0])) joined += " ";
-    joined += line;
+    if (joined && !CJK.test(joined.slice(-1)) && !CJK.test(line[0])) joined += ' '
+    joined += line
   }
-  return joined;
+  return joined
 }
 
 /** The sections Read along shows: the Log's, each one run of text, empty ones dropped. */
-export function readingSections(groups, text = "") {
-  return logSections(groups, text).map(sectionText).filter(Boolean);
+export function readingSections(groups, text = '') {
+  return logSections(groups, text).map(sectionText).filter(Boolean)
 }
 
-export default { logSections, sectionText, readingSections };
+export default { logSections, sectionText, readingSections }

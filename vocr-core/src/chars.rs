@@ -104,7 +104,15 @@ fn div_round(a: i64, b: i64) -> i64 {
 
 /// Per greedy character (centre, x0, x1) in 1/16 crop px: calibrated frame centres, cells cut halfway
 /// between neighbours, the outer ones half the median pitch wide.
-pub fn cells(sp: &[(i64, i64, i64)], w: i64, h: i64, nw: i64, cal: &[i64; 9], groups: &[u8], stride: i64) -> Vec<(i64, i64, i64)> {
+pub fn cells(
+    sp: &[(i64, i64, i64)],
+    w: i64,
+    h: i64,
+    nw: i64,
+    cal: &[i64; 9],
+    groups: &[u8],
+    stride: i64,
+) -> Vec<(i64, i64, i64)> {
     let n = sp.len();
     if n == 0 {
         return Vec::new();
@@ -255,7 +263,18 @@ mod tests {
 
     #[test]
     fn inserted_characters_share_a_neighbours_cell() {
-        let c = |t: &str, x0: f32| Char { text: t.into(), cls: 1, f0: 0, f1: 0, x: x0 + 5.0, x0, x1: x0 + 10.0, y0: 0, y1: 20, conf: 1.0 };
+        let c = |t: &str, x0: f32| Char {
+            text: t.into(),
+            cls: 1,
+            f0: 0,
+            f1: 0,
+            x: x0 + 5.0,
+            x0,
+            x1: x0 + 10.0,
+            y0: 0,
+            y1: 20,
+            conf: 1.0,
+        };
         let greedy = vec![c("あ", 0.0), c("い", 10.0)];
         let placed = place("あうい", &greedy);
         assert_eq!(placed[1].x0, 0.0);

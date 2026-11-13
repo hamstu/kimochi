@@ -34,7 +34,7 @@
   transition: opacity var(--k-fast);
 }
 .log-session-item + .log-session-item::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: var(--k-space-4);
@@ -49,7 +49,9 @@
   gap: var(--k-space-1);
   min-height: var(--k-row-h);
   padding: var(--k-space-0-5) var(--k-space-3) var(--k-space-0-5) var(--k-space-3);
-  transition: opacity var(--k-fast), background-color var(--k-fast);
+  transition:
+    opacity var(--k-fast),
+    background-color var(--k-fast);
 }
 .log-session-item:hover > .log-session-row {
   background: var(--k-hover);
@@ -62,7 +64,9 @@
   flex: none;
   margin-right: var(--k-space-0-5);
 }
-.log-session-check-space { width: 1rem; }
+.log-session-check-space {
+  width: 1rem;
+}
 .log-session-stats {
   display: inline-flex;
   flex: none;
@@ -73,7 +77,9 @@
   font-size: var(--k-text-sm);
   white-space: nowrap;
 }
-.log-session-stats-sep { color: var(--k-text-3); }
+.log-session-stats-sep {
+  color: var(--k-text-3);
+}
 /* Active and Switch share one column, so the buttons after them line up. */
 .log-session-state {
   display: inline-flex;
@@ -84,7 +90,7 @@
 .log-session-expand.k-button svg {
   transition: transform var(--k-fast);
 }
-.log-session-expand[aria-expanded="true"] svg {
+.log-session-expand[aria-expanded='true'] svg {
   transform: rotate(180deg);
 }
 /* Details under an open row: the description, then the newest lines in an inset well. */
@@ -147,7 +153,9 @@
   padding: var(--k-space-1) var(--k-space-1) var(--k-space-1) var(--k-space-3);
   border-radius: var(--k-radius-md);
   background: var(--k-raised);
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a5);
 }
 .log-sessions-bulk-count {
   flex: 1;
@@ -188,7 +196,9 @@
 .log-session-lifted {
   border-radius: var(--k-radius-md);
   background: var(--k-raised);
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a5);
   cursor: grabbing;
 }
 .log-session-lifted .log-session-grip {
@@ -209,7 +219,9 @@
   touch-action: none;
   color: var(--k-text-3);
 }
-body:has(.log-session-lifted) { cursor: grabbing; }
+body:has(.log-session-lifted) {
+  cursor: grabbing;
+}
 .log-session-grip.k-button:active {
   cursor: grabbing;
 }
@@ -238,8 +250,12 @@ body:has(.log-session-lifted) { cursor: grabbing; }
 .log-sessions-wrap.settings-sessions {
   margin: 0;
 }
-.settings-sessions .log-sessions-head { padding-top: var(--k-space-2); }
-.settings-sessions .log-sessions-export { margin-bottom: var(--k-space-3); }
+.settings-sessions .log-sessions-head {
+  padding-top: var(--k-space-2);
+}
+.settings-sessions .log-sessions-export {
+  margin-bottom: var(--k-space-3);
+}
 .log-session-switch.k-button {
   color: var(--k-text-2);
 }

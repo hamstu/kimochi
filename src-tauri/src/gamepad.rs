@@ -89,7 +89,9 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
     // Without gilrs there is nothing to read. (On Windows the poll runs anyway: XInput can
     // still be switched on.)
     #[cfg(not(windows))]
-    let Some(gilrs) = new_gilrs() else { return };
+    let Some(gilrs) = new_gilrs() else {
+        return;
+    };
     #[cfg(not(windows))]
     let mut gilrs = Some(gilrs);
     let app = app.clone();
@@ -152,9 +154,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 hand_back_when_released(&app);
                 continue;
             }
-            let preferred: Option<usize> = service
-                .settings
-                .get_or("gamepadSettings.preferredGamepadIndex", None);
+            let preferred: Option<usize> = service.settings.get_or("gamepadSettings.preferredGamepadIndex", None);
             let tick = match gilrs.as_ref() {
                 Some(gilrs) => read_gilrs(gilrs, &mut raw, preferred, &mut logged_pads),
                 #[cfg(windows)]
@@ -190,8 +190,12 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                         (devices, active, buttons, axes)
                     } else if preferred.is_none() || preferred == Some(index) {
                         (devices, Some(index), sample.buttons, sample.axes)
-                    } else { (devices, active, buttons, axes) }
-                } else { (devices, active, buttons, axes) }
+                    } else {
+                        (devices, active, buttons, axes)
+                    }
+                } else {
+                    (devices, active, buttons, axes)
+                }
             };
             #[cfg(target_os = "linux")]
             if crate::platform::gamescope::active() {
@@ -204,10 +208,8 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             }
             BUTTONS_HELD.store(buttons.contains(&true), Ordering::SeqCst);
             let lookup: Option<usize> = service.settings.get_or("gamepadSettings.lookupButton", None);
-            LOOKUP_HELD.store(
-                !navigating() && lookup_button_held(lookup, &buttons, physical.as_deref()),
-                Ordering::SeqCst,
-            );
+            LOOKUP_HELD
+                .store(!navigating() && lookup_button_held(lookup, &buttons, physical.as_deref()), Ordering::SeqCst);
             hand_back_when_released(&app);
             // `overlayNavigation`: the overlay's controller menu or reading has the controller, so
             // a focused panel must not act on the same presses (ui/panel-controller.js). Opening
@@ -233,8 +235,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             let stale = broadcast.as_ref().is_none_or(|(last, at)| {
                 let since = at.elapsed();
                 since >= RESEND_UNCHANGED
-                    || (*last != state
-                        && (since >= STICK_TICK || last["buttonStates"] != state["buttonStates"]))
+                    || (*last != state && (since >= STICK_TICK || last["buttonStates"] != state["buttonStates"]))
             });
             if stale {
                 let _ = app.emit("gamepad", &state);
@@ -248,7 +249,10 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 if crate::platform::gamescope::active() && (!deck.connected() || deck.system_menu()) {
                     crate::platform::steam_input::handoff();
                     set_navigation(&app, false, false);
-                    let _ = app.emit("controller-nav-cancel", json!({"reason": "Steam system button or physical controller disconnected"}));
+                    let _ = app.emit(
+                        "controller-nav-cancel",
+                        json!({"reason": "Steam system button or physical controller disconnected"}),
+                    );
                     previous = buttons;
                     continue;
                 }
@@ -263,11 +267,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             // Rising edge only: holding a button must not repeat the action. While Settings
             // records a binding the press is still emitted above, so it can be assigned, but
             // it does not fire whatever the button is bound to now.
-            let rising: Vec<bool> = buttons
-                .iter()
-                .zip(&previous)
-                .map(|(now, before)| *now && !*before)
-                .collect();
+            let rising: Vec<bool> = buttons.iter().zip(&previous).map(|(now, before)| *now && !*before).collect();
             if rising.contains(&true) && !crate::hotkeys::suspended() {
                 dispatch_for_buttons(&app, &service, &buttons, &rising);
             }
@@ -277,7 +277,13 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
 }
 
 /// The gilrs backend this build reads controllers with.
-const BACKEND: &str = if cfg!(windows) { "windows-gaming-input" } else if cfg!(target_os = "macos") { "iokit" } else { "evdev" };
+const BACKEND: &str = if cfg!(windows) {
+    "windows-gaming-input"
+} else if cfg!(target_os = "macos") {
+    "iokit"
+} else {
+    "evdev"
+};
 
 /// Records the connected controllers when they change. Always on disk, not only in the Debug
 /// panel: which pads, and how each is read, is the first question for "listed but no button
@@ -295,9 +301,15 @@ fn log_pads(logged: &mut Option<Vec<String>>, names: Vec<String>, backend: &str,
 }
 
 /// One tick as gilrs has it, after its events were drained into `raw`.
-fn read_gilrs(gilrs: &Gilrs, raw: &mut RawEventLog, preferred: Option<usize>, logged: &mut Option<Vec<String>>) -> Tick {
+fn read_gilrs(
+    gilrs: &Gilrs,
+    raw: &mut RawEventLog,
+    preferred: Option<usize>,
+    logged: &mut Option<Vec<String>>,
+) -> Tick {
     let pads: Vec<_> = gilrs.gamepads().collect();
-    let names: Vec<String> = pads.iter().filter(|(_, pad)| pad.is_connected()).map(|(_, pad)| pad.name().to_owned()).collect();
+    let names: Vec<String> =
+        pads.iter().filter(|(_, pad)| pad.is_connected()).map(|(_, pad)| pad.name().to_owned()).collect();
     log_pads(logged, names, BACKEND, || {
         pads.iter().enumerate().map(|(index, (_, pad))| describe_pad(index, pad)).collect()
     });
@@ -376,7 +388,10 @@ const RAW_AXIS_SHOWN: f32 = 0.5;
 /// held by its raw code (with the standard index it reads as, or none), and every axis pushed half
 /// way from where it rests, rounded to a half so a resting stick does not resend the state. Settings shows it
 /// under the button test, so a press that never reaches the standard buttons is still seen.
-fn raw_activity(pad: &gilrs::Gamepad, rests: &std::collections::HashMap<(gilrs::GamepadId, gilrs::ev::Code), f32>) -> Value {
+fn raw_activity(
+    pad: &gilrs::Gamepad,
+    rests: &std::collections::HashMap<(gilrs::GamepadId, gilrs::ev::Code), f32>,
+) -> Value {
     use gilrs::ev::AxisOrBtn;
     let mut buttons: Vec<Value> = pad
         .state()
@@ -465,7 +480,11 @@ fn moves_active(button: Button) -> bool {
 /// Where an axis rests, from the first value seen for it: a centred stick near 0, a trigger or
 /// pedal at an end (gilrs scales an axis whose minimum is 0 to rest at -1).
 fn axis_rest(first: f32) -> f32 {
-    if first.is_finite() && first.abs() >= 0.75 { first.signum() } else { 0.0 }
+    if first.is_finite() && first.abs() >= 0.75 {
+        first.signum()
+    } else {
+        0.0
+    }
 }
 
 /// Whether an axis is pushed far enough from its rest to show as input.
@@ -510,15 +529,19 @@ impl RawEventLog {
                 // On disk without verbose logging: whether presses arrive at all, on which
                 // controller, and whether the standard layout can name them.
                 // `active` is filled in once this tick has picked the controller it reads.
-                self.pending.push((event.id, json!({
-                    "check": if first { "gamepad-first-press" } else { "gamepad-unmapped-press" },
-                    "pad": usize::from(event.id),
-                    "name": pad.name(),
-                    "button": format!("{button:?}"),
-                    "code": code.to_string(),
-                    "standardIndex": STANDARD.iter().position(|b| *b == button),
-                    "mapping": format!("{:?}", pad.mapping_source()),
-                }), true));
+                self.pending.push((
+                    event.id,
+                    json!({
+                        "check": if first { "gamepad-first-press" } else { "gamepad-unmapped-press" },
+                        "pad": usize::from(event.id),
+                        "name": pad.name(),
+                        "button": format!("{button:?}"),
+                        "code": code.to_string(),
+                        "standardIndex": STANDARD.iter().position(|b| *b == button),
+                        "mapping": format!("{:?}", pad.mapping_source()),
+                    }),
+                    true,
+                ));
             }
         }
         if let gilrs::EventType::AxisChanged(_, value, code) = event.event {
@@ -614,17 +637,23 @@ static PANEL_FOCUS_REVISION: AtomicU64 = AtomicU64::new(0);
 
 fn update_panel_focus(owner: &mut Option<String>, label: &str, focused: bool) -> bool {
     if focused {
-        if owner.as_deref() == Some(label) { return false; }
+        if owner.as_deref() == Some(label) {
+            return false;
+        }
         *owner = Some(label.to_owned());
         true
     } else if owner.as_deref() == Some(label) {
         *owner = None;
         true
-    } else { false }
+    } else {
+        false
+    }
 }
 
 pub fn panel_focus(label: &str, focused: bool) {
-    if !matches!(label, "log" | "settings" | "diagnostics" | "dictionary" | "welcome") { return; }
+    if !matches!(label, "log" | "settings" | "diagnostics" | "dictionary" | "welcome") {
+        return;
+    }
     let mut owner = PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if update_panel_focus(&mut owner, label, focused) {
         PANEL_FOCUS_REVISION.fetch_add(1, Ordering::SeqCst);
@@ -635,7 +664,9 @@ pub fn panel_focus(label: &str, focused: bool) {
 /// onboarding) has the keyboard. Never the overlay or the pop-up.
 pub fn panel_focused() -> bool {
     #[cfg(target_os = "linux")]
-    if crate::platform::gamescope::managed() && !crate::platform::gamescope::controls_routed() { return false; }
+    if crate::platform::gamescope::managed() && !crate::platform::gamescope::controls_routed() {
+        return false;
+    }
     PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some()
 }
 
@@ -705,16 +736,16 @@ fn lookup_button_held(button: Option<usize>, active: &[bool], physical: Option<&
     down(active) || physical.is_some_and(down)
 }
 #[cfg(target_os = "windows")]
-pub fn buttons_held() -> bool { BUTTONS_HELD.load(Ordering::SeqCst) }
+pub fn buttons_held() -> bool {
+    BUTTONS_HELD.load(Ordering::SeqCst)
+}
 /// The application to reactivate once every button is up, and when navigation ended.
 static PENDING_RETURN: Mutex<Option<(u32, Instant)>> = Mutex::new(None);
 /// The longest the game waits for its focus back while a button stays down.
 const RETURN_WAIT_LIMIT: Duration = Duration::from_millis(1500);
 
 fn pending_return() -> std::sync::MutexGuard<'static, Option<(u32, Instant)>> {
-    PENDING_RETURN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    PENDING_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn reactivate(app: &tauri::AppHandle, pid: u32) {
@@ -758,9 +789,7 @@ pub fn navigating() -> bool {
 /// Returns the remembered process id. Activation is scheduled on the main thread rather
 /// than waited for, so this is safe to call from anywhere, including that thread.
 pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) -> Option<u32> {
-    let mut remembered = NAV_RETURN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut remembered = NAV_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let was = NAV.swap(active, Ordering::SeqCst);
     if active {
         // Reopened before the game got its focus back: it is still the one to return to.
@@ -772,8 +801,15 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
         // them took the overlay's keyboard focus at every press. The blur cancelled Hachidori's
         // lookup in flight, and the word showed nothing.
         let local_keys = {
-            #[cfg(target_os="linux")] { (!take_focus && crate::platform::gnome::eligible_popup_session()) || crate::platform::gamescope::active() }
-            #[cfg(not(target_os="linux"))] { false }
+            #[cfg(target_os = "linux")]
+            {
+                (!take_focus && crate::platform::gnome::eligible_popup_session())
+                    || crate::platform::gamescope::active()
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                false
+            }
         };
         // Taking activation stops games that read controllers only in the foreground.
         // Keyboard navigation takes it too: Windows' low-level hook keeps the menu's keys out
@@ -813,10 +849,7 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
         drop(remembered);
         if !was && !local_keys {
             if let Err(e) = crate::hotkeys::set_nav_keys(app, true) {
-                log(
-                    app,
-                    json!({ "check": "controller-nav", "keys": "failed", "detail": e }),
-                );
+                log(app, json!({ "check": "controller-nav", "keys": "failed", "detail": e }));
             }
         }
         return previous;
@@ -866,16 +899,11 @@ pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<u32>, source: 
         return;
     }
     let Some(front) = front else { return };
-    let returning_to = *NAV_RETURN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let returning_to = *NAV_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if front == std::process::id() || Some(front) == returning_to || Some(front) == source {
         return;
     }
-    NAV_RETURN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .take();
+    NAV_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
     set_navigation(app, false, false);
     log(
         app,
@@ -946,18 +974,11 @@ fn nav_report(
 /// Which binding a tick's presses fire: among the chords that are fully held and include a
 /// button pressed this tick, the one with the most buttons, so LS + RS beats a binding on
 /// LS alone. Ties go to the earliest binding, which callers list in `HOTKEY_ACTIONS` order.
-fn chord_to_fire<'a>(
-    bindings: &[(&'a str, Vec<usize>)],
-    held: &[bool],
-    rising: &[bool],
-) -> Option<&'a str> {
+fn chord_to_fire<'a>(bindings: &[(&'a str, Vec<usize>)], held: &[bool], rising: &[bool]) -> Option<&'a str> {
     let is = |states: &[bool], index: &usize| states.get(*index).copied().unwrap_or(false);
     let mut best: Option<(&str, usize)> = None;
     for (name, chord) in bindings {
-        if chord.is_empty()
-            || !chord.iter().all(|b| is(held, b))
-            || !chord.iter().any(|b| is(rising, b))
-        {
+        if chord.is_empty() || !chord.iter().all(|b| is(held, b)) || !chord.iter().any(|b| is(rising, b)) {
             continue;
         }
         if best.is_none_or(|(_, size)| chord.len() > size) {
@@ -973,7 +994,9 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
     let bindings: Vec<(&str, Vec<usize>)> = actions::HOTKEY_ACTIONS
         .iter()
         .filter_map(|name| {
-            if !panel_action_allowed(name, focused) { return None; }
+            if !panel_action_allowed(name, focused) {
+                return None;
+            }
             let definition = hotkeys.get(*name)?;
             if definition.get("enabled") == Some(&Value::Bool(false)) {
                 return None;
@@ -984,9 +1007,12 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
     let pressed: Vec<usize> = rising.iter().enumerate().filter(|(_, r)| **r).map(|(i, _)| i).collect();
     // Verbose only: a debug report then says what each press did, and why a scan didn't follow.
     let trace = |outcome: &str| {
-        crate::debug_report::trace(app, json!({
-            "check": "gamepad-press", "pressed": pressed, "panelFocused": focused, "outcome": outcome,
-        }));
+        crate::debug_report::trace(
+            app,
+            json!({
+                "check": "gamepad-press", "pressed": pressed, "panelFocused": focused, "outcome": outcome,
+            }),
+        );
     };
     if let Some(name) = chord_to_fire(&bindings, held, rising) {
         trace(name);
@@ -994,36 +1020,39 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
         return;
     }
     let enabled = service.settings.get_or("autoScanSettings.enabled", false);
-    let auto: Option<usize> = service
-        .settings
-        .get_or("autoScanSettings.gamepadButton", None);
+    let auto: Option<usize> = service.settings.get_or("autoScanSettings.gamepadButton", None);
     let Some(index) = auto.filter(|index| rising.get(*index).copied().unwrap_or(false)) else {
         trace("none");
         return;
     };
     // The controller works Kimochi's own window while one is in front (usePanelController).
-    if focused { trace("auto-scan skipped: a Kimochi window has focus"); return; }
+    if focused {
+        trace("auto-scan skipped: a Kimochi window has focus");
+        return;
+    }
     // The switch gates the button; with it off a saved button does nothing.
-    if !enabled { trace("auto-scan skipped: switched off"); return; }
-    let delay = service
-        .settings
-        .get_or::<f64>("autoScanSettings.scanDelay", 500.0)
-        .clamp(0.0, 10_000.0);
+    if !enabled {
+        trace("auto-scan skipped: switched off");
+        return;
+    }
+    let delay = service.settings.get_or::<f64>("autoScanSettings.scanDelay", 500.0).clamp(0.0, 10_000.0);
     trace("auto-scan queued");
     let revision = PANEL_FOCUS_REVISION.load(Ordering::SeqCst);
     let app = app.clone();
     let service = service.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(delay as u64));
-        let (current, focused, navigation, suspended) = (
-            PANEL_FOCUS_REVISION.load(Ordering::SeqCst), panel_focused(), navigating(), crate::hotkeys::suspended(),
-        );
+        let (current, focused, navigation, suspended) =
+            (PANEL_FOCUS_REVISION.load(Ordering::SeqCst), panel_focused(), navigating(), crate::hotkeys::suspended());
         if !delayed_scan_allowed(revision, current, focused, navigation, suspended) {
-            crate::debug_report::trace(&app, json!({
-                "check": "gamepad-press", "pressed": [index], "outcome": "auto-scan cancelled",
-                "focusChanged": revision != current, "panelFocused": focused,
-                "navigating": navigation, "suspended": suspended,
-            }));
+            crate::debug_report::trace(
+                &app,
+                json!({
+                    "check": "gamepad-press", "pressed": [index], "outcome": "auto-scan cancelled",
+                    "focusChanged": revision != current, "panelFocused": focused,
+                    "navigating": navigation, "suspended": suspended,
+                }),
+            );
             return;
         }
         actions::dispatch(&app, &service, "triggerScan");
@@ -1159,49 +1188,24 @@ mod tests {
 
     #[test]
     fn the_largest_fully_held_chord_fires() {
-        let bindings = [
-            ("triggerScan", vec![10]),
-            ("openControllerMenu", vec![10, 11]),
-        ];
+        let bindings = [("triggerScan", vec![10]), ("openControllerMenu", vec![10, 11])];
         // RS joins a held LS: both chords include the new press, the larger one wins.
-        assert_eq!(
-            chord_to_fire(&bindings, &states(&[10, 11]), &states(&[11])),
-            Some("openControllerMenu")
-        );
+        assert_eq!(chord_to_fire(&bindings, &states(&[10, 11]), &states(&[11])), Some("openControllerMenu"));
         // LS alone fires the single-button binding.
-        assert_eq!(
-            chord_to_fire(&bindings, &states(&[10]), &states(&[10])),
-            Some("triggerScan")
-        );
+        assert_eq!(chord_to_fire(&bindings, &states(&[10]), &states(&[10])), Some("triggerScan"));
         // Holding a chord without a new press fires nothing.
-        assert_eq!(
-            chord_to_fire(&bindings, &states(&[10, 11]), &states(&[])),
-            None
-        );
+        assert_eq!(chord_to_fire(&bindings, &states(&[10, 11]), &states(&[])), None);
         // A partly held chord fires nothing on its own.
         let menu_only = [("openControllerMenu", vec![10, 11])];
-        assert_eq!(
-            chord_to_fire(&menu_only, &states(&[11]), &states(&[11])),
-            None
-        );
+        assert_eq!(chord_to_fire(&menu_only, &states(&[11]), &states(&[11])), None);
         // A press unrelated to a held chord does not fire it.
-        assert_eq!(
-            chord_to_fire(&menu_only, &states(&[0, 10, 11]), &states(&[0])),
-            None
-        );
+        assert_eq!(chord_to_fire(&menu_only, &states(&[0, 10, 11]), &states(&[0])), None);
     }
 
     #[test]
     fn chord_ties_go_to_the_first_binding_and_empty_chords_never_fire() {
-        let bindings = [
-            ("triggerScan", vec![]),
-            ("openControllerMenu", vec![4, 5]),
-            ("later", vec![5, 6]),
-        ];
-        assert_eq!(
-            chord_to_fire(&bindings, &states(&[4, 5, 6]), &states(&[5])),
-            Some("openControllerMenu")
-        );
+        let bindings = [("triggerScan", vec![]), ("openControllerMenu", vec![4, 5]), ("later", vec![5, 6])];
+        assert_eq!(chord_to_fire(&bindings, &states(&[4, 5, 6]), &states(&[5])), Some("openControllerMenu"));
     }
 
     #[test]

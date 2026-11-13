@@ -1,118 +1,95 @@
 /* ankiconnect.ts — TS wrapper around the Rust AnkiConnect commands +
    a sendCardForTerm orchestrator. Status pub/sub mirrors yomitan.ts. */
 
-import { invoke } from "@tauri-apps/api/core";
-import type { AnkiConnectStatus } from "@ui/anki-connect";
-import { attachSentenceAudio } from "./sentenceAudio";
-import { attachScreenshot } from "./screenshots";
-import type {
-  AnkiFieldMapping,
-  AnkiMediaItem,
-  AnkiStatus,
-  YomitanAnkiFields,
-} from "./types";
+import { invoke } from '@tauri-apps/api/core'
+import type { AnkiConnectStatus } from '@ui/anki-connect'
+import { attachSentenceAudio } from './sentenceAudio'
+import { attachScreenshot } from './screenshots'
+import type { AnkiFieldMapping, AnkiMediaItem, AnkiStatus, YomitanAnkiFields } from './types'
 
 /* ---------------- status pub/sub ---------------- */
 
-type StatusSub = (s: AnkiStatus) => void;
-const subs = new Set<StatusSub>();
-let current: AnkiStatus = "unknown";
+type StatusSub = (s: AnkiStatus) => void
+const subs = new Set<StatusSub>()
+let current: AnkiStatus = 'unknown'
 
 function setStatus(next: AnkiStatus) {
-  if (next === current) return;
-  current = next;
+  if (next === current) return
+  current = next
   for (const fn of subs) {
     try {
-      fn(next);
+      fn(next)
     } catch (e) {
-      console.error(e);
+      console.error(e)
     }
   }
 }
 
 export function onAnkiStatus(fn: StatusSub): () => void {
-  subs.add(fn);
-  fn(current);
+  subs.add(fn)
+  fn(current)
   return () => {
-    subs.delete(fn);
-  };
+    subs.delete(fn)
+  }
 }
 
 export function getAnkiStatus(): AnkiStatus {
-  return current;
+  return current
 }
 
 /* ---------------- thin invoke wrappers ---------------- */
 
 /** The connection check behind Settings → Anki: the given address and key, or the saved ones.
  *  Never rejects for a failed connection; the status says what happened. */
-export async function checkAnkiConnect(
-  url?: string,
-  key?: string,
-): Promise<AnkiConnectStatus> {
-  const status = await invoke<AnkiConnectStatus>("anki_connect_status", {
+export async function checkAnkiConnect(url?: string, key?: string): Promise<AnkiConnectStatus> {
+  const status = await invoke<AnkiConnectStatus>('anki_connect_status', {
     url: url ?? null,
-    key: key ?? null,
-  });
-  setStatus(status.state === "connected" ? "ok" : "err");
-  return status;
+    key: key ?? null
+  })
+  setStatus(status.state === 'connected' ? 'ok' : 'err')
+  return status
 }
 
-export async function probeAnki(
-  url: string,
-): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }> {
+export async function probeAnki(url: string): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }> {
   try {
-    const ms = await invoke<number>("anki_probe", { url });
-    setStatus("ok");
-    return { ok: true, latencyMs: ms };
+    const ms = await invoke<number>('anki_probe', { url })
+    setStatus('ok')
+    return { ok: true, latencyMs: ms }
   } catch (err) {
-    setStatus("err");
-    return { ok: false, error: String(err) };
+    setStatus('err')
+    return { ok: false, error: String(err) }
   }
 }
 
 export async function listDecks(url: string): Promise<string[]> {
-  return invoke<string[]>("anki_deck_names", { url });
+  return invoke<string[]>('anki_deck_names', { url })
 }
 
 export async function listModels(url: string): Promise<string[]> {
-  return invoke<string[]>("anki_model_names", { url });
+  return invoke<string[]>('anki_model_names', { url })
 }
 
-export async function listModelFields(
-  url: string,
-  model: string,
-): Promise<string[]> {
-  return invoke<string[]>("anki_model_field_names", {
+export async function listModelFields(url: string, model: string): Promise<string[]> {
+  return invoke<string[]>('anki_model_field_names', {
     url,
-    modelName: model,
-  });
+    modelName: model
+  })
 }
 
-export async function findNotesByQuery(
-  url: string,
-  query: string,
-): Promise<number[]> {
-  return invoke<number[]>("anki_find_notes", { url, query });
+export async function findNotesByQuery(url: string, query: string): Promise<number[]> {
+  return invoke<number[]>('anki_find_notes', { url, query })
 }
 
-export async function openInAnkiBrowser(
-  url: string,
-  query: string,
-): Promise<void> {
-  await invoke<number[]>("anki_gui_browse", { url, query });
+export async function openInAnkiBrowser(url: string, query: string): Promise<void> {
+  await invoke<number[]>('anki_gui_browse', { url, query })
 }
 
-export async function storeMedia(
-  url: string,
-  filename: string,
-  base64: string,
-): Promise<void> {
-  await invoke<string>("anki_store_media_file", {
+export async function storeMedia(url: string, filename: string, base64: string): Promise<void> {
+  await invoke<string>('anki_store_media_file', {
     url,
     filename,
-    dataBase64: base64,
-  });
+    dataBase64: base64
+  })
 }
 
 /** Add a note. Returns { id, duplicate }. Catches the "duplicate" error and
@@ -129,11 +106,11 @@ export async function addNote(
   expressionValue: string,
   card: { term: string | null; reading: string | null } = {
     term: null,
-    reading: null,
-  },
+    reading: null
+  }
 ): Promise<{ id: number; duplicate: boolean }> {
   try {
-    const id = await invoke<number>("anki_add_note", {
+    const id = await invoke<number>('anki_add_note', {
       url,
       deck,
       model,
@@ -141,52 +118,52 @@ export async function addNote(
       tags,
       allowDuplicate: false,
       term: card.term,
-      reading: card.reading,
-    });
-    return { id, duplicate: false };
+      reading: card.reading
+    })
+    return { id, duplicate: false }
   } catch (err) {
-    const msg = String(err);
-    if (!/duplicate/i.test(msg)) throw err;
+    const msg = String(err)
+    if (!/duplicate/i.test(msg)) throw err
     // Try to find the existing note by the expression field's exact value.
-    const safe = expressionValue.replace(/"/g, '\\"');
-    const query = `"${expressionFieldName}:${safe}"`;
-    let ids: number[] = [];
+    const safe = expressionValue.replace(/"/g, '\\"')
+    const query = `"${expressionFieldName}:${safe}"`
+    let ids: number[] = []
     try {
-      ids = await findNotesByQuery(url, query);
+      ids = await findNotesByQuery(url, query)
     } catch {
       // ignore — fall through to original error if recovery fails
     }
     if (ids.length > 0) {
-      return { id: ids[0], duplicate: true };
+      return { id: ids[0], duplicate: true }
     }
-    throw err;
+    throw err
   }
 }
 
 /* ---------------- mining orchestrator ---------------- */
 
 export interface SendCardOpts {
-  ankiUrl: string;
-  deck: string;
-  model: string;
-  modelFields: string[];
-  mappings: AnkiFieldMapping[];
-  tags: string[];
+  ankiUrl: string
+  deck: string
+  model: string
+  modelFields: string[]
+  mappings: AnkiFieldMapping[]
+  tags: string[]
   yomitan: {
-    fields: YomitanAnkiFields;
-    audioMedia: AnkiMediaItem[];
-    dictionaryMedia: AnkiMediaItem[];
-  };
-  sentence: string | null;
+    fields: YomitanAnkiFields
+    audioMedia: AnkiMediaItem[]
+    dictionaryMedia: AnkiMediaItem[]
+  }
+  sentence: string | null
   /** The OCR scan the sentence was read in, when known: its screenshot goes on the card. */
-  scan?: string | null;
+  scan?: string | null
   /** Text the reader selected in the pop-up, for the `popup-selection-text` marker (as Yomitan). */
-  popupSelectionText?: string;
+  popupSelectionText?: string
 }
 
 export interface SendCardResult {
-  noteId: number;
-  duplicate: boolean;
+  noteId: number
+  duplicate: boolean
 }
 
 /** The field Anki/AnkiConnect dedups on: the first field of the note type.
@@ -196,12 +173,12 @@ export function resolveExpressionField(
   modelFields: string[],
   mappings: AnkiFieldMapping[],
   fields: YomitanAnkiFields,
-  sentence: string | null,
+  sentence: string | null
 ): { name: string; value: string } {
-  const name = modelFields[0] ?? "Expression";
-  const mapping = mappings.find((m) => m.ankiField === name);
-  const value = mapping ? resolveFieldValue(mapping, fields, sentence) : "";
-  return { name, value };
+  const name = modelFields[0] ?? 'Expression'
+  const mapping = mappings.find((m) => m.ankiField === name)
+  const value = mapping ? resolveFieldValue(mapping, fields, sentence) : ''
+  return { name, value }
 }
 
 /** True if a note with this expression already exists in the deck. Used to
@@ -211,53 +188,49 @@ export async function noteExistsForTerm(
   url: string,
   deck: string,
   expressionFieldName: string,
-  expressionValue: string,
+  expressionValue: string
 ): Promise<number | null> {
-  if (!expressionValue.trim()) return null;
-  const safeField = expressionFieldName.replace(/"/g, '\\"');
-  const safeValue = expressionValue.replace(/"/g, '\\"');
-  const safeDeck = deck.replace(/"/g, '\\"');
-  const query = `"deck:${safeDeck}" "${safeField}:${safeValue}"`;
-  const ids = await findNotesByQuery(url, query);
-  return ids.length > 0 ? ids[0] : null;
+  if (!expressionValue.trim()) return null
+  const safeField = expressionFieldName.replace(/"/g, '\\"')
+  const safeValue = expressionValue.replace(/"/g, '\\"')
+  const safeDeck = deck.replace(/"/g, '\\"')
+  const query = `"deck:${safeDeck}" "${safeField}:${safeValue}"`
+  const ids = await findNotesByQuery(url, query)
+  return ids.length > 0 ? ids[0] : null
 }
 
 /** Yomitan's marker for the text selected in the pop-up; Kimochi's pop-up fills it itself. */
-export const POPUP_SELECTION_MARKER = "popup-selection-text";
+export const POPUP_SELECTION_MARKER = 'popup-selection-text'
 
 /** The selection as a field's HTML, as Yomitan writes it: escaped, its line breaks kept. */
 export function selectionHtml(text: string): string {
   return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/\r?\n/g, "<br>\n");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\r?\n/g, '<br>\n')
 }
 
-function resolveFieldValue(
-  mapping: AnkiFieldMapping,
-  yomitan: YomitanAnkiFields,
-  sentence: string | null,
-): string {
+function resolveFieldValue(mapping: AnkiFieldMapping, yomitan: YomitanAnkiFields, sentence: string | null): string {
   switch (mapping.mappingType) {
-    case "marker": {
-      if (!mapping.marker) return "";
-      const v = (yomitan as Record<string, string | undefined>)[mapping.marker];
-      return typeof v === "string" ? v : "";
+    case 'marker': {
+      if (!mapping.marker) return ''
+      const v = (yomitan as Record<string, string | undefined>)[mapping.marker]
+      return typeof v === 'string' ? v : ''
     }
-    case "sentence":
-      return sentence ?? "";
-    case "sentenceAudio":
-    case "wordAudio":
+    case 'sentence':
+      return sentence ?? ''
+    case 'sentenceAudio':
+    case 'wordAudio':
       // Filled in after the card is added (attachSentenceAudio).
-      return "";
-    case "literal":
-      return mapping.literal ?? "";
-    case "empty":
-      return "";
+      return ''
+    case 'literal':
+      return mapping.literal ?? ''
+    case 'empty':
+      return ''
     default:
-      return "";
+      return ''
   }
 }
 
@@ -267,73 +240,60 @@ function resolveFieldValue(
  *  3. addNote (with duplicate detection)
  *  4. a new card gets its line's recorded audio and its scan's screenshot afterwards, when on
  */
-export async function sendCardForTerm(
-  opts: SendCardOpts,
-): Promise<SendCardResult> {
-  const {
-    ankiUrl,
-    deck,
-    model,
-    modelFields,
-    mappings,
-    tags,
-    yomitan,
-    sentence,
-  } = opts;
+export async function sendCardForTerm(opts: SendCardOpts): Promise<SendCardResult> {
+  const { ankiUrl, deck, model, modelFields, mappings, tags, yomitan, sentence } = opts
   // Not one of /ankiFields' markers: the selection is the pop-up's, read as the card was added.
   const markers: YomitanAnkiFields = {
     ...yomitan.fields,
-    [POPUP_SELECTION_MARKER]: selectionHtml(opts.popupSelectionText ?? ""),
-  };
+    [POPUP_SELECTION_MARKER]: selectionHtml(opts.popupSelectionText ?? '')
+  }
 
   // 1. Store any media bundled with the term.
   for (const item of yomitan.audioMedia) {
-    await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64);
+    await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64)
   }
   for (const item of yomitan.dictionaryMedia) {
-    await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64);
+    await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64)
   }
 
   // 2. Build the fields record. Skip Anki fields with no mapping (default empty).
-  const fields: Record<string, string> = {};
-  const mappingByField = new Map(mappings.map((m) => [m.ankiField, m]));
+  const fields: Record<string, string> = {}
+  const mappingByField = new Map(mappings.map((m) => [m.ankiField, m]))
   for (const f of modelFields) {
-    const m = mappingByField.get(f);
+    const m = mappingByField.get(f)
     if (m) {
-      fields[f] = resolveFieldValue(m, markers, sentence);
+      fields[f] = resolveFieldValue(m, markers, sentence)
     } else {
-      fields[f] = "";
+      fields[f] = ''
     }
   }
 
   // 3. Add note. For duplicate recovery we use the first Anki field as the
   //    dedup key (Anki/AnkiConnect's default duplicate check looks there).
-  const { name: expressionFieldName, value: expressionValue } =
-    resolveExpressionField(modelFields, mappings, markers, sentence);
-  const { id, duplicate } = await addNote(
-    ankiUrl,
-    deck,
-    model,
-    fields,
-    tags,
-    expressionFieldName,
-    expressionValue,
-    { term: yomitan.fields.expression ?? null, reading: yomitan.fields.reading ?? null },
-  );
+  const { name: expressionFieldName, value: expressionValue } = resolveExpressionField(
+    modelFields,
+    mappings,
+    markers,
+    sentence
+  )
+  const { id, duplicate } = await addNote(ankiUrl, deck, model, fields, tags, expressionFieldName, expressionValue, {
+    term: yomitan.fields.expression ?? null,
+    reading: yomitan.fields.reading ?? null
+  })
   // 4. In the background: the card is not held up while the voice finishes or is cut.
   if (!duplicate) {
-    const fieldFor = (type: AnkiFieldMapping["mappingType"]): string | null =>
-      mappings.find((m) => m.mappingType === type)?.ankiField ?? null;
+    const fieldFor = (type: AnkiFieldMapping['mappingType']): string | null =>
+      mappings.find((m) => m.mappingType === type)?.ankiField ?? null
     attachSentenceAudio(
       ankiUrl,
       id,
       sentence,
-      fieldFor("sentenceAudio"),
+      fieldFor('sentenceAudio'),
       yomitan.fields.expression ?? null,
-      fieldFor("wordAudio"),
-      yomitan.fields.reading ?? null,
-    );
-    attachScreenshot(ankiUrl, id, sentence, opts.scan ?? null);
+      fieldFor('wordAudio'),
+      yomitan.fields.reading ?? null
+    )
+    attachScreenshot(ankiUrl, id, sentence, opts.scan ?? null)
   }
-  return { noteId: id, duplicate };
+  return { noteId: id, duplicate }
 }

@@ -43,24 +43,15 @@ fn parse_port(url: &str) -> Option<u16> {
 
 impl Texthooker {
     pub fn new(settings: Arc<Settings>, log: Arc<dyn Fn(serde_json::Value) + Send + Sync>) -> Self {
-        Self {
-            settings,
-            server: Arc::new(Mutex::new(None)),
-            generation: Arc::new(AtomicU64::new(0)),
-            log,
-        }
+        Self { settings, server: Arc::new(Mutex::new(None)), generation: Arc::new(AtomicU64::new(0)), log }
     }
 
     fn enabled(&self) -> bool {
-        self.settings
-            .get_or("texthookerSettings.sendToWebSocket", false)
+        self.settings.get_or("texthookerSettings.sendToWebSocket", false)
     }
 
     fn url(&self) -> String {
-        self.settings.get_or(
-            "texthookerSettings.webSocketUrl",
-            "ws://localhost:6677".to_string(),
-        )
+        self.settings.get_or("texthookerSettings.webSocketUrl", "ws://localhost:6677".to_string())
     }
 
     pub fn start(&self) {
@@ -75,13 +66,7 @@ impl Texthooker {
             }));
             return;
         };
-        if self
-            .server
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_some_and(|s| s.port == port)
-        {
+        if self.server.lock().unwrap().as_ref().is_some_and(|s| s.port == port) {
             return;
         }
         self.stop();
@@ -101,10 +86,7 @@ impl Texthooker {
         if listener.set_nonblocking(true).is_err() {
             return;
         }
-        *self.server.lock().unwrap() = Some(Server {
-            port,
-            clients: Vec::new(),
-        });
+        *self.server.lock().unwrap() = Some(Server { port, clients: Vec::new() });
         let generation = self.generation.load(Ordering::SeqCst);
         let current = self.generation.clone();
         let server = self.server.clone();
@@ -170,10 +152,7 @@ impl Texthooker {
         if text.trim().is_empty() {
             return;
         }
-        if self
-            .settings
-            .get_or("texthookerSettings.copyToClipboard", false)
-        {
+        if self.settings.get_or("texthookerSettings.copyToClipboard", false) {
             match arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())) {
                 Ok(()) => {}
                 Err(e) => (self.log)(json!({
@@ -195,10 +174,9 @@ impl Texthooker {
         let mut dead: Vec<Client> = Vec::new();
         for client in clients {
             let ok = match client.lock() {
-                Ok(mut socket) => socket
-                    .send(tungstenite::Message::Text(text.into()))
-                    .and_then(|()| socket.flush())
-                    .is_ok(),
+                Ok(mut socket) => {
+                    socket.send(tungstenite::Message::Text(text.into())).and_then(|()| socket.flush()).is_ok()
+                }
                 Err(_) => false,
             };
             if !ok {
@@ -210,9 +188,7 @@ impl Texthooker {
         }
         // Drop clients that have gone away rather than retrying them forever.
         if let Some(server) = self.server.lock().unwrap().as_mut() {
-            server
-                .clients
-                .retain(|client| !dead.iter().any(|d| Arc::ptr_eq(d, client)));
+            server.clients.retain(|client| !dead.iter().any(|d| Arc::ptr_eq(d, client)));
         }
     }
 }
@@ -242,10 +218,7 @@ mod tests {
         settings
             .set_many(&[
                 (&["texthookerSettings", "sendToWebSocket"], json!(true)),
-                (
-                    &["texthookerSettings", "webSocketUrl"],
-                    json!(format!("ws://127.0.0.1:{port}")),
-                ),
+                (&["texthookerSettings", "webSocketUrl"], json!(format!("ws://127.0.0.1:{port}"))),
             ])
             .expect("settings");
         Texthooker::new(settings, Arc::new(|_| {}))
@@ -269,13 +242,7 @@ mod tests {
         let mut client = client.expect("client should connect to the texthooker server");
         // Give the accept loop a moment to register the connection.
         for _ in 0..50 {
-            if hooker
-                .server
-                .lock()
-                .unwrap()
-                .as_ref()
-                .is_some_and(|s| !s.clients.is_empty())
-            {
+            if hooker.server.lock().unwrap().as_ref().is_some_and(|s| !s.clients.is_empty()) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(20));

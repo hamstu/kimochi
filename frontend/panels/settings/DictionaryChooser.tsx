@@ -261,12 +261,7 @@ function DictionaryDetail({
               </MenuTrigger>
             </Tooltip>
             <MenuContent align="end">
-              <MenuItem
-                icon={<Trash2 />}
-                tone="danger"
-                disabled={!removable}
-                onSelect={() => setConfirmRemove(true)}
-              >
+              <MenuItem icon={<Trash2 />} tone="danger" disabled={!removable} onSelect={() => setConfirmRemove(true)}>
                 {needs === selectedDownload && canRemoveExtension(status)
                   ? 'Remove downloaded engine… (switch to another engine first)'
                   : 'Remove downloaded engine…'}
@@ -305,9 +300,7 @@ function DictionaryDetail({
           type="button"
           className="k-link dictionary-detail-upstream"
           onClick={() =>
-            void openUrl(info.upstream).catch((error: unknown) =>
-              console.error('Open upstream page failed:', error)
-            )
+            void openUrl(info.upstream).catch((error: unknown) => console.error('Open upstream page failed:', error))
           }
         >
           {info.upstreamLabel ?? 'Upstream'}
@@ -363,8 +356,7 @@ export function DictionaryChooser({
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
   const [language] = useLanguage()
-  const unsupported = (engine: DictionaryEngine): string | null =>
-    dictionaryEngineLanguageReason(engine, language.code)
+  const unsupported = (engine: DictionaryEngine): string | null => dictionaryEngineLanguageReason(engine, language.code)
   const standIn = chosen && chosen !== active && unsupported(chosen) ? chosen : null
 
   // The viewed engine follows the active one whenever that changes (including the first load).
@@ -443,10 +435,9 @@ export function DictionaryChooser({
       {standIn && (
         <div className="dictionary-chooser-status">
           <Callout tone="neutral">
-            {DICTIONARY_ENGINES[standIn].name} is chosen on this computer, but it reads{' '}
-            {languageNameFor(standIn)} only, so {DICTIONARY_ENGINES[active].name} looks words up while
-            you learn {language.name}. {DICTIONARY_ENGINES[standIn].name} comes back when you switch to{' '}
-            {languageNameFor(standIn)}.
+            {DICTIONARY_ENGINES[standIn].name} is chosen on this computer, but it reads {languageNameFor(standIn)} only,
+            so {DICTIONARY_ENGINES[active].name} looks words up while you learn {language.name}.{' '}
+            {DICTIONARY_ENGINES[standIn].name} comes back when you switch to {languageNameFor(standIn)}.
           </Callout>
         </div>
       )}

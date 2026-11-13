@@ -1,11 +1,17 @@
 /* Main window: sidebar + view, below the app-drawn title bar. */
-.main-sidebar[data-mini] { flex: 1; width: 100%; border-right: none; }
+.main-sidebar[data-mini] {
+  flex: 1;
+  width: 100%;
+  border-right: none;
+}
 /* Mini mode's title bar is too narrow for everything: keep the toggles that matter there. */
-html[data-mini] button[aria-label="Unpin window"],
-html[data-mini] button[aria-label="Keep on top"],
-html[data-mini] button[aria-label="Mute sound effects"],
-html[data-mini] button[aria-label="Turn on sound effects"],
-html[data-mini] .main-help { display: none; }
+html[data-mini] button[aria-label='Unpin window'],
+html[data-mini] button[aria-label='Keep on top'],
+html[data-mini] button[aria-label='Mute sound effects'],
+html[data-mini] button[aria-label='Turn on sound effects'],
+html[data-mini] .main-help {
+  display: none;
+}
 .main-frame {
   /* The footers are a bar and their top border, their controls centred in the bar. */
   --main-foot-h: calc(var(--k-row-h) + 1px);
@@ -139,12 +145,12 @@ html[data-mini] .main-help { display: none; }
   background: var(--k-hover);
   color: var(--k-text);
 }
-.main-tab[aria-selected="true"] {
+.main-tab[aria-selected='true'] {
   background: var(--k-bg);
   color: var(--k-text);
 }
-.main-tab[aria-selected="true"]::after {
-  content: "";
+.main-tab[aria-selected='true']::after {
+  content: '';
   position: absolute;
   right: 0;
   bottom: 0;
@@ -152,7 +158,7 @@ html[data-mini] .main-help { display: none; }
   height: 2px;
   background: var(--k-accent);
 }
-.main-tab[aria-selected="true"] > svg {
+.main-tab[aria-selected='true'] > svg {
   color: var(--k-accent-text);
 }
 .main-tab:focus-visible {
@@ -371,7 +377,7 @@ html[data-mini] .main-help { display: none; }
   overflow: hidden;
 }
 .sb-select[data-progress]::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0 auto 0 0;
   z-index: -1;
@@ -379,11 +385,13 @@ html[data-mini] .main-help { display: none; }
   background: var(--k-accent-soft);
   transition: width 400ms var(--k-ease-out);
 }
-.sb-select[data-progress="step"]::before {
+.sb-select[data-progress='step']::before {
   animation: sb-progress-pulse 1.4s ease-in-out infinite;
 }
 @keyframes sb-progress-pulse {
-  50% { opacity: 0.45; }
+  50% {
+    opacity: 0.45;
+  }
 }
 .sb-engine-status {
   flex: none;
@@ -398,13 +406,26 @@ html[data-mini] .main-help { display: none; }
   animation: sb-notice-in var(--k-base) var(--k-ease-out);
 }
 @keyframes sb-notice-in {
-  from { opacity: 0; transform: translateY(-0.25rem); max-height: 0; padding-block: 0; }
-  to { opacity: 1; transform: none; max-height: 6rem; }
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+    max-height: 0;
+    padding-block: 0;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    max-height: 6rem;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-notice,
-  .sb-select[data-progress="step"]::before { animation: none; }
-  .sb-select[data-progress]::before { transition: none; }
+  .sb-select[data-progress='step']::before {
+    animation: none;
+  }
+  .sb-select[data-progress]::before {
+    transition: none;
+  }
 }
 /* In the open list each engine is two tight lines, name (with where it runs) over tagline, beside
    a picture as tall as both: its top is the name line's top, its bottom the tagline's. With
@@ -513,12 +534,16 @@ html[data-mini] .main-help { display: none; }
   border: 0;
   border-radius: var(--k-radius-lg);
   background: var(--k-field);
-  box-shadow: inset 0 0 0 1px var(--k-line-strong), 0 1px 2px rgb(0 0 0 / 0.05);
+  box-shadow:
+    inset 0 0 0 1px var(--k-line-strong),
+    0 1px 2px rgb(0 0 0 / 0.05);
   color: var(--k-text);
   font: inherit;
   text-align: left;
   cursor: default;
-  transition: box-shadow var(--k-fast), background-color var(--k-fast);
+  transition:
+    box-shadow var(--k-fast),
+    background-color var(--k-fast);
 }
 .dark .src-card {
   background: var(--gray-a3);
@@ -526,8 +551,10 @@ html[data-mini] .main-help { display: none; }
 }
 .src-card:hover,
 .src-card[data-native-hover],
-.src-card[data-state="open"] {
-  box-shadow: inset 0 0 0 1px var(--gray-a8), 0 1px 2px rgb(0 0 0 / 0.05);
+.src-card[data-state='open'] {
+  box-shadow:
+    inset 0 0 0 1px var(--gray-a8),
+    0 1px 2px rgb(0 0 0 / 0.05);
 }
 .src-card:focus-visible {
   outline: 2px solid var(--k-focus);
@@ -542,7 +569,7 @@ html[data-mini] .main-help { display: none; }
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
 }
 .src-card-live::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -676,7 +703,7 @@ html[data-mini] .main-help { display: none; }
 }
 .src-empty:hover,
 .src-empty[data-native-hover],
-.src-empty[data-state="open"] {
+.src-empty[data-state='open'] {
   border-color: var(--k-accent-line);
   background: var(--k-accent-soft);
   box-shadow: none;
@@ -690,7 +717,9 @@ html[data-mini] .main-help { display: none; }
   border-radius: 999px;
   background: var(--k-hover);
   color: var(--k-text-2);
-  transition: background-color var(--k-fast), color var(--k-fast);
+  transition:
+    background-color var(--k-fast),
+    color var(--k-fast);
 }
 .src-empty-plus > svg {
   width: var(--k-icon);
@@ -698,7 +727,7 @@ html[data-mini] .main-help { display: none; }
 }
 .src-empty:hover .src-empty-plus,
 .src-empty[data-native-hover] .src-empty-plus,
-.src-empty[data-state="open"] .src-empty-plus {
+.src-empty[data-state='open'] .src-empty-plus {
   background: var(--k-accent);
   color: var(--k-accent-contrast);
 }
@@ -735,10 +764,7 @@ html[data-mini] .main-help { display: none; }
   position: relative;
   display: block;
   flex: none;
-  width: min(
-    calc(100cqw - 2 * var(--src-pad)),
-    calc((100cqh - 2 * var(--src-pad)) * var(--src-ratio))
-  );
+  width: min(calc(100cqw - 2 * var(--src-pad)), calc((100cqh - 2 * var(--src-pad)) * var(--src-ratio)));
   aspect-ratio: var(--src-ratio);
   overflow: hidden;
   border-radius: var(--k-radius-sm);
@@ -798,7 +824,9 @@ html[data-mini] .main-help { display: none; }
   opacity: 0.6;
 }
 @keyframes src-shimmer {
-  to { background-position: -200% 0; }
+  to {
+    background-position: -200% 0;
+  }
 }
 /* "Auto" while Auto OCR is watching the source. */
 .src-live {
@@ -832,7 +860,7 @@ html[data-mini] .main-help { display: none; }
    OCR was on (about 45 % of a CPU core at 165 Hz on a GTX 1080 machine), with the badge's
    backdrop blur redone each time. */
 .src-live-dot::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   border-radius: 999px;
@@ -844,8 +872,15 @@ html[data-mini] .main-help { display: none; }
   animation: src-pulse 2s steps(12, jump-none) infinite;
 }
 @keyframes src-pulse {
-  0% { transform: scale(1); opacity: 1; }
-  70%, 100% { transform: scale(2.6); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
 }
 /* Gaming Mode, while the game is in front (useBehindGame.ts): nobody sees this window. */
 [data-behind-game] *,
@@ -855,8 +890,12 @@ html[data-mini] .main-help { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .src-live-dot::after,
-  .src-shot-wait { animation: none; }
-  .src-frame { transition: none; }
+  .src-shot-wait {
+    animation: none;
+  }
+  .src-frame {
+    transition: none;
+  }
 }
 
 /* The card's caption: icon, name, what it is, and the change affordance. */
@@ -1144,8 +1183,8 @@ html[data-mini] .main-help { display: none; }
   opacity: 0.6;
 }
 .src-row-layered > .src-info:hover,
-.src-row-layered > .src-info[data-state="delayed-open"],
-.src-row-layered > .src-info[data-state="instant-open"] {
+.src-row-layered > .src-info[data-state='delayed-open'],
+.src-row-layered > .src-info[data-state='instant-open'] {
   opacity: 1;
   color: var(--k-text-2);
 }
@@ -1167,11 +1206,11 @@ html[data-mini] .main-help { display: none; }
   position: relative;
   opacity: 1;
 }
-.src-row-layered > .src-info[data-caution]:not(:hover, [data-state$="-open"]) > svg {
+.src-row-layered > .src-info[data-caution]:not(:hover, [data-state$='-open']) > svg {
   opacity: 0.6;
 }
 .src-info[data-caution]::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 1px;
   right: 1px;
@@ -1193,11 +1232,15 @@ html[data-mini] .main-help { display: none; }
   padding: var(--k-space-2) var(--k-space-2-5);
   border-radius: var(--k-radius-lg);
   background: var(--k-raised);
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a5);
   color: var(--k-text);
 }
 .dark .k-tooltip.src-info-tip {
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a6);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a6);
 }
 .src-info-tip p {
   margin: 0;
@@ -1229,7 +1272,7 @@ html[data-mini] .main-help { display: none; }
   user-select: none;
 }
 .src-type[data-highlighted],
-.src-type[data-state="open"] {
+.src-type[data-state='open'] {
   background: var(--k-hover);
 }
 /* As tall as the two lines beside it: its top on the name's, its bottom on the description's. */
@@ -1312,7 +1355,7 @@ html[data-mini] .main-help { display: none; }
 }
 .src-action:hover,
 .src-action[data-native-hover],
-.src-action[data-state="open"] {
+.src-action[data-state='open'] {
   background: var(--k-press);
 }
 .src-action:focus-visible {
@@ -1403,7 +1446,9 @@ html[data-mini] .main-help { display: none; }
   max-height: calc(100% - 8px);
   margin: auto;
   border-radius: 2px;
-  box-shadow: 0 0 0 1px var(--gray-a5), 0 2px 6px -1px rgb(0 0 0 / 0.3);
+  box-shadow:
+    0 0 0 1px var(--gray-a5),
+    0 2px 6px -1px rgb(0 0 0 / 0.3);
 }
 .sg-tile[data-current] .sg-thumb {
   box-shadow: inset 0 0 0 2px var(--k-accent);
@@ -1517,17 +1562,27 @@ html[data-mini] .main-help { display: none; }
 /* A narrow sidebar keeps the labels and lets the shortcut and region size go. */
 @container (max-width: 11.5rem) {
   .src-scan-key,
-  .src-row-meta { display: none; }
+  .src-row-meta {
+    display: none;
+  }
 }
 /* Too narrow for the switches' names with their info marks: the names win; the cog stays. */
 @container (max-width: 14rem) {
-  .src-row-layered > .src-info { display: none; }
+  .src-row-layered > .src-info {
+    display: none;
+  }
 }
 /* Too narrow for both full labels with their icons: the icons stay, the labels shorten. */
-.src-action-short { display: none; }
+.src-action-short {
+  display: none;
+}
 @container (max-width: 15rem) {
-  .src-action-long { display: none; }
-  .src-action-short { display: inline; }
+  .src-action-long {
+    display: none;
+  }
+  .src-action-short {
+    display: inline;
+  }
 }
 
 /*
@@ -1689,7 +1744,9 @@ html[data-mini] .main-help { display: none; }
   border-radius: var(--k-radius-lg);
   background: var(--k-sunken);
   color: var(--k-text-3);
-  transition: background-color var(--k-fast) var(--k-ease-out), color var(--k-fast) var(--k-ease-out);
+  transition:
+    background-color var(--k-fast) var(--k-ease-out),
+    color var(--k-fast) var(--k-ease-out);
 }
 .gm-step[data-active] {
   background: var(--k-raised);
@@ -1748,7 +1805,9 @@ html[data-mini] .main-help { display: none; }
   vertical-align: 0.0625em;
   color: #fff;
   background: #23262e;
-  box-shadow: inset 0 -1.5px 0 rgb(255 255 255 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.25);
+  box-shadow:
+    inset 0 -1.5px 0 rgb(255 255 255 / 0.14),
+    0 0 0 1px rgb(0 0 0 / 0.25);
 }
 
 /* A lazy view opened before its (preloaded) chunk arrived: a spinner, only once that's noticeable. */

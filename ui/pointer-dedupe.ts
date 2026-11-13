@@ -114,11 +114,21 @@ export function createPointerFilter({ active = true }: { active?: boolean } = {}
         if (event.type.startsWith('pointer')) touchPointer = seen
         return 'pass'
       }
-      if (isMouse(event) && touchPointer && within(touchPointer, seen, GHOST_MS) && near(touchPointer, seen, GHOST_PX)) {
+      if (
+        isMouse(event) &&
+        touchPointer &&
+        within(touchPointer, seen, GHOST_MS) &&
+        near(touchPointer, seen, GHOST_PX)
+      ) {
         return 'ghost'
       }
       if (event.type === 'click') {
-        const repeat = click && touch && within(touch, seen, GHOST_MS) && within(click, seen, CLICK_MS) && near(click, seen, GHOST_PX)
+        const repeat =
+          click &&
+          touch &&
+          within(touch, seen, GHOST_MS) &&
+          within(click, seen, CLICK_MS) &&
+          near(click, seen, GHOST_PX)
         if (repeat) return 'duplicate'
         click = seen
       }
@@ -147,7 +157,10 @@ export interface InstallOptions {
 }
 
 /** Filters `target`'s input in the capture phase; returns the uninstall. */
-export function installPointerFilter(target: Target, { active, debug = false, report }: InstallOptions = {}): () => void {
+export function installPointerFilter(
+  target: Target,
+  { active, debug = false, report }: InstallOptions = {}
+): () => void {
   const filter = createPointerFilter({ active })
   const listener = (event: Event): void => {
     // Events the app dispatches itself (the overlay's scan pointer) are never doubled input.

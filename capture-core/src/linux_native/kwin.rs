@@ -37,8 +37,7 @@ use wayland_protocols_plasma::plasma_virtual_desktop::client::{
     org_kde_plasma_virtual_desktop as vdesk, org_kde_plasma_virtual_desktop_management as vdesk_mgmt,
 };
 use wayland_protocols_plasma::plasma_window_management::client::{
-    org_kde_plasma_stacking_order as stacking, org_kde_plasma_window as pwin,
-    org_kde_plasma_window_management as pwm,
+    org_kde_plasma_stacking_order as stacking, org_kde_plasma_window as pwin, org_kde_plasma_window_management as pwm,
 };
 use wayland_protocols_plasma::primary_output::v1::client::kde_primary_output_v1 as primary;
 use wayland_protocols_plasma::screencast::v1::client::{
@@ -194,8 +193,7 @@ fn inventory_of(model: &Model) -> Inventory {
         }
     }
     // Front to back: the stacking order reversed, then anything it does not list yet.
-    let rank: HashMap<&str, usize> =
-        model.stacking.iter().rev().enumerate().map(|(i, u)| (u.as_str(), i)).collect();
+    let rank: HashMap<&str, usize> = model.stacking.iter().rev().enumerate().map(|(i, u)| (u.as_str(), i)).collect();
     let mut windows: Vec<&Win> = model.windows.values().filter(|w| w.ready).collect();
     windows.sort_by_key(|w| (rank.get(w.uuid.as_str()).copied().unwrap_or(usize::MAX), w.uuid.clone()));
     let windows = windows
@@ -282,7 +280,14 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for State {
 }
 
 impl Dispatch<wl_output::WlOutput, u32> for State {
-    fn event(state: &mut Self, proxy: &wl_output::WlOutput, event: wl_output::Event, name: &u32, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        proxy: &wl_output::WlOutput,
+        event: wl_output::Event,
+        name: &u32,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let mut model = state.model.lock().unwrap();
         let Some(out) = model.outputs.get_mut(name) else { return };
         match event {
@@ -315,14 +320,29 @@ impl Dispatch<wl_output::WlOutput, u32> for State {
 }
 
 impl Dispatch<zxdg_output_manager_v1::ZxdgOutputManagerV1, ()> for State {
-    fn event(_: &mut Self, _: &zxdg_output_manager_v1::ZxdgOutputManagerV1, _: zxdg_output_manager_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &zxdg_output_manager_v1::ZxdgOutputManagerV1,
+        _: zxdg_output_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 /// User data of an xdg output: its wl_output's global name and proxy.
 type XdgOf = (u32, wl_output::WlOutput);
 
 impl Dispatch<zxdg_output_v1::ZxdgOutputV1, XdgOf> for State {
-    fn event(state: &mut Self, _: &zxdg_output_v1::ZxdgOutputV1, event: zxdg_output_v1::Event, (name, output): &XdgOf, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &zxdg_output_v1::ZxdgOutputV1,
+        event: zxdg_output_v1::Event,
+        (name, output): &XdgOf,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let mut model = state.model.lock().unwrap();
         let Some(out) = model.outputs.get_mut(name) else { return };
         match event {
@@ -338,7 +358,14 @@ impl Dispatch<zxdg_output_v1::ZxdgOutputV1, XdgOf> for State {
 }
 
 impl Dispatch<primary::KdePrimaryOutputV1, ()> for State {
-    fn event(state: &mut Self, _: &primary::KdePrimaryOutputV1, event: primary::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &primary::KdePrimaryOutputV1,
+        event: primary::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let primary::Event::PrimaryOutput { output_name } = event {
             state.model.lock().unwrap().primary = Some(output_name);
         }
@@ -346,7 +373,14 @@ impl Dispatch<primary::KdePrimaryOutputV1, ()> for State {
 }
 
 impl Dispatch<pwm::OrgKdePlasmaWindowManagement, ()> for State {
-    fn event(state: &mut Self, pwm: &pwm::OrgKdePlasmaWindowManagement, event: pwm::Event, _: &(), _: &Connection, qh: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        pwm: &pwm::OrgKdePlasmaWindowManagement,
+        event: pwm::Event,
+        _: &(),
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
         match event {
             pwm::Event::WindowWithUuid { uuid, .. } => {
                 if let std::collections::hash_map::Entry::Vacant(slot) =
@@ -367,7 +401,14 @@ impl Dispatch<pwm::OrgKdePlasmaWindowManagement, ()> for State {
 }
 
 impl Dispatch<stacking::OrgKdePlasmaStackingOrder, ()> for State {
-    fn event(state: &mut Self, _: &stacking::OrgKdePlasmaStackingOrder, event: stacking::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &stacking::OrgKdePlasmaStackingOrder,
+        event: stacking::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         match event {
             stacking::Event::Window { uuid } => state.stacking.push(uuid),
             stacking::Event::Done => {
@@ -383,7 +424,14 @@ fn rect(x: i32, y: i32, width: u32, height: u32) -> Rect {
 }
 
 impl Dispatch<pwin::OrgKdePlasmaWindow, String> for State {
-    fn event(state: &mut Self, proxy: &pwin::OrgKdePlasmaWindow, event: pwin::Event, uuid: &String, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        proxy: &pwin::OrgKdePlasmaWindow,
+        event: pwin::Event,
+        uuid: &String,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let mut model = state.model.lock().unwrap();
         if let pwin::Event::Unmapped = event {
             model.windows.remove(uuid);
@@ -414,7 +462,14 @@ impl Dispatch<pwin::OrgKdePlasmaWindow, String> for State {
 }
 
 impl Dispatch<vdesk_mgmt::OrgKdePlasmaVirtualDesktopManagement, ()> for State {
-    fn event(state: &mut Self, mgmt: &vdesk_mgmt::OrgKdePlasmaVirtualDesktopManagement, event: vdesk_mgmt::Event, _: &(), _: &Connection, qh: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        mgmt: &vdesk_mgmt::OrgKdePlasmaVirtualDesktopManagement,
+        event: vdesk_mgmt::Event,
+        _: &(),
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
         match event {
             vdesk_mgmt::Event::DesktopCreated { desktop_id, .. } => {
                 if let std::collections::hash_map::Entry::Vacant(slot) = state.desktops.entry(desktop_id.clone()) {
@@ -432,7 +487,14 @@ impl Dispatch<vdesk_mgmt::OrgKdePlasmaVirtualDesktopManagement, ()> for State {
 }
 
 impl Dispatch<vdesk::OrgKdePlasmaVirtualDesktop, String> for State {
-    fn event(state: &mut Self, _: &vdesk::OrgKdePlasmaVirtualDesktop, event: vdesk::Event, id: &String, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &vdesk::OrgKdePlasmaVirtualDesktop,
+        event: vdesk::Event,
+        id: &String,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let mut model = state.model.lock().unwrap();
         match event {
             vdesk::Event::Activated => {
@@ -447,7 +509,15 @@ impl Dispatch<vdesk::OrgKdePlasmaVirtualDesktop, String> for State {
 }
 
 impl Dispatch<screencast::ZkdeScreencastUnstableV1, ()> for State {
-    fn event(_: &mut Self, _: &screencast::ZkdeScreencastUnstableV1, _: screencast::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &screencast::ZkdeScreencastUnstableV1,
+        _: screencast::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 /// One stream's answer from KWin.
@@ -459,7 +529,14 @@ struct StreamState {
 }
 
 impl Dispatch<stream::ZkdeScreencastStreamUnstableV1, Arc<StreamState>> for State {
-    fn event(_: &mut Self, _: &stream::ZkdeScreencastStreamUnstableV1, event: stream::Event, s: &Arc<StreamState>, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        _: &mut Self,
+        _: &stream::ZkdeScreencastStreamUnstableV1,
+        event: stream::Event,
+        s: &Arc<StreamState>,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let answer = match event {
             stream::Event::Created { node } => Ok(node),
             stream::Event::Failed { error } => Err(error),
@@ -558,9 +635,7 @@ fn probe_once() -> std::result::Result<Box<dyn Driver>, String> {
             })
             .map_err(|e| e.to_string())?;
     }
-    let setup = rx
-        .recv_timeout(CONNECT_WAIT)
-        .map_err(|_| "KWin did not answer in time".to_string())??;
+    let setup = rx.recv_timeout(CONNECT_WAIT).map_err(|_| "KWin did not answer in time".to_string())??;
     Ok(Box::new(Kwin { conn: setup.conn, qh: setup.qh, model, screencast: setup.screencast, outputs, windows }))
 }
 
@@ -570,27 +645,24 @@ fn connect(
     windows: Proxies<pwin::OrgKdePlasmaWindow>,
 ) -> std::result::Result<(EventQueue<State>, State, Setup), String> {
     let conn = Connection::connect_to_env().map_err(|e| format!("no Wayland compositor: {e}"))?;
-    let (globals, mut queue) =
-        registry_queue_init::<State>(&conn).map_err(|e| format!("Wayland registry: {e}"))?;
+    let (globals, mut queue) = registry_queue_init::<State>(&conn).map_err(|e| format!("Wayland registry: {e}"))?;
     let qh = queue.handle();
     let has = |name: &str| globals.contents().with_list(|l| l.iter().any(|g| g.interface == name));
-    let missing: Vec<&str> = ["zkde_screencast_unstable_v1", "org_kde_plasma_window_management"]
-        .into_iter()
-        .filter(|i| !has(i))
-        .collect();
+    let missing: Vec<&str> =
+        ["zkde_screencast_unstable_v1", "org_kde_plasma_window_management"].into_iter().filter(|i| !has(i)).collect();
     if !missing.is_empty() {
         let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
-        return Err(format!(
-            "KWin does not offer {} to this process ({exe}). {AUTH_HINT}",
-            missing.join(" or ")
-        ));
+        return Err(format!("KWin does not offer {} to this process ({exe}). {AUTH_HINT}", missing.join(" or ")));
     }
     let screencast: screencast::ZkdeScreencastUnstableV1 =
         globals.bind(&qh, 1..=4, ()).map_err(|e| format!("zkde_screencast_unstable_v1: {e}"))?;
     let pwm: pwm::OrgKdePlasmaWindowManagement =
         globals.bind(&qh, 1..=18, ()).map_err(|e| format!("org_kde_plasma_window_management: {e}"))?;
     if pwm.version() < 13 {
-        return Err(format!("org_kde_plasma_window_management version {} is too old (13+: Plasma 5.20)", pwm.version()));
+        return Err(format!(
+            "org_kde_plasma_window_management version {} is too old (13+: Plasma 5.20)",
+            pwm.version()
+        ));
     }
     let mut state = State {
         model,
@@ -604,9 +676,9 @@ fn connect(
     };
     let _primary: Option<primary::KdePrimaryOutputV1> = globals.bind(&qh, 1..=2, ()).ok();
     let registry = globals.registry().clone();
-    let outputs: Vec<(u32, u32)> = globals.contents().with_list(|l| {
-        l.iter().filter(|g| g.interface == "wl_output").map(|g| (g.name, g.version)).collect()
-    });
+    let outputs: Vec<(u32, u32)> = globals
+        .contents()
+        .with_list(|l| l.iter().filter(|g| g.interface == "wl_output").map(|g| (g.name, g.version)).collect());
     for (name, version) in outputs {
         state.bind_output(&registry, name, version, &qh);
     }

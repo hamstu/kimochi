@@ -156,13 +156,13 @@ function HelperStep({
       {!host.installed ? (
         <>
           <p className="yomitan-setup-text">
-            Press <strong>Install helper</strong> to add the small program your browser&apos;s
-            Yomitan uses to talk to Kimochi.
+            Press <strong>Install helper</strong> to add the small program your browser&apos;s Yomitan uses to talk to
+            Kimochi.
           </p>
           {broken.length > 0 && (
             <Callout tone="warn">
-              A helper is registered for {listNames(broken.map((b) => b.browserName))}, but it cannot
-              start ({broken[0].problem ?? 'its program is missing'}). Installing replaces it.
+              A helper is registered for {listNames(broken.map((b) => b.browserName))}, but it cannot start (
+              {broken[0].problem ?? 'its program is missing'}). Installing replaces it.
             </Callout>
           )}
         </>
@@ -225,13 +225,11 @@ function EnableStep({ host, api }: { host: HostStatus | null; api: ApiStatus | n
           Turn on <strong>Advanced</strong>, the switch at the bottom left.
         </li>
         <li>
-          Under <strong>General</strong>, turn on <strong>Enable Yomitan API</strong>, and allow the
-          permission your browser asks for.
+          Under <strong>General</strong>, turn on <strong>Enable Yomitan API</strong>, and allow the permission your
+          browser asks for.
         </li>
       </ol>
-      <p className="yomitan-setup-aside">
-        Already on? Quit and reopen your browser.
-      </p>
+      <p className="yomitan-setup-aside">Already on? Quit and reopen your browser.</p>
       <ConnectionLine host={host} api={api} />
     </div>
   )
@@ -251,12 +249,11 @@ function ConnectStep({ url, host, api }: { url: string; host: HostStatus | null;
         <ul className="yomitan-setup-list">
           <li>Open your browser; it starts the helper.</li>
           <li>
-            After installing the helper, quit the browser completely and open it again (closing the
-            window is not always enough).
+            After installing the helper, quit the browser completely and open it again (closing the window is not always
+            enough).
           </li>
           <li>
-            Check that <strong>Enable Yomitan API</strong> is on in Yomitan&apos;s settings
-            (Advanced, then General).
+            Check that <strong>Enable Yomitan API</strong> is on in Yomitan&apos;s settings (Advanced, then General).
           </li>
           <li>Some browsers put idle extensions to sleep: open any page and this connects again.</li>
         </ul>

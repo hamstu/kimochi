@@ -127,7 +127,8 @@ pub fn hyprland_facts(clients: &[u8], monitors: &[u8], active: &[u8]) -> Option<
     let clients: Vec<HyprClient> = serde_json::from_slice(clients).ok()?;
     let monitors: Vec<HyprMonitor> = serde_json::from_slice(monitors).unwrap_or_default();
     // `{}` when nothing is focused.
-    let active = serde_json::from_slice::<HyprActive>(active).ok().and_then(|a| a.address).and_then(|a| parse_address(&a));
+    let active =
+        serde_json::from_slice::<HyprActive>(active).ok().and_then(|a| a.address).and_then(|a| parse_address(&a));
     let mut out = HashMap::new();
     for c in &clients {
         let Some(address) = parse_address(&c.address) else { continue };

@@ -106,7 +106,8 @@ test('a release plan rewrites all four files and takes its notes from the change
 
 test('a release plan refuses a version that is not newer, drifted files and an empty changelog', () => {
   const files = { tauriConf: conf, cargoToml: toml, cargoLock: lock, changelog }
-  const plan = (version, overrides = {}) => planRelease({ version, date: '2026-10-13', files: { ...files, ...overrides } })
+  const plan = (version, overrides = {}) =>
+    planRelease({ version, date: '2026-10-13', files: { ...files, ...overrides } })
   assert.throws(() => plan('0.1.0'), /0.1.0 is not greater than the current version 0.1.0/)
   assert.throws(() => plan('0.0.9'), /not greater/)
   assert.throws(() => plan('v0.2.0'), /without the "v"/)
@@ -145,11 +146,17 @@ test('the checks pass on a clean main that matches origin, with the tag free', (
 
 test('each check refuses with what to do', () => {
   const check = (overrides, options = {}) => preflight({ tag: 'v0.2.0', git: fakeGit(overrides).git, ...options })
-  assert.throws(() => check({ 'symbolic-ref --short -q HEAD': { stdout: 'feature\n' } }), /cut from main; this checkout is on feature/)
+  assert.throws(
+    () => check({ 'symbolic-ref --short -q HEAD': { stdout: 'feature\n' } }),
+    /cut from main; this checkout is on feature/
+  )
   assert.throws(() => check({ 'symbolic-ref --short -q HEAD': { status: 1, stdout: '' } }), /detached HEAD/)
   assert.throws(() => check({ 'status --porcelain': { stdout: ' M README.md\n' } }), /not clean[\s\S]*README.md/)
   assert.doesNotThrow(() => check({ 'status --porcelain': { stdout: ' M README.md\n' } }, { skipClean: true }))
-  assert.throws(() => check({ 'fetch --quiet origin main': { status: 128, stderr: 'no network' } }), /fetch .* failed: no network/)
+  assert.throws(
+    () => check({ 'fetch --quiet origin main': { status: 128, stderr: 'no network' } }),
+    /fetch .* failed: no network/
+  )
   assert.throws(
     () =>
       check({
@@ -158,7 +165,10 @@ test('each check refuses with what to do', () => {
       }),
     /2 commit\(s\) ahead of and 1 behind origin\/main/
   )
-  assert.throws(() => check({ 'rev-parse -q --verify refs/tags/v0.2.0': { stdout: 'abc\n' } }), /v0.2.0 already exists here/)
+  assert.throws(
+    () => check({ 'rev-parse -q --verify refs/tags/v0.2.0': { stdout: 'abc\n' } }),
+    /v0.2.0 already exists here/
+  )
   assert.throws(
     () => check({ 'ls-remote --tags origin refs/tags/v0.2.0': { stdout: 'abc\trefs/tags/v0.2.0\n' } }),
     /already exists on origin/
@@ -185,7 +195,7 @@ test('CI takes release notes from the changelog, checks the tag first and publis
   assert.equal(pkg.scripts.release, 'node scripts/cut-release.mjs')
   assert.equal(pkg.scripts['release:bundle'], 'node scripts/run.mjs release')
   assert.match(ci, /run: npm run \$\{\{ needs\.plan\.outputs\.script \}\}/, 'release mode bundles with release:bundle')
-  assert.match(ci, /const script = mode === 'release' \? 'release:bundle' : 'bundle'/)
+  assert.match(ci, /core\.setOutput\('script', profile === 'release' \? 'release:bundle' : 'bundle'\)/)
   assert.match(ci, /\[\[ "\$tag" != "v\$version" \]\]/, 'the plan job refuses a tag that does not match the version')
   assert.match(ci, /node scripts\/changelog\.mjs section "\$version" > \.\.\/release-notes\.md/)
   assert.match(ci, /--notes-file \.\.\/release-notes\.md/)
@@ -195,10 +205,26 @@ test('CI takes release notes from the changelog, checks the tag first and publis
   // Only a tag builds bundles (there is no nightly), and main's run of the release commit, which
   // arrives in the same push as its tag, skips rather than repeating the tag's checks.
   const bundle = ci.slice(ci.indexOf('\n  bundle:'), ci.indexOf('\n  manifest:'))
-  assert.match(bundle, /needs\.plan\.outputs\.mode == 'release' && needs\.checks\.result == 'success'/)
+  assert.match(
+    bundle,
+    /\(needs\.plan\.outputs\.mode == 'release' \|\| needs\.plan\.outputs\.mode == 'trial'\) && needs\.lint\.result == 'success' && needs\.checks\.result == 'success'/
+  )
   assert.doesNotMatch(ci, /tag=nightly|--prerelease/)
   assert.match(ci, /git ls-remote --tags origin 'refs\/tags\/v\*'/)
-  assert.match(ci, /\n {4}if: needs\.plan\.outputs\.mode != 'skip'\n/, 'checks skip a release commit on main')
+  assert.match(ci, /\n {4}if: needs\.plan\.outputs\.mode != 'skip'\n/, 'lint skips a release commit on main')
+  assert.match(
+    ci,
+    /\n {4}if: needs\.plan\.outputs\.mode != 'skip' && needs\.plan\.outputs\.app == 'true'\n/,
+    'checks skip a release commit on main'
+  )
+  // Everything runs on GitHub's runners, and one always-reported status sums the run up for the
+  // `main` ruleset (a skipped job must not leave a required check pending).
+  assert.doesNotMatch(ci, /self-hosted/)
+  // A trial builds release bundles but never uploads them to a release.
+  assert.match(bundle, /- name: Upload to release\n {8}if: needs\.plan\.outputs\.mode == 'release'\n/)
+  const gate = ci.slice(ci.indexOf('\n  ci:'), ci.indexOf('\n  bundle:'))
+  assert.match(gate, /name: CI\n/)
+  assert.match(gate, /needs: \[plan, lint, checks\]\n {4}if: always\(\)\n/)
   assert.ok(
     manifest.indexOf('gh release edit "$RELEASE" --draft=false --latest') > manifest.indexOf('gh release delete-asset'),
     'publishing is the last step, after latest.json is uploaded and the sidecars removed'

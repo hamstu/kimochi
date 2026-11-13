@@ -177,15 +177,13 @@ export default function PanelShell({
     const onMouseDown = (event: MouseEvent): void => {
       if (event.button !== 0) return
       const target = event.target as HTMLElement
-      if (target.closest('button, [role="button"], [role="radio"], a, input, select, textarea'))
-        return
+      if (target.closest('button, [role="button"], [role="radio"], a, input, select, textarea')) return
       run('drag')
     }
     // A double click on the title bar maximizes or restores, as on every desktop.
     const onDoubleClick = (event: MouseEvent): void => {
       const target = event.target as HTMLElement
-      if (!canMaximize || target.closest('button, [role="button"], [role="radio"], a, input, select, textarea'))
-        return
+      if (!canMaximize || target.closest('button, [role="button"], [role="radio"], a, input, select, textarea')) return
       run('maximize')
     }
     header.addEventListener('mousedown', onMouseDown)
@@ -247,9 +245,7 @@ export default function PanelShell({
             aria-label={label === 'log' ? 'Quit Kimochi' : 'Close window'}
             title={label === 'log' ? 'Quit Kimochi' : 'Close'}
             onClick={() =>
-              label === 'log'
-                ? void quitApp().catch((caught) => setError(nativeError(caught).message))
-                : run('hide')
+              label === 'log' ? void quitApp().catch((caught) => setError(nativeError(caught).message)) : run('hide')
             }
           >
             <X />

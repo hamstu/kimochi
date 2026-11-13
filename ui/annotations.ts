@@ -139,26 +139,22 @@ export const FILTER_LEVELS = [
   {
     threshold: 0.6,
     label: 'Light',
-    description:
-      'Removes furigana and other text well under the main size. Most small print stays.'
+    description: 'Removes furigana and other text well under the main size. Most small print stays.'
   },
   {
     threshold: 0.75,
     label: 'Balanced',
-    description:
-      'Removes furigana and small labels under three-quarters of the main text size. Right for most text.'
+    description: 'Removes furigana and small labels under three-quarters of the main text size. Right for most text.'
   },
   {
     threshold: 0.85,
     label: 'Strong',
-    description:
-      'Also removes text a little smaller than the main text, such as speaker names and small menu text.'
+    description: 'Also removes text a little smaller than the main text, such as speaker names and small menu text.'
   },
   {
     threshold: 0.95,
     label: 'Strict',
-    description:
-      'Keeps only text close to the size of the main text. Smaller lines you want to read can go too.'
+    description: 'Keeps only text close to the size of the main text. Smaller lines you want to read can go too.'
   }
 ] as const
 
@@ -166,8 +162,7 @@ export const FILTER_LEVELS = [
 export function filterLevelOf(threshold: number): number {
   let best = 0
   FILTER_LEVELS.forEach((level, index) => {
-    if (Math.abs(level.threshold - threshold) < Math.abs(FILTER_LEVELS[best].threshold - threshold))
-      best = index
+    if (Math.abs(level.threshold - threshold) < Math.abs(FILTER_LEVELS[best].threshold - threshold)) best = index
   })
   return best
 }
@@ -180,16 +175,16 @@ export function filterLevelOf(threshold: number): number {
  * long Japanese words. That correction lives in the Electron working tree and is
  * carried over here deliberately.
  */
-export function filterSmallTextAnnotations(
-  annotations: Annotation[],
-  threshold: number
-): Annotation[] {
+export function filterSmallTextAnnotations(annotations: Annotation[], threshold: number): Annotation[] {
   if (annotations.length <= 1) return annotations
 
   const boxed = annotations.map((annotation) => ({ annotation, box: getBoundingBox(annotation) }))
-  const medianHeight = median(boxed.map(({ annotation, box }) => annotation.isVertical ? box.width : box.height))
+  const medianHeight = median(boxed.map(({ annotation, box }) => (annotation.isVertical ? box.width : box.height)))
   const medianCharacterWidth = median(
-    boxed.map(({ annotation, box }) => (annotation.isVertical ? box.height : box.width) / Math.max(1, [...annotation.description].length))
+    boxed.map(
+      ({ annotation, box }) =>
+        (annotation.isVertical ? box.height : box.width) / Math.max(1, [...annotation.description].length)
+    )
   )
 
   const minHeight = medianHeight * threshold
@@ -229,14 +224,12 @@ export function buildFilteredText(
   if (filtered.length === 0) return ''
 
   const boxed = filtered.map((annotation) => ({ annotation, box: getBoundingBox(annotation) }))
-  const medianHeight = median(boxed.map(({ annotation, box }) => annotation.isVertical ? box.width : box.height))
+  const medianHeight = median(boxed.map(({ annotation, box }) => (annotation.isVertical ? box.width : box.height)))
   const lineTolerance = medianHeight * 0.5
   const spaceThreshold = medianHeight * 1.5
 
   const sorted = [...boxed].sort((a, b) =>
-    Math.abs(a.box.minY - b.box.minY) <= lineTolerance
-      ? a.box.minX - b.box.minX
-      : a.box.minY - b.box.minY
+    Math.abs(a.box.minY - b.box.minY) <= lineTolerance ? a.box.minX - b.box.minX : a.box.minY - b.box.minY
   )
 
   // Words on one line are apart however close: a language that spaces its words gets a space
@@ -282,10 +275,10 @@ function passagesOf(lines: Annotation[], vertical: boolean): Annotation[][] {
   if (lines.length < 2) return [lines]
   const boxes = lines.map(getBoundingBox)
   // Along the gutter-split axis (x for horizontal text, y for vertical), and across it.
-  const along = (box: BoundingBox): [number, number] => vertical ? [box.minY, box.maxY] : [box.minX, box.maxX]
-  const across = (box: BoundingBox): number => vertical ? box.minX : box.minY
+  const along = (box: BoundingBox): [number, number] => (vertical ? [box.minY, box.maxY] : [box.minX, box.maxX])
+  const across = (box: BoundingBox): number => (vertical ? box.minX : box.minY)
   // The typical line's thickness: its height, or its width for vertical text.
-  const lineThickness = median(boxes.map((box) => vertical ? box.width : box.height))
+  const lineThickness = median(boxes.map((box) => (vertical ? box.width : box.height)))
   const spans: Array<[number, number]> = []
   for (const [start, end] of boxes.map(along).sort((a, b) => a[0] - b[0])) {
     const last = spans[spans.length - 1]
@@ -293,10 +286,12 @@ function passagesOf(lines: Annotation[], vertical: boolean): Annotation[][] {
     else spans.push([start, end])
   }
   if (spans.length < 2 || spans.some(([start, end]) => end - start < lineThickness * 3)) return [lines]
-  const passages = spans.map(([start, end]) => lines.filter((_, i) => {
-    const [from, to] = along(boxes[i])
-    return from >= start && to <= end
-  }))
+  const passages = spans.map(([start, end]) =>
+    lines.filter((_, i) => {
+      const [from, to] = along(boxes[i])
+      return from >= start && to <= end
+    })
+  )
   const multiline = passages.some((passage) => {
     const offsets = passage.map((a) => across(getBoundingBox(a)))
     return Math.max(...offsets) - Math.min(...offsets) > lineThickness * 0.5
@@ -332,10 +327,14 @@ export function groupTextAnnotations(
   // here as blocks, from normalizeOcrResult), and they cluster by proximity like any engine's lines.
   for (let i = 0; i < boxed.length; i++) {
     for (let j = i + 1; j < boxed.length; j++) {
-      const a=boxed[i].annotation, b=boxed[j].annotation
-      if (a.groupId && a.groupId===b.groupId) { union(i,j); continue }
+      const a = boxed[i].annotation,
+        b = boxed[j].annotation
+      if (a.groupId && a.groupId === b.groupId) {
+        union(i, j)
+        continue
+      }
       if (a.bubble || b.bubble) continue
-      if (isVertical(a)!==isVertical(b)) continue
+      if (isVertical(a) !== isVertical(b)) continue
       if (areBoxesNearby(boxed[i].box, boxed[j].box, proximityThreshold)) union(i, j)
     }
   }
@@ -358,11 +357,14 @@ export function groupTextAnnotations(
     const height = maxY - minY
 
     // Reading order within the group: 5px tolerance decides "same line".
-    const vertical=isVertical(groupAnnotations[0])
+    const vertical = isVertical(groupAnnotations[0])
     const rowOrder = [...groupAnnotations].sort((a, b) => {
       const aBox = getBoundingBox(a)
       const bBox = getBoundingBox(b)
-      if (vertical) return Math.abs(aBox.centerX-bBox.centerX)<Math.min(aBox.width,bBox.width)*0.7 ? aBox.minY-bBox.minY : bBox.centerX-aBox.centerX
+      if (vertical)
+        return Math.abs(aBox.centerX - bBox.centerX) < Math.min(aBox.width, bBox.width) * 0.7
+          ? aBox.minY - bBox.minY
+          : bBox.centerX - aBox.centerX
       const yDiff = aBox.minY - bBox.minY
       return Math.abs(yDiff) > 5 ? yDiff : aBox.minX - bBox.minX
     })
@@ -373,13 +375,17 @@ export function groupTextAnnotations(
     let text = ''
     let lastCenterY = -1
     let lastMaxX = -1
-    let lastBox: BoundingBox | null=null
+    let lastBox: BoundingBox | null = null
     sortedAnnotations.forEach((annotation, index) => {
       const box = getBoundingBox(annotation)
       if (passageStarts.has(annotation)) {
         text += '\n'
         lastMaxX = -1
-      } else if (vertical && lastBox && Math.abs(lastBox.centerX-box.centerX)>Math.min(lastBox.width,box.width)*0.7) {
+      } else if (
+        vertical &&
+        lastBox &&
+        Math.abs(lastBox.centerX - box.centerX) > Math.min(lastBox.width, box.width) * 0.7
+      ) {
         text += '\n'
       } else if (!vertical && index > 0 && lastCenterY !== -1) {
         if (box.centerY - lastCenterY > box.height * 0.5) {
@@ -395,14 +401,14 @@ export function groupTextAnnotations(
         }
       }
       text += annotation.description
-      lastBox=box
+      lastBox = box
       lastCenterY = box.centerY
       lastMaxX = box.maxX
     })
 
     return {
       annotations: sortedAnnotations,
-      orientation: vertical?'vertical':'horizontal',
+      orientation: vertical ? 'vertical' : 'horizontal',
       boundingBox: {
         minX,
         minY,
@@ -434,7 +440,7 @@ export function visibleAnnotations(
 function sizedAnnotations(words: Annotation[], grouping: GroupingSettings): Annotation[] {
   // Small text is furigana only in a language that has it; elsewhere it is short words.
   if (!grouping.filterSmallText || words.length <= 1 || !languageOf(grouping.language).ruby) return words
-  if (words.some(a=>a.granularity==='block')) return words
+  if (words.some((a) => a.granularity === 'block')) return words
   return filterSmallTextAnnotations(words, grouping.filterSmallTextThreshold)
 }
 

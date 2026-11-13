@@ -56,7 +56,12 @@ const all = pages(dist)
 
 for (const file of all) {
   const html = readFileSync(file, 'utf8')
-  const page = '/' + path.relative(dist, file).replace(/index\.html$/, '').replace(/\.html$/, '')
+  const page =
+    '/' +
+    path
+      .relative(dist, file)
+      .replace(/index\.html$/, '')
+      .replace(/\.html$/, '')
   // A 404 page's canonical names a path that is, by design, not a page.
   const body = page === '/404' ? html.replace(/<link rel="canonical"[^>]*>/, '') : html
   const refs = [
@@ -72,17 +77,21 @@ for (const file of all) {
       continue
     }
     if (ref.startsWith('#')) {
-      if (ref.length > 1 && !ids(file).has(decodeURIComponent(ref.slice(1)))) problems.push(`${page}: no #${ref.slice(1)} on this page`)
+      if (ref.length > 1 && !ids(file).has(decodeURIComponent(ref.slice(1))))
+        problems.push(`${page}: no #${ref.slice(1)} on this page`)
       continue
     }
-    const absolute = ref.startsWith('/') ? ref : path.posix.join(page.endsWith('/') ? page : path.posix.dirname(page), ref)
+    const absolute = ref.startsWith('/')
+      ? ref
+      : path.posix.join(page.endsWith('/') ? page : path.posix.dirname(page), ref)
     const target = resolve(absolute)
     if (!target) {
       problems.push(`${page}: broken link ${ref}`)
       continue
     }
     const hash = ref.split('#')[1]
-    if (hash && target.endsWith('.html') && !ids(target).has(decodeURIComponent(hash))) problems.push(`${page}: ${ref} has no #${hash}`)
+    if (hash && target.endsWith('.html') && !ids(target).has(decodeURIComponent(hash)))
+      problems.push(`${page}: ${ref} has no #${hash}`)
   }
 }
 
@@ -96,7 +105,9 @@ if (external) {
   }
 }
 
-console.log(`${all.length} pages, ${externals.size} external links${external ? ' (requested)' : ' (not requested; --external)'}`)
+console.log(
+  `${all.length} pages, ${externals.size} external links${external ? ' (requested)' : ' (not requested; --external)'}`
+)
 if (problems.length) {
   for (const p of problems) console.error(`✗ ${p}`)
   console.error(`${problems.length} broken link(s)`)

@@ -31,16 +31,10 @@ struct Registry {
     active: Vec<Shortcut>,
 }
 
-static REGISTRY: Mutex<Registry> = Mutex::new(Registry {
-    suspended: false,
-    generation: 0,
-    active: Vec::new(),
-});
+static REGISTRY: Mutex<Registry> = Mutex::new(Registry { suspended: false, generation: 0, active: Vec::new() });
 
 fn lock() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    REGISTRY.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Whether actions are suspended; the gamepad poller checks this before dispatching.
@@ -83,10 +77,13 @@ pub fn suspend(app: &tauri::AppHandle, settings: &Arc<Settings>, on: bool) -> Va
         let generation = registry.generation;
         drop(registry);
         if on {
-            let app = app.clone(); let settings = settings.clone();
+            let app = app.clone();
+            let settings = settings.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(SUSPEND_LIMIT);
-                if lock().generation == generation { resume(&app, &settings); }
+                if lock().generation == generation {
+                    resume(&app, &settings);
+                }
             });
         }
         return crate::platform::shortcuts::apply(app, settings, on);
@@ -158,9 +155,7 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
         let parsed = match Shortcut::from_str(accelerator) {
             Ok(parsed) => parsed,
             Err(e) => {
-                failed.push(
-                    json!({"name": name, "accelerator": accelerator, "error": e.to_string()}),
-                );
+                failed.push(json!({"name": name, "accelerator": accelerator, "error": e.to_string()}));
                 continue;
             }
         };
@@ -178,16 +173,17 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
                 registry.active.push(parsed);
                 registered.push(name)
             }
-            Err(e) => failed
-                .push(json!({"name": name, "accelerator": accelerator, "error": e.to_string()})),
+            Err(e) => failed.push(json!({"name": name, "accelerator": accelerator, "error": e.to_string()})),
         }
     }
     // Always, even with no button bound: an empty set removes a hook that is no longer needed.
     match crate::mouse_buttons::bind(app, &buttons) {
         Ok(()) => registered.extend(buttons.into_iter().map(|(name, _)| name)),
-        Err(error) => failed.extend(buttons.into_iter().map(|(name, button)| {
-            json!({"name": name, "accelerator": button.accelerator(), "error": error})
-        })),
+        Err(error) => failed.extend(
+            buttons
+                .into_iter()
+                .map(|(name, button)| json!({"name": name, "accelerator": button.accelerator(), "error": error})),
+        ),
     }
     json!({ "registered": registered, "failed": failed })
 }
@@ -251,9 +247,7 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
             })
             .map_err(|e| e.to_string());
     }
-    let _serial = KEYS_SYNC
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _serial = KEYS_SYNC.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let shortcuts = app.global_shortcut();
     for key in ["Escape", "Enter", "Space", "Up", "Down", "Left", "Right"] {
         let parsed = Shortcut::from_str(key).map_err(|e| e.to_string())?;
@@ -272,9 +266,7 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
             .on_shortcut(parsed, move |app, _shortcut, event| {
                 let pressed = event.state == ShortcutState::Pressed;
                 let kind = if pressed { "keydown" } else { "keyup" };
-                if REGION_KEYS.load(Ordering::SeqCst)
-                    && REGION_KEY_NAMES.contains(&key)
-                    && (pressed || key == "Space")
+                if REGION_KEYS.load(Ordering::SeqCst) && REGION_KEY_NAMES.contains(&key) && (pressed || key == "Space")
                 {
                     // The DOM's names: the editor replays these as keyboard events.
                     let name = if key == "Space" { " " } else { key };

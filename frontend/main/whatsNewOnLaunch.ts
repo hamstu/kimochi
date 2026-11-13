@@ -26,9 +26,7 @@ let decidedFor: string | null = null
  * `?whatsnew=1` (the browser preview) opens the dialog on load.
  */
 export function useWhatsNewOnLaunch(): [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(
-    () => new URLSearchParams(location.search).get('whatsnew') === '1'
-  )
+  const [open, setOpen] = useState(() => new URLSearchParams(location.search).get('whatsnew') === '1')
   const currentVersion = useUpdateStatus()?.currentVersion ?? null
   useEffect(() => {
     if (!currentVersion || decidedFor === currentVersion) return

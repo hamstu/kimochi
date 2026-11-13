@@ -25,7 +25,9 @@ export default function LanguageStep({ next }: { next: string }): JSX.Element {
         inline
         className={style.languagePicker}
         value={language.code}
-        onValueChange={(code) => void setLanguage(code).catch((error: unknown) => console.error('Saving the language failed:', error))}
+        onValueChange={(code) =>
+          void setLanguage(code).catch((error: unknown) => console.error('Saving the language failed:', error))
+        }
       />
       <ExperimentalLanguageNote language={language} />
       <StepActions>

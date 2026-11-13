@@ -7,13 +7,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Callout, SettingsRow, SettingsSection } from '@kit'
-import {
-  actionLabel,
-  checkedLine,
-  isPrimaryAction,
-  showsBar,
-  updateActions
-} from '@ui/update'
+import { actionLabel, checkedLine, isPrimaryAction, showsBar, updateActions } from '@ui/update'
 import { useUpdateControls } from '../../bridge/updates'
 import { UpdateBar } from '../../components/UpdateBar'
 import { WhatsNewDialog } from '../../main/WhatsNewDialog'

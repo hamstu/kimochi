@@ -76,7 +76,15 @@ pub(crate) fn voice_path(path: &str) -> bool {
 
 type Create = unsafe extern "system" fn(*const c_void, u32, u32, *const c_void, u32, u32, *mut c_void) -> *mut c_void;
 
-unsafe extern "system" fn create_w(name: *const u16, access: u32, share: u32, sa: *const c_void, disp: u32, flags: u32, tmpl: *mut c_void) -> *mut c_void {
+unsafe extern "system" fn create_w(
+    name: *const u16,
+    access: u32,
+    share: u32,
+    sa: *const c_void,
+    disp: u32,
+    flags: u32,
+    tmpl: *mut c_void,
+) -> *mut c_void {
     let o: Create = std::mem::transmute(O_CREATE_W.load(Ordering::SeqCst));
     let h = o(name as *const c_void, access, share, sa, disp, flags, tmpl);
     guard(|| unsafe {
@@ -88,7 +96,15 @@ unsafe extern "system" fn create_w(name: *const u16, access: u32, share: u32, sa
     h
 }
 
-unsafe extern "system" fn create_a(name: *const u8, access: u32, share: u32, sa: *const c_void, disp: u32, flags: u32, tmpl: *mut c_void) -> *mut c_void {
+unsafe extern "system" fn create_a(
+    name: *const u8,
+    access: u32,
+    share: u32,
+    sa: *const c_void,
+    disp: u32,
+    flags: u32,
+    tmpl: *mut c_void,
+) -> *mut c_void {
     let o: Create = std::mem::transmute(O_CREATE_A.load(Ordering::SeqCst));
     let h = o(name as *const c_void, access, share, sa, disp, flags, tmpl);
     guard(|| unsafe {
@@ -113,7 +129,8 @@ fn opened(h: *mut c_void, path: String) {
 }
 
 unsafe extern "system" fn read(h: *mut c_void, buf: *mut u8, n: u32, got: *mut u32, ov: *mut c_void) -> i32 {
-    let o: unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut u32, *mut c_void) -> i32 = std::mem::transmute(O_READ.load(Ordering::SeqCst));
+    let o: unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut u32, *mut c_void) -> i32 =
+        std::mem::transmute(O_READ.load(Ordering::SeqCst));
     let ok = o(h, buf, n, got, ov);
     // Overlapped reads complete later; only synchronous ones are looked at.
     if !ov.is_null() && lock(&OPEN).contains_key(&(h as usize)) && lock(&LOGGED).insert("overlapped".into()) {
@@ -166,7 +183,12 @@ fn on_read(h: usize, data: &[u8]) {
     let Some(p) = f.clip.as_mut() else {
         if lock(&LOGGED).insert(format!("read:{}", f.name)) {
             let head: Vec<String> = data.iter().take(8).map(|b| format!("{b:02x}")).collect();
-            crate::util::log(&format!("file: a read of {} ({} bytes) that starts no file: {}", f.name, data.len(), head.join(" ")));
+            crate::util::log(&format!(
+                "file: a read of {} ({} bytes) that starts no file: {}",
+                f.name,
+                data.len(),
+                head.join(" ")
+            ));
         }
         return;
     };

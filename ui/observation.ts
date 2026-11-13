@@ -215,11 +215,7 @@ export function boxesOverlap(a: TextBox, b: TextBox, tolerance: number): boolean
  * dialogue box — the single most common thing a visual novel does. Layout here
  * only explains *why* a decision was made.
  */
-export function sameLayout(
-  a: ObservedLine[] | null,
-  b: ObservedLine[] | null,
-  tolerance: number
-): boolean {
+export function sameLayout(a: ObservedLine[] | null, b: ObservedLine[] | null, tolerance: number): boolean {
   if (!a || !b || a.length === 0 || a.length !== b.length) return false
   return a.every((line, index) => boxesOverlap(line.box, b[index].box, tolerance))
 }

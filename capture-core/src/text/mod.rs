@@ -23,14 +23,14 @@ use std::time::Duration;
 
 #[cfg(target_os = "macos")]
 mod livetext;
-/// The engine itself, for a caller that wants its own instance rather than the
-/// automatic-scan observer (the manual Apple Live Text scan in the app).
-#[cfg(target_os = "macos")]
-pub use livetext::LiveTextObserver;
 /// Test seam for the main-queue reclamation ordering; see `livetext::AckProbe`.
 #[cfg(target_os = "macos")]
 #[doc(hidden)]
 pub use livetext::AckProbe;
+/// The engine itself, for a caller that wants its own instance rather than the
+/// automatic-scan observer (the manual Apple Live Text scan in the app).
+#[cfg(target_os = "macos")]
+pub use livetext::LiveTextObserver;
 /// Test support, compiled on macOS so the integration tests can reach it.
 /// Nothing in the shipping path calls it; release builds strip it.
 #[cfg(target_os = "macos")]
@@ -118,12 +118,7 @@ pub trait TextObserver: Send {
 /// the policy, which folds whitespace anyway, and a reader of the diagnostics
 /// should see the lines the engine actually returned.
 pub fn join_lines(lines: &[TextLine]) -> String {
-    lines
-        .iter()
-        .map(|line| line.text.trim())
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
+    lines.iter().map(|line| line.text.trim()).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
 }
 
 /// The answer on a platform with no local observer.
@@ -224,14 +219,7 @@ mod tests {
     }
 
     fn line(text: &str) -> TextLine {
-        TextLine {
-            text: text.into(),
-            x: 0.0,
-            y: 0.0,
-            width: 1.0,
-            height: 1.0,
-            segments: Vec::new(),
-        }
+        TextLine { text: text.into(), x: 0.0, y: 0.0, width: 1.0, height: 1.0, segments: Vec::new() }
     }
 
     #[test]
@@ -241,9 +229,7 @@ mod tests {
         assert!(!status.supported);
         assert_eq!(status.engine, "none");
 
-        let error = observer
-            .observe(&frame(), Duration::from_millis(10))
-            .unwrap_err();
+        let error = observer.observe(&frame(), Duration::from_millis(10)).unwrap_err();
         assert_eq!(error.code, "unsupported");
         assert!(error.message.contains("Manual scanning works normally"));
     }
@@ -253,10 +239,7 @@ mod tests {
         let status = platform_observer().status();
         if cfg!(target_os = "macos") {
             assert_eq!(status.engine, "apple-live-text");
-            assert!(
-                status.private_api,
-                "the maintenance assumption is disclosed"
-            );
+            assert!(status.private_api, "the maintenance assumption is disclosed");
             assert_eq!(status.minimum_os, "macOS 13");
         } else {
             assert!(!status.supported);
@@ -266,10 +249,7 @@ mod tests {
 
     #[test]
     fn lines_join_in_reading_order_and_blank_lines_are_dropped() {
-        assert_eq!(
-            join_lines(&[line("一行目"), line("  "), line(" 二行目 ")]),
-            "一行目\n二行目"
-        );
+        assert_eq!(join_lines(&[line("一行目"), line("  "), line(" 二行目 ")]), "一行目\n二行目");
         assert_eq!(join_lines(&[]), "");
     }
 
@@ -286,12 +266,7 @@ mod tests {
             }
             fn observe(&mut self, _: &Frame, _: Duration) -> Result<Observation> {
                 let call = self.0.fetch_add(1, Ordering::SeqCst);
-                Ok(Observation {
-                    engine: "test",
-                    text: format!("reading-{call}"),
-                    lines: vec![],
-                    duration_ms: 10.0,
-                })
+                Ok(Observation { engine: "test", text: format!("reading-{call}"), lines: vec![], duration_ms: 10.0 })
             }
         }
         let calls = Arc::new(AtomicUsize::new(0));
@@ -305,13 +280,7 @@ mod tests {
         }
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         image.pixels[0] = 1; // Even a one-byte glyph edit must cause a fresh read.
-        assert_ne!(
-            observer
-                .observe(&image, Duration::from_secs(1))
-                .unwrap()
-                .text,
-            read.text
-        );
+        assert_ne!(observer.observe(&image, Duration::from_secs(1)).unwrap().text, read.text);
         image.info.source_id = "other-source".into();
         observer.observe(&image, Duration::from_secs(1)).unwrap();
         image.info.crop_pixels[0] = 1;

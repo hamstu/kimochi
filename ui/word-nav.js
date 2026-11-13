@@ -280,7 +280,8 @@ export async function segmentAcross(units, split, words = JAPANESE_WORDS) {
     const lastWord = [...tokens].reverse().find((token) => token.word)
     covered = Math.max(0, covered - unit.text.length)
     // The joiner between the two units is in neither of them.
-    if (lastWord && lastWord.end > unit.text.length) covered = Math.max(0, lastWord.end - unit.text.length - found[index].lead)
+    if (lastWord && lastWord.end > unit.text.length)
+      covered = Math.max(0, lastWord.end - unit.text.length - found[index].lead)
     return { ...unit, tokens }
   })
 }
@@ -407,8 +408,7 @@ export class WordCursor {
         if (index > this.index && at < end) removed.add(index)
       })
     }
-    const remainder =
-      end < word.end && word.end <= unitText.length ? unitText.slice(end, word.end) : ''
+    const remainder = end < word.end && word.end <= unitText.length ? unitText.slice(end, word.end) : ''
     word.end = end
     word.text = unitText.slice(word.start, Math.min(end, unitText.length))
     const words = this.words.filter((_, index) => !removed.has(index))

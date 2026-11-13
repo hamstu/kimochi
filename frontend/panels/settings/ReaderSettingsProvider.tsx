@@ -57,11 +57,7 @@ export function ReaderSettingsProvider({ children }: { children: ReactNode }): R
 }
 
 /** Renders its children with the loaded settings, or the loading state or failure in their place. */
-export function WithReaderSettings({
-  children
-}: {
-  children: (settings: Settings) => ReactNode
-}): ReactNode {
+export function WithReaderSettings({ children }: { children: (settings: Settings) => ReactNode }): ReactNode {
   const { settings, error } = useReaderSettings()
   if (settings) return children(settings)
   return (

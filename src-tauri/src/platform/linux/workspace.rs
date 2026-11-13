@@ -77,21 +77,17 @@ pub fn observe_workspace(
             suspended: Cell::new(false),
         })
     });
-    let _ = std::thread::Builder::new()
-        .name("kimochi-logind".into())
-        .spawn(|| {
-            if let Err(e) = watch_logind() {
-                eprintln!("platform: sleep/wake notifications unavailable: {e}");
+    let _ = std::thread::Builder::new().name("kimochi-logind".into()).spawn(|| {
+        if let Err(e) = watch_logind() {
+            eprintln!("platform: sleep/wake notifications unavailable: {e}");
+        }
+    });
+    if session().backend == Backend::X11 {
+        let _ = std::thread::Builder::new().name("kimochi-activation".into()).spawn(|| {
+            if let Err(e) = watch_activation() {
+                eprintln!("platform: activation notifications unavailable: {e}");
             }
         });
-    if session().backend == Backend::X11 {
-        let _ = std::thread::Builder::new()
-            .name("kimochi-activation".into())
-            .spawn(|| {
-                if let Err(e) = watch_activation() {
-                    eprintln!("platform: activation notifications unavailable: {e}");
-                }
-            });
     }
 }
 
@@ -104,10 +100,7 @@ fn watch_logind() -> Result<(), String> {
         "org.freedesktop.login1.Manager",
     )
     .map_err(|e| e.to_string())?;
-    for message in proxy
-        .receive_signal("PrepareForSleep")
-        .map_err(|e| e.to_string())?
-    {
+    for message in proxy.receive_signal("PrepareForSleep").map_err(|e| e.to_string())? {
         if let Ok(start) = message.body().deserialize::<bool>() {
             deliver(Notice::Sleep(start));
         }
@@ -123,11 +116,8 @@ fn watch_activation() -> Result<(), String> {
         .reply()
         .map_err(|e| e.to_string())?
         .atom;
-    conn.change_window_attributes(
-        root,
-        &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
-    )
-    .map_err(|e| e.to_string())?;
+    conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE))
+        .map_err(|e| e.to_string())?;
     conn.flush().map_err(|e| e.to_string())?;
     let mut last_pid = None;
     loop {

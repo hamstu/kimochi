@@ -12,7 +12,8 @@
     "dictionary",
     "overlay",
     "popup-host",
-    "crop-host", "controller-host"
+    "crop-host",
+    "controller-host"
   ],
   "permissions": [
     "core:event:default",

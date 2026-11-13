@@ -52,11 +52,7 @@ export function popupHitRects(popups: Iterable<PopupLike>, origin: Origin | null
   if (!origin) return []
   const rects: HitRect[] = []
   for (const root of popups) {
-    for (
-      let popup: PopupLike | null = root;
-      popup !== null && popup.isVisibleSync();
-      popup = popup.child
-    ) {
+    for (let popup: PopupLike | null = root; popup !== null && popup.isVisibleSync(); popup = popup.child) {
       const { left, top, right, bottom, valid } = popup.getFrameRect()
       if (!valid) continue
       const width = right - left

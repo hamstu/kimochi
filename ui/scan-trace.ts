@@ -38,10 +38,7 @@ export function editSummary(before: string, after: string): TraceRecord {
   let prefix = 0,
     suffix = 0
   while (prefix < Math.min(a.length, b.length) && a[prefix] === b[prefix]) prefix++
-  while (
-    suffix < Math.min(a.length, b.length) - prefix &&
-    a[a.length - 1 - suffix] === b[b.length - 1 - suffix]
-  )
+  while (suffix < Math.min(a.length, b.length) - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix])
     suffix++
   const removed = a.slice(prefix, a.length - suffix),
     added = b.slice(prefix, b.length - suffix)
@@ -49,8 +46,7 @@ export function editSummary(before: string, after: string): TraceRecord {
     prefixChars: prefix,
     removedChars: removed.length,
     addedChars: added.length,
-    numericOnly:
-      removed.length + added.length > 0 && [...removed, ...added].every((c) => /\p{N}/u.test(c))
+    numericOnly: removed.length + added.length > 0 && [...removed, ...added].every((c) => /\p{N}/u.test(c))
   }
 }
 
@@ -165,8 +161,7 @@ export class ScanTrace {
       roundTripMs: input.roundTripMs,
       selectionMs: input.selectionMs,
       completionGapMs: this.lastCaptureAt === null ? null : at - this.lastCaptureAt,
-      pixelsChanged:
-        before?.fingerprint && input.fingerprint ? before.fingerprint !== input.fingerprint : null,
+      pixelsChanged: before?.fingerprint && input.fingerprint ? before.fingerprint !== input.fingerprint : null,
       observationAvailable: current !== null,
       rawTextId: current ? this.ids.get(text) : null,
       normalizedTextId: current ? this.ids.get(key) : null,

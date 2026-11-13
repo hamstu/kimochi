@@ -27,8 +27,7 @@ export function publishableText(annotations, grouping) {
 
 function newEntry(text) {
   const id =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
   return { id, text, timestamp: Date.now() }
 }
 
@@ -40,11 +39,27 @@ function newEntry(text) {
  * add/delete race Electron already has when the log panel edits history while a
  * scan lands.
  */
-export async function addHistoryEntry(text, { detached = false, groups, engine, merge = false, frame = null, session = null } = {}) {
-  const entry = { ...newEntry(text), ...(groups ? { groups, engine } : {}), ...(frame ? { frame } : {}), ...(session ? { session } : {}) }
+export async function addHistoryEntry(
+  text,
+  { detached = false, groups, engine, merge = false, frame = null, session = null } = {}
+) {
+  const entry = {
+    ...newEntry(text),
+    ...(groups ? { groups, engine } : {}),
+    ...(frame ? { frame } : {}),
+    ...(session ? { session } : {})
+  }
   const native = await optional(
     'history_add',
-    { text, detached, groups: groups ?? null, engine: engine ?? null, merge, frame: frame ?? null, session: session ?? null },
+    {
+      text,
+      detached,
+      groups: groups ?? null,
+      engine: engine ?? null,
+      merge,
+      frame: frame ?? null,
+      session: session ?? null
+    },
     null
   )
   if (native) return native
@@ -99,11 +114,11 @@ export async function publishOcrResult(result, options = {}) {
   const report = (lines, duplicate = false) => options.onPublication?.({ lines, duplicate })
   // The groups the Log will show, one line each (shared with Read along's full screen).
   const groups = logGroups(result, options.grouping ?? {})
-  if (result.geometry && !result.textAnnotations.some(a => a.granularity === 'block') && !groups.length) {
+  if (result.geometry && !result.textAnnotations.some((a) => a.granularity === 'block') && !groups.length) {
     report(0)
     return ''
   }
-  const text = groups.map(group => group.text).join('\n') || result.fullText || ''
+  const text = groups.map((group) => group.text).join('\n') || result.fullText || ''
   if (!text.trim()) {
     report(0)
     return ''
@@ -127,6 +142,6 @@ export async function publishOcrResult(result, options = {}) {
   }
   await publishText(text)
   // The Log gives each non-empty group a line of its own, and an ungrouped reading one line.
-  report(groups.filter(group => group.text?.trim()).length || 1)
+  report(groups.filter((group) => group.text?.trim()).length || 1)
   return text
 }

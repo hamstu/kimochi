@@ -141,11 +141,7 @@ const SHIM_EXTENSIONS: [&str; 2] = ["cmd", "bat"];
 ///
 /// A program with a directory component or an explicit extension is taken as given
 /// (with the binary extensions tried if it has no extension).
-pub fn resolve_program(
-    program: &str,
-    path_dirs: &[PathBuf],
-    exists: impl Fn(&Path) -> bool,
-) -> Option<PathBuf> {
+pub fn resolve_program(program: &str, path_dirs: &[PathBuf], exists: impl Fn(&Path) -> bool) -> Option<PathBuf> {
     let has_dir = program.contains(['\\', '/']);
     let has_ext = image_stem(program) != program.rsplit(['\\', '/']).next().unwrap_or(program);
     if has_dir {
@@ -160,10 +156,7 @@ pub fn resolve_program(
             .find(|p| exists(p));
     }
     if has_ext {
-        return path_dirs
-            .iter()
-            .map(|d| d.join(program))
-            .find(|p| exists(p));
+        return path_dirs.iter().map(|d| d.join(program)).find(|p| exists(p));
     }
     for exts in [&BINARY_EXTENSIONS, &SHIM_EXTENSIONS] {
         for dir in path_dirs {
@@ -199,9 +192,7 @@ pub enum PowerEvent {
 pub fn power_transition(suspended: bool, event: PowerEvent) -> (Option<bool>, bool) {
     match event {
         PowerEvent::Suspend => (Some(true), true),
-        PowerEvent::ResumeAutomatic | PowerEvent::ResumeSuspend if suspended => {
-            (Some(false), false)
-        }
+        PowerEvent::ResumeAutomatic | PowerEvent::ResumeSuspend if suspended => (Some(false), false),
         PowerEvent::ResumeAutomatic => (Some(false), false),
         PowerEvent::ResumeSuspend => (None, false),
     }
@@ -214,35 +205,12 @@ mod tests {
     #[test]
     fn fullscreen_covers_physical_monitor_not_just_work_area() {
         use kimochi_capture::Rect;
-        let monitor = Rect {
-            x: -1920.,
-            y: 0.,
-            width: 1920.,
-            height: 1080.,
-        };
+        let monitor = Rect { x: -1920., y: 0., width: 1920., height: 1080. };
         assert!(covers_display(monitor, monitor));
-        assert!(covers_display(
-            Rect {
-                width: 3840.,
-                ..monitor
-            },
-            monitor
-        ));
-        assert!(!covers_display(
-            Rect {
-                height: 1040.,
-                ..monitor
-            },
-            monitor
-        ));
+        assert!(covers_display(Rect { width: 3840., ..monitor }, monitor));
+        assert!(!covers_display(Rect { height: 1040., ..monitor }, monitor));
         assert!(!covers_display(Rect { x: 0., ..monitor }, monitor));
-        assert!(!covers_display(
-            Rect {
-                width: 0.,
-                ..monitor
-            },
-            monitor
-        ));
+        assert!(!covers_display(Rect { width: 0., ..monitor }, monitor));
     }
 
     #[test]
@@ -267,18 +235,9 @@ mod tests {
     fn resize_edge_only_on_resizable_frame_edges() {
         assert_eq!(resize_edge(1., 1., 100., 100., false), None);
         assert_eq!(resize_edge(50., 50., 100., 100., true), None);
-        assert_eq!(
-            resize_edge(1., 1., 100., 100., true),
-            Some(ResizeEdge::TopLeft)
-        );
-        assert_eq!(
-            resize_edge(99., 50., 100., 100., true),
-            Some(ResizeEdge::Right)
-        );
-        assert_eq!(
-            cursor_shape("text", resize_edge(99., 99., 100., 100., true)),
-            CursorShape::SizeNWSE
-        );
+        assert_eq!(resize_edge(1., 1., 100., 100., true), Some(ResizeEdge::TopLeft));
+        assert_eq!(resize_edge(99., 50., 100., 100., true), Some(ResizeEdge::Right));
+        assert_eq!(cursor_shape("text", resize_edge(99., 99., 100., 100., true)), CursorShape::SizeNWSE);
     }
 
     #[test]
@@ -295,31 +254,19 @@ mod tests {
         let dirs = vec![PathBuf::from("/npm"), PathBuf::from("/local")];
         let have = |p: &Path| {
             [
-                Path::new("/npm/claude.cmd"), Path::new("/local/claude.exe"),
-                Path::new("/npm/codex.cmd"), Path::new("/bin/tool.exe"),
-            ].contains(&p)
+                Path::new("/npm/claude.cmd"),
+                Path::new("/local/claude.exe"),
+                Path::new("/npm/codex.cmd"),
+                Path::new("/bin/tool.exe"),
+            ]
+            .contains(&p)
         };
-        assert_eq!(
-            resolve_program("claude", &dirs, have),
-            Some(PathBuf::from("/local/claude.exe"))
-        );
-        assert_eq!(
-            resolve_program("codex", &dirs, have),
-            Some(PathBuf::from("/npm/codex.cmd"))
-        );
+        assert_eq!(resolve_program("claude", &dirs, have), Some(PathBuf::from("/local/claude.exe")));
+        assert_eq!(resolve_program("codex", &dirs, have), Some(PathBuf::from("/npm/codex.cmd")));
         assert_eq!(resolve_program("missing", &dirs, have), None);
-        assert_eq!(
-            resolve_program("/bin/tool", &dirs, have),
-            Some(PathBuf::from("/bin/tool.exe"))
-        );
-        assert_eq!(
-            resolve_program("/bin/tool.exe", &dirs, have),
-            Some(PathBuf::from("/bin/tool.exe"))
-        );
-        assert_eq!(
-            resolve_program("claude.cmd", &dirs, have),
-            Some(PathBuf::from("/npm/claude.cmd"))
-        );
+        assert_eq!(resolve_program("/bin/tool", &dirs, have), Some(PathBuf::from("/bin/tool.exe")));
+        assert_eq!(resolve_program("/bin/tool.exe", &dirs, have), Some(PathBuf::from("/bin/tool.exe")));
+        assert_eq!(resolve_program("claude.cmd", &dirs, have), Some(PathBuf::from("/npm/claude.cmd")));
     }
 
     #[test]
@@ -328,14 +275,8 @@ mod tests {
         assert_eq!((sleep, s), (Some(true), true));
         let (wake, s) = power_transition(s, PowerEvent::ResumeAutomatic);
         assert_eq!((wake, s), (Some(false), false));
-        assert_eq!(
-            power_transition(s, PowerEvent::ResumeSuspend),
-            (None, false)
-        );
+        assert_eq!(power_transition(s, PowerEvent::ResumeSuspend), (None, false));
         // Suspend missed: the automatic resume still reports a wake.
-        assert_eq!(
-            power_transition(false, PowerEvent::ResumeAutomatic),
-            (Some(false), false)
-        );
+        assert_eq!(power_transition(false, PowerEvent::ResumeAutomatic), (Some(false), false));
     }
 }

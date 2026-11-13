@@ -70,7 +70,9 @@ export function DictionaryProfileSection({ readOnly = false }: { readOnly?: bool
       <SettingsRow
         label="Yomitan profile"
         controlId="yomitan-profile"
-        description={profiles ? 'Kimochi switches to it whenever you switch to this account.' : 'Shown once Yomitan has started.'}
+        description={
+          profiles ? 'Kimochi switches to it whenever you switch to this account.' : 'Shown once Yomitan has started.'
+        }
       >
         <Select
           aria-label="Yomitan profile"
@@ -93,8 +95,8 @@ export function DictionaryProfileSection({ readOnly = false }: { readOnly?: bool
       {mismatch && inUse && (
         <div className="settings-note">
           <Callout tone="warn">
-            {inUse.name} looks words up in {profileLanguageName(inUse.language)}, and you’re learning{' '}
-            {language.name}. Choose another profile, or change its language in Yomitan’s settings.
+            {inUse.name} looks words up in {profileLanguageName(inUse.language)}, and you’re learning {language.name}.
+            Choose another profile, or change its language in Yomitan’s settings.
           </Callout>
         </div>
       )}

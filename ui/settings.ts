@@ -13,11 +13,7 @@ import type { OcrGroup } from './ocr-result.js'
  * window reaches it through its own client.
  */
 
-import {
-  DEFAULT_AUTO_OCR_SETTINGS,
-  migrateAutoScanSettings,
-  type AutoScanSettings
-} from './autoscan.js'
+import { DEFAULT_AUTO_OCR_SETTINGS, migrateAutoScanSettings, type AutoScanSettings } from './autoscan.js'
 import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 import { DEFAULT_LANGUAGE, LANGUAGE_CODES, languageOf } from './languages.js'
 
@@ -93,18 +89,11 @@ export function hexToRgbTriplet(color: unknown): string | null {
 /** A stored overlay style made whole: an unknown colour or appearance falls back to the default. */
 export function overlayStyleOf(stored: unknown): OverlayStyleSettings {
   const raw =
-    stored && typeof stored === 'object' && !Array.isArray(stored)
-      ? (stored as Partial<OverlayStyleSettings>)
-      : {}
+    stored && typeof stored === 'object' && !Array.isArray(stored) ? (stored as Partial<OverlayStyleSettings>) : {}
   const color =
-    typeof raw.color === 'string' && HEX_COLOR.test(raw.color)
-      ? raw.color.toLowerCase()
-      : DEFAULT_OVERLAY_STYLE.color
+    typeof raw.color === 'string' && HEX_COLOR.test(raw.color) ? raw.color.toLowerCase() : DEFAULT_OVERLAY_STYLE.color
   const appearance =
-    raw.appearance === 'light' ||
-    raw.appearance === 'dark' ||
-    raw.appearance === 'app' ||
-    raw.appearance === 'blend'
+    raw.appearance === 'light' || raw.appearance === 'dark' || raw.appearance === 'app' || raw.appearance === 'blend'
       ? raw.appearance
       : DEFAULT_OVERLAY_STYLE.appearance
   const opacity =
@@ -180,9 +169,7 @@ export const DEFAULT_CONTROLLER_BUTTONS: ControllerButtons = {
  * Stored controller buttons over the defaults: an action added since they were saved keeps its
  * default, and a retired one (`backAlt`, the second Back that Y used to be) is dropped.
  */
-export function effectiveControllerButtons(
-  stored: object | null | undefined
-): ControllerButtons {
+export function effectiveControllerButtons(stored: object | null | undefined): ControllerButtons {
   const buttons = { ...DEFAULT_CONTROLLER_BUTTONS }
   for (const key of Object.keys(DEFAULT_CONTROLLER_BUTTONS) as (keyof ControllerButtons)[]) {
     const value = (stored as Record<string, unknown> | null | undefined)?.[key]
@@ -429,8 +416,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     tagline: 'Online, sent to Google',
     geometry: true,
     runs: 'online',
-    description:
-      'Sends each capture to Google Lens. The most accurate choice for games and manga. Free.',
+    description: 'Sends each capture to Google Lens. The most accurate choice for games and manga. Free.',
     strengths: [
       'Accurate on game text, manga and busy backgrounds',
       'Reads vertical and horizontal text, with line positions for the overlay'
@@ -445,12 +431,8 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     runs: 'online',
     description:
       'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision. Part of Kimochi Cloud.',
-    strengths: [
-      'Accurate across fonts, sizes and busy backgrounds',
-      'Word positions for overlay lookups'
-    ],
-    requirements:
-      'Needs an internet connection and Kimochi Cloud (free trial in Settings → Account).'
+    strengths: ['Accurate across fonts, sizes and busy backgrounds', 'Word positions for overlay lookups'],
+    requirements: 'Needs an internet connection and Kimochi Cloud (free trial in Settings → Account).'
   },
   meikiocr: {
     label: 'Local (MeikiOCR)',
@@ -459,11 +441,8 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'local',
     description:
-      "A small OCR model tuned for Japanese game text. The best offline pick for games; for manga, choose Manga OCR.",
-    strengths: [
-      'A scan takes a fraction of a second',
-      'Reads both horizontal and vertical text'
-    ],
+      'A small OCR model tuned for Japanese game text. The best offline pick for games; for manga, choose Manga OCR.',
+    strengths: ['A scan takes a fraction of a second', 'Reads both horizontal and vertical text'],
     requirements: 'A one-time model download.'
   },
   mangaocr: {
@@ -474,12 +453,8 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     runs: 'local',
     description:
       'A model trained on manga. The best offline choice for manga and printed vertical text; slower than MeikiOCR on game dialogue.',
-    strengths: [
-      'Excellent on vertical text and hand-lettered dialogue',
-      'Reads text set over busy artwork'
-    ],
-    requirements:
-      'Uses the GPU if there is one (Metal on macOS, DirectML on Windows), else the CPU.'
+    strengths: ['Excellent on vertical text and hand-lettered dialogue', 'Reads text set over busy artwork'],
+    requirements: 'Uses the GPU if there is one (Metal on macOS, DirectML on Windows), else the CPU.'
   },
   ppocr: {
     label: 'Local (PaddleOCR)',
@@ -504,10 +479,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     runs: 'local',
     description:
       'The on-device OCR Google Chrome uses for scanned PDFs. Fast and very accurate on game text, horizontal or vertical, with a box for every character.',
-    strengths: [
-      'Reads game dialogue, menus and vertical text accurately',
-      'Fast, with nothing sent anywhere'
-    ],
+    strengths: ['Reads game dialogue, menus and vertical text accurately', 'Fast, with nothing sent anywhere'],
     requirements:
       "Uses Google Chrome's copy when Chrome has one. Otherwise Kimochi downloads it from Google once (about 80 MB)."
   },
@@ -531,14 +503,9 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     tagline: 'Built into macOS',
     geometry: true,
     runs: 'local',
-    description:
-      "Uses macOS's Live Text. A good all-round offline choice on a Mac.",
-    strengths: [
-      'Fast, with no model to load',
-      'Handles vertical and horizontal text'
-    ],
-    requirements:
-      'Requires macOS 13 or later.'
+    description: "Uses macOS's Live Text. A good all-round offline choice on a Mac.",
+    strengths: ['Fast, with no model to load', 'Handles vertical and horizontal text'],
+    requirements: 'Requires macOS 13 or later.'
   },
   oneocr: {
     label: 'Local (OneOCR)',
@@ -546,14 +513,9 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     tagline: 'Via Snipping Tool',
     geometry: true,
     runs: 'local',
-    description:
-      'Uses the OCR engine in Microsoft Snipping Tool. A good all-round offline choice on Windows.',
-    strengths: [
-      'Word positions for overlay lookups',
-      'Uses the Snipping Tool runtime already installed on Windows 11'
-    ],
-    requirements:
-      'Windows only. On Windows 11, install or update Microsoft Snipping Tool.'
+    description: 'Uses the OCR engine in Microsoft Snipping Tool. A good all-round offline choice on Windows.',
+    strengths: ['Word positions for overlay lookups', 'Uses the Snipping Tool runtime already installed on Windows 11'],
+    requirements: 'Windows only. On Windows 11, install or update Microsoft Snipping Tool.'
   }
 }
 
@@ -609,14 +571,9 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     // a contradiction. The Yomitan API is the browser's Yomitan, so the two stay distinct.
     name: 'Yomitan',
     tagline: 'Runs inside Kimochi',
-    description:
-      'Yomitan, with its own dictionaries and settings, separate from any Yomitan in your browser.',
-    strengths: [
-      'Imports any Yomitan dictionary or settings backup',
-      'Word audio and Anki mining'
-    ],
-    requirements:
-      'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
+    description: 'Yomitan, with its own dictionaries and settings, separate from any Yomitan in your browser.',
+    strengths: ['Imports any Yomitan dictionary or settings backup', 'Word audio and Anki mining'],
+    requirements: 'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/yomidevs/yomitan',
     version: '26.10.22.0',
@@ -626,15 +583,13 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
   hachidori: {
     name: 'Hachidori',
     tagline: 'Fast, with native dictionary indexes',
-    description:
-      'Imports Yomitan dictionaries and MDict.',
+    description: 'Imports Yomitan dictionaries and MDict.',
     strengths: [
       'Quick, even with many large dictionaries',
       'Recommended dictionaries on first run',
       'Anki mining through AnkiConnect'
     ],
-    requirements:
-      'Downloaded when you choose it (about 5 MB). Needs at least one dictionary.',
+    requirements: 'Downloaded when you choose it (about 5 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/bee-san/hachidori',
     version: '0.3.0',
@@ -646,12 +601,8 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
   tenten: {
     name: '10ten',
     tagline: 'Lightweight, works straight away',
-    description:
-      '10ten Japanese Reader, with a bundled word dictionary.',
-    strengths: [
-      'Nothing to import',
-      'Kanji and name lookups'
-    ],
+    description: '10ten Japanese Reader, with a bundled word dictionary.',
+    strengths: ['Nothing to import', 'Kanji and name lookups'],
     requirements:
       'Downloaded when you choose it (about 18 MB), then fetches its full dictionaries in the background. No Anki mining.',
     licence: 'GPL-3.0-or-later',
@@ -664,15 +615,13 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
   'custom-api': {
     name: 'Yomitan API',
     tagline: 'The Yomitan in your browser',
-    description:
-      'Looks words up through the Yomitan in your browser, with its dictionaries and settings.',
+    description: 'Looks words up through the Yomitan in your browser, with its dictionaries and settings.',
     strengths: [
       'Nothing to import again',
       'Shift-hover lookups in the Log and over your source',
       'Anki card builder in Kimochi'
     ],
-    requirements:
-      'Needs Yomitan in your browser with its API on, and a small helper that Kimochi installs.',
+    requirements: 'Needs Yomitan in your browser with its API on, and a small helper that Kimochi installs.',
     licence: 'Part of Kimochi',
     upstream: 'https://github.com/yomidevs/yomitan-api',
     upstreamLabel: 'Yomitan API',
@@ -769,11 +718,13 @@ export type HostEngine = 'yomitan' | 'hachidori' | 'tenten' | 'none'
 export const NO_ENGINE = 'none' as const
 
 /** What lookups say while no engine is downloaded. */
-export const NO_ENGINE_MESSAGE =
-  'No dictionary is set up yet. Choose and download one in Settings → Dictionary.'
+export const NO_ENGINE_MESSAGE = 'No dictionary is set up yet. Choose and download one in Settings → Dictionary.'
 
 /** `resolveDictionaryEngine`, keeping `'none'` instead of reading it as Yomitan. */
-export function resolveHostEngine(mirrored: string | null | undefined, injected: string | null | undefined): HostEngine {
+export function resolveHostEngine(
+  mirrored: string | null | undefined,
+  injected: string | null | undefined
+): HostEngine {
   const value = mirrored ?? injected
   if (value === NO_ENGINE) return NO_ENGINE
   return hostEngineOf(resolveDictionaryEngine(value, null))
@@ -955,10 +906,7 @@ function migrated<K extends keyof Settings>(key: K, stored: unknown): Settings[K
  * the remote control both call it, which is what keeps a toggle from showing one
  * state while the render gate holds another.
  */
-export function isOverlayTextVisible(
-  liveOverlayEnabled: boolean,
-  textOverlayVisible: boolean
-): boolean {
+export function isOverlayTextVisible(liveOverlayEnabled: boolean, textOverlayVisible: boolean): boolean {
   return liveOverlayEnabled && textOverlayVisible
 }
 
@@ -972,20 +920,17 @@ export function isOverlayTextVisible(
  * persisted preference the Settings panel shows is not silently rewritten every
  * time someone hides the text for a moment.
  */
-export function nextOverlayToggle(current: {
+export function nextOverlayToggle(current: { liveOverlayEnabled: boolean; textOverlayVisible: boolean }): {
   liveOverlayEnabled: boolean
   textOverlayVisible: boolean
-}): { liveOverlayEnabled: boolean; textOverlayVisible: boolean } {
+} {
   return isOverlayTextVisible(current.liveOverlayEnabled, current.textOverlayVisible)
     ? { liveOverlayEnabled: current.liveOverlayEnabled, textOverlayVisible: false }
     : { liveOverlayEnabled: true, textOverlayVisible: true }
 }
 
 /** Newest first, capped, so the history cannot grow without bound. */
-export function pushHistory(
-  history: ScanHistoryEntry[],
-  entry: ScanHistoryEntry
-): ScanHistoryEntry[] {
+export function pushHistory(history: ScanHistoryEntry[], entry: ScanHistoryEntry): ScanHistoryEntry[] {
   return [entry, ...history].slice(0, MAX_HISTORY_ENTRIES)
 }
 
@@ -1010,11 +955,7 @@ export type OverlayTextChange = 'idle' | 'scan' | 'scan-pending'
  *    that was just switched on. `scan-pending` says so rather than silently doing
  *    nothing.
  */
-export function overlayTextChange(
-  was: boolean | null,
-  shown: boolean,
-  busy: boolean
-): OverlayTextChange {
+export function overlayTextChange(was: boolean | null, shown: boolean, busy: boolean): OverlayTextChange {
   if (was !== false || !shown) return 'idle'
   return busy ? 'scan-pending' : 'scan'
 }

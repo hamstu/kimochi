@@ -111,7 +111,7 @@ function initialLayout(desk: Size): Layout {
   if (gameHeight(gw, desk) > room) gw = ((room - TITLE) * 1.6) / desk.width
   return {
     log: { x: 0.43, y: 0.03, w: 0.545, h: floor / desk.height - 0.05 },
-    game: { x: 0.09, y: (floor - gameHeight(gw, desk)) / desk.height - 0.02, w: gw, h: 0 },
+    game: { x: 0.09, y: (floor - gameHeight(gw, desk)) / desk.height - 0.02, w: gw, h: 0 }
   }
 }
 
@@ -174,7 +174,14 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   // opened again.
   const [quit, setQuit] = useState(false)
   const [logReady, setLogReady] = useState(false)
-  const NO_STATE: LogState = { sourceId: null, autoOcr: false, overlay: false, input: 'ocr', hookPhase: null, autoAlign: true }
+  const NO_STATE: LogState = {
+    sourceId: null,
+    autoOcr: false,
+    overlay: false,
+    input: 'ocr',
+    hookPhase: null,
+    autoAlign: true
+  }
   const [logState, setLogState] = useState<LogState>(NO_STATE)
   // On the guided desk the visitor chooses how Kimochi reads the game, in its source menu.
   const hook = !deck && (flow ? logState.input === 'hook' : input === 'hook')
@@ -223,23 +230,28 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const scrollLog = useCallback((): void => {
     const doc = iframeRef.current?.contentDocument
     if (!doc) return
-    for (const el of doc.querySelectorAll<HTMLElement>('.log-transcript-frame, .log-transcript, .log-lines, .log-root')) {
+    for (const el of doc.querySelectorAll<HTMLElement>(
+      '.log-transcript-frame, .log-transcript, .log-lines, .log-root'
+    )) {
       if (el.scrollHeight > el.clientHeight + 2) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     }
   }, [])
 
-  const onEnter = useCallback((frame: Frame) => {
-    if (frame.emit === 'scan') postRef.current?.({ type: 'scan' })
-    if (frame.emit === 'line' || frame.emit === 'hook') setTimeout(scrollLog, 350)
-    if (frame.emit === 'line') {
-      postRef.current?.({ type: 'line', text: PLAY_LINES[frame.line].text })
-      setLinesIn((n) => n + 1)
-    }
-    if (frame.emit === 'hook') {
-      postRef.current?.({ type: 'hook-line', text: PLAY_LINES[frame.line].text })
-      setHookLines((n) => n + 1)
-    }
-  }, [scrollLog])
+  const onEnter = useCallback(
+    (frame: Frame) => {
+      if (frame.emit === 'scan') postRef.current?.({ type: 'scan' })
+      if (frame.emit === 'line' || frame.emit === 'hook') setTimeout(scrollLog, 350)
+      if (frame.emit === 'line') {
+        postRef.current?.({ type: 'line', text: PLAY_LINES[frame.line].text })
+        setLinesIn((n) => n + 1)
+      }
+      if (frame.emit === 'hook') {
+        postRef.current?.({ type: 'hook-line', text: PLAY_LINES[frame.line].text })
+        setHookLines((n) => n + 1)
+      }
+    },
+    [scrollLog]
+  )
 
   // Kimochi is reading a window: it is running (not quit), and that window is its source with Auto
   // OCR on, or (Text hooking on) hooked. Off the desk the windows are always open.
@@ -254,7 +266,8 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const running = onScreen && !reduced && userCursor === null && reading
   const [playing, nextLine] = usePlayer(frames, running, onEnter, `${platform}:${run}`, flow)
   const frame = reduced ? stillFrame(frames) : playing
-  const overlay = deck || reduced || ((!free || (open.game && !quit)) && logState.sourceId === GAME_SOURCE && logState.overlay)
+  const overlay =
+    deck || reduced || ((!free || (open.game && !quit)) && logState.sourceId === GAME_SOURCE && logState.overlay)
 
   // A visitor's pick belongs to the line it was made on.
   useEffect(() => setUserCursor(null), [frame.line, platform])
@@ -459,7 +472,11 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
       if (!start || !d) return
       if (event.phase === 'end') logDrag.current = null
       const next = clamp(
-        { ...start.place, x: start.place.x + (event.x - start.x) / d.width, y: start.place.y + (event.y - start.y) / d.height },
+        {
+          ...start.place,
+          x: start.place.x + (event.x - start.x) / d.width,
+          y: start.place.y + (event.y - start.y) / d.height
+        },
         d
       )
       setLayout((l) => (l ? { ...l, log: next } : l))
@@ -500,7 +517,10 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const toDownload = (): void => {
     setUnavailable(null)
     setMax(false)
-    setTimeout(() => document.getElementById('get-kimochi')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+    setTimeout(
+      () => document.getElementById('get-kimochi')?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      50
+    )
   }
 
   const onAction = (name: string): void => {
@@ -565,7 +585,20 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
         {deck && <DeckHud frame={frame} />}
       </GameScreen>
     ),
-    [frame, shownFrame, deck, onScreen, userCursor, overlay, hook, flow, logState.autoAlign, anki, addToAnki, advanceGame]
+    [
+      frame,
+      shownFrame,
+      deck,
+      onScreen,
+      userCursor,
+      overlay,
+      hook,
+      flow,
+      logState.autoAlign,
+      anki,
+      addToAnki,
+      advanceGame
+    ]
   )
 
   const placed = (id: WindowId): CSSProperties | undefined => {
@@ -678,11 +711,19 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
         ) : (
           <>
             <DesktopBar platform={platform} replay={tour} />
-            <div ref={deskRef} className={free ? 'relative min-h-[560px] flex-1' : 'relative grid min-h-0 flex-1 gap-4 p-3 sm:p-5'}>
+            <div
+              ref={deskRef}
+              className={free ? 'relative min-h-[560px] flex-1' : 'relative grid min-h-0 flex-1 gap-4 p-3 sm:p-5'}
+            >
               {free && (
                 <>
                   <div className="absolute top-4 left-5 flex flex-col gap-4" inert={inert}>
-                    <DesktopIcon id="kimochi" label="Kimochi" icon={<img src="/icon.svg" alt="" className="size-10" />} onOpen={() => openWindow('log')} />
+                    <DesktopIcon
+                      id="kimochi"
+                      label="Kimochi"
+                      icon={<img src="/icon.svg" alt="" className="size-10" />}
+                      onOpen={() => openWindow('log')}
+                    />
                     <DesktopIcon id="game" label={GAME.app} icon={<GameIcon />} onOpen={() => openWindow('game')} />
                   </div>
                 </>
@@ -695,7 +736,12 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
                 onPointerDown={free ? () => front('game') : undefined}
               >
                 <div onPointerDown={free ? track('game', 'move') : undefined}>
-                  <TitleBar platform={platform} title={GAME.app} icon={<GameIcon size="xs" />} onClose={close('game')} />
+                  <TitleBar
+                    platform={platform}
+                    title={GAME.app}
+                    icon={<GameIcon size="xs" />}
+                    onClose={close('game')}
+                  />
                 </div>
                 <div className="relative">
                   {screen}
@@ -725,7 +771,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
                 {busy && <span className="absolute inset-0 z-10" aria-hidden="true" />}
                 {corner('log')}
               </div>
-                            {tour && guideOn && (
+              {tour && guideOn && (
                 <Guide
                   key={run}
                   facts={facts}
@@ -768,7 +814,12 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
           </>
         )}
         {unavailable && !deck && (
-          <TryRealThing platform={platform} feature={unavailable} onTry={toDownload} onClose={() => setUnavailable(null)} />
+          <TryRealThing
+            platform={platform}
+            feature={unavailable}
+            onTry={toDownload}
+            onClose={() => setUnavailable(null)}
+          />
         )}
       </div>
     </div>
@@ -777,7 +828,12 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
 
 /** The demo game's icon: a pastel tile with a cute emoji in it. */
 function GameIcon({ size = 'md' }: { size?: 'xs' | 'sm' | 'md' }) {
-  const box = size === 'xs' ? 'size-3.5 rounded-[3px] text-[9px]' : size === 'sm' ? 'size-4.5 rounded-[4px] text-[11px]' : 'size-10 rounded-[10px] text-[22px]'
+  const box =
+    size === 'xs'
+      ? 'size-3.5 rounded-[3px] text-[9px]'
+      : size === 'sm'
+        ? 'size-4.5 rounded-[4px] text-[11px]'
+        : 'size-10 rounded-[10px] text-[22px]'
   return (
     <span className={`kd-game-icon grid place-items-center leading-none ${box}`} aria-hidden="true">
       🌸
@@ -818,7 +874,10 @@ function DesktopIcon({ id, label, icon, onOpen }: { id: string; label: string; i
       className="kd-icon flex w-20 flex-col items-center gap-1.5 rounded-md p-1.5"
     >
       <span className="grid size-11 place-items-center">{icon}</span>
-      <span className="max-w-full truncate px-1 text-[11px] font-medium" lang={/[^\x20-\x7e]/.test(label) ? 'ja' : undefined}>
+      <span
+        className="max-w-full truncate px-1 text-[11px] font-medium"
+        lang={/[^\x20-\x7e]/.test(label) ? 'ja' : undefined}
+      >
         {label}
       </span>
     </button>
@@ -833,7 +892,14 @@ function ShiftKey({ down }: { down: boolean }) {
   return (
     <div aria-hidden="true" className={`kd-shift kd-shift-sm pointer-events-none ${down ? 'kd-shift-down' : ''}`}>
       <span className="kd-shift-cap">
-        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+        <svg
+          viewBox="0 0 24 24"
+          className="size-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        >
           <path d="M9 18v-6H5l7-7 7 7h-4v6H9z" />
         </svg>
         Shift

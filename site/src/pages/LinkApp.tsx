@@ -118,7 +118,9 @@ export function LinkApp() {
         <CodeForm
           key={raw ?? ''}
           initial={raw ?? ''}
-          error={raw ? 'That doesn’t look like a Kimochi code. It has 8 letters and numbers, like ABCD-EFGH.' : undefined}
+          error={
+            raw ? 'That doesn’t look like a Kimochi code. It has 8 letters and numbers, like ABCD-EFGH.' : undefined
+          }
         />
       </AuthShell>
     )
@@ -146,7 +148,11 @@ export function LinkApp() {
           Open Kimochi
         </Button>
         <p className="mt-6 text-small text-ink-3">
-          You can see and sign out linked apps on <Link to="/account#devices" className="text-accent-ink">your account page</Link>.
+          You can see and sign out linked apps on{' '}
+          <Link to="/account#devices" className="text-accent-ink">
+            your account page
+          </Link>
+          .
         </p>
       </AuthShell>
     )
@@ -154,7 +160,12 @@ export function LinkApp() {
 
   if (view.kind === 'denied') {
     return (
-      <AuthShell title="Request denied" lede={<p>Kimochi was not signed in. If you didn&rsquo;t start this, you don&rsquo;t need to do anything else.</p>}>
+      <AuthShell
+        title="Request denied"
+        lede={
+          <p>Kimochi was not signed in. If you didn&rsquo;t start this, you don&rsquo;t need to do anything else.</p>
+        }
+      >
         <p className="text-small text-ink-2">
           To try again, choose Sign in in Kimochi&rsquo;s Settings &rarr; Account for a new code.
         </p>

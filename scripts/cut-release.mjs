@@ -88,7 +88,8 @@ export function bumpCargoToml(text, version) {
 export function bumpCargoLock(text, version, crate = CRATE) {
   const pattern = new RegExp(`(\\[\\[package\\]\\]\\r?\\nname = "${crate}"\\r?\\nversion = )"([^"]*)"`, 'g')
   const matches = [...text.matchAll(pattern)]
-  if (matches.length !== 1) throw new Error(`expected one "${crate}" package in ${FILES.cargoLock}, found ${matches.length}`)
+  if (matches.length !== 1)
+    throw new Error(`expected one "${crate}" package in ${FILES.cargoLock}, found ${matches.length}`)
   return { current: matches[0][2], text: text.replace(pattern, `$1"${version}"`) }
 }
 
@@ -111,8 +112,12 @@ export function planRelease({ version, date, files }) {
   const toml = bumpCargoToml(files.cargoToml, version)
   const lock = bumpCargoLock(files.cargoLock, version)
   // The three should agree already; a mismatch means someone bumped one by hand.
-  for (const [file, found] of [[FILES.cargoToml, toml.current], [FILES.cargoLock, lock.current]]) {
-    if (found !== conf.current) throw new Error(`${file} says ${found} but ${FILES.tauriConf} says ${conf.current}: make them agree first`)
+  for (const [file, found] of [
+    [FILES.cargoToml, toml.current],
+    [FILES.cargoLock, lock.current]
+  ]) {
+    if (found !== conf.current)
+      throw new Error(`${file} says ${found} but ${FILES.tauriConf} says ${conf.current}: make them agree first`)
   }
   const changelog = promoteUnreleased(files.changelog, version, date)
   const notes = sectionFor(changelog, version)

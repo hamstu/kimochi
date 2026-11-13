@@ -64,12 +64,7 @@ export function soundKindOn(settings: SoundSettings, kind: 'scans' | 'clicks'): 
   return (kind === 'scans' ? settings.soundEffectsScans : settings.soundEffectsClicks) !== false
 }
 
-export const SOUND_NAMES: readonly SoundName[] = [
-  'scan-start',
-  'scan-done',
-  'scan-error',
-  ...INTERFACE_SOUNDS
-]
+export const SOUND_NAMES: readonly SoundName[] = ['scan-start', 'scan-done', 'scan-error', ...INTERFACE_SOUNDS]
 
 /**
  * The default volume (the `soundEffectsVolume` setting, 0–1): under the system's alert level, as
@@ -109,10 +104,7 @@ const QUIET_WARNINGS = /^(Scan discarded|Nothing recognised)/
 const NO_SOURCE = /^Choose a source/
 
 /** The sound a scan's outcome post calls for, or null for an outcome that should pass quietly. */
-export function outcomeSound(
-  post: ActivityPost | null | undefined,
-  { auto = false } = {}
-): SoundName | null {
+export function outcomeSound(post: ActivityPost | null | undefined, { auto = false } = {}): SoundName | null {
   if (!post) return null
   if (post.tone === 'ok') return 'scan-done'
   if (post.tone === 'error') return 'scan-error'
@@ -291,8 +283,7 @@ export function readControl(target: EventTarget | null): ControlFacts | null {
     checked: control.getAttribute('aria-checked'),
     popup: popup !== null && popup !== 'false' ? popup : role === 'combobox' ? 'listbox' : null,
     expanded: control.getAttribute('aria-expanded') === 'true',
-    disabled:
-      control.getAttribute('aria-disabled') === 'true' || control.getAttribute('disabled') !== null
+    disabled: control.getAttribute('aria-disabled') === 'true' || control.getAttribute('disabled') !== null
   }
 }
 
@@ -460,9 +451,7 @@ export function createBufferPlayer(
         fetchSound(name)
           .then((data) => context.decodeAudioData(data))
           .then((buffer) => {
-            const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) =>
-              buffer.getChannelData(i)
-            )
+            const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i))
             sounds.set(name, { buffer, offset: leadingSilence(channels) / buffer.sampleRate })
           })
           // Not decoded: that sound keeps the element fallback.

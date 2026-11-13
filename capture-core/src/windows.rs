@@ -65,20 +65,14 @@ pub(crate) fn image_stem(path: &str) -> Option<String> {
 /// own `GraphicsCaptureSession::Close` (an RPC to the capture server that never
 /// returns, #49). The caller holds the capture backend's lock, so an unbounded join
 /// would queue every later scan and thumbnail behind it until Kimochi restarts.
-pub(crate) fn finish_within(
-    limit: std::time::Duration,
-    work: impl FnOnce() + Send + 'static,
-) -> bool {
+pub(crate) fn finish_within(limit: std::time::Duration, work: impl FnOnce() + Send + 'static) -> bool {
     let (done, finished) = std::sync::mpsc::channel::<()>();
     std::thread::spawn(move || {
         work();
         drop(done);
     });
     // Nothing is ever sent: the channel disconnects when `work` returns or panics.
-    !matches!(
-        finished.recv_timeout(limit),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
-    )
+    !matches!(finished.recv_timeout(limit), Err(std::sync::mpsc::RecvTimeoutError::Timeout))
 }
 
 /// Runs `work` on a thread of its own and waits up to `limit` for its value. `None` when it
@@ -136,12 +130,7 @@ impl PxRect {
 /// rectangle at their offset; a frame already the size of `visible` is all visible.
 /// `None` means the frame matches neither, which happens for the frame or two after a
 /// resize, before a frame of the new size arrives.
-pub(crate) fn visible_region(
-    frame_width: u32,
-    frame_height: u32,
-    outer: PxRect,
-    visible: PxRect,
-) -> Option<[u32; 4]> {
+pub(crate) fn visible_region(frame_width: u32, frame_height: u32, outer: PxRect, visible: PxRect) -> Option<[u32; 4]> {
     let near = |frame: u32, size: i32| size > 0 && (i64::from(frame) - i64::from(size)).abs() <= 1;
     if near(frame_width, outer.width()) && near(frame_height, outer.height()) {
         let x = (visible.left - outer.left).max(0) as u32;
@@ -159,11 +148,11 @@ pub(crate) fn visible_region(
 #[cfg(target_os = "windows")]
 mod wgc {
     use super::{image_stem, visible_region, PxRect};
-    use crate::win_rules::{hex_handle, listable, owner_hides, parse_hex_handle, WindowMeta};
     use crate::pixels::{bgra_crop_to_rgba, box_downscale, crop_pixels, fit_within, unpremultiply};
+    use crate::win_rules::{hex_handle, listable, owner_hides, parse_hex_handle, WindowMeta};
     use crate::{
-        crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop,
-        Frame, FrameInfo, Platform, Rect, Result, Source, SourceId,
+        crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, FrameInfo,
+        Platform, Rect, Result, Source, SourceId,
     };
     use std::collections::HashMap;
     use std::ffi::c_void;
@@ -177,18 +166,14 @@ mod wgc {
     use ::windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus;
     use ::windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT, TRUE};
     use ::windows::Win32::Graphics::Direct3D11::{
-        ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
-        D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_TEXTURE2D_DESC,
-        D3D11_USAGE_STAGING,
+        ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
+        D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
     };
+    use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
     use ::windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
-    use ::windows::Win32::Graphics::Dwm::{
-        DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
-    };
     use ::windows::Win32::Graphics::Gdi::{GetMonitorInfoW, HMONITOR, MONITORINFO};
     use ::windows::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-        PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use ::windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetClassNameW, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextW,
@@ -199,8 +184,8 @@ mod wgc {
     use windows_capture::graphics_capture_api::{GraphicsCaptureApi, InternalCaptureControl};
     use windows_capture::monitor::Monitor;
     use windows_capture::settings::{
-        ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
-        MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
+        ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings, MinimumUpdateIntervalSettings,
+        SecondaryWindowSettings, Settings,
     };
     use windows_capture::window::Window;
 
@@ -229,10 +214,7 @@ mod wgc {
         CaptureError::new("native", e)
     }
     fn stale_source() -> CaptureError {
-        CaptureError::new(
-            "stale_source",
-            "Source has closed or disconnected. Refresh sources and select again.",
-        )
+        CaptureError::new("stale_source", "Source has closed or disconnected. Refresh sources and select again.")
     }
     /// Same code and wording family as macOS's minimized/off-Space window, so the app
     /// reports it the same way ("gone:").
@@ -249,12 +231,7 @@ mod wgc {
         HWND(raw as *mut c_void)
     }
     fn px(r: RECT) -> PxRect {
-        PxRect {
-            left: r.left,
-            top: r.top,
-            right: r.right,
-            bottom: r.bottom,
-        }
+        PxRect { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
     }
     fn window_pid(h: HWND) -> u32 {
         let mut pid = 0u32;
@@ -320,14 +297,8 @@ mod wgc {
         let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
         let mut buf = vec![0u16; 1024];
         let mut size = buf.len() as u32;
-        let named = unsafe {
-            QueryFullProcessImageNameW(
-                process,
-                PROCESS_NAME_WIN32,
-                PWSTR(buf.as_mut_ptr()),
-                &mut size,
-            )
-        };
+        let named =
+            unsafe { QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut size) };
         let _ = unsafe { CloseHandle(process) };
         named.ok()?;
         image_stem(&String::from_utf16_lossy(&buf[..size as usize]))
@@ -341,32 +312,18 @@ mod wgc {
     /// Every top-level window, front to back.
     fn top_level_windows() -> Result<Vec<usize>> {
         let mut found: Vec<usize> = Vec::new();
-        unsafe {
-            EnumWindows(
-                Some(collect_window),
-                LPARAM(&mut found as *mut Vec<usize> as isize),
-            )
-        }
-        .map_err(native_error)?;
+        unsafe { EnumWindows(Some(collect_window), LPARAM(&mut found as *mut Vec<usize> as isize)) }
+            .map_err(native_error)?;
         Ok(found)
     }
 
     fn monitors() -> Result<Vec<usize>> {
-        Ok(Monitor::enumerate()
-            .map_err(native_error)?
-            .iter()
-            .map(|m| m.as_raw_hmonitor() as usize)
-            .collect())
+        Ok(Monitor::enumerate().map_err(native_error)?.iter().map(|m| m.as_raw_hmonitor() as usize).collect())
     }
     /// The monitor's rectangle in physical virtual-screen pixels.
     fn monitor_rect(raw: usize) -> Option<PxRect> {
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        unsafe { GetMonitorInfoW(HMONITOR(raw as *mut c_void), &mut info) }
-            .as_bool()
-            .then(|| px(info.rcMonitor))
+        let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        unsafe { GetMonitorInfoW(HMONITOR(raw as *mut c_void), &mut info) }.as_bool().then(|| px(info.rcMonitor))
     }
 
     fn window_source(raw: usize, own_pid: u32) -> Option<Source> {
@@ -412,10 +369,7 @@ mod wgc {
 
     fn display_source(index: usize, raw: usize) -> Option<Source> {
         let bounds = monitor_rect(raw)?;
-        let name = Monitor::from_raw_hmonitor(raw as *mut c_void)
-            .name()
-            .ok()
-            .filter(|n| !n.trim().is_empty());
+        let name = Monitor::from_raw_hmonitor(raw as *mut c_void).name().ok().filter(|n| !n.trim().is_empty());
         Some(Source {
             id: SourceId::display(Platform::Windows, hex_handle(raw)).to_string(),
             kind: "display",
@@ -438,16 +392,11 @@ mod wgc {
     }
 
     fn parse_target(id: &str) -> Result<Target> {
-        let parsed = SourceId::parse(id)
-            .filter(|p| p.platform() == Platform::Windows)
-            .ok_or_else(stale_source)?;
+        let parsed = SourceId::parse(id).filter(|p| p.platform() == Platform::Windows).ok_or_else(stale_source)?;
         let raw = parse_hex_handle(parsed.handle()).ok_or_else(stale_source)?;
         Ok(match parsed {
             SourceId::Display { .. } => Target::Display { hmonitor: raw },
-            SourceId::Window { pid, .. } => Target::Window {
-                hwnd: raw,
-                pid: pid.ok_or_else(stale_source)?,
-            },
+            SourceId::Window { pid, .. } => Target::Window { hwnd: raw, pid: pid.ok_or_else(stale_source)? },
         })
     }
 
@@ -516,9 +465,7 @@ mod wgc {
             let (width, height) = (self.width, self.height);
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
             unsafe {
-                self.context
-                    .Map(&self.texture, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
-                    .ok()?;
+                self.context.Map(&self.texture, 0, D3D11_MAP_READ, 0, Some(&mut mapped)).ok()?;
             }
             // Mapped staging textures pad rows to the driver's pitch.
             let stride = mapped.RowPitch as usize;
@@ -529,12 +476,7 @@ mod wgc {
                 bgra_crop_to_rgba(raw, stride, [0, 0, width, height])
             });
             unsafe { self.context.Unmap(&self.texture, 0) };
-            Some(LatestFrame {
-                pixels: pixels?,
-                width,
-                height,
-                generation: self.generation,
-            })
+            Some(LatestFrame { pixels: pixels?, width, height, generation: self.generation })
         }
     }
 
@@ -548,10 +490,7 @@ mod wgc {
             MipLevels: 1,
             ArraySize: 1,
             Format: source.Format,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             Usage: D3D11_USAGE_STAGING,
             BindFlags: 0,
             CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
@@ -571,11 +510,7 @@ mod wgc {
 
     impl Frames {
         fn newest(&self) -> u64 {
-            self.gpu
-                .as_ref()
-                .map(|g| g.generation)
-                .max(self.latest.as_ref().map(|f| f.generation))
-                .unwrap_or(0)
+            self.gpu.as_ref().map(|g| g.generation).max(self.latest.as_ref().map(|f| f.generation)).unwrap_or(0)
         }
         /// The newest frame as pixels, reading the GPU copy back if it is newer.
         fn resolve(&mut self) -> Option<Arc<LatestFrame>> {
@@ -608,10 +543,7 @@ mod wgc {
             *self.used.lock().unwrap() = Some(Instant::now());
         }
         fn idle_for(&self) -> Duration {
-            self.used
-                .lock()
-                .unwrap()
-                .map_or(Duration::ZERO, |at| at.elapsed())
+            self.used.lock().unwrap().map_or(Duration::ZERO, |at| at.elapsed())
         }
         fn end(&self) {
             self.ended.store(true, Ordering::SeqCst);
@@ -647,10 +579,7 @@ mod wgc {
         type Error = String;
 
         fn new(ctx: Context<Self::Flags>) -> std::result::Result<Self, Self::Error> {
-            Ok(Self {
-                slot: ctx.flags,
-                protected: None,
-            })
+            Ok(Self { slot: ctx.flags, protected: None })
         }
 
         fn on_frame_arrived(
@@ -664,19 +593,12 @@ mod wgc {
             }
             let context = frame.device_context();
             let protected = *self.protected.get_or_insert_with(|| {
-                context
-                    .cast::<ID3D11Multithread>()
-                    .map(|m| unsafe { m.SetMultithreadProtected(true) })
-                    .is_ok()
+                context.cast::<ID3D11Multithread>().map(|m| unsafe { m.SetMultithreadProtected(true) }).is_ok()
             });
             {
                 let mut frames = self.slot.frames.lock().unwrap();
                 // One staging texture per session, replaced when the source resizes.
-                let reuse = frames
-                    .gpu
-                    .take()
-                    .filter(|g| (g.width, g.height) == (width, height))
-                    .map(|g| g.texture);
+                let reuse = frames.gpu.take().filter(|g| (g.width, g.height) == (width, height)).map(|g| g.texture);
                 let texture = match reuse {
                     Some(texture) => texture,
                     None => match staging_texture(frame.device(), frame.desc()) {
@@ -687,13 +609,7 @@ mod wgc {
                 };
                 unsafe { context.CopyResource(&texture, frame.as_raw_texture()) };
                 let generation = self.slot.generation.fetch_add(1, Ordering::SeqCst) + 1;
-                frames.gpu = Some(GpuFrame {
-                    texture,
-                    context: context.clone(),
-                    width,
-                    height,
-                    generation,
-                });
+                frames.gpu = Some(GpuFrame { texture, context: context.clone(), width, height, generation });
                 if !protected {
                     frames.resolve();
                 }
@@ -720,12 +636,7 @@ mod wgc {
     impl Session {
         fn alive(&self) -> bool {
             !self.slot.ended.load(Ordering::SeqCst)
-                && self
-                    .control
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .is_some_and(|c| !c.is_finished())
+                && self.control.lock().unwrap().as_ref().is_some_and(|c| !c.is_finished())
         }
         fn stop(&self) {
             stop_control(&self.slot, &self.control);
@@ -784,15 +695,8 @@ mod wgc {
         let (timer_slot, timer_control) = (slot.clone(), control.clone());
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_secs(1));
-            let finished = timer_control
-                .lock()
-                .unwrap()
-                .as_ref()
-                .is_none_or(|c| c.is_finished());
-            if finished
-                || timer_slot.ended.load(Ordering::SeqCst)
-                || timer_slot.idle_for() > SESSION_IDLE
-            {
+            let finished = timer_control.lock().unwrap().as_ref().is_none_or(|c| c.is_finished());
+            if finished || timer_slot.ended.load(Ordering::SeqCst) || timer_slot.idle_for() > SESSION_IDLE {
                 stop_control(&timer_slot, &timer_control);
                 return;
             }
@@ -809,12 +713,11 @@ mod wgc {
         } else {
             CursorCaptureSettings::Default
         };
-        let interval =
-            if GraphicsCaptureApi::is_minimum_update_interval_supported().unwrap_or(false) {
-                MinimumUpdateIntervalSettings::Custom(FRAME_INTERVAL)
-            } else {
-                MinimumUpdateIntervalSettings::Default
-            };
+        let interval = if GraphicsCaptureApi::is_minimum_update_interval_supported().unwrap_or(false) {
+            MinimumUpdateIntervalSettings::Custom(FRAME_INTERVAL)
+        } else {
+            MinimumUpdateIntervalSettings::Default
+        };
         // Asked per session, so turning the setting on takes effect on the next one.
         let border = if capture_border() == CaptureBorder::Hidden {
             DrawBorderSettings::WithoutBorder
@@ -868,13 +771,8 @@ mod wgc {
                     let (Some(outer), Some(visible)) = (outer_rect(h), visible_rect(h)) else {
                         break;
                     };
-                    if let Some(region) = visible_region(frame.width, frame.height, outer, visible)
-                    {
-                        return Located {
-                            frame,
-                            region,
-                            bounds: Some(visible.to_rect()),
-                        };
+                    if let Some(region) = visible_region(frame.width, frame.height, outer, visible) {
+                        return Located { frame, region, bounds: Some(visible.to_rect()) };
                     }
                     // Just resized: the newest frame predates the new size. WGC
                     // recreates its pool and sends one of the new size; wait once.
@@ -888,9 +786,7 @@ mod wgc {
                 // Best effort: the whole frame, labelled with where the window is.
                 Located {
                     region: [0, 0, frame.width, frame.height],
-                    bounds: visible_rect(h)
-                        .or_else(|| outer_rect(h))
-                        .map(PxRect::to_rect),
+                    bounds: visible_rect(h).or_else(|| outer_rect(h)).map(PxRect::to_rect),
                     frame,
                 }
             }
@@ -914,10 +810,7 @@ mod wgc {
     ) -> Result<Frame> {
         let [rx, ry, rw, rh] = located.region;
         if rw == 0 || rh == 0 || u64::from(rw) * u64::from(rh) > MAX_PIXELS {
-            return Err(CaptureError::new(
-                "dimensions",
-                "Invalid or larger than 64 megapixel source",
-            ));
+            return Err(CaptureError::new("dimensions", "Invalid or larger than 64 megapixel source"));
         }
         let crop = crop_rect(crop, rw, rh)?;
         let copying = Instant::now();
@@ -983,9 +876,7 @@ mod wgc {
 
     impl WgcCapture {
         pub fn new() -> Self {
-            Self {
-                sessions: HashMap::new(),
-            }
+            Self { sessions: HashMap::new() }
         }
 
         fn drop_session(&mut self, source_id: &str) {
@@ -996,21 +887,12 @@ mod wgc {
 
         /// Make room for one more session, stopping the one used longest ago.
         fn evict_for_new_session(&mut self) {
-            let dead: Vec<_> = self
-                .sessions
-                .iter()
-                .filter(|(_, s)| !s.alive())
-                .map(|(id, _)| id.clone())
-                .collect();
+            let dead: Vec<_> = self.sessions.iter().filter(|(_, s)| !s.alive()).map(|(id, _)| id.clone()).collect();
             for id in dead {
                 self.drop_session(&id);
             }
             while self.sessions.len() >= MAX_SESSIONS {
-                let oldest = self
-                    .sessions
-                    .iter()
-                    .max_by_key(|(_, s)| s.slot.idle_for())
-                    .map(|(id, _)| id.clone());
+                let oldest = self.sessions.iter().max_by_key(|(_, s)| s.slot.idle_for()).map(|(id, _)| id.clone());
                 match oldest {
                     Some(id) => self.drop_session(&id),
                     None => break,
@@ -1047,8 +929,8 @@ mod wgc {
         if !GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false) {
             return CaptureBorder::Unsupported;
         }
-        let status = GraphicsCaptureAccess::RequestAccessAsync(GraphicsCaptureAccessKind::Borderless)
-            .and_then(|op| op.join());
+        let status =
+            GraphicsCaptureAccess::RequestAccessAsync(GraphicsCaptureAccessKind::Borderless).and_then(|op| op.join());
         match status {
             Ok(AppCapabilityAccessStatus::Allowed) => CaptureBorder::Hidden,
             Ok(_) => CaptureBorder::Denied,
@@ -1076,16 +958,9 @@ mod wgc {
         }
         fn enumerate(&mut self) -> Result<Vec<Source>> {
             let own_pid = std::process::id();
-            let mut result: Vec<_> = monitors()?
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, raw)| display_source(i, raw))
-                .collect();
-            result.extend(
-                top_level_windows()?
-                    .into_iter()
-                    .filter_map(|raw| window_source(raw, own_pid)),
-            );
+            let mut result: Vec<_> =
+                monitors()?.into_iter().enumerate().filter_map(|(i, raw)| display_source(i, raw)).collect();
+            result.extend(top_level_windows()?.into_iter().filter_map(|raw| window_source(raw, own_pid)));
             Ok(result)
         }
         fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
@@ -1102,20 +977,14 @@ mod wgc {
             let slot = self.session(&request.source_id, target)?;
             let resolve_ms = elapsed_ms(start);
             let acquisition = Instant::now();
-            let frame = slot
-                .wait_newer(0, FIRST_FRAME_WAIT)
-                .ok_or_else(|| no_frame(target, &slot))?;
+            let frame = slot.wait_newer(0, FIRST_FRAME_WAIT).ok_or_else(|| no_frame(target, &slot))?;
             let located = locate(target, &slot, frame);
             compose(
                 &request.source_id,
                 &located,
                 request.crop,
                 None,
-                Timings {
-                    start,
-                    resolve_ms,
-                    acquisition_ms: elapsed_ms(acquisition),
-                },
+                Timings { start, resolve_ms, acquisition_ms: elapsed_ms(acquisition) },
             )
         }
         fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
@@ -1150,11 +1019,7 @@ mod wgc {
                 &located,
                 None,
                 Some(edge.max(1)),
-                Timings {
-                    start,
-                    resolve_ms,
-                    acquisition_ms: elapsed_ms(acquisition),
-                },
+                Timings { start, resolve_ms, acquisition_ms: elapsed_ms(acquisition) },
             )
         }
         fn close(&mut self) {
@@ -1237,22 +1102,14 @@ mod tests {
     #[test]
     fn process_image_stems() {
         assert_eq!(image_stem(r"C:\Games\Novel\vn.exe").as_deref(), Some("vn"));
-        assert_eq!(
-            image_stem(r"C:\Program Files\App\my.app.exe").as_deref(),
-            Some("my.app")
-        );
+        assert_eq!(image_stem(r"C:\Program Files\App\my.app.exe").as_deref(), Some("my.app"));
         assert_eq!(image_stem("noext").as_deref(), Some("noext"));
         assert_eq!(image_stem(r"C:\dir\.hidden").as_deref(), Some(".hidden"));
         assert_eq!(image_stem(r"C:\dir\"), None);
     }
 
     fn rect(left: i32, top: i32, right: i32, bottom: i32) -> PxRect {
-        PxRect {
-            left,
-            top,
-            right,
-            bottom,
-        }
+        PxRect { left, top, right, bottom }
     }
 
     #[test]
@@ -1260,30 +1117,21 @@ mod tests {
         // Windows 10/11: 7px invisible borders left, right and bottom; none on top.
         let outer = rect(93, 50, 1307, 777);
         let visible = rect(100, 50, 1300, 770);
-        assert_eq!(
-            visible_region(1214, 727, outer, visible),
-            Some([7, 0, 1200, 720])
-        );
+        assert_eq!(visible_region(1214, 727, outer, visible), Some([7, 0, 1200, 720]));
     }
 
     #[test]
     fn negative_origins_on_a_left_monitor_keep_the_same_offsets() {
         let outer = rect(-1927, -10, -713, 717);
         let visible = rect(-1920, -10, -720, 710);
-        assert_eq!(
-            visible_region(1214, 727, outer, visible),
-            Some([7, 0, 1200, 720])
-        );
+        assert_eq!(visible_region(1214, 727, outer, visible), Some([7, 0, 1200, 720]));
     }
 
     #[test]
     fn a_frame_already_the_visible_size_is_used_whole() {
         let outer = rect(93, 50, 1307, 777);
         let visible = rect(100, 50, 1300, 770);
-        assert_eq!(
-            visible_region(1200, 720, outer, visible),
-            Some([0, 0, 1200, 720])
-        );
+        assert_eq!(visible_region(1200, 720, outer, visible), Some([0, 0, 1200, 720]));
         // Borderless windows: both rectangles agree.
         let same = rect(0, 0, 800, 600);
         assert_eq!(visible_region(800, 600, same, same), Some([0, 0, 800, 600]));
@@ -1325,10 +1173,7 @@ fn session_stop_probe() {
     use std::time::Instant;
     let mut backend = WgcCapture::new();
     let sources = backend.enumerate().expect("enumerate");
-    let display = sources
-        .iter()
-        .find(|s| s.kind == "display")
-        .expect("display");
+    let display = sources.iter().find(|s| s.kind == "display").expect("display");
     let windows = sources.iter().filter(|s| s.kind == "window").take(4);
     for source in std::iter::once(display).chain(windows) {
         let start = Instant::now();
@@ -1337,20 +1182,11 @@ fn session_stop_probe() {
             Err(e) => e.code.to_string(),
         };
         let ms = start.elapsed().as_millis();
-        eprintln!(
-            "thumbnail {} ({:?}): {outcome} in {ms} ms",
-            source.id, source.name
-        );
+        eprintln!("thumbnail {} ({:?}): {outcome} in {ms} ms", source.id, source.name);
     }
-    let request = CaptureRequest {
-        source_id: display.id.clone(),
-        crop: None,
-    };
+    let request = CaptureRequest { source_id: display.id.clone(), crop: None };
     let frame = backend.capture(&request).expect("capture the display");
-    eprintln!(
-        "capture {}: {}x{}",
-        display.id, frame.info.width, frame.info.height
-    );
+    eprintln!("capture {}: {}x{}", display.id, frame.info.width, frame.info.height);
     let start = Instant::now();
     backend.close();
     let took = start.elapsed();

@@ -2,19 +2,19 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
-import ts from 'typescript'
+import { parse, topLevelFunctions, text } from './source-ast.mjs'
 import { load } from './load.mjs'
 import { markScanPublished } from '../ui/scan-publication.js'
 
 const source = await readFile(new URL('../ui/overlay.js', import.meta.url), 'utf8')
-const ast = ts.createSourceFile('overlay.js', source, ts.ScriptTarget.Latest, true)
-const functions = ast.statements
-  .filter(
-    (node) =>
-      ts.isFunctionDeclaration(node) && ['publishAccepted', 'applyResult'].includes(node.name?.text)
-  )
-  .map((node) => node.getText(ast))
-  .join('\n')
+const declared = [...topLevelFunctions(parse('overlay.js', source))]
+/** overlay.js's top-level functions of these names, as source in file order. */
+const functionsNamed = (names) =>
+  declared
+    .filter(([name]) => names.includes(name))
+    .map(([, node]) => text(source, node))
+    .join('\n')
+const functions = functionsNamed(['publishAccepted', 'applyResult'])
 
 test('the real overlay application awaits native publication before releasing its caller', async () => {
   let finish
@@ -49,11 +49,9 @@ test('the real overlay application awaits native publication before releasing it
   }
   vm.runInContext(functions, context)
   let returned = false
-  const result = context
-    .applyResult({ geometry: false, fullText: 'text' }, { id: 1 }, { source: {} })
-    .then(() => {
-      returned = true
-    })
+  const result = context.applyResult({ geometry: false, fullText: 'text' }, { id: 1 }, { source: {} }).then(() => {
+    returned = true
+  })
   await Promise.resolve()
   assert.equal(returned, false)
   assert.equal(drawn, 0)
@@ -85,10 +83,7 @@ test('a refused native publication is not presented as a successful overlay resu
     context.state.annotations = annotations
   }
   vm.runInContext(functions, context)
-  await assert.rejects(
-    context.applyResult({ geometry: false }, { id: 1 }, { source: {} }),
-    /evicted frame/
-  )
+  await assert.rejects(context.applyResult({ geometry: false }, { id: 1 }, { source: {} }), /evicted frame/)
 })
 
 test('the overlay tells the activity feed how a result ended', async () => {
@@ -124,10 +119,15 @@ test('the overlay tells the activity feed how a result ended', async () => {
   vm.runInContext(functions, context)
 
   // An applied result hands the publisher's report to whoever is waiting for it.
-  await context.applyResult({ geometry: false, fullText: 'text' }, { id: 1 }, { source: {} }, {
-    publish: true,
-    onPublication: (report) => reports.push(report)
-  })
+  await context.applyResult(
+    { geometry: false, fullText: 'text' },
+    { id: 1 },
+    { source: {} },
+    {
+      publish: true,
+      onPublication: (report) => reports.push(report)
+    }
+  )
   assert.deepEqual(reports, [{ lines: 2, duplicate: false }])
   assert.deepEqual(posts, [])
 
@@ -146,21 +146,14 @@ test('the overlay tells the activity feed how a result ended', async () => {
   assert.equal(context.autoRound.outcome.text, 'source changed')
 })
 
-const scanPath = ast.statements
-  .filter(
-    (node) =>
-      ts.isFunctionDeclaration(node) &&
-      [
-        'performScan',
-        'reportOutcome',
-        'beginAutoRound',
-        'noteAutoPublication',
-        'settleAutoRound',
-        'onAutoScanEvent'
-      ].includes(node.name?.text)
-  )
-  .map((node) => node.getText(ast))
-  .join('\n')
+const scanPath = functionsNamed([
+  'performScan',
+  'reportOutcome',
+  'beginAutoRound',
+  'noteAutoPublication',
+  'settleAutoRound',
+  'onAutoScanEvent'
+])
 
 /**
  * The real scan path with every stage stubbed: `recognise` and `applied` decide how the scan
@@ -214,7 +207,10 @@ test('a scan the reader asks for plucks at the start and chimes when lines are a
 })
 
 test('a repeat or an empty reading ends a scan without a chime', async () => {
-  for (const applied of [{ lines: 0, duplicate: true }, { lines: 0, duplicate: false }]) {
+  for (const applied of [
+    { lines: 0, duplicate: true },
+    { lines: 0, duplicate: false }
+  ]) {
     const { context, sounds } = await scanContext({ applied })
     await context.performScan()
     assert.deepEqual(sounds, [

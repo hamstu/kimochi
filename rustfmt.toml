@@ -1,0 +1,4 @@
+# Every crate in the repository formats with this (`npm run format`, checked in CI). Wide lines
+# and rustfmt's "Max" heuristics match how the code was written before formatting was enforced.
+max_width = 120
+use_small_heuristics = "Max"

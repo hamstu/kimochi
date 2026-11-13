@@ -58,8 +58,7 @@ export function installBackendFetch(invoke, log) {
     } catch {
       return pageFetch(input, init)
     }
-    const crossOrigin =
-      (url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== location.origin
+    const crossOrigin = (url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== location.origin
     if (!crossOrigin || (method !== 'GET' && method !== 'HEAD')) return pageFetch(input, init)
     if (init.signal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
 

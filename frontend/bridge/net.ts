@@ -54,9 +54,7 @@ export function isWithinHttpScope(candidate: string): boolean {
 
 export class HttpScopeError extends Error {
   constructor(candidate: string, allowed: string[]) {
-    super(
-      `${candidate} is outside the addresses this build is allowed to contact. Supported: ${allowed.join(', ')}.`
-    )
+    super(`${candidate} is outside the addresses this build is allowed to contact. Supported: ${allowed.join(', ')}.`)
     this.name = 'HttpScopeError'
   }
 }

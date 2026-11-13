@@ -32,10 +32,9 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    ChangeWindowMessageFilterEx, CreateWindowExW, DefWindowProcW, FindWindowW, GetPropW,
-    GetWindowLongW, GetWindowRect, IsWindowVisible, RegisterClassExW, RegisterWindowMessageW,
-    GWL_EXSTYLE, MSGFLT_ALLOW, WINDOW_STYLE, WNDCLASSEXW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    ChangeWindowMessageFilterEx, CreateWindowExW, DefWindowProcW, FindWindowW, GetPropW, GetWindowLongW, GetWindowRect,
+    IsWindowVisible, RegisterClassExW, RegisterWindowMessageW, GWL_EXSTYLE, MSGFLT_ALLOW, WINDOW_STYLE, WNDCLASSEXW,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 /// The scaling window's class, which Magpie promises never to change.

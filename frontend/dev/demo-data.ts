@@ -9,12 +9,7 @@
 import { previewFs } from './mocks/plugin-fs'
 import { DEMO_CONTENT, type DemoLine } from './demo-content'
 import { SETTINGS_DEFAULTS as READER_DEFAULTS } from '../texthooker/lib/types'
-import type {
-  Line,
-  NotebookEntry,
-  NotebookFile,
-  SessionsManifest
-} from '../texthooker/lib/types'
+import type { Line, NotebookEntry, NotebookFile, SessionsManifest } from '../texthooker/lib/types'
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -98,11 +93,7 @@ function sgLines(omitPlayed = false): Line[] {
 }
 
 const otherLines: Record<string, string[]> = {
-  [SESSION_IDS.ace]: [
-    '「異議あり！」',
-    '「証人の発言には、明らかなムジュンがあります！」',
-    '法廷内がざわめいた。'
-  ],
+  [SESSION_IDS.ace]: ['「異議あり！」', '「証人の発言には、明らかなムジュンがあります！」', '法廷内がざわめいた。'],
   [SESSION_IDS.persona]: ['「ようこそ、ベルベットルームへ」', '怪盗団の予告状が、街中に貼られていた。'],
   [SESSION_IDS.yotsuba]: ['「とーちゃん！　セミとった！」']
 }
@@ -141,9 +132,7 @@ async function placeholderPng({ hue, glyph }: ImageSpec, width = 240, height = 3
 function sgNotebook(images: Record<string, string>): NotebookFile {
   const t = NOW - 10 * DAY
   const img = (key: string) =>
-    images[key]
-      ? [{ id: `img-${key}`, path: images[key], width: 240, height: 320, addedAt: t }]
-      : []
+    images[key] ? [{ id: `img-${key}`, path: images[key], width: 240, height: 320, addedAt: t }] : []
   const note = (id: string, text: string) => ({ id, text, createdAt: t, updatedAt: t })
   const entries: NotebookEntry[] = [
     {
@@ -248,7 +237,10 @@ function sgNotebook(images: Record<string, string>): NotebookFile {
  * they arrive fresh when the embedding page sends them (`?embed=1`). `noLines` starts it with none
  * at all (its Notebook is still there).
  */
-export async function seedFilesystem({ omitPlayed = false, noLines = false }: { omitPlayed?: boolean; noLines?: boolean } = {}): Promise<void> {
+export async function seedFilesystem({
+  omitPlayed = false,
+  noLines = false
+}: { omitPlayed?: boolean; noLines?: boolean } = {}): Promise<void> {
   previewFs.put('sessions.json', JSON.stringify(manifest))
   const images: Record<string, string> = {}
   const specs: Record<string, ImageSpec> = {
@@ -279,10 +271,7 @@ export async function seedFilesystem({ omitPlayed = false, noLines = false }: { 
       ts: NOW - 5 * DAY + i * 60_000
     }))
     previewFs.put(`sessions/${sid}/lines.json`, JSON.stringify({ version: 1, lines }))
-    previewFs.put(
-      `sessions/${sid}/notebook.json`,
-      JSON.stringify({ version: 2, cacheVersion: 0, entries: [] })
-    )
+    previewFs.put(`sessions/${sid}/notebook.json`, JSON.stringify({ version: 2, cacheVersion: 0, entries: [] }))
   }
   previewFs.put(
     'stats.json',
@@ -303,9 +292,7 @@ export async function seedFilesystem({ omitPlayed = false, noLines = false }: { 
         Default: { settings: { ...READER_DEFAULTS }, replacements: [] },
         'VN — large text': {
           settings: { ...READER_DEFAULTS, fontSizePx: 20, showFurigana: true },
-          replacements: [
-            { id: 'r1', pattern: '\\s+', flags: 'g', replacement: '', enabled: true }
-          ]
+          replacements: [{ id: 'r1', pattern: '\\s+', flags: 'g', replacement: '', enabled: true }]
         }
       }
     })
@@ -368,17 +355,96 @@ export interface DemoSource {
 }
 
 export const SOURCES: DemoSource[] = [
-  { id: 'display:1', kind: 'display', name: 'Built-in Retina Display', hue: 215, on_screen: true, bounds: { x: 0, y: 0, width: 1512, height: 982 } },
-  { id: 'display:2', kind: 'display', name: 'LG UltraFine', hue: 160, on_screen: true, bounds: { x: 1512, y: 0, width: 2560, height: 1440 } },
-  { id: 'window:101', kind: 'window', name: DEMO_CONTENT.title, app: DEMO_CONTENT.app, hue: 330, on_screen: true, bounds: { x: 120, y: 80, width: 1280, height: 720 } },
-  { id: 'window:102', kind: 'window', name: '逆転裁判123 成歩堂セレクション', app: 'Ace Attorney Trilogy', hue: 30, on_screen: true, bounds: { x: 200, y: 120, width: 1280, height: 720 } },
-  { id: 'window:103', kind: 'window', name: 'YouTube — Google Chrome', app: 'Google Chrome', hue: 5, on_screen: true, bounds: { x: 0, y: 25, width: 1440, height: 900 } },
-  { id: 'window:104', kind: 'window', name: 'mpv — 葬送のフリーレン 第12話.mkv', app: 'mpv', hue: 280, on_screen: true, bounds: { x: 300, y: 100, width: 1280, height: 720 } },
-  { id: 'window:105', kind: 'window', name: 'Kindle — よつばと！ 1', app: 'Kindle', hue: 45, on_screen: false, bounds: { x: 400, y: 60, width: 900, height: 1200 } },
-  { id: 'window:108', kind: 'window', name: 'ペルソナ５ ザ・ロイヤル', app: 'P5R', hue: 0, on_screen: false, space: 'Full screen', bounds: { x: 0, y: 0, width: 1512, height: 982 } },
+  {
+    id: 'display:1',
+    kind: 'display',
+    name: 'Built-in Retina Display',
+    hue: 215,
+    on_screen: true,
+    bounds: { x: 0, y: 0, width: 1512, height: 982 }
+  },
+  {
+    id: 'display:2',
+    kind: 'display',
+    name: 'LG UltraFine',
+    hue: 160,
+    on_screen: true,
+    bounds: { x: 1512, y: 0, width: 2560, height: 1440 }
+  },
+  {
+    id: 'window:101',
+    kind: 'window',
+    name: DEMO_CONTENT.title,
+    app: DEMO_CONTENT.app,
+    hue: 330,
+    on_screen: true,
+    bounds: { x: 120, y: 80, width: 1280, height: 720 }
+  },
+  {
+    id: 'window:102',
+    kind: 'window',
+    name: '逆転裁判123 成歩堂セレクション',
+    app: 'Ace Attorney Trilogy',
+    hue: 30,
+    on_screen: true,
+    bounds: { x: 200, y: 120, width: 1280, height: 720 }
+  },
+  {
+    id: 'window:103',
+    kind: 'window',
+    name: 'YouTube — Google Chrome',
+    app: 'Google Chrome',
+    hue: 5,
+    on_screen: true,
+    bounds: { x: 0, y: 25, width: 1440, height: 900 }
+  },
+  {
+    id: 'window:104',
+    kind: 'window',
+    name: 'mpv — 葬送のフリーレン 第12話.mkv',
+    app: 'mpv',
+    hue: 280,
+    on_screen: true,
+    bounds: { x: 300, y: 100, width: 1280, height: 720 }
+  },
+  {
+    id: 'window:105',
+    kind: 'window',
+    name: 'Kindle — よつばと！ 1',
+    app: 'Kindle',
+    hue: 45,
+    on_screen: false,
+    bounds: { x: 400, y: 60, width: 900, height: 1200 }
+  },
+  {
+    id: 'window:108',
+    kind: 'window',
+    name: 'ペルソナ５ ザ・ロイヤル',
+    app: 'P5R',
+    hue: 0,
+    on_screen: false,
+    space: 'Full screen',
+    bounds: { x: 0, y: 0, width: 1512, height: 982 }
+  },
   // Awkward shapes: a tall, thin sidebar and a tiny utility window (smaller than a tile).
-  { id: 'window:106', kind: 'window', name: '縦書きリーダー', app: 'Vertical Reader', hue: 190, on_screen: true, bounds: { x: 20, y: 40, width: 180, height: 900 } },
-  { id: 'window:107', kind: 'window', name: 'Mini timer', app: 'Timer', hue: 120, on_screen: true, bounds: { x: 900, y: 600, width: 96, height: 60 } }
+  {
+    id: 'window:106',
+    kind: 'window',
+    name: '縦書きリーダー',
+    app: 'Vertical Reader',
+    hue: 190,
+    on_screen: true,
+    bounds: { x: 20, y: 40, width: 180, height: 900 }
+  },
+  {
+    id: 'window:107',
+    kind: 'window',
+    name: 'Mini timer',
+    app: 'Timer',
+    hue: 120,
+    on_screen: true,
+    bounds: { x: 900, y: 600, width: 96, height: 60 }
+  }
 ]
 
 /** Long edge of a catalog thumbnail, matching the native `THUMBNAIL_EDGE` (never upscaled). */

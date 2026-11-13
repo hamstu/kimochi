@@ -47,7 +47,7 @@ export const features: Feature[] = [
   {
     id: 'overlay',
     title: 'Cross Platform Overlay',
-    body: "With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen.",
+    body: 'With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen.',
     Visual: OverlayVisual,
     docs: '/reading/overlay/'
   },

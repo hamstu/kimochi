@@ -11,7 +11,17 @@
  */
 import { useEffect, useState, type JSX } from 'react'
 import { ArrowLeft, Globe, Settings } from 'lucide-react'
-import { Badge, ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
+import {
+  Badge,
+  ConfirmDialog,
+  ResizeHandle,
+  Row,
+  SelectContent,
+  SelectItem,
+  SelectRoot,
+  SelectTrigger,
+  SelectValue
+} from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
 import { useLanguage } from '../bridge/useLanguage'
@@ -57,7 +67,12 @@ const OCR_MODE_LIST = Object.keys(OCR_MODES) as OcrMode[]
 /** An engine as Settings lists it: its picture, its name and where it runs. Also the closed select. */
 function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgress | null }): JSX.Element {
   return (
-    <EngineValue picture={<OcrEngineIcon mode={mode} />} name={ocrModeInfo(mode).name} runs={<OcrRunsIcon mode={mode} />} busy={busy} />
+    <EngineValue
+      picture={<OcrEngineIcon mode={mode} />}
+      name={ocrModeInfo(mode).name}
+      runs={<OcrRunsIcon mode={mode} />}
+      busy={busy}
+    />
   )
 }
 
@@ -92,7 +107,9 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
                 value={mode}
                 description={
                   // Kimochi cloud without an account (or key) is listed only while it is still selected.
-                  mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : ocrModeInfo(mode).tagline
+                  mode === 'cloud' && !capabilities.cloudAccess
+                    ? 'Sign in under Settings → Account'
+                    : ocrModeInfo(mode).tagline
                 }
               >
                 <OcrModeLabel mode={mode} />
@@ -114,7 +131,13 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
 const DICTIONARY_LIST = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
 
 /** A dictionary engine as Settings lists it: its picture, its name and where it runs. */
-function DictionaryLabel({ engine, busy = null }: { engine: DictionaryEngine; busy?: FieldProgress | null }): JSX.Element {
+function DictionaryLabel({
+  engine,
+  busy = null
+}: {
+  engine: DictionaryEngine
+  busy?: FieldProgress | null
+}): JSX.Element {
   return (
     <EngineValue
       picture={<DictionaryEngineIcon engine={engine} />}
@@ -141,16 +164,31 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
     ? pendingDownload?.state === 'downloading'
       ? (() => {
           const value = percent(pendingDownload.overallReceived, pendingDownload.overallTotal) / 2
-          return { value, exact: true, short: `${Math.floor(value)}%`, title: `Downloading ${DICTIONARY_ENGINES[pending].name}` }
+          return {
+            value,
+            exact: true,
+            short: `${Math.floor(value)}%`,
+            title: `Downloading ${DICTIONARY_ENGINES[pending].name}`
+          }
         })()
       : {
           value: 50,
           exact: false,
-          short: pendingDownload?.state === 'verifying' ? 'Verifying…' : pendingDownload?.state === 'ready' ? 'Switching…' : 'Waiting…',
+          short:
+            pendingDownload?.state === 'verifying'
+              ? 'Verifying…'
+              : pendingDownload?.state === 'ready'
+                ? 'Switching…'
+                : 'Waiting…',
           title: `${DICTIONARY_ENGINES[pending].name} is used once it has downloaded`
         }
     : reloading === 'self'
-      ? { value: readiness.setup?.value ?? 0, exact: false, short: 'Switching…', title: `Switching to ${DICTIONARY_ENGINES[active].name}` }
+      ? {
+          value: readiness.setup?.value ?? 0,
+          exact: false,
+          short: 'Switching…',
+          title: `Switching to ${DICTIONARY_ENGINES[active].name}`
+        }
       : dictionary.verifyingApi
         ? { value: 0, exact: false, short: 'Checking…', title: 'Checking the Yomitan API' }
         : readiness.setup
@@ -199,7 +237,9 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
         {notice && (
           <SidebarNotice
             tone={notice.tone}
-            action={readiness.download && readiness.download !== 'ready' ? 'Download in Settings' : 'Open dictionary settings'}
+            action={
+              readiness.download && readiness.download !== 'ready' ? 'Download in Settings' : 'Open dictionary settings'
+            }
             onAction={onOpenSettings}
             title={notice.title}
           >

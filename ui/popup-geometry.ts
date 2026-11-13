@@ -51,10 +51,7 @@ const centre = (rect: Rect): { x: number; y: number } => ({
 })
 
 const contains = (area: Rect, point: { x: number; y: number }): boolean =>
-  point.x >= area.x &&
-  point.x < area.x + area.width &&
-  point.y >= area.y &&
-  point.y < area.y + area.height
+  point.x >= area.x && point.x < area.x + area.width && point.y >= area.y && point.y < area.y + area.height
 
 const overlap = (a: Rect, b: Rect): number =>
   Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
@@ -80,11 +77,7 @@ export const asViewport = (rect: Rect): Viewport => ({
  */
 export function boundsOf(rects: Edges[]): Rect | null {
   const usable = rects.filter(
-    (r) =>
-      Number.isFinite(r.left) &&
-      Number.isFinite(r.top) &&
-      Number.isFinite(r.right) &&
-      Number.isFinite(r.bottom)
+    (r) => Number.isFinite(r.left) && Number.isFinite(r.top) && Number.isFinite(r.right) && Number.isFinite(r.bottom)
   )
   if (usable.length === 0) return null
   const left = Math.min(...usable.map((r) => r.left))
@@ -96,13 +89,9 @@ export function boundsOf(rects: Edges[]): Rect | null {
 
 /** The bounding box of rectangles given as an origin and a size. */
 export function boundingRect(rects: Rect[]): Rect | null {
-  const usable = rects.filter(
-    (r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.width >= 0 && r.height >= 0
-  )
+  const usable = rects.filter((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.width >= 0 && r.height >= 0)
   if (usable.length === 0) return null
-  return boundsOf(
-    usable.map((r) => ({ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height }))
-  )
+  return boundsOf(usable.map((r) => ({ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height })))
 }
 
 /**
@@ -118,11 +107,7 @@ export function boundingRect(rects: Rect[]): Rect | null {
  * left of the primary has a negative origin — so nothing here may assume positive
  * coordinates.
  */
-export function anchorViewport(
-  anchors: Edges[],
-  displays: DisplayArea[],
-  fallback: Rect
-): Viewport {
+export function anchorViewport(anchors: Edges[], displays: DisplayArea[], fallback: Rect): Viewport {
   const anchor = boundsOf(anchors)
   const areas = displays.map((display) => display.work_area).filter((area) => area.width > 0)
   if (areas.length === 0) return asViewport(fallback)

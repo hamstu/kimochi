@@ -78,7 +78,12 @@ fn main() {
         println!("{at:>7.0}ms  rms {rms:.4} {}", "#".repeat((rms * 200.0).min(60.0) as usize));
     }
     if let (Some(played), Some(loud)) = (played_at, first_loud) {
-        println!("the sound started at {:.0}ms; first loud 100ms window at {:.0}ms (offset {:+.0}ms)", played - started, loud - started, loud - played);
+        println!(
+            "the sound started at {:.0}ms; first loud 100ms window at {:.0}ms (offset {:+.0}ms)",
+            played - started,
+            loud - started,
+            loud - played
+        );
     }
     if let Ok(path) = std::env::var("KIMOCHI_WAV") {
         write_wav(&path, clip.sample_rate, &clip.samples);

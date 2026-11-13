@@ -184,10 +184,7 @@ export function useGamepad(options: UseGamepadOptions = {}): UseGamepadReturn {
       for (const gamepad of navigator.getGamepads?.() ?? []) {
         if (!gamepad?.connected) continue
         devices.push(toDevice(gamepad))
-        if (
-          settings.preferredGamepadIndex !== undefined &&
-          gamepad.index === settings.preferredGamepadIndex
-        ) {
+        if (settings.preferredGamepadIndex !== undefined && gamepad.index === settings.preferredGamepadIndex) {
           active = gamepad
         } else if (!active) {
           active = gamepad

@@ -17,9 +17,20 @@ export const WINDOW_SHAPE: Record<DesktopPlatform, string> = {
 
 /** A title bar's close control: a real button when the window can close, else decoration. */
 function Close({ onClose, className, children }: { onClose?: () => void; className: string; children?: ReactNode }) {
-  if (!onClose) return <span className={className} aria-hidden="true">{children}</span>
+  if (!onClose)
+    return (
+      <span className={className} aria-hidden="true">
+        {children}
+      </span>
+    )
   return (
-    <button type="button" aria-label="Close window" onClick={onClose} onPointerDown={(e) => e.stopPropagation()} className={className}>
+    <button
+      type="button"
+      aria-label="Close window"
+      onClick={onClose}
+      onPointerDown={(e) => e.stopPropagation()}
+      className={className}
+    >
       {children}
     </button>
   )
@@ -40,13 +51,19 @@ function Caption({ onClose }: { onClose?: () => void }) {
   return (
     <span className="flex h-full">
       <span className={box} aria-hidden="true">
-        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" /></svg>
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M0 5h10" stroke="currentColor" />
+        </svg>
       </span>
       <span className={box} aria-hidden="true">
-        <svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" />
+        </svg>
       </span>
       <Close onClose={onClose} className={`${box} hover:bg-[#c42b1c] hover:text-white`}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" />
+        </svg>
       </Close>
     </span>
   )
@@ -55,7 +72,9 @@ function Caption({ onClose }: { onClose?: () => void }) {
 function GnomeClose({ onClose }: { onClose?: () => void }) {
   return (
     <Close onClose={onClose} className="grid size-6 place-items-center rounded-full bg-hover text-ink">
-      <svg width="8" height="8" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+      <svg width="8" height="8" viewBox="0 0 10 10" aria-hidden="true">
+        <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
     </Close>
   )
 }
@@ -100,7 +119,10 @@ export function TitleBar({
 export function DesktopBar({ platform, replay = false }: { platform: DesktopPlatform; replay?: boolean }) {
   if (platform === 'macos')
     return (
-      <div className="flex h-6 shrink-0 items-center gap-4 bg-bar/80 px-4 text-[11px] text-ink-2 backdrop-blur" aria-hidden="true">
+      <div
+        className="flex h-6 shrink-0 items-center gap-4 bg-bar/80 px-4 text-[11px] text-ink-2 backdrop-blur"
+        aria-hidden="true"
+      >
         <span className="font-semibold text-ink">Kimochi</span>
         <span>File</span>
         <span>Edit</span>
@@ -111,7 +133,10 @@ export function DesktopBar({ platform, replay = false }: { platform: DesktopPlat
     )
   if (platform === 'linux')
     return (
-      <div className="relative flex h-6 shrink-0 items-center kd-gnome-bar px-3 text-[11px] font-semibold text-white/90" aria-hidden="true">
+      <div
+        className="relative flex h-6 shrink-0 items-center kd-gnome-bar px-3 text-[11px] font-semibold text-white/90"
+        aria-hidden="true"
+      >
         <span className="flex gap-1">
           <span className="h-1.5 w-4 rounded-full bg-white/90" />
           <span className="size-1.5 rounded-full bg-white/45" />
@@ -134,7 +159,9 @@ export interface RunningApp {
 
 /** Keeps a closed app a moment longer, so it can slide out (`leaving`). */
 function useLive(apps: RunningApp[], ms = 220): (RunningApp & { leaving: boolean })[] {
-  const [shown, setShown] = useState<(RunningApp & { leaving: boolean })[]>(() => apps.map((a) => ({ ...a, leaving: false })))
+  const [shown, setShown] = useState<(RunningApp & { leaving: boolean })[]>(() =>
+    apps.map((a) => ({ ...a, leaving: false }))
+  )
   const key = apps.map((a) => `${a.id}:${a.active}`).join(',')
   useEffect(() => {
     setShown((cur) => {
@@ -156,7 +183,10 @@ function useLive(apps: RunningApp[], ms = 220): (RunningApp & { leaving: boolean
 export function Taskbar({ apps }: { apps: RunningApp[] }) {
   const live = useLive(apps)
   return (
-    <div className="flex h-8 shrink-0 items-center justify-center gap-1 border-t border-hairline bg-bar/85 backdrop-blur" aria-hidden="true">
+    <div
+      className="flex h-8 shrink-0 items-center justify-center gap-1 border-t border-hairline bg-bar/85 backdrop-blur"
+      aria-hidden="true"
+    >
       <span className="grid size-6 place-items-center">
         <svg width="14" height="14" viewBox="0 0 16 16" className="text-accent-ink" fill="currentColor">
           <rect width="7.4" height="7.4" />
@@ -169,7 +199,9 @@ export function Taskbar({ apps }: { apps: RunningApp[] }) {
         <span key={a.id} className={`kd-task ${a.leaving ? 'kd-task-out' : ''}`} title={a.label}>
           <span className={`relative grid size-6 place-items-center rounded-sm ${a.active ? 'bg-hover' : ''}`}>
             {a.icon}
-            <span className={`absolute -bottom-0.5 h-0.5 rounded-full bg-accent transition-[width] duration-200 ${a.active ? 'w-3' : 'w-1.5 opacity-60'}`} />
+            <span
+              className={`absolute -bottom-0.5 h-0.5 rounded-full bg-accent transition-[width] duration-200 ${a.active ? 'w-3' : 'w-1.5 opacity-60'}`}
+            />
           </span>
         </span>
       ))}

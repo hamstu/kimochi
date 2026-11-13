@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 fn http_get(port: u16, path: &str) -> Result<String, String> {
     let mut s = TcpStream::connect(("127.0.0.1", port)).map_err(|e| e.to_string())?;
     s.set_read_timeout(Some(Duration::from_secs(2))).ok();
-    write!(s, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").map_err(|e| e.to_string())?;
+    write!(s, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n")
+        .map_err(|e| e.to_string())?;
     // Read until the server closes or goes quiet (DevTools may keep the connection open).
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];

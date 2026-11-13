@@ -403,7 +403,8 @@ export function createHookCard(parent, hooks) {
     bare: (on) => card.toggleAttribute('data-bare', Boolean(on)),
     dragging: () => drag !== null,
     /** Where the card and its open menu are on the overlay; empty when it is not shown. */
-    rects: () => (card.hidden ? [] : [card.getBoundingClientRect(), ...(menu.hidden ? [] : [menu.getBoundingClientRect()])]),
+    rects: () =>
+      card.hidden ? [] : [card.getBoundingClientRect(), ...(menu.hidden ? [] : [menu.getBoundingClientRect()])],
     /** The card's text box now (overlay coordinates), or null. */
     box: () => (box ? { ...box } : null),
     element: card

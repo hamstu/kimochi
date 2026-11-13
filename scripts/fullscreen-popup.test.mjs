@@ -40,7 +40,12 @@ function popupClass() {
         width = 1280
         top = 0
       }
-      Object.assign(this._frame.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` })
+      Object.assign(this._frame.style, {
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+        height: `${height}px`
+      })
     }
   }
 }
@@ -93,7 +98,12 @@ test('Yomitan: the Popup seams the placing relies on are in the pinned build', a
 test('Hachidori and 10ten: the fill stylesheet puts the top-level pop-up over the box', () => {
   const hachidori = fillCss('hachidori', BOX)
   assert.match(hachidori, /^\.gsm-hoshidicts-popup\[data-hoshidicts-depth="0"\] \{/)
-  for (const rule of ['left: 120px !important', 'top: 260px !important', 'width: 900px !important', 'height: 420px !important'])
+  for (const rule of [
+    'left: 120px !important',
+    'top: 260px !important',
+    'width: 900px !important',
+    'height: 420px !important'
+  ])
     assert.ok(hachidori.includes(rule), rule)
 
   const tenten = fillCss('tenten', { x: 10.123, y: 20, width: 300.5, height: 200 })
@@ -182,7 +192,12 @@ const descriptor = (id) => ({
 
 test("an engine's driver keeps the fill on its host, and takes it off once the pop-up has closed", async () => {
   const { win, state, styles, createHost } = fakeWindow()
-  const driver = createDriver(win, { descriptor: descriptor('tenten'), context: {}, report: () => {}, backgroundSender: () => null })
+  const driver = createDriver(win, {
+    descriptor: descriptor('tenten'),
+    context: {},
+    report: () => {},
+    backgroundSender: () => null
+  })
 
   // No host yet (no lookup so far): the fill waits for one and lands the moment it is made.
   driver.place(BOX)
@@ -205,7 +220,10 @@ test("an engine's driver keeps the fill on its host, and takes it off once the p
   state.showing = false
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert.equal(styles.length, 0)
-  assert.ok(state.observers.every((observer) => !observer.active), 'stops watching the document')
+  assert.ok(
+    state.observers.every((observer) => !observer.active),
+    'stops watching the document'
+  )
 
   // A new box before the old clear has run keeps the new one.
   driver.place(BOX)

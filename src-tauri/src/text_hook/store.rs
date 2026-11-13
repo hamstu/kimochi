@@ -76,7 +76,9 @@ impl Manifest {
                 if !safe_relative(&file.name) {
                     return Err(format!("{:?} is not a safe relative path", file.name));
                 }
-                if file.sha256.len() != 64 || !file.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+                if file.sha256.len() != 64
+                    || !file.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                {
                     return Err(format!("{} has no valid SHA-256", file.name));
                 }
                 if file.size == 0 || file.sources.is_empty() {
@@ -139,10 +141,7 @@ impl Fetch for HttpFetch {
             return Err("the server does not serve byte ranges".into());
         }
         let mut body = Vec::new();
-        response
-            .take(WHOLE_LIMIT)
-            .read_to_end(&mut body)
-            .map_err(|e| format!("network error: {e}"))?;
+        response.take(WHOLE_LIMIT).read_to_end(&mut body).map_err(|e| format!("network error: {e}"))?;
         Ok(body)
     }
 
@@ -314,20 +313,14 @@ pub fn engine_dir(root: &Path, id: &str, engine: &Engine) -> PathBuf {
 pub fn installed(root: &Path, id: &str) -> Option<PathBuf> {
     let engine = manifest().engines.get(id)?;
     let dir = engine_dir(root, id, engine);
-    let complete = engine.files.iter().all(|f| {
-        fs::metadata(dir.join(&f.name)).map(|m| m.len() == f.size).unwrap_or(false)
-    });
+    let complete =
+        engine.files.iter().all(|f| fs::metadata(dir.join(&f.name)).map(|m| m.len() == f.size).unwrap_or(false));
     complete.then_some(dir)
 }
 
 /// Downloads and verifies every file of `id` into a staging directory, then renames it into
 /// place. `progress` gets (bytes done, bytes total) after each file.
-pub fn install(
-    fetch: &dyn Fetch,
-    root: &Path,
-    id: &str,
-    progress: &dyn Fn(u64, u64),
-) -> Result<PathBuf, String> {
+pub fn install(fetch: &dyn Fetch, root: &Path, id: &str, progress: &dyn Fn(u64, u64)) -> Result<PathBuf, String> {
     install_from(fetch, manifest(), root, id, progress)
 }
 
@@ -518,7 +511,10 @@ mod tests {
         let big = vec![7u8; 300_000];
         let host = b"host dll bytes".repeat(1000);
         let archive = zip(&[("pad.bin", &big, false), ("R/files/LunaHost64.dll", &host, true)]);
-        let fake = Fake { files: BTreeMap::from([("https://gh/r.zip".to_string(), archive.clone())]), asked: Mutex::default() };
+        let fake = Fake {
+            files: BTreeMap::from([("https://gh/r.zip".to_string(), archive.clone())]),
+            asked: Mutex::default(),
+        };
         let manifest = manifest_for(&[(
             "LunaHost64.dll",
             &host,

@@ -48,10 +48,7 @@ fn decode(report: &[u8]) -> Option<Sample> {
     }
     Some(Sample {
         system_menu: report[9] & (1 << 5) != 0 || report[14] & (1 << 2) != 0,
-        buttons: BUTTONS
-            .iter()
-            .map(|&(offset, bit)| report[offset] & (1 << bit) != 0)
-            .collect(),
+        buttons: BUTTONS.iter().map(|&(offset, bit)| report[offset] & (1 << bit) != 0).collect(),
         // HID stick Y is positive up, matching gilrs/navigation's convention.
         axes: [48, 50, 52, 54]
             .into_iter()
@@ -74,25 +71,13 @@ pub struct Reader {
 
 impl Reader {
     pub fn connected(&self) -> bool {
-        self.received
-            .is_some_and(|time| time.elapsed() < Duration::from_millis(250))
-            && self.sample.is_some()
+        self.received.is_some_and(|time| time.elapsed() < Duration::from_millis(250)) && self.sample.is_some()
     }
     pub fn system_menu(&self) -> bool {
-        self.connected()
-            && self
-                .sample
-                .as_ref()
-                .is_some_and(|sample| sample.system_menu)
+        self.connected() && self.sample.as_ref().is_some_and(|sample| sample.system_menu)
     }
     pub fn new() -> Self {
-        Self {
-            file: None,
-            sample: None,
-            received: None,
-            retry: Instant::now(),
-            desktop: false,
-        }
+        Self { file: None, sample: None, received: None, retry: Instant::now(), desktop: false }
     }
 
     /// A reader that also works in Desktop Mode on a Steam Deck (the controller thread,
@@ -123,9 +108,7 @@ impl Reader {
             // Match the Deck's raw controller interface, never keyboard/mouse or
             // an arbitrary hidraw index. Steam already owns this shared interface.
             if !info.lines().any(|l| l == "HID_ID=0003:000028DE:00001205")
-                || !info
-                    .lines()
-                    .any(|l| l.starts_with("HID_PHYS=") && l.ends_with("/input2"))
+                || !info.lines().any(|l| l.starts_with("HID_PHYS=") && l.ends_with("/input2"))
             {
                 continue;
             }
@@ -174,9 +157,7 @@ impl Reader {
             self.sample = None;
             self.received = None;
         }
-        self.received
-            .filter(|time| time.elapsed() < Duration::from_millis(250))
-            .and(self.sample.clone())
+        self.received.filter(|time| time.elapsed() < Duration::from_millis(250)).and(self.sample.clone())
     }
 }
 

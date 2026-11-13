@@ -7,10 +7,15 @@ export function portalWindowBounds(info, liveBounds = null) {
   if (!/^(portal|wayland):window:/.test(info?.source_id ?? '') || !info.source_bounds) return null
   const bounds = liveBounds ?? info.source_bounds
   const scale = info.scale_factor
-  if (![bounds.x, bounds.y, bounds.width, bounds.height, scale].every(Number.isFinite)
-    || bounds.width <= 0 || bounds.height <= 0 || scale <= 0) return null
-  if (Math.abs(bounds.width * scale - info.full_width) > 2
-    || Math.abs(bounds.height * scale - info.full_height) > 2) return null
+  if (
+    ![bounds.x, bounds.y, bounds.width, bounds.height, scale].every(Number.isFinite) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0 ||
+    scale <= 0
+  )
+    return null
+  if (Math.abs(bounds.width * scale - info.full_width) > 2 || Math.abs(bounds.height * scale - info.full_height) > 2)
+    return null
   return bounds
 }
 

@@ -159,7 +159,9 @@ export function relaySeqWindow(size = RELAY_REORDER_WINDOW) {
   let floor = 0
   let highest = 0
   return {
-    get highest() { return highest },
+    get highest() {
+      return highest
+    },
     accept(seq) {
       if (seq <= floor || recent.has(seq)) return false
       recent.add(seq)
@@ -231,7 +233,13 @@ export function extCommand(win, command) {
 /** `win.__TAURI__` with `core.invoke` going through `extCommand` (same object when no prefix). */
 export function extTauri(win, tauri = win?.__TAURI__) {
   if (typeof win?.__kimochiExtCommandPrefix !== 'string' || !tauri?.core?.invoke) return tauri
-  return { ...tauri, core: { ...tauri.core, invoke: (command, args, options) => tauri.core.invoke(extCommand(win, command), args, options) } }
+  return {
+    ...tauri,
+    core: {
+      ...tauri.core,
+      invoke: (command, args, options) => tauri.core.invoke(extCommand(win, command), args, options)
+    }
+  }
 }
 
 /**

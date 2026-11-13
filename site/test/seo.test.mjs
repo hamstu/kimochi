@@ -1,21 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  NOT_FOUND,
-  ROUTES,
-  canonicalUrl,
-  headTags,
-  jsonLd,
-  outputFile,
-  routeMeta,
-  sitemapXml
-} from '../src/lib/seo.js'
+import { NOT_FOUND, ROUTES, canonicalUrl, headTags, jsonLd, outputFile, routeMeta, sitemapXml } from '../src/lib/seo.js'
 import { FAQ, HOME_FAQ_COUNT } from '../src/content/faq.js'
 
 test('every route has a unique title and description', () => {
   const all = [...ROUTES, NOT_FOUND]
   assert.equal(new Set(all.map((r) => r.title)).size, all.length)
-  assert.equal(new Set(ROUTES.filter((r) => r.index).map((r) => r.description)).size, ROUTES.filter((r) => r.index).length)
+  assert.equal(
+    new Set(ROUTES.filter((r) => r.index).map((r) => r.description)).size,
+    ROUTES.filter((r) => r.index).length
+  )
   for (const r of all) assert.ok(r.description.length > 10 && r.description.length <= 230, r.path)
 })
 
@@ -82,7 +76,10 @@ test('JSON-LD in a script element cannot close it', () => {
 test('sitemap lists exactly the indexed routes', () => {
   const xml = sitemapXml()
   const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
-  assert.deepEqual(locs, ROUTES.filter((r) => r.index).map((r) => canonicalUrl(r.path)))
+  assert.deepEqual(
+    locs,
+    ROUTES.filter((r) => r.index).map((r) => canonicalUrl(r.path))
+  )
 })
 
 test('FAQ entries are complete and plain text', () => {

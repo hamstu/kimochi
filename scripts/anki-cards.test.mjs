@@ -53,11 +53,20 @@ test('records from native are made safe to show, unknown enhancements dropped', 
 
 test('the list is newest first and a changed card takes its own place', () => {
   const cards = sortNewestFirst([card(1, '一', 10), card(2, '二', 30), card(3, '三', 20)])
-  assert.deepEqual(cards.map((c) => c.noteId), [2, 3, 1])
+  assert.deepEqual(
+    cards.map((c) => c.noteId),
+    [2, 3, 1]
+  )
   const enhanced = upsertCard(cards, card(3, '三', 20, { enhanced: ['sentenceAudio'] }))
-  assert.deepEqual(enhanced.map((c) => c.noteId), [2, 3, 1])
+  assert.deepEqual(
+    enhanced.map((c) => c.noteId),
+    [2, 3, 1]
+  )
   assert.deepEqual(enhanced[1].enhanced, ['sentenceAudio'])
-  assert.deepEqual(upsertCard(cards, card(4, '四', 40)).map((c) => c.noteId), [4, 2, 3, 1])
+  assert.deepEqual(
+    upsertCard(cards, card(4, '四', 40)).map((c) => c.noteId),
+    [4, 2, 3, 1]
+  )
 })
 
 test('search looks at the word, its reading and the deck', () => {
@@ -74,7 +83,11 @@ test("the footer counts the session's cards, today's and those given audio", () 
   const today = new Date(2026, 9, 27, 0, 5).getTime()
   const yesterday = new Date(2026, 9, 26, 23, 55).getTime()
   const stats = cardStats(
-    [card(1, 'a', today), card(2, 'b', yesterday, { enhanced: ['wordAudio'] }), card(3, 'c', now, { enhanced: ['sentenceAudio'] })],
+    [
+      card(1, 'a', today),
+      card(2, 'b', yesterday, { enhanced: ['wordAudio'] }),
+      card(3, 'c', now, { enhanced: ['sentenceAudio'] })
+    ],
     now
   )
   assert.deepEqual(stats, { total: 3, today: 2, enhanced: 2, screenshots: 0 })
@@ -85,7 +98,10 @@ test('the mark says what Kimochi added', () => {
   assert.equal(enhancementLabel(['sentenceAudio']), 'Sentence audio added by Kimochi')
   assert.equal(enhancementLabel(['wordAudio']), 'Word audio added by Kimochi')
   assert.equal(enhancementLabel(['wordAudio', 'sentenceAudio']), 'Sentence audio and word audio added by Kimochi')
-  assert.equal(enhancementLabel(['screenshot', 'wordAudio', 'sentenceAudio']), 'Sentence audio, word audio and screenshot added by Kimochi')
+  assert.equal(
+    enhancementLabel(['screenshot', 'wordAudio', 'sentenceAudio']),
+    'Sentence audio, word audio and screenshot added by Kimochi'
+  )
   assert.equal(enhancementLabel(['screenshot']), 'Screenshot added by Kimochi')
   assert.equal(browseQuery({ noteId: 1730000000001 }), 'nid:1730000000001')
 })

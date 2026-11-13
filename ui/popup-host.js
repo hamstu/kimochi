@@ -39,15 +39,7 @@
  */
 
 import './install-pointer-dedupe.js'
-import {
-  anchorViewport,
-  asEdges,
-  boundsOf,
-  chainWindow,
-  fitsIn,
-  insetIn,
-  withExtent
-} from './popup-geometry.js'
+import { anchorViewport, asEdges, boundsOf, chainWindow, fitsIn, insetIn, withExtent } from './popup-geometry.js'
 
 const LABEL = 'popup-host'
 const core = window.__TAURI__?.core
@@ -77,9 +69,7 @@ const [{ Application }, { PopupFactory }, { Popup }] = await Promise.all([
 // does that.
 for (const seam of ['_getViewport', '_getPosition']) {
   if (typeof Popup.prototype[seam] !== 'function') {
-    throw new Error(
-      `The popup host relies on Popup#${seam}, which this Yomitan build does not have.`
-    )
+    throw new Error(`The popup host relies on Popup#${seam}, which this Yomitan build does not have.`)
   }
 }
 
@@ -90,7 +80,8 @@ let desktopLookup = false
 let gnomeBridge = false
 let appearance = 'system'
 const themeMedia = matchMedia('(prefers-color-scheme: dark)')
-const resolvedTheme = () => appearance === 'light' || appearance === 'dark' ? appearance : themeMedia.matches ? 'dark' : 'light'
+const resolvedTheme = () =>
+  appearance === 'light' || appearance === 'dark' ? appearance : themeMedia.matches ? 'dark' : 'light'
 let anchors = []
 let displays = []
 let windowRect = null
@@ -239,7 +230,9 @@ async function relayout() {
   const signature = JSON.stringify(readingRects)
   if (signature !== readingPopupSignature) {
     readingPopupSignature = signature
-    void window.__TAURI__.event.emitTo('overlay','overlay-reading-popup',{visible:readingVisible,rects:readingRects}).catch(() => {})
+    void window.__TAURI__.event
+      .emitTo('overlay', 'overlay-reading-popup', { visible: readingVisible, rects: readingRects })
+      .catch(() => {})
   }
   if (visible.length === 0) {
     scheduleHide()
@@ -286,10 +279,14 @@ async function relayout() {
   }
   try {
     if (gnomeBridge) {
-      await invoke('gnome_overlay', { operation: 'own-window', payload: {
-        label: LABEL, sourceKind: popupSources.get(newest) ?? 'reader',
-        interactiveRects: visible.filter(([popup]) => container === whole || popup === newest).map(([, rect]) => rect)
-      } })
+      await invoke('gnome_overlay', {
+        operation: 'own-window',
+        payload: {
+          label: LABEL,
+          sourceKind: popupSources.get(newest) ?? 'reader',
+          interactiveRects: visible.filter(([popup]) => container === whole || popup === newest).map(([, rect]) => rect)
+        }
+      })
     }
     await invoke('popup_window', { rect: padded, visible: true })
     await invoke('regions', {
@@ -301,7 +298,9 @@ async function relayout() {
       // non-activating panel, that costs the reader's own application nothing: it
       // stays active, and its window order is not touched.
       rects: gnomeBridge
-        ? visible.filter(([popup]) => container === whole || popup === newest).map(([, rect]) => ({ ...rect, focus: true }))
+        ? visible
+            .filter(([popup]) => container === whole || popup === newest)
+            .map(([, rect]) => ({ ...rect, focus: true }))
         : [{ ...container, focus: true }]
     })
   } catch (error) {
@@ -375,7 +374,15 @@ Popup.prototype.showContent = async function (details, displayDetails) {
     for (const [popup] of placed) if (!popup.parent && popup !== this) popup.hide(false)
   }
   markNewest(this)
-  if (sent.length) popupSources.set(this, this.parent ? popupSources.get(this.parent) : desktopLookup || displayDetails?.content?.contentOrigin?.tabId === 1 ? 'desktop' : 'reader')
+  if (sent.length)
+    popupSources.set(
+      this,
+      this.parent
+        ? popupSources.get(this.parent)
+        : desktopLookup || displayDetails?.content?.contentOrigin?.tabId === 1
+          ? 'desktop'
+          : 'reader'
+    )
   anchors = origin
     ? real.map((r) => ({
         left: r.left + origin.x,
@@ -522,36 +529,61 @@ await Application.main(false, async (application) => {
     let generation = 0
     let desktopPopup = null
 
-if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeBridge) {
-  await window.__TAURI__.event.listen('gnome-controller-popup-control',async({payload})=>{
-    const doc=desktopPopup?._frame?.contentDocument
-    const scroll=doc?.querySelector('#content-scroll');if(!scroll)return
-    if(Number.isFinite(payload.scroll))scroll.scrollBy(0,payload.scroll)
-    if(payload.step===1||payload.step===-1) {
-      // Use the reader's own entry action first, including its active entry and
-      // sticky-header handling, just as the shared controller does.
-      const options=await application.api.optionsGetFull()
-      const profile=options?.profiles?.[options.profileCurrent]?.options
-      const action=payload.step>0?'nextEntry':'previousEntry'
-      const hotkey=profile?.inputs?.hotkeys?.find(h=>h.action===action&&h.enabled!==false&&typeof h.key==='string'&&(h.scopes??[]).includes('popup'))
-      if(hotkey) {
-        const win=desktopPopup._frame.contentWindow,mods=hotkey.modifiers??[]
-        const key=new win.KeyboardEvent('keydown',{key:hotkey.key.replace(/^Key/,'').toLowerCase(),code:hotkey.key,
-          altKey:mods.includes('alt'),ctrlKey:mods.includes('ctrl'),shiftKey:mods.includes('shift'),metaKey:mods.includes('meta'),bubbles:true,cancelable:true})
-        doc.dispatchEvent(key)
-        if(key.defaultPrevented)return
-      }
-      const entries=[...doc.querySelectorAll('.entry')]
-      const top=scroll.getBoundingClientRect().top
-      const current=Math.max(0,entries.findIndex(entry=>entry.getBoundingClientRect().bottom>top+8))
-      entries[Math.max(0,Math.min(entries.length-1,current+payload.step))]?.scrollIntoView({block:'start'})
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeBridge) {
+      await window.__TAURI__.event.listen('gnome-controller-popup-control', async ({ payload }) => {
+        const doc = desktopPopup?._frame?.contentDocument
+        const scroll = doc?.querySelector('#content-scroll')
+        if (!scroll) return
+        if (Number.isFinite(payload.scroll)) scroll.scrollBy(0, payload.scroll)
+        if (payload.step === 1 || payload.step === -1) {
+          // Use the reader's own entry action first, including its active entry and
+          // sticky-header handling, just as the shared controller does.
+          const options = await application.api.optionsGetFull()
+          const profile = options?.profiles?.[options.profileCurrent]?.options
+          const action = payload.step > 0 ? 'nextEntry' : 'previousEntry'
+          const hotkey = profile?.inputs?.hotkeys?.find(
+            (h) =>
+              h.action === action &&
+              h.enabled !== false &&
+              typeof h.key === 'string' &&
+              (h.scopes ?? []).includes('popup')
+          )
+          if (hotkey) {
+            const win = desktopPopup._frame.contentWindow,
+              mods = hotkey.modifiers ?? []
+            const key = new win.KeyboardEvent('keydown', {
+              key: hotkey.key.replace(/^Key/, '').toLowerCase(),
+              code: hotkey.key,
+              altKey: mods.includes('alt'),
+              ctrlKey: mods.includes('ctrl'),
+              shiftKey: mods.includes('shift'),
+              metaKey: mods.includes('meta'),
+              bubbles: true,
+              cancelable: true
+            })
+            doc.dispatchEvent(key)
+            if (key.defaultPrevented) return
+          }
+          const entries = [...doc.querySelectorAll('.entry')]
+          const top = scroll.getBoundingClientRect().top
+          const current = Math.max(
+            0,
+            entries.findIndex((entry) => entry.getBoundingClientRect().bottom > top + 8)
+          )
+          entries[Math.max(0, Math.min(entries.length - 1, current + payload.step))]?.scrollIntoView({ block: 'start' })
+        }
+      })
     }
-  })
-}
     // Desktop OCR has no Frontend scanner. Original Display.close() still calls
     // the content-origin API; answer that API here instead of timing out.
     application.crossFrame.registerHandlers([
-      ['frontendClosePopup', () => { ++generation; desktopPopup?.hide(false) }]
+      [
+        'frontendClosePopup',
+        () => {
+          ++generation
+          desktopPopup?.hide(false)
+        }
+      ]
     ])
     await window.__TAURI__.event.listen('gnome-popup-dismiss', () => {
       ++generation
@@ -569,26 +601,63 @@ if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeBridge) {
         if (serial !== generation) return
         const current = await invoke('gnome_overlay', { operation: 'status', payload: null })
         if (current.suspended || current.serial !== payload.serial) return
-        await invoke('gnome_overlay', { operation: 'highlight', payload: {
-          serial: payload.serial, index: payload.index, length: result.originalTextLength ?? 0
-        } })
-        if (!result.dictionaryEntries.length) { desktopPopup?.hide(false); return }
+        await invoke('gnome_overlay', {
+          operation: 'highlight',
+          payload: {
+            serial: payload.serial,
+            index: payload.index,
+            length: result.originalTextLength ?? 0
+          }
+        })
+        if (!result.dictionaryEntries.length) {
+          desktopPopup?.hide(false)
+          return
+        }
         await refreshDisplays()
-        desktopPopup ??= await factory.getOrCreatePopup({ frameId: application.frameId, depth: 0, childrenSupported: true })
+        desktopPopup ??= await factory.getOrCreatePopup({
+          frameId: application.frameId,
+          depth: 0,
+          childrenSupported: true
+        })
         await desktopPopup.setOptionsContext(optionsContext)
         if (serial !== generation) return
         desktopLookup = true
         try {
-        await desktopPopup.showContent({ optionsContext,
-          sourceRects: [{ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height }],
-          writingMode: 'horizontal-tb' }, {
-          focus: false, historyMode: 'clear', params: { type: 'terms', query: payload.text.slice(0, result.originalTextLength ?? payload.text.length), wildcards: 'off' },
-          state: { focusEntry: 0, optionsContext, url: location.href, pageTheme: resolvedTheme(), sentence: { text: payload.sentence ?? payload.text, offset: payload.offset ?? 0 }, documentTitle: 'Kimochi screen OCR' },
-          content: { contentOrigin: { tabId: application.tabId, frameId: application.frameId }, dictionaryEntries: result.dictionaryEntries }
-        })
-        if (serial !== generation) desktopPopup.hide(false)
-        } finally { desktopLookup = false }
-      } catch (error) { report({ check: 'gnome-yomitan-popup-failed', error: String(error) }) }
+          await desktopPopup.showContent(
+            {
+              optionsContext,
+              sourceRects: [{ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height }],
+              writingMode: 'horizontal-tb'
+            },
+            {
+              focus: false,
+              historyMode: 'clear',
+              params: {
+                type: 'terms',
+                query: payload.text.slice(0, result.originalTextLength ?? payload.text.length),
+                wildcards: 'off'
+              },
+              state: {
+                focusEntry: 0,
+                optionsContext,
+                url: location.href,
+                pageTheme: resolvedTheme(),
+                sentence: { text: payload.sentence ?? payload.text, offset: payload.offset ?? 0 },
+                documentTitle: 'Kimochi screen OCR'
+              },
+              content: {
+                contentOrigin: { tabId: application.tabId, frameId: application.frameId },
+                dictionaryEntries: result.dictionaryEntries
+              }
+            }
+          )
+          if (serial !== generation) desktopPopup.hide(false)
+        } finally {
+          desktopLookup = false
+        }
+      } catch (error) {
+        report({ check: 'gnome-yomitan-popup-failed', error: String(error) })
+      }
     })
   }
   // Only now: a client that asks earlier gets a timeout, and Yomitan caches which

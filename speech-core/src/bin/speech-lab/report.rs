@@ -88,14 +88,16 @@ pub fn write(
         let scores: Vec<Score> = rows.iter().filter_map(score).collect();
         let truly_voiced = count(&|r| r.line.truth.as_ref().is_some_and(|t| t.voiced));
         let truly_silent = count(&|r| r.line.truth.as_ref().is_some_and(|t| !t.voiced));
-        let silent_right = count(&|r| r.line.truth.as_ref().is_some_and(|t| !t.voiced) && matches!(outcome(r), Some(Outcome::Silent)));
+        let silent_right =
+            count(&|r| r.line.truth.as_ref().is_some_and(|t| !t.voiced) && matches!(outcome(r), Some(Outcome::Silent)));
         let covered = scores.iter().filter(|s| s.covered).count();
         let wrong = scores.iter().filter(|s| !s.overlaps).count();
         let starts = median(scores.iter().map(|s| s.start_error.abs()).collect());
         let ends = median(scores.iter().map(|s| s.end_error.abs()).collect());
         let flipped: Vec<&str> = rows.iter().filter(|r| r.flipped).map(|r| r.line.uid.as_str()).collect();
         let names = count(&|r| r.line.kind.as_deref() == Some("name"));
-        let names_voiced = count(&|r| r.line.kind.as_deref() == Some("name") && matches!(outcome(r), Some(Outcome::Voiced(_))));
+        let names_voiced =
+            count(&|r| r.line.kind.as_deref() == Some("name") && matches!(outcome(r), Some(Outcome::Voiced(_))));
         let _ = write!(
             summary,
             "\nAgainst the truth: {}/{truly_voiced} voiced lines got a clip, {covered} holding the whole voice, {wrong} the wrong audio; \
@@ -127,7 +129,9 @@ pub fn write(
         let mut contaminated = 0;
         let mut excess = Vec::new();
         for r in rows {
-            let (Some(Outcome::Voiced(v)), Some(t)) = (outcome(r), r.line.truth.as_ref().filter(|t| t.voiced)) else { continue };
+            let (Some(Outcome::Voiced(v)), Some(t)) = (outcome(r), r.line.truth.as_ref().filter(|t| t.voiced)) else {
+                continue;
+            };
             let others = voices.iter().filter(|(uid, ..)| *uid != r.line.uid);
             if others.clone().any(|(_, a, b)| v.to_ms.min(*b) - v.from_ms.max(*a) >= 300.0) {
                 contaminated += 1;
@@ -142,7 +146,12 @@ pub fn write(
             " {contaminated} clips take in another line's voice; clips run {:.2}s longer than the voice (median).",
             excess_median / 1000.0
         );
-        let _ = write!(summary, " Clips came {:.1}s (median), {:.1}s (90%) after the line and its voice.", wait_median / 1000.0, wait_p90 / 1000.0);
+        let _ = write!(
+            summary,
+            " Clips came {:.1}s (median), {:.1}s (90%) after the line and its voice.",
+            wait_median / 1000.0,
+            wait_p90 / 1000.0
+        );
         if names > 0 {
             let _ = write!(summary, " {names_voiced}/{names} name boxes were given a voice.");
         }
@@ -184,7 +193,11 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
             (Some(d), clip) => match &d.outcome {
                 Outcome::Voiced(v) => {
                     let how = match &v.how {
-                        How::Matched(m) => format!("matched {:.0}%<br><span class=muted>heard {}</span>", m.score * 100.0, escape(&m.heard)),
+                        How::Matched(m) => format!(
+                            "matched {:.0}%<br><span class=muted>heard {}</span>",
+                            m.score * 100.0,
+                            escape(&m.heard)
+                        ),
                         How::Hooked => "hooked".into(),
                         How::Timed => "by timing".into(),
                     };
@@ -213,26 +226,27 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
             Some(kind) => format!("{} <span class=muted>({kind})</span>", escape(&line.text)),
             None => escape(&line.text),
         };
-        let truth = match &line.truth {
-            None => String::new(),
-            Some(t) if !t.voiced => {
-                let right = matches!(row.decision.as_ref().map(|d| &d.outcome), Some(Outcome::Silent));
-                format!("<span class={}>no voice</span>", if right { "good" } else { "bad" })
-            }
-            Some(t) => {
-                let range = format!("{:.2}–{:.2}s", rel(t.start_ms.unwrap_or(0.0)), rel(t.end_ms.unwrap_or(0.0)));
-                match score(row) {
-                    Some(s) => format!(
+        let truth =
+            match &line.truth {
+                None => String::new(),
+                Some(t) if !t.voiced => {
+                    let right = matches!(row.decision.as_ref().map(|d| &d.outcome), Some(Outcome::Silent));
+                    format!("<span class={}>no voice</span>", if right { "good" } else { "bad" })
+                }
+                Some(t) => {
+                    let range = format!("{:.2}–{:.2}s", rel(t.start_ms.unwrap_or(0.0)), rel(t.end_ms.unwrap_or(0.0)));
+                    match score(row) {
+                        Some(s) => format!(
                         "{range}<br><span class={}>{}</span> <span class=muted>start {:+.0} ms, end {:+.0} ms</span>",
                         if s.covered { "good" } else { "bad" },
                         if !s.overlaps { "wrong audio" } else if s.covered { "whole voice" } else { "partly cut" },
                         s.start_error,
                         s.end_error
                     ),
-                    None => format!("{range}<br><span class=bad>no clip</span>"),
+                        None => format!("{range}<br><span class=bad>no clip</span>"),
+                    }
                 }
-            }
-        };
+            };
         let _ = write!(
             html,
             "<tr><td>{}</td><td class=text>{text}</td><td>{arrived}</td><td>{decided}</td><td>{clip}</td><td>{truth}</td></tr>",
@@ -241,7 +255,13 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
     }
     html.push_str("</table><h2>Speech heard</h2><table><tr><th>From</th><th>To</th><th>Heard</th></tr>");
     for h in heard {
-        let _ = write!(html, "<tr><td>{:.2}s</td><td>{:.2}s</td><td>{}</td></tr>", rel(h.start_ms), rel(h.end_ms), escape(&h.text()));
+        let _ = write!(
+            html,
+            "<tr><td>{:.2}s</td><td>{:.2}s</td><td>{}</td></tr>",
+            rel(h.start_ms),
+            rel(h.end_ms),
+            escape(&h.text())
+        );
     }
     html.push_str("</table>");
     std::fs::write(out.join("report.html"), html).map_err(|e| e.to_string())?;
@@ -268,7 +288,8 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
         })
         .collect();
     let report = json!({ "summary": summary, "metrics": metrics, "processingSeconds": elapsed, "audioSeconds": audio_seconds, "lines": json_rows });
-    std::fs::write(out.join("report.json"), serde_json::to_string_pretty(&report).unwrap()).map_err(|e| e.to_string())?;
+    std::fs::write(out.join("report.json"), serde_json::to_string_pretty(&report).unwrap())
+        .map_err(|e| e.to_string())?;
     Ok(summary)
 }
 

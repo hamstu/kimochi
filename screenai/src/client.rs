@@ -42,15 +42,9 @@ impl Worker {
         configure: impl FnOnce(&mut Command),
     ) -> Result<Self, String> {
         let mut command = Command::new(program);
-        command
-            .arg(dir)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        command.arg(dir).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         configure(&mut command);
-        let mut child = command
-            .spawn()
-            .map_err(|e| format!("could not start the Screen AI worker: {e}"))?;
+        let mut child = command.spawn().map_err(|e| format!("could not start the Screen AI worker: {e}"))?;
         let stdin = child.stdin.take().ok_or("the Screen AI worker has no stdin")?;
         let stdout = child.stdout.take().ok_or("the Screen AI worker has no stdout")?;
         let stderr = child.stderr.take().ok_or("the Screen AI worker has no stderr")?;
@@ -137,8 +131,9 @@ fn wait(
 ) -> Result<Reply, String> {
     match replies.recv_timeout(timeout) {
         Ok(Ok(reply)) => Ok(reply),
-        Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => Err(died(child, tail)
-            .unwrap_or_else(|| "the Screen AI worker stopped answering".into())),
+        Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(died(child, tail).unwrap_or_else(|| "the Screen AI worker stopped answering".into()))
+        }
         Err(mpsc::RecvTimeoutError::Timeout) => {
             let _ = child.lock().unwrap_or_else(|p| p.into_inner()).kill();
             Err(format!("Screen AI did not {doing} within {} s", timeout.as_secs()))

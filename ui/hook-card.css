@@ -22,10 +22,7 @@
   --hook-card-top: var(--ocr-card);
   --hook-card-bottom: var(--ocr-card);
   --hook-card-colours:
-    --hook-card-top 500ms ease,
-    --hook-card-bottom 500ms ease,
-    color 500ms ease,
-    text-shadow 500ms ease;
+    --hook-card-top 500ms ease, --hook-card-bottom 500ms ease, color 500ms ease, text-shadow 500ms ease;
   transition: var(--hook-card-colours);
   --hook-card-radius: 5px;
   position: absolute;
@@ -91,8 +88,16 @@
 .hook-card-text-ghost {
   /* Full-width glyphs a whole em across, as the game's own CJK text is: what OCR measured. Another
      language's text is set in its own fonts (language-style.ts, set on the page by overlay.js). */
-  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif);
+  font-family: var(
+    --kimochi-text-font,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+    'Yu Gothic',
+    'Meiryo',
+    sans-serif
+  );
   font-weight: 400;
   font-kerning: none;
   letter-spacing: 0;
@@ -227,7 +232,9 @@
   box-shadow:
     inset 0 0 0 1px var(--ocr-card-line),
     var(--ocr-card-shadow);
-  font: 12px/1.3 system-ui, sans-serif;
+  font:
+    12px/1.3 system-ui,
+    sans-serif;
   text-shadow: none;
 }
 .hook-card-menu[hidden] {

@@ -1,5 +1,5 @@
-@import "tailwindcss/theme.css";
-@import "tailwindcss/utilities.css";
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/utilities.css';
 @source "./**/*.{ts,tsx}";
 @theme {
   /* The learner's text: the language being read's fonts (--k-font-text, kit/tokens.css). */
@@ -52,7 +52,7 @@ body.scan-mode .jp-text button {
 .jp-text {
   font-family: var(--font-jp);
   line-height: 1.85;
-  font-feature-settings: "palt";
+  font-feature-settings: 'palt';
   letter-spacing: 0.01em;
   -webkit-user-select: text;
   user-select: text;
@@ -90,14 +90,14 @@ ruby rt {
   margin: 0.125rem 0;
 }
 
-.yomitan-html [data-sc-content="example-sentence-a"] {
+.yomitan-html [data-sc-content='example-sentence-a'] {
   font-size: 1.05em;
   border-left: 1px solid var(--k-accent-line);
   padding-left: 0.5rem;
   margin: 0.25rem 0;
 }
 
-.yomitan-html [data-sc-content="example-sentence-b"] {
+.yomitan-html [data-sc-content='example-sentence-b'] {
   font-size: 0.9em;
   color: var(--color-text-dim);
   border-left: 1px solid var(--k-line-strong);
@@ -105,7 +105,7 @@ ruby rt {
   margin: 0.25rem 0;
 }
 
-.yomitan-html [data-sc-content="example-keyword"] {
+.yomitan-html [data-sc-content='example-keyword'] {
   color: var(--color-accent);
   font-weight: 700;
 }
@@ -121,11 +121,11 @@ ruby rt {
    "see also" headwords) render as `<a href="#" lang="ja">`. Style them as
    real links; .yomitan-xref marks the glossary as having a click handler that
    resolves the target, so only then do we show the interactive affordance. */
-.yomitan-html a[lang="ja"] {
+.yomitan-html a[lang='ja'] {
   color: var(--color-accent-text);
   text-decoration: none;
 }
-.yomitan-html.yomitan-xref a[lang="ja"] {
+.yomitan-html.yomitan-xref a[lang='ja'] {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
@@ -135,7 +135,7 @@ ruby rt {
     background-color 0.12s ease,
     color 0.12s ease;
 }
-.yomitan-html.yomitan-xref a[lang="ja"]:hover {
+.yomitan-html.yomitan-xref a[lang='ja']:hover {
   color: var(--color-accent);
   background: var(--color-accent-soft);
   text-decoration-style: solid;

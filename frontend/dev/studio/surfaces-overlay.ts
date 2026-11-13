@@ -41,7 +41,13 @@ const GAME: ControlGroup = {
       ],
       default: 'dialogue'
     },
-    { kind: 'toggle', param: 'windowed', label: 'Windowed (a Mac game)', on: '1', help: 'Off: the whole screen, as on the Deck.' },
+    {
+      kind: 'toggle',
+      param: 'windowed',
+      label: 'Windowed (a Mac game)',
+      on: '1',
+      help: 'Off: the whole screen, as on the Deck.'
+    },
     { kind: 'toggle', param: 'furigana', label: 'Furigana', on: '1', off: '0', default: true }
   ]
 }
@@ -146,7 +152,13 @@ export const OVERLAY_SURFACES: Surface[] = [
         title: 'Pointer and pop-up',
         when: inScene('overlay-words', ''),
         controls: [
-          { kind: 'text', param: 'hover', label: 'Rest the pointer at (x,y)', placeholder: '200,656', help: 'Or move the mouse over the text; hold Shift over a word to look it up.' },
+          {
+            kind: 'text',
+            param: 'hover',
+            label: 'Rest the pointer at (x,y)',
+            placeholder: '200,656',
+            help: 'Or move the mouse over the text; hold Shift over a word to look it up.'
+          },
           { kind: 'toggle', param: 'lookup', label: 'Pop-up open on the first line', on: '1' },
           THEME
         ]
@@ -154,7 +166,15 @@ export const OVERLAY_SURFACES: Surface[] = [
       {
         title: 'Source outline',
         when: inScene('overlay-hover'),
-        controls: [{ kind: 'toggle', param: 'crop', label: 'Saved crop too', on: '1', help: 'Hovering Select Region in the main window.' }]
+        controls: [
+          {
+            kind: 'toggle',
+            param: 'crop',
+            label: 'Saved crop too',
+            on: '1',
+            help: 'Hovering Select Region in the main window.'
+          }
+        ]
       },
       {
         title: 'Region editor',
@@ -174,7 +194,13 @@ export const OVERLAY_SURFACES: Surface[] = [
             ],
             default: 'blue'
           },
-          { kind: 'text', param: 'title', label: 'Title in the foot', placeholder: 'Anki crop area', help: 'Hidden when the foot has no room for it.' },
+          {
+            kind: 'text',
+            param: 'title',
+            label: 'Title in the foot',
+            placeholder: 'Anki crop area',
+            help: 'Hidden when the foot has no room for it.'
+          },
           THEME
         ]
       }

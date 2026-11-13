@@ -4,7 +4,14 @@
  * the wording Settings → Dictionary and onboarding share. The progress block, its bar, its line
  * and its buttons are the OCR models' (`model-download.ts`), which take any `DownloadStatus`.
  */
-import { formatBytes, percent, progressText, type DownloadStatus, type ModelAction, type ModelState } from './model-download.js'
+import {
+  formatBytes,
+  percent,
+  progressText,
+  type DownloadStatus,
+  type ModelAction,
+  type ModelState
+} from './model-download.js'
 import type { DictionaryEngine } from './settings.js'
 
 export type ExtensionEngine = 'yomitan' | 'hachidori' | 'tenten'

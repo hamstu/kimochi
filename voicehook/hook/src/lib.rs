@@ -16,15 +16,15 @@ mod census;
 mod cri;
 mod ds;
 mod fileread;
-mod il2cpp;
 mod iat;
+mod il2cpp;
 mod renpy;
 mod sdl;
 mod sink;
 mod unity;
 mod util;
-mod waveout;
 mod vt;
+mod waveout;
 mod xa;
 
 use std::ffi::c_void;

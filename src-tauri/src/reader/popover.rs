@@ -32,31 +32,25 @@ fn level_of(label: &str) -> Option<usize> {
 
 /// Builds one level's window, hidden. The first is built at startup; the others when the level
 /// below them first shows, so one is ready by the time the reader scans inside it.
-pub fn build_window(
-    app: &AppHandle,
-    level: usize,
-) -> tauri::Result<tauri::WebviewWindow> {
-    let builder = tauri::WebviewWindowBuilder::new(
-        app,
-        label(level),
-        tauri::WebviewUrl::App("app/reader-popup.html".into()),
-    )
-    .title("Dictionary")
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .visible(false)
-    .focused(false)
-    .accept_first_mouse(true)
-    .skip_taskbar(true)
-    .inner_size(500., 380.)
-    // Hidden from capture unless the reader turned that off (`exclude_from_capture`); on
-    // Windows the cursor poll then narrows it to display sources (`sync_capture_protection`).
-    .content_protected(
-        app.try_state::<crate::state::Shared>()
-            .is_none_or(|service| crate::settings::exclude_from_capture(&service.settings)),
-    )
-    .initialization_script_for_all_frames(crate::platform::platform_prelude());
+pub fn build_window(app: &AppHandle, level: usize) -> tauri::Result<tauri::WebviewWindow> {
+    let builder =
+        tauri::WebviewWindowBuilder::new(app, label(level), tauri::WebviewUrl::App("app/reader-popup.html".into()))
+            .title("Dictionary")
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .visible(false)
+            .focused(false)
+            .accept_first_mouse(true)
+            .skip_taskbar(true)
+            .inner_size(500., 380.)
+            // Hidden from capture unless the reader turned that off (`exclude_from_capture`); on
+            // Windows the cursor poll then narrows it to display sources (`sync_capture_protection`).
+            .content_protected(
+                app.try_state::<crate::state::Shared>()
+                    .is_none_or(|service| crate::settings::exclude_from_capture(&service.settings)),
+            )
+            .initialization_script_for_all_frames(crate::platform::platform_prelude());
     #[cfg(target_os = "linux")]
     let builder = builder.focusable(crate::platform::wayland_overlay_unavailable());
     // Without a shadow from the start. An undecorated window built with one is sized for its
@@ -188,20 +182,12 @@ pub fn pointer(app: &AppHandle, x: f64, y: f64, shift: bool) {
     let scale = if crate::platform::desktop_unit() == crate::platform::DesktopUnit::Points {
         1.0
     } else {
-        app.get_webview_window(&label(level))
-            .and_then(|w| w.scale_factor().ok())
-            .unwrap_or(1.0)
+        app.get_webview_window(&label(level)).and_then(|w| w.scale_factor().ok()).unwrap_or(1.0)
     };
     let _ = app.emit_to(
         label(level),
         "popover:pointer",
-        PopupPointer {
-            x: (x - ox) / scale,
-            y: (y - oy) / scale,
-            screen_x: x,
-            screen_y: y,
-            shift,
-        },
+        PopupPointer { x: (x - ox) / scale, y: (y - oy) / scale, screen_x: x, screen_y: y, shift },
     );
 }
 
@@ -226,10 +212,7 @@ pub async fn reader_popup_ready(window: tauri::WebviewWindow) {
 #[tauri::command]
 pub async fn reader_popup_focus(window: tauri::WebviewWindow) -> Result<(), String> {
     let level = level_of(window.label()).unwrap_or(0);
-    on_popup_main(window.app_handle(), level, |window| {
-        crate::platform::promote_to_key(&window).map(|_| ())
-    })
-    .await
+    on_popup_main(window.app_handle(), level, |window| crate::platform::promote_to_key(&window).map(|_| ())).await
 }
 
 /// Monotonic lookup generation per level. Bumped on every show_popover (and hide), so
@@ -379,18 +362,14 @@ pub async fn show_popover(
     // opens on the entry rather than flashing a loading state first.
     let mut fields = (!is_notebook).then(|| {
         let (base_url, term) = (base_url.clone(), term.clone());
-        tokio::spawn(async move {
-            crate::reader::yomitan::ankifields_value(&base_url, &term, false).await
-        })
+        tokio::spawn(async move { crate::reader::yomitan::ankifields_value(&base_url, &term, false).await })
     });
     // And the first entry's media alone, which is what autoplay plays: every entry's media takes
     // Yomitan seconds for a common word (it tries each entry's audio sources in turn, online ones
     // included), the first entry's alone tens of milliseconds with local audio.
     let first_media = (!is_notebook && include_media.unwrap_or(false)).then(|| {
         let (base_url, term) = (base_url.clone(), term.clone());
-        tokio::spawn(async move {
-            crate::reader::yomitan::ankifields_first(&base_url, &term, true, 1).await
-        })
+        tokio::spawn(async move { crate::reader::yomitan::ankifields_first(&base_url, &term, true, 1).await })
     });
 
     prepare_level(&app, level);
@@ -411,12 +390,7 @@ pub async fn show_popover(
         first = tokio::time::timeout(SHOW_WAIT, handle)
             .await
             .ok()
-            .map(|joined| {
-                joined
-                    .map_err(|e| e.to_string())
-                    .and_then(|r| r)
-                    .map(|v| extract_entries(&v))
-            });
+            .map(|joined| joined.map_err(|e| e.to_string()).and_then(|r| r).map(|v| extract_entries(&v)));
         if LOOKUP_GEN[level].load(Ordering::Relaxed) != gen {
             return Ok(()); // a newer lookup took over while this one ran
         }
@@ -427,9 +401,7 @@ pub async fn show_popover(
     // instead of straddling two device pixels (which reads as a double line).
     let width = width.clamp(240., 1200.).round();
     let height = height.clamp(120., 1000.).round();
-    let window = app
-        .get_webview_window(&label(level))
-        .ok_or_else(|| "popover window missing".to_string())?;
+    let window = app.get_webview_window(&label(level)).ok_or_else(|| "popover window missing".to_string())?;
 
     // Grow the window by 2*SHADOW_PAD so the visible card's drop-shadow lives
     // inside transparent margin and doesn't get clipped by the OS window.
@@ -456,10 +428,7 @@ pub async fn show_popover(
         .iter()
         .find(|m| {
             let b = m.bounds;
-            cursor_x >= b.x
-                && cursor_x < b.x + b.width
-                && cursor_y >= b.y
-                && cursor_y < b.y + b.height
+            cursor_x >= b.x && cursor_x < b.x + b.width && cursor_y >= b.y && cursor_y < b.y + b.height
         })
         .or_else(|| displays.first());
     let (mon_x, mon_y, mon_w, mon_h) = target
@@ -469,23 +438,14 @@ pub async fn show_popover(
         })
         .unwrap_or((0., 0., 1920., 1080.));
 
-    let (x, y) = place_card(
-        anchor,
-        (cursor_x, cursor_y),
-        width,
-        height,
-        (mon_x, mon_y, mon_w, mon_h),
-    );
+    let (x, y) = place_card(anchor, (cursor_x, cursor_y), width, height, (mon_x, mon_y, mon_w, mon_h));
     CARDS.lock().unwrap_or_else(|p| p.into_inner())[level] = Some((x, y, width, height));
 
     // (x, y) above target the CARD's top-left. Subtract SHADOW_PAD so the
     // window's transparent margin sits behind the card. Tauri converts logical
     // → physical using the destination monitor's scale factor.
     if logical {
-        let _ = window.set_position(LogicalPosition::new(
-            (x - SHADOW_PAD).round(),
-            (y - SHADOW_PAD).round(),
-        ));
+        let _ = window.set_position(LogicalPosition::new((x - SHADOW_PAD).round(), (y - SHADOW_PAD).round()));
     } else {
         // Tauri's logical position is not desktop points under mixed DPI, so the
         // platform places the window (on the main thread, which native placement needs).
@@ -501,12 +461,8 @@ pub async fn show_popover(
     let audio_autoplay_v = audio_autoplay.unwrap_or(true);
     let audio_volume_v = audio_volume.unwrap_or(0.9);
     let loaded = {
-        let (term, sentence, anki_config, base_url) = (
-            term.clone(),
-            sentence.clone(),
-            anki_config.clone(),
-            base_url.clone(),
-        );
+        let (term, sentence, anki_config, base_url) =
+            (term.clone(), sentence.clone(), anki_config.clone(), base_url.clone());
         move |fresh: bool, entries: Vec<Value>, audio_media, dictionary_media| ShowPayload::Loaded {
             term: term.clone(),
             fresh,
@@ -522,35 +478,19 @@ pub async fn show_popover(
     };
     let failed = {
         let (term, sentence) = (term.clone(), sentence.clone());
-        move |message: String| ShowPayload::Error {
-            term: term.clone(),
-            message,
-            sentence: sentence.clone(),
-        }
+        move |message: String| ShowPayload::Error { term: term.clone(), message, sentence: sentence.clone() }
     };
 
     // The initial payload. A notebook entry carries everything; a lookup that finished within
     // SHOW_WAIT opens on its entry; a slower one opens on a loading state.
     if is_notebook {
-        let entry = notebook_entry
-            .clone()
-            .ok_or_else(|| "notebook payload missing".to_string())?;
-        let _ = app.emit_to(
-            label(level),
-            "popover:show",
-            ShowPayload::Notebook {
-                entry,
-                sentence: sentence.clone(),
-            },
-        );
+        let entry = notebook_entry.clone().ok_or_else(|| "notebook payload missing".to_string())?;
+        let _ = app.emit_to(label(level), "popover:show", ShowPayload::Notebook { entry, sentence: sentence.clone() });
     } else if fields.is_some() {
         let payload = match &first {
             Some(Ok(entries)) => loaded(true, entries.clone(), Vec::new(), Vec::new()),
             Some(Err(err)) => failed(err.clone()),
-            None => ShowPayload::Loading {
-                term: term.clone(),
-                sentence: sentence.clone(),
-            },
+            None => ShowPayload::Loading { term: term.clone(), sentence: sentence.clone() },
         };
         if LOOKUP_GEN[level].load(Ordering::Relaxed) != gen {
             return Ok(());
@@ -595,11 +535,7 @@ pub async fn show_popover(
             Some(Ok(entries)) => entries,
             Some(Err(_)) => return,
             None => {
-                let result = handle
-                    .await
-                    .map_err(|e| e.to_string())
-                    .and_then(|r| r)
-                    .map(|v| extract_entries(&v));
+                let result = handle.await.map_err(|e| e.to_string()).and_then(|r| r).map(|v| extract_entries(&v));
                 if !is_current() {
                     return;
                 }
@@ -682,10 +618,7 @@ fn same_entry(a: &Value, b: &Value) -> bool {
 }
 
 fn extract_entries(v: &Value) -> Vec<Value> {
-    v.get("fields")
-        .and_then(|f| f.as_array())
-        .cloned()
-        .unwrap_or_default()
+    v.get("fields").and_then(|f| f.as_array()).cloned().unwrap_or_default()
 }
 
 fn extract_media(v: &Value, key: &str) -> Vec<MediaItem> {
@@ -694,18 +627,9 @@ fn extract_media(v: &Value, key: &str) -> Vec<MediaItem> {
     };
     arr.iter()
         .filter_map(|item| {
-            let filename = item
-                .get("ankiFilename")
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string())?;
-            let content = item
-                .get("content")
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string())?;
-            Some(MediaItem {
-                anki_filename: filename,
-                content_base64: content,
-            })
+            let filename = item.get("ankiFilename").and_then(|x| x.as_str()).map(|s| s.to_string())?;
+            let content = item.get("content").and_then(|x| x.as_str()).map(|s| s.to_string())?;
+            Some(MediaItem { anki_filename: filename, content_base64: content })
         })
         .collect()
 }
@@ -780,12 +704,9 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
         "description": "Synthetic popup regression", "notes": [], "images": [],
         "matchEnabled": false, "createdAt": 0, "updatedAt": 0
     });
-    let window = app
-        .get_webview_window(POPOVER_LABEL)
-        .ok_or("missing window")?;
+    let window = app.get_webview_window(POPOVER_LABEL).ok_or("missing window")?;
     // The helpers must fail safely if a future caller forgets the dispatcher.
-    if crate::platform::order_front(&window).is_ok() || crate::platform::promote_to_key(&window).is_ok()
-    {
+    if crate::platform::order_front(&window).is_ok() || crate::platform::promote_to_key(&window).is_ok() {
         return Err("native helpers accepted a worker-thread call".into());
     }
     for _ in 0..3 {
@@ -809,9 +730,7 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
             None,
         )
         .await?;
-        let window = app
-            .get_webview_window(POPOVER_LABEL)
-            .ok_or("missing window")?;
+        let window = app.get_webview_window(POPOVER_LABEL).ok_or("missing window")?;
         reader_popup_focus(window.clone()).await?;
         if !window.is_visible().map_err(|e| e.to_string())? {
             return Err("popup did not become visible".into());
@@ -847,10 +766,7 @@ mod tests {
     #[test]
     fn each_level_has_its_own_window_and_reads_back() {
         let labels: Vec<String> = (0..LEVELS).map(label).collect();
-        assert_eq!(
-            labels,
-            ["reader-popup", "reader-popup-2", "reader-popup-3", "reader-popup-4", "reader-popup-5"]
-        );
+        assert_eq!(labels, ["reader-popup", "reader-popup-2", "reader-popup-3", "reader-popup-4", "reader-popup-5"]);
         for (level, label) in labels.iter().enumerate() {
             assert_eq!(level_of(label), Some(level));
         }

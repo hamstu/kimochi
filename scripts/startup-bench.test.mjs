@@ -29,7 +29,10 @@ test('summarizes medians in the order the marks happen', () => {
 
 test('finds the app data directory on each OS', () => {
   const tail = (file) => file.split(/[\\/]/).slice(-2).join('/')
-  assert.equal(tail(dataDir('win32', 'C:/Users/a', { APPDATA: 'C:/Users/a/AppData/Roaming' })), 'Roaming/dev.kimochi.app')
+  assert.equal(
+    tail(dataDir('win32', 'C:/Users/a', { APPDATA: 'C:/Users/a/AppData/Roaming' })),
+    'Roaming/dev.kimochi.app'
+  )
   assert.equal(tail(dataDir('darwin', '/Users/a', {})), 'Application Support/dev.kimochi.app')
   assert.equal(tail(dataDir('linux', '/home/a', {})), 'share/dev.kimochi.app')
 })

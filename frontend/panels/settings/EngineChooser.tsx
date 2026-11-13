@@ -29,25 +29,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, Ellipsis, Trash2 } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
-import {
-  Badge,
-  Button,
-  Callout,
-  IconButton,
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuTrigger,
-  Tooltip
-} from '@kit'
+import { Badge, Button, Callout, IconButton, Menu, MenuContent, MenuItem, MenuTrigger, Tooltip } from '@kit'
 import { canRemoveModel, isModelEngine } from '@ui/model-download'
-import {
-  acceleratorLabel,
-  engineHint,
-  engineListed,
-  engineSelectable,
-  type EngineHint
-} from '@ui/ocr-engines'
+import { acceleratorLabel, engineHint, engineListed, engineSelectable, type EngineHint } from '@ui/ocr-engines'
 import { listKeyTarget, ocrUseAction, activateLabel } from '@ui/engine-chooser'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../../bridge/settings'
 import { OcrEngineIcon, OcrRunsIcon } from '../../components/EngineIcon'
@@ -63,7 +47,6 @@ import './engine-chooser.css'
 type Engines = PlatformCapabilities['ocrEngines']
 
 const MODES = Object.keys(OCR_MODES) as OcrMode[]
-
 
 /** The active engine's mark at the end of its row: a green check, read out as "In use". */
 export function InUseCheck(): ReactNode {
@@ -98,9 +81,7 @@ function EngineItem({
   const info = ocrModeInfo(mode)
   const status = useModelStatus(isModelEngine(mode) ? mode : null)
   const capability = engines[mode]
-  const hint: EngineHint | null = pending
-    ? { text: 'Confirming…', tone: 'progress' }
-    : engineHint(capability, status)
+  const hint: EngineHint | null = pending ? { text: 'Confirming…', tone: 'progress' } : engineHint(capability, status)
   const selectable = engineSelectable(capability)
   return (
     <div
@@ -162,7 +143,8 @@ function EngineDetail({
   const action = ocrUseAction({ inUse, pending, selectable })
   const runsOn = capability?.available ? acceleratorLabel(capability.accelerator) : null
   const capabilities = useCapabilities()
-  const windows10 = capabilities.os === 'windows' &&
+  const windows10 =
+    capabilities.os === 'windows' &&
     Number(capabilities.osVersion.split('.')[2]) > 0 &&
     Number(capabilities.osVersion.split('.')[2]) < 22000
 
@@ -236,9 +218,8 @@ function EngineDetail({
         <>
           {windows10 && (
             <p className="k-description">
-              Windows 10 needs three files from a recent Windows 11 Snipping Tool package:
-              {' '}oneocr.dll, oneocr.onemodel and onnxruntime.dll. Put a matching x64 or ARM64
-              set in your user folder under .config/oneocr.
+              Windows 10 needs three files from a recent Windows 11 Snipping Tool package: oneocr.dll, oneocr.onemodel
+              and onnxruntime.dll. Put a matching x64 or ARM64 set in your user folder under .config/oneocr.
             </p>
           )}
           {!capability?.available && (
@@ -368,4 +349,3 @@ export function EngineChooser(): ReactNode {
     </div>
   )
 }
-

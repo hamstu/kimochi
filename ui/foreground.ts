@@ -26,8 +26,7 @@ export interface SourceDescriptor {
 const isScreen = (source: SourceDescriptor | undefined | null): boolean =>
   source?.kind === 'display' || source?.kind === 'screen' || source?.type === 'screen'
 
-const appOf = (source: SourceDescriptor | undefined | null): string | null =>
-  source?.appName ?? source?.app ?? null
+const appOf = (source: SourceDescriptor | undefined | null): string | null => source?.appName ?? source?.app ?? null
 
 export { DEFAULT_OWN_APP_NAMES }
 
@@ -120,8 +119,7 @@ export function shouldShowScannedText(
   focusedAppName: string | null,
   scannedApp: string | null
 ): boolean {
-  const byApp =
-    isSourceInForeground(source, focusedAppName) && shouldShowOverlay(scannedApp, focusedAppName)
+  const byApp = isSourceInForeground(source, focusedAppName) && shouldShowOverlay(scannedApp, focusedAppName)
   if (!source || isScreen(source) || !focus) return byApp
   return focus.focused && focus.present
 }
@@ -131,13 +129,7 @@ export function isSourceInForeground(
   source: SourceDescriptor | undefined | null,
   focusedAppName: string | null
 ): boolean {
-  return (
-    !source ||
-    isScreen(source) ||
-    !focusedAppName ||
-    !appOf(source) ||
-    appOf(source) === focusedAppName
-  )
+  return !source || isScreen(source) || !focusedAppName || !appOf(source) || appOf(source) === focusedAppName
 }
 
 /**
@@ -156,9 +148,6 @@ export function getScannedAppName(
 }
 
 /** Should the overlay show text from `scannedApp` while `focusedApp` is in front? */
-export function shouldShowOverlay(
-  scannedApp: string | null,
-  focusedApp: string | null
-): boolean {
+export function shouldShowOverlay(scannedApp: string | null, focusedApp: string | null): boolean {
   return !scannedApp || !focusedApp || scannedApp === focusedApp
 }

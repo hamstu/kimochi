@@ -8,10 +8,7 @@ use std::{
 use x11rb::{
     connection::Connection,
     protocol::{
-        xproto::{
-            AtomEnum, ClientMessageEvent, ConnectionExt as _, CreateWindowAux, EventMask, PropMode,
-            WindowClass,
-        },
+        xproto::{AtomEnum, ClientMessageEvent, ConnectionExt as _, CreateWindowAux, EventMask, PropMode, WindowClass},
         Event,
     },
     rust_connection::RustConnection,
@@ -24,11 +21,7 @@ static LAST_GAME: AtomicU32 = AtomicU32::new(0);
 /// in Steam's own menu takes over.
 static RETURNED: AtomicU32 = AtomicU32::new(0);
 pub(super) fn own_id() -> Option<u32> {
-    std::env::var("KIMOCHI_STEAM_APP_ID")
-        .ok()?
-        .parse()
-        .ok()
-        .filter(|v| *v != 0)
+    std::env::var("KIMOCHI_STEAM_APP_ID").ok()?.parse().ok().filter(|v| *v != 0)
 }
 fn game(id: u32) -> bool {
     id != 0 && id != 769 && Some(id) != own_id()
@@ -68,13 +61,7 @@ impl Link {
             .reply()
             .map_err(|e| e.to_string())?
             .atom;
-        Ok(Self {
-            conn,
-            root,
-            helper,
-            time_atom,
-            atoms: Default::default(),
-        })
+        Ok(Self { conn, root, helper, time_atom, atoms: Default::default() })
     }
     fn atom(&self, name: &'static [u8]) -> Option<u32> {
         if let Some(atom) = self.atoms.borrow().get(name) {
@@ -99,33 +86,21 @@ impl Link {
         self.values(window, name)?.first().copied()
     }
     fn display(&self, name: &'static [u8]) -> Option<String> {
-        let bytes = self
-            .values(self.root, name)?
-            .iter()
-            .flat_map(|v| v.to_le_bytes())
-            .collect::<Vec<_>>();
+        let bytes = self.values(self.root, name)?.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>();
         let text = String::from_utf8(bytes.split(|v| *v == 0).next()?.to_vec()).ok()?;
         let number = text.strip_prefix(':')?;
         (!number.is_empty() && number.bytes().all(|v| v.is_ascii_digit())).then_some(text)
     }
     fn timestamp(&self) -> Result<u32, String> {
         self.conn
-            .change_property8(
-                PropMode::REPLACE,
-                self.helper,
-                self.time_atom,
-                AtomEnum::STRING,
-                &[1],
-            )
+            .change_property8(PropMode::REPLACE, self.helper, self.time_atom, AtomEnum::STRING, &[1])
             .map_err(|e| e.to_string())?
             .check()
             .map_err(|e| e.to_string())?;
         self.conn.flush().map_err(|e| e.to_string())?;
         let deadline = Instant::now() + Duration::from_millis(200);
         while Instant::now() < deadline {
-            if let Some(Event::PropertyNotify(event)) =
-                self.conn.poll_for_event().map_err(|e| e.to_string())?
-            {
+            if let Some(Event::PropertyNotify(event)) = self.conn.poll_for_event().map_err(|e| e.to_string())? {
                 if event.window == self.helper && event.atom == self.time_atom {
                     return Ok(event.time);
                 }
@@ -141,13 +116,7 @@ struct Target {
     display: String,
     window: u32,
 }
-fn coherent(
-    input: Option<u32>,
-    graphics: Option<u32>,
-    window_app: Option<u32>,
-    wine: bool,
-    protocol: bool,
-) -> bool {
+fn coherent(input: Option<u32>, graphics: Option<u32>, window_app: Option<u32>, wine: bool, protocol: bool) -> bool {
     input.is_some_and(game) && input == graphics && input == window_app && wine && protocol
 }
 fn target(root: &Link, links: &mut HashMap<String, Link>) -> Option<Target> {
@@ -173,12 +142,11 @@ fn target(root: &Link, links: &mut HashMap<String, Link>) -> Option<Target> {
             let wine = link.scalar(window, b"_WINE_HWND_STYLE").is_some();
             let protocols = link.values(window, b"WM_PROTOCOLS")?;
             let supported = protocols.contains(&link.atom(b"WM_TAKE_FOCUS")?);
-            return coherent(Some(app), Some(graphics), Some(window_app), wine, supported)
-                .then_some(Target {
-                    app,
-                    display: name,
-                    window,
-                });
+            return coherent(Some(app), Some(graphics), Some(window_app), wine, supported).then_some(Target {
+                app,
+                display: name,
+                window,
+            });
         }
         let parent = link.conn.query_tree(window).ok()?.reply().ok()?.parent;
         if parent == window {
@@ -189,7 +157,11 @@ fn target(root: &Link, links: &mut HashMap<String, Link>) -> Option<Target> {
     None
 }
 #[derive(Debug, PartialEq, Eq)]
-enum Steer { Keep, Reselect, Release }
+enum Steer {
+    Keep,
+    Reselect,
+    Release,
+}
 /// Steam owns GAMESCOPECTRL_BASELAYER_APPID and rewrites it from its own running-app
 /// list (`[…, <its app>, 769]`), which nothing outside Steam's UI can reorder
 /// (steamui's `SetRunningApp` is only called from its own menus and launches). So after
@@ -198,12 +170,22 @@ enum Steer { Keep, Reselect, Release }
 /// pick made from Steam's menu, or of any third app, is the user's and ends the guard.
 /// `game` is the game Kimochi last saw in front.
 fn steer(returned: u32, own: Option<u32>, game: u32, order: &[u32], focusable: &[u32], steam_ui: bool) -> Steer {
-    if returned == 0 { return Steer::Keep; }
-    if !focusable.contains(&returned) { return Steer::Release; }
+    if returned == 0 {
+        return Steer::Keep;
+    }
+    if !focusable.contains(&returned) {
+        return Steer::Release;
+    }
     let pick = order.iter().find(|id| focusable.contains(id)).copied();
-    if pick == Some(returned) { return Steer::Keep; }
+    if pick == Some(returned) {
+        return Steer::Keep;
+    }
     let ours = own.is_some() && (pick == own || (Some(returned) == own && pick == Some(game)));
-    if ours && !steam_ui { Steer::Reselect } else { Steer::Release }
+    if ours && !steam_ui {
+        Steer::Reselect
+    } else {
+        Steer::Release
+    }
 }
 pub(super) fn start() {
     if !super::gamescope::active() || STARTED.swap(true, Ordering::SeqCst) {
@@ -226,21 +208,27 @@ pub(super) fn start() {
             if current_order != order {
                 let focusable = root.values(root.root, b"GAMESCOPE_FOCUSABLE_APPS").unwrap_or_default();
                 let returned = RETURNED.load(Ordering::SeqCst);
-                match steer(returned, own_id(), LAST_GAME.load(Ordering::SeqCst), current_order.as_deref().unwrap_or_default(), &focusable, steam_ui) {
+                match steer(
+                    returned,
+                    own_id(),
+                    LAST_GAME.load(Ordering::SeqCst),
+                    current_order.as_deref().unwrap_or_default(),
+                    &focusable,
+                    steam_ui,
+                ) {
                     Steer::Keep => {}
                     Steer::Release => RETURNED.store(0, Ordering::SeqCst),
                     Steer::Reselect => match select(returned) {
-                        Ok(()) => eprintln!("Gamescope return: Steam rewrote the base layer outside its menu; kept app {returned}"),
+                        Ok(()) => eprintln!(
+                            "Gamescope return: Steam rewrote the base layer outside its menu; kept app {returned}"
+                        ),
                         Err(error) => eprintln!("Gamescope return: {error}"),
                     },
                 }
                 order = current_order;
             }
             steam_ui = root.scalar(root.root, b"GAMESCOPE_FOCUSED_APP") == Some(769);
-            if let Some(id) = root
-                .scalar(root.root, b"GAMESCOPE_FOCUSED_APP_GFX")
-                .filter(|id| game(*id))
-            {
+            if let Some(id) = root.scalar(root.root, b"GAMESCOPE_FOCUSED_APP_GFX").filter(|id| game(*id)) {
                 LAST_GAME.store(id, Ordering::SeqCst);
             }
             let current = target(&root, &mut links);
@@ -248,13 +236,26 @@ pub(super) fn start() {
                 if let Some(next) = &current {
                     let link = &links[&next.display];
                     let result = link.timestamp().and_then(|timestamp| {
-                        if target(&root,&mut links).as_ref()!=Some(next) { return Ok(()); }
+                        if target(&root, &mut links).as_ref() != Some(next) {
+                            return Ok(());
+                        }
                         let link = &links[&next.display];
-                        let event = ClientMessageEvent::new(32,next.window,link.atom(b"WM_PROTOCOLS").ok_or("WM_PROTOCOLS unavailable")?,
-                            [link.atom(b"WM_TAKE_FOCUS").ok_or("WM_TAKE_FOCUS unavailable")?,timestamp,0,0,0]);
-                        link.conn.send_event(false,next.window,EventMask::NO_EVENT,event).map_err(|e|e.to_string())?.check().map_err(|e|e.to_string())?;
-                        link.conn.flush().map_err(|e|e.to_string())?;
-                        eprintln!("Gamescope Wine focus handoff: app={} display={} window={} timestamp={timestamp}",next.app,next.display,next.window);
+                        let event = ClientMessageEvent::new(
+                            32,
+                            next.window,
+                            link.atom(b"WM_PROTOCOLS").ok_or("WM_PROTOCOLS unavailable")?,
+                            [link.atom(b"WM_TAKE_FOCUS").ok_or("WM_TAKE_FOCUS unavailable")?, timestamp, 0, 0, 0],
+                        );
+                        link.conn
+                            .send_event(false, next.window, EventMask::NO_EVENT, event)
+                            .map_err(|e| e.to_string())?
+                            .check()
+                            .map_err(|e| e.to_string())?;
+                        link.conn.flush().map_err(|e| e.to_string())?;
+                        eprintln!(
+                            "Gamescope Wine focus handoff: app={} display={} window={} timestamp={timestamp}",
+                            next.app, next.display, next.window
+                        );
                         Ok(())
                     });
                     if let Err(error) = result {
@@ -273,13 +274,7 @@ pub(super) fn last_game() -> u32 {
 }
 pub(super) fn game_id() -> Option<u32> {
     let d = super::x11::desktop()?;
-    let atom = d
-        .conn
-        .intern_atom(true, b"GAMESCOPE_FOCUSABLE_APPS")
-        .ok()?
-        .reply()
-        .ok()?
-        .atom;
+    let atom = d.conn.intern_atom(true, b"GAMESCOPE_FOCUSABLE_APPS").ok()?.reply().ok()?.atom;
     let values = d.property32(d.root, atom, AtomEnum::CARDINAL)?;
     let last = LAST_GAME.load(Ordering::SeqCst);
     if game(last) && values.contains(&last) {
@@ -304,12 +299,10 @@ pub(super) fn select(app: u32) -> Result<(), String> {
         .reply()
         .map_err(|e| e.to_string())?
         .atom;
-    if own_id().is_some() { RETURNED.store(app, Ordering::SeqCst); }
-    let order = priority(
-        d.property32(d.root, atom, AtomEnum::CARDINAL)
-            .unwrap_or_default(),
-        app,
-    );
+    if own_id().is_some() {
+        RETURNED.store(app, Ordering::SeqCst);
+    }
+    let order = priority(d.property32(d.root, atom, AtomEnum::CARDINAL).unwrap_or_default(), app);
     d.conn
         .change_property32(PropMode::REPLACE, d.root, atom, AtomEnum::CARDINAL, &order)
         .map_err(|e| e.to_string())?
@@ -322,13 +315,7 @@ mod tests {
     use super::*;
     #[test]
     fn activation_requires_the_selected_wine_game() {
-        assert!(coherent(
-            Some(1244090),
-            Some(1244090),
-            Some(1244090),
-            true,
-            true
-        ));
+        assert!(coherent(Some(1244090), Some(1244090), Some(1244090), true, true));
         for (input, graphics, window, wine, protocol) in [
             (Some(769), Some(1244090), Some(1244090), true, true),
             (Some(1244090), Some(769), Some(1244090), true, true),
@@ -366,9 +353,6 @@ mod tests {
     }
     #[test]
     fn explicit_switch_preserves_other_app_priorities_without_duplicates() {
-        assert_eq!(
-            priority(vec![413091, 769, 123, 42], 42),
-            vec![42, 413091, 769, 123]
-        );
+        assert_eq!(priority(vec![413091, 769, 123, 42], 42), vec![42, 413091, 769, 123]);
     }
 }

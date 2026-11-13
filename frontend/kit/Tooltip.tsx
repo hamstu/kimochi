@@ -30,7 +30,12 @@ export function Tooltip({
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
       </InsideTooltip.Provider>
       <TooltipPrimitive.Portal container={portalRoot()}>
-        <TooltipPrimitive.Content side={side} sideOffset={6} collisionPadding={8} className={cn('k-tooltip', className)}>
+        <TooltipPrimitive.Content
+          side={side}
+          sideOffset={6}
+          collisionPadding={8}
+          className={cn('k-tooltip', className)}
+        >
           {content}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>

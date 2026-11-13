@@ -44,7 +44,9 @@ mod tests {
         });
         let text = std::fs::read_to_string(&path).unwrap();
         assert_eq!(text.lines().count(), 800);
-        for line in text.lines() { serde_json::from_str::<serde_json::Value>(line).unwrap(); }
+        for line in text.lines() {
+            serde_json::from_str::<serde_json::Value>(line).unwrap();
+        }
         append(&path, &serde_json::json!({"next": 1}), 0).unwrap();
         append(&path, &serde_json::json!({"next": 2}), 0).unwrap();
         assert_eq!(std::fs::read_to_string(path.with_file_name("evidence.1.jsonl")).unwrap(), "{\"next\":1}\n");

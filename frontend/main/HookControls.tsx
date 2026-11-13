@@ -47,7 +47,12 @@ function threadLabel(thread: HookThread): string {
  * for a Unity game whose text Kimochi reads itself: its threads come without the hooker.
  */
 function couldNotHook(status: HookStatus): boolean {
-  return status.phase === 'hooked' && !status.unityText && !status.threads.some((t) => t.selected) && (status.hookFailures?.length ?? 0) > 0
+  return (
+    status.phase === 'hooked' &&
+    !status.unityText &&
+    !status.threads.some((t) => t.selected) &&
+    (status.hookFailures?.length ?? 0) > 0
+  )
 }
 
 /** What the select shows, and whether it is still working on it. */
@@ -68,7 +73,9 @@ function shown(status: HookStatus, selected: HookThread | null): { busy: boolean
   }
   if (selected) return { busy: false, text: threadLabel(selected) }
   if (status.threads.length === 0)
-    return couldNotHook(status) ? { busy: false, warn: true, text: 'No text hooked' } : { busy: true, text: 'Waiting for text…' }
+    return couldNotHook(status)
+      ? { busy: false, warn: true, text: 'No text hooked' }
+      : { busy: true, text: 'Waiting for text…' }
   // Nothing matched the screen yet: the reader can choose.
   if (status.pickNote) return { busy: false, warn: true, text: 'Choose the text…' }
   return { busy: true, text: 'Finding the dialogue…' }
@@ -103,8 +110,8 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
       {couldNotHook(status) && (
         <Callout tone="warn" className="src-notice">
           <span title={status.hookFailures?.join('\n')}>
-            Kimochi reached the game but couldn&apos;t hook some of its text. If the dialogue doesn&apos;t
-            show up, restart the game while Kimochi is open.
+            Kimochi reached the game but couldn&apos;t hook some of its text. If the dialogue doesn&apos;t show up,
+            restart the game while Kimochi is open.
           </span>
         </Callout>
       )}

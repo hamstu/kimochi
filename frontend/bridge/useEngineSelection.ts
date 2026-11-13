@@ -70,10 +70,7 @@ export function useEngineSelection(): EngineSelection {
 
   // Stable while the pick stands, so the dialog can tell a new question from a re-render.
   const confirmation = useMemo<DownloadConfirmation | null>(
-    () =>
-      pick?.status != null
-        ? { status: pick.status, confirm: () => commit(pick.mode), cancel }
-        : null,
+    () => (pick?.status != null ? { status: pick.status, confirm: () => commit(pick.mode), cancel } : null),
     [pick, commit, cancel]
   )
 

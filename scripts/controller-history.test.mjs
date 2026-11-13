@@ -1,153 +1,134 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { historyEntries, historyIndex } from "../ui/controller-history.js";
-import { itemFor } from "../ui/radial-menu.js";
-test("history ignores malformed and duplicate entries without editing durable text", () => {
-  const text = "日本語\n<script>untouched</script>";
-  const entry = { id: "a", text };
-  const values = [
-    null,
-    { id: "empty", text: " " },
-    entry,
-    { id: "a", text: "duplicate" },
-    { id: 5, text: "bad" },
-  ];
-  assert.deepEqual(historyEntries(values), [entry]);
-  assert.equal(entry.text, text);
-  assert.equal(values.length, 5);
-  assert.deepEqual(historyEntries(null), []);
-});
-test("history is bounded and navigation does not wrap at the ends", () => {
-  assert.equal(
-    historyEntries(
-      Array.from({ length: 100 }, (_, id) => ({ id: String(id), text: "猫" })),
-    ).length,
-    50,
-  );
-  assert.equal(historyIndex(0, "up", 3), 0);
-  assert.equal(historyIndex(0, "down", 3), 1);
-  assert.equal(historyIndex(2, "right", 3), 2);
-  assert.equal(historyIndex(2, "left", 3), 1);
-  assert.equal(historyIndex(0, "down", 0), -1);
-});
-test("D-pad can reach every expanded radial action and wrap both directions", () => {
-  let current = -1;
-  const visited = new Set();
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { historyEntries, historyIndex } from '../ui/controller-history.js'
+import { itemFor } from '../ui/radial-menu.js'
+test('history ignores malformed and duplicate entries without editing durable text', () => {
+  const text = '日本語\n<script>untouched</script>'
+  const entry = { id: 'a', text }
+  const values = [null, { id: 'empty', text: ' ' }, entry, { id: 'a', text: 'duplicate' }, { id: 5, text: 'bad' }]
+  assert.deepEqual(historyEntries(values), [entry])
+  assert.equal(entry.text, text)
+  assert.equal(values.length, 5)
+  assert.deepEqual(historyEntries(null), [])
+})
+test('history is bounded and navigation does not wrap at the ends', () => {
+  assert.equal(historyEntries(Array.from({ length: 100 }, (_, id) => ({ id: String(id), text: '猫' }))).length, 50)
+  assert.equal(historyIndex(0, 'up', 3), 0)
+  assert.equal(historyIndex(0, 'down', 3), 1)
+  assert.equal(historyIndex(2, 'right', 3), 2)
+  assert.equal(historyIndex(2, 'left', 3), 1)
+  assert.equal(historyIndex(0, 'down', 0), -1)
+})
+test('D-pad can reach every expanded radial action and wrap both directions', () => {
+  let current = -1
+  const visited = new Set()
   for (let step = 0; step < 6; step++) {
-    current = itemFor("right", 6, current);
-    visited.add(current);
+    current = itemFor('right', 6, current)
+    visited.add(current)
   }
-  assert.equal(visited.size, 6);
-  assert.equal(itemFor("right", 6, current), 0);
-  assert.equal(itemFor("left", 6, 0), 5);
-  assert.equal(itemFor("invalid", 6, 2), 2);
-  assert.equal(itemFor("down", 4, 0), 2);
-});
+  assert.equal(visited.size, 6)
+  assert.equal(itemFor('right', 6, current), 0)
+  assert.equal(itemFor('left', 6, 0), 5)
+  assert.equal(itemFor('invalid', 6, 2), 2)
+  assert.equal(itemFor('down', 4, 0), 2)
+})
 
 // Exercise the real controller state machine and history DOM together. Geometry is
 // deterministic here; native input and dictionary rendering remain device gates.
-import { createController } from "../ui/controller.js";
+import { createController } from '../ui/controller.js'
 
 class Element {
-  constructor(tag, text = "") {
-    this.tagName = tag;
-    this.nodeType = tag === "#text" ? 3 : 1;
-    this.children = [];
-    this.style = { setProperty(name, value) { this[name] = value; } };
-    this.dataset = {};
-    this.attributes = new Map();
-    this.listeners = new Map();
-    this.className = "";
-    this.value = text;
-    this.parentElement = null;
+  constructor(tag, text = '') {
+    this.tagName = tag
+    this.nodeType = tag === '#text' ? 3 : 1
+    this.children = []
+    this.style = {
+      setProperty(name, value) {
+        this[name] = value
+      }
+    }
+    this.dataset = {}
+    this.attributes = new Map()
+    this.listeners = new Map()
+    this.className = ''
+    this.value = text
+    this.parentElement = null
     this.classList = {
       add: (...names) => {
-        this.className = [
-          ...new Set([...this.className.split(" "), ...names]),
-        ].join(" ");
+        this.className = [...new Set([...this.className.split(' '), ...names])].join(' ')
       },
       remove: (...names) => {
         this.className = this.className
-          .split(" ")
+          .split(' ')
           .filter((name) => !names.includes(name))
-          .join(" ");
+          .join(' ')
       },
-      contains: (name) => this.className.split(" ").includes(name),
-      toggle: (name, enabled) =>
-        enabled ? this.classList.add(name) : this.classList.remove(name),
-    };
+      contains: (name) => this.className.split(' ').includes(name),
+      toggle: (name, enabled) => (enabled ? this.classList.add(name) : this.classList.remove(name))
+    }
   }
   get childNodes() {
-    return this.children;
+    return this.children
   }
   get textContent() {
-    return (
-      this.value + this.children.map((child) => child.textContent).join("")
-    );
+    return this.value + this.children.map((child) => child.textContent).join('')
   }
   set textContent(text) {
-    this.replaceChildren();
-    this.value = text;
+    this.replaceChildren()
+    this.value = text
   }
   set innerHTML(value) {
-    this.replaceChildren();
+    this.replaceChildren()
     for (const match of value.matchAll(/class="([^"]+)"/g)) {
-      const child = new Element('span');
-      child.className = match[1];
-      this.append(child);
+      const child = new Element('span')
+      child.className = match[1]
+      this.append(child)
     }
   }
   get length() {
-    return this.textContent.length;
+    return this.textContent.length
   }
   get isConnected() {
-    return this.connected || Boolean(this.parentElement?.isConnected);
+    return this.connected || Boolean(this.parentElement?.isConnected)
   }
   append(...children) {
     for (const child of children) {
-      child.parentElement = this;
-      this.children.push(child);
+      child.parentElement = this
+      this.children.push(child)
     }
   }
   replaceChildren(...children) {
-    for (const child of this.children) child.parentElement = null;
-    this.children = [];
-    this.append(...children);
+    for (const child of this.children) child.parentElement = null
+    this.children = []
+    this.append(...children)
   }
   remove() {
-    if (this.parentElement)
-      this.parentElement.children = this.parentElement.children.filter(
-        (child) => child !== this,
-      );
-    this.parentElement = null;
+    if (this.parentElement) this.parentElement.children = this.parentElement.children.filter((child) => child !== this)
+    this.parentElement = null
   }
   setAttribute(name, value) {
-    this.attributes.set(name, value);
+    this.attributes.set(name, value)
   }
   addEventListener(name, fn) {
-    this.listeners.set(name, fn);
+    this.listeners.set(name, fn)
   }
   scrollIntoView() {}
   scrollBy() {}
   getBoundingClientRect() {
-    return { x: 10, y: 20, left: 10, top: 20, width: 240, height: 30 };
+    return { x: 10, y: 20, left: 10, top: 20, width: 240, height: 30 }
   }
   querySelector(selector) {
-    if (selector === ".cm-hud-message" && !this.message) {
-      this.message = new Element("span");
-      this.message.className = "cm-hud-message";
-      this.append(this.message);
+    if (selector === '.cm-hud-message' && !this.message) {
+      this.message = new Element('span')
+      this.message.className = 'cm-hud-message'
+      this.append(this.message)
     }
     return (
-      this.children.find((child) =>
-        child.classList.contains(selector.slice(1)),
-      ) ??
-      this.children
-        .map((child) => child.querySelector(selector))
-        .find(Boolean) ??
+      this.children.find((child) => child.classList.contains(selector.slice(1))) ??
+      this.children.map((child) => child.querySelector(selector)).find(Boolean) ??
       this.message ??
       null
-    );
+    )
   }
 }
 
@@ -155,61 +136,61 @@ function controllerHarness(t, history, overrides = {}) {
   const saved = {
     document: globalThis.document,
     window: globalThis.window,
-    Node: globalThis.Node,
-  };
-  globalThis.window = { innerWidth: 1280, innerHeight: 800 };
-  globalThis.Node = { TEXT_NODE: 3 };
+    Node: globalThis.Node
+  }
+  globalThis.window = { innerWidth: 1280, innerHeight: 800 }
+  globalThis.Node = { TEXT_NODE: 3 }
   globalThis.document = {
     createElement: (tag) => new Element(tag),
     createElementNS: (_, tag) => new Element(tag),
-    createTextNode: (text) => new Element("#text", text),
+    createTextNode: (text) => new Element('#text', text),
     createRange: () => ({
       setStart(node, offset) {
-        this.node = node;
-        this.start = offset;
+        this.node = node
+        this.start = offset
       },
       setEnd(node, offset) {
-        this.node = node;
-        this.end = offset;
+        this.node = node
+        this.end = offset
       },
       getClientRects() {
-        return [this.getBoundingClientRect()];
+        return [this.getBoundingClientRect()]
       },
       getBoundingClientRect() {
         return {
           left: 10 + this.start * 10,
           top: 20,
           width: (this.end - this.start) * 10,
-          height: 30,
-        };
+          height: 30
+        }
       },
       toString() {
-        return this.node.textContent.slice(this.start, this.end);
-      },
-    }),
-  };
-  const host = new Element("main");
-  host.connected = true;
-  const words = new Element("div");
-  const listeners = new Map();
+        return this.node.textContent.slice(this.start, this.end)
+      }
+    })
+  }
+  const host = new Element('main')
+  host.connected = true
+  const words = new Element('div')
+  const listeners = new Map()
   const nav = [],
     lookups = [],
     textVisible = [],
-    logs = [];
+    logs = []
   let scans = 0,
-    actions = 0;
-  let dictionary = null;
+    actions = 0
+  let dictionary = null
   const controller = createController({
     host,
     words,
     native: {
       listen: (name, fn) => {
-        listeners.set(name, fn);
-        return Promise.resolve(() => listeners.delete(name));
+        listeners.set(name, fn)
+        return Promise.resolve(() => listeners.delete(name))
       },
       controllerNav: async (active) => {
-        nav.push(active);
-      },
+        nav.push(active)
+      }
     },
     status: () => ({
       hasText: true,
@@ -218,40 +199,40 @@ function controllerHarness(t, history, overrides = {}) {
       textVisible: true,
       center: { x: 640, y: 400 },
       area: null,
-      origin: null,
+      origin: null
     }),
     history,
     run: () => {
-      actions++;
+      actions++
     },
     scan: async () => {
-      scans++;
-      return true;
+      scans++
+      return true
     },
     popupControl: () => {},
     redraw: () => {},
     dictionary: () => dictionary,
     buttons: () => ({}),
-    popupType: () => "builtin",
+    popupType: () => 'builtin',
     lookupRange: async (range) => {
-      lookups.push(range.toString());
-      return true;
+      lookups.push(range.toString())
+      return true
     },
     dismiss: () => {},
     quietText: () => {},
     setText: async (visible) => {
-      textVisible.push(visible);
+      textVisible.push(visible)
     },
     nearText: () => false,
     log: (record) => {
-      logs.push(record);
+      logs.push(record)
     },
-    ...overrides,
-  });
+    ...overrides
+  })
   t.after(async () => {
-    await controller.close();
-    Object.assign(globalThis, saved);
-  });
+    await controller.close()
+    Object.assign(globalThis, saved)
+  })
   return {
     controller,
     host,
@@ -261,430 +242,460 @@ function controllerHarness(t, history, overrides = {}) {
     logs,
     effects: () => ({ scans, actions }),
     setDictionary(api) {
-      dictionary = api;
+      dictionary = api
     },
     send(payload) {
-      listeners.get("controller-nav")({ payload });
+      listeners.get('controller-nav')({ payload })
     },
     async press(button) {
-      listeners.get("controller-nav")({
+      listeners.get('controller-nav')({
         payload: {
           pressed: [button],
           released: [],
           held: [button],
           stick: { x: 0, y: 0 },
-          rstick: { x: 0, y: 0 },
-        },
-      });
-      await new Promise((resolve) => setImmediate(resolve));
-      listeners.get("controller-nav")({
+          rstick: { x: 0, y: 0 }
+        }
+      })
+      await new Promise((resolve) => setImmediate(resolve))
+      listeners.get('controller-nav')({
         payload: {
           pressed: [],
           released: [button],
           held: [],
           stick: { x: 0, y: 0 },
-          rstick: { x: 0, y: 0 },
-        },
-      });
-      await new Promise((resolve) => setImmediate(resolve));
-    },
-  };
+          rstick: { x: 0, y: 0 }
+        }
+      })
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+  }
 }
 
-test("recent text reads archived words, B returns to its list, and B closes without altering the live scan", async (t) => {
-  const h = controllerHarness(t, async () => [
-    { id: "old", text: "猫 犬", timestamp: 1 },
-  ]);
-  await h.controller.recentText();
-  assert.equal(h.controller.mode, "history");
-  assert.deepEqual(h.nav, [true]);
-  assert.ok(h.host.textContent.includes("猫 犬"));
-  await h.press(0);
-  assert.equal(h.controller.mode, "words");
-  assert.equal(
-    h.controller.holdsText,
-    false,
-    "archived words do not force live annotations on",
-  );
-  assert.deepEqual(h.lookups, ["猫 犬"]);
-  const lookups = h.lookups.length;
-  h.controller.scanChanged(true);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(
-    h.lookups.length,
-    lookups,
-    "live scan updates never replace the historical cursor",
-  );
-  await h.press(15);
-  assert.equal(h.lookups.at(-1), "犬");
-  await h.press(1);
-  assert.equal(h.controller.mode, "history");
-  assert.deepEqual(
-    h.nav,
-    [true],
-    "returning to the list retains navigation ownership",
-  );
-  await h.press(1);
-  assert.equal(h.controller.mode, "idle");
-  assert.deepEqual(h.nav, [true, false]);
-  assert.deepEqual(h.controller.hitRects(), []);
-  assert.deepEqual(
-    h.textVisible,
-    [],
-    "closing archived text does not hide the live overlay",
-  );
-  assert.deepEqual(h.effects(), { scans: 0, actions: 0 });
-});
+test('recent text reads archived words, B returns to its list, and B closes without altering the live scan', async (t) => {
+  const h = controllerHarness(t, async () => [{ id: 'old', text: '猫 犬', timestamp: 1 }])
+  await h.controller.recentText()
+  assert.equal(h.controller.mode, 'history')
+  assert.deepEqual(h.nav, [true])
+  assert.ok(h.host.textContent.includes('猫 犬'))
+  await h.press(0)
+  assert.equal(h.controller.mode, 'words')
+  assert.equal(h.controller.holdsText, false, 'archived words do not force live annotations on')
+  assert.deepEqual(h.lookups, ['猫 犬'])
+  const lookups = h.lookups.length
+  h.controller.scanChanged(true)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(h.lookups.length, lookups, 'live scan updates never replace the historical cursor')
+  await h.press(15)
+  assert.equal(h.lookups.at(-1), '犬')
+  await h.press(1)
+  assert.equal(h.controller.mode, 'history')
+  assert.deepEqual(h.nav, [true], 'returning to the list retains navigation ownership')
+  await h.press(1)
+  assert.equal(h.controller.mode, 'idle')
+  assert.deepEqual(h.nav, [true, false])
+  assert.deepEqual(h.controller.hitRects(), [])
+  assert.deepEqual(h.textVisible, [], 'closing archived text does not hide the live overlay')
+  assert.deepEqual(h.effects(), { scans: 0, actions: 0 })
+})
 
-test("history fetched after cancellation cannot reopen the reader or reclaim input", async (t) => {
-  let resolveHistory;
+test('history fetched after cancellation cannot reopen the reader or reclaim input', async (t) => {
+  let resolveHistory
   const h = controllerHarness(
     t,
     () =>
       new Promise((resolve) => {
-        resolveHistory = resolve;
-      }),
-  );
-  const opening = h.controller.recentText();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(h.controller.mode, "history");
-  await h.controller.close();
-  resolveHistory([{ id: "late", text: "古い文字" }]);
-  await opening;
-  assert.equal(h.controller.mode, "idle");
-  assert.deepEqual(h.nav, [true, false]);
-  assert.deepEqual(h.controller.hitRects(), []);
-  assert.equal(h.host.textContent, "");
-});
+        resolveHistory = resolve
+      })
+  )
+  const opening = h.controller.recentText()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(h.controller.mode, 'history')
+  await h.controller.close()
+  resolveHistory([{ id: 'late', text: '古い文字' }])
+  await opening
+  assert.equal(h.controller.mode, 'idle')
+  assert.deepEqual(h.nav, [true, false])
+  assert.deepEqual(h.controller.hitRects(), [])
+  assert.equal(h.host.textContent, '')
+})
 
-test("failed history fetch releases navigation ownership and reports the exact failure", async (t) => {
+test('failed history fetch releases navigation ownership and reports the exact failure', async (t) => {
   const h = controllerHarness(t, async () => {
-    throw Error("fixture: history read failed");
-  });
-  await h.controller.recentText();
-  assert.equal(h.controller.mode, "idle");
-  assert.deepEqual(h.nav, [true, false]);
+    throw Error('fixture: history read failed')
+  })
+  await h.controller.recentText()
+  assert.equal(h.controller.mode, 'idle')
+  assert.deepEqual(h.nav, [true, false])
   assert.deepEqual(h.logs, [
     {
-      check: "controller-history-failed",
-      error: "fixture: history read failed",
-    },
-  ]);
-});
+      check: 'controller-history-failed',
+      error: 'fixture: history read failed'
+    }
+  ])
+})
 
-test("late archived-word segmentation cannot replace the list after B returns to it", async (t) => {
-  let finishParse;
-  const h = controllerHarness(t, async () => [{ id: "old", text: "猫" }]);
+test('late archived-word segmentation cannot replace the list after B returns to it', async (t) => {
+  let finishParse
+  const h = controllerHarness(t, async () => [{ id: 'old', text: '猫' }])
   h.setDictionary(
     () =>
       new Promise((resolve) => {
-        finishParse = resolve;
-      }),
-  );
-  await h.controller.recentText();
-  await h.press(0);
-  assert.equal(h.controller.mode, "words");
-  await h.press(1);
-  assert.equal(h.controller.mode, "history");
-  finishParse([
-    { source: "scanning-parser", content: [[{ text: "猫", headwords: [] }]] },
-  ]);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(h.controller.mode, "history");
-  assert.deepEqual(h.lookups, []);
-  assert.deepEqual(h.nav, [true]);
-  await h.press(1);
-  assert.deepEqual(h.nav, [true, false]);
-});
+        finishParse = resolve
+      })
+  )
+  await h.controller.recentText()
+  await h.press(0)
+  assert.equal(h.controller.mode, 'words')
+  await h.press(1)
+  assert.equal(h.controller.mode, 'history')
+  finishParse([{ source: 'scanning-parser', content: [[{ text: '猫', headwords: [] }]] }])
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(h.controller.mode, 'history')
+  assert.deepEqual(h.lookups, [])
+  assert.deepEqual(h.nav, [true])
+  await h.press(1)
+  assert.deepEqual(h.nav, [true, false])
+})
 
-test("Gaming Mode opens controls before releasing radial ownership", async (t) => {
-  let panelReady;
-  const events = [];
+test('Gaming Mode opens controls before releasing radial ownership', async (t) => {
+  let panelReady
+  const events = []
   const h = controllerHarness(t, async () => [], {
     panelInputHandoff: true,
-    run: async id => {
-      events.push(id);
-      await new Promise(resolve => { panelReady = resolve; });
-      events.push('panel-focused');
+    run: async (id) => {
+      events.push(id)
+      await new Promise((resolve) => {
+        panelReady = resolve
+      })
+      events.push('panel-focused')
     }
-  });
-  await h.controller.toggle();
-  for (let i = 0; i < 5; i++) await h.press(15);
-  await h.press(0);
-  assert.deepEqual(events, ['controls']);
-  assert.deepEqual(h.nav, [true], 'lease must remain live while panel is opening');
-  panelReady();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(events, ['controls', 'panel-focused']);
-  assert.deepEqual(h.nav, [true, false]);
-  assert.equal(h.controller.mode, 'idle');
-});
+  })
+  await h.controller.toggle()
+  for (let i = 0; i < 5; i++) await h.press(15)
+  await h.press(0)
+  assert.deepEqual(events, ['controls'])
+  assert.deepEqual(h.nav, [true], 'lease must remain live while panel is opening')
+  panelReady()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(events, ['controls', 'panel-focused'])
+  assert.deepEqual(h.nav, [true, false])
+  assert.equal(h.controller.mode, 'idle')
+})
 
-test("Scan from the menu lands quiet, so the text is not lit and put out again as reading starts", async (t) => {
-  const events = [];
+test('Scan from the menu lands quiet, so the text is not lit and put out again as reading starts', async (t) => {
+  const events = []
   const h = controllerHarness(t, async () => [], {
     quietText: (quiet) => events.push(`quiet:${quiet}`),
     scan: async () => {
-      events.push("scan");
-      return true;
-    },
-  });
-  await h.controller.toggle();
-  await h.press(12);
-  await h.press(0);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  assert.equal(events[0], "quiet:true");
-  assert.equal(events[1], "scan");
-  assert.ok(!events.slice(2).includes("quiet:false"), `held quiet into reading: ${events}`);
-  assert.equal(h.controller.mode, "words");
-});
+      events.push('scan')
+      return true
+    }
+  })
+  await h.controller.toggle()
+  await h.press(12)
+  await h.press(0)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.equal(events[0], 'quiet:true')
+  assert.equal(events[1], 'scan')
+  assert.ok(!events.slice(2).includes('quiet:false'), `held quiet into reading: ${events}`)
+  assert.equal(h.controller.mode, 'words')
+})
 
-test("a menu scan that brings no text puts the text back to its ordinary look", async (t) => {
-  const events = [];
+test('a menu scan that brings no text puts the text back to its ordinary look', async (t) => {
+  const events = []
   const h = controllerHarness(t, async () => [], {
     quietText: (quiet) => events.push(`quiet:${quiet}`),
     scan: async () => {
-      events.push("scan");
-      return false;
+      events.push('scan')
+      return false
     },
-    status: () => ({ hasText: false, autoOcr: false, autoAvailable: true, center: { x: 640, y: 400 } }),
-  });
-  await h.controller.toggle();
-  await h.press(12);
-  await h.press(0);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  assert.deepEqual(events, ["quiet:true", "scan", "quiet:false"]);
-  assert.equal(h.controller.mode, "idle");
-});
+    status: () => ({ hasText: false, autoOcr: false, autoAvailable: true, center: { x: 640, y: 400 } })
+  })
+  await h.controller.toggle()
+  await h.press(12)
+  await h.press(0)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.deepEqual(events, ['quiet:true', 'scan', 'quiet:false'])
+  assert.equal(h.controller.mode, 'idle')
+})
 
-test("leaving reading leaves Show overlay as it was", async (t) => {
-  const h = controllerHarness(t, async () => []);
-  await h.controller.toggle();
-  await h.press(12);
-  await h.press(0);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  assert.equal(h.controller.mode, "words");
+test('leaving reading leaves Show overlay as it was', async (t) => {
+  const h = controllerHarness(t, async () => [])
+  await h.controller.toggle()
+  await h.press(12)
+  await h.press(0)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.equal(h.controller.mode, 'words')
   // B: out of reading, back to the game.
-  await h.press(1);
-  assert.equal(h.controller.mode, "idle");
-  assert.deepEqual(h.textVisible, [], "the overlay's own switch is never turned off");
-});
+  await h.press(1)
+  assert.equal(h.controller.mode, 'idle')
+  assert.deepEqual(h.textVisible, [], "the overlay's own switch is never turned off")
+})
 
-test("read along asks the engine for each word directly, and says so when it has no entry", async (t) => {
-  const asked = [];
-  const h = controllerHarness(t, async () => [{ id: "old", text: "猫 犬" }], {
+test('read along asks the engine for each word directly, and says so when it has no entry', async (t) => {
+  const asked = []
+  const h = controllerHarness(t, async () => [{ id: 'old', text: '猫 犬' }], {
     lookupText: async (request) => {
-      asked.push({ text: request.text, sentence: request.sentence, offset: request.offset });
-      return request.text.startsWith("猫") ? { shown: true, length: 1 } : { shown: false, length: 0 };
-    },
-  });
-  await h.controller.recentText();
-  await h.press(0);
-  assert.equal(h.controller.mode, "words");
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(asked[0], { text: "猫 犬", sentence: "猫 犬", offset: 0 });
-  await h.press(15);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(asked.at(-1), { text: "犬", sentence: "猫 犬", offset: 2 });
-  assert.ok(h.host.textContent.includes("No entry for 犬"), "a miss is said, not left to look like a hang");
-  assert.deepEqual(h.lookups, [], "no pointer-style lookup while the engine answers directly");
-  assert.ok(h.logs.some((record) => record.check === "controller-lookup" && record.direct === true && record.length === 0));
-});
+      asked.push({ text: request.text, sentence: request.sentence, offset: request.offset })
+      return request.text.startsWith('猫') ? { shown: true, length: 1 } : { shown: false, length: 0 }
+    }
+  })
+  await h.controller.recentText()
+  await h.press(0)
+  assert.equal(h.controller.mode, 'words')
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(asked[0], { text: '猫 犬', sentence: '猫 犬', offset: 0 })
+  await h.press(15)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(asked.at(-1), { text: '犬', sentence: '猫 犬', offset: 2 })
+  assert.ok(h.host.textContent.includes('No entry for 犬'), 'a miss is said, not left to look like a hang')
+  assert.deepEqual(h.lookups, [], 'no pointer-style lookup while the engine answers directly')
+  assert.ok(
+    h.logs.some((record) => record.check === 'controller-lookup' && record.direct === true && record.length === 0)
+  )
+})
 
-test("by character, the outline covers what the dictionary matched while the cursor stays on its character", async (t) => {
-  const asked = [];
-  const h = controllerHarness(t, async () => [{ id: "old", text: "時よ過ぎゆけ" }], {
+test('by character, the outline covers what the dictionary matched while the cursor stays on its character', async (t) => {
+  const asked = []
+  const h = controllerHarness(t, async () => [{ id: 'old', text: '時よ過ぎゆけ' }], {
     lookupText: async (request) => {
-      asked.push(request.offset);
-      return { shown: true, length: request.text.startsWith("よ過ぎ") ? 3 : 1 };
-    },
-  });
-  await h.controller.recentText();
-  await h.press(0);
-  await new Promise((resolve) => setImmediate(resolve));
-  await h.press(3); // Y: by character
-  await h.press(15);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(asked.at(-1), 1, "looked up from よ, where the reader put it");
-  assert.ok(h.logs.some((record) => record.check === "controller-fit-match" && record.character && record.length === 3));
+      asked.push(request.offset)
+      return { shown: true, length: request.text.startsWith('よ過ぎ') ? 3 : 1 }
+    }
+  })
+  await h.controller.recentText()
+  await h.press(0)
+  await new Promise((resolve) => setImmediate(resolve))
+  await h.press(3) // Y: by character
+  await h.press(15)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(asked.at(-1), 1, 'looked up from よ, where the reader put it')
+  assert.ok(h.logs.some((record) => record.check === 'controller-fit-match' && record.character && record.length === 3))
   // The next step is the next character, 過, not past the match.
-  await h.press(15);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(asked.at(-1), 2);
-});
+  await h.press(15)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(asked.at(-1), 2)
+})
 
-test("read along falls back to the pointer-style lookup for an engine without a direct one", async (t) => {
-  const h = controllerHarness(t, async () => [{ id: "old", text: "猫 犬" }], {
-    lookupText: async () => null,
-  });
-  await h.controller.recentText();
-  await h.press(0);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(h.lookups, ["猫 犬"]);
-});
+test('read along falls back to the pointer-style lookup for an engine without a direct one', async (t) => {
+  const h = controllerHarness(t, async () => [{ id: 'old', text: '猫 犬' }], {
+    lookupText: async () => null
+  })
+  await h.controller.recentText()
+  await h.press(0)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(h.lookups, ['猫 犬'])
+})
 
 test("Text Hooker: the menu starts on Read along, and offers the Text Hooker panel and the app's settings", async (t) => {
-  const card = fakeCard();
+  const card = fakeCard()
   const h = controllerHarness(t, async () => [], {
-    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
-    card,
-  });
-  await h.controller.toggle();
-  const found = [];
+    status: () => ({
+      hasText: true,
+      hooked: true,
+      autoOcr: false,
+      autoAvailable: true,
+      textVisible: true,
+      center: { x: 640, y: 400 },
+      area: null,
+      origin: null
+    }),
+    card
+  })
+  await h.controller.toggle()
+  const found = []
   const walk = (element) => {
-    if (element.className === "cm-label") found.push(element.value);
-    element.children.forEach(walk);
-  };
-  walk(h.host);
-  const labels = found;
-  assert.deepEqual(labels, ["Read along", "Text Hooker", "Recent text", "Kimochi", "App settings"]);
-});
+    if (element.className === 'cm-label') found.push(element.value)
+    element.children.forEach(walk)
+  }
+  walk(h.host)
+  const labels = found
+  assert.deepEqual(labels, ['Read along', 'Text Hooker', 'Recent text', 'Kimochi', 'App settings'])
+})
 
 test("Text Hooker: Card's panel switches the card, and the sticks place it until A keeps it", async (t) => {
-  const card = fakeCard();
-  const frames = [];
-  const savedFrame = globalThis.requestAnimationFrame;
-  globalThis.requestAnimationFrame = (fn) => frames.push(fn);
-  globalThis.cancelAnimationFrame = () => {};
+  const card = fakeCard()
+  const frames = []
+  const savedFrame = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = (fn) => frames.push(fn)
+  globalThis.cancelAnimationFrame = () => {}
   t.after(() => {
-    globalThis.requestAnimationFrame = savedFrame;
-  });
+    globalThis.requestAnimationFrame = savedFrame
+  })
   const h = controllerHarness(t, async () => [], {
-    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
-    card,
-  });
-  await h.controller.toggle();
-  await h.press(15); // right: Read along → Card
-  await h.press(0);
-  assert.equal(h.controller.mode, "card");
-  assert.ok(h.controller.holdsCard, "the card stays up while its panel is open");
-  await h.press(0);
-  assert.deepEqual(card.calls, [], "the press that opened the panel presses nothing in it");
-  await settle();
-  await h.press(0);
-  assert.deepEqual(card.calls, [], "the hooked text cannot be opened while nothing is hooked");
-  await h.press(13); // down: Show card
-  await h.press(0); // Show card: off
-  assert.deepEqual(card.calls.at(-1), ["setShown", false]);
-  await h.press(13); // down: Move and resize
-  await h.press(0);
-  assert.equal(h.controller.mode, "place");
-  assert.deepEqual(card.calls.at(-1), ["steer", { x: 100, y: 500, width: 400, height: 60 }]);
+    status: () => ({
+      hasText: true,
+      hooked: true,
+      autoOcr: false,
+      autoAvailable: true,
+      textVisible: true,
+      center: { x: 640, y: 400 },
+      area: null,
+      origin: null
+    }),
+    card
+  })
+  await h.controller.toggle()
+  await h.press(15) // right: Read along → Card
+  await h.press(0)
+  assert.equal(h.controller.mode, 'card')
+  assert.ok(h.controller.holdsCard, 'the card stays up while its panel is open')
+  await h.press(0)
+  assert.deepEqual(card.calls, [], 'the press that opened the panel presses nothing in it')
+  await settle()
+  await h.press(0)
+  assert.deepEqual(card.calls, [], 'the hooked text cannot be opened while nothing is hooked')
+  await h.press(13) // down: Show card
+  await h.press(0) // Show card: off
+  assert.deepEqual(card.calls.at(-1), ['setShown', false])
+  await h.press(13) // down: Move and resize
+  await h.press(0)
+  assert.equal(h.controller.mode, 'place')
+  assert.deepEqual(card.calls.at(-1), ['steer', { x: 100, y: 500, width: 400, height: 60 }])
   // Left stick right and up: the card moves right and up; right stick right: wider.
-  h.send({ pressed: [], released: [], held: [], stick: { x: 1, y: 1 }, rstick: { x: 1, y: 0 } });
-  let at = performance.now();
-  for (let i = 0; i < 5 && frames.length; i++) frames.shift()((at += 40));
-  const moved = card.calls.filter(([name]) => name === "steer").at(-1)[1];
-  assert.ok(moved.x > 100 && moved.y < 500 && moved.width > 400 && moved.height === 60, JSON.stringify(moved));
-  h.send({ pressed: [], released: [], held: [], stick: { x: 0, y: 0 }, rstick: { x: 0, y: 0 } });
-  await h.press(1); // B: kept too, as every change in the panel is
-  assert.deepEqual(card.calls.at(-1), ["release", true]);
-  assert.equal(h.controller.mode, "card");
+  h.send({ pressed: [], released: [], held: [], stick: { x: 1, y: 1 }, rstick: { x: 1, y: 0 } })
+  let at = performance.now()
+  for (let i = 0; i < 5 && frames.length; i++) frames.shift()((at += 40))
+  const moved = card.calls.filter(([name]) => name === 'steer').at(-1)[1]
+  assert.ok(moved.x > 100 && moved.y < 500 && moved.width > 400 && moved.height === 60, JSON.stringify(moved))
+  h.send({ pressed: [], released: [], held: [], stick: { x: 0, y: 0 }, rstick: { x: 0, y: 0 } })
+  await h.press(1) // B: kept too, as every change in the panel is
+  assert.deepEqual(card.calls.at(-1), ['release', true])
+  assert.equal(h.controller.mode, 'card')
   // A on a row with a value to step does nothing; left and right step it.
-  await h.press(13);
-  await h.press(13); // Text size
-  const before = card.calls.length;
-  await h.press(0);
-  assert.equal(card.calls.length, before, "A does not change the text size");
-  await h.press(15);
-  assert.deepEqual(card.calls.at(-1), ["textSize", 1]);
-  await h.press(1); // B: close
-  assert.equal(h.controller.mode, "idle");
-  assert.ok(!card.calls.some(([name, on]) => name === "setAutoAlign" && on === false), "Auto align was never turned off");
-});
+  await h.press(13)
+  await h.press(13) // Text size
+  const before = card.calls.length
+  await h.press(0)
+  assert.equal(card.calls.length, before, 'A does not change the text size')
+  await h.press(15)
+  assert.deepEqual(card.calls.at(-1), ['textSize', 1])
+  await h.press(1) // B: close
+  assert.equal(h.controller.mode, 'idle')
+  assert.ok(
+    !card.calls.some(([name, on]) => name === 'setAutoAlign' && on === false),
+    'Auto align was never turned off'
+  )
+})
 
-test("Text Hooker: leaving Move and resize without moving the card leaves it as it was", async (t) => {
-  const card = fakeCard();
+test('Text Hooker: leaving Move and resize without moving the card leaves it as it was', async (t) => {
+  const card = fakeCard()
   const h = controllerHarness(t, async () => [], {
-    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
-    card,
-  });
-  await h.controller.toggle();
-  await h.press(15);
-  await h.press(0);
-  await settle();
-  await h.press(13);
-  await h.press(13);
-  await h.press(0);
-  assert.equal(h.controller.mode, "place");
-  await h.press(1);
-  assert.deepEqual(card.calls.at(-1), ["release", false], "nothing moved, so Auto align is left alone");
-  assert.equal(h.controller.mode, "card");
-});
+    status: () => ({
+      hasText: true,
+      hooked: true,
+      autoOcr: false,
+      autoAvailable: true,
+      textVisible: true,
+      center: { x: 640, y: 400 },
+      area: null,
+      origin: null
+    }),
+    card
+  })
+  await h.controller.toggle()
+  await h.press(15)
+  await h.press(0)
+  await settle()
+  await h.press(13)
+  await h.press(13)
+  await h.press(0)
+  assert.equal(h.controller.mode, 'place')
+  await h.press(1)
+  assert.deepEqual(card.calls.at(-1), ['release', false], 'nothing moved, so Auto align is left alone')
+  assert.equal(h.controller.mode, 'card')
+})
 
 /** Past the moment after opening the Card panel when it takes no press. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 320));
+const settle = () => new Promise((resolve) => setTimeout(resolve, 320))
 
 function fakeCard() {
-  const calls = [];
-  const state = { shown: true, autoAlign: true, opacity: 1, fontPx: 24, look: "app", box: { x: 100, y: 500, width: 400, height: 60 } };
+  const calls = []
+  const state = {
+    shown: true,
+    autoAlign: true,
+    opacity: 1,
+    fontPx: 24,
+    look: 'app',
+    box: { x: 100, y: 500, width: 400, height: 60 }
+  }
   return {
     calls,
     opacities: [1, 0.85, 0.7, 0.55, 0.4],
     state: () => ({ ...state }),
     setShown: async (on) => {
-      calls.push(["setShown", on]);
-      state.shown = on;
+      calls.push(['setShown', on])
+      state.shown = on
     },
-    setAutoAlign: async (on) => calls.push(["setAutoAlign", on]),
-    textSize: async (step) => calls.push(["textSize", step]),
-    setOpacity: async (value) => calls.push(["setOpacity", value]),
-    setLook: async (value) => calls.push(["setLook", value]),
+    setAutoAlign: async (on) => calls.push(['setAutoAlign', on]),
+    textSize: async (step) => calls.push(['textSize', step]),
+    setOpacity: async (value) => calls.push(['setOpacity', value]),
+    setLook: async (value) => calls.push(['setLook', value]),
     steer: (box) => {
-      calls.push(["steer", box]);
-      return box;
+      calls.push(['steer', box])
+      return box
     },
-    release: (commit) => calls.push(["release", commit]),
+    release: (commit) => calls.push(['release', commit]),
     status: null,
     hook() {
-      return this.status;
+      return this.status
     },
-    selectThread: async (key) => calls.push(["selectThread", key]),
-  };
+    selectThread: async (key) => calls.push(['selectThread', key])
+  }
 }
 
 test("Text Hooker: the panel's hooked text opens the threads, and A uses the one chosen", async (t) => {
-  const card = fakeCard();
+  const card = fakeCard()
   card.status = {
-    phase: "hooked",
-    selectedBy: "auto",
+    phase: 'hooked',
+    selectedBy: 'auto',
     threads: [
-      { key: "a", name: "TextRender", preview: "わたしは見守る。", selected: true },
-      { key: "b", name: "KiriKiriZ", preview: "わわわたし", selected: false },
-    ],
-  };
+      { key: 'a', name: 'TextRender', preview: 'わたしは見守る。', selected: true },
+      { key: 'b', name: 'KiriKiriZ', preview: 'わわわたし', selected: false }
+    ]
+  }
   const h = controllerHarness(t, async () => [], {
-    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
-    card,
-  });
-  await h.controller.toggle();
-  await h.press(15);
-  await h.press(0);
-  await settle();
-  assert.ok(h.host.textContent.includes("わたしは見守る。"), "the line in use is shown");
-  assert.ok(h.host.textContent.includes("Matched to the screen"));
-  await h.press(0);
-  assert.ok(h.host.textContent.includes("Choose automatically"));
-  await h.press(13);
-  await h.press(13); // the second thread
-  await h.press(0);
-  assert.deepEqual(card.calls.at(-1), ["selectThread", "b"]);
-  assert.ok(!h.host.textContent.includes("Choose automatically"), "back to the settings");
-  await h.press(0);
-  await h.press(1); // B: back from the threads, not out of the panel
-  assert.equal(h.controller.mode, "card");
+    status: () => ({
+      hasText: true,
+      hooked: true,
+      autoOcr: false,
+      autoAvailable: true,
+      textVisible: true,
+      center: { x: 640, y: 400 },
+      area: null,
+      origin: null
+    }),
+    card
+  })
+  await h.controller.toggle()
+  await h.press(15)
+  await h.press(0)
+  await settle()
+  assert.ok(h.host.textContent.includes('わたしは見守る。'), 'the line in use is shown')
+  assert.ok(h.host.textContent.includes('Matched to the screen'))
+  await h.press(0)
+  assert.ok(h.host.textContent.includes('Choose automatically'))
+  await h.press(13)
+  await h.press(13) // the second thread
+  await h.press(0)
+  assert.deepEqual(card.calls.at(-1), ['selectThread', 'b'])
+  assert.ok(!h.host.textContent.includes('Choose automatically'), 'back to the settings')
+  await h.press(0)
+  await h.press(1) // B: back from the threads, not out of the panel
+  assert.equal(h.controller.mode, 'card')
   // Live: the status changing redraws the open panel.
-  card.status = { phase: "attaching", threads: [] };
-  h.controller.hookChanged();
-  assert.ok(h.host.textContent.includes("Hooking…"));
-});
+  card.status = { phase: 'attaching', threads: [] }
+  h.controller.hookChanged()
+  assert.ok(h.host.textContent.includes('Hooking…'))
+})
 
 test("read along over the Text Hooker card's rows gives Anki the whole line as the sentence", async (t) => {
   // The card shows 昨日は自転 / 車で行った, one unit per row (ui/overlay.js `hookCardUnits`).
-  const sentence = "昨日は自転車で行った";
+  const sentence = '昨日は自転車で行った'
   const row = (text, sentenceOffset, y) => {
-    const node = new Element("#text", text);
-    node.connected = true;
+    const node = new Element('#text', text)
+    node.connected = true
     return {
       element: null,
       node,
@@ -692,30 +703,30 @@ test("read along over the Text Hooker card's rows gives Anki the whole line as t
       sentence,
       sentenceOffset,
       vertical: false,
-      box: { x: 10, y, width: 200, height: 30 },
-    };
-  };
-  const asked = [];
+      box: { x: 10, y, width: 200, height: 30 }
+    }
+  }
+  const asked = []
   const h = controllerHarness(t, async () => [], {
-    extraUnits: () => [row("昨日は自転", 0, 100), row("車で行った", 5, 140)],
+    extraUnits: () => [row('昨日は自転', 0, 100), row('車で行った', 5, 140)],
     lookupText: async (request) => {
-      asked.push({ sentence: request.sentence, offset: request.offset });
-      return { shown: true, length: 1 };
-    },
-  });
-  await h.controller.toggle();
-  await h.press(12);
-  await h.press(0);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  assert.equal(h.controller.mode, "words");
-  for (let i = 0; i < 6; i++) await h.press(15);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.ok(asked.length > 1, JSON.stringify(asked));
+      asked.push({ sentence: request.sentence, offset: request.offset })
+      return { shown: true, length: 1 }
+    }
+  })
+  await h.controller.toggle()
+  await h.press(12)
+  await h.press(0)
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.equal(h.controller.mode, 'words')
+  for (let i = 0; i < 6; i++) await h.press(15)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.ok(asked.length > 1, JSON.stringify(asked))
   // Every word, on either row, is looked up with the whole line, at its place in it.
-  for (const { sentence: given } of asked) assert.equal(given, sentence);
-  assert.equal(asked[0].offset, 0);
+  for (const { sentence: given } of asked) assert.equal(given, sentence)
+  assert.equal(asked[0].offset, 0)
   assert.ok(
     asked.some(({ offset }) => offset >= 5),
-    "a word on the second row counts from the line's start",
-  );
-});
+    "a word on the second row counts from the line's start"
+  )
+})

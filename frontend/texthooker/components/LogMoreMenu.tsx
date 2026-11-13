@@ -1,6 +1,6 @@
 /** The Log footer's ⋯ menu: which stats the footer shows, the session's reset actions, settings. */
-import { useEffect, useState } from "react";
-import { Ellipsis, Eraser, RotateCcw, Settings } from "lucide-react";
+import { useEffect, useState } from 'react'
+import { Ellipsis, Eraser, RotateCcw, Settings } from 'lucide-react'
 import {
   IconButton,
   Menu,
@@ -10,27 +10,27 @@ import {
   MenuLabel,
   MenuSeparator,
   MenuTrigger,
-  Tooltip,
-} from "@kit";
-import { getSettings, onSettingsChange, updateSettings } from "@texthooker/lib/settings";
-import type { Settings as ReaderSettings } from "@texthooker/lib/types";
-import { useLogActions } from "../../main/logActions";
-import { openSettings } from "../../bridge/tauri";
-import { useLanguage } from "../../bridge/useLanguage";
+  Tooltip
+} from '@kit'
+import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
+import type { Settings as ReaderSettings } from '@texthooker/lib/types'
+import { useLogActions } from '../../main/logActions'
+import { openSettings } from '../../bridge/tauri'
+import { useLanguage } from '../../bridge/useLanguage'
 
 const STATS = [
-  { key: "statsShowTime", label: "Reading time" },
-  { key: "statsShowLines", label: "Line count" },
-  { key: "statsShowChars", label: "Character count" },
-  { key: "statsShowSpeed", label: "Reading speed" },
-] as const satisfies readonly { key: keyof ReaderSettings; label: string }[];
+  { key: 'statsShowTime', label: 'Reading time' },
+  { key: 'statsShowLines', label: 'Line count' },
+  { key: 'statsShowChars', label: 'Character count' },
+  { key: 'statsShowSpeed', label: 'Reading speed' }
+] as const satisfies readonly { key: keyof ReaderSettings; label: string }[]
 
 export function LogMoreMenu() {
-  const [settings, setSettings] = useState(getSettings);
-  const actions = useLogActions();
+  const [settings, setSettings] = useState(getSettings)
+  const actions = useLogActions()
   // A language that spaces its words counts words (StatsFooter).
-  const [language] = useLanguage();
-  useEffect(() => onSettingsChange(setSettings), []);
+  const [language] = useLanguage()
+  useEffect(() => onSettingsChange(setSettings), [])
 
   return (
     <Menu>
@@ -50,7 +50,7 @@ export function LogMoreMenu() {
             onSelect={(event) => event.preventDefault()}
             onCheckedChange={(value) => void updateSettings({ [stat.key]: value })}
           >
-            {stat.key === "statsShowChars" && language.spaces ? "Word count" : stat.label}
+            {stat.key === 'statsShowChars' && language.spaces ? 'Word count' : stat.label}
           </MenuCheckboxItem>
         ))}
         <MenuSeparator />
@@ -61,10 +61,10 @@ export function LogMoreMenu() {
           Reset stats…
         </MenuItem>
         <MenuSeparator />
-        <MenuItem icon={<Settings />} onSelect={() => void openSettings("log")}>
+        <MenuItem icon={<Settings />} onSelect={() => void openSettings('log')}>
           Log settings…
         </MenuItem>
       </MenuContent>
     </Menu>
-  );
+  )
 }

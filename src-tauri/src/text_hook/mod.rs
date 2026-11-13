@@ -160,7 +160,12 @@ impl Hook {
     /// is the hooked game). Off, the game stays hooked, so turning it back on is instant.
     fn reading_text(&self) -> bool {
         self.app.try_state::<Shared>().is_none_or(|service| {
-            service.settings.get_path(&["superTexthooker", "inputSource"]).ok().flatten().is_none_or(|value| value == json!("hook"))
+            service
+                .settings
+                .get_path(&["superTexthooker", "inputSource"])
+                .ok()
+                .flatten()
+                .is_none_or(|value| value == json!("hook"))
         })
     }
 
@@ -175,7 +180,9 @@ impl Hook {
     }
     /// The language being read (the `language` setting); Japanese before the app is up.
     fn language(&self) -> &'static Language {
-        self.app.try_state::<Shared>().map_or_else(|| crate::language::get("ja"), |service| crate::language::current(&service.settings))
+        self.app
+            .try_state::<Shared>()
+            .map_or_else(|| crate::language::get("ja"), |service| crate::language::current(&service.settings))
     }
     /// The hooked game's settings, as they are now (Settings → Text Hooker).
     fn config(&self, session: &Session) -> clean::GameConfig {
@@ -203,7 +210,10 @@ impl Hook {
         let config = self.config(session);
         let Some(mut text) = config.clean(text) else {
             if !text.trim().is_empty() {
-                crate::debug_report::trace(&self.app, json!({ "check": "texthook-dropped", "chars": text.chars().count() }));
+                crate::debug_report::trace(
+                    &self.app,
+                    json!({ "check": "texthook-dropped", "chars": text.chars().count() }),
+                );
             }
             return;
         };
@@ -225,8 +235,14 @@ impl Hook {
             if let Some(before) = session.last_line.as_deref() {
                 // A language that spaces its words has a space between the rows (they come trimmed).
                 let joined = if config.spaces { format!("{before} {text}") } else { format!("{before}{text}") };
-                if clean::continues_in(before, &text, config.japanese) && !before.ends_with(&text) && joined.chars().count() <= config.max_chars {
-                    crate::debug_report::trace(&self.app, json!({ "check": "texthook-joined", "before": before, "piece": text }));
+                if clean::continues_in(before, &text, config.japanese)
+                    && !before.ends_with(&text)
+                    && joined.chars().count() <= config.max_chars
+                {
+                    crate::debug_report::trace(
+                        &self.app,
+                        json!({ "check": "texthook-joined", "before": before, "piece": text }),
+                    );
                     text = joined;
                     carries_on = true;
                 }
@@ -262,7 +278,9 @@ impl Hook {
             },
         );
         session.last_id = Some(id.clone());
-        let _ = self.app.emit("texthook-line", json!({ "text": text, "key": key, "at": at, "id": id, "replaces": replaces }));
+        let _ = self
+            .app
+            .emit("texthook-line", json!({ "text": text, "key": key, "at": at, "id": id, "replaces": replaces }));
     }
 }
 
@@ -387,7 +405,13 @@ fn stop_child(session: &mut Session) {
 }
 
 /// Starts the helper for `engine`, waits for it to say it is ready, and attaches to `targets`.
-fn launch(hook: &'static Hook, generation: u64, engine: &'static str, dir: &std::path::Path, targets: &[process::Target]) -> Result<(), String> {
+fn launch(
+    hook: &'static Hook,
+    generation: u64,
+    engine: &'static str,
+    dir: &std::path::Path,
+    targets: &[process::Target],
+) -> Result<(), String> {
     let exe = hookd_path(&hook.app)?;
     let mut command = Command::new(&exe);
     command.arg(engine).arg("--dir").arg(dir);
@@ -550,7 +574,9 @@ fn read_events(
         hook.publish(&session);
         let disconnected = event["event"] == "disconnected";
         drop(session);
-        if disconnected { refresh_voice_hook(); }
+        if disconnected {
+            refresh_voice_hook();
+        }
     }
     let _ = ready.send(Err("the hook helper exited".into()));
     let mut session = hook.lock();
@@ -595,7 +621,10 @@ fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool
             Ok(r) => r,
             Err(e) => {
                 // With no request made, `texthook_start` starts the hooker itself.
-                crate::debug_report::trace(&hook.app, json!({ "check": "texthook-unity-text", "ok": false, "error": e }));
+                crate::debug_report::trace(
+                    &hook.app,
+                    json!({ "check": "texthook-unity-text", "ok": false, "error": e }),
+                );
                 continue;
             }
         };
@@ -607,7 +636,11 @@ fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool
             let injected = inject_voice_dll(&app, &target);
             if start_hooker {
                 if injected.is_ok() {
-                    let watching = unity::wait_for_watch(&crate::sentence_audio::voice_hook::base_dir(), target.pid, Duration::from_secs(10));
+                    let watching = unity::wait_for_watch(
+                        &crate::sentence_audio::voice_hook::base_dir(),
+                        target.pid,
+                        Duration::from_secs(10),
+                    );
                     crate::debug_report::trace(&app, json!({ "check": "texthook-unity-text", "watch": watching }));
                 }
                 std::thread::spawn(move || run(hook, generation, ENGINES[0]));
@@ -661,7 +694,10 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         }
     }
     if let Some(better) = cleaner_thread(session, index, language) {
-        crate::debug_report::trace(&hook.app, json!({ "check": "texthook-reselected", "from": session.selected, "to": better }));
+        crate::debug_report::trace(
+            &hook.app,
+            json!({ "check": "texthook-reselected", "from": session.selected, "to": better }),
+        );
         let thread = session.threads.iter().find(|t| t.key == better).cloned();
         if let Some(thread) = thread {
             if let Some(exe) = session.exe.clone() {
@@ -680,7 +716,10 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         }
     }
     if session.selected.as_deref() == Some(key) {
-        crate::debug_report::trace(&hook.app, json!({ "check": "texthook-burst", "text": text, "lines": lines, "carriesOn": carries_on }));
+        crate::debug_report::trace(
+            &hook.app,
+            json!({ "check": "texthook-burst", "text": text, "lines": lines, "carriesOn": carries_on }),
+        );
         session.missed = 0;
         for (i, line) in lines.iter().enumerate() {
             hook.line(session, key, line, carries_on && i == 0);
@@ -692,7 +731,9 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let spoken = &session.threads[index];
         let shown = pick::normalize(text);
-        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language)
+            && !pick::is_generic(&spoken.hookcode, &spoken.name)
+        {
             session.missed = session.missed.saturating_add(1);
             session.missed_text = shown;
         }
@@ -702,11 +743,11 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // that has missed the last few lines other threads sent (a hook that starts a thread per line,
     // as Majiro's does beside the one that keeps going): the screen is read again.
     if session.selected_by == Some("auto") && (session.threads[index].count >= 3 || session.missed >= MISSED_LINES) {
-        let stale = session
-            .threads
-            .iter()
-            .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
-            .is_some_and(|t| (t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10))) || session.missed >= MISSED_LINES);
+        let stale =
+            session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
+                (t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
+                    || session.missed >= MISSED_LINES
+            });
         if stale {
             session.missed = 0;
             crate::debug_report::trace(&hook.app, json!({ "check": "texthook-repick", "from": session.selected }));
@@ -720,7 +761,9 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     }
     // A thread chosen for this game before is taken back as soon as it speaks.
     let saved = session.exe.as_deref().and_then(|exe| remembered(hook, exe));
-    if unity::remembers_by_signature(&session.threads[index].hookcode) && saved.as_ref() == Some(&session.threads[index].signature()) {
+    if unity::remembers_by_signature(&session.threads[index].hookcode)
+        && saved.as_ref() == Some(&session.threads[index].signature())
+    {
         session.selected = Some(key.to_string());
         session.selected_by = Some("saved");
         session.pick_note = None;
@@ -752,7 +795,12 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
     // A text object that showed the line once and has shown a glyph at a time since: a thread
     // showing whole lines takes over.
     let spoken = &session.threads[index];
-    if chosen.glyphs >= GLYPHS && spoken.key != selected && spoken.count >= 3 && spoken.glyphs == 0 && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+    if chosen.glyphs >= GLYPHS
+        && spoken.key != selected
+        && spoken.count >= 3
+        && spoken.glyphs == 0
+        && !pick::is_generic(&spoken.hookcode, &spoken.name)
+    {
         let text = pick::normalize(&spoken.text);
         if text.chars().count() >= PICK_MIN_MATCH * pick::letter_scale(language) && pick::reads_as(&text, language) {
             return Some(spoken.key.clone());
@@ -762,7 +810,11 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
     // line is shown, the hooker's string functions whenever the game handles the string.
     if !unity::is_unity(&chosen.hookcode) && !chosen.text.is_empty() {
         let text = pick::normalize(&chosen.text);
-        if let Some(unity) = session.threads.iter().find(|t| unity::is_unity(&t.hookcode) && t.count >= 2 && pick::normalize(&t.text) == text) {
+        if let Some(unity) = session
+            .threads
+            .iter()
+            .find(|t| unity::is_unity(&t.hookcode) && t.count >= 2 && pick::normalize(&t.text) == text)
+        {
             return Some(unity.key.clone());
         }
     }
@@ -808,7 +860,12 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             // And the hooker's thread with the same text as a Unity text object is left to the
             // object: the object is set when the line is shown, the hooker's string functions
             // whenever the game handles the string.
-            let unity_texts: Vec<&str> = session.threads.iter().filter(|t| unity::is_unity(&t.hookcode) && t.count >= 2).map(|t| t.text.as_str()).collect();
+            let unity_texts: Vec<&str> = session
+                .threads
+                .iter()
+                .filter(|t| unity::is_unity(&t.hookcode) && t.count >= 2)
+                .map(|t| t.text.as_str())
+                .collect();
             let candidates: Vec<Thread> = session
                 .threads
                 .iter()
@@ -821,7 +878,15 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
         let outcome = read_screen(hook, &source_id, observer_engine.as_deref()).map(|blocks| {
             let list: Vec<Candidate> = candidates
                 .iter()
-                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, name: &t.name, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
+                .map(|t| Candidate {
+                    key: &t.key,
+                    hookcode: &t.hookcode,
+                    name: &t.name,
+                    text: &t.text,
+                    recent: t.recent_count(),
+                    count: t.count,
+                    noise: t.noisy as f64 / t.count.max(1) as f64,
+                })
                 .collect();
             pick::score(&list, &blocks, hook.language())
         });
@@ -840,13 +905,18 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                         session.pick_note = None;
                         // A generic thread won only because nothing better showed the line yet:
                         // the screen is read again next time, not this one taken back.
-                        if let Some(exe) = session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name)) {
+                        if let Some(exe) =
+                            session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name))
+                        {
                             remember(hook, &exe, Some(thread.signature()));
                         }
                         hook.line(&mut session, &key, &thread.text, false);
                     }
                 }
-                _ => session.pick_note = Some("No hooked text matches the screen yet. Advance the game, or choose a thread.".into()),
+                _ => {
+                    session.pick_note =
+                        Some("No hooked text matches the screen yet. Advance the game, or choose a thread.".into())
+                }
             },
             Err(e) => session.pick_note = Some(format!("Could not read the window to choose a thread: {e}")),
         }
@@ -1042,7 +1112,8 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             let mut session = hook.lock();
             stop_child(&mut session);
             let generation = session.generation + 1;
-            *session = Session { generation, source_id, phase: "failed", detail: Some(reason.clone()), ..Default::default() };
+            *session =
+                Session { generation, source_id, phase: "failed", detail: Some(reason.clone()), ..Default::default() };
             hook.publish(&session);
             drop(session);
             refresh_voice_hook();
@@ -1241,15 +1312,13 @@ pub fn refresh_voice_hook() {
         return;
     };
     let targets = hook.lock().targets.clone();
-    let Some(service) = hook
-        .app
-        .try_state::<std::sync::Arc<crate::sentence_audio::SentenceAudio>>()
-    else {
+    let Some(service) = hook.app.try_state::<std::sync::Arc<crate::sentence_audio::SentenceAudio>>() else {
         return;
     };
     let config = service.config();
     // Windows games, natively or (on Linux) through Wine or Proton.
-    let enabled = (cfg!(windows) || cfg!(target_os = "linux")) && config.enabled && config.voice_hook && hook.reading_text();
+    let enabled =
+        (cfg!(windows) || cfg!(target_os = "linux")) && config.enabled && config.voice_hook && hook.reading_text();
     if enabled {
         let mut bases: Vec<PathBuf> = Vec::new();
         for target in &targets {
@@ -1298,9 +1367,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
         "kimochi-voicehook-x64.dll"
     });
     if !dll.is_file() {
-        return Err(
-            "The voice hook DLL is missing from this build; using system audio.".into(),
-        );
+        return Err("The voice hook DLL is missing from this build; using system audio.".into());
     }
     let prepare = |e: String| format!("The voice hook DLL could not be prepared; using system audio: {e}");
     // Under Wine the helper injects from inside the game's prefix, and the DLL is staged in the
@@ -1320,7 +1387,8 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
     };
     #[cfg(not(target_os = "linux"))]
     let mut command = {
-        let dll = crate::sentence_audio::voice_hook::staged_dll(&dll, &crate::sentence_audio::voice_hook::base_dir()).map_err(prepare)?;
+        let dll = crate::sentence_audio::voice_hook::staged_dll(&dll, &crate::sentence_audio::voice_hook::base_dir())
+            .map_err(prepare)?;
         let mut command = Command::new(helper);
         command.args(["inject", "--pid", &target.pid.to_string(), "--dll"]).arg(dll);
         command
@@ -1334,10 +1402,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
     if output.status.success() {
         Ok(())
     } else {
-        Err(format!(
-            "Voice hook failed; using system audio: {}",
-            String::from_utf8_lossy(&output.stdout)
-        ))
+        Err(format!("Voice hook failed; using system audio: {}", String::from_utf8_lossy(&output.stdout)))
     }
 }
 
@@ -1351,7 +1416,10 @@ mod tests {
             failed_hook("钩子注入失败 EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY").as_deref(),
             Some("EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY")
         );
-        assert_eq!(failed_hook("Failed to insert hook: HQXF1@mscorlib:System:String:Substring").as_deref(), Some("HQXF1@mscorlib:System:String:Substring"));
+        assert_eq!(
+            failed_hook("Failed to insert hook: HQXF1@mscorlib:System:String:Substring").as_deref(),
+            Some("HQXF1@mscorlib:System:String:Substring")
+        );
         assert_eq!(failed_hook("MH_ERROR_MEMORY_ALLOC"), None);
         assert_eq!(failed_hook("注入钩子: String:String: 000001DCD4B56610"), None);
         assert_eq!(failed_hook("移除钩子: String:String:"), None);

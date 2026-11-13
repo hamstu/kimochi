@@ -27,9 +27,7 @@ const target =
 const withModels = argv.includes('--with-models') || process.env.KIMOCHI_WITH_MODELS === '1'
 // The mangaocr source Cargo builds from (the pinned revision, or a local override).
 const library = ocrCrateDir('mangaocr')
-const { files } = JSON.parse(
-  await readFile(path.join(root, 'src-tauri/ocr-models.json'), 'utf8')
-).engines.mangaocr
+const { files } = JSON.parse(await readFile(path.join(root, 'src-tauri/ocr-models.json'), 'utf8')).engines.mangaocr
 const destination = path.join(root, 'src-tauri/resources/mangaocr')
 const models = path.join(destination, 'models')
 const local = process.env.MANGAOCR_MODEL_DIR ?? path.join(library, 'models')
@@ -64,8 +62,7 @@ if (withModels) {
         const response = await fetch(url, {
           signal: AbortSignal.timeout(300000)
         })
-        if (!response.ok || !response.body)
-          throw new Error(`Manga OCR download failed (${response.status}): ${name}`)
+        if (!response.ok || !response.body) throw new Error(`Manga OCR download failed (${response.status}): ${name}`)
         await pipeline(Readable.fromWeb(response.body), createWriteStream(stage, { flags: 'wx' }))
       }
       if (!(await verified(stage, expected))) throw new Error(`Manga OCR checksum mismatch: ${name}`)
@@ -78,10 +75,7 @@ if (withModels) {
 for (const name of ['LICENSE', 'LICENSE-APACHE', 'NOTICE']) {
   await cp(path.join(library, name), path.join(destination, name))
 }
-await cp(
-  path.join(library, 'scripts/model-manifest.json'),
-  path.join(destination, 'model-manifest.json')
-)
+await cp(path.join(library, 'scripts/model-manifest.json'), path.join(destination, 'model-manifest.json'))
 console.log(
   withModels
     ? `Manga OCR verified models staged for development (not bundled; target: ${target}).`

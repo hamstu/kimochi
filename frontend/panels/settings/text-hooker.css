@@ -152,7 +152,9 @@
 }
 .k-field.th-name-input:focus {
   background: var(--k-field);
-  box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4);
+  box-shadow:
+    inset 0 0 0 1px var(--k-focus),
+    0 0 0 2px var(--accent-a4);
 }
 .th-game-meta {
   display: flex;

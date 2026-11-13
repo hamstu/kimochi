@@ -1,14 +1,10 @@
-import { useEffect, useState } from "react";
-import {
-  isRunning,
-  snapshotStats,
-  subscribeStats,
-} from "@texthooker/lib/stats";
-import type { Stats } from "@texthooker/lib/types";
+import { useEffect, useState } from 'react'
+import { isRunning, snapshotStats, subscribeStats } from '@texthooker/lib/stats'
+import type { Stats } from '@texthooker/lib/types'
 
 interface Snapshot {
-  stats: Stats;
-  elapsedMs: number;
+  stats: Stats
+  elapsedMs: number
 }
 
 /**
@@ -17,39 +13,39 @@ interface Snapshot {
  * this and renders compactly.
  */
 export function useStats(): Snapshot {
-  const [snap, setSnap] = useState<Snapshot>(() => snapshotStats());
+  const [snap, setSnap] = useState<Snapshot>(() => snapshotStats())
 
   useEffect(() => {
-    return subscribeStats(() => setSnap(snapshotStats()));
-  }, []);
+    return subscribeStats(() => setSnap(snapshotStats()))
+  }, [])
 
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: ReturnType<typeof setInterval> | null = null
     const start = () => {
-      if (timer) return;
+      if (timer) return
       timer = setInterval(() => {
-        if (document.visibilityState !== "visible") return;
-        if (!isRunning()) return;
-        setSnap(snapshotStats());
-      }, 1000);
-    };
+        if (document.visibilityState !== 'visible') return
+        if (!isRunning()) return
+        setSnap(snapshotStats())
+      }, 1000)
+    }
     const stop = () => {
       if (timer) {
-        clearInterval(timer);
-        timer = null;
+        clearInterval(timer)
+        timer = null
       }
-    };
-    start();
+    }
+    start()
     const onVis = () => {
-      if (document.visibilityState === "visible") start();
-      else stop();
-    };
-    document.addEventListener("visibilitychange", onVis);
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+    document.addEventListener('visibilitychange', onVis)
     return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, []);
+      stop()
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [])
 
-  return snap;
+  return snap
 }

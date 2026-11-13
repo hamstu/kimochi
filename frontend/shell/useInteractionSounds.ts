@@ -4,7 +4,14 @@
  * plays while sentence audio records.
  */
 import { useEffect, useRef } from 'react'
-import { installInteractionSounds, recordingAudio, setSoundVolume, soundKind, soundKindOn, type SoundSettings } from '@ui/sounds'
+import {
+  installInteractionSounds,
+  recordingAudio,
+  setSoundVolume,
+  soundKind,
+  soundKindOn,
+  type SoundSettings
+} from '@ui/sounds'
 import { useSetting } from '../bridge/useSetting'
 
 export function useInteractionSounds(): void {

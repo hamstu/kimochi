@@ -44,7 +44,11 @@ test('opacity-0 text and ancestors are shown for the event only, and restored af
 
 test('a throw still restores the text', () => {
   const text = element('0')
-  assert.throws(() => withTextShown(win, text, () => { throw Error('boom') }))
+  assert.throws(() =>
+    withTextShown(win, text, () => {
+      throw Error('boom')
+    })
+  )
   assert.equal(text.style.getPropertyValue('opacity'), '')
   assert.equal(win.getComputedStyle(text).opacity, '0')
 })

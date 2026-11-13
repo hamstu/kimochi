@@ -182,7 +182,9 @@ impl Luna {
 
     pub fn insert(&self, pid: u32, code: &str) -> Result<(), String> {
         let code = crate::wide(code);
-        unsafe { (self.symbol::<unsafe extern "C" fn(u32, *const u16)>(b"Luna_InsertHookCode\0")?)(pid, code.as_ptr()) };
+        unsafe {
+            (self.symbol::<unsafe extern "C" fn(u32, *const u16)>(b"Luna_InsertHookCode\0")?)(pid, code.as_ptr())
+        };
         Ok(())
     }
 
@@ -221,7 +223,9 @@ impl Luna {
                     break;
                 }
                 if Instant::now() >= deadline {
-                    return Err("a hook is already loaded in this process but did not reconnect; restart the game".into());
+                    return Err(
+                        "a hook is already loaded in this process but did not reconnect; restart the game".into()
+                    );
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -251,7 +255,10 @@ impl Luna {
                 // has no engine hook for gets the generic text-API hooks instead.
                 std::thread::sleep(Duration::from_millis(1500));
                 if !shared().engine.contains_key(&pid) {
-                    emit("info", json!({ "level": "console", "text": "no engine detected; inserting generic API hooks" }));
+                    emit(
+                        "info",
+                        json!({ "level": "console", "text": "no engine detected; inserting generic API hooks" }),
+                    );
                     self.pc_hooks(pid)?;
                 }
             }

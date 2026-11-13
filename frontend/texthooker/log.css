@@ -31,7 +31,7 @@
   gap: var(--k-space-1);
 }
 .log-stat + .log-stat::before {
-  content: "";
+  content: '';
   width: 0.1875rem;
   height: 0.1875rem;
   margin: 0 var(--k-space-2);
@@ -71,7 +71,7 @@
 }
 .log-session-trigger:hover,
 .log-session-trigger[data-native-hover],
-.log-session-trigger[data-state="open"] {
+.log-session-trigger[data-state='open'] {
   background: var(--k-press);
   color: var(--k-text);
 }
@@ -191,7 +191,7 @@
   transition: background-color var(--k-fast);
 }
 .log-lines .line + .line::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: var(--k-space-3);
@@ -202,15 +202,15 @@
 }
 .log-lines .line:hover,
 .log-lines .line[data-menu-open],
-.log-lines .line:has(.line-actions-trigger[data-state="open"]) {
+.log-lines .line:has(.line-actions-trigger[data-state='open']) {
   background: var(--k-hover);
 }
 .log-lines .line:hover::before,
 .log-lines .line:hover + .line::before,
 .log-lines .line[data-menu-open]::before,
 .log-lines .line[data-menu-open] + .line::before,
-.log-lines .line:has(.line-actions-trigger[data-state="open"])::before,
-.log-lines .line:has(.line-actions-trigger[data-state="open"]) + .line::before {
+.log-lines .line:has(.line-actions-trigger[data-state='open'])::before,
+.log-lines .line:has(.line-actions-trigger[data-state='open']) + .line::before {
   opacity: 0;
 }
 body.scan-mode .log-lines .line:hover {
@@ -238,7 +238,7 @@ body.scan-mode .log-lines .line:hover {
   font-family: var(--k-font-ui);
   font-size: var(--k-text-xs);
   font-weight: var(--k-weight-medium);
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
   letter-spacing: 0;
   line-height: 1;
   color: var(--k-text-3);
@@ -268,7 +268,7 @@ body.scan-mode .log-lines .line:hover {
 .log-lines .line:hover > .line-rail,
 .log-lines .line[data-menu-open] > .line-rail,
 .log-lines .line-editing:not(.line-editing-note) > .line-rail,
-.log-lines .line:has(.line-actions-trigger[data-state="open"]) > .line-rail {
+.log-lines .line:has(.line-actions-trigger[data-state='open']) > .line-rail {
   opacity: 1;
   transform: none;
 }
@@ -313,7 +313,7 @@ html[data-mini] .line-time {
 }
 .log-day::before,
 .log-day::after {
-  content: "";
+  content: '';
   flex: 1;
   height: 1px;
   background: var(--k-line);
@@ -336,11 +336,14 @@ html[data-mini] .line-time {
 }
 .line-actions-trigger.k-button {
   opacity: 0;
-  transition: opacity var(--k-fast), background-color var(--k-fast), color var(--k-fast);
+  transition:
+    opacity var(--k-fast),
+    background-color var(--k-fast),
+    color var(--k-fast);
 }
 .line:hover .line-actions-trigger.k-button,
 .line-actions-trigger.k-button:focus-visible,
-.line-actions-trigger.k-button[data-state="open"] {
+.line-actions-trigger.k-button[data-state='open'] {
   opacity: 1;
 }
 body.scan-mode .line-actions-trigger.k-button {
@@ -407,7 +410,10 @@ body.scan-mode .line-actions-trigger.k-button {
   color: var(--k-text-3);
   font: inherit;
   cursor: pointer;
-  transition: color var(--k-fast), background-color var(--k-fast), box-shadow var(--k-fast);
+  transition:
+    color var(--k-fast),
+    background-color var(--k-fast),
+    box-shadow var(--k-fast);
 }
 .line-chip > svg {
   flex: none;
@@ -436,7 +442,7 @@ body.scan-mode .line-chip {
   font-family: var(--k-font-ui);
   font-size: 0.62em;
   font-weight: var(--k-weight-medium);
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
   line-height: 1;
   white-space: nowrap;
 }
@@ -447,7 +453,7 @@ body.scan-mode .line-chip {
   position: relative;
 }
 .line-chip-voice::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background: var(--accent-a5);
@@ -476,7 +482,7 @@ body.scan-mode .line-chip {
 }
 /* The edge, drawn over the picture. */
 .line-chip-shot::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -582,7 +588,9 @@ body.scan-mode .line-chip {
 .shot-viewer-crop {
   position: absolute;
   border-radius: 2px;
-  box-shadow: 0 0 0 1.5px var(--k-accent), 0 0 0 9999px rgb(0 0 0 / 0.45);
+  box-shadow:
+    0 0 0 1.5px var(--k-accent),
+    0 0 0 9999px rgb(0 0 0 / 0.45);
   pointer-events: none;
 }
 .shot-viewer-mark {
@@ -623,7 +631,9 @@ body.scan-mode .line-chip {
   font-style: normal;
 }
 @keyframes log-pulse {
-  50% { opacity: 0.3; }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* Tokens: clickable dictionary words get a soft accent wash on hover; non-dictionary tokens
@@ -857,8 +867,9 @@ body.scan-mode .line-chip {
 }
 
 /* Each OCR capture is a section; its semantic units retain their own actions. */
-.line[data-ocr-index="0"]:not([data-ocr-count="1"]) { margin-top: 1.25rem; }
-
+.line[data-ocr-index='0']:not([data-ocr-count='1']) {
+  margin-top: 1.25rem;
+}
 
 /* A line being edited in place (LineRow.tsx, LineEditor): the transcript's own text in a field
    that grows with it, inset so the text stays where it was. Below it, what was recorded, once
@@ -880,7 +891,9 @@ body.scan-mode .log-lines .line-editing:not(.line-editing-note):hover {
   border: 0;
   border-radius: var(--k-radius-md);
   background: var(--k-field);
-  box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4);
+  box-shadow:
+    inset 0 0 0 1px var(--k-focus),
+    0 0 0 2px var(--accent-a4);
   color: var(--k-text);
   resize: none;
   overflow: hidden;
@@ -932,7 +945,9 @@ body.scan-mode .log-lines .line-editing:not(.line-editing-note):hover {
   gap: var(--k-space-2);
   border-radius: var(--k-radius-md);
   background: var(--k-raised);
-  box-shadow: inset 0 0 0 1px var(--k-line-strong), 0 1px 2px rgb(15 17 26 / 0.06);
+  box-shadow:
+    inset 0 0 0 1px var(--k-line-strong),
+    0 1px 2px rgb(15 17 26 / 0.06);
   padding: var(--k-space-2) var(--k-space-3) var(--k-space-2) var(--k-space-2);
 }
 /* The note's mark in its own column: the Notebook's icon, faded. Its box is a square the height of
@@ -1032,7 +1047,9 @@ body.scan-mode .log-lines .line-editing:not(.line-editing-note):hover {
 }
 .note-card-editing {
   z-index: 1;
-  box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4);
+  box-shadow:
+    inset 0 0 0 1px var(--k-focus),
+    0 0 0 2px var(--accent-a4);
 }
 .note-editor {
   display: block;
@@ -1094,7 +1111,7 @@ body.scan-mode .log-lines .line-editing:not(.line-editing-note):hover {
   color: var(--k-text-3);
 }
 .note-keys-md::before {
-  content: "";
+  content: '';
   align-self: stretch;
   width: 1px;
   margin: 0.125rem var(--k-space-4) 0.125rem 0;
@@ -1148,7 +1165,7 @@ body.scan-mode .log-lines .line-editing:not(.line-editing-note):hover {
 }
 .log-add-note::before,
 .log-add-note::after {
-  content: "";
+  content: '';
   flex: 1;
   height: 1px;
   background: var(--k-line);
@@ -1218,7 +1235,9 @@ html[data-mini] .log-add-note {
   padding: var(--k-space-1);
   border-radius: var(--k-radius-lg);
   background: var(--k-raised);
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a5);
   color: var(--k-text);
   font-family: var(--k-font-ui);
   font-size: var(--k-text-sm);
@@ -1238,7 +1257,7 @@ html[data-mini] .log-add-note {
   border-radius: var(--k-radius-md);
   cursor: default;
 }
-.mention-option[aria-selected="true"] {
+.mention-option[aria-selected='true'] {
   background: var(--k-press);
 }
 .mention-option .nb-avatar {

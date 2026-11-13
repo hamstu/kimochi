@@ -30,7 +30,10 @@ use kimochi_screenai::{
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
-    sync::{atomic::{AtomicBool, Ordering}, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     time::Duration,
 };
 use tauri::Manager;
@@ -91,11 +94,7 @@ fn library_arch(component: &Component) -> Option<Arch> {
 
 fn found(component: Component, source: &str) -> Option<Found> {
     let arch = library_arch(&component)?;
-    failed_reason(&component.dir).is_none().then(|| Found {
-        component,
-        source: source.into(),
-        arch,
-    })
+    failed_reason(&component.dir).is_none().then(|| Found { component, source: source.into(), arch })
 }
 
 /// A copy another program put on this computer (owocr's folder, then each browser), newest
@@ -234,19 +233,12 @@ fn start(app: &tauri::AppHandle, found: &Found) -> Result<Worker, String> {
 }
 
 /// The running worker for `found`, started if need be.
-fn worker<'a>(
-    app: &tauri::AppHandle,
-    slot: &'a mut Option<Running>,
-    found: &Found,
-) -> Result<&'a mut Worker, String> {
+fn worker<'a>(app: &tauri::AppHandle, slot: &'a mut Option<Running>, found: &Found) -> Result<&'a mut Worker, String> {
     if slot.as_ref().is_some_and(|r| r.dir != found.component.dir) {
         *slot = None;
     }
     if slot.is_none() {
-        *slot = Some(Running {
-            dir: found.component.dir.clone(),
-            worker: start(app, found)?,
-        });
+        *slot = Some(Running { dir: found.component.dir.clone(), worker: start(app, found)? });
     }
     Ok(&mut slot.as_mut().expect("just started").worker)
 }
@@ -254,9 +246,9 @@ fn worker<'a>(
 /// Start the worker in the background when Screen AI is the engine in use, so the first scan does
 /// not wait for the library to load. Once per session; a later scan starts it otherwise.
 fn warm_if_selected(app: &tauri::AppHandle) {
-    let selected = app.try_state::<crate::state::Shared>().is_some_and(|service| {
-        service.settings.get_or::<String>("ocrMode", String::new()) == "screenai"
-    });
+    let selected = app
+        .try_state::<crate::state::Shared>()
+        .is_some_and(|service| service.settings.get_or::<String>("ocrMode", String::new()) == "screenai");
     if !selected || WARMING.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -298,9 +290,9 @@ impl Pixels<'_> {
 
     fn rows(&self) -> Box<dyn Iterator<Item = &[u8]> + '_> {
         match self {
-            Pixels::Rows { data, width, height, stride } => Box::new(
-                data.chunks(*stride).take(*height as usize).map(move |row| &row[..*width as usize * 4]),
-            ),
+            Pixels::Rows { data, width, height, stride } => {
+                Box::new(data.chunks(*stride).take(*height as usize).map(move |row| &row[..*width as usize * 4]))
+            }
             Pixels::Owned(image) => Box::new(image.as_raw().chunks_exact(image.width() as usize * 4)),
         }
     }
@@ -357,7 +349,14 @@ pub(crate) fn recognize_rgb(app: &tauri::AppHandle, image: &image::RgbImage) -> 
 }
 
 /// Recognise RGBA rows of `stride` bytes with the warm worker, starting it if need be.
-fn recognize_rows(app: &tauri::AppHandle, found: &Found, data: &[u8], width: u32, height: u32, stride: usize) -> Result<Value, String> {
+fn recognize_rows(
+    app: &tauri::AppHandle,
+    found: &Found,
+    data: &[u8],
+    width: u32,
+    height: u32,
+    stride: usize,
+) -> Result<Value, String> {
     if width == 0 || height == 0 {
         return Ok(value_from_lines(&[], 1., width, height));
     }
@@ -420,11 +419,14 @@ fn line_segments(line: &Line, back: f64, width: u32, height: u32) -> Vec<Value> 
             } else {
                 word.symbols.iter().map(|s| (s.text.as_str(), &s.bounding_box)).collect()
             };
-            parts.into_iter().filter_map(|(text, rect)| {
-                let text = text.trim();
-                let bbox = bounds(&frame_corners(rect, back, width, height))?;
-                (!text.is_empty()).then(|| json!({"text": text, "bbox": bbox}))
-            }).collect::<Vec<_>>()
+            parts
+                .into_iter()
+                .filter_map(|(text, rect)| {
+                    let text = text.trim();
+                    let bbox = bounds(&frame_corners(rect, back, width, height))?;
+                    (!text.is_empty()).then(|| json!({"text": text, "bbox": bbox}))
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -438,7 +440,9 @@ fn value_from_lines(lines: &[Line], back: f64, width: u32, height: u32) -> Value
     let mut paragraphs: Vec<Vec<&Line>> = Vec::new();
     for line in lines.iter().filter(|l| is_text(l)) {
         match paragraphs.last_mut() {
-            Some(last) if last[0].block_id == line.block_id && last[0].paragraph_id == line.paragraph_id => last.push(line),
+            Some(last) if last[0].block_id == line.block_id && last[0].paragraph_id == line.paragraph_id => {
+                last.push(line)
+            }
             _ => paragraphs.push(vec![line]),
         }
     }
@@ -457,11 +461,13 @@ fn value_from_lines(lines: &[Line], back: f64, width: u32, height: u32) -> Value
         let vertical = placed.iter().all(|(line, corners)| {
             line.direction == Direction::TopToBottom
                 || (line.direction == Direction::Unspecified
-                    && bounds(corners).is_some_and(|b| line.text.trim().chars().count() > 1 && b[3] - b[1] > (b[2] - b[0]) * 1.5))
+                    && bounds(corners)
+                        .is_some_and(|b| line.text.trim().chars().count() > 1 && b[3] - b[1] > (b[2] - b[0]) * 1.5))
         });
         let orientation = if vertical { "vertical" } else { "horizontal" };
         let polygons: Vec<[[f64; 2]; 4]> = placed.iter().map(|(_, c)| *c).collect();
-        let segments: Vec<Vec<Value>> = placed.iter().map(|(line, _)| line_segments(line, back, width, height)).collect();
+        let segments: Vec<Vec<Value>> =
+            placed.iter().map(|(line, _)| line_segments(line, back, width, height)).collect();
         let bbox = bounds(&polygons.concat());
         let confidence = placed.iter().map(|(l, _)| f64::from(l.confidence)).fold(f64::INFINITY, f64::min);
         groups.push(json!({
@@ -513,9 +519,21 @@ mod tests {
             .map(|(i, c)| Symbol {
                 text: c.to_string(),
                 bounding_box: if direction == Direction::TopToBottom {
-                    Rect { x: rect.x, y: rect.y + i as i32 * rect.width, width: rect.width, height: rect.width, angle: 0. }
+                    Rect {
+                        x: rect.x,
+                        y: rect.y + i as i32 * rect.width,
+                        width: rect.width,
+                        height: rect.width,
+                        angle: 0.,
+                    }
                 } else {
-                    Rect { x: rect.x + i as i32 * rect.height, y: rect.y, width: rect.height, height: rect.height, angle: 0. }
+                    Rect {
+                        x: rect.x + i as i32 * rect.height,
+                        y: rect.y,
+                        width: rect.height,
+                        height: rect.height,
+                        angle: 0.,
+                    }
                 },
                 confidence: 1.,
             })
@@ -556,7 +574,8 @@ mod tests {
 
     #[test]
     fn top_to_bottom_lines_are_vertical() {
-        let lines = [line("吾輩は猫", Rect { x: 100, y: 10, width: 30, height: 120, angle: 0. }, 0, 0, Direction::TopToBottom)];
+        let lines =
+            [line("吾輩は猫", Rect { x: 100, y: 10, width: 30, height: 120, angle: 0. }, 0, 0, Direction::TopToBottom)];
         let value = value_from_lines(&lines, 1., 300, 300);
         assert_eq!(value["groups"][0]["orientation"], "vertical");
         assert_eq!(value["textAnnotations"][1]["isVertical"], true);
@@ -572,7 +591,8 @@ mod tests {
 
     #[test]
     fn images_and_empty_lines_are_not_text() {
-        let mut picture = line("x", Rect { x: 0, y: 0, width: 10, height: 10, angle: 0. }, 0, 0, Direction::LeftToRight);
+        let mut picture =
+            line("x", Rect { x: 0, y: 0, width: 10, height: 10, angle: 0. }, 0, 0, Direction::LeftToRight);
         picture.content_type = 2;
         let blank = line("  ", Rect { x: 0, y: 20, width: 10, height: 10, angle: 0. }, 0, 0, Direction::LeftToRight);
         let value = value_from_lines(&[picture, blank], 1., 100, 100);

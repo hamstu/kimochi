@@ -7,7 +7,8 @@
 // Not util.js `randomId`: util.js imports the engine descriptors (both manifests), which the
 // worker shim's bundle has no use for.
 let nextRequest = 0
-const requestId = () => `F${Date.now().toString(36)}-${(nextRequest++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const requestId = () =>
+  `F${Date.now().toString(36)}-${(nextRequest++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 export const NULL_BODY = new Set([101, 103, 204, 205, 304])
 
@@ -105,7 +106,8 @@ export function installFrameNetwork(win, { upstream, denied, report, base = null
     const url = new win.URL(href)
     // A relative string is handed on resolved, so a worker shim's own location never leaks in.
     const local = typeof input === 'string' || input instanceof win.URL ? href : input
-    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return nativeFetch(local, init)
+    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin)
+      return nativeFetch(local, init)
     if (deniedHost(url.hostname, denied)) {
       report({ check: 'ext-host-host-refused', host: url.hostname })
       return Promise.reject(new TypeError('Failed to fetch'))
@@ -117,7 +119,9 @@ export function installFrameNetwork(win, { upstream, denied, report, base = null
 
 /** Windows maps native protocols to HTTP. IPC must never invoke plugin-http through itself. */
 export function isNativeRequest(win, url) {
-  return win.__KIMOCHI_PLATFORM__?.os === 'windows' && url.protocol === 'http:' &&
+  return (
+    win.__KIMOCHI_PLATFORM__?.os === 'windows' &&
+    url.protocol === 'http:' &&
     ['ipc.localhost', 'capture.localhost'].includes(url.hostname)
+  )
 }
-

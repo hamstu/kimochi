@@ -47,10 +47,7 @@ pub fn path(dir: &Path, sid: &str) -> PathBuf {
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 /// A session's file: empty when there is none yet, an error when it cannot be read (it is then
@@ -304,9 +301,8 @@ pub fn apply(dir: &Path, sid: &str, items: &BTreeMap<String, Option<Value>>) -> 
 /// field named Reading or Kana (not the sentence's).
 pub fn card_term(fields: &[(String, String)]) -> (String, Option<String>) {
     let plain = |v: &str| kimochi_speech::timeline::normalize(v);
-    let term = crate::sentence_audio::card_word(fields, "").or_else(|| {
-        fields.iter().map(|(_, v)| plain(v)).filter(|v| !v.is_empty()).min_by_key(|v| v.chars().count())
-    });
+    let term = crate::sentence_audio::card_word(fields, "")
+        .or_else(|| fields.iter().map(|(_, v)| plain(v)).filter(|v| !v.is_empty()).min_by_key(|v| v.chars().count()));
     let term: String = term.unwrap_or_default().chars().take(TERM_MAX).collect();
     let reading = fields
         .iter()
@@ -417,7 +413,14 @@ mod tests {
     }
 
     fn card(note_id: u64, term: &str) -> NewCard {
-        NewCard { note_id, term: term.into(), reading: Some("ねこ".into()), deck: Some("Mining".into()), via: "kimochi", engine: KIMOCHI_ENGINE.into() }
+        NewCard {
+            note_id,
+            term: term.into(),
+            reading: Some("ねこ".into()),
+            deck: Some("Mining".into()),
+            via: "kimochi",
+            engine: KIMOCHI_ENGINE.into(),
+        }
     }
 
     #[test]
@@ -487,7 +490,8 @@ mod tests {
         // Kept in the file, for Sync.
         assert_eq!(read(&dir, "s2").unwrap()["cards"].as_array().unwrap().len(), 2);
         // Another computer's newer change to the card (its audio) doesn't bring it back.
-        let theirs = json!({ "noteId": 7, "term": "猫", "addedAt": 100, "enhanced": ["sentenceAudio"], "updatedAt": 400 });
+        let theirs =
+            json!({ "noteId": 7, "term": "猫", "addedAt": 100, "enhanced": ["sentenceAudio"], "updatedAt": 400 });
         assert_eq!(merge(&theirs, &record)["deleted"], true);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -508,13 +512,20 @@ mod tests {
         let dir = dir("apply");
         add(&dir, "s1", &card(1, "猫"), 100).unwrap();
         let mut items = BTreeMap::new();
-        items.insert("2".to_string(), Some(json!({ "sid": "s1", "card": { "noteId": 99, "term": "犬", "addedAt": 50 } })));
+        items.insert(
+            "2".to_string(),
+            Some(json!({ "sid": "s1", "card": { "noteId": 99, "term": "犬", "addedAt": 50 } })),
+        );
         items.insert("1".to_string(), None);
         items.insert("x".to_string(), Some(json!({ "card": {} })));
         apply(&dir, "s1", &items).unwrap();
         let cards = list(&dir, "s1").unwrap();
         assert_eq!(cards.len(), 1);
-        assert_eq!((cards[0]["noteId"].as_u64(), cards[0]["term"].as_str()), (Some(2), Some("犬")), "the id is the record's");
+        assert_eq!(
+            (cards[0]["noteId"].as_u64(), cards[0]["term"].as_str()),
+            (Some(2), Some("犬")),
+            "the id is the record's"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

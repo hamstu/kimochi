@@ -28,9 +28,8 @@ fn main() {
     std::thread::spawn(move || {
         let mut backend = platform_backend().expect("capture backend");
         let mut observer = if optimized {
-            Box::new(kimochi_capture::text::CachedObserver::new(
-                platform_observer(),
-            )) as Box<dyn kimochi_capture::TextObserver>
+            Box::new(kimochi_capture::text::CachedObserver::new(platform_observer()))
+                as Box<dyn kimochi_capture::TextObserver>
         } else {
             platform_observer()
         };
@@ -40,10 +39,7 @@ fn main() {
         for i in 0..16 {
             let started = Instant::now();
             let frame = match &source {
-                Some(id) => match backend.capture(&CaptureRequest {
-                    source_id: id.clone(),
-                    crop: None,
-                }) {
+                Some(id) => match backend.capture(&CaptureRequest { source_id: id.clone(), crop: None }) {
                     Ok(frame) => frame,
                     Err(e) => {
                         eprintln!("capture unavailable: {}", e.code);
@@ -54,14 +50,7 @@ fn main() {
                     1000,
                     600,
                     if i < 8 {
-                        &[(
-                            "今日は寒いですね",
-                            Placement {
-                                x: 60.0,
-                                top: 120.0,
-                                size: 42.0,
-                            },
-                        )]
+                        &[("今日は寒いですね", Placement { x: 60.0, top: 120.0, size: 42.0 })]
                     } else {
                         &[]
                     },
@@ -71,8 +60,7 @@ fn main() {
             frame.pixels.hash(&mut hash);
             let pixels = hash.finish();
             if !optimized {
-                let _ =
-                    kimochi_capture::dhash_rgba(&frame.pixels, frame.info.width, frame.info.height);
+                let _ = kimochi_capture::dhash_rgba(&frame.pixels, frame.info.width, frame.info.height);
             }
             let read = match observer.observe(&frame, Duration::from_secs(5)) {
                 Ok(read) => read,

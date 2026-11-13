@@ -75,12 +75,7 @@ pub fn intersects(a: &Rect, b: &Rect) -> bool {
 }
 
 fn padded(r: &Rect, margin: f64) -> Rect {
-    Rect {
-        x: r.x - margin,
-        y: r.y - margin,
-        width: r.width + 2. * margin,
-        height: r.height + 2. * margin,
-    }
+    Rect { x: r.x - margin, y: r.y - margin, width: r.width + 2. * margin, height: r.height + 2. * margin }
 }
 
 /// Whether any of Kimochi's windows on screen covers any of the overlay's text boxes.
@@ -93,11 +88,7 @@ fn padded(r: &Rect, margin: f64) -> Rect {
 ///
 /// No text at all is never covered: there is nothing to hide, and an empty overlay
 /// staying "shown" is what lets the next scan appear without a focus change.
-pub fn covers_text<'a>(
-    frames: impl IntoIterator<Item = &'a OwnFrame>,
-    text: &[Rect],
-    reliable: bool,
-) -> bool {
+pub fn covers_text<'a>(frames: impl IntoIterator<Item = &'a OwnFrame>, text: &[Rect], reliable: bool) -> bool {
     let text: Vec<Rect> = text.iter().filter(|r| finite(r)).map(|r| padded(r, TEXT_MARGIN)).collect();
     if text.is_empty() {
         return false;
@@ -138,9 +129,8 @@ pub fn wake() {
 pub fn wait(timeout: Duration) {
     let (flag, signal) = &WAKE;
     let guard = flag.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (mut woken, _) = signal
-        .wait_timeout_while(guard, timeout, |woken| !*woken)
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (mut woken, _) =
+        signal.wait_timeout_while(guard, timeout, |woken| !*woken).unwrap_or_else(|poisoned| poisoned.into_inner());
     *woken = false;
 }
 
@@ -169,19 +159,8 @@ pub fn note(window: &tauri::WebviewWindow) {
     }
     let visible = window.is_visible().unwrap_or(false);
     let minimized = window.is_minimized().unwrap_or(false);
-    let bounds = if visible && !minimized {
-        crate::platform::desktop_bounds(window).ok()
-    } else {
-        None
-    };
-    store(
-        label,
-        OwnFrame {
-            bounds,
-            visible,
-            minimized,
-        },
-    );
+    let bounds = if visible && !minimized { crate::platform::desktop_bounds(window).ok() } else { None };
+    store(label, OwnFrame { bounds, visible, minimized });
 }
 
 /// A window that was just hidden, minimised or destroyed. Recorded without asking the
@@ -190,14 +169,7 @@ pub fn note_gone(label: &str) {
     if !COVERING.contains(&label) {
         return;
     }
-    store(
-        label,
-        OwnFrame {
-            bounds: None,
-            visible: false,
-            minimized: false,
-        },
-    );
+    store(label, OwnFrame { bounds: None, visible: false, minimized: false });
 }
 
 /// The overlay's text boxes, in desktop points.
@@ -208,12 +180,7 @@ pub fn set_text(rects: Vec<Rect>) {
 
 /// Kimochi's own windows on screen, in desktop points, from the cache.
 pub fn own_rects() -> Vec<Rect> {
-    frames_lock()
-        .values()
-        .filter(|frame| frame.on_screen())
-        .filter_map(|frame| frame.bounds)
-        .filter(finite)
-        .collect()
+    frames_lock().values().filter(|frame| frame.on_screen()).filter_map(|frame| frame.bounds).filter(finite).collect()
 }
 
 /// Blanks what a display capture shows of Kimochi's own windows (`own`, desktop points), so
@@ -271,20 +238,11 @@ mod tests {
     use crate::platform::{DesktopGeometry, DesktopUnit, DisplayInfo};
 
     fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
-        Rect {
-            x,
-            y,
-            width,
-            height,
-        }
+        Rect { x, y, width, height }
     }
 
     fn shown(bounds: Rect) -> OwnFrame {
-        OwnFrame {
-            bounds: Some(bounds),
-            visible: true,
-            minimized: false,
-        }
+        OwnFrame { bounds: Some(bounds), visible: true, minimized: false }
     }
 
     /// Two lines of text in a game window at the left of a 1728×1117 display.
@@ -298,7 +256,12 @@ mod tests {
     }
 
     fn black_pixels(pixels: &[u8], width: usize) -> Vec<(usize, usize)> {
-        pixels.chunks(4).enumerate().filter(|(_, p)| p.iter().all(|v| *v == 0)).map(|(i, _)| (i % width, i / width)).collect()
+        pixels
+            .chunks(4)
+            .enumerate()
+            .filter(|(_, p)| p.iter().all(|v| *v == 0))
+            .map(|(i, _)| (i % width, i / width))
+            .collect()
     }
 
     #[test]
@@ -389,23 +352,11 @@ mod tests {
     #[test]
     fn hidden_and_minimised_windows_are_ignored() {
         let over = rect(500., 600., 900., 560.);
-        let hidden = OwnFrame {
-            bounds: Some(over),
-            visible: false,
-            minimized: false,
-        };
-        let minimised = OwnFrame {
-            bounds: Some(over),
-            visible: true,
-            minimized: true,
-        };
+        let hidden = OwnFrame { bounds: Some(over), visible: false, minimized: false };
+        let minimised = OwnFrame { bounds: Some(over), visible: true, minimized: true };
         assert!(!covers_text(&[hidden, minimised], &text(), true));
         // Windows parks a minimised window at -32000; that must not count either way.
-        let parked = OwnFrame {
-            bounds: Some(rect(-32000., -32000., 160., 28.)),
-            visible: true,
-            minimized: true,
-        };
+        let parked = OwnFrame { bounds: Some(rect(-32000., -32000., 160., 28.)), visible: true, minimized: true };
         assert!(!covers_text(&[parked], &text(), true));
     }
 
@@ -437,11 +388,7 @@ mod tests {
 
     #[test]
     fn an_unreadable_frame_is_assumed_to_cover() {
-        let unknown = OwnFrame {
-            bounds: None,
-            visible: true,
-            minimized: false,
-        };
+        let unknown = OwnFrame { bounds: None, visible: true, minimized: false };
         assert!(covers_text(&[unknown], &text(), true));
     }
 
@@ -451,21 +398,12 @@ mod tests {
         let aside = shown(rect(1728. + 100., 200., 900., 560.));
         assert!(covers_text(&[aside], &text(), false));
         // But nothing on screen still covers nothing.
-        let hidden = OwnFrame {
-            visible: false,
-            ..aside
-        };
+        let hidden = OwnFrame { visible: false, ..aside };
         assert!(!covers_text(&[hidden], &text(), false));
     }
 
     fn display(id: u32, bounds: Rect, scale: f64) -> DisplayInfo {
-        DisplayInfo {
-            id,
-            source_id: format!("test:display:{id}"),
-            bounds,
-            work_area: bounds,
-            scale_factor: scale,
-        }
+        DisplayInfo { id, source_id: format!("test:display:{id}"), bounds, work_area: bounds, scale_factor: scale }
     }
 
     #[test]
@@ -475,10 +413,7 @@ mod tests {
         // overlay's text in desktop points; the frame is converted before comparing.
         let geometry = DesktopGeometry::new(
             DesktopUnit::PhysicalPixels,
-            vec![
-                display(1, rect(0., 0., 1920., 1080.), 1.),
-                display(2, rect(1920., 0., 2880., 1620.), 1.5),
-            ],
+            vec![display(1, rect(0., 0., 1920., 1080.), 1.), display(2, rect(1920., 0., 2880., 1620.), 1.5)],
         );
         // Text on the 150 % monitor, at desktop points (2120..2520, 300..340).
         let text = [rect(2120., 300., 400., 40.)];
@@ -507,10 +442,7 @@ mod tests {
     #[test]
     fn retina_points_are_not_scaled() {
         // macOS: frames and text are both points, and a 2× backing scale never enters into it.
-        let geometry = DesktopGeometry::new(
-            DesktopUnit::Points,
-            vec![display(1, rect(0., 0., 1728., 1117.), 2.)],
-        );
+        let geometry = DesktopGeometry::new(DesktopUnit::Points, vec![display(1, rect(0., 0., 1728., 1117.), 2.)]);
         let frame = geometry.rect_to_desktop(rect(900., 40., 800., 560.));
         assert_eq!((frame.x, frame.y, frame.width, frame.height), (900., 40., 800., 560.));
         assert!(!covers_text(&[shown(frame)], &text(), true));

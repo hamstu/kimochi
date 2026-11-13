@@ -11,7 +11,9 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-use windows_sys::Win32::System::Memory::{VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE};
+use windows_sys::Win32::System::Memory::{
+    VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
+};
 use windows_sys::Win32::System::Threading::{
     CreateEventW, CreateProcessW, CreateRemoteThread, GetExitCodeThread, IsWow64Process2, OpenProcess, ResumeThread,
     TerminateProcess, WaitForSingleObject, CREATE_SUSPENDED, PROCESS_ALL_ACCESS, PROCESS_INFORMATION,
@@ -151,8 +153,18 @@ pub fn launch(exe: &Path, args: &[String], dll: &Path) -> Result<(Handle, u32), 
         let mut si: STARTUPINFOW = std::mem::zeroed();
         si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
         let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
-        if CreateProcessW(app.as_ptr(), cmd.as_mut_ptr(), null(), null(), 0, CREATE_SUSPENDED, null(), cwd.as_ptr(), &si, &mut pi)
-            == 0
+        if CreateProcessW(
+            app.as_ptr(),
+            cmd.as_mut_ptr(),
+            null(),
+            null(),
+            0,
+            CREATE_SUSPENDED,
+            null(),
+            cwd.as_ptr(),
+            &si,
+            &mut pi,
+        ) == 0
         {
             return Err(format!("cannot start {} (error {})", exe.display(), GetLastError()));
         }

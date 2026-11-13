@@ -8,8 +8,7 @@ use crate::platform;
 use crate::state::{descriptor_key, descriptor_type, Image, Service, Shared, Thumbnail};
 use base64::Engine;
 use kimochi_capture::{
-    crop_rect, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, Source,
-    SourceId,
+    crop_rect, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, Source, SourceId,
 };
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -94,9 +93,7 @@ pub fn err_for(source_id: &str, e: CaptureError) -> String {
 fn closed(source_id: &str) -> String {
     let text = "gone: that source has closed; refresh the list and pick again".to_string();
     if needs_pick_again(source_id, "stale_source") {
-        tag_pick_again(
-            "gone: that shared source has closed; choose it again in the system picker".into(),
-        )
+        tag_pick_again("gone: that shared source has closed; choose it again in the system picker".into())
     } else {
         text
     }
@@ -105,14 +102,8 @@ fn closed(source_id: &str) -> String {
 /// Capture one source without touching any view state. Returns the frame's own RGBA
 /// so callers encode once, at the size they actually serve.
 fn capture_isolated(service: &Service, source_id: &str) -> Result<kimochi_capture::Frame, String> {
-    let mut backend = service
-        .backend
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let request = CaptureRequest {
-        source_id: source_id.to_string(),
-        crop: None,
-    };
+    let mut backend = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let request = CaptureRequest { source_id: source_id.to_string(), crop: None };
     #[cfg(target_os = "linux")]
     let frame = backend.preview(&request);
     #[cfg(not(target_os = "linux"))]
@@ -138,14 +129,10 @@ fn downscale(pixels: &[u8], width: u32, height: u32, edge: u32) -> (Vec<u8>, u32
     let mut out = Vec::with_capacity(target_w as usize * target_h as usize * 4);
     for ty in 0..target_h {
         let y0 = (ty * height / target_h) as usize;
-        let y1 = (((ty + 1) * height / target_h) as usize)
-            .max(y0 + 1)
-            .min(height as usize);
+        let y1 = (((ty + 1) * height / target_h) as usize).max(y0 + 1).min(height as usize);
         for tx in 0..target_w {
             let x0 = (tx * width / target_w) as usize;
-            let x1 = (((tx + 1) * width / target_w) as usize)
-                .max(x0 + 1)
-                .min(width as usize);
+            let x1 = (((tx + 1) * width / target_w) as usize).max(x0 + 1).min(width as usize);
             let mut sums = [0u32; 4];
             let mut count = 0u32;
             for y in y0..y1 {
@@ -173,9 +160,7 @@ fn encode_png(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String>
         encoder.set_depth(png::BitDepth::Eight);
         encoder.set_compression(png::Compression::Fast);
         let mut writer = encoder.write_header().map_err(|e| format!("native: {e}"))?;
-        writer
-            .write_image_data(pixels)
-            .map_err(|e| format!("native: {e}"))?;
+        writer.write_image_data(pixels).map_err(|e| format!("native: {e}"))?;
     }
     Ok(bytes)
 }
@@ -185,9 +170,7 @@ fn decode_rgba(png_bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     let decoder = png::Decoder::new(std::io::Cursor::new(png_bytes));
     let mut reader = decoder.read_info().map_err(|e| format!("native: {e}"))?;
     let mut buffer = vec![0; reader.output_buffer_size().unwrap_or(0)];
-    let info = reader
-        .next_frame(&mut buffer)
-        .map_err(|e| format!("native: {e}"))?;
+    let info = reader.next_frame(&mut buffer).map_err(|e| format!("native: {e}"))?;
     buffer.truncate(info.buffer_size());
     Ok((buffer, info.width, info.height))
 }
@@ -200,21 +183,11 @@ fn icon_for(service: &Service, app: Option<&str>) -> Option<Arc<str>> {
     if let Some(cached) = service.icons.lock().unwrap().get(app) {
         return cached.clone();
     }
-    let identity = platform::AppIdentity {
-        name: app.to_string(),
-        pid: None,
-    };
+    let identity = platform::AppIdentity { name: app.to_string(), pid: None };
     let encoded = platform::app_icon_png(&identity, ICON_EDGE).map(|png| {
-        Arc::from(format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(&png)
-        ))
+        Arc::from(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&png)))
     });
-    service
-        .icons
-        .lock()
-        .unwrap()
-        .insert(app.to_string(), encoded.clone());
+    service.icons.lock().unwrap().insert(app.to_string(), encoded.clone());
     encoded
 }
 
@@ -243,10 +216,7 @@ pub fn catalog() -> Result<Vec<Value>, String> {
     let mut sources = platform::desktop_picker_sources()?;
     sources.sort_by(|a, b| {
         let rank = |s: &Source| u8::from(s.kind != "display");
-        rank(a)
-            .cmp(&rank(b))
-            .then_with(|| a.app.cmp(&b.app))
-            .then_with(|| a.name.cmp(&b.name))
+        rank(a).cmp(&rank(b)).then_with(|| a.app.cmp(&b.app)).then_with(|| a.name.cmp(&b.name))
     });
     let spaces = platform::source_spaces(&sources);
     let result: Vec<_> = sources.iter().map(|s| entry(s, spaces.get(&s.id))).collect();
@@ -272,20 +242,12 @@ pub fn thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
         .thumbnail(source_id, THUMBNAIL_EDGE)
         .map_err(|e| err_for(source_id, e))?;
     let png = encode_png(&frame.pixels, frame.info.width, frame.info.height)?;
-    let data_uri: Arc<str> = Arc::from(format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(&png)
-    ));
+    let data_uri: Arc<str> =
+        Arc::from(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&png)));
     let mut cache = service.thumbnails.lock().unwrap();
     // Drop anything stale before inserting, so the map tracks live sources only.
     cache.retain(|_, entry| entry.taken.elapsed() < THUMBNAIL_TTL);
-    cache.insert(
-        source_id.to_string(),
-        Thumbnail {
-            taken: Instant::now(),
-            data_uri: data_uri.clone(),
-        },
-    );
+    cache.insert(source_id.to_string(), Thumbnail { taken: Instant::now(), data_uri: data_uri.clone() });
     Ok(json!({ "url": data_uri }))
 }
 
@@ -321,11 +283,7 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
     let (width, height, scale) = (desktop.width, desktop.height, desktop.scale_factor);
     let source_bounds = desktop.source_bounds;
     let info = serde_json::to_value(&desktop).unwrap_or(Value::Null);
-    let token = service
-        .images
-        .lock()
-        .unwrap()
-        .put_hover(Image::captured(frame, info));
+    let token = service.images.lock().unwrap().put_hover(Image::captured(frame, info));
     Ok(json!({
         "url": platform::capture_url(&format!("hover/{token}")),
         "width": width,
@@ -348,14 +306,9 @@ pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String
         return Ok(json!({ "url": null }));
     }
     #[cfg(target_os = "linux")]
-    crate::platform::gnome::refresh_identity(service,source_id);
+    crate::platform::gnome::refresh_identity(service, source_id);
     let frame = capture_isolated(service, source_id)?;
-    let (small, width, height) = downscale(
-        &frame.pixels,
-        frame.info.width,
-        frame.info.height,
-        LIVE_THUMBNAIL_EDGE,
-    );
+    let (small, width, height) = downscale(&frame.pixels, frame.info.width, frame.info.height, LIVE_THUMBNAIL_EDGE);
     let png = encode_png(&small, width, height)?;
     Ok(json!({
         "url": format!(
@@ -371,16 +324,8 @@ pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String
 /// picker means now that regions are drawn over the source itself rather than in the picker.
 pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, String> {
     let source = {
-        let mut backend = service
-            .backend
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        backend
-            .enumerate()
-            .map_err(err)?
-            .into_iter()
-            .find(|s| s.id == source_id)
-            .ok_or_else(|| closed(source_id))?
+        let mut backend = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        backend.enumerate().map_err(err)?.into_iter().find(|s| s.id == source_id).ok_or_else(|| closed(source_id))?
     };
     let key = selection_crop_key(service, source.kind, &source.name, source.app.as_deref());
     let saved = saved_crop_for_key(service, &key);
@@ -395,7 +340,12 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
     commit_with_key(service, source_id, crop, None)
 }
 
-fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_key: Option<String>) -> Result<Value, String> {
+fn commit_with_key(
+    service: &Shared,
+    source_id: &str,
+    crop: Option<Crop>,
+    saved_key: Option<String>,
+) -> Result<Value, String> {
     let had_crop = crop.is_some();
     let result = commit_with_key_inner(service, source_id, crop, saved_key);
     if crate::debug_report::verbose() {
@@ -422,25 +372,23 @@ fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_
     result
 }
 
-fn commit_with_key_inner(service: &Shared, source_id: &str, crop: Option<Crop>, saved_key: Option<String>) -> Result<Value, String> {
+fn commit_with_key_inner(
+    service: &Shared,
+    source_id: &str,
+    crop: Option<Crop>,
+    saved_key: Option<String>,
+) -> Result<Value, String> {
     let source = {
-        let mut backend = service
-            .backend
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        backend
-            .enumerate()
-            .map_err(err)?
-            .into_iter()
-            .find(|s| s.id == source_id)
-            .ok_or_else(|| closed(source_id))?
+        let mut backend = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        backend.enumerate().map_err(err)?.into_iter().find(|s| s.id == source_id).ok_or_else(|| closed(source_id))?
     };
     if let Some(crop) = crop {
         // Reuse capture-core's validation rather than re-deriving the rules here.
         crop_rect(Some(crop), crop.reference_width, crop.reference_height)
             .map_err(|e| format!("invalid: {}", e.message))?;
     }
-    let key = saved_key.unwrap_or_else(|| selection_crop_key(service, source.kind, &source.name, source.app.as_deref()));
+    let key =
+        saved_key.unwrap_or_else(|| selection_crop_key(service, source.kind, &source.name, source.app.as_deref()));
     let previous = saved_crop_for_key(service, &key);
     let crop_value = match crop {
         Some(crop) => serde_json::to_value(crop).unwrap(),
@@ -485,16 +433,8 @@ fn commit_with_key_inner(service: &Shared, source_id: &str, crop: Option<Crop>, 
 /// scan on screen all stay as they are.
 pub fn commit_anki(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<Value, String> {
     let source = {
-        let mut backend = service
-            .backend
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        backend
-            .enumerate()
-            .map_err(err)?
-            .into_iter()
-            .find(|s| s.id == source_id)
-            .ok_or_else(|| closed(source_id))?
+        let mut backend = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        backend.enumerate().map_err(err)?.into_iter().find(|s| s.id == source_id).ok_or_else(|| closed(source_id))?
     };
     if let Some(crop) = crop {
         crop_rect(Some(crop), crop.reference_width, crop.reference_height)
@@ -528,12 +468,7 @@ fn record_crop_key(record: &Value, fullscreen: bool) -> Option<String> {
 
 /// The Anki crop saved under a crop key, if any. None means the whole source.
 pub fn anki_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
-    service
-        .settings
-        .get_path(&["ankiCropRegions", key])
-        .ok()
-        .flatten()
-        .and_then(|v| serde_json::from_value(v).ok())
+    service.settings.get_path(&["ankiCropRegions", key]).ok().flatten().and_then(|v| serde_json::from_value(v).ok())
 }
 
 /// Reads nothing: no source is selected, now or at the next launch. Each source's saved crop is
@@ -613,8 +548,7 @@ static PICKING: AtomicBool = AtomicBool::new(false);
 /// Why a pick that returned false is reported as `cancelled`: `request_permission()` answers
 /// only a bool, and the concrete `PortalCapture::last_error()` is out of reach behind
 /// `Box<dyn CaptureBackend>`, so a dismissal, a timeout and a portal failure look the same here.
-const NOT_SHARED: &str =
-    "Nothing was shared. The system picker was closed, timed out or could not open; try again.";
+const NOT_SHARED: &str = "Nothing was shared. The system picker was closed, timed out or could not open; try again.";
 
 /// Stands in for the real backend while its system picker is open.
 ///
@@ -629,10 +563,7 @@ struct PickerOpen {
 
 impl PickerOpen {
     fn busy() -> CaptureError {
-        CaptureError::new(
-            "busy",
-            "The system picker is open; choose a screen or window there first",
-        )
+        CaptureError::new("busy", "The system picker is open; choose a screen or window there first")
     }
 }
 
@@ -663,11 +594,7 @@ struct Restore<'a> {
 impl Drop for Restore<'_> {
     fn drop(&mut self) {
         if let Some(backend) = self.backend.take() {
-            *self
-                .service
-                .backend
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = backend;
+            *self.service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = backend;
         }
         PICKING.store(false, Ordering::SeqCst);
     }
@@ -702,45 +629,25 @@ fn pick_result(sources: &[Source]) -> PickResult<'_> {
 /// message}` with `reason` one of `cancelled`, `busy` (a picker is already open) or `ambiguous`.
 /// A backend that lists sources itself has no picker and answers `invalid:`.
 pub fn pick_source(service: &Shared) -> Result<Value, String> {
-    let capabilities = service
-        .backend
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .capabilities();
+    let capabilities = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner).capabilities();
     if !capabilities.system_picker_required {
-        return Err(
-            "invalid: this capture backend lists sources itself; choose one from the list".into(),
-        );
+        return Err("invalid: this capture backend lists sources itself; choose one from the list".into());
     }
     if PICKING.swap(true, Ordering::SeqCst) {
         return Ok(not_picked("busy", "The system picker is already open."));
     }
     let real = std::mem::replace(
-        &mut *service
-            .backend
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        &mut *service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner),
         Box::new(PickerOpen { capabilities }),
     );
-    let open = Restore {
-        service,
-        backend: Some(real),
-    };
-    let granted = open
-        .backend
-        .as_ref()
-        .is_some_and(|backend| backend.request_permission());
+    let open = Restore { service, backend: Some(real) };
+    let granted = open.backend.as_ref().is_some_and(|backend| backend.request_permission());
     drop(open);
     if !granted {
         trace_pick("cancelled", &[]);
         return Ok(not_picked("cancelled", NOT_SHARED));
     }
-    let sources = service
-        .backend
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .enumerate()
-        .map_err(err)?;
+    let sources = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner).enumerate().map_err(err)?;
     trace_pick(
         match pick_result(&sources) {
             PickResult::One(_) => "picked",
@@ -787,37 +694,23 @@ fn crop_differs(a: Option<&Crop>, b: Option<&Crop>) -> bool {
     match (a, b) {
         (None, None) => false,
         (Some(a), Some(b)) => {
-            (
-                a.x,
-                a.y,
-                a.width,
-                a.height,
-                a.reference_width,
-                a.reference_height,
-            ) != (
-                b.x,
-                b.y,
-                b.width,
-                b.height,
-                b.reference_width,
-                b.reference_height,
-            )
+            (a.x, a.y, a.width, a.height, a.reference_width, a.reference_height)
+                != (b.x, b.y, b.width, b.height, b.reference_width, b.reference_height)
         }
         _ => true,
     }
 }
 
 fn selection_crop_key(service: &Service, kind: &str, name: &str, app: Option<&str>) -> String {
-    crate::state::shaped_crop_key(descriptor_key(kind, name, app), kind, service.source_fullscreen.load(Ordering::Relaxed))
+    crate::state::shaped_crop_key(
+        descriptor_key(kind, name, app),
+        kind,
+        service.source_fullscreen.load(Ordering::Relaxed),
+    )
 }
 
 fn saved_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
-    service
-        .settings
-        .get_path(&["cropRegions", key])
-        .ok()
-        .flatten()
-        .and_then(|v| serde_json::from_value(v).ok())
+    service.settings.get_path(&["cropRegions", key]).ok().flatten().and_then(|v| serde_json::from_value(v).ok())
 }
 
 /// Outcome of matching a persisted source record against live sources.
@@ -841,8 +734,7 @@ fn same_description(saved: &Value, source: &Source) -> bool {
     // Compare in the frontend's vocabulary, since that is what was persisted.
     let kind_matches = field(saved, "type") == Some(descriptor_type(source.kind));
     let name_matches = field(saved, "name").unwrap_or_default() == source.name.trim();
-    let app_matches = field(saved, "appName").unwrap_or_default()
-        == source.app.as_deref().unwrap_or_default().trim();
+    let app_matches = field(saved, "appName").unwrap_or_default() == source.app.as_deref().unwrap_or_default().trim();
     kind_matches && name_matches && app_matches
 }
 
@@ -855,10 +747,7 @@ fn same_description(saved: &Value, source: &Source) -> bool {
 pub fn resolve_saved_source(saved: &Value, live: &[Source]) -> Restored {
     let saved_id = field(saved, "sourceId").unwrap_or_default();
     if !saved_id.is_empty() {
-        if let Some(source) = live
-            .iter()
-            .find(|s| s.id == saved_id && same_description(saved, s))
-        {
+        if let Some(source) = live.iter().find(|s| s.id == saved_id && same_description(saved, s)) {
             return Restored::Exact(source.id.clone());
         }
     }
@@ -872,7 +761,11 @@ pub fn resolve_saved_source(saved: &Value, live: &[Source]) -> Restored {
 
 /// The crop saved for a source descriptor, used when a scan starts.
 pub fn saved_crop(service: &Service, kind: &str, name: &str, app: Option<&str>) -> Option<Crop> {
-    let key = crate::state::shaped_crop_key(descriptor_key(kind, name, app), kind, service.source_fullscreen.load(Ordering::Relaxed));
+    let key = crate::state::shaped_crop_key(
+        descriptor_key(kind, name, app),
+        kind,
+        service.source_fullscreen.load(Ordering::Relaxed),
+    );
     saved_crop_for_key(service, &key)
 }
 
@@ -927,14 +820,7 @@ mod tests {
     }
 
     fn crop(x: u32) -> Crop {
-        Crop {
-            x,
-            y: 0,
-            width: 10,
-            height: 10,
-            reference_width: 100,
-            reference_height: 100,
-        }
+        Crop { x, y: 0, width: 10, height: 10, reference_width: 100, reference_height: 100 }
     }
 
     #[test]
@@ -974,10 +860,7 @@ mod tests {
     fn a_recycled_id_is_not_trusted() {
         // Same id, different window: ids are session-scoped and must not be believed.
         let live = [source("macos:window:1:2", "window", "Mail", Some("Mail"))];
-        assert_eq!(
-            resolve_saved_source(&saved("macos:window:1:2", "window", "Doc", "Safari"), &live),
-            Restored::Gone
-        );
+        assert_eq!(resolve_saved_source(&saved("macos:window:1:2", "window", "Doc", "Safari"), &live), Restored::Gone);
     }
 
     #[test]
@@ -1017,10 +900,7 @@ mod tests {
 
     #[test]
     fn nothing_live_means_gone() {
-        assert_eq!(
-            resolve_saved_source(&saved("x", "window", "Doc", "Safari"), &[]),
-            Restored::Gone
-        );
+        assert_eq!(resolve_saved_source(&saved("x", "window", "Doc", "Safari"), &[]), Restored::Gone);
     }
 
     #[test]
@@ -1035,24 +915,12 @@ mod tests {
     #[test]
     fn a_stale_portal_source_is_tagged_after_its_prefix() {
         assert_eq!(
-            err_for(
-                "portal:display:57",
-                CaptureError::new("stale_source", "Choose it again.")
-            ),
+            err_for("portal:display:57", CaptureError::new("stale_source", "Choose it again.")),
             "gone: pick-again: Choose it again."
         );
         // Anything else keeps today's text exactly.
-        assert_eq!(
-            err_for(
-                "macos:display:1",
-                CaptureError::new("stale_source", "Closed.")
-            ),
-            "gone: Closed."
-        );
-        assert_eq!(
-            closed("macos:window:1:2"),
-            "gone: that source has closed; refresh the list and pick again"
-        );
+        assert_eq!(err_for("macos:display:1", CaptureError::new("stale_source", "Closed.")), "gone: Closed.");
+        assert_eq!(closed("macos:window:1:2"), "gone: that source has closed; refresh the list and pick again");
         assert!(closed("portal:window:3").starts_with("gone: pick-again: "));
     }
 
@@ -1068,10 +936,8 @@ mod tests {
             assert!(err_for(id, minimised.clone()).starts_with("gone: hidden: "), "{id}");
         }
         // A closed window is still gone for good, and stops automatic scanning as before.
-        let closed_window = err_for(
-            "windows:window:0x1A2B:42",
-            CaptureError::new("stale_source", "Source has closed."),
-        );
+        let closed_window =
+            err_for("windows:window:0x1A2B:42", CaptureError::new("stale_source", "Source has closed."));
         assert_eq!(closed_window, "gone: Source has closed.");
         assert!(gone_for_good(&closed_window));
         assert!(gone_for_good(&closed("windows:window:0x1A2B:42")));
@@ -1085,10 +951,8 @@ mod tests {
         let one = [source("portal:window:3", "window", "Game", None)];
         assert!(matches!(pick_result(&one), PickResult::One(s) if s.id == "portal:window:3"));
         assert!(matches!(pick_result(&[]), PickResult::None));
-        let two = [
-            source("portal:window:3", "window", "Game", None),
-            source("portal:display:4", "display", "Screen", None),
-        ];
+        let two =
+            [source("portal:window:3", "window", "Game", None), source("portal:display:4", "display", "Screen", None)];
         assert!(matches!(pick_result(&two), PickResult::Several));
     }
 
@@ -1105,10 +969,7 @@ mod tests {
         assert_eq!(open.permission(), "promptOnSelect");
         assert!(!open.request_permission());
         assert!(open.enumerate().unwrap().is_empty());
-        let Err(error) = open.capture(&CaptureRequest {
-            source_id: "portal:display:1".into(),
-            crop: None,
-        }) else {
+        let Err(error) = open.capture(&CaptureRequest { source_id: "portal:display:1".into(), crop: None }) else {
             panic!("a capture while the picker is open must fail");
         };
         assert!(err(error).starts_with("busy: "));
@@ -1125,10 +986,7 @@ mod tests {
             ("encode", "native:"),
         ];
         for (code, prefix) in cases {
-            assert!(
-                err(CaptureError::new(code, "x")).starts_with(prefix),
-                "{code}"
-            );
+            assert!(err(CaptureError::new(code, "x")).starts_with(prefix), "{code}");
         }
     }
 }

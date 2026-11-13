@@ -114,7 +114,9 @@ export function createOverlayHints(parent, hooks) {
       if (menuButtons === null && mode !== modeNow) {
         modeNow = mode
         if (hover) {
-          lead.textContent = gated ? 'Rest the pointer on a word to look it up · Hold ' : 'Rest the pointer on a word to look it up'
+          lead.textContent = gated
+            ? 'Rest the pointer on a word to look it up · Hold '
+            : 'Rest the pointer on a word to look it up'
           rest.textContent = gated ? ' to click text' : ''
         } else {
           lead.textContent = 'Hold '

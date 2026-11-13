@@ -43,11 +43,7 @@ import {
 import { DEFAULT_YOMITAN_API_URL } from '@ui/yomitan-api-setup'
 import { YomitanApiSetupDialog, YomitanApiStatusRows } from '../../components/YomitanApiSetup'
 import { nativeError } from '../../bridge/tauri'
-import {
-  DICTIONARY_ENGINES,
-  openDictionarySettings,
-  type DictionaryEngine
-} from '../../bridge/dictionaryEngine'
+import { DICTIONARY_ENGINES, openDictionarySettings, type DictionaryEngine } from '../../bridge/dictionaryEngine'
 import { describeUrlRestriction } from '../../bridge/yomitan'
 import { setSetting } from '../../bridge/settings'
 import { useSetting } from '../../bridge/useSetting'
@@ -124,9 +120,7 @@ export function DictionaryTab(): ReactNode {
             onSave={(value) => void setYomitanSettings({ ...yomitanSettings, customApiUrl: value })}
           />
         </SettingsSection>
-        <WithReaderSettings>
-          {(settings) => <KimochiPopupSections settings={settings} />}
-        </WithReaderSettings>
+        <WithReaderSettings>{(settings) => <KimochiPopupSections settings={settings} />}</WithReaderSettings>
       </>
     )
   }

@@ -30,7 +30,10 @@ test('Japanese is unspaced, vertical and the only language with ruby', () => {
     { spaces: japanese.spaces, vertical: japanese.vertical, ruby: japanese.ruby, scripts: [...japanese.scripts] },
     { spaces: false, vertical: true, ruby: true, scripts: ['Jpan'] }
   )
-  assert.deepEqual(LANGUAGES.filter((language) => language.ruby).map((language) => language.code), ['ja'])
+  assert.deepEqual(
+    LANGUAGES.filter((language) => language.ruby).map((language) => language.code),
+    ['ja']
+  )
 })
 
 test('traits of the other kinds of language', () => {
@@ -51,10 +54,16 @@ test('a code this build does not list reads as Japanese', () => {
   assert.equal(isJapanese('en'), false)
 })
 
-test('the native table (src-tauri/languages.json) is the TS table\'s native fields, in order', () => {
+test("the native table (src-tauri/languages.json) is the TS table's native fields, in order", () => {
   const native = JSON.parse(readFileSync(new URL('../src-tauri/languages.json', import.meta.url), 'utf8'))
   assert.deepEqual(
     native,
-    LANGUAGES.map(({ code, scripts, spaces, vertical, ruby }) => ({ code, scripts: [...scripts], spaces, vertical, ruby }))
+    LANGUAGES.map(({ code, scripts, spaces, vertical, ruby }) => ({
+      code,
+      scripts: [...scripts],
+      spaces,
+      vertical,
+      ruby
+    }))
   )
 })

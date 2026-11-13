@@ -22,7 +22,7 @@ import { yomitanShimSource } from './yomitan-shims.mjs'
 
 const SETTINGS = 'tauri://localhost/settings.html'
 
-test('links are sorted into web pages, extension pages, dead ends and the page\'s own business', () => {
+test("links are sorted into web pages, extension pages, dead ends and the page's own business", () => {
   const kind = (href, base = SETTINGS) => classifyLink(href, base).kind
   assert.equal(kind('https://yomitan.wiki/anki/'), 'web')
   assert.equal(kind('http://127.0.0.1:8765'), 'web')
@@ -30,7 +30,13 @@ test('links are sorted into web pages, extension pages, dead ends and the page\'
   assert.equal(kind('info.html'), 'page')
   assert.equal(kind('#anki'), 'page')
   assert.equal(kind('tauri://localhost/welcome.html'), 'page')
-  for (const href of ['chrome://extensions/shortcuts', 'edge://extensions/?id=x', 'about:config', 'file:///etc/hosts', 'mailto:a@b.c'])
+  for (const href of [
+    'chrome://extensions/shortcuts',
+    'edge://extensions/?id=x',
+    'about:config',
+    'file:///etc/hosts',
+    'mailto:a@b.c'
+  ])
     assert.equal(kind(href), 'ignore', href)
   for (const href of ['blob:tauri://localhost/1', 'data:text/plain,x', 'javascript:void 0', '', null])
     assert.equal(kind(href), 'none', String(href))
@@ -40,7 +46,7 @@ test('links are sorted into web pages, extension pages, dead ends and the page\'
   assert.equal(classifyLink('info.html', SETTINGS).url, 'tauri://localhost/info.html')
 })
 
-test('only an extension page at the origin root gets the handling, never Kimochi\'s documents', () => {
+test("only an extension page at the origin root gets the handling, never Kimochi's documents", () => {
   const at = (pathname) => isExtensionPage({ location: { pathname } })
   for (const page of ['/settings.html', '/popup.html', '/search.html', '/info.html', '/quick-start-guide.html'])
     assert.equal(at(page), true, page)
@@ -91,7 +97,12 @@ function fakeWindow(href = SETTINGS) {
       opened.push(args)
       return { native: true }
     },
-    fetch: async (url) => ({ blob: async () => ({ type: 'application/json', arrayBuffer: async () => new TextEncoder().encode(`bytes of ${url}`).buffer }) })
+    fetch: async (url) => ({
+      blob: async () => ({
+        type: 'application/json',
+        arrayBuffer: async () => new TextEncoder().encode(`bytes of ${url}`).buffer
+      })
+    })
   }
   const fire = (type, anchor, extra = {}) => {
     const event = {
@@ -141,11 +152,14 @@ test('an extension page stays in its frame unless a new tab was asked for', asyn
   assert.equal(newTab.defaultPrevented, true)
   assert.equal(modified.defaultPrevented, true)
   assert.equal(middle.defaultPrevented, true)
-  assert.deepEqual(asked.map(([url, kind]) => [new URL(url).pathname, kind]), [
-    ['/search.html', 'page'],
-    ['/legal.html', 'page'],
-    ['/support.html', 'page']
-  ])
+  assert.deepEqual(
+    asked.map(([url, kind]) => [new URL(url).pathname, kind]),
+    [
+      ['/search.html', 'page'],
+      ['/legal.html', 'page'],
+      ['/support.html', 'page']
+    ]
+  )
 })
 
 test('what the page already handled, and browser-internal links, are not opened', async () => {
@@ -182,12 +196,15 @@ test('window.open sends web pages to the system browser and leaves the rest to t
   assert.equal(opened.length, 2)
 })
 
-test('Yomitan\'s blob downloads reach the save handler, however the anchor is clicked', async () => {
+test("Yomitan's blob downloads reach the save handler, however the anchor is clicked", async () => {
   const { win, fire, HTMLAnchorElement } = fakeWindow()
   const saved = []
   installDownloads(win, { save: (file) => saved.push(file) })
   // backup-controller.js `_saveBlob`: a detached anchor sent a synthetic click.
-  const detached = new HTMLAnchorElement({ href: 'blob:tauri://localhost/a', download: 'yomitan-settings.json', target: '_blank' }, false)
+  const detached = new HTMLAnchorElement(
+    { href: 'blob:tauri://localhost/a', download: 'yomitan-settings.json', target: '_blank' },
+    false
+  )
   assert.equal(detached.dispatchEvent({ type: 'click' }), false)
   assert.equal(detached.dispatched, undefined, 'the cancelled navigation is never dispatched')
   new HTMLAnchorElement({ href: 'blob:tauri://localhost/b', download: 'deck.txt' }, false).click()
@@ -223,7 +240,7 @@ test('a file dropped outside a drop zone is refused; a drop zone keeps its drops
   const zone = event('dragover', ['Files'], true)
   zone.dataTransfer.dropEffect = 'copy'
   listeners.dragover.forEach((fn) => fn(zone))
-  assert.equal(zone.dataTransfer.dropEffect, 'copy', 'Yomitan\'s import zone accepted it')
+  assert.equal(zone.dataTransfer.dropEffect, 'copy', "Yomitan's import zone accepted it")
   const text = event('dragover', ['text/plain'])
   listeners.dragover.forEach((fn) => fn(text))
   assert.equal(text.defaultPrevented, false, 'dragging list items is not a file drop')
@@ -310,5 +327,8 @@ test('the overlay opens web pages in the system browser instead of the dictionar
   assert.notEqual(start, -1)
   const body = source.slice(start, source.indexOf('\n}\n', start))
   const shell = body.indexOf("'plugin:shell|open'")
-  assert.ok(shell !== -1 && shell < body.indexOf("native.panel('dictionary'"), 'web links must not show the dictionary window')
+  assert.ok(
+    shell !== -1 && shell < body.indexOf("native.panel('dictionary'"),
+    'web links must not show the dictionary window'
+  )
 })

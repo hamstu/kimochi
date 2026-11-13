@@ -3,7 +3,7 @@
  * reports, where to find help, and the open-source work it is built on. macOS's "About Kimochi" menu item and the tray
  * menu open this page.
  */
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react'
 import {
   AppWindow,
   AudioLines,
@@ -17,64 +17,53 @@ import {
   MessagesSquare,
   ScanText,
   Type,
-  type LucideIcon,
-} from "lucide-react";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
-import {
-  Badge,
-  IconButton,
-  SettingsPage,
-  SettingsRow,
-  SettingsSection,
-} from "@kit";
-import { useUpdateStatus } from "../../bridge/updates";
-import { UpdatesSection } from "./UpdatesSection";
-import { DebugInfoSection } from "./DebugInfoSection";
-import {
-  ACKNOWLEDGEMENTS,
-  NOTICE_URL,
-  creditIcon,
-  type CreditGroupIcon,
-} from "../../credits/credits";
-import "../../credits/credits.css";
-import appIcon from "../../assets/app-icon.svg";
-import "./about.css";
+  type LucideIcon
+} from 'lucide-react'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
+import { Badge, IconButton, SettingsPage, SettingsRow, SettingsSection } from '@kit'
+import { useUpdateStatus } from '../../bridge/updates'
+import { UpdatesSection } from './UpdatesSection'
+import { DebugInfoSection } from './DebugInfoSection'
+import { ACKNOWLEDGEMENTS, NOTICE_URL, creditIcon, type CreditGroupIcon } from '../../credits/credits'
+import '../../credits/credits.css'
+import appIcon from '../../assets/app-icon.svg'
+import './about.css'
 
 const LINKS = [
   {
-    label: "Website",
-    description: "kimochiapp.com",
-    url: "https://kimochiapp.com",
-    icon: <Globe />,
+    label: 'Website',
+    description: 'kimochiapp.com',
+    url: 'https://kimochiapp.com',
+    icon: <Globe />
   },
   {
-    label: "Documentation",
-    description: "Guides for every source, OCR engine and dictionary.",
-    url: "https://docs.kimochiapp.com",
-    icon: <BookOpen />,
+    label: 'Documentation',
+    description: 'Guides for every source, OCR engine and dictionary.',
+    url: 'https://docs.kimochiapp.com',
+    icon: <BookOpen />
   },
   {
-    label: "Discord",
-    description: "Ask questions, share setups and suggest features.",
-    url: "https://discord.gg/vdMge6TBZQ",
-    icon: <MessagesSquare />,
+    label: 'Discord',
+    description: 'Ask questions, share setups and suggest features.',
+    url: 'https://discord.gg/vdMge6TBZQ',
+    icon: <MessagesSquare />
   },
   {
-    label: "Source code",
-    description: "Free software under the GNU GPL, version 3.",
-    url: "https://github.com/hamstu/kimochi",
-    icon: <CodeXml />,
-  },
-] as const;
+    label: 'Source code',
+    description: 'Free software under the GNU GPL, version 3.',
+    url: 'https://github.com/hamstu/kimochi',
+    icon: <CodeXml />
+  }
+] as const
 
-const visit = (url: string): void => void openUrl(url).catch(() => undefined);
+const visit = (url: string): void => void openUrl(url).catch(() => undefined)
 
 function OpenLink({ url, label }: { url: string; label: string }): ReactNode {
   return (
     <IconButton label={`Open ${label}`} size="sm" onClick={() => visit(url)}>
       <ExternalLink />
     </IconButton>
-  );
+  )
 }
 
 const GROUP_ICONS: Record<CreditGroupIcon, LucideIcon> = {
@@ -84,52 +73,42 @@ const GROUP_ICONS: Record<CreditGroupIcon, LucideIcon> = {
   AudioLines,
   Lightbulb,
   AppWindow,
-  Type,
-};
+  Type
+}
 
 /** A project's tile (shared with the website): its logo on a pale badge, or an emoji on a tint. */
 function CreditTile({ id }: { id: string }): ReactNode {
-  const icon = creditIcon(id);
-  if ("src" in icon) {
+  const icon = creditIcon(id)
+  if ('src' in icon) {
     return (
       <span
         aria-hidden
-        className={`credit-tile about-credit-tile ${icon.tint ? `credit-tint-${icon.tint}` : ""}`}
+        className={`credit-tile about-credit-tile ${icon.tint ? `credit-tint-${icon.tint}` : ''}`}
         data-logo=""
       >
         <img src={icon.src} alt="" draggable={false} />
       </span>
-    );
+    )
   }
   return (
-    <span
-      aria-hidden
-      className={`credit-tile about-credit-tile credit-tint-${icon.tint}`}
-    >
+    <span aria-hidden className={`credit-tile about-credit-tile credit-tint-${icon.tint}`}>
       {icon.emoji}
     </span>
-  );
+  )
 }
 
 export function AboutTab(): ReactNode {
-  const version = useUpdateStatus()?.currentVersion;
+  const version = useUpdateStatus()?.currentVersion
   return (
     <SettingsPage title="About" className="about-page">
       <header className="about-hero">
-        <img
-          className="about-icon"
-          src={appIcon}
-          alt=""
-          width={72}
-          height={72}
-          draggable={false}
-        />
+        <img className="about-icon" src={appIcon} alt="" width={72} height={72} draggable={false} />
         <div className="about-identity">
           <h2 className="about-name">Kimochi</h2>
           {version && <p className="about-version k-num">Version {version}</p>}
           <p className="about-summary">
-            Read and play in Japanese: on-screen OCR, pop-up dictionaries and a
-            reading log, beside any game or visual novel.
+            Read and play in Japanese: on-screen OCR, pop-up dictionaries and a reading log, beside any game or visual
+            novel.
           </p>
         </div>
       </header>
@@ -161,12 +140,8 @@ export function AboutTab(): ReactNode {
         grouped={false}
         footnote={
           <>
-            Exact versions and full licence texts are in{" "}
-            <button
-              type="button"
-              className="about-inline-link"
-              onClick={() => visit(NOTICE_URL)}
-            >
+            Exact versions and full licence texts are in{' '}
+            <button type="button" className="about-inline-link" onClick={() => visit(NOTICE_URL)}>
               NOTICE
             </button>
             .
@@ -174,7 +149,7 @@ export function AboutTab(): ReactNode {
         }
       >
         {ACKNOWLEDGEMENTS.map((group) => {
-          const GroupIcon = GROUP_ICONS[group.icon];
+          const GroupIcon = GROUP_ICONS[group.icon]
           return (
             <div key={group.title} className="about-credits">
               <h3 className="about-credits-title">
@@ -192,9 +167,7 @@ export function AboutTab(): ReactNode {
                         {item.name}
                       </span>
                     }
-                    badge={
-                      <Badge className="about-license">{item.license}</Badge>
-                    }
+                    badge={<Badge className="about-license">{item.license}</Badge>}
                     description={item.role}
                   >
                     <OpenLink url={item.url} label={item.name} />
@@ -202,11 +175,11 @@ export function AboutTab(): ReactNode {
                 ))}
               </div>
             </div>
-          );
+          )
         })}
       </SettingsSection>
 
       <p className="about-copyright">© 2026 Hamish Macpherson</p>
     </SettingsPage>
-  );
+  )
 }

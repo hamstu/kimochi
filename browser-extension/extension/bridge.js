@@ -74,12 +74,14 @@ export class Bridge {
     this.socket = socket
     socket.onopen = () => {
       opened = true
-      socket.send(JSON.stringify({
-        type: 'hello',
-        protocol: PROTOCOL,
-        version: chrome.runtime.getManifest().version,
-        browser: navigator.userAgent,
-      }))
+      socket.send(
+        JSON.stringify({
+          type: 'hello',
+          protocol: PROTOCOL,
+          version: chrome.runtime.getManifest().version,
+          browser: navigator.userAgent
+        })
+      )
     }
     socket.onmessage = (event) => this.receive(event.data)
     socket.onclose = () => {

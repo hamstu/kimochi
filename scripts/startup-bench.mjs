@@ -73,7 +73,8 @@ function resolveBinary(arg) {
 
 function quit(child) {
   try {
-    if (process.platform === 'win32') execFileSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore' })
+    if (process.platform === 'win32')
+      execFileSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore' })
     else child.kill('SIGKILL')
   } catch {
     /* Already gone. */
@@ -122,7 +123,10 @@ async function main() {
       const record = await launch(binary, evidence, timeout)
       const row = flatten(record)
       rows.push(row)
-      if (!asJson) console.log(`run ${run}: ready ${row['web:ready'] ?? '?'} ms, first paint ${row['web:first-contentful-paint'] ?? '?'} ms`)
+      if (!asJson)
+        console.log(
+          `run ${run}: ready ${row['web:ready'] ?? '?'} ms, first paint ${row['web:first-contentful-paint'] ?? '?'} ms`
+        )
     } catch (error) {
       console.error(`run ${run}: ${error.message}`)
     }

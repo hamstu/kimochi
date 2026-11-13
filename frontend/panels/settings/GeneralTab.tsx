@@ -44,11 +44,7 @@ export function GeneralTab(): ReactNode {
       <SettingsSection title="Appearance">
         <SettingsRow
           label="Theme"
-          description={
-            appearance === 'system'
-              ? 'Follows your system setting.'
-              : `Always ${appearance}.`
-          }
+          description={appearance === 'system' ? 'Follows your system setting.' : `Always ${appearance}.`}
         >
           <Segmented
             aria-label="Theme"

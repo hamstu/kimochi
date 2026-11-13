@@ -57,18 +57,15 @@ use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, BringWindowToTop, GetAncestor, GetClientRect, GetForegroundWindow,
-    GetWindow, GetWindowLongPtrW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, LoadCursorW, SendMessageTimeoutW, SetCursor, SetForegroundWindow,
-    SetWindowLongPtrW, SetWindowPos, ShowWindow, WindowFromPoint, ASFW_ANY, GA_ROOT, GWL_EXSTYLE,
-    GWL_STYLE, GW_OWNER, HWND_TOP, HWND_TOPMOST, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS, IDC_HAND,
-    IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE,
-    IDC_WAIT, MA_NOACTIVATE, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, STYLESTRUCT, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, SW_SHOWNA, WA_INACTIVE,
-    SC_KEYMENU, WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NULL, WM_STYLECHANGING,
-    WM_SYSCOMMAND,
-    WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    AllowSetForegroundWindow, BringWindowToTop, GetAncestor, GetClientRect, GetForegroundWindow, GetWindow,
+    GetWindowLongPtrW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible, LoadCursorW,
+    SendMessageTimeoutW, SetCursor, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, WindowFromPoint,
+    ASFW_ANY, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_TOP, HWND_TOPMOST, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
+    IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_WAIT,
+    MA_NOACTIVATE, SC_KEYMENU, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, SW_SHOWNA, WA_INACTIVE, WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE,
+    WM_NCDESTROY, WM_NULL, WM_STYLECHANGING, WM_SYSCOMMAND, WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 fn hwnd(w: &tauri::WebviewWindow) -> Result<HWND, String> {
@@ -124,19 +121,12 @@ fn window_scale(hwnd: HWND) -> f64 {
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
     let hwnd = hwnd(w)?;
     let (x, y) = (r.x.round() as i32, r.y.round() as i32);
-    let (cx, cy) = (
-        r.width.round().max(1.) as i32,
-        r.height.round().max(1.) as i32,
-    );
+    let (cx, cy) = (r.width.round().max(1.) as i32, r.height.round().max(1.) as i32);
     for _ in 0..2 {
         unsafe { SetWindowPos(hwnd, None, x, y, cx, cy, SWP_NOACTIVATE | SWP_NOZORDER) }
             .map_err(|e| format!("native: {e}"))?;
         let now = window_rect(hwnd)?;
-        if now.x as i32 == x
-            && now.y as i32 == y
-            && now.width as i32 == cx
-            && now.height as i32 == cy
-        {
+        if now.x as i32 == x && now.y as i32 == y && now.width as i32 == cx && now.height as i32 == cy {
             break;
         }
     }
@@ -172,12 +162,7 @@ pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, Str
     if x < r.x || y < r.y || x >= r.x + r.width || y >= r.y + r.height {
         return Ok(None);
     }
-    let hit = unsafe {
-        WindowFromPoint(POINT {
-            x: x as i32,
-            y: y as i32,
-        })
-    };
+    let hit = unsafe { WindowFromPoint(POINT { x: x as i32, y: y as i32 }) };
     if hit.is_invalid() {
         return Ok(None);
     }
@@ -209,13 +194,8 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
     let hwnd = hwnd(w)?;
     let r = client_rect(hwnd)?;
     let scale = window_scale(hwnd);
-    let edge = rules::resize_edge(
-        x,
-        y,
-        r.width / scale,
-        r.height / scale,
-        w.is_resizable().map_err(|e| e.to_string())?,
-    );
+    let edge =
+        rules::resize_edge(x, y, r.width / scale, r.height / scale, w.is_resizable().map_err(|e| e.to_string())?);
     use rules::CursorShape::*;
     let id = match rules::cursor_shape(kind, edge) {
         Arrow => IDC_ARROW,
@@ -289,23 +269,9 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
         let _ = ShowWindow(hwnd, SW_SHOWNA);
     }
     w.show().map_err(|e| e.to_string())?;
-    let after = if ex_style(hwnd) & WS_EX_TOPMOST.0 != 0 {
-        HWND_TOPMOST
-    } else {
-        HWND_TOP
-    };
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            Some(after),
-            0,
-            0,
-            0,
-            0,
-            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-        )
-    }
-    .map_err(|e| format!("native: {e}"))
+    let after = if ex_style(hwnd) & WS_EX_TOPMOST.0 != 0 { HWND_TOPMOST } else { HWND_TOP };
+    unsafe { SetWindowPos(hwnd, Some(after), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE) }
+        .map_err(|e| format!("native: {e}"))
 }
 
 /// Fullscreen games can enter the topmost band ahead of an already-topmost
@@ -357,10 +323,7 @@ fn fullscreen_foreground() -> Option<HWND> {
         return None;
     }
     let bounds = window_rect(foreground).ok()?;
-    super::displays()
-        .into_iter()
-        .any(|display| rules::covers_display(bounds, display))
-        .then_some(foreground)
+    super::displays().into_iter().any(|display| rules::covers_display(bounds, display)).then_some(foreground)
 }
 
 /// Magpie's scaling window, while it is in the topmost band (the game it scales is in front).
@@ -372,10 +335,16 @@ fn scaler_on_top() -> Option<HWND> {
 /// over one of them. Main thread.
 pub fn raise_over_fullscreen(app: &tauri::AppHandle, service: &crate::state::Service) {
     let selected = || {
-        if !crate::compact::over_fullscreen() || window_pid(unsafe { GetForegroundWindow() }) != std::process::id() { return None; }
+        if !crate::compact::over_fullscreen() || window_pid(unsafe { GetForegroundWindow() }) != std::process::id() {
+            return None;
+        }
         let source = service.watching.lock().unwrap().as_deref().and_then(kimochi_capture::SourceId::parse)?;
-        if super::window_fullscreen(&source) != Some(true) { return None; }
-        if !super::window_bounds(&source)?.1 { return None; }
+        if super::window_fullscreen(&source) != Some(true) {
+            return None;
+        }
+        if !super::window_bounds(&source)?.1 {
+            return None;
+        }
         super::sources::resolve(&source).filter(|hwnd| ex_style(*hwnd) & WS_EX_TOPMOST.0 != 0)
     };
     let order = super::sources::top_level_windows();
@@ -411,25 +380,13 @@ pub fn raise_over_fullscreen(app: &tauri::AppHandle, service: &crate::state::Ser
     let mut errors = Vec::new();
     // Raise back-to-front so dictionary popups stay ahead of their own panels.
     for (_, hwnd, label) in pinned.into_iter().rev() {
-        match unsafe {
-            SetWindowPos(
-                hwnd,
-                Some(HWND_TOPMOST),
-                0,
-                0,
-                0,
-                0,
-                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-            )
-        } {
+        match unsafe { SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE) } {
             Ok(()) => raised.push(label),
             Err(error) => errors.push(format!("{label}: {error}")),
         }
     }
-    service.log(
-        json!({"check": "fullscreen-order", "sourceHwnd": foreground.0 as usize,
-        "raised": raised, "errors": errors}),
-    );
+    service.log(json!({"check": "fullscreen-order", "sourceHwnd": foreground.0 as usize,
+        "raised": raised, "errors": errors}));
 }
 
 /// Enter editing mode: give this window the keyboard, deliberately.
@@ -482,11 +439,7 @@ fn force_foreground(target: HWND) -> bool {
             return true;
         }
         let foreground = GetForegroundWindow();
-        let theirs = if foreground.is_invalid() {
-            0
-        } else {
-            GetWindowThreadProcessId(foreground, None)
-        };
+        let theirs = if foreground.is_invalid() { 0 } else { GetWindowThreadProcessId(foreground, None) };
         let ours = GetCurrentThreadId();
         // Without a shared queue, handing the foreground back from one of our own windows
         // only activated the target inside its own queue (WM_ACTIVATE, WM_NCACTIVATE(FALSE)):
@@ -511,7 +464,9 @@ fn attach_thread(ours: u32, foreground: u32, target: u32) -> Option<u32> {
 
 /// Return a completed hover lease to its exact source window, not a launcher.
 pub(super) fn restore_input_focus(target: HWND) {
-    if unsafe { IsWindowVisible(target) }.as_bool() { let _ = force_foreground(target); }
+    if unsafe { IsWindowVisible(target) }.as_bool() {
+        let _ = force_foreground(target);
+    }
 }
 
 /// Across input queues, SetForegroundWindow can return before the target handles
@@ -523,15 +478,8 @@ fn foreground_ready(target: HWND) -> bool {
         if GetForegroundWindow() == target {
             return true;
         }
-        let _ = SendMessageTimeoutW(
-            target,
-            WM_NULL,
-            WPARAM(0),
-            LPARAM(0),
-            SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
-            500,
-            None,
-        );
+        let _ =
+            SendMessageTimeoutW(target, WM_NULL, WPARAM(0), LPARAM(0), SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 500, None);
         GetForegroundWindow() == target
     }
 }
@@ -554,9 +502,7 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     let hwnd = hwnd(w)?;
     let owner = unsafe { GetWindowThreadProcessId(hwnd, None) };
     if owner != unsafe { GetCurrentThreadId() } {
-        return Err(
-            "native: a window becomes a panel on the thread that owns it (the main thread)".into(),
-        );
+        return Err("native: a window becomes a panel on the thread that owns it (the main thread)".into());
     }
     if !is_panel(hwnd) {
         if !unsafe { SetWindowSubclass(hwnd, Some(panel_proc), PANEL_SUBCLASS_ID, 0) }.as_bool() {
@@ -704,10 +650,7 @@ unsafe extern "system" fn panel_proc(
 /// Top-level windows of one process in z-order (front first), with the facts needed to
 /// pick the one that represents it.
 fn process_windows(pid: u32) -> Vec<HWND> {
-    super::sources::top_level_windows()
-        .into_iter()
-        .filter(|h| window_pid(*h) == pid)
-        .collect()
+    super::sources::top_level_windows().into_iter().filter(|h| window_pid(*h) == pid).collect()
 }
 
 /// The window that stands for a process: front-most visible-or-minimised, unowned,
@@ -772,13 +715,11 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
 /// clicked it), which is what lets Windows honour the request.
 pub fn activate_process(pid: u32) -> Result<(), String> {
     let Some(target) = main_window_of(pid) else {
-        return Err(
-            if super::process_image_path(pid).is_none() && process_windows(pid).is_empty() {
-                "gone: that application is no longer running".into()
-            } else {
-                "native: that application has no window to bring forward".into()
-            },
-        );
+        return Err(if super::process_image_path(pid).is_none() && process_windows(pid).is_empty() {
+            "gone: that application is no longer running".into()
+        } else {
+            "native: that application has no window to bring forward".into()
+        });
     };
     unsafe {
         if IsIconic(target).as_bool() {

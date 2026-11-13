@@ -299,7 +299,10 @@ export const SHOTS = [
     ready: '.sb-engine-select',
     // The Dictionary picker sits low in the sidebar's scroll: bring it into view first.
     actions: [
-      { run: `document.querySelector('button[aria-label="Dictionary"]').scrollIntoView({ block: 'center' })`, after: 200 },
+      {
+        run: `document.querySelector('button[aria-label="Dictionary"]').scrollIntoView({ block: 'center' })`,
+        after: 200
+      },
       { click: 'button[aria-label="Dictionary"]', after: 500 }
     ]
   },
@@ -310,7 +313,10 @@ export const SHOTS = [
     ready: '.sb-engine-select',
     // The Dictionary picker sits low in the sidebar's scroll: bring it into view first.
     actions: [
-      { run: `document.querySelector('button[aria-label="Dictionary"]').scrollIntoView({ block: 'center' })`, after: 200 },
+      {
+        run: `document.querySelector('button[aria-label="Dictionary"]').scrollIntoView({ block: 'center' })`,
+        after: 200
+      },
       { click: 'button[aria-label="Dictionary"]', after: 500 }
     ]
   },
@@ -463,7 +469,10 @@ export const SHOTS = [
     actions: [
       HIDE_DEV_SERVER,
       { waitFor: 'button[aria-label="Yomitan profile"]:not([disabled])' },
-      { run: `[...document.querySelectorAll('h2, h3')].find((h) => h.textContent.trim() === 'Dictionary profile')?.scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -24)`, after: 300 }
+      {
+        run: `[...document.querySelectorAll('h2, h3')].find((h) => h.textContent.trim() === 'Dictionary profile')?.scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -24)`,
+        after: 300
+      }
     ],
     marks: [{ type: 'glow', target: { selector: '.k-settings-section', text: 'Yomitan profile', pad: 6 }, radius: 12 }]
   },
@@ -480,7 +489,11 @@ export const SHOTS = [
     page: settingsTab('ocr'),
     size: SETTINGS,
     ready: '#ocr-live-overlay',
-    actions: [{ run: `document.querySelector('#ocr-live-overlay').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)` }]
+    actions: [
+      {
+        run: `document.querySelector('#ocr-live-overlay').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)`
+      }
+    ]
   },
   {
     id: 'settings-auto-ocr',
@@ -492,7 +505,9 @@ export const SHOTS = [
       // Clicked in the page: below the fold, the button is out of the stage's reach.
       { run: `document.querySelector('#ocr-auto-advanced').click()`, after: 300 },
       { waitFor: '#ocr-adaptive' },
-      { run: `document.querySelector('#ocr-auto').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)` }
+      {
+        run: `document.querySelector('#ocr-auto').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)`
+      }
     ]
   },
   {
@@ -527,7 +542,9 @@ export const SHOTS = [
     // The page opens on AnkiConnect; the shot is the Yomitan API's Mining tab.
     ready: '.k-settings-tabs',
     actions: [
-      { run: `[...document.querySelectorAll('.k-settings-tab')].find((tab) => tab.textContent.includes('Mining')).click()` },
+      {
+        run: `[...document.querySelectorAll('.k-settings-tab')].find((tab) => tab.textContent.includes('Mining')).click()`
+      },
       { waitFor: '#anki-enabled' }
     ]
   },
@@ -551,7 +568,12 @@ export const SHOTS = [
     page: settingsTab('account', '&account=signedin&sync=conflicts'),
     size: SETTINGS,
     ready: '.account-meter',
-    actions: [HIDE_DEV_SERVER, { run: `[...document.querySelectorAll('h2, h3')].find((h) => h.textContent.trim() === 'Sync')?.scrollIntoView({ block: 'start' })` }]
+    actions: [
+      HIDE_DEV_SERVER,
+      {
+        run: `[...document.querySelectorAll('h2, h3')].find((h) => h.textContent.trim() === 'Sync')?.scrollIntoView({ block: 'start' })`
+      }
+    ]
   },
   {
     id: 'settings-updates',
@@ -574,8 +596,18 @@ export const SHOTS = [
   },
 
   // ------------------------------------------------------------------ other windows
-  { id: 'diagnostics', page: 'panel.html?window=diagnostics&capture=window:101', size: [680, 720], ready: '[aria-label="Diagnostics view"]' },
-  { id: 'sync-log', page: 'panel.html?window=sync-log&account=signedin', size: [760, 520], ready: '.sync-log-text, [class*="sync-log"]' },
+  {
+    id: 'diagnostics',
+    page: 'panel.html?window=diagnostics&capture=window:101',
+    size: [680, 720],
+    ready: '[aria-label="Diagnostics view"]'
+  },
+  {
+    id: 'sync-log',
+    page: 'panel.html?window=sync-log&account=signedin',
+    size: [760, 520],
+    ready: '.sync-log-text, [class*="sync-log"]'
+  },
   {
     // A lookup as you see it in the Log: the word selected, the dictionary's pop-up beside it (the
     // Yomitan API pop-up, standing in for any engine's) and the pointer.

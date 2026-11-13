@@ -30,7 +30,12 @@
         // The engines' hosts read everything synchronously when they install, so they are parsed
         // here, before the body, in the harness's order (see ui/dictionary-harness.html).
         if (engine !== 'custom-api') {
-          for (const src of ['/ui/dictionary-harness-native.js', '/ui/dictionary-harness.js', '/spike/ext-host.js', '/spike/shim.js']) {
+          for (const src of [
+            '/ui/dictionary-harness-native.js',
+            '/ui/dictionary-harness.js',
+            '/spike/ext-host.js',
+            '/spike/shim.js'
+          ]) {
             document.write(`<script src="${src}"><\/script>`)
           }
         }
@@ -48,7 +53,12 @@
         --box-text: #1d2433;
         --name-bg: #3c5a7a;
         --name-text: #ffffff;
-        --sun: radial-gradient(circle at 80% 20%, #fffbe8 0 38px, rgba(255, 246, 214, 0.6) 41px, rgba(255, 246, 214, 0) 130px);
+        --sun: radial-gradient(
+          circle at 80% 20%,
+          #fffbe8 0 38px,
+          rgba(255, 246, 214, 0.6) 41px,
+          rgba(255, 246, 214, 0) 130px
+        );
         color-scheme: light;
       }
       :root[data-theme='dark'] {
@@ -62,7 +72,12 @@
         --name-bg: #c2667a;
         --name-text: #ffffff;
         --sun:
-          radial-gradient(circle at 80% 18%, #fff8e6 0 26px, rgba(255, 240, 210, 0.3) 29px, rgba(255, 240, 210, 0) 90px),
+          radial-gradient(
+            circle at 80% 18%,
+            #fff8e6 0 26px,
+            rgba(255, 240, 210, 0.3) 29px,
+            rgba(255, 240, 210, 0) 90px
+          ),
           radial-gradient(circle at 12% 14%, #fff 0 1.5px, transparent 2px),
           radial-gradient(circle at 31% 26%, #fff 0 1px, transparent 1.5px),
           radial-gradient(circle at 47% 9%, #fff 0 1.5px, transparent 2px),
@@ -71,27 +86,55 @@
           radial-gradient(circle at 22% 40%, #fff 0 1px, transparent 1.5px);
         color-scheme: dark;
       }
-      html, body { margin: 0; height: 100%; overflow: hidden; }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+      }
       body {
         position: relative;
         background: var(--sky);
-        font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif;
+        font-family:
+          'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo',
+          sans-serif;
         cursor: none;
       }
-      .scene { position: absolute; inset: 0; background: var(--sun); }
+      .scene {
+        position: absolute;
+        inset: 0;
+        background: var(--sun);
+      }
       /* A skyline in two planes, each a row of blocks with lit windows. */
-      .skyline { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: 10px; padding: 0 20px; }
+      .skyline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        padding: 0 20px;
+      }
       .skyline > i {
         display: block;
         flex: 1 1 0;
         background:
-          repeating-linear-gradient(90deg, transparent 0 10px, var(--window) 10px 18px, transparent 18px 28px) top 18px left 0 / 100% 12px no-repeat,
-          repeating-linear-gradient(90deg, transparent 0 14px, var(--window) 14px 22px, transparent 22px 32px) top 48px left 0 / 100% 12px no-repeat,
+          repeating-linear-gradient(90deg, transparent 0 10px, var(--window) 10px 18px, transparent 18px 28px) top 18px
+            left 0 / 100% 12px no-repeat,
+          repeating-linear-gradient(90deg, transparent 0 14px, var(--window) 14px 22px, transparent 22px 32px) top 48px
+            left 0 / 100% 12px no-repeat,
           var(--c);
         border-radius: 3px 3px 0 0;
       }
-      .skyline.far { --c: var(--far); opacity: 0.9; }
-      .skyline.near { --c: var(--near); gap: 18px; }
+      .skyline.far {
+        --c: var(--far);
+        opacity: 0.9;
+      }
+      .skyline.near {
+        --c: var(--near);
+        gap: 18px;
+      }
       .dialogue {
         position: absolute;
         left: 48px;
@@ -118,7 +161,12 @@
         font-weight: 700;
         letter-spacing: 0.08em;
       }
-      .line { margin: 0; font-size: 30px; line-height: 1.6; letter-spacing: 0.02em; }
+      .line {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.6;
+        letter-spacing: 0.02em;
+      }
       /* Kimochi's overlay box under the pointer (ui/render.js proximityStyle, hovering), for the
          Yomitan API pop-up, whose lookups start from the overlay rather than an extension's scan. */
       [data-engine='custom-api'] #word.hovered {
@@ -146,17 +194,30 @@
         display: none;
       }
       /* The harness's own panels, kept for its scripts but out of the picture. */
-      .internals { position: fixed; left: -4000px; top: 0; width: 900px; height: 700px; overflow: hidden; }
-      .internals iframe { width: 900px; height: 700px; border: 0; }
+      .internals {
+        position: fixed;
+        left: -4000px;
+        top: 0;
+        width: 900px;
+        height: 700px;
+        overflow: hidden;
+      }
+      .internals iframe {
+        width: 900px;
+        height: 700px;
+        border: 0;
+      }
     </style>
   </head>
   <body>
     <div class="scene" aria-hidden="true">
       <div class="skyline far" style="height: 300px">
-        <i style="height: 58%"></i><i style="height: 82%"></i><i style="height: 64%"></i><i style="height: 96%"></i><i style="height: 70%"></i><i style="height: 88%"></i><i style="height: 60%"></i>
+        <i style="height: 58%"></i><i style="height: 82%"></i><i style="height: 64%"></i><i style="height: 96%"></i
+        ><i style="height: 70%"></i><i style="height: 88%"></i><i style="height: 60%"></i>
       </div>
       <div class="skyline near" style="height: 220px">
-        <i style="height: 70%"></i><i style="height: 92%"></i><i style="height: 60%"></i><i style="height: 100%"></i><i style="height: 76%"></i>
+        <i style="height: 70%"></i><i style="height: 92%"></i><i style="height: 60%"></i><i style="height: 100%"></i
+        ><i style="height: 76%"></i>
       </div>
     </div>
     <div class="dialogue">
@@ -164,7 +225,13 @@
       <p class="line" id="target">あの日は怖くて、何も<span id="word">食べられなかった</span>んだ。</p>
     </div>
     <svg id="pointer" viewBox="0 0 22 32" aria-hidden="true">
-      <path d="M2 2 L2 25 L7.6 19.8 L11.4 28.6 L15 27 L11.3 18.4 L18.8 18.4 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round" />
+      <path
+        d="M2 2 L2 25 L7.6 19.8 L11.4 28.6 L15 27 L11.3 18.4 L18.8 18.4 Z"
+        fill="#fff"
+        stroke="#111"
+        stroke-width="1.6"
+        stroke-linejoin="round"
+      />
     </svg>
     <iframe id="api-popup" title="Yomitan API pop-up"></iframe>
     <div class="internals" aria-hidden="true">

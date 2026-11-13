@@ -36,8 +36,8 @@ export function OrDivider() {
 export function AccountPitch() {
   return (
     <p>
-      Accounts are optional; Kimochi works fully without one. You need one for Kimochi Cloud:
-      cloud OCR, read aloud, translation, AI explanations and Sync, with a 14-day free trial.
+      Accounts are optional; Kimochi works fully without one. You need one for Kimochi Cloud: cloud OCR, read aloud,
+      translation, AI explanations and Sync, with a 14-day free trial.
     </p>
   )
 }

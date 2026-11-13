@@ -46,20 +46,59 @@ fn too_long(secs: f64) -> bool {
 pub type Key = (u8, usize);
 
 pub enum Ev {
-    Create { key: Key, api: &'static str, fmt: Vec<u8>, info: Value },
-    Data { key: Key, bytes: Vec<u8>, eos: bool, looping: bool, region: Option<(u32, u32)>, info: Value },
-    Play { key: Key, looping: bool, info: Value },
-    Stop { key: Key },
-    Flush { key: Key },
-    Destroy { key: Key },
+    Create {
+        key: Key,
+        api: &'static str,
+        fmt: Vec<u8>,
+        info: Value,
+    },
+    Data {
+        key: Key,
+        bytes: Vec<u8>,
+        eos: bool,
+        looping: bool,
+        region: Option<(u32, u32)>,
+        info: Value,
+    },
+    Play {
+        key: Key,
+        looping: bool,
+        info: Value,
+    },
+    Stop {
+        key: Key,
+    },
+    Flush {
+        key: Key,
+    },
+    Destroy {
+        key: Key,
+    },
     /// A logged event tied to a stream (seek, ...).
-    Mark { key: Key, what: &'static str, info: Value },
+    Mark {
+        key: Key,
+        what: &'static str,
+        info: Value,
+    },
     /// A whole sound at once, from adapters that see the complete clip when it starts (Unity
     /// AudioClip, SDL_mixer Mix_Chunk, Ren'Py's file): written as a clip immediately.
     /// `ext: None` = PCM in `fmt`, written as WAV; `Some("ogg")` etc. = the original encoded file.
-    Whole { key: Key, api: &'static str, fmt: Vec<u8>, bytes: Vec<u8>, ext: Option<String>, source: Option<String>, dur: Option<f64>, at: Option<f64>, info: Value },
+    Whole {
+        key: Key,
+        api: &'static str,
+        fmt: Vec<u8>,
+        bytes: Vec<u8>,
+        ext: Option<String>,
+        source: Option<String>,
+        dur: Option<f64>,
+        at: Option<f64>,
+        info: Value,
+    },
     /// What the stream is playing now (file or cue name); goes on its next clips.
-    Source { key: Key, source: Option<String> },
+    Source {
+        key: Key,
+        source: Option<String>,
+    },
     Note(Value),
 }
 
@@ -91,7 +130,15 @@ pub fn start(dir: &Path) {
             return;
         }
     };
-    let w = Writer { dir: dir.to_path_buf(), events, streams: HashMap::new(), next_id: 1, seq: 0, saved: VecDeque::new(), saved_bytes: 0 };
+    let w = Writer {
+        dir: dir.to_path_buf(),
+        events,
+        streams: HashMap::new(),
+        next_id: 1,
+        seq: 0,
+        saved: VecDeque::new(),
+        saved_bytes: 0,
+    };
     *lock(&STATE) = Some((w, rx));
     std::thread::spawn(|| loop {
         std::thread::sleep(Duration::from_millis(50));
@@ -183,11 +230,15 @@ impl Writer {
             if let Some(file) = v["file"].as_str().filter(|_| v["ev"] == "clip") {
                 let path = self.dir.join(file);
                 let bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
-                self.saved.push_back((path, bytes)); self.saved_bytes += bytes;
+                self.saved.push_back((path, bytes));
+                self.saved_bytes += bytes;
                 while self.saved.len() > 256 || self.saved_bytes > 128 * 1024 * 1024 {
                     if let Some((path, bytes)) = self.saved.pop_front() {
-                        let _ = std::fs::remove_file(path); self.saved_bytes = self.saved_bytes.saturating_sub(bytes);
-                    } else { break; }
+                        let _ = std::fs::remove_file(path);
+                        self.saved_bytes = self.saved_bytes.saturating_sub(bytes);
+                    } else {
+                        break;
+                    }
                 }
             }
         }
@@ -424,7 +475,8 @@ impl Writer {
         };
         let stats = if pcm { s.fmt.map(|f| level(&f, data)) } else { None };
         let silent = matches!(stats, Some((peak, _)) if peak < 1e-4);
-        let secs = if pcm && !data.is_empty() { s.fmt.map_or(0.0, |f| f.seconds(data.len())) } else { dur.unwrap_or(0.0) };
+        let secs =
+            if pcm && !data.is_empty() { s.fmt.map_or(0.0, |f| f.seconds(data.len())) } else { dur.unwrap_or(0.0) };
         let file = if silent || data.is_empty() || too_long(secs) {
             None
         } else {
@@ -462,7 +514,8 @@ impl Writer {
         // everything that way, with the LOOPING flag): not a loop. A real loop is a buffer
         // played round and round on the same data.
         let streamed = s.ds() && s.buffer_bytes > 0 && data.len() > s.buffer_bytes;
-        let wrapped = s.buffer_bytes == 0 || s.fmt.is_none_or(|f| t - s.clip_start() > f.seconds(s.buffer_bytes) * 1050.0);
+        let wrapped =
+            s.buffer_bytes == 0 || s.fmt.is_none_or(|f| t - s.clip_start() > f.seconds(s.buffer_bytes) * 1050.0);
         let looping = s.looping && !streamed && wrapped;
         let align = s.fmt.map_or(1, |f| f.block_align.max(1) as usize);
         let trimmed = vh_common::trim_zeros(&data).len().div_ceil(align) * align;
@@ -500,8 +553,13 @@ impl Writer {
 fn file_stem(src: &str) -> String {
     let base = src.rsplit(['/', '\\']).next().unwrap_or(src);
     let base = base.rsplit_once('.').map_or(base, |(a, _)| a);
-    let clean: String = base.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).take(40).collect();
-    if clean.is_empty() { String::new() } else { format!("_{clean}") }
+    let clean: String =
+        base.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).take(40).collect();
+    if clean.is_empty() {
+        String::new()
+    } else {
+        format!("_{clean}")
+    }
 }
 
 fn merge(into: &mut Value, extra: Value) {
@@ -515,14 +573,16 @@ fn merge(into: &mut Value, extra: Value) {
 /// Peak and RMS in 0..1 for linear formats; (1, 1) for anything we cannot read (never "silent").
 fn level(f: &Fmt, data: &[u8]) -> (f64, f64) {
     let samples: Box<dyn Iterator<Item = f64>> = match (f.kind, f.bits) {
-        (WAVE_FORMAT_PCM, 16) => Box::new(data.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f64 / 32768.0)),
+        (WAVE_FORMAT_PCM, 16) => {
+            Box::new(data.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f64 / 32768.0))
+        }
         (WAVE_FORMAT_PCM, 8) => Box::new(data.iter().map(|&b| (b as f64 - 128.0) / 128.0)),
         (WAVE_FORMAT_PCM, 24) => Box::new(
             data.chunks_exact(3).map(|c| (i32::from_le_bytes([0, c[0], c[1], c[2]]) >> 8) as f64 / 8_388_608.0),
         ),
-        (WAVE_FORMAT_PCM, 32) => {
-            Box::new(data.chunks_exact(4).map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f64 / 2_147_483_648.0))
-        }
+        (WAVE_FORMAT_PCM, 32) => Box::new(
+            data.chunks_exact(4).map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f64 / 2_147_483_648.0),
+        ),
         (WAVE_FORMAT_IEEE_FLOAT, 32) => {
             Box::new(data.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]) as f64))
         }

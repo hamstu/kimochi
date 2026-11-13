@@ -1,7 +1,8 @@
 <!doctype html>
 <html>
-  <meta charset="utf-8" /><title>Kimochi Split-Word Fixture</title
-  ><style>
+  <meta charset="utf-8" />
+  <title>Kimochi Split-Word Fixture</title>
+  <style>
     :root {
       --gap: 12px;
     }
@@ -12,7 +13,7 @@
       font:
         16px -apple-system,
         system-ui,
-        "Segoe UI",
+        'Segoe UI',
         sans-serif;
     }
     header {
@@ -76,8 +77,7 @@
     <header>
       <strong>Split-word fixture · drag to move</strong>
       <label
-        >Gap <input id="gap" type="range" min="0" max="32" value="12" />
-        <output id="gap-value">12px</output></label
+        >Gap <input id="gap" type="range" min="0" max="32" value="12" /> <output id="gap-value">12px</output></label
       >
     </header>
     <main>
@@ -97,11 +97,9 @@
     <details>
       <summary>How to use this with cloud OCR</summary>
       <p>
-        Each sentence has a small gap inside one or two words (食べ|ました,
-        走っ|ている, 美し|かった, 日本|語, 勉強|します, 読み|たい, and in the
-        vertical column 食べ|ます, 話し|かけた, 東|京, 行き|ました). A reader
-        sees one word; Google Vision does not know Japanese word boundaries and
-        returns the two halves as separate chunks.
+        Each sentence has a small gap inside one or two words (食べ|ました, 走っ|ている, 美し|かった, 日本|語,
+        勉強|します, 読み|たい, and in the vertical column 食べ|ます, 話し|かけた, 東|京, 行き|ました). A reader sees
+        one word; Google Vision does not know Japanese word boundaries and returns the two halves as separate chunks.
       </p>
       <ol>
         <li>
@@ -109,50 +107,40 @@
           <b>off</b> (ungrouped words mode: one box per OCR chunk).
         </li>
         <li>
-          Choose a source that covers this window (a display or region;
-          Kimochi's own windows are not offered in the window picker), or open
+          Choose a source that covers this window (a display or region; Kimochi's own windows are not offered in the
+          window picker), or open
           <code>ui/fixture-chunks.html</code> in a browser and pick that window.
         </li>
         <li>
-          Scan, then hover the <b>first</b> half of a split word (食べ) with the
-          lookup modifier. The popup should show the whole word (食べる for
-          食べました), anchored on the hovered box, not shifted towards the
-          following chunk. The hovered box itself should widen to read 食べました
-          while the popup is open, with the ました box gone underneath it rather
-          than lit as a second piece; both return to normal when the popup
-          closes. For 日本|語を勉強|します the lookup 勉強します spans 勉強 and
-          します only, so 日本語 stays as it was.
+          Scan, then hover the <b>first</b> half of a split word (食べ) with the lookup modifier. The popup should show
+          the whole word (食べる for 食べました), anchored on the hovered box, not shifted towards the following chunk.
+          The hovered box itself should widen to read 食べました while the popup is open, with the ました box gone
+          underneath it rather than lit as a second piece; both return to normal when the popup closes. For
+          日本|語を勉強|します the lookup 勉強します spans 勉強 and します only, so 日本語 stays as it was.
         </li>
         <li>
-          If OCR still reads a split word as one chunk, widen the gap with the
-          slider. If it starts reading the halves as separate lines, narrow it.
+          If OCR still reads a split word as one chunk, widen the gap with the slider. If it starts reading the halves
+          as separate lines, narrow it.
         </li>
         <li>
-          The vertical column checks reading order: the lookahead follows
-          columns right to left, each top to bottom.
+          The vertical column checks reading order: the lookahead follows columns right to left, each top to bottom.
         </li>
       </ol>
-      <p>
-        Local MeikiOCR returns whole lines, so it should look the same before
-        and after.
-      </p>
+      <p>Local MeikiOCR returns whole lines, so it should look the same before and after.</p>
     </details>
     <script>
-      const slider = document.querySelector("#gap");
+      const slider = document.querySelector('#gap')
       slider.oninput = () => {
-        document.documentElement.style.setProperty(
-          "--gap",
-          slider.value + "px",
-        );
-        document.querySelector("#gap-value").textContent = slider.value + "px";
-      };
-      slider.onmousedown = (event) => event.stopPropagation();
-      document.querySelector("header").onmousedown = () =>
-        window.__TAURI__?.core.invoke("panel", {
-          label: "fixture-chunks",
-          action: "drag",
-          rect: null,
-        });
+        document.documentElement.style.setProperty('--gap', slider.value + 'px')
+        document.querySelector('#gap-value').textContent = slider.value + 'px'
+      }
+      slider.onmousedown = (event) => event.stopPropagation()
+      document.querySelector('header').onmousedown = () =>
+        window.__TAURI__?.core.invoke('panel', {
+          label: 'fixture-chunks',
+          action: 'drag',
+          rect: null
+        })
     </script>
   </body>
 </html>

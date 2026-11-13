@@ -2,7 +2,7 @@
 //! Decodes with libavif, linked directly, so the AppImage carries it and its AV1 decoder like any
 //! other library: no GdkPixbuf loader, loader cache or plugin path, which differ by distribution
 //! (Arch's GdkPixbuf decodes through glycin and has no legacy loaders at all).
-use std::ffi::{CStr, c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void, CStr};
 
 /// `avifRGBImage` from avif.h; the same layout in every libavif with soname 16 (1.0 through 1.4).
 #[repr(C)]
@@ -31,12 +31,7 @@ const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 unsafe extern "C" {
     fn avifDecoderCreate() -> *mut c_void;
     fn avifDecoderDestroy(decoder: *mut c_void);
-    fn avifDecoderReadMemory(
-        decoder: *mut c_void,
-        image: *mut c_void,
-        data: *const u8,
-        size: usize,
-    ) -> c_int;
+    fn avifDecoderReadMemory(decoder: *mut c_void, image: *mut c_void, data: *const u8, size: usize) -> c_int;
     fn avifImageCreateEmpty() -> *mut c_void;
     fn avifImageDestroy(image: *mut c_void);
     fn avifRGBImageSetDefaults(rgb: *mut AvifRgbImage, image: *const c_void);
@@ -50,18 +45,12 @@ unsafe extern "C" {
 
 fn describe(result: c_int) -> String {
     // SAFETY: libavif returns a static, NUL-terminated string for every result code.
-    unsafe {
-        CStr::from_ptr(avifResultToString(result))
-            .to_string_lossy()
-            .into_owned()
-    }
+    unsafe { CStr::from_ptr(avifResultToString(result)).to_string_lossy().into_owned() }
 }
 
 #[tauri::command]
 pub async fn linux_dictionary_image(content: Vec<u8>) -> Result<Vec<u8>, String> {
-    tauri::async_runtime::spawn_blocking(move || convert(&content))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || convert(&content)).await.map_err(|e| e.to_string())?
 }
 
 /// AVIF bytes to PNG bytes.
@@ -103,24 +92,15 @@ fn decode(content: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
             }
             let mut rgb = std::mem::zeroed::<AvifRgbImage>();
             avifRGBImageSetDefaults(&mut rgb, image);
-            if rgb.width == 0
-                || rgb.height == 0
-                || u64::from(rgb.width) * u64::from(rgb.height) > MAX_PIXELS
-            {
-                return Err(format!(
-                    "AVIF image {}×{} is out of range",
-                    rgb.width, rgb.height
-                ));
+            if rgb.width == 0 || rgb.height == 0 || u64::from(rgb.width) * u64::from(rgb.height) > MAX_PIXELS {
+                return Err(format!("AVIF image {}×{} is out of range", rgb.width, rgb.height));
             }
             // Higher bit depths would otherwise come out as 16-bit samples.
             rgb.depth = 8;
             rgb.format = AVIF_RGB_FORMAT_RGBA;
             let allocated = avifRGBImageAllocatePixels(&mut rgb);
             if allocated != AVIF_RESULT_OK {
-                return Err(format!(
-                    "AVIF pixels could not be allocated: {}",
-                    describe(allocated)
-                ));
+                return Err(format!("AVIF pixels could not be allocated: {}", describe(allocated)));
             }
             let converted = avifImageYUVToRGB(image, &mut rgb);
             let pixels = if converted == AVIF_RESULT_OK {
@@ -132,10 +112,7 @@ fn decode(content: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
                 }
                 Ok((rgb.width, rgb.height, packed))
             } else {
-                Err(format!(
-                    "AVIF colour conversion failed: {}",
-                    describe(converted)
-                ))
+                Err(format!("AVIF colour conversion failed: {}", describe(converted)))
             };
             avifRGBImageFreePixels(&mut rgb);
             pixels
@@ -161,16 +138,12 @@ pub fn run_check() -> bool {
         avifCodecVersions(codecs.as_mut_ptr());
         (
             CStr::from_ptr(avifVersion()).to_string_lossy().into_owned(),
-            CStr::from_ptr(codecs.as_ptr())
-                .to_string_lossy()
-                .into_owned(),
+            CStr::from_ptr(codecs.as_ptr()).to_string_lossy().into_owned(),
         )
     };
     // AppRun changes directory; the AppImage runtime keeps the caller's in OWD.
     let path = args.get(2).map(|path| match std::env::var_os("OWD") {
-        Some(owd) if std::path::Path::new(path).is_relative() => {
-            std::path::Path::new(&owd).join(path)
-        }
+        Some(owd) if std::path::Path::new(path).is_relative() => std::path::Path::new(&owd).join(path),
         _ => path.into(),
     });
     let outcome = match path {
@@ -180,10 +153,9 @@ pub fn run_check() -> bool {
             .and_then(|bytes| convert(&bytes).map(|png| (path, png.len()))),
     };
     match outcome {
-        Ok((path, size)) => println!(
-            "AVIF ok: {} decoded to a {size}-byte PNG with libavif {version} ({codecs})",
-            path.display()
-        ),
+        Ok((path, size)) => {
+            println!("AVIF ok: {} decoded to a {size}-byte PNG with libavif {version} ({codecs})", path.display())
+        }
         Err(message) => {
             eprintln!("AVIF check failed with libavif {version} ({codecs}): {message}");
             std::process::exit(1);
@@ -205,10 +177,7 @@ mod tests {
         assert_eq!((width, height, rgba.len()), (64, 48, 64 * 48 * 4));
         let (r, g, b, a) = (rgba[0], rgba[1], rgba[2], rgba[3]);
         assert!(r > 240 && g < 16 && b < 16 && a == 255, "{r} {g} {b} {a}");
-        assert_eq!(
-            &convert(SAMPLE).unwrap()[..8],
-            &[137, 80, 78, 71, 13, 10, 26, 10]
-        );
+        assert_eq!(&convert(SAMPLE).unwrap()[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
     }
 
     #[test]
@@ -218,10 +187,6 @@ mod tests {
 
     #[test]
     fn rejects_invalid_image_without_panicking() {
-        assert!(
-            convert(b"not an AVIF image")
-                .unwrap_err()
-                .contains("AVIF decode failed")
-        );
+        assert!(convert(b"not an AVIF image").unwrap_err().contains("AVIF decode failed"));
     }
 }

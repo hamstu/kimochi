@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
-import ts from 'typescript'
+import { parse, topLevelFunctions, text } from './source-ast.mjs'
 import { build } from 'esbuild'
 
 const outDir = await mkdtemp(path.join(tmpdir(), 'kimochi-api-engine-'))
@@ -80,8 +80,7 @@ test("the API lookup waits for the overlay's lookup key, not always Shift", asyn
 
 test('the overlay starts the Yomitan API on its own, as a ready dictionary', async () => {
   const source = await readFile(new URL('../ui/overlay.js', import.meta.url), 'utf8')
-  const ast = ts.createSourceFile('overlay.js', source, ts.ScriptTarget.Latest, true)
-  const start = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'startApiEngine')
+  const start = topLevelFunctions(parse('overlay.js', source)).get('startApiEngine')
   assert.ok(start, 'overlay.js has startApiEngine')
   const installs = []
   const logged = []
@@ -94,14 +93,17 @@ test('the overlay starts the Yomitan API on its own, as a ready dictionary', asy
     settleBackend: () => settled++,
     log: (entry) => logged.push(entry.check)
   })
-  vm.runInContext(`${start.getText(ast)}\nglobalThis.run = startApiEngine`, context)
+  vm.runInContext(`${text(source, start)}\nglobalThis.run = startApiEngine`, context)
   await context.run()
-  assert.equal(JSON.stringify(installs), JSON.stringify([{ embedded: false }]), "no Yomitan frontend to switch")
+  assert.equal(JSON.stringify(installs), JSON.stringify([{ embedded: false }]), 'no Yomitan frontend to switch')
   assert.equal(installs[0].onVisibilityChange, apiPopupVisible, 'its pop-up holds automatic OCR still while read')
   assert.equal(context.state.yomitan.ready, true, 'the pointer replay and the controller see a dictionary')
   assert.equal(settled, 1)
-  assert.equal(logged.join(), "dictionary-api-ready")
+  assert.equal(logged.join(), 'dictionary-api-ready')
   // And it is the path taken for the Yomitan API, ahead of "no engine downloaded".
-  assert.match(source, /hostedEngine === NO_ENGINE && dictionaryEngineOf\(setting\('yomitanSettings'\)\?\.popupType\) === 'custom-api'/)
+  assert.match(
+    source,
+    /hostedEngine === NO_ENGINE && dictionaryEngineOf\(setting\('yomitanSettings'\)\?\.popupType\) === 'custom-api'/
+  )
   assert.match(source, /\(apiEngine\s*\?\s*startApiEngine\(\)/)
 })

@@ -41,9 +41,7 @@ function manualTimers() {
     advance(ms) {
       const until = now + ms
       for (;;) {
-        const due = [...pending.entries()]
-          .filter(([, timer]) => timer.at <= until)
-          .sort((a, b) => a[1].at - b[1].at)[0]
+        const due = [...pending.entries()].filter(([, timer]) => timer.at <= until).sort((a, b) => a[1].at - b[1].at)[0]
         if (!due) break
         pending.delete(due[0])
         now = due[1].at
@@ -211,9 +209,7 @@ test('parser tokens keep their offsets, and only dictionary matches are words', 
 
 test('a parse that matches nothing in Japanese falls back to the segmenter', async () => {
   const text = '今日はいい天気'
-  const tokens = await segmentText(text, async () => [
-    { source: 'scanning-parser', content: parsed([text, false]) }
-  ])
+  const tokens = await segmentText(text, async () => [{ source: 'scanning-parser', content: parsed([text, false]) }])
   assert.ok(tokens.filter((token) => token.word).length > 1)
   assert.equal(tokens.map((token) => token.text).join(''), text)
 })
@@ -237,8 +233,15 @@ test("Hachidori's own segments are the reader's stops, gaps between them skipped
     ]
   )
   assert.deepEqual(
-    tokensFromSpans('あいう', [{ start: 1, length: 1 }, { start: 0, length: 2 }, { start: 2, length: 5 }]).map((t) => [t.text, t.word]),
-    [['あい', true], ['う', false]],
+    tokensFromSpans('あいう', [
+      { start: 1, length: 1 },
+      { start: 0, length: 2 },
+      { start: 2, length: 5 }
+    ]).map((t) => [t.text, t.word]),
+    [
+      ['あい', true],
+      ['う', false]
+    ],
     'a span overlapping an earlier one, or running past the text, is ignored'
   )
 })
@@ -340,32 +343,32 @@ const boxed = (text, x, y, width = 100, height = 20, vertical = false) => ({
 })
 
 test('units are read by position, rows from the top and left to right', () => {
-  const order = readingUnits(
-    [boxed('二行目', 10, 60), boxed('右', 300, 12), boxed('一行目', 10, 10)],
-    false
-  ).map((u) => u.text)
+  const order = readingUnits([boxed('二行目', 10, 60), boxed('右', 300, 12), boxed('一行目', 10, 10)], false).map(
+    (u) => u.text
+  )
   assert.deepEqual(order, ['一行目', '右', '二行目'])
 })
 
 test('vertical units are read in columns from the right, top to bottom', () => {
   const column = (text, x, y) => boxed(text, x, y, 20, 100, true)
-  const order = readingUnits(
-    [column('左', 10, 10), column('右下', 50, 120), column('右上', 50, 10)],
-    true
-  ).map((u) => u.text)
+  const order = readingUnits([column('左', 10, 10), column('右下', 50, 120), column('右上', 50, 10)], true).map(
+    (u) => u.text
+  )
   assert.deepEqual(order, ['右上', '右下', '左'])
 })
 
 test('units with no Japanese (background read as symbols or digits) are skipped', () => {
-  const order = readingUnits(
-    [boxed('■■', 10, 200), boxed('88', 10, 240), boxed('買って行かんか?', 10, 10)],
-    false
-  ).map((u) => u.text)
+  const order = readingUnits([boxed('■■', 10, 200), boxed('88', 10, 240), boxed('買って行かんか?', 10, 10)], false).map(
+    (u) => u.text
+  )
   assert.deepEqual(order, ['買って行かんか?'])
 })
 
 test('without a dictionary, kanji keep the kana of their inflection', () => {
-  const words = (text) => tokensFromSegmenter(text).filter((t) => t.word).map((t) => t.text)
+  const words = (text) =>
+    tokensFromSegmenter(text)
+      .filter((t) => t.word)
+      .map((t) => t.text)
   assert.deepEqual(words('作った剣でも'), ['作った', '剣でも'])
   assert.deepEqual(words('食べさせられた'), ['食べさせられた'])
   assert.deepEqual(words('刀の'), ['刀', 'の'])
@@ -466,12 +469,7 @@ test('command buttons follow the settings, and an unbound one does nothing', () 
   controls.nav(pad([BUTTON.south]))
   controls.nav(pad([BUTTON.east]))
   controls.nav(pad([BUTTON.rt]))
-  assert.deepEqual(commands, [
-    { type: 'confirm' },
-    { type: 'step', delta: 1 },
-    { type: 'cancel' },
-    { type: 'audio' }
-  ])
+  assert.deepEqual(commands, [{ type: 'confirm' }, { type: 'step', delta: 1 }, { type: 'cancel' }, { type: 'audio' }])
 })
 
 // --- by character, and the free cursor -------------------------------------------
@@ -482,10 +480,18 @@ test('by character, every letter is a stop and punctuation is not', () => {
   const [unit] = characterUnits([box('猫、が。', [])])
   assert.deepEqual(
     unit.tokens.map((token) => [token.text, token.word]),
-    [['猫', true], ['、', false], ['が', true], ['。', false]]
+    [
+      ['猫', true],
+      ['、', false],
+      ['が', true],
+      ['。', false]
+    ]
   )
   const cursor = new WordCursor(characterUnits([box('食べた', []), box('猫', [])]))
-  assert.deepEqual(cursor.words.map((word) => word.text), ['食', 'べ', 'た', '猫'])
+  assert.deepEqual(
+    cursor.words.map((word) => word.text),
+    ['食', 'べ', 'た', '猫']
+  )
 })
 
 test('characters reach what the dictionary left as gaps between words', () => {

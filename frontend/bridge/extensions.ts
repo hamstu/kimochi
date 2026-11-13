@@ -6,11 +6,7 @@
  */
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import {
-  normalizeExtensionStatus,
-  type ExtensionEngine,
-  type ExtensionStatus
-} from '@ui/extension-download'
+import { normalizeExtensionStatus, type ExtensionEngine, type ExtensionStatus } from '@ui/extension-download'
 import type { ModelAction } from '@ui/model-download'
 import { nativeError, onEvent } from './tauri'
 
@@ -30,9 +26,7 @@ function watch(): void {
   if (watching) return
   watching = true
   try {
-    onEvent<unknown>('extension-download', (payload) => set(normalizeExtensionStatus(payload))).catch(
-      () => undefined
-    )
+    onEvent<unknown>('extension-download', (payload) => set(normalizeExtensionStatus(payload))).catch(() => undefined)
   } catch {
     // No event bridge (a plain browser): the fetched status stands.
   }

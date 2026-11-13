@@ -5,10 +5,30 @@
  * choice, a form (with Back), and a thank-you whose Done returns to the choice. The forms keep
  * what was typed until it is sent, so Back or closing the dialog loses nothing.
  */
-import { useEffect, useId, useState, type Dispatch, type FormEvent, type JSX, type ReactNode, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useId,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type JSX,
+  type ReactNode,
+  type SetStateAction
+} from 'react'
 import { ArrowLeft, Bug, ChevronRight, CircleCheck, ExternalLink, Lightbulb, MessagesSquare } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
-import { Button, Callout, Checkbox, Dialog, DialogClose, DialogContent, IconButton, Input, Spinner, Textarea } from '@kit'
+import {
+  Button,
+  Callout,
+  Checkbox,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  IconButton,
+  Input,
+  Spinner,
+  Textarea
+} from '@kit'
 import { debugMarkdown } from '@ui/debug-report'
 import {
   DISCORD_URL,
@@ -65,20 +85,36 @@ function Choice({
 }): JSX.Element {
   return (
     <button type="button" className="help-choice" onClick={onClick}>
-      <span className="help-choice-icon" aria-hidden="true">{icon}</span>
+      <span className="help-choice-icon" aria-hidden="true">
+        {icon}
+      </span>
       <span className="help-choice-text">
         <span className="help-choice-title">{title}</span>
         {detail && <span className="help-choice-detail">{detail}</span>}
       </span>
-      <span className="help-choice-trailing" aria-hidden="true">{trailing}</span>
+      <span className="help-choice-trailing" aria-hidden="true">
+        {trailing}
+      </span>
     </button>
   )
 }
 
-function Field({ label, hint, children, id }: { label: string; hint?: string; children: ReactNode; id: string }): JSX.Element {
+function Field({
+  label,
+  hint,
+  children,
+  id
+}: {
+  label: string
+  hint?: string
+  children: ReactNode
+  id: string
+}): JSX.Element {
   return (
     <div className="help-field">
-      <label htmlFor={id} className="help-label">{label}</label>
+      <label htmlFor={id} className="help-label">
+        {label}
+      </label>
       {children}
       {hint && <span className="help-hint">{hint}</span>}
     </div>
@@ -276,8 +312,14 @@ function HelpContent({
           <CircleCheck className="help-sent-icon" aria-hidden="true" />
           <p className="help-sent-title">Thank you!</p>
           <p className="help-sent-detail">
-            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If I
-            need anything else, I’ll reply to {sent?.email || 'your email'}.
+            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way
+            {sent?.id ? (
+              <>
+                {' '}
+                (reference <span className="k-num">{sent.id}</span>)
+              </>
+            ) : null}
+            . If I need anything else, I’ll reply to {sent?.email || 'your email'}.
           </p>
         </div>
       </DialogContent>
@@ -305,12 +347,7 @@ function HelpContent({
             onClose()
           }}
         />
-        <Choice
-          icon={<Bug />}
-          title="Report a bug"
-          trailing={<ChevronRight />}
-          onClick={() => setStep('bug')}
-        />
+        <Choice icon={<Bug />} title="Report a bug" trailing={<ChevronRight />} onClick={() => setStep('bug')} />
         <Choice
           icon={<Lightbulb />}
           title="Request a feature"
@@ -322,7 +359,13 @@ function HelpContent({
   )
 }
 
-export function HelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }): JSX.Element {
+export function HelpDialog({
+  open,
+  onOpenChange
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}): JSX.Element {
   // Here, not in the content (which unmounts on close), so closing mid-report keeps the draft.
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   return (

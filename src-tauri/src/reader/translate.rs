@@ -38,8 +38,12 @@ pub async fn deepl_translate(
     }
     // From the language being read; DeepL takes only the languages it has.
     let language = crate::language::current(&state.settings);
-    let source = crate::language::deepl_source(language)
-        .ok_or_else(|| format!("DeepL cannot translate from this language ({}). Choose Kimochi cloud translation instead.", language.code))?;
+    let source = crate::language::deepl_source(language).ok_or_else(|| {
+        format!(
+            "DeepL cannot translate from this language ({}). Choose Kimochi cloud translation instead.",
+            language.code
+        )
+    })?;
     if text.trim().is_empty() {
         return Err("nothing to translate".into());
     }
@@ -63,10 +67,7 @@ pub async fn deepl_translate(
         .map_err(|e| format!("deepl request failed: {e}"))?;
 
     let status = resp.status();
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("deepl read failed: {e}"))?;
+    let body = resp.text().await.map_err(|e| format!("deepl read failed: {e}"))?;
     if !status.is_success() {
         let hint = match status.as_u16() {
             403 => " (invalid key?)",
@@ -76,12 +77,6 @@ pub async fn deepl_translate(
         return Err(format!("DeepL HTTP {}{hint}", status.as_u16()));
     }
 
-    let parsed: DeepLResponse =
-        serde_json::from_str(&body).map_err(|e| format!("deepl JSON parse failed: {e}"))?;
-    parsed
-        .translations
-        .into_iter()
-        .next()
-        .map(|t| t.text)
-        .ok_or_else(|| "deepl returned no translations".into())
+    let parsed: DeepLResponse = serde_json::from_str(&body).map_err(|e| format!("deepl JSON parse failed: {e}"))?;
+    parsed.translations.into_iter().next().map(|t| t.text).ok_or_else(|| "deepl returned no translations".into())
 }

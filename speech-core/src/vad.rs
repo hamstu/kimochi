@@ -71,17 +71,9 @@ impl Vad {
         let gain = super::trim::gain_to(&audio, 0.5, 1_000.0);
         audio.iter_mut().for_each(|s| *s *= gain);
         let mut stream = Scorer::default();
-        let probabilities = audio
-            .chunks(FRAME)
-            .map(|frame| stream.score(&mut self.session, frame))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(spans_from_probabilities(
-            &probabilities,
-            FRAME_MS,
-            ON,
-            OFF,
-            MIN_SILENCE_MS,
-        ))
+        let probabilities =
+            audio.chunks(FRAME).map(|frame| stream.score(&mut self.session, frame)).collect::<Result<Vec<_>, _>>()?;
+        Ok(spans_from_probabilities(&probabilities, FRAME_MS, ON, OFF, MIN_SILENCE_MS))
     }
 }
 
@@ -93,10 +85,7 @@ struct Scorer {
 
 impl Default for Scorer {
     fn default() -> Self {
-        Self {
-            state: vec![0f32; 2 * 128],
-            input: vec![0f32; CONTEXT + FRAME],
-        }
+        Self { state: vec![0f32; 2 * 128], input: vec![0f32; CONTEXT + FRAME] }
     }
 }
 
@@ -114,13 +103,9 @@ impl Scorer {
                 "sr" => Tensor::from_array(((), vec![RATE as i64])).map_err(error)?,
             ])
             .map_err(error)?;
-        let (_, p) = outputs["output"]
-            .try_extract_tensor::<f32>()
-            .map_err(error)?;
+        let (_, p) = outputs["output"].try_extract_tensor::<f32>().map_err(error)?;
         let p = p.first().copied().unwrap_or(0.0);
-        let (_, next) = outputs["stateN"]
-            .try_extract_tensor::<f32>()
-            .map_err(error)?;
+        let (_, next) = outputs["stateN"].try_extract_tensor::<f32>().map_err(error)?;
         self.state.copy_from_slice(next);
         Ok(p)
     }
@@ -142,12 +127,7 @@ const HOLD_FRAMES: usize = 940;
 
 impl Stream {
     pub fn new(vad: Vad) -> Self {
-        Self {
-            vad,
-            scorer: Scorer::default(),
-            pending: Vec::new(),
-            peaks: Default::default(),
-        }
+        Self { vad, scorer: Scorer::default(), pending: Vec::new(), peaks: Default::default() }
     }
 
     /// Score `samples` (16 kHz mono), with whatever was left over from the last call: for each
@@ -164,11 +144,7 @@ impl Stream {
                 self.peaks.pop_front();
             }
             let held = self.peaks.iter().fold(0f32, |m, p| m.max(*p));
-            let gain = if held < 1e-5 {
-                1.0
-            } else {
-                (0.5 / held).clamp(1.0, 1_000.0)
-            };
+            let gain = if held < 1e-5 { 1.0 } else { (0.5 / held).clamp(1.0, 1_000.0) };
             for (out, s) in frame.iter_mut().zip(chunk) {
                 *out = s * gain;
             }
@@ -199,10 +175,7 @@ pub fn to_16k(samples: &[f32], sample_rate: u32) -> Vec<f32> {
     }
     if sample_rate.is_multiple_of(RATE) {
         let k = (sample_rate / RATE) as usize;
-        return samples
-            .chunks(k)
-            .map(|c| c.iter().sum::<f32>() / c.len() as f32)
-            .collect();
+        return samples.chunks(k).map(|c| c.iter().sum::<f32>() / c.len() as f32).collect();
     }
     let step = sample_rate as f64 / RATE as f64;
     let n = (samples.len() as f64 / step) as usize;
@@ -224,10 +197,7 @@ mod tests {
     #[test]
     fn audio_is_brought_to_16k() {
         let samples: Vec<f32> = (0..48).map(|i| i as f32).collect();
-        assert_eq!(
-            to_16k(&samples, 48_000),
-            (0..16).map(|i| 3.0 * i as f32 + 1.0).collect::<Vec<_>>()
-        );
+        assert_eq!(to_16k(&samples, 48_000), (0..16).map(|i| 3.0 * i as f32 + 1.0).collect::<Vec<_>>());
         assert_eq!(to_16k(&samples, 44_100).len(), 17);
         assert_eq!(to_16k(&samples, 16_000), samples);
     }
@@ -241,23 +211,12 @@ mod tests {
     fn silero_finds_the_speech_between_silence_and_noise() {
         let ort_path = std::env::var("KIMOCHI_ORT").expect("KIMOCHI_ORT");
         ort::init_from(ort_path).commit().unwrap();
-        let wav = std::fs::read(std::env::var("KIMOCHI_SPEECH_WAV").expect("KIMOCHI_SPEECH_WAV"))
-            .unwrap();
-        let data = wav
-            .windows(4)
-            .position(|w| w == b"data")
-            .expect("data chunk")
-            + 8;
-        let fmt = wav
-            .windows(4)
-            .position(|w| w == b"fmt ")
-            .expect("fmt chunk")
-            + 8;
+        let wav = std::fs::read(std::env::var("KIMOCHI_SPEECH_WAV").expect("KIMOCHI_SPEECH_WAV")).unwrap();
+        let data = wav.windows(4).position(|w| w == b"data").expect("data chunk") + 8;
+        let fmt = wav.windows(4).position(|w| w == b"fmt ").expect("fmt chunk") + 8;
         let rate = u32::from_le_bytes(wav[fmt + 4..fmt + 8].try_into().unwrap());
-        let speech: Vec<f32> = wav[data..]
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
-            .collect();
+        let speech: Vec<f32> =
+            wav[data..].chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0).collect();
         let speech_ms = speech.len() as f64 * 1000.0 / rate as f64;
         let mut audio = vec![0.0; rate as usize * 3 / 2];
         audio.extend_from_slice(&speech);
@@ -270,9 +229,6 @@ mod tests {
         let voice = crate::trim::voice(&spans, 1_500.0).expect("speech");
         eprintln!("spans {spans:?}, voice {voice:?}, speech {speech_ms:.0}ms from 1500ms");
         assert!((voice.start - 1_500.0).abs() < 300.0, "{voice:?}");
-        assert!(
-            (voice.end - (1_500.0 + speech_ms)).abs() < 500.0,
-            "{voice:?}"
-        );
+        assert!((voice.end - (1_500.0 + speech_ms)).abs() < 500.0, "{voice:?}");
     }
 }

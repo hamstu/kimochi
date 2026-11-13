@@ -11,7 +11,11 @@ test('the text hooker manifest lists exactly the pinned files, upstream first, m
   for (const [id, engine] of Object.entries(ENGINES)) {
     const listed = manifest.engines[id]
     assert.equal(listed.version, engine.version, id)
-    assert.deepEqual(listed.files.map((f) => f.name), Object.keys(engine.files), id)
+    assert.deepEqual(
+      listed.files.map((f) => f.name),
+      Object.keys(engine.files),
+      id
+    )
     for (const file of listed.files) {
       const spec = engine.files[file.name]
       assert.match(file.sha256, /^[0-9a-f]{64}$/)

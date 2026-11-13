@@ -176,7 +176,10 @@ unsafe fn redirect(a: &Il2Cpp) -> Result<usize, String> {
     if (a.domain_get)().is_null() {
         return Err("IL2CPP not initialised".into());
     }
-    let found: Vec<_> = watched().into_iter().filter_map(|(base, slot, tramp)| unity_function(a, base).map(|f| (base, slot, tramp, f))).collect();
+    let found: Vec<_> = watched()
+        .into_iter()
+        .filter_map(|(base, slot, tramp)| unity_function(a, base).map(|f| (base, slot, tramp, f)))
+        .collect();
     if !found.iter().any(|(base, ..)| base.starts_with("Play")) {
         return Err("no AudioSource play function registered".into());
     }
@@ -197,7 +200,9 @@ unsafe fn redirect(a: &Il2Cpp) -> Result<usize, String> {
         }
         n += 1;
         log(&format!("il2cpp: {name} at {} -> trampoline ({copies} cached copies repointed)", hex(f)));
-        sink::send(Ev::Note(json!({"ev": "adapter", "adapter": "unity-il2cpp", "icall": name, "base": base, "cached": copies, "injected": injected})));
+        sink::send(Ev::Note(
+            json!({"ev": "adapter", "adapter": "unity-il2cpp", "icall": name, "base": base, "cached": copies, "injected": injected}),
+        ));
     }
     Ok(n)
 }
@@ -299,13 +304,15 @@ unsafe fn invoke(a: &Il2Cpp, obj: P, name: &'static str, args: &mut [P]) -> Opti
         return None;
     }
     let mut exc: P = std::ptr::null_mut();
-    let r = (a.runtime_invoke)(m, obj, if args.is_empty() { std::ptr::null_mut() } else { args.as_mut_ptr() }, &mut exc);
+    let r =
+        (a.runtime_invoke)(m, obj, if args.is_empty() { std::ptr::null_mut() } else { args.as_mut_ptr() }, &mut exc);
     exc.is_null().then_some(r)
 }
 
 /// The value inside a boxed value type (after the object header: klass, monitor).
 unsafe fn unbox<T: Copy>(boxed: P) -> Option<T> {
-    (!boxed.is_null()).then(|| std::ptr::read_unaligned((boxed as *const u8).add(2 * std::mem::size_of::<usize>()) as *const T))
+    (!boxed.is_null())
+        .then(|| std::ptr::read_unaligned((boxed as *const u8).add(2 * std::mem::size_of::<usize>()) as *const T))
 }
 
 /// An `Il2CppString`: header (klass, monitor), `int32` length, then UTF-16.
@@ -359,7 +366,8 @@ unsafe fn seen(what: &'static str, src: P, clip: P) {
         sink::send(Ev::Mark { key, what: "unity_play_unknown", info: json!({"method": what, "injected": true}) });
         return;
     }
-    let clip_obj = if clip.is_null() { invoke(a, src, "get_clip", &mut []).unwrap_or(std::ptr::null_mut()) } else { clip };
+    let clip_obj =
+        if clip.is_null() { invoke(a, src, "get_clip", &mut []).unwrap_or(std::ptr::null_mut()) } else { clip };
     if clip_obj.is_null() {
         sink::send(Ev::Mark { key, what: "unity_play_unknown", info: json!({"method": what}) });
         return;
@@ -374,7 +382,9 @@ unsafe fn seen(what: &'static str, src: P, clip: P) {
         }
         last.insert(src as usize, (clip_obj as usize, now));
     }
-    let get_i32 = |name: &'static str| -> i32 { unsafe { invoke(a, clip_obj, name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) } };
+    let get_i32 = |name: &'static str| -> i32 {
+        unsafe { invoke(a, clip_obj, name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) }
+    };
     let clip_name = invoke(a, clip_obj, "get_name", &mut []).and_then(|s| string(s));
     let (samples, channels, freq) = (get_i32("get_samples"), get_i32("get_channels"), get_i32("get_frequency"));
     let load_type: i32 = invoke(a, clip_obj, "get_loadType", &mut []).and_then(|b| unbox(b)).unwrap_or(-1);
@@ -447,7 +457,17 @@ impl Pending {
                 Vec::new()
             }
         };
-        sink::send(Ev::Whole { key: self.key, api: "unity", fmt: self.fmt, bytes, ext: None, source: self.name, dur: Some(self.secs), at: Some(self.at), info });
+        sink::send(Ev::Whole {
+            key: self.key,
+            api: "unity",
+            fmt: self.fmt,
+            bytes,
+            ext: None,
+            source: self.name,
+            dur: Some(self.secs),
+            at: Some(self.at),
+            info,
+        });
     }
 }
 
@@ -511,7 +531,9 @@ mod tests {
     #[test]
     fn every_cached_copy_of_the_function_is_repointed() {
         let mut data = vec![0usize, 0xABCD, 7, 0xABCD, 0xABC];
-        let n = unsafe { repoint_all(data.as_mut_ptr() as usize, data.len() * std::mem::size_of::<usize>(), 0xABCD, 0x1234) };
+        let n = unsafe {
+            repoint_all(data.as_mut_ptr() as usize, data.len() * std::mem::size_of::<usize>(), 0xABCD, 0x1234)
+        };
         assert_eq!(n, 2);
         assert_eq!(data, vec![0, 0x1234, 7, 0x1234, 0xABC]);
     }

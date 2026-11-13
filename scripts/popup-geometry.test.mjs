@@ -36,10 +36,7 @@ const source = (x, y, width, height) => ({
 // The real desktop this was written against: a laptop display at the origin and a
 // wide monitor to its right. A display above or to the left has a negative origin,
 // which is why nothing may assume positive coordinates.
-const DISPLAYS = [
-  { work_area: rect(0, 25, 1728, 1092) },
-  { work_area: rect(1728, 0, 3440, 1440) }
-]
+const DISPLAYS = [{ work_area: rect(0, 25, 1728, 1092) }, { work_area: rect(1728, 0, 3440, 1440) }]
 
 test('the popup is positioned on the display the scanned text is on', () => {
   assert.deepEqual(anchorViewport([source(2000, 500, 40, 20)], DISPLAYS, rect(0, 0, 1, 1)), {

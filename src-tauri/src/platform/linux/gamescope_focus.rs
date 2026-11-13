@@ -7,39 +7,59 @@ fn display_number(display: &str) -> Option<&str> {
     (!number.is_empty() && number.bytes().all(|c| c.is_ascii_digit())).then_some(number)
 }
 fn routes_to_owner(local: &str, mouse: &str, keyboard: &str, focused_pid: Option<u32>, owner: u32) -> bool {
-    let Some(local) = display_number(local) else { return false; };
-    display_number(mouse) == Some(local) && display_number(keyboard) == Some(local)
-        && focused_pid == Some(owner)
+    let Some(local) = display_number(local) else {
+        return false;
+    };
+    display_number(mouse) == Some(local) && display_number(keyboard) == Some(local) && focused_pid == Some(owner)
 }
 
 /// Unknown ownership fails open: do not stop Steam unless input is demonstrably
 /// routed to Kimochi. Shared by the app and its independent recovery processes.
 pub(super) fn owns_input(owner: u32) -> bool {
-    let Some(d) = super::x11::desktop() else { return false; };
+    let Some(d) = super::x11::desktop() else {
+        return false;
+    };
     // Steam menus share :0 with the managed app. XGetInputFocus may still
     // point at our GTK window while Gamescope routes the controller to Steam.
-    let steam = d.conn.intern_atom(true, b"GAMESCOPE_FOCUSED_APP").ok()
+    let steam = d
+        .conn
+        .intern_atom(true, b"GAMESCOPE_FOCUSED_APP")
+        .ok()
         .and_then(|cookie| cookie.reply().ok())
         .and_then(|atom| d.property32(d.root, atom.atom, AtomEnum::CARDINAL))
         .and_then(|values| values.first().copied());
-    if steam == Some(769) { return false; }
+    if steam == Some(769) {
+        return false;
+    }
     let display = |name: &[u8]| -> Option<String> {
         let atom = d.conn.intern_atom(true, name).ok()?.reply().ok()?.atom;
-        if atom == 0 { return None; }
+        if atom == 0 {
+            return None;
+        }
         let value = d.property(d.root, atom, AtomEnum::ANY, 64)?.value;
         String::from_utf8(value.split(|v| *v == 0).next()?.to_vec()).ok()
     };
-    let Some(mouse) = display(b"GAMESCOPE_MOUSE_FOCUS_DISPLAY") else { return false; };
-    let Some(keyboard) = display(b"GAMESCOPE_KEYBOARD_FOCUS_DISPLAY") else { return false; };
+    let Some(mouse) = display(b"GAMESCOPE_MOUSE_FOCUS_DISPLAY") else {
+        return false;
+    };
+    let Some(keyboard) = display(b"GAMESCOPE_KEYBOARD_FOCUS_DISPLAY") else {
+        return false;
+    };
     let local = std::env::var("DISPLAY").unwrap_or_default();
-    let Some(mut window) = d.conn.get_input_focus().ok().and_then(|c| c.reply().ok()).map(|r| r.focus) else { return false; };
+    let Some(mut window) = d.conn.get_input_focus().ok().and_then(|c| c.reply().ok()).map(|r| r.focus) else {
+        return false;
+    };
     // Include GTK file choosers and child windows, not just registered webviews.
     for _ in 0..8 {
         if let Some(pid) = d.pid(window) {
             return routes_to_owner(&local, &mouse, &keyboard, Some(pid), owner);
         }
-        let Some(parent) = d.conn.query_tree(window).ok().and_then(|c| c.reply().ok()).map(|r| r.parent) else { return false; };
-        if parent == 0 || parent == window { return false; }
+        let Some(parent) = d.conn.query_tree(window).ok().and_then(|c| c.reply().ok()).map(|r| r.parent) else {
+            return false;
+        };
+        if parent == 0 || parent == window {
+            return false;
+        }
         window = parent;
     }
     false

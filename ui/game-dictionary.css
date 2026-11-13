@@ -27,7 +27,14 @@
   --gd-shadow: var(--cm-shadow, 0 2px 8px rgb(0 0 0 / 0.35), 0 28px 64px -12px rgb(0 0 0 / 0.7));
   --gd-shadow-pop: var(--cm-shadow-pop, 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6));
   --gd-font: var(--cm-font, system-ui, sans-serif);
-  --gd-font-jp: var(--cm-font-jp, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", sans-serif);
+  --gd-font-jp: var(
+    --cm-font-jp,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Yu Gothic UI',
+    sans-serif
+  );
   /* The learner's text, in the language being read's fonts (language-style.ts); Japanese: --gd-font-jp. */
   --gd-font-text: var(--kimochi-text-font, var(--gd-font-jp));
   --gd-text-xs: var(--cm-text-xs, 14px);
@@ -61,7 +68,7 @@
   font-weight: 430;
   -webkit-font-smoothing: antialiased;
 }
-[data-cm-theme="light"] .gd-root {
+[data-cm-theme='light'] .gd-root {
   --gd-ok: #218358;
   --gd-danger: #ce2c31;
 }
@@ -82,9 +89,7 @@
 .gd-backdrop {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(to bottom, transparent 50%, rgb(var(--gd-bg-rgb) / 0.4)),
-    var(--gd-scrim);
+  background: linear-gradient(to bottom, transparent 50%, rgb(var(--gd-bg-rgb) / 0.4)), var(--gd-scrim);
   backdrop-filter: var(--gd-blur);
   -webkit-backdrop-filter: var(--gd-blur);
 }
@@ -94,7 +99,7 @@
    back to the dim alone. An imperceptible, endless fade on the backdrop itself keeps it redrawn,
    so the blur stays for as long as the view is open. Not reduced by reduced-motion: nothing
    visible moves. Elsewhere the dim alone is all there is, so nothing is kept redrawing. */
-.gd-root[data-os="macos"]:not(.gd-leaving) .gd-backdrop {
+.gd-root[data-os='macos']:not(.gd-leaving) .gd-backdrop {
   animation:
     gd-in 0.22s ease-out backwards,
     gd-hold-blur 2s linear 0.22s infinite alternate;
@@ -175,8 +180,20 @@
   mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade));
 }
 .gd-sentence[data-more-above][data-more-below] {
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade), #000 calc(100% - var(--gd-fade)), transparent);
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade), #000 calc(100% - var(--gd-fade)), transparent);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--gd-fade),
+    #000 calc(100% - var(--gd-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--gd-fade),
+    #000 calc(100% - var(--gd-fade)),
+    transparent
+  );
 }
 .gd-line {
   color: var(--gd-text);
@@ -293,7 +310,9 @@
   background: var(--gd-frost);
   backdrop-filter: var(--gd-frost-blur);
   -webkit-backdrop-filter: var(--gd-frost-blur);
-  box-shadow: var(--gd-shadow), inset 0 0 0 1px var(--gd-line-strong);
+  box-shadow:
+    var(--gd-shadow),
+    inset 0 0 0 1px var(--gd-line-strong);
   scrollbar-width: thin;
   scrollbar-color: var(--gd-line-strong) transparent;
   outline: none;
@@ -303,7 +322,7 @@
 }
 /* With an engine's own pop-up (built-in Yomitan, Hachidori, 10ten) the panel only says what is
    happening while no pop-up covers it. */
-.gd-root[data-source="popup"] .gd-body {
+.gd-root[data-source='popup'] .gd-body {
   display: grid;
   place-items: center;
 }
@@ -340,7 +359,9 @@
 .gd-entry-tab.gd-entry-current {
   color: var(--gd-text);
   background: var(--gd-raised);
-  box-shadow: var(--gd-shadow-pop), inset 0 0 0 2px var(--gd-accent-line);
+  box-shadow:
+    var(--gd-shadow-pop),
+    inset 0 0 0 2px var(--gd-accent-line);
 }
 
 .gd-headword {
@@ -415,24 +436,24 @@
   color: var(--gd-text-2);
   margin-right: 0.3em;
 }
-.gd-glossary a[lang="ja"] {
+.gd-glossary a[lang='ja'] {
   color: var(--gd-accent-text);
   text-decoration: none;
 }
-.gd-glossary [data-sc-content="example-sentence-a"] {
+.gd-glossary [data-sc-content='example-sentence-a'] {
   font-family: var(--gd-font-text);
   border-left: 2px solid var(--gd-accent-line);
   padding-left: 0.6em;
   margin: 0.4em 0;
 }
-.gd-glossary [data-sc-content="example-sentence-b"] {
+.gd-glossary [data-sc-content='example-sentence-b'] {
   font-size: 0.88em;
   color: var(--gd-text-2);
   border-left: 2px solid var(--gd-line-strong);
   padding-left: 0.6em;
   margin: 0.4em 0;
 }
-.gd-glossary [data-sc-content="example-keyword"] {
+.gd-glossary [data-sc-content='example-keyword'] {
   color: var(--gd-accent-text);
   font-weight: 700;
 }
@@ -507,7 +528,9 @@
   background: var(--gd-frost);
   backdrop-filter: var(--gd-frost-blur);
   -webkit-backdrop-filter: var(--gd-frost-blur);
-  box-shadow: var(--gd-shadow-pop), inset 0 0 0 1px var(--gd-line-strong);
+  box-shadow:
+    var(--gd-shadow-pop),
+    inset 0 0 0 1px var(--gd-line-strong);
 }
 .gd-bar-group {
   display: flex;
@@ -534,7 +557,9 @@
   font: 620 13px/1 var(--gd-font);
   color: var(--gd-text);
   background: var(--gd-key);
-  box-shadow: inset 0 0 0 1px var(--gd-line-strong), inset 0 -1.5px 0 var(--gd-line-strong);
+  box-shadow:
+    inset 0 0 0 1px var(--gd-line-strong),
+    inset 0 -1.5px 0 var(--gd-line-strong);
 }
 .gd-bar .cm-glyph.cm-confirm {
   color: var(--gd-accent-contrast);
@@ -559,18 +584,18 @@ button.gd-hint {
   color: var(--gd-text);
   background: var(--gd-hover);
 }
-.gd-bar .gd-anki[data-state="idle"] .gd-hint,
-.gd-bar .gd-anki[data-state="error"] .gd-hint {
+.gd-bar .gd-anki[data-state='idle'] .gd-hint,
+.gd-bar .gd-anki[data-state='error'] .gd-hint {
   color: var(--gd-text);
 }
-.gd-bar .gd-anki[data-tone="ok"] .gd-hint {
+.gd-bar .gd-anki[data-tone='ok'] .gd-hint {
   color: var(--gd-ok);
 }
-.gd-bar .gd-anki[data-tone="danger"] .gd-hint {
+.gd-bar .gd-anki[data-tone='danger'] .gd-hint {
   color: var(--gd-danger);
 }
-.gd-anki[data-state="checking"] .gd-hint,
-.gd-anki[data-state="sending"] .gd-hint {
+.gd-anki[data-state='checking'] .gd-hint,
+.gd-anki[data-state='sending'] .gd-hint {
   opacity: 0.6;
 }
 .gd-note {
@@ -608,13 +633,13 @@ button.gd-hint {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gd-root:not([data-os="macos"]) .gd-backdrop,
+  .gd-root:not([data-os='macos']) .gd-backdrop,
   .gd-frame,
   .gd-entry,
   .gd-frame.gd-bump {
     animation: none;
   }
-  .gd-root[data-os="macos"]:not(.gd-leaving) .gd-backdrop {
+  .gd-root[data-os='macos']:not(.gd-leaving) .gd-backdrop {
     animation: gd-hold-blur 2s linear infinite alternate;
   }
 }

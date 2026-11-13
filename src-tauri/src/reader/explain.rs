@@ -52,10 +52,7 @@ fn stop(mut child: Child) {
 /// Model names are interpolated into a shell string, so restrict them to
 /// characters that can never escape quoting.
 fn validate_model(model: &str) -> Result<(), String> {
-    if model
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-    {
+    if model.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
         Ok(())
     } else {
         Err(format!("invalid model name: {model}"))
@@ -113,15 +110,7 @@ pub async fn explain_run(
             // --json: JSONL events; the answer arrives as item.completed /
             // agent_message. `-` reads the prompt from stdin. read-only
             // sandbox: this is a pure text task, the agent needs no writes.
-            let mut args = vec![
-                "exec",
-                "--skip-git-repo-check",
-                "-s",
-                "read-only",
-                "--color",
-                "never",
-                "--json",
-            ];
+            let mut args = vec!["exec", "--skip-git-repo-check", "-s", "read-only", "--color", "never", "--json"];
             if !model.is_empty() {
                 args.extend(["-m", model.as_str()]);
             }
@@ -155,13 +144,8 @@ pub async fn explain_run(
     // The prompt is fed on stdin, which is closed afterwards so the CLI starts.
     // Neutral cwd: keeps claude from loading a project's CLAUDE.md/hooks and
     // codex from scanning a repo.
-    let mut child = crate::platform::run_cli(
-        program,
-        &args,
-        Some(&prompt),
-        Some(&std::env::temp_dir()),
-    )
-    .map_err(|e| format!("failed to spawn {provider}: {e}"))?;
+    let mut child = crate::platform::run_cli(program, &args, Some(&prompt), Some(&std::env::temp_dir()))
+        .map_err(|e| format!("failed to spawn {provider}: {e}"))?;
 
     let stdout = child
         .stdout
@@ -228,11 +212,8 @@ pub async fn explain_run(
                         claude_result = Some(r.to_string());
                     }
                     if v.get("is_error").and_then(|b| b.as_bool()) == Some(true) {
-                        let msg = v
-                            .get("result")
-                            .and_then(|r| r.as_str())
-                            .unwrap_or("claude returned an error")
-                            .to_string();
+                        let msg =
+                            v.get("result").and_then(|r| r.as_str()).unwrap_or("claude returned an error").to_string();
                         if is_current() {
                             emit(&app, "explain:error", request_id, msg);
                         }
@@ -247,12 +228,9 @@ pub async fn explain_run(
                 // codex
                 "item.completed" => {
                     let item = v.get("item");
-                    let is_msg = item.and_then(|i| i.get("type")).and_then(|t| t.as_str())
-                        == Some("agent_message");
+                    let is_msg = item.and_then(|i| i.get("type")).and_then(|t| t.as_str()) == Some("agent_message");
                     if is_msg {
-                        if let Some(text) =
-                            item.and_then(|i| i.get("text")).and_then(|t| t.as_str())
-                        {
+                        if let Some(text) = item.and_then(|i| i.get("text")).and_then(|t| t.as_str()) {
                             if !full.is_empty() {
                                 full.push_str("\n\n");
                             }
@@ -264,11 +242,8 @@ pub async fn explain_run(
                     }
                 }
                 "error" => {
-                    let msg = v
-                        .get("message")
-                        .and_then(|m| m.as_str())
-                        .unwrap_or("codex returned an error")
-                        .to_string();
+                    let msg =
+                        v.get("message").and_then(|m| m.as_str()).unwrap_or("codex returned an error").to_string();
                     if is_current() {
                         emit(&app, "explain:error", request_id, msg);
                     }
@@ -295,10 +270,7 @@ pub async fn explain_run(
         }
     };
     let status = match own_child {
-        Some(mut child) => tokio::task::spawn_blocking(move || child.wait())
-            .await
-            .ok()
-            .and_then(Result::ok),
+        Some(mut child) => tokio::task::spawn_blocking(move || child.wait()).await.ok().and_then(Result::ok),
         None => None, // killed by a newer run / cancel
     };
 
@@ -310,9 +282,7 @@ pub async fn explain_run(
     if !final_text.trim().is_empty() {
         emit(&app, "explain:done", request_id, final_text);
     } else {
-        let exit = status
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "killed".into());
+        let exit = status.map(|s| s.to_string()).unwrap_or_else(|| "killed".into());
         // Skip zsh interactive-shell noise; keep the tail, where CLIs put
         // the actual error.
         let detail: String = stderr_text
@@ -331,9 +301,7 @@ pub async fn explain_run(
             &app,
             "explain:error",
             request_id,
-            format!("{provider} produced no output ({exit}). {detail}")
-                .trim()
-                .to_string(),
+            format!("{provider} produced no output ({exit}). {detail}").trim().to_string(),
         );
     }
     Ok(())

@@ -1,26 +1,18 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core'
 /* eslint react-hooks/preserve-manual-memoization: "off" -- The imported popup derives mutable display locals; this build does not enable React Compiler. */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@kit";
-import { PopoverAudio } from "@texthooker/components/PopoverAudio";
-import {
-  PopoverAddToAnki,
-  type AnkiConfig,
-} from "@texthooker/components/PopoverAddToAnki";
-import { TermDefinition } from "@texthooker/components/TermDefinition";
-import { NotebookEntryCard } from "@texthooker/components/NotebookEntryCard";
-import { usePopupScan, popupLevel } from "@texthooker/hooks/usePopupScan";
-import { audioItemForEntry, mediaForFields } from "@texthooker/lib/audio";
-import { termAllEntries } from "@texthooker/lib/yomitan";
-import type {
-  AnkiMediaItem,
-  ResolvedTheme,
-  SerializedNotebookEntry,
-  YomitanAnkiFields,
-} from "@texthooker/lib/types";
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { ArrowLeft } from 'lucide-react'
+import { Button } from '@kit'
+import { PopoverAudio } from '@texthooker/components/PopoverAudio'
+import { PopoverAddToAnki, type AnkiConfig } from '@texthooker/components/PopoverAddToAnki'
+import { TermDefinition } from '@texthooker/components/TermDefinition'
+import { NotebookEntryCard } from '@texthooker/components/NotebookEntryCard'
+import { usePopupScan, popupLevel } from '@texthooker/hooks/usePopupScan'
+import { audioItemForEntry, mediaForFields } from '@texthooker/lib/audio'
+import { termAllEntries } from '@texthooker/lib/yomitan'
+import type { AnkiMediaItem, ResolvedTheme, SerializedNotebookEntry, YomitanAnkiFields } from '@texthooker/lib/types'
 
 /**
  * A cross-reference view pushed on top of the originally-scanned term when the
@@ -30,172 +22,166 @@ import type {
  * and the back button unwind them. Cleared on every fresh popover:show.
  */
 interface XrefFrame {
-  term: string;
-  state: "loading" | "loaded" | "empty" | "error";
-  entries: YomitanAnkiFields[];
-  audioMedia: AnkiMediaItem[];
-  dictionaryMedia: AnkiMediaItem[];
+  term: string
+  state: 'loading' | 'loaded' | 'empty' | 'error'
+  entries: YomitanAnkiFields[]
+  audioMedia: AnkiMediaItem[]
+  dictionaryMedia: AnkiMediaItem[]
 }
 
 type ShowPayload =
   | {
-      kind: "loading";
-      term: string;
-      sentence: string | null;
+      kind: 'loading'
+      term: string
+      sentence: string | null
     }
   | {
-      kind: "loaded";
-      term: string;
+      kind: 'loaded'
+      term: string
       /** A new word's first result; false when the same lookup's media arrives. */
-      fresh: boolean;
+      fresh: boolean
       /** All matched entries, longest match first (Yomitan-style). */
-      entries: YomitanAnkiFields[];
-      audioMedia: AnkiMediaItem[];
-      dictionaryMedia: AnkiMediaItem[];
-      sentence: string | null;
-      audioAutoplay: boolean;
-      audioVolume: number;
-      ankiConfig: AnkiConfig | null;
-      baseUrl: string;
+      entries: YomitanAnkiFields[]
+      audioMedia: AnkiMediaItem[]
+      dictionaryMedia: AnkiMediaItem[]
+      sentence: string | null
+      audioAutoplay: boolean
+      audioVolume: number
+      ankiConfig: AnkiConfig | null
+      baseUrl: string
     }
   | {
-      kind: "error";
-      term: string;
-      message: string;
-      sentence: string | null;
+      kind: 'error'
+      term: string
+      message: string
+      sentence: string | null
     }
   | {
-      kind: "notebook";
-      entry: SerializedNotebookEntry;
-      sentence: string | null;
-    };
+      kind: 'notebook'
+      entry: SerializedNotebookEntry
+      sentence: string | null
+    }
 
 /** Scroll so the next (`step` 1) or previous (-1) entry sits at the top of the card. */
 function jumpEntry(scroller: HTMLElement, step: number): void {
-  const entries = [...scroller.querySelectorAll<HTMLElement>(".popover-entry")];
-  if (!entries.length) return;
-  const top = scroller.getBoundingClientRect().top;
-  const offsets = entries.map(
-    (entry) => entry.getBoundingClientRect().top - top + scroller.scrollTop,
-  );
-  let current = 0;
+  const entries = [...scroller.querySelectorAll<HTMLElement>('.popover-entry')]
+  if (!entries.length) return
+  const top = scroller.getBoundingClientRect().top
+  const offsets = entries.map((entry) => entry.getBoundingClientRect().top - top + scroller.scrollTop)
+  let current = 0
   offsets.forEach((offset, index) => {
-    if (offset <= scroller.scrollTop + 8) current = index;
-  });
-  const next = Math.max(0, Math.min(entries.length - 1, current + step));
-  scroller.scrollTo({ top: next === 0 ? 0 : offsets[next], behavior: "smooth" });
+    if (offset <= scroller.scrollTop + 8) current = index
+  })
+  const next = Math.max(0, Math.min(entries.length - 1, current + step))
+  scroller.scrollTo({ top: next === 0 ? 0 : offsets[next], behavior: 'smooth' })
 }
 
 /** This window's place in the stack of pop-ups: 0 for the first. */
-const level = popupLevel();
+const level = popupLevel()
 
 function PopoverApp() {
-  const [payload, setPayload] = useState<ShowPayload | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [ankiTriggerNonce, setAnkiTriggerNonce] = useState<number | undefined>(
-    undefined,
-  );
+  const [payload, setPayload] = useState<ShowPayload | null>(null)
+  const [visible, setVisible] = useState(false)
+  const [ankiTriggerNonce, setAnkiTriggerNonce] = useState<number | undefined>(undefined)
   // Stack of cross-reference lookups followed within the current popover. Empty
   // = showing the originally-scanned term. Reset whenever a new lookup arrives.
-  const [xrefStack, setXrefStack] = useState<XrefFrame[]>([]);
+  const [xrefStack, setXrefStack] = useState<XrefFrame[]>([])
   // Guards against a slow xref fetch landing after the user moved on (a new
   // popover:show, or popping the frame). Bumped on every navigation.
-  const xrefGen = useRef(0);
+  const xrefGen = useRef(0)
 
   // Listen for show/hide events from the main window (via Rust).
   useEffect(() => {
-    let cancelled = false;
-    const unlistens: UnlistenFn[] = [];
+    let cancelled = false
+    const unlistens: UnlistenFn[] = []
 
-    const registrations: Promise<unknown>[] = [];
+    const registrations: Promise<unknown>[] = []
     const register = async <T,>(
       event: string,
       handler: (e: { payload: T }) => void,
       /** Every pop-up's, rather than addressed to this window alone. */
-      shared = false,
+      shared = false
     ) => {
-      const registration = shared
-        ? listen<T>(event, handler)
-        : getCurrentWebviewWindow().listen<T>(event, handler);
-      registrations.push(registration);
-      const u = await registration;
+      const registration = shared ? listen<T>(event, handler) : getCurrentWebviewWindow().listen<T>(event, handler)
+      registrations.push(registration)
+      const u = await registration
       if (cancelled) {
-        u();
+        u()
       } else {
-        unlistens.push(u);
+        unlistens.push(u)
       }
-    };
+    }
 
-    void register<ShowPayload>("popover:show", (e) => {
-      setPayload(e.payload);
+    void register<ShowPayload>('popover:show', (e) => {
+      setPayload(e.payload)
       // A new lookup starts with a "loading", "error" or fresh "loaded" payload
       // (notebook payloads arrive standalone). Reset the Cmd+Enter nonce so a
       // leftover value can't auto-fire an Anki add when the new term's (keyed,
       // freshly mounted) entry buttons appear, discard any followed
       // cross-reference links so a re-hover shows the freshly-scanned term — not
       // where we drilled to — and start the new word at the top.
-      if (e.payload.kind !== "loaded" || e.payload.fresh) {
-        setAnkiTriggerNonce(undefined);
-        xrefGen.current += 1;
-        setXrefStack([]);
-        document.querySelector(".popover-scroll")?.scrollTo(0, 0);
+      if (e.payload.kind !== 'loaded' || e.payload.fresh) {
+        setAnkiTriggerNonce(undefined)
+        xrefGen.current += 1
+        setXrefStack([])
+        document.querySelector('.popover-scroll')?.scrollTo(0, 0)
       }
       // Show window if hidden (Rust also shows it; both are idempotent).
-      setVisible(true);
-    });
+      setVisible(true)
+    })
 
     // Every pop-up hears every hide: this one closes when its level or one below it does.
     void register<{ level?: number } | null>(
-      "popover:hide",
+      'popover:hide',
       (e) => {
-        if ((e.payload?.level ?? 0) <= level) setVisible(false);
+        if ((e.payload?.level ?? 0) <= level) setVisible(false)
       },
-      true,
-    );
+      true
+    )
 
     // The overlay's controller mode: the right stick scrolls, the shoulder buttons jump from
     // one definition to the next.
-    void register<{ scroll?: number; step?: number }>("popover:control", (e) => {
-      if (level !== 0) return;
-      const scroller = document.querySelector<HTMLElement>(".popover-scroll");
-      if (!scroller) return;
-      if (e.payload.scroll) scroller.scrollTop += e.payload.scroll;
-      if (e.payload.step) jumpEntry(scroller, e.payload.step);
-    });
+    void register<{ scroll?: number; step?: number }>('popover:control', (e) => {
+      if (level !== 0) return
+      const scroller = document.querySelector<HTMLElement>('.popover-scroll')
+      if (!scroller) return
+      if (e.payload.scroll) scroller.scrollTop += e.payload.scroll
+      if (e.payload.step) jumpEntry(scroller, e.payload.step)
+    })
 
     // Mirror the main window's resolved theme onto our document root.
     void register<ResolvedTheme>(
-      "popover:theme",
+      'popover:theme',
       (e) => {
-        document.documentElement.dataset.theme = e.payload;
+        document.documentElement.dataset.theme = e.payload
       },
-      true,
-    );
+      true
+    )
 
-    void Promise.all(registrations).then(() => invoke("reader_popup_ready"));
+    void Promise.all(registrations).then(() => invoke('reader_popup_ready'))
 
     return () => {
-      cancelled = true;
-      for (const u of unlistens) u();
-    };
-  }, []);
+      cancelled = true
+      for (const u of unlistens) u()
+    }
+  }, [])
 
   // Esc dismisses; window blur also dismisses (handled below).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setVisible(false);
+      if (e.key === 'Escape') {
+        setVisible(false)
         // After the fade-out, hide the window in Rust by emitting on this side.
         // Rust listens to 'popover:dismiss' from the popover window itself.
-        void invoke("hide_popover", { level });
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        setAnkiTriggerNonce((n) => (n ?? 0) + 1);
+        void invoke('hide_popover', { level })
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        setAnkiTriggerNonce((n) => (n ?? 0) + 1)
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Note: we intentionally do NOT dismiss on window blur. The popover stays
   // visible until the user explicitly hits Escape or another show_popover /
@@ -207,56 +193,53 @@ function PopoverApp() {
   // transparent shadow margin around it must not take focus from the page
   // being scanned.
   const focusPopup = useCallback(() => {
-    void invoke("reader_popup_focus");
-  }, []);
+    void invoke('reader_popup_focus')
+  }, [])
 
   // Render
-  let state: "loading" | "loaded" | "error" | "empty" = "loading";
-  let entries: YomitanAnkiFields[] = [];
-  let term = "";
-  let errorMessage: string | undefined;
-  let audioMedia: AnkiMediaItem[] = [];
-  let dictionaryMedia: AnkiMediaItem[] = [];
-  let audioAutoplay = false;
-  let audioVolume = 0.9;
-  let ankiConfig: AnkiConfig | null = null;
-  let sentence: string | null = null;
-  let notebookEntry: SerializedNotebookEntry | null = null;
-  let baseUrl: string | null = null;
+  let state: 'loading' | 'loaded' | 'error' | 'empty' = 'loading'
+  let entries: YomitanAnkiFields[] = []
+  let term = ''
+  let errorMessage: string | undefined
+  let audioMedia: AnkiMediaItem[] = []
+  let dictionaryMedia: AnkiMediaItem[] = []
+  let audioAutoplay = false
+  let audioVolume = 0.9
+  let ankiConfig: AnkiConfig | null = null
+  let sentence: string | null = null
+  let notebookEntry: SerializedNotebookEntry | null = null
+  let baseUrl: string | null = null
   // Whether the popover would normally carry media for this lookup, so a
   // followed cross-reference fetches audio/dictionary media too. Anki on or
   // autoplay on imply it; so does the base lookup having already returned audio
   // (covers audio-enabled-but-autoplay-off, where the phase-2 fetch ran).
-  let baseWantsMedia = false;
+  let baseWantsMedia = false
 
   if (payload) {
-    if (payload.kind === "loading") {
-      term = payload.term;
-      state = "loading";
-      sentence = payload.sentence;
-    } else if (payload.kind === "error") {
-      term = payload.term;
-      state = "error";
-      errorMessage = payload.message;
-      sentence = payload.sentence;
-    } else if (payload.kind === "loaded") {
-      term = payload.term;
-      entries = payload.entries ?? [];
-      state = entries.length > 0 ? "loaded" : "empty";
-      audioMedia = payload.audioMedia;
-      dictionaryMedia = payload.dictionaryMedia;
-      audioAutoplay = payload.audioAutoplay;
-      audioVolume = payload.audioVolume;
-      ankiConfig = payload.ankiConfig;
-      sentence = payload.sentence;
-      baseUrl = payload.baseUrl;
-      baseWantsMedia =
-        payload.ankiConfig !== null ||
-        payload.audioAutoplay ||
-        payload.audioMedia.length > 0;
-    } else if (payload.kind === "notebook") {
-      notebookEntry = payload.entry;
-      sentence = payload.sentence;
+    if (payload.kind === 'loading') {
+      term = payload.term
+      state = 'loading'
+      sentence = payload.sentence
+    } else if (payload.kind === 'error') {
+      term = payload.term
+      state = 'error'
+      errorMessage = payload.message
+      sentence = payload.sentence
+    } else if (payload.kind === 'loaded') {
+      term = payload.term
+      entries = payload.entries ?? []
+      state = entries.length > 0 ? 'loaded' : 'empty'
+      audioMedia = payload.audioMedia
+      dictionaryMedia = payload.dictionaryMedia
+      audioAutoplay = payload.audioAutoplay
+      audioVolume = payload.audioVolume
+      ankiConfig = payload.ankiConfig
+      sentence = payload.sentence
+      baseUrl = payload.baseUrl
+      baseWantsMedia = payload.ankiConfig !== null || payload.audioAutoplay || payload.audioMedia.length > 0
+    } else if (payload.kind === 'notebook') {
+      notebookEntry = payload.entry
+      sentence = payload.sentence
     }
   }
 
@@ -268,120 +251,124 @@ function PopoverApp() {
   // then every entry's (seconds for a common word).
   const followCrossRef = useCallback(
     (target: string) => {
-      if (!baseUrl) return;
-      const gen = (xrefGen.current += 1);
+      if (!baseUrl) return
+      const gen = (xrefGen.current += 1)
       setXrefStack((prev) => [
         ...prev,
         {
           term: target,
-          state: "loading",
+          state: 'loading',
           entries: [],
           audioMedia: [],
-          dictionaryMedia: [],
-        },
-      ]);
+          dictionaryMedia: []
+        }
+      ])
       const setTop = (update: (top: XrefFrame) => XrefFrame | null) =>
         setXrefStack((prev) => {
-          if (prev.length === 0) return prev;
-          const top = update(prev[prev.length - 1]);
-          if (!top) return prev;
-          const next = prev.slice();
-          next[next.length - 1] = top;
-          return next;
-        });
-      let allMedia = false;
+          if (prev.length === 0) return prev
+          const top = update(prev[prev.length - 1])
+          if (!top) return prev
+          const next = prev.slice()
+          next[next.length - 1] = top
+          return next
+        })
+      let allMedia = false
       const media = async () => {
-        if (!baseWantsMedia) return;
+        if (!baseWantsMedia) return
         void termAllEntries(baseUrl, target, true, 1).then((first) => {
-          const entry = first.entries[0];
-          if (xrefGen.current !== gen || allMedia || !entry) return;
+          const entry = first.entries[0]
+          if (xrefGen.current !== gen || allMedia || !entry) return
           setTop((top) => {
-            const own = top.entries[0];
-            if (top.state !== "loaded" || !own || own.expression !== entry.expression || own.reading !== entry.reading)
-              return null;
-            return { ...top, entries: [entry, ...top.entries.slice(1)], audioMedia: first.audioMedia, dictionaryMedia: first.dictionaryMedia };
-          });
-        });
-        const all = await termAllEntries(baseUrl, target, true);
-        if (xrefGen.current !== gen || all.entries.length === 0) return;
-        allMedia = true;
-        setTop(() => ({ term: target, state: "loaded", ...all }));
-      };
+            const own = top.entries[0]
+            if (top.state !== 'loaded' || !own || own.expression !== entry.expression || own.reading !== entry.reading)
+              return null
+            return {
+              ...top,
+              entries: [entry, ...top.entries.slice(1)],
+              audioMedia: first.audioMedia,
+              dictionaryMedia: first.dictionaryMedia
+            }
+          })
+        })
+        const all = await termAllEntries(baseUrl, target, true)
+        if (xrefGen.current !== gen || all.entries.length === 0) return
+        allMedia = true
+        setTop(() => ({ term: target, state: 'loaded', ...all }))
+      }
       void termAllEntries(baseUrl, target, false)
         .then((res) => {
-          if (xrefGen.current !== gen) return; // superseded
+          if (xrefGen.current !== gen) return // superseded
           setTop(() => ({
             term: target,
-            state: res.entries.length > 0 ? "loaded" : "empty",
+            state: res.entries.length > 0 ? 'loaded' : 'empty',
             entries: res.entries,
             audioMedia: [],
-            dictionaryMedia: [],
-          }));
-          if (res.entries.length > 0) void media();
+            dictionaryMedia: []
+          }))
+          if (res.entries.length > 0) void media()
         })
         .catch(() => {
-          if (xrefGen.current !== gen) return;
+          if (xrefGen.current !== gen) return
           setXrefStack((prev) => {
-            if (prev.length === 0) return prev;
-            const next = prev.slice();
+            if (prev.length === 0) return prev
+            const next = prev.slice()
             next[next.length - 1] = {
               ...next[next.length - 1],
-              state: "error",
-            };
-            return next;
-          });
-        });
+              state: 'error'
+            }
+            return next
+          })
+        })
     },
-    [baseUrl, baseWantsMedia],
-  );
+    [baseUrl, baseWantsMedia]
+  )
 
   const goBackCrossRef = useCallback(() => {
-    xrefGen.current += 1; // cancel any in-flight fetch for the popped frame
-    setXrefStack((prev) => prev.slice(0, -1));
-  }, []);
+    xrefGen.current += 1 // cancel any in-flight fetch for the popped frame
+    setXrefStack((prev) => prev.slice(0, -1))
+  }, [])
 
   // A followed cross-reference overrides the base payload's entries/media while
   // it's on the stack. Re-scanning (a fresh popover:show) clears the stack.
-  const activeXref =
-    xrefStack.length > 0 ? xrefStack[xrefStack.length - 1] : null;
+  const activeXref = xrefStack.length > 0 ? xrefStack[xrefStack.length - 1] : null
   if (activeXref) {
-    term = activeXref.term;
-    state = activeXref.state;
-    entries = activeXref.entries;
-    audioMedia = activeXref.audioMedia;
-    dictionaryMedia = activeXref.dictionaryMedia;
-    errorMessage = activeXref.state === "error" ? "Lookup failed." : undefined;
+    term = activeXref.term
+    state = activeXref.state
+    entries = activeXref.entries
+    audioMedia = activeXref.audioMedia
+    dictionaryMedia = activeXref.dictionaryMedia
+    errorMessage = activeXref.state === 'error' ? 'Lookup failed.' : undefined
   }
 
-  const isNotebook = notebookEntry !== null;
+  const isNotebook = notebookEntry !== null
 
   // Shift over a word in this pop-up opens the next one on top, with this lookup's settings.
   usePopupScan(
     level,
-    payload?.kind === "loaded"
+    payload?.kind === 'loaded'
       ? {
           baseUrl: payload.baseUrl,
           includeMedia: baseWantsMedia,
           audioAutoplay: payload.audioAutoplay,
           audioVolume: payload.audioVolume,
-          ankiConfig: payload.ankiConfig,
+          ankiConfig: payload.ankiConfig
         }
-      : null,
-  );
+      : null
+  )
 
   return (
-    <div className={`popover-shell ${visible ? "visible" : ""}`}>
+    <div className={`popover-shell ${visible ? 'visible' : ''}`}>
       <div className="popover-card" onMouseEnter={focusPopup}>
-        <div className={`popover-scroll${isNotebook ? " popover-scroll-flush" : ""}`}>
+        <div className={`popover-scroll${isNotebook ? ' popover-scroll-flush' : ''}`}>
           {isNotebook && notebookEntry ? (
             <NotebookEntryCard
               entry={notebookEntry}
               onOpen={(entryId) => {
                 // Hand off to the main window: it opens the edit modal (and
                 // the notebook drawer) and focuses itself; we just disappear.
-                void emit("notebook:edit-request", { entryId });
-                setVisible(false);
-                void invoke("hide_popover", { level });
+                void emit('notebook:edit-request', { entryId })
+                setVisible(false)
+                void invoke('hide_popover', { level })
               }}
             />
           ) : (
@@ -420,7 +407,7 @@ function PopoverApp() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /** One lookup's entries. */
@@ -437,30 +424,28 @@ function EntryList({
   ankiConfig,
   sentence,
   ankiTriggerNonce,
-  onCrossRef,
+  onCrossRef
 }: {
-  keyPrefix: string;
-  term: string;
-  state: "loading" | "loaded" | "error" | "empty";
-  errorMessage?: string;
-  entries: YomitanAnkiFields[];
-  audioMedia: AnkiMediaItem[];
-  dictionaryMedia: AnkiMediaItem[];
-  autoplay: boolean;
-  audioVolume: number;
-  ankiConfig: AnkiConfig | null;
-  sentence: string | null;
-  ankiTriggerNonce?: number;
-  onCrossRef?: (target: string) => void;
+  keyPrefix: string
+  term: string
+  state: 'loading' | 'loaded' | 'error' | 'empty'
+  errorMessage?: string
+  entries: YomitanAnkiFields[]
+  audioMedia: AnkiMediaItem[]
+  dictionaryMedia: AnkiMediaItem[]
+  autoplay: boolean
+  audioVolume: number
+  ankiConfig: AnkiConfig | null
+  sentence: string | null
+  ankiTriggerNonce?: number
+  onCrossRef?: (target: string) => void
 }) {
-  if (state !== "loaded") {
-    return <TermDefinition term={term} state={state} errorMessage={errorMessage} />;
+  if (state !== 'loaded') {
+    return <TermDefinition term={term} state={state} errorMessage={errorMessage} />
   }
   // Autoplay belongs to the first entry that actually has audio — the most
   // exact match wins; shorter sub-term matches stay silent unless clicked.
-  const firstAudioIdx = entries.findIndex(
-    (f) => audioItemForEntry(f, audioMedia) !== null,
-  );
+  const firstAudioIdx = entries.findIndex((f) => audioItemForEntry(f, audioMedia) !== null)
   return entries.map((f, i) => (
     <div key={`${keyPrefix}:${term}:${i}`} className="popover-entry">
       <TermDefinition
@@ -490,7 +475,7 @@ function EntryList({
         }
       />
     </div>
-  ));
+  ))
 }
 
-export default PopoverApp;
+export default PopoverApp

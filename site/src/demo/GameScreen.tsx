@@ -284,9 +284,19 @@ export function GameScreen({
                       }
                     : undefined
                 }
-                onPointerMove={known && needShift ? (e) => e.pointerType === 'mouse' && e.shiftKey && userCursor !== i && onUserCursor(i) : undefined}
-                onPointerLeave={known ? () => (hovered.current = hovered.current === i ? null : hovered.current) : undefined}
-                onPointerUp={known && needShift ? (e) => e.pointerType !== 'mouse' && onUserCursor(userCursor === i ? null : i) : undefined}
+                onPointerMove={
+                  known && needShift
+                    ? (e) => e.pointerType === 'mouse' && e.shiftKey && userCursor !== i && onUserCursor(i)
+                    : undefined
+                }
+                onPointerLeave={
+                  known ? () => (hovered.current = hovered.current === i ? null : hovered.current) : undefined
+                }
+                onPointerUp={
+                  known && needShift
+                    ? (e) => e.pointerType !== 'mouse' && onUserCursor(userCursor === i ? null : i)
+                    : undefined
+                }
                 onClick={known && !needShift ? () => onUserCursor(userCursor === i ? null : i) : undefined}
               >
                 {chars}
@@ -330,7 +340,12 @@ export function GameScreen({
       )}
 
       {hud && (
-        <HintBar reading={{ layer: hud.layer, loading: hud.loading }} index={hud.index} count={hud.count} leaving={hudLeaving} />
+        <HintBar
+          reading={{ layer: hud.layer, loading: hud.loading }}
+          index={hud.index}
+          count={hud.count}
+          leaving={hudLeaving}
+        />
       )}
 
       {menu && <RadialMenu selected={menu.sel} chosen={menu.chosen} leaving={menuLeaving} hasText={frame.line > 0} />}

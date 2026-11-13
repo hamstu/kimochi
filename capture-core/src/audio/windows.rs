@@ -234,7 +234,14 @@ unsafe fn open_endpoint_loopback() -> Result<Opened> {
     let parsed = parse_format(mix);
     let initialized = match &parsed {
         Ok(_) => client
-            .Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, BUFFER_100NS, 0, mix, None)
+            .Initialize(
+                AUDCLNT_SHAREMODE_SHARED,
+                AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                BUFFER_100NS,
+                0,
+                mix,
+                None,
+            )
             .map_err(native),
         Err(_) => Ok(()),
     };
@@ -258,7 +265,10 @@ unsafe fn parse_format(format: *const WAVEFORMATEX) -> Result<(SampleFormat, usi
         (WAVE_FORMAT_PCM, 16) => SampleFormat::I16,
         (WAVE_FORMAT_PCM, 32) => SampleFormat::I32,
         (tag, bits) => {
-            return Err(CaptureError::new("native", format!("The sound output's format ({tag}, {bits}-bit) is not one Kimochi reads.")));
+            return Err(CaptureError::new(
+                "native",
+                format!("The sound output's format ({tag}, {bits}-bit) is not one Kimochi reads."),
+            ));
         }
     };
     Ok((sample, f.nChannels.max(1) as usize, f.nSamplesPerSec))
@@ -320,12 +330,20 @@ impl Opened {
                     break;
                 }
                 let (mut data, mut frames, mut flags, mut qpc) = (std::ptr::null_mut(), 0u32, 0u32, 0u64);
-                unsafe { self.capture.GetBuffer(&mut data, &mut frames, &mut flags, None, Some(&mut qpc)) }.map_err(native)?;
+                unsafe { self.capture.GetBuffer(&mut data, &mut frames, &mut flags, None, Some(&mut qpc)) }
+                    .map_err(native)?;
                 let wall = stamp(qpc, frames, self.rate, frequency);
                 let silent = flags & (AUDCLNT_BUFFERFLAGS_SILENT.0 as u32) != 0 || data.is_null();
-                let bytes: &[u8] = if silent { &[] } else { unsafe { std::slice::from_raw_parts(data, frames as usize * block) } };
+                let bytes: &[u8] =
+                    if silent { &[] } else { unsafe { std::slice::from_raw_parts(data, frames as usize * block) } };
                 let (channels, format) = (self.channels, self.format);
-                let pushed = feed.push(wall, self.rate, frames as usize, |i| if silent { 0.0 } else { mono_frame(bytes, channels, format, i) });
+                let pushed = feed.push(wall, self.rate, frames as usize, |i| {
+                    if silent {
+                        0.0
+                    } else {
+                        mono_frame(bytes, channels, format, i)
+                    }
+                });
                 if !pushed {
                     health.dropped_chunks.fetch_add(1, Ordering::Relaxed);
                 }

@@ -5,8 +5,8 @@
 //! per-OS contract described in `platform/mod.rs`, and the shared types it returns live
 //! there.
 mod focus;
-mod mouse_tap;
 pub mod instance;
+mod mouse_tap;
 mod spaces;
 
 use super::{AppIdentity, DisplayInfo, FrontWindow, Modifiers, PointerSample};
@@ -16,15 +16,12 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{msg_send, AllocAnyThread, ClassType};
 use objc2_app_kit::{
-    NSApplication, NSBitmapImageFileType, NSBitmapImageRep, NSCursor,
-    NSCursorFrameResizeDirections, NSCursorFrameResizePosition, NSImage, NSPanel, NSScreen,
-    NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace, NSWorkspaceApplicationKey,
-    NSWorkspaceDidActivateApplicationNotification, NSWorkspaceDidWakeNotification,
-    NSWorkspaceWillSleepNotification,
+    NSApplication, NSBitmapImageFileType, NSBitmapImageRep, NSCursor, NSCursorFrameResizeDirections,
+    NSCursorFrameResizePosition, NSImage, NSPanel, NSScreen, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask,
+    NSWorkspace, NSWorkspaceApplicationKey, NSWorkspaceDidActivateApplicationNotification,
+    NSWorkspaceDidWakeNotification, NSWorkspaceWillSleepNotification,
 };
-use objc2_foundation::{
-    ns_string, NSDictionary, NSNotification, NSPoint, NSRect, NSSize, NSString,
-};
+use objc2_foundation::{ns_string, NSDictionary, NSNotification, NSPoint, NSRect, NSSize, NSString};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -60,10 +57,7 @@ extern "C" {
     fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> *mut std::ffi::c_void;
     /// Reads a CFDictionary-encoded CGRect, so window bounds need no manual
     /// X/Y/Width/Height parsing.
-    fn CGRectMakeWithDictionaryRepresentation(
-        dict: *const std::ffi::c_void,
-        rect: *mut Bounds,
-    ) -> bool;
+    fn CGRectMakeWithDictionaryRepresentation(dict: *const std::ffi::c_void, rect: *mut Bounds) -> bool;
 }
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
@@ -168,12 +162,7 @@ pub fn displays() -> Vec<Rect> {
             .iter()
             .map(|id| {
                 let b = CGDisplayBounds(*id);
-                Rect {
-                    x: b.origin.x,
-                    y: b.origin.y,
-                    width: b.size.width,
-                    height: b.size.height,
-                }
+                Rect { x: b.origin.x, y: b.origin.y, width: b.size.width, height: b.size.height }
             })
             .collect()
     }
@@ -231,13 +220,7 @@ pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
     unsafe {
         let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
         let h = primary_height();
-        (*p).setFrame_display(
-            NSRect::new(
-                NSPoint::new(r.x, h - r.y - r.height),
-                NSSize::new(r.width, r.height),
-            ),
-            true,
-        );
+        (*p).setFrame_display(NSRect::new(NSPoint::new(r.x, h - r.y - r.height), NSSize::new(r.width, r.height)), true);
         Ok(())
     }
 }
@@ -247,12 +230,7 @@ pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
         let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
         let b = (*p).frame();
         let h = primary_height();
-        Ok(Rect {
-            x: b.origin.x,
-            y: h - b.origin.y - b.size.height,
-            width: b.size.width,
-            height: b.size.height,
-        })
+        Ok(Rect { x: b.origin.x, y: h - b.origin.y - b.size.height, width: b.size.width, height: b.size.height })
     }
 }
 
@@ -281,10 +259,7 @@ pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, Str
 /// No native input regions on macOS: `Ok(false)`, so the shared cursor poll keeps
 /// toggling `ignoresMouseEvents` exactly as before. AppKit has no per-region
 /// click-through for a window; `ignoresMouseEvents` is whole-window.
-pub fn set_input_regions(
-    _w: &tauri::WebviewWindow,
-    _regions: Option<&[Rect]>,
-) -> Result<bool, String> {
+pub fn set_input_regions(_w: &tauri::WebviewWindow, _regions: Option<&[Rect]>) -> Result<bool, String> {
     Ok(false)
 }
 
@@ -313,24 +288,14 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
         return Ok(()); // Leave native dragging/resizing cursor tracking alone.
     }
     let r = bounds(w)?;
-    let edge = resize_edge(
-        x,
-        y,
-        r.width,
-        r.height,
-        w.is_resizable().map_err(|e| e.to_string())?,
-    );
+    let edge = resize_edge(x, y, r.width, r.height, w.is_resizable().map_err(|e| e.to_string())?);
     unsafe {
         if let Some(edge) = edge {
             // Frame resize cursors are public on recent macOS. Guard older hosts.
             let supported: bool = objc2::msg_send![NSCursor::class(), respondsToSelector:
                 objc2::sel!(frameResizeCursorFromPosition:inDirections:)];
             if supported {
-                NSCursor::frameResizeCursorFromPosition_inDirections(
-                    edge,
-                    NSCursorFrameResizeDirections::All,
-                )
-                .set();
+                NSCursor::frameResizeCursorFromPosition_inDirections(edge, NSCursorFrameResizeDirections::All).set();
             }
             return Ok(());
         }
@@ -350,13 +315,7 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn resize_edge(
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    resizable: bool,
-) -> Option<NSCursorFrameResizePosition> {
+fn resize_edge(x: f64, y: f64, width: f64, height: f64, resizable: bool) -> Option<NSCursorFrameResizePosition> {
     use NSCursorFrameResizePosition::*;
     if !resizable {
         return None;
@@ -541,9 +500,7 @@ unsafe fn ghost_window(w: &tauri::WebviewWindow, view: *mut AnyObject) -> Result
     let _: () = msg_send![p as *mut AnyObject, setAccessibilityElement: Bool::NO];
     (*p).setAlphaValue(0.);
     (*p).setIgnoresMouseEvents(true);
-    (*p).setCollectionBehavior(
-        overlay_behavior((*p).collectionBehavior()) | NSWindowCollectionBehavior::Transient,
-    );
+    (*p).setCollectionBehavior(overlay_behavior((*p).collectionBehavior()) | NSWindowCollectionBehavior::Transient);
     (*p).orderBack(None);
     Ok(())
 }
@@ -573,9 +530,7 @@ fn overlay_behavior(current: NSWindowCollectionBehavior) -> NSWindowCollectionBe
 pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     objc2::rc::autoreleasepool(|_| unsafe {
         if !CGPreflightScreenCaptureAccess() {
-            return Err(
-                "permission: Allow Screen Recording for Kimochi in System Settings.".into(),
-            );
+            return Err("permission: Allow Screen Recording for Kimochi in System Settings.".into());
         }
         let mut ids = [0; 16];
         let mut count = 0;
@@ -591,12 +546,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
                     kind: "display",
                     name: format!("Display {id}"),
                     app: None,
-                    bounds: Some(Rect {
-                        x: b.origin.x,
-                        y: b.origin.y,
-                        width: b.size.width,
-                        height: b.size.height,
-                    }),
+                    bounds: Some(Rect { x: b.origin.x, y: b.origin.y, width: b.size.width, height: b.size.height }),
                     on_screen: Some(true),
                 }
             })
@@ -610,11 +560,8 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             Retained::from_raw(ptr.cast()).ok_or("native: Could not list windows")?;
         let own = std::process::id();
         for entry in list.iter() {
-            let number = |key: &NSString| -> Option<u32> {
-                entry
-                    .objectForKey(key)
-                    .map(|v| msg_send![&*v, unsignedIntValue])
-            };
+            let number =
+                |key: &NSString| -> Option<u32> { entry.objectForKey(key).map(|v| msg_send![&*v, unsignedIntValue]) };
             let Some(pid) = number(ns_string!("kCGWindowOwnerPID")) else {
                 continue;
             };
@@ -625,20 +572,12 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             let Some(dict) = entry.objectForKey(ns_string!("kCGWindowBounds")) else {
                 continue;
             };
-            let mut b = Bounds {
-                origin: Point { x: 0., y: 0. },
-                size: Size {
-                    width: 0.,
-                    height: 0.,
-                },
-            };
+            let mut b = Bounds { origin: Point { x: 0., y: 0. }, size: Size { width: 0., height: 0. } };
             if !CGRectMakeWithDictionaryRepresentation(Retained::as_ptr(&dict).cast(), &mut b) {
                 continue;
             }
             let string = |key: &NSString| -> Option<String> {
-                entry
-                    .objectForKey(key)
-                    .map(|v| (&*(Retained::as_ptr(&v) as *const NSString)).to_string())
+                entry.objectForKey(key).map(|v| (&*(Retained::as_ptr(&v) as *const NSString)).to_string())
             };
             let name = string(ns_string!("kCGWindowName")).filter(|s| !s.trim().is_empty());
             // Empty-title windows are overwhelmingly framework helper surfaces, not app
@@ -659,12 +598,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
                 kind: "window",
                 name,
                 app: string(ns_string!("kCGWindowOwnerName")),
-                bounds: Some(Rect {
-                    x: b.origin.x,
-                    y: b.origin.y,
-                    width: b.size.width,
-                    height: b.size.height,
-                }),
+                bounds: Some(Rect { x: b.origin.x, y: b.origin.y, width: b.size.width, height: b.size.height }),
                 on_screen: Some(on_screen),
             });
         }
@@ -703,12 +637,7 @@ fn picker_window_eligible(layer: u32, pid: u32, own: u32, width: f64, height: f6
 /// "which window of this app is in front" with that one means the window actually
 /// being read is never in front, and its scanned text never comes back.
 fn readable_window(layer: u32, alpha: f64, width: f64, height: f64) -> bool {
-    layer == 0
-        && alpha > 0.01
-        && width.is_finite()
-        && height.is_finite()
-        && width >= 80.
-        && height >= 60.
+    layer == 0 && alpha > 0.01 && width.is_finite() && height.is_finite() && width >= 80. && height >= 60.
 }
 
 /// Live geometry for one window id, in top-left desktop points.
@@ -733,15 +662,8 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
             Retained::from_raw(ptr.cast())?;
         let entry = list.iter().next()?;
         let bounds_dict = entry.objectForKey(ns_string!("kCGWindowBounds"))?;
-        let mut raw = Bounds {
-            origin: Point { x: 0., y: 0. },
-            size: Size {
-                width: 0.,
-                height: 0.,
-            },
-        };
-        if !CGRectMakeWithDictionaryRepresentation(Retained::as_ptr(&bounds_dict).cast(), &mut raw)
-        {
+        let mut raw = Bounds { origin: Point { x: 0., y: 0. }, size: Size { width: 0., height: 0. } };
+        if !CGRectMakeWithDictionaryRepresentation(Retained::as_ptr(&bounds_dict).cast(), &mut raw) {
             return None;
         }
         let on_screen = entry
@@ -752,15 +674,7 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
         // than once the slide has finished: text over a game the reader just left went on
         // being drawn over the Space they went to until then.
         let on_screen = on_screen && spaces::Spaces::current().is_none_or(|s| s.showing(window_number));
-        Some((
-            Rect {
-                x: raw.origin.x,
-                y: raw.origin.y,
-                width: raw.size.width,
-                height: raw.size.height,
-            },
-            on_screen,
-        ))
+        Some((Rect { x: raw.origin.x, y: raw.origin.y, width: raw.size.width, height: raw.size.height }, on_screen))
     }
 }
 
@@ -788,15 +702,10 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
 /// `None` only when there is no frontmost application at all, which the caller treats
 /// as "do not change what is shown".
 pub fn front_window() -> Option<FrontWindow> {
-    let pid = NSWorkspace::sharedWorkspace()
-        .frontmostApplication()?
-        .processIdentifier();
+    let pid = NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier();
     let (window, pid) = front_window_number(pid)?;
     let owner = u32::try_from(pid).unwrap_or(0);
-    Some(FrontWindow {
-        window: (window != 0).then(|| SourceId::window(Platform::MacOs, window, owner)),
-        pid: owner,
-    })
+    Some(FrontWindow { window: (window != 0).then(|| SourceId::window(Platform::MacOs, window, owner)), pid: owner })
 }
 
 fn front_window_number(pid: i32) -> Option<(u32, i32)> {
@@ -807,9 +716,9 @@ fn front_window_number(pid: i32) -> Option<(u32, i32)> {
         if ptr.is_null() {
             return Some((0, pid));
         }
-        let Some(list): Option<
-            Retained<objc2_foundation::NSArray<NSDictionary<NSString, AnyObject>>>,
-        > = Retained::from_raw(ptr.cast()) else {
+        let Some(list): Option<Retained<objc2_foundation::NSArray<NSDictionary<NSString, AnyObject>>>> =
+            Retained::from_raw(ptr.cast())
+        else {
             return Some((0, pid));
         };
         // The first window this application could be read in, and — if none of them is
@@ -818,9 +727,7 @@ fn front_window_number(pid: i32) -> Option<(u32, i32)> {
         let mut fallback = None;
         for entry in list.iter() {
             let number = |key: &NSString| -> Option<f64> {
-                entry
-                    .objectForKey(key)
-                    .map(|value| msg_send![&*value, doubleValue])
+                entry.objectForKey(key).map(|value| msg_send![&*value, doubleValue])
             };
             if number(ns_string!("kCGWindowOwnerPID")) != Some(f64::from(pid)) {
                 continue;
@@ -828,13 +735,7 @@ fn front_window_number(pid: i32) -> Option<(u32, i32)> {
             let Some(dict) = entry.objectForKey(ns_string!("kCGWindowBounds")) else {
                 continue;
             };
-            let mut b = Bounds {
-                origin: Point { x: 0., y: 0. },
-                size: Size {
-                    width: 0.,
-                    height: 0.,
-                },
-            };
+            let mut b = Bounds { origin: Point { x: 0., y: 0. }, size: Size { width: 0., height: 0. } };
             if !CGRectMakeWithDictionaryRepresentation(Retained::as_ptr(&dict).cast(), &mut b) {
                 continue;
             }
@@ -852,12 +753,7 @@ fn front_window_number(pid: i32) -> Option<(u32, i32)> {
             }
             let titled = entry
                 .objectForKey(ns_string!("kCGWindowName"))
-                .is_some_and(|v| {
-                    !(&*(Retained::as_ptr(&v) as *const NSString))
-                        .to_string()
-                        .trim()
-                        .is_empty()
-                });
+                .is_some_and(|v| !(&*(Retained::as_ptr(&v) as *const NSString)).to_string().trim().is_empty());
             if titled {
                 return Some((id as u32, pid));
             }
@@ -877,9 +773,7 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
     let workspace = NSWorkspace::sharedWorkspace();
     let wanted = NSString::from_str(&app.name);
     let running = workspace.runningApplications();
-    let app = running
-        .iter()
-        .find(|a| a.localizedName().is_some_and(|n| *n == *wanted))?;
+    let app = running.iter().find(|a| a.localizedName().is_some_and(|n| *n == *wanted))?;
     let image: Retained<NSImage> = app.icon()?;
     let best = pick_representation(&image, target);
     let rep = match best {
@@ -890,9 +784,7 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
             NSBitmapImageRep::initWithData(NSBitmapImageRep::alloc(), &tiff)?
         }
     };
-    let data = unsafe {
-        rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new())
-    }?;
+    let data = unsafe { rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new()) }?;
     Some(data.to_vec())
 }
 
@@ -910,11 +802,7 @@ fn pick_representation(image: &NSImage, target: isize) -> Option<Retained<NSBitm
         let width = rep.pixelsWide();
         // Smallest representation that is still at least the requested size; if none
         // qualifies, the largest available.
-        let better = if best_width < target {
-            width > best_width
-        } else {
-            width >= target && width < best_width
-        };
+        let better = if best_width < target { width > best_width } else { width >= target && width < best_width };
         if best.is_none() || better {
             best_width = width;
             let bitmap: Retained<NSBitmapImageRep> =
@@ -933,10 +821,7 @@ fn note_ref(note: std::ptr::NonNull<NSNotification>) -> &'static NSNotification 
 }
 
 pub fn frontmost_app() -> Option<String> {
-    NSWorkspace::sharedWorkspace()
-        .frontmostApplication()
-        .and_then(|a| a.localizedName())
-        .map(|n| n.to_string())
+    NSWorkspace::sharedWorkspace().frontmostApplication().and_then(|a| a.localizedName()).map(|n| n.to_string())
 }
 
 /// System sleep/wake and application-activation notifications — the macOS equivalent of
@@ -957,10 +842,7 @@ pub fn observe_workspace(
         unsafe { NSWorkspaceWillSleepNotification },
         RcBlock::new(move |_: std::ptr::NonNull<NSNotification>| on_sleep()),
     );
-    add(
-        unsafe { NSWorkspaceDidWakeNotification },
-        RcBlock::new(move |_: std::ptr::NonNull<NSNotification>| on_wake()),
-    );
+    add(unsafe { NSWorkspaceDidWakeNotification }, RcBlock::new(move |_: std::ptr::NonNull<NSNotification>| on_wake()));
     add(
         unsafe { NSWorkspaceDidActivateApplicationNotification },
         RcBlock::new(move |note: std::ptr::NonNull<NSNotification>| {
@@ -968,8 +850,7 @@ pub fn observe_workspace(
                 .userInfo()
                 .and_then(|info| info.objectForKey(unsafe { NSWorkspaceApplicationKey }))
                 .and_then(|app| unsafe {
-                    let running =
-                        Retained::as_ptr(&app) as *const objc2_app_kit::NSRunningApplication;
+                    let running = Retained::as_ptr(&app) as *const objc2_app_kit::NSRunningApplication;
                     (*running).localizedName()
                 })
                 .map(|n| n.to_string());
@@ -1045,30 +926,20 @@ mod tests {
     fn resize_edge_only_on_resizable_frame_edges() {
         assert!(resize_edge(1., 1., 100., 100., false).is_none());
         assert!(resize_edge(50., 50., 100., 100., true).is_none());
-        assert!(matches!(
-            resize_edge(1., 1., 100., 100., true),
-            Some(NSCursorFrameResizePosition::TopLeft)
-        ));
-        assert!(matches!(
-            resize_edge(99., 50., 100., 100., true),
-            Some(NSCursorFrameResizePosition::Right)
-        ));
+        assert!(matches!(resize_edge(1., 1., 100., 100., true), Some(NSCursorFrameResizePosition::TopLeft)));
+        assert!(matches!(resize_edge(99., 50., 100., 100., true), Some(NSCursorFrameResizePosition::Right)));
     }
 }
 
 /// Whether one of the controller menu's keys (the arrows, Return, keypad Enter, Space,
 /// Escape) is down, so the game gets its focus back only once they are up.
 pub fn menu_keys_held() -> bool {
-    [123u16, 124, 125, 126, 36, 76, 49, 53]
-        .iter()
-        .any(|key| unsafe { CGEventSourceKeyState(0, *key) })
+    [123u16, 124, 125, 126, 36, 76, 49, 53].iter().any(|key| unsafe { CGEventSourceKeyState(0, *key) })
 }
 
 /// The process id of the frontmost application, whoever it is.
 pub fn frontmost_pid() -> Option<u32> {
-    NSWorkspace::sharedWorkspace()
-        .frontmostApplication()
-        .and_then(|a| u32::try_from(a.processIdentifier()).ok())
+    NSWorkspace::sharedWorkspace().frontmostApplication().and_then(|a| u32::try_from(a.processIdentifier()).ok())
 }
 
 /// Make Kimochi the active application without raising the rest of its windows.
@@ -1103,7 +974,10 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
         if !app.isActive() {
             step_aside(&app, false);
         }
-        report.insert("heldBehind".into(), json!(STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|(_, n)| n.len())));
+        report.insert(
+            "heldBehind".into(),
+            json!(STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|(_, n)| n.len())),
+        );
         let number = unsafe { (*(window.ns_window().map_err(|e| e.to_string())? as *mut NSWindow)).windowNumber() };
         let own = std::process::id() as i32;
         let kept = u32::try_from(number).is_ok_and(|number| focus::front_keeping_order(own, number, &mut report));
@@ -1237,12 +1111,7 @@ fn restore_soon(delay_ns: i64) {
         }
     }
     unsafe {
-        dispatch_after_f(
-            dispatch_time(0, delay_ns),
-            std::ptr::addr_of!(_dispatch_main_q),
-            std::ptr::null_mut(),
-            work,
-        );
+        dispatch_after_f(dispatch_time(0, delay_ns), std::ptr::addr_of!(_dispatch_main_q), std::ptr::null_mut(), work);
     }
 }
 
@@ -1295,8 +1164,7 @@ fn activate_app(pid: u32, all_windows: bool) -> Result<(), String> {
             return Err("gone: that application is no longer running".into());
         }
         let shared: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
-        let yields: bool =
-            msg_send![shared, respondsToSelector: objc2::sel!(yieldActivationToApplication:)];
+        let yields: bool = msg_send![shared, respondsToSelector: objc2::sel!(yieldActivationToApplication:)];
         if yields {
             let _: () = msg_send![shared, yieldActivationToApplication: app];
         }
@@ -1385,11 +1253,7 @@ pub fn sync_mouse_buttons(app: &tauri::AppHandle, wanted: bool) -> Result<(), St
 // ---------------------------------------------------------------- system links
 
 fn open_url(url: &str) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(url)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("native: {e}"))
+    std::process::Command::new("open").arg(url).spawn().map(|_| ()).map_err(|e| format!("native: {e}"))
 }
 
 /// Opens the Screen Recording pane. Requesting permission is an explicit user
@@ -1426,11 +1290,7 @@ pub fn run_cli(
     stdin: Option<&str>,
     cwd: Option<&Path>,
 ) -> Result<std::process::Child, String> {
-    let line = std::iter::once(program)
-        .chain(args.iter().copied())
-        .map(shell_word)
-        .collect::<Vec<_>>()
-        .join(" ");
+    let line = std::iter::once(program).chain(args.iter().copied()).map(shell_word).collect::<Vec<_>>().join(" ");
     let mut command = std::process::Command::new("/bin/zsh");
     command.arg("-ilc").arg(line);
     if let Some(cwd) = cwd {

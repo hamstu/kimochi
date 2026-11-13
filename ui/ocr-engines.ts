@@ -40,10 +40,7 @@ function modelHint(state: ModelState, pct: number | null, message: string | null
  * model says where the download stands, from the live model status when there is one and from
  * the capability's model gate until then.
  */
-export function engineHint(
-  capability: OcrEngineCapability | undefined,
-  status: ModelStatus | null
-): EngineHint | null {
+export function engineHint(capability: OcrEngineCapability | undefined, status: ModelStatus | null): EngineHint | null {
   if (capability && !capability.available && !capability.model) {
     return {
       text: capability.selectable ? 'Setup needed' : 'Unavailable',
@@ -86,7 +83,11 @@ export function engineOffered(mode: string, os: PlatformOs): boolean {
  */
 export function engineListed(
   mode: string,
-  capabilities: { os: PlatformOs; cloudAccess: boolean; ocrEngines?: Partial<Record<OcrEngineKey, OcrEngineCapability>> },
+  capabilities: {
+    os: PlatformOs
+    cloudAccess: boolean
+    ocrEngines?: Partial<Record<OcrEngineKey, OcrEngineCapability>>
+  },
   selected: string,
   language: string
 ): boolean {

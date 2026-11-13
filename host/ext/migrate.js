@@ -33,7 +33,8 @@ export async function encodeValue(value) {
   const walk = async (v) => {
     if (v === undefined) return { $u: 1 }
     if (v === null || typeof v === 'boolean' || typeof v === 'string') return { $v: v }
-    if (typeof v === 'number') return Number.isFinite(v) && !Object.is(v, -0) ? { $v: v } : { $num: String(Object.is(v, -0) ? '-0' : v) }
+    if (typeof v === 'number')
+      return Number.isFinite(v) && !Object.is(v, -0) ? { $v: v } : { $num: String(Object.is(v, -0) ? '-0' : v) }
     if (v instanceof Date) return { $date: v.getTime() }
     if (typeof Blob !== 'undefined' && v instanceof Blob) {
       parts.push(new Uint8Array(await v.arrayBuffer()))
@@ -75,8 +76,18 @@ export async function encodeValue(value) {
 }
 
 const VIEWS = {
-  Uint8Array, Int8Array, Uint8ClampedArray, Uint16Array, Int16Array, Uint32Array, Int32Array,
-  Float32Array, Float64Array, BigInt64Array, BigUint64Array, DataView
+  Uint8Array,
+  Int8Array,
+  Uint8ClampedArray,
+  Uint16Array,
+  Int16Array,
+  Uint32Array,
+  Int32Array,
+  Float32Array,
+  Float64Array,
+  BigInt64Array,
+  BigUint64Array,
+  DataView
 }
 
 /** The inverse of `encodeValue`. */
@@ -209,7 +220,9 @@ export async function exportStorage({ idb, storage, put }) {
           const { meta, parts } = await encodeValue(value)
           const digests = []
           for (const part of parts) digests.push(await digest(part))
-          await put(packPart({ kind: 'record', db: name, store: store.name, key: keyMeta(key), value: meta, digests }, parts))
+          await put(
+            packPart({ kind: 'record', db: name, store: store.name, key: keyMeta(key), value: meta, digests }, parts)
+          )
           records++
           bytes += parts.reduce((n, p) => n + p.byteLength, 0)
         }
@@ -239,7 +252,8 @@ export async function importStorage({ idb, storage, parts, get }) {
             const options = { autoIncrement: store.autoIncrement }
             if (store.keyPath !== null) options.keyPath = store.keyPath
             const made = created.createObjectStore(store.name, options)
-            for (const index of store.indexes) made.createIndex(index.name, index.keyPath, { unique: index.unique, multiEntry: index.multiEntry })
+            for (const index of store.indexes)
+              made.createIndex(index.name, index.keyPath, { unique: index.unique, multiEntry: index.multiEntry })
           }
         })
         open.set(header.name, { db, stores: new Map(header.stores.map((s) => [s.name, s])) })
@@ -253,7 +267,10 @@ export async function importStorage({ idb, storage, parts, get }) {
         await request(inline ? store().put(value) : store().put(value, key))
         const back = await request(target.db.transaction(header.store, 'readonly').objectStore(header.store).get(key))
         const check = await fingerprintRecord(back)
-        if (check.meta !== JSON.stringify(header.value) || JSON.stringify(check.digests) !== JSON.stringify(header.digests)) {
+        if (
+          check.meta !== JSON.stringify(header.value) ||
+          JSON.stringify(check.digests) !== JSON.stringify(header.digests)
+        ) {
           throw new Error(`${header.db}/${header.store}: a record did not read back as written`)
         }
         records++
@@ -272,7 +289,12 @@ export async function importStorage({ idb, storage, parts, get }) {
 
 /** Hachidori's own test (offscreen.js `supportsSharedWasmMemory`): what the move is for. */
 export function canThread(win) {
-  if (win.crossOriginIsolated !== true || typeof win.SharedArrayBuffer !== 'function' || typeof win.WebAssembly?.Memory !== 'function') return false
+  if (
+    win.crossOriginIsolated !== true ||
+    typeof win.SharedArrayBuffer !== 'function' ||
+    typeof win.WebAssembly?.Memory !== 'function'
+  )
+    return false
   try {
     return new win.WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }).buffer instanceof win.SharedArrayBuffer
   } catch {
@@ -287,7 +309,11 @@ async function run(win) {
   try {
     if (step === 'export') {
       const { to, page } = await call('ext_migration_begin')
-      const totals = await exportStorage({ idb: win.indexedDB, storage: win.localStorage, put: (bytes) => call('ext_migration_put', bytes) })
+      const totals = await exportStorage({
+        idb: win.indexedDB,
+        storage: win.localStorage,
+        put: (bytes) => call('ext_migration_put', bytes)
+      })
       await call('ext_migration_exported', totals)
       win.location.replace(`${to}${page}?step=import`)
     } else if (step === 'import') {

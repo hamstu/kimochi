@@ -5,10 +5,9 @@ import { fileURLToPath } from 'node:url'
 if (process.platform !== 'darwin') {
   throw new Error('This native popup regression currently requires macOS')
 }
-const executable = fileURLToPath(new URL(
-  '../src-tauri/target/debug/bundle/macos/Kimochi.app/Contents/MacOS/kimochi',
-  import.meta.url
-))
+const executable = fileURLToPath(
+  new URL('../src-tauri/target/debug/bundle/macos/Kimochi.app/Contents/MacOS/kimochi', import.meta.url)
+)
 const result = spawnSync(executable, [], {
   env: { ...process.env, KIMOCHI_READER_POPUP_SMOKE: '1' },
   encoding: 'utf8',

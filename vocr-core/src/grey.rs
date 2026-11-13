@@ -145,7 +145,11 @@ pub fn preprocess(g: &Grey, invert: bool, height: usize, stride: usize, max_widt
     assert!(h > 0 && w > 0 && h <= 65535 && w <= 65535, "an empty or oversized crop");
     let px = |x: i64, y: i64| -> i64 {
         let v = g.data[y as usize * w + x as usize] as i64;
-        if invert { 255 - v } else { v }
+        if invert {
+            255 - v
+        } else {
+            v
+        }
     };
     let nw = resized_width(w, h, height, max_width, 8);
     let padded = nw.div_ceil(stride) * stride;

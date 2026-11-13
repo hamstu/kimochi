@@ -112,13 +112,7 @@ function screenAt(screen, at) {
 const replay = (scenario, settings = {}, pipeline = 'new', fingerprints = true) =>
   replayInstrumented(scenario, settings, null, pipeline, fingerprints)
 
-async function replayInstrumented(
-  scenario,
-  settings = {},
-  onStarted = null,
-  pipeline = 'new',
-  fingerprints = true
-) {
+async function replayInstrumented(scenario, settings = {}, onStarted = null, pipeline = 'new', fingerprints = true) {
   const clock = new Clock()
   const costs = scenario.costs ?? scenarios.costs[pipeline]
   const log = []
@@ -428,10 +422,7 @@ test('FAILING: a new line reaches the reader promptly after an idle spell', asyn
 test('FAILING: read noise on a static screen does not buy repeated requests', async () => {
   const { log } = await replay(byId('read-noise-sustained'))
   const count = requests(log)
-  assert.ok(
-    count <= 2,
-    `a screen that never actually changes should not cost ${count} requests in a minute`
-  )
+  assert.ok(count <= 2, `a screen that never actually changes should not cost ${count} requests in a minute`)
 })
 
 // --- before and after, under the same measured costs ------------------------
@@ -483,17 +474,14 @@ test('COMPARISON: every scenario, before and after, at measured costs', async ()
 
   // The latency ones get a phase sweep in both columns.
   const idle = byId('latency-after-idle')
-  comparison['latency-after-idle'].before.latency = await latencySweep(
-    idle, 60000, 500, 11, LEGACY_SETTINGS, 'old'
-  )
+  comparison['latency-after-idle'].before.latency = await latencySweep(idle, 60000, 500, 11, LEGACY_SETTINGS, 'old')
   comparison['latency-after-idle'].after.latency = await latencySweep(idle, 60000, 500, 11, {}, 'new')
 
   writeFileSync(
     new URL('comparison.json', RESULTS),
     JSON.stringify(
       {
-        note:
-          'CALIBRATED SIMULATION, not an original-code before/after. Both columns execute the CURRENT code; only the configuration differs — before = legacy cadence 2000/500/5000 with no contentFingerprint supplied, after = retuned cadence 500/250/500 with one. The columns also use DIFFERENT cost models (before: old 400ms flat, after: new 250/150), so the gap includes the native pipeline change as well as the scheduling change and isolates neither. Invalidation and superseded-result counts appear in the before column only because they are in the code being run; the original code had no such mechanism, so those before values are simulation artefacts and not history. See baseline.json for what was actually measured against the original code, and its caveat.',
+        note: 'CALIBRATED SIMULATION, not an original-code before/after. Both columns execute the CURRENT code; only the configuration differs — before = legacy cadence 2000/500/5000 with no contentFingerprint supplied, after = retuned cadence 500/250/500 with one. The columns also use DIFFERENT cost models (before: old 400ms flat, after: new 250/150), so the gap includes the native pipeline change as well as the scheduling change and isolates neither. Invalidation and superseded-result counts appear in the before column only because they are in the code being run; the original code had no such mechanism, so those before values are simulation artefacts and not history. See baseline.json for what was actually measured against the original code, and its caveat.',
         costs: scenarios.costs,
         comparison
       },
@@ -586,9 +574,7 @@ async function blankClearSweep(samples = 13, step = 75) {
         { at: blankAt, text: '' }
       ]
     })
-    const cleared = log.find(
-      (e) => e.type === 'visual-invalidated' && e.reason === 'empty' && e.at >= blankAt
-    )
+    const cleared = log.find((e) => e.type === 'visual-invalidated' && e.reason === 'empty' && e.at >= blankAt)
     results.push(cleared ? cleared.at - blankAt : null)
   }
   const seen = results.filter((value) => value !== null)
@@ -619,8 +605,7 @@ test('records the measured baseline as evidence', async () => {
     new URL('baseline.json', RESULTS),
     JSON.stringify(
       {
-        note:
-          'Measured against the CURRENT AutoScanner, driven through its real setTimeout scheduling seam on a virtual clock, using the calibrated cost model in scenarios.json. No app, no screen, no service. HISTORY: the first run of this file did measure the original, pre-change code — 26 requests on a noisy static screen, 0 clears on disappearance, 3691ms mean latency after idle — but it did so with a 60ms observation cost that later native probing showed to be about 6x too low. Those original-code latency figures are withdrawn as cost-model error; the request and clear counts from that run are unaffected by cost and stand.',
+        note: 'Measured against the CURRENT AutoScanner, driven through its real setTimeout scheduling seam on a virtual clock, using the calibrated cost model in scenarios.json. No app, no screen, no service. HISTORY: the first run of this file did measure the original, pre-change code — 26 requests on a noisy static screen, 0 clears on disappearance, 3691ms mean latency after idle — but it did so with a 60ms observation cost that later native probing showed to be about 6x too low. Those original-code latency figures are withdrawn as cost-model error; the request and clear counts from that run are unaffected by cost and stand.',
         settings: {
           pollInterval: DEFAULT_AUTO_OCR_SETTINGS.pollInterval,
           adaptivePollMin: DEFAULT_AUTO_OCR_SETTINGS.adaptivePollMin,
@@ -662,9 +647,7 @@ test('holding recognition still observes, and still clears when the text goes', 
     clock.at = now
   })
 
-  const observedDuringHold = log.filter(
-    (e) => e.type === 'observed' && e.at >= 3000 && e.at <= 7000
-  ).length
+  const observedDuringHold = log.filter((e) => e.type === 'observed' && e.at >= 3000 && e.at <= 7000).length
   assert.ok(observedDuringHold >= 4, `the loop kept looking while held (${observedDuringHold})`)
   assert.ok(stats.invalidations >= 1, 'and still told the overlay when the text went')
   assert.equal(overlay.showing, '', 'so nothing was left drawn over an empty box')

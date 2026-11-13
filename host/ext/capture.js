@@ -24,11 +24,15 @@ export function captureArgs(windowId, options) {
   }
   const format = options?.format ?? 'jpeg'
   if (!FORMATS.includes(format)) {
-    throw Error(`Error in invocation of tabs.captureVisibleTab(optional integer windowId, optional extensionTypes.ImageDetails options, optional function callback): Error at parameter 'options': Error at property 'format': Value must be one of jpeg, png.`)
+    throw Error(
+      `Error in invocation of tabs.captureVisibleTab(optional integer windowId, optional extensionTypes.ImageDetails options, optional function callback): Error at parameter 'options': Error at property 'format': Value must be one of jpeg, png.`
+    )
   }
   const quality = options?.quality ?? DEFAULT_QUALITY
   if (!Number.isInteger(quality) || quality < 0 || quality > 100) {
-    throw Error(`Error in invocation of tabs.captureVisibleTab(optional integer windowId, optional extensionTypes.ImageDetails options, optional function callback): Error at parameter 'options': Error at property 'quality': Value must be an integer between 0 and 100.`)
+    throw Error(
+      `Error in invocation of tabs.captureVisibleTab(optional integer windowId, optional extensionTypes.ImageDetails options, optional function callback): Error at parameter 'options': Error at property 'quality': Value must be an integer between 0 and 100.`
+    )
   }
   return { format, quality }
 }
@@ -69,9 +73,10 @@ export async function encodeFrame(win, url, { format, quality }) {
   }
   context.drawImage(bitmap, 0, 0)
   bitmap.close?.()
-  const encoded = typeof canvas.toBlob === 'function'
-    ? await new Promise((resolve) => canvas.toBlob(resolve, type, quality / 100))
-    : null
+  const encoded =
+    typeof canvas.toBlob === 'function'
+      ? await new Promise((resolve) => canvas.toBlob(resolve, type, quality / 100))
+      : null
   if (encoded) return dataUrlOf(encoded, type)
   return canvas.toDataURL(type, quality / 100)
 }

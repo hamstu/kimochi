@@ -46,10 +46,10 @@ export function Hero() {
           </span>
         </h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
-          Kimochi is a free, open-source desktop app for language learners. It reads the text in your games,
-          visual novels, manga and videos directly, or with OCR, so you can hover any word to look it up in your
-          favorite dictionary and make flash cards for Anki. Built for Japanese, and now for the language you’re
-          learning too (experimental).
+          Kimochi is a free, open-source desktop app for language learners. It reads the text in your games, visual
+          novels, manga and videos directly, or with OCR, so you can hover any word to look it up in your favorite
+          dictionary and make flash cards for Anki. Built for Japanese, and now for the language you’re learning too
+          (experimental).
         </p>
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
         <div id="get-kimochi" className="mt-10 scroll-mt-24">

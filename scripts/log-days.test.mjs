@@ -2,9 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const { dayKey, dayLabel, dayStarts, lineDate, lineTime } = await load(
-  '../frontend/texthooker/lib/logDays.ts'
-)
+const { dayKey, dayLabel, dayStarts, lineDate, lineTime } = await load('../frontend/texthooker/lib/logDays.ts')
 
 const at = (y, m, d, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime()
 const NOW = at(2026, 10, 19, 21, 30)
@@ -37,12 +35,9 @@ test('no dividers while a session stays on one day', () => {
 })
 
 test('once lines span days, every day is labelled where it starts', () => {
-  const lines = [
-    at(2026, 10, 17, 22),
-    at(2026, 10, 17, 23),
-    at(2026, 10, 19, 0, 5),
-    at(2026, 10, 19, 1)
-  ].map((ts) => ({ ts }))
+  const lines = [at(2026, 10, 17, 22), at(2026, 10, 17, 23), at(2026, 10, 19, 0, 5), at(2026, 10, 19, 1)].map((ts) => ({
+    ts
+  }))
   assert.deepEqual([...dayStarts(lines, lines)], [0, 2])
   // With earlier lines not shown, the first shown line still says its day.
   assert.deepEqual([...dayStarts(lines, lines.slice(1))], [0, 1])

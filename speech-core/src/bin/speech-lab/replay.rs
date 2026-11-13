@@ -73,13 +73,17 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
     };
     // When each line first got a clip: how long the Log waits for its voice.
     let mut voiced_at: HashMap<String, f64> = HashMap::new();
-    let mut keep = |decided: &mut HashMap<String, (Decision, Option<Clipped>)>, decisions: Vec<Decision>, ring: &AudioRing, now: f64| {
+    let mut keep = |decided: &mut HashMap<String, (Decision, Option<Clipped>)>,
+                    decisions: Vec<Decision>,
+                    ring: &AudioRing,
+                    now: f64| {
         for d in decisions {
             if matches!(d.outcome, Outcome::Voiced(_)) {
                 voiced_at.entry(d.uid.clone()).or_insert(now);
             }
             if let Some((before, _)) = decided.get(&d.uid) {
-                let flipped = score(before).is_some_and(|b| score(&d).is_none_or(|n| n <= b)) && before.outcome != d.outcome;
+                let flipped =
+                    score(before).is_some_and(|b| score(&d).is_none_or(|n| n <= b)) && before.outcome != d.outcome;
                 if flipped && !changed_after_match.contains(&d.uid) {
                     changed_after_match.push(d.uid.clone());
                 }
@@ -145,11 +149,20 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
             let (decision, clip) = decided.get(&line.uid).cloned().map_or((None, None), |(d, c)| (Some(d), c));
             let appeared = listener.get_line(&line.uid).and_then(|l| l.appeared);
             let note = listener.note(&line.uid).unwrap_or_default();
-            Row { line: line.clone(), decision, clip, appeared, note, flipped: changed_after_match.contains(&line.uid), voiced_at: voiced_at.get(&line.uid).copied() }
+            Row {
+                line: line.clone(),
+                decision,
+                clip,
+                appeared,
+                note,
+                flipped: changed_after_match.contains(&line.uid),
+                voiced_at: voiced_at.get(&line.uid).copied(),
+            }
         })
         .collect();
     let heard: Vec<_> = listener.transcripts().to_vec();
-    let summary = report::write(session, out, &rows, &heard, elapsed, audio.len() as f64 / rate as f64, model.is_some())?;
+    let summary =
+        report::write(session, out, &rows, &heard, elapsed, audio.len() as f64 / rate as f64, model.is_some())?;
     Ok(Replayed { summary })
 }
 

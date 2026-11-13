@@ -14,13 +14,7 @@ import { refreshCapabilities, useCapabilities } from '../../bridge/capabilities'
 import { modelStatus, type ModelControls } from '../../bridge/models'
 import { ModelDownload } from './ModelDownload'
 
-export function ScreenAiSetup({
-  model,
-  emphasis
-}: {
-  model: ModelControls
-  emphasis: boolean
-}): ReactNode {
+export function ScreenAiSetup({ model, emphasis }: { model: ModelControls; emphasis: boolean }): ReactNode {
   const capability = useCapabilities().ocrEngines.screenai
   const [looking, setLooking] = useState(false)
   const lookAgain = (): void => {
@@ -47,8 +41,8 @@ export function ScreenAiSetup({
         <div className="engine-setting">
           <div className="engine-setting-text">
             <span className="k-description">
-              Or let Google Chrome fetch it: open chrome://components in Chrome, find Screen AI and
-              choose Check for update, then look again.
+              Or let Google Chrome fetch it: open chrome://components in Chrome, find Screen AI and choose Check for
+              update, then look again.
             </span>
           </div>
           <div className="engine-setting-control">

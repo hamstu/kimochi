@@ -50,33 +50,48 @@
    face that visitors' systems have, so a word is never stitched together from two fonts.
    Japanese gets the site's Japanese stack through :lang(ja). Only the characters change font:
    the word itself keeps the headline's, so its line (and the baseline) never moves. */
-.lf-word[data-script="Kore"] .lf-char {
-  font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "Nanum Gothic", sans-serif;
+.lf-word[data-script='Kore'] .lf-char {
+  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Noto Sans CJK KR', 'Nanum Gothic', sans-serif;
 }
-.lf-word[data-script="Hans"] .lf-char {
-  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+.lf-word[data-script='Hans'] .lf-char {
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
 }
-.lf-word[data-script="Hant"] .lf-char {
-  font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
+.lf-word[data-script='Hant'] .lf-char {
+  font-family: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Noto Sans CJK TC', sans-serif;
 }
-.lf-word[data-lang="yue"] .lf-char {
-  font-family: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans HK", "Noto Sans CJK HK", sans-serif;
+.lf-word[data-lang='yue'] .lf-char {
+  font-family: 'PingFang HK', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans HK', 'Noto Sans CJK HK', sans-serif;
 }
-.lf-word[data-script="Cyrl"] .lf-char,
-.lf-word[data-lang="vi"] .lf-char {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Ubuntu, Cantarell, Roboto, sans-serif;
+.lf-word[data-script='Cyrl'] .lf-char,
+.lf-word[data-lang='vi'] .lf-char {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Ubuntu, Cantarell, Roboto, sans-serif;
 }
-.lf-word[data-script="Deva"] .lf-char {
-  font-family: "Kohinoor Devanagari", "Devanagari Sangam MN", "Nirmala UI", "Noto Sans Devanagari", sans-serif;
+.lf-word[data-script='Deva'] .lf-char {
+  font-family: 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI', 'Noto Sans Devanagari', sans-serif;
 }
-.lf-word[data-script="Thai"] .lf-char {
-  font-family: "Sukhumvit Set", Thonburi, "Leelawadee UI", "Noto Sans Thai", "Noto Sans Thai UI", sans-serif;
+.lf-word[data-script='Thai'] .lf-char {
+  font-family: 'Sukhumvit Set', Thonburi, 'Leelawadee UI', 'Noto Sans Thai', 'Noto Sans Thai UI', sans-serif;
 }
 /* Full-width scripts fill the em square; a step smaller, they sit level with the Latin line. */
-.lf-word:is([data-script="Jpan"], [data-script="Kore"], [data-script="Hans"], [data-script="Hant"], [data-script="Deva"]) .lf-char {
+.lf-word:is(
+    [data-script='Jpan'],
+    [data-script='Kore'],
+    [data-script='Hans'],
+    [data-script='Hant'],
+    [data-script='Deva']
+  )
+  .lf-char {
   font-size: 0.9em;
 }
-.lf-word:is([data-script="Jpan"], [data-script="Kore"], [data-script="Hans"], [data-script="Hant"], [data-script="Deva"], [data-script="Thai"]) .lf-char {
+.lf-word:is(
+    [data-script='Jpan'],
+    [data-script='Kore'],
+    [data-script='Hans'],
+    [data-script='Hant'],
+    [data-script='Deva'],
+    [data-script='Thai']
+  )
+  .lf-char {
   letter-spacing: 0;
 }
 

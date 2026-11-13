@@ -45,7 +45,7 @@ test('a value of the wrong type reads as the default', () => {
   assert.equal(withDefaults('overlayHoverLookup', true), true)
 })
 
-test("an object setting keeps its good fields and drops only the broken one", () => {
+test('an object setting keeps its good fields and drops only the broken one', () => {
   const read = withDefaults('cardScreenshot', { enabled: 'yes', field: 'Picture', kept: 120 })
   assert.equal(read.enabled, SETTINGS_DEFAULTS.cardScreenshot.enabled)
   assert.equal(read.field, 'Picture')

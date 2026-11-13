@@ -30,7 +30,9 @@ const EXTRA = import.meta.glob<{ [name: string]: unknown }>('./surfaces-*.ts', {
 const SURFACES: readonly Surface[] = [
   ...APP_SURFACES,
   ...Object.values(EXTRA).flatMap((module) =>
-    Object.values(module).filter((v): v is Surface[] => Array.isArray(v)).flat()
+    Object.values(module)
+      .filter((v): v is Surface[] => Array.isArray(v))
+      .flat()
   )
 ]
 
@@ -133,18 +135,15 @@ export function Studio(): ReactNode {
     ;(window as unknown as { __kimochiStudio: StudioState }).__kimochiStudio = { json: parsedJson(json) }
     return { key: 0, url: frameUrl(surface, saved.globals, context, values) }
   })
-  const reloadWith = useCallback(
-    (next: Saved) => {
-      const s = SURFACES.find((x) => x.id === next.surface) ?? SURFACES[0]
-      const studio: StudioState = { json: parsedJson(next.json[s.id]) }
-      ;(window as unknown as { __kimochiStudio: StudioState }).__kimochiStudio = studio
-      setFrame((f) => ({
-        key: f.key + 1,
-        url: frameUrl(s, next.globals, next.contexts[s.id] ?? {}, next.values[s.id] ?? {})
-      }))
-    },
-    []
-  )
+  const reloadWith = useCallback((next: Saved) => {
+    const s = SURFACES.find((x) => x.id === next.surface) ?? SURFACES[0]
+    const studio: StudioState = { json: parsedJson(next.json[s.id]) }
+    ;(window as unknown as { __kimochiStudio: StudioState }).__kimochiStudio = studio
+    setFrame((f) => ({
+      key: f.key + 1,
+      url: frameUrl(s, next.globals, next.contexts[s.id] ?? {}, next.values[s.id] ?? {})
+    }))
+  }, [])
   /** Change state the frame starts from, and reload it with that. */
   const change = (patch: (s: Saved) => Partial<Saved>): void => {
     const next = { ...savedRef.current, ...patch(savedRef.current) }
@@ -175,7 +174,9 @@ export function Studio(): ReactNode {
       return { json: { ...s.json, [surface.id]: current } }
     })
   const setContext = (param: string, value: string): void =>
-    change((s) => ({ contexts: { ...s.contexts, [surface.id]: { ...(s.contexts[surface.id] ?? {}), [param]: value } } }))
+    change((s) => ({
+      contexts: { ...s.contexts, [surface.id]: { ...(s.contexts[surface.id] ?? {}), [param]: value } }
+    }))
   const chooseSurface = (id: string): void => change(() => ({ surface: id }))
   /** A preset's whole state: it replaces the surface's values, JSON and place in it. */
   const applyPreset = (state: PresetState): void =>
@@ -221,7 +222,12 @@ export function Studio(): ReactNode {
 
   // Copy editing, installed into each frame as it loads.
   const uninstall = useRef<(() => void) | null>(null)
-  const place = [surface.label, ...activeAxes(surface, context).map(({ axis, value }) => axis.options.find((o) => o.value === value)?.label ?? value)].join(' › ')
+  const place = [
+    surface.label,
+    ...activeAxes(surface, context).map(
+      ({ axis, value }) => axis.options.find((o) => o.value === value)?.label ?? value
+    )
+  ].join(' › ')
   const placeRef = useRef(place)
   useLayoutEffect(() => {
     placeRef.current = place
@@ -278,7 +284,13 @@ export function Studio(): ReactNode {
   const box = placement ?? { width: surface.size.width, height: surface.size.height, x: 0, y: 0 }
 
   return (
-    <Theme appearance={dark ? 'dark' : 'light'} accentColor="indigo" grayColor="slate" radius="medium" panelBackground="solid">
+    <Theme
+      appearance={dark ? 'dark' : 'light'}
+      accentColor="indigo"
+      grayColor="slate"
+      radius="medium"
+      panelBackground="solid"
+    >
       <TooltipProvider delayDuration={500}>
         <div className="studio">
           <header className="studio-top">
@@ -301,9 +313,15 @@ export function Studio(): ReactNode {
                 ) : (
                   <Menu key={group}>
                     <MenuTrigger asChild>
-                      <button type="button" className="studio-nav-item" data-active={list.some((s) => s.id === surface.id) || undefined}>
+                      <button
+                        type="button"
+                        className="studio-nav-item"
+                        data-active={list.some((s) => s.id === surface.id) || undefined}
+                      >
                         {group}
-                        {list.some((s) => s.id === surface.id) && <span className="studio-nav-sub">{surface.label}</span>}
+                        {list.some((s) => s.id === surface.id) && (
+                          <span className="studio-nav-sub">{surface.label}</span>
+                        )}
                       </button>
                     </MenuTrigger>
                     <MenuContent align="start">
@@ -328,7 +346,9 @@ export function Studio(): ReactNode {
                     size="sm"
                     variant="ghost"
                     value={controlValue(control, saved.globals, impliedParams(surface, context))}
-                    onValueChange={(v) => setGlobal(control.param, storedValue(control, v, impliedParams(surface, context)))}
+                    onValueChange={(v) =>
+                      setGlobal(control.param, storedValue(control, v, impliedParams(surface, context)))
+                    }
                     options={control.options}
                   />
                 ) : null
@@ -390,7 +410,15 @@ export function Studio(): ReactNode {
                         </MenuItem>
                       ))}
                       {!surface.frameless && (
-                        <MenuItem onSelect={() => update((s) => { const placements = { ...s.placements }; delete placements[surface.id]; return { placements } })}>
+                        <MenuItem
+                          onSelect={() =>
+                            update((s) => {
+                              const placements = { ...s.placements }
+                              delete placements[surface.id]
+                              return { placements }
+                            })
+                          }
+                        >
                           Centre at its usual size
                         </MenuItem>
                       )}
@@ -419,7 +447,11 @@ export function Studio(): ReactNode {
                   >
                     {linkCopied ? <Check /> : <Link2 />}
                   </IconButton>
-                  <IconButton size="sm" label="Open the page on its own" onClick={() => window.open(absoluteUrl, '_blank')}>
+                  <IconButton
+                    size="sm"
+                    label="Open the page on its own"
+                    onClick={() => window.open(absoluteUrl, '_blank')}
+                  >
                     <ExternalLink />
                   </IconButton>
                 </div>

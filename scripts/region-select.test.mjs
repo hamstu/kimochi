@@ -197,10 +197,7 @@ test('malformed bounds are refused rather than producing a meaningless rectangle
     () => new RegionSelect().start({ bounds: { x: 0, y: 0, width: 0, height: 100 } }),
     /display bounds/
   )
-  await assert.rejects(
-    () => new RegionSelect().start({ bounds: { x: 0, y: 0, width: 10 } }),
-    /display bounds/
-  )
+  await assert.rejects(() => new RegionSelect().start({ bounds: { x: 0, y: 0, width: 10 } }), /display bounds/)
 })
 
 test('the element call shape resolves overlay-local pixels and never rejects', async () => {
@@ -565,13 +562,23 @@ test('onTrace hears each gesture, with the other pointers it ignored', async () 
   const selector = new RegionSelect({ onTrace: (record) => traced.push(record) })
   const pending = selector.start({ bounds: BOUNDS })
   const element = surface()
-  element.dispatch('pointerdown', { button: 0, pointerId: 1, pointerType: 'mouse', isTrusted: false, clientX: 10, clientY: 20 })
+  element.dispatch('pointerdown', {
+    button: 0,
+    pointerId: 1,
+    pointerType: 'mouse',
+    isTrusted: false,
+    clientX: 10,
+    clientY: 20
+  })
   element.dispatch('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 60 })
   element.dispatch('pointermove', { pointerId: 2, pointerType: 'pen', clientX: 90, clientY: 90 })
   element.dispatch('pointermove', { pointerId: 2, pointerType: 'pen', clientX: 95, clientY: 95 })
   element.dispatch('pointermove', { pointerId: 0, pointerType: 'mouse', isTrusted: false, clientX: 5, clientY: 5 })
   element.dispatch('pointerup', { pointerId: 1, pointerType: 'mouse', clientX: 60, clientY: 70 })
-  assert.deepEqual(traced.map((record) => record.type), ['gesture-begin', 'gesture-end'])
+  assert.deepEqual(
+    traced.map((record) => record.type),
+    ['gesture-begin', 'gesture-end']
+  )
   assert.deepEqual(traced[0].start, { x: 10, y: 20 })
   assert.equal(traced[0].isTrusted, false)
   const end = traced[1]

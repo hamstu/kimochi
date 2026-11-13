@@ -6,18 +6,19 @@
  * Theme resolution: light by default; dark when the OS prefers dark and the user has not forced
  * light (data-theme="light"), or when the user forces dark (data-theme="dark").
  */
-@import "@fontsource-variable/figtree/wght.css";
-@import "@fontsource-variable/noto-sans-jp/wght.css";
-@import "@fontsource-variable/caveat/wght.css";
+@import '@fontsource-variable/figtree/wght.css';
+@import '@fontsource-variable/noto-sans-jp/wght.css';
+@import '@fontsource-variable/caveat/wght.css';
 
 :root {
   color-scheme: light;
 
   /* Type */
-  --k-font-ui: "Figtree Variable", "Figtree", system-ui, sans-serif;
-  --k-font-jp: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP Variable",
-    "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
-  --k-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+  --k-font-ui: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --k-font-jp:
+    'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP Variable', 'Noto Sans JP', 'Yu Gothic UI', 'Meiryo',
+    sans-serif;
+  --k-font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, monospace;
   --k-weight-regular: 430;
   --k-weight-medium: 520;
   --k-weight-semibold: 620;
@@ -73,7 +74,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --k-bg: #111113;
     --k-bar: #18191b;
@@ -103,7 +104,7 @@
   }
 }
 
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   color-scheme: dark;
   --k-bg: #111113;
   --k-bar: #18191b;

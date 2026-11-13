@@ -39,11 +39,16 @@ export function AccountReset() {
       setUser(u)
       navigate('/account', {
         replace: true,
-        state: { notice: 'Your password is changed and you’re signed in. Other browsers and linked apps were signed out.' }
+        state: {
+          notice: 'Your password is changed and you’re signed in. Other browsers and linked apps were signed out.'
+        }
       })
     } catch (err) {
       setBusy(false)
-      if (err instanceof ApiError && (err.code === 'invalid' || err.code === 'not_found' || err.code === 'unauthorized')) {
+      if (
+        err instanceof ApiError &&
+        (err.code === 'invalid' || err.code === 'not_found' || err.code === 'unauthorized')
+      ) {
         setExpired(true)
       } else {
         setFormError(err instanceof ApiError ? err.message : messageForCode('internal'))

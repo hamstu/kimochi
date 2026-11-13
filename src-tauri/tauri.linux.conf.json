@@ -6,10 +6,7 @@
     },
     "category": "Education",
     "shortDescription": "Read and play in the language you're learning, with on-screen OCR, pop-up dictionaries and a reading log",
-    "targets": [
-      "deb",
-      "appimage"
-    ],
+    "targets": ["deb", "appimage"],
     "icon": [
       "icons/icon.png",
       "icons/32x32.png",
@@ -29,9 +26,7 @@
           "gstreamer1.0-plugins-bad",
           "libavif16"
         ],
-        "recommends": [
-          "libgtk-layer-shell0"
-        ],
+        "recommends": ["libgtk-layer-shell0"],
         "files": {
           "/usr/share/applications/kimochi-screencast.desktop": "linux/kimochi-screencast.desktop"
         }

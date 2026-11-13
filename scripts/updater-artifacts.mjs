@@ -62,7 +62,8 @@ const archName = (triple) => (triple.startsWith('aarch64') ? 'aarch64' : 'x64')
 export function plan(triple, version, files, product = 'Kimochi') {
   const one = (dir, what, test) => {
     const found = files.filter((f) => f.startsWith(`${dir}/`) && test(path.basename(f)))
-    if (found.length !== 1) throw new Error(`expected one ${what} in ${dir}/, found ${found.length}: ${found.join(', ') || 'none'}`)
+    if (found.length !== 1)
+      throw new Error(`expected one ${what} in ${dir}/, found ${found.length}: ${found.join(', ') || 'none'}`)
     return found[0]
   }
   const versioned = (suffix) => {
@@ -73,7 +74,13 @@ export function plan(triple, version, files, product = 'Kimochi') {
     switch (bundle) {
       case 'app': {
         const app = one('macos', `${product}.app`, (name) => name === `${product}.app`)
-        return { key, bundle, source: app, asset: `${product}_${version}_${archName(triple)}.app.tar.gz`, archive: true }
+        return {
+          key,
+          bundle,
+          source: app,
+          asset: `${product}_${version}_${archName(triple)}.app.tar.gz`,
+          archive: true
+        }
       }
       case 'nsis': {
         const exe = one('nsis', `${product}_${version}_*-setup.exe`, versioned('-setup.exe'))
@@ -150,7 +157,11 @@ function signFile(file) {
   // The key comes from the environment, never the command line. An unset password makes the
   // CLI prompt for one (and fail without a terminal); an empty one is "no password".
   const env = { TAURI_SIGNING_PRIVATE_KEY_PASSWORD: '', ...process.env }
-  const result = spawnSync(process.execPath, [cli, 'signer', 'sign', file], { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8', env })
+  const result = spawnSync(process.execPath, [cli, 'signer', 'sign', file], {
+    stdio: ['ignore', 'pipe', 'inherit'],
+    encoding: 'utf8',
+    env
+  })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`tauri signer sign failed for ${file} (${result.status})`)
   return `${file}.sig`
@@ -198,7 +209,9 @@ async function compose(options) {
   }
   const dir = path.resolve(options.sidecars)
   const names = (await readdir(dir)).filter((name) => /^updater-.*\.json$/.test(name)).sort()
-  const sidecars = await Promise.all(names.map(async (name) => JSON.parse(await readFile(path.join(dir, name), 'utf8'))))
+  const sidecars = await Promise.all(
+    names.map(async (name) => JSON.parse(await readFile(path.join(dir, name), 'utf8')))
+  )
   const notes = options.notes && existsSync(options.notes) ? (await readFile(options.notes, 'utf8')).trim() : undefined
   const document = manifest({
     version: options.version,

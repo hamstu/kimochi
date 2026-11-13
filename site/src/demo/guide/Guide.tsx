@@ -30,7 +30,16 @@
  *            tab); `linksAfter` is said after them
  *   next / end   where to go afterwards, or close the tour
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject
+} from 'react'
 import { Volume2, VolumeX } from 'lucide-react'
 import script from './script.json'
 import { blip } from './blip'
@@ -174,7 +183,9 @@ function reveal(el: Element): void {
 /** The element a `log` point names, whether or not it is scrolled into view. */
 function logTarget(point: Point, doc: Document): Element | null {
   if (!point.log) return null
-  const all = [...doc.querySelectorAll(point.log)].filter((e) => e.getClientRects().length > 0 && matches(e, point.text))
+  const all = [...doc.querySelectorAll(point.log)].filter(
+    (e) => e.getClientRects().length > 0 && matches(e, point.text)
+  )
   return (point.text || all.length < 2 ? all[0] : all[all.length - 1]) ?? null
 }
 
@@ -192,7 +203,9 @@ function find(point: Point, desk: HTMLElement, iframe: HTMLIFrameElement | null,
     const doc = iframe?.contentDocument
     if (!iframe || !doc || !shown(iframe)) return null
     // Only what can be seen (not scrolled out of its list), the newest (last) first.
-    const all = [...doc.querySelectorAll(point.log)].filter((e) => e.getClientRects().length > 0 && matches(e, point.text) && inView(e))
+    const all = [...doc.querySelectorAll(point.log)].filter(
+      (e) => e.getClientRects().length > 0 && matches(e, point.text) && inView(e)
+    )
     const el = point.text || all.length < 2 ? all[0] : all[all.length - 1]
     return el ? rectOn(desk, el, iframe) : null
   }
@@ -279,7 +292,8 @@ export function Guide({
       const doc = iframeRef.current?.contentDocument
       const one = (c: Until): boolean => {
         if (typeof c === 'string') return !!facts[c]
-        if ('logVisible' in c) return !!doc && [...doc.querySelectorAll(c.logVisible)].some((e) => e.getClientRects().length > 0)
+        if ('logVisible' in c)
+          return !!doc && [...doc.querySelectorAll(c.logVisible)].some((e) => e.getClientRects().length > 0)
         return clicks.current.some((k) => k.at >= stepAt.current && !!k.target.closest(c.logClicked))
       }
       return Array.isArray(u) ? u.some(one) : one(u)
@@ -489,7 +503,8 @@ export function Guide({
     const x = (desk.clientWidth - w) / 2
     const r = { x: ring.x - 6, y: ring.y - 6, w: ring.w + 12, h: ring.h + 12 }
     const hidden = (y: number): number =>
-      Math.max(0, Math.min(r.x + r.w, x + w) - Math.max(r.x, x)) * Math.max(0, Math.min(r.y + r.h, y + h) - Math.max(r.y, y))
+      Math.max(0, Math.min(r.x + r.w, x + w) - Math.max(r.x, x)) *
+      Math.max(0, Math.min(r.y + r.h, y + h) - Math.max(r.y, y))
     const below = hidden(desk.clientHeight - inset - h)
     const above = hidden(16)
     setTop(ring.h < desk.clientHeight * 0.5 && below > r.w * r.h * 0.15 && above < below / 2)
@@ -557,7 +572,10 @@ export function Guide({
           onClick={advance}
         >
           <Portrait face={face} />
-          <div className="kd-guide-body min-w-0 flex-1" style={bodyHeight === null ? undefined : { height: bodyHeight }}>
+          <div
+            className="kd-guide-body min-w-0 flex-1"
+            style={bodyHeight === null ? undefined : { height: bodyHeight }}
+          >
             <div ref={bodyRef} className="py-3.5 pr-4">
               <div className="mb-1.5 flex items-center gap-2">
                 <span className="kd-guide-name" lang="ja">
@@ -618,7 +636,11 @@ export function Guide({
                 )}
               </p>
               {step.choices && (
-                <div key={`choices-${line}`} className="kd-guide-choices mt-3 flex flex-wrap gap-2" data-shown={done ? '' : undefined}>
+                <div
+                  key={`choices-${line}`}
+                  className="kd-guide-choices mt-3 flex flex-wrap gap-2"
+                  data-shown={done ? '' : undefined}
+                >
                   {step.choices.map((c, i) => (
                     <button
                       key={c.label}
@@ -642,7 +664,11 @@ export function Guide({
           </div>
           {done && !step.choices && (
             <span className="kd-guide-cue" aria-hidden="true">
-              {waiting && !met ? <span className="kd-guide-turn">Your turn</span> : <span className="kd-guide-next">▼</span>}
+              {waiting && !met ? (
+                <span className="kd-guide-turn">Your turn</span>
+              ) : (
+                <span className="kd-guide-next">▼</span>
+              )}
             </span>
           )}
         </div>
@@ -663,7 +689,13 @@ function Portrait({ face }: { face: Face }) {
         // A character from stacked layers (guide/art.ts), the same hop on each change of face.
         <div key={face} className="kd-guide-face relative">
           {layers(art, art.faces[face]).map((src, i) => (
-            <img key={src} src={src} alt="" draggable={false} className={i === 0 ? 'block w-full' : 'absolute inset-0 size-full'} />
+            <img
+              key={src}
+              src={src}
+              alt=""
+              draggable={false}
+              className={i === 0 ? 'block w-full' : 'absolute inset-0 size-full'}
+            />
           ))}
         </div>
       ) : (
@@ -690,7 +722,9 @@ const FACES: Face[] = ['happy', 'excited', 'surprised', 'thinking', 'wink', 'sad
 export function preloadFaces(): void {
   const art = getArt()
   const srcs =
-    art.art === 'sutemo' ? [...new Set(FACES.flatMap((f) => layers(art, art.faces[f])))] : FACES.map((f) => portraitFile(art.art, f))
+    art.art === 'sutemo'
+      ? [...new Set(FACES.flatMap((f) => layers(art, art.faces[f])))]
+      : FACES.map((f) => portraitFile(art.art, f))
   for (const src of srcs) {
     const img = new Image()
     img.src = src

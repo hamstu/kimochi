@@ -49,7 +49,10 @@ fn main() {
             let inv = linux_native::inventory().unwrap_or_default();
             println!("{}", serde_json::to_string_pretty(&inv).unwrap());
             for s in &sources {
-                println!("{:<40} {:<8} {:?} app={:?} bounds={:?} on_screen={:?}", s.id, s.kind, s.name, s.app, s.bounds, s.on_screen);
+                println!(
+                    "{:<40} {:<8} {:?} app={:?} bounds={:?} on_screen={:?}",
+                    s.id, s.kind, s.name, s.app, s.bounds, s.on_screen
+                );
             }
         }
         "capture" => {
@@ -58,9 +61,18 @@ fn main() {
             let started = Instant::now();
             match capture.capture(&CaptureRequest { source_id: id.clone(), crop: None }) {
                 Ok(frame) => {
-                    println!("{id}: {}x{} scale={} bounds={:?} total={:.1}ms (first, includes stream start {:.0}ms)", frame.info.width, frame.info.height, frame.info.scale_factor, frame.info.source_bounds, frame.info.total_ms, started.elapsed().as_secs_f64() * 1e3);
+                    println!(
+                        "{id}: {}x{} scale={} bounds={:?} total={:.1}ms (first, includes stream start {:.0}ms)",
+                        frame.info.width,
+                        frame.info.height,
+                        frame.info.scale_factor,
+                        frame.info.source_bounds,
+                        frame.info.total_ms,
+                        started.elapsed().as_secs_f64() * 1e3
+                    );
                     save(&frame, out);
-                    let again = capture.capture(&CaptureRequest { source_id: id.clone(), crop: None }).expect("second capture");
+                    let again =
+                        capture.capture(&CaptureRequest { source_id: id.clone(), crop: None }).expect("second capture");
                     println!("second capture: {:.1}ms", again.info.total_ms);
                 }
                 Err(e) => {
@@ -83,7 +95,13 @@ fn main() {
             }
             times.sort_by(f64::total_cmp);
             if !times.is_empty() {
-                println!("{} captures: median {:.1}ms, p95 {:.1}ms, max {:.1}ms", times.len(), times[times.len() / 2], times[times.len() * 95 / 100], times[times.len() - 1]);
+                println!(
+                    "{} captures: median {:.1}ms, p95 {:.1}ms, max {:.1}ms",
+                    times.len(),
+                    times[times.len() / 2],
+                    times[times.len() * 95 / 100],
+                    times[times.len() - 1]
+                );
             }
         }
         "follow" => {
@@ -95,7 +113,13 @@ fn main() {
             let started = Instant::now();
             while Instant::now() < until {
                 let line = match capture.capture(&CaptureRequest { source_id: id.clone(), crop: None }) {
-                    Ok(f) => format!("{}x{} scale={:.3} bounds={:?}", f.info.width, f.info.height, f.info.scale_factor, f.info.source_bounds.map(|b| (b.x, b.y, b.width, b.height))),
+                    Ok(f) => format!(
+                        "{}x{} scale={:.3} bounds={:?}",
+                        f.info.width,
+                        f.info.height,
+                        f.info.scale_factor,
+                        f.info.source_bounds.map(|b| (b.x, b.y, b.width, b.height))
+                    ),
                     Err(e) => format!("error {}: {}", e.code, e.message),
                 };
                 if line != last {
@@ -112,7 +136,13 @@ fn main() {
                     Ok(frame) => {
                         let path = format!("thumb-{}.png", s.id.replace(':', "_"));
                         save(&frame, &path);
-                        println!("{:<40} {}x{} {:.0}ms → {path}", s.id, frame.info.width, frame.info.height, started.elapsed().as_secs_f64() * 1e3);
+                        println!(
+                            "{:<40} {}x{} {:.0}ms → {path}",
+                            s.id,
+                            frame.info.width,
+                            frame.info.height,
+                            started.elapsed().as_secs_f64() * 1e3
+                        );
                     }
                     Err(e) => println!("{:<40} {} ({})", s.id, e.message, e.code),
                 }

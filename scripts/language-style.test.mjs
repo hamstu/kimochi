@@ -12,14 +12,14 @@ import { readFile } from 'node:fs/promises'
 import { load } from './load.mjs'
 import { distribute, estimate, layoutParts, characterCells, fit, chars } from '../ui/text-layout.js'
 
-const { textStyle, textLang, textFont, textUnits, wordPieces, graphemes, JAPANESE_TEXT_FONT } = await load(
-  'language-style.ts'
-)
+const { textStyle, textLang, textFont, textUnits, wordPieces, graphemes, JAPANESE_TEXT_FONT } =
+  await load('language-style.ts')
 const { measureFor, measureEms, GROUP_FONT, MANGA_FONT } = await load('render.js')
 const { sampleFor, SAMPLE_LANGUAGES } = await load('language-samples.ts')
 
 const css = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
-const oneLine = (text) => text.replace(/\s+/g, ' ')
+// One line, and no space just inside parentheses (a formatter may break `var(` over lines).
+const oneLine = (text) => text.replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')')
 
 test('Japanese keeps its lang, its font stack and its measure exactly', async () => {
   assert.equal(textLang('ja'), 'ja')
@@ -72,8 +72,16 @@ test('Japanese layout through its measure is what it was without one', () => {
   ]
   assert.deepEqual(distribute(text, lines, false, measureEms), distribute(text, lines, false))
   const parts = [{ text, rect, block: true }]
-  assert.deepEqual(layoutParts(parts, measureEms), layoutParts(parts, (t) => measureEms(t)))
-  assert.deepEqual(layoutParts(parts, measureEms).flat().map((run) => run.text), estimate(text, rect, false).map((run) => run.text))
+  assert.deepEqual(
+    layoutParts(parts, measureEms),
+    layoutParts(parts, (t) => measureEms(t))
+  )
+  assert.deepEqual(
+    layoutParts(parts, measureEms)
+      .flat()
+      .map((run) => run.text),
+    estimate(text, rect, false).map((run) => run.text)
+  )
   // Code points, even where a mark would join a cluster.
   assert.deepEqual(textUnits('か\u3099', 'ja'), ['か', '\u3099'])
 })

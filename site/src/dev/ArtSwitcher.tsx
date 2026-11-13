@@ -185,7 +185,9 @@ function ArtSwitcher() {
                     type="button"
                     onClick={() =>
                       setArt({
-                        accessories: art.accessories.includes(o.id) ? art.accessories.filter((a) => a !== o.id) : [...art.accessories, o.id]
+                        accessories: art.accessories.includes(o.id)
+                          ? art.accessories.filter((a) => a !== o.id)
+                          : [...art.accessories, o.id]
                       })
                     }
                     className={`rounded-full px-2 py-0.5 ${art.accessories.includes(o.id) ? 'bg-white/25' : 'bg-white/5 text-white/60'}`}

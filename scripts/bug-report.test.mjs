@@ -4,7 +4,12 @@ import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
 const { draftProblem, EMPTY_DRAFT } = await load('bug-report.ts')
-const good = { ...EMPTY_DRAFT, name: 'Aki', email: 'aki@example.com', description: 'The overlay vanished after a scan.' }
+const good = {
+  ...EMPTY_DRAFT,
+  name: 'Aki',
+  email: 'aki@example.com',
+  description: 'The overlay vanished after a scan.'
+}
 
 test('a complete draft can be sent', () => {
   assert.equal(draftProblem(good), null)

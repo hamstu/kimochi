@@ -36,11 +36,7 @@ test('a result that lands after the source changed is stale', async () => {
   settle({ fullText: '古いテキスト' })
   await slowOcr
 
-  assert.equal(
-    generation.isStale(job),
-    true,
-    'the late result belongs to a source the user is no longer looking at'
-  )
+  assert.equal(generation.isStale(job), true, 'the late result belongs to a source the user is no longer looking at')
 })
 
 test('a result that lands after a new crop is committed is stale', () => {
@@ -53,10 +49,7 @@ test('a result that lands after a new crop is committed is stale', () => {
 test('an unchanged selection does not invalidate work in flight', () => {
   const generation = new Generation()
   const job = { generation: generation.current }
-  assert.equal(
-    generation.bumpIfChanged({ sourceId: 'w:1', crop }, { sourceId: 'w:1', crop: { ...crop } }),
-    false
-  )
+  assert.equal(generation.bumpIfChanged({ sourceId: 'w:1', crop }, { sourceId: 'w:1', crop: { ...crop } }), false)
   assert.equal(generation.isStale(job), false)
 })
 
@@ -167,4 +160,3 @@ test('the loop takes the same lock the manual path does, not a private flag', as
   assert.deepEqual(held, [true], 'the recognition ran with the shared lock held')
   assert.equal(lock.isHeld, false)
 })
-

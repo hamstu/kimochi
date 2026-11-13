@@ -6,7 +6,10 @@
 
 /** Lower case, without combining marks; other scripts are left as they are. */
 export function foldText(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase()
+  return text
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
 }
 
 export function comboboxMatches(texts: readonly string[], query: string): boolean {

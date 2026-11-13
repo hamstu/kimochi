@@ -2,10 +2,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { transform } from 'esbuild'
 import { readFile } from 'node:fs/promises'
-const { code } = await transform(
-  await readFile(new URL('../frontend/kit/steadyValue.ts', import.meta.url), 'utf8'),
-  { loader: 'ts', format: 'esm' }
-)
+const { code } = await transform(await readFile(new URL('../frontend/kit/steadyValue.ts', import.meta.url), 'utf8'), {
+  loader: 'ts',
+  format: 'esm'
+})
 const { steadyStart, steadyProp, steadyTyped } = await import(
   'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
 )

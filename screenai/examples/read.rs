@@ -6,7 +6,10 @@
 //! `SCREENAI_RUNS=n` repeats each image (the first read of a size warms the library up);
 //! `SCREENAI_LIGHT=1` uses the light model.
 use kimochi_screenai::{client::Worker, proto, wire};
-use std::{path::PathBuf, time::{Duration, Instant}};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 fn main() {
     let mut args = std::env::args_os().skip(1).map(PathBuf::from);
@@ -36,8 +39,17 @@ fn main() {
             let b = line.bounding_box;
             println!(
                 "  [{:?} block {} conf {:.2} box {},{} {}×{} ∠{}] {:?}  words={} symbols={}",
-                line.direction, line.block_id, line.confidence, b.x, b.y, b.width, b.height, b.angle, line.text,
-                line.words.len(), line.words.iter().map(|w| w.symbols.len()).sum::<usize>()
+                line.direction,
+                line.block_id,
+                line.confidence,
+                b.x,
+                b.y,
+                b.width,
+                b.height,
+                b.angle,
+                line.text,
+                line.words.len(),
+                line.words.iter().map(|w| w.symbols.len()).sum::<usize>()
             );
         }
     }

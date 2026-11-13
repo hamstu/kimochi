@@ -53,11 +53,31 @@ function blocks(
   let at = middle ? x - width / 2 : x
   words.forEach((length, w) => {
     if (word) {
-      shapes.push(<rect key={w} className={className} x={at} y={y - size * 0.56} width={length * size * 0.5} height={size * 0.48} rx={size * 0.24} />)
+      shapes.push(
+        <rect
+          key={w}
+          className={className}
+          x={at}
+          y={y - size * 0.56}
+          width={length * size * 0.5}
+          height={size * 0.48}
+          rx={size * 0.24}
+        />
+      )
       at += length * size * 0.5 + size * 0.35
     } else
       for (let c = 0; c < length; c++) {
-        shapes.push(<rect key={`${w}-${c}`} className={className} x={at} y={y - size * 0.8} width={size * 0.78} height={size * 0.78} rx={size * 0.2} />)
+        shapes.push(
+          <rect
+            key={`${w}-${c}`}
+            className={className}
+            x={at}
+            y={y - size * 0.8}
+            width={size * 0.78}
+            height={size * 0.78}
+            rx={size * 0.2}
+          />
+        )
         at += size * 0.92
       }
   })
@@ -145,14 +165,7 @@ export default function CaptureBorderArt({ hidden }: { hidden: boolean }): JSX.E
         <path className={style.more} d={`M${box.x + box.w - 22} ${box.y + 40}h8l-4 5Z`} />
       </g>
       <path className={style.rule} d={`M${WIN.x} ${GAME.y + 0.5}H${right}`} />
-      <rect
-        className={style.frame}
-        x={WIN.x + 0.5}
-        y={WIN.y + 0.5}
-        width={WIN.w - 1}
-        height={WIN.h - 1}
-        rx={WIN.r}
-      />
+      <rect className={style.frame} x={WIN.x + 0.5} y={WIN.y + 0.5} width={WIN.w - 1} height={WIN.h - 1} rx={WIN.r} />
 
       {/* What Windows draws around a captured window. */}
       <rect
@@ -198,10 +211,7 @@ export function BorderSettingsArt(): JSX.Element {
             <rect className={style.row} x={0.5} y={y} width={SW - 1} height={ROW_H} rx={6} />
             {/* The row's icon: a picture frame for the first, a list for the second. */}
             {i === 0 ? (
-              <path
-                className={style.glyph}
-                d={`M18 ${mid - 8}h16v16h-16ZM21 ${mid + 5}l4-5 3 3 2-2 3 4`}
-              />
+              <path className={style.glyph} d={`M18 ${mid - 8}h16v16h-16ZM21 ${mid + 5}l4-5 3 3 2-2 3 4`} />
             ) : (
               <path
                 className={style.glyph}

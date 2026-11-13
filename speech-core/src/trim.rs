@@ -45,25 +45,16 @@ pub fn voice(spans: &[Span], anchor: f64) -> Option<Span> {
         }
     }
     joined.retain(|s| s.end - s.start >= MIN_SPEECH_MS);
-    Some(Span {
-        start: joined.first()?.start,
-        end: joined.last()?.end,
-    })
+    Some(Span { start: joined.first()?.start, end: joined.last()?.end })
 }
 
 /// The cut, in ms from the window's start: the voice padded (or the whole window when there is
 /// none), moved by the user's offsets, and kept inside `0..length`.
 pub fn cut(voice: Option<Span>, length: f64, start_offset: f64, end_offset: f64) -> Span {
-    let base = voice.map_or(
-        Span {
-            start: 0.0,
-            end: length,
-        },
-        |v| Span {
-            start: v.start - PAD_BEFORE_MS,
-            end: v.end + PAD_AFTER_MS,
-        },
-    );
+    let base = voice.map_or(Span { start: 0.0, end: length }, |v| Span {
+        start: v.start - PAD_BEFORE_MS,
+        end: v.end + PAD_AFTER_MS,
+    });
     let start = (base.start + start_offset).clamp(0.0, length);
     let end = (base.end + end_offset).clamp(start, length);
     Span { start, end }
@@ -115,10 +106,7 @@ pub fn spans_from_probabilities(
                 } else {
                     let since = *quiet_since.get_or_insert(t);
                     if t + frame_ms - since >= min_silence_ms {
-                        spans.push(Span {
-                            start: s,
-                            end: since,
-                        });
+                        spans.push(Span { start: s, end: since });
                         start = None;
                         quiet_since = None;
                     }
@@ -128,10 +116,7 @@ pub fn spans_from_probabilities(
         }
     }
     if let Some(s) = start {
-        spans.push(Span {
-            start: s,
-            end: quiet_since.unwrap_or(probabilities.len() as f64 * frame_ms),
-        });
+        spans.push(Span { start: s, end: quiet_since.unwrap_or(probabilities.len() as f64 * frame_ms) });
     }
     spans
 }
@@ -146,11 +131,7 @@ mod tests {
 
     #[test]
     fn the_voice_runs_from_the_first_to_the_last_speech_in_the_window() {
-        let spans = [
-            span(400.0, 1_500.0),
-            span(1_900.0, 3_000.0),
-            span(4_000.0, 5_200.0),
-        ];
+        let spans = [span(400.0, 1_500.0), span(1_900.0, 3_000.0), span(4_000.0, 5_200.0)];
         assert_eq!(voice(&spans, 300.0), Some(span(400.0, 5_200.0)));
     }
 
@@ -167,12 +148,7 @@ mod tests {
 
     #[test]
     fn short_noises_and_short_pauses_are_not_speech_boundaries() {
-        let spans = [
-            span(100.0, 150.0),
-            span(500.0, 900.0),
-            span(1_200.0, 1_300.0),
-            span(5_000.0, 5_050.0),
-        ];
+        let spans = [span(100.0, 150.0), span(500.0, 900.0), span(1_200.0, 1_300.0), span(5_000.0, 5_050.0)];
         assert_eq!(voice(&spans, 0.0), Some(span(500.0, 1_300.0)));
         assert_eq!(voice(&[span(100.0, 150.0)], 0.0), None);
         assert_eq!(voice(&[], 0.0), None);
@@ -183,20 +159,9 @@ mod tests {
         let v = Some(span(1_000.0, 2_000.0));
         assert_eq!(cut(v, 10_000.0, 0.0, 0.0), span(850.0, 2_300.0));
         assert_eq!(cut(v, 10_000.0, -500.0, 1_000.0), span(350.0, 3_300.0));
-        assert_eq!(
-            cut(Some(span(50.0, 9_900.0)), 10_000.0, 0.0, 0.0),
-            span(0.0, 10_000.0)
-        );
-        assert_eq!(
-            cut(None, 4_000.0, 200.0, -200.0),
-            span(200.0, 3_800.0),
-            "no voice: the whole window"
-        );
-        assert_eq!(
-            cut(v, 10_000.0, 0.0, -5_000.0),
-            span(850.0, 850.0),
-            "never ends before it starts"
-        );
+        assert_eq!(cut(Some(span(50.0, 9_900.0)), 10_000.0, 0.0, 0.0), span(0.0, 10_000.0));
+        assert_eq!(cut(None, 4_000.0, 200.0, -200.0), span(200.0, 3_800.0), "no voice: the whole window");
+        assert_eq!(cut(v, 10_000.0, 0.0, -5_000.0), span(850.0, 850.0), "never ends before it starts");
     }
 
     #[test]
@@ -213,20 +178,14 @@ mod tests {
 
     #[test]
     fn the_gain_toward_a_peak_never_amplifies_silence() {
-        assert_eq!(
-            gain_to(&[0.0, 1e-7], 0.5, 1_000.0),
-            1.0,
-            "silence is not amplified"
-        );
+        assert_eq!(gain_to(&[0.0, 1e-7], 0.5, 1_000.0), 1.0, "silence is not amplified");
         assert!((gain_to(&[0.001], 0.5, 1_000.0) - 500.0).abs() < 0.01);
     }
 
     #[test]
     fn probabilities_become_spans_with_hysteresis() {
         // 10ms frames: speech at frames 2..6 (with a dip to 0.4, above `off`), then silence.
-        let p = [
-            0.1, 0.1, 0.9, 0.8, 0.4, 0.7, 0.2, 0.1, 0.1, 0.1, 0.1, 0.9, 0.9,
-        ];
+        let p = [0.1, 0.1, 0.9, 0.8, 0.4, 0.7, 0.2, 0.1, 0.1, 0.1, 0.1, 0.9, 0.9];
         let spans = spans_from_probabilities(&p, 10.0, 0.5, 0.35, 30.0);
         assert_eq!(spans, vec![span(20.0, 60.0), span(110.0, 130.0)]);
     }

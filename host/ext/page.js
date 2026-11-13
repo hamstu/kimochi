@@ -100,7 +100,11 @@ export function installPage(win, { origin, open, save, report }) {
   const follow = (decision) => {
     if (decision.action === 'open') {
       Promise.resolve(open(decision.url)).catch((error) =>
-        report({ check: 'ext-host-link-failed', url: decision.url.slice(0, 300), error: String(error?.message ?? error) })
+        report({
+          check: 'ext-host-link-failed',
+          url: decision.url.slice(0, 300),
+          error: String(error?.message ?? error)
+        })
       )
       return
     }

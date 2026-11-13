@@ -54,11 +54,7 @@ pub struct MacCapture {
 
 impl MacCapture {
     pub fn new() -> Self {
-        Self {
-            catalog: None,
-            streams: HashMap::new(),
-            surfaces: HashMap::new(),
-        }
+        Self { catalog: None, streams: HashMap::new(), surfaces: HashMap::new() }
     }
 }
 
@@ -69,12 +65,7 @@ impl Default for MacCapture {
 }
 
 fn rect(r: screencapturekit::cg::CGRect) -> Rect {
-    Rect {
-        x: r.origin.x,
-        y: r.origin.y,
-        width: r.size.width,
-        height: r.size.height,
-    }
+    Rect { x: r.origin.x, y: r.origin.y, width: r.size.width, height: r.size.height }
 }
 fn native_error(e: impl ToString) -> CaptureError {
     CaptureError::new("native", e)
@@ -82,7 +73,10 @@ fn native_error(e: impl ToString) -> CaptureError {
 fn content() -> Result<SCShareableContent> {
     // Explicit permission check avoids unexpectedly opening a prompt during polling.
     if !unsafe { CGPreflightScreenCaptureAccess() } {
-        return Err(CaptureError::new("permission", "Allow Screen Recording for Kimochi in System Settings, then relaunch if macOS requests it."));
+        return Err(CaptureError::new(
+            "permission",
+            "Allow Screen Recording for Kimochi in System Settings, then relaunch if macOS requests it.",
+        ));
     }
     SCShareableContent::create()
         .with_exclude_desktop_windows(true)
@@ -91,10 +85,7 @@ fn content() -> Result<SCShareableContent> {
         .map_err(native_error)
 }
 fn window_id(w: &SCWindow) -> String {
-    let pid = w
-        .owning_application()
-        .map(|a| a.process_id())
-        .unwrap_or(0);
+    let pid = w.owning_application().map(|a| a.process_id()).unwrap_or(0);
     // `process_id` is a pid_t; the wire format has always printed it unsigned-looking
     // decimal, and real pids are never negative.
     SourceId::window(Platform::MacOs, w.window_id(), pid as u32).to_string()
@@ -139,39 +130,24 @@ struct Resolved {
 /// controls — by excluding the application rather than its current windows, so a
 /// window opened after a display stream starts is left out too.
 fn resolve(c: &SCShareableContent, source_id: &str) -> Result<Option<Resolved>> {
-    let Some(parsed) = SourceId::parse(source_id).filter(|p| p.platform() == Platform::MacOs)
-    else {
+    let Some(parsed) = SourceId::parse(source_id).filter(|p| p.platform() == Platform::MacOs) else {
         return Ok(None);
     };
     // CoreGraphics ids are canonical decimal ("01" never named display 1); anything
     // else names no source here.
-    let Some(number) = parsed
-        .handle_u32()
-        .filter(|n| n.to_string() == parsed.handle())
-    else {
+    let Some(number) = parsed.handle_u32().filter(|n| n.to_string() == parsed.handle()) else {
         return Ok(None);
     };
-    let (source, filter) = if let Some(d) = parsed
-        .is_display()
-        .then(|| c.displays().into_iter().find(|d| d.display_id() == number))
-        .flatten()
+    let (source, filter) = if let Some(d) =
+        parsed.is_display().then(|| c.displays().into_iter().find(|d| d.display_id() == number)).flatten()
     {
         let process_id = std::process::id() as i32;
         let apps = c.applications();
-        let own: Vec<_> = apps
-            .iter()
-            .filter(|app| app.process_id() == process_id)
-            .collect();
+        let own: Vec<_> = apps.iter().filter(|app| app.process_id() == process_id).collect();
         let filter = if own.is_empty() {
-            SCContentFilter::create()
-                .with_display(&d)
-                .with_excluding_windows(&[])
-                .build()
+            SCContentFilter::create().with_display(&d).with_excluding_windows(&[]).build()
         } else {
-            SCContentFilter::create()
-                .with_display(&d)
-                .with_excluding_applications(&own, &[])
-                .build()
+            SCContentFilter::create().with_display(&d).with_excluding_applications(&own, &[]).build()
         };
         (display_source(&d), filter)
     } else if let Some(w) = parsed
@@ -189,10 +165,7 @@ fn resolve(c: &SCShareableContent, source_id: &str) -> Result<Option<Resolved>> 
         if !w.is_on_screen() {
             return Err(CaptureError::new("unavailable", "Window is minimized, hidden, or on another Space; restore it before capturing. Occluded on-screen windows are supported."));
         }
-        (
-            window_source(&w),
-            SCContentFilter::create().with_window(&w).build(),
-        )
+        (window_source(&w), SCContentFilter::create().with_window(&w).build())
     } else {
         return Ok(None);
     };
@@ -202,25 +175,13 @@ fn resolve(c: &SCShareableContent, source_id: &str) -> Result<Option<Resolved>> 
     let height = (bounds.size.height * scale).round() as u32;
     // Bound native allocation and PNG preview size to 64 megapixels.
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 64_000_000 {
-        return Err(CaptureError::new(
-            "dimensions",
-            "Invalid or larger than 64 megapixel source",
-        ));
+        return Err(CaptureError::new("dimensions", "Invalid or larger than 64 megapixel source"));
     }
-    Ok(Some(Resolved {
-        source,
-        filter,
-        width,
-        height,
-        scale,
-    }))
+    Ok(Some(Resolved { source, filter, width, height, scale }))
 }
 
 fn stale_source() -> CaptureError {
-    CaptureError::new(
-        "stale_source",
-        "Source has closed or disconnected. Refresh sources and select again.",
-    )
+    CaptureError::new("stale_source", "Source has closed or disconnected. Refresh sources and select again.")
 }
 
 /// What a stream's callbacks share with captures and with its idle timer.
@@ -241,18 +202,13 @@ impl Slot {
         *self.used.lock().unwrap() = Some(Instant::now());
     }
     fn idle_for(&self) -> Duration {
-        self.used
-            .lock()
-            .unwrap()
-            .map_or(Duration::ZERO, |at| at.elapsed())
+        self.used.lock().unwrap().map_or(Duration::ZERO, |at| at.elapsed())
     }
     fn wait_for_frame(&self, limit: Duration) -> Option<CMSampleBuffer> {
         let latest = self.latest.lock().unwrap();
         let (latest, _) = self
             .arrived
-            .wait_timeout_while(latest, limit, |frame| {
-                frame.is_none() && !self.ended.load(Ordering::SeqCst)
-            })
+            .wait_timeout_while(latest, limit, |frame| frame.is_none() && !self.ended.load(Ordering::SeqCst))
             .unwrap();
         latest.clone()
     }
@@ -290,12 +246,8 @@ impl Live {
 /// stream is started again at the surface's own size, and frames are cut to the window's frame:
 /// the bottom of the surface, where the hidden title bar is above it.
 fn surface_of(scale: f64, content: screencapturekit::cg::CGRect) -> Option<(u32, u32)> {
-    (scale > 0.05 && scale < 0.995).then(|| {
-        (
-            (content.size.width / scale).round() as u32,
-            (content.size.height / scale).round() as u32,
-        )
-    })
+    (scale > 0.05 && scale < 0.995)
+        .then(|| ((content.size.width / scale).round() as u32, (content.size.height / scale).round() as u32))
 }
 
 /// Where the window's frame is in a frame of its surface: its bottom-left `frame` pixels.
@@ -337,9 +289,7 @@ fn start_stream(resolved: &Resolved, size: Option<(u32, u32)>) -> Result<Live> {
                 output.status.store(status as u8, Ordering::SeqCst);
             }
             // Idle frames repeat the previous image and carry no pixels of their own.
-            if status.is_some_and(|s| s != SCFrameStatus::Complete)
-                || sample.pixel_buffer().is_none()
-            {
+            if status.is_some_and(|s| s != SCFrameStatus::Complete) || sample.pixel_buffer().is_none() {
                 return;
             }
             *output.latest.lock().unwrap() = Some(sample);
@@ -387,7 +337,11 @@ enum Unusable {
 }
 
 /// The newest frame of a running stream, cropped and converted.
-fn frame_from_stream(live: &Live, request: &CaptureRequest, start: Instant) -> std::result::Result<Result<Frame>, Unusable> {
+fn frame_from_stream(
+    live: &Live,
+    request: &CaptureRequest,
+    start: Instant,
+) -> std::result::Result<Result<Frame>, Unusable> {
     let slot = &live.slot;
     if slot.ended.load(Ordering::SeqCst) {
         return Err(Unusable::Restart);
@@ -404,17 +358,10 @@ fn frame_from_stream(live: &Live, request: &CaptureRequest, start: Instant) -> s
     let resolve_ms = elapsed_ms(start);
     let acquisition = Instant::now();
     let Some(sample) = slot.wait_for_frame(FIRST_FRAME_WAIT) else {
-        return Err(if slot.ended.load(Ordering::SeqCst) {
-            Unusable::Restart
-        } else {
-            Unusable::NoFrame
-        });
+        return Err(if slot.ended.load(Ordering::SeqCst) { Unusable::Restart } else { Unusable::NoFrame });
     };
     let info = sample.frame_info();
-    let scale = info
-        .as_ref()
-        .and_then(|i| i.scale_factor)
-        .unwrap_or(1.0);
+    let scale = info.as_ref().and_then(|i| i.scale_factor).unwrap_or(1.0);
     let mut bounds = live.source.bounds;
     if live.source.kind == "window" {
         // The frame reports where the window is now, so a moved window needs no
@@ -519,14 +466,10 @@ fn one_shot(
         .with_ignores_shadows_single_window(true);
     let resolve_ms = elapsed_ms(start);
     let acquisition = Instant::now();
-    let image =
-        SCScreenshotManager::capture_image(&resolved.filter, &config).map_err(native_error)?;
+    let image = SCScreenshotManager::capture_image(&resolved.filter, &config).map_err(native_error)?;
     let acquisition_ms = elapsed_ms(acquisition);
     if image.width() != width as usize || image.height() != height as usize {
-        return Err(CaptureError::new(
-            "dimensions",
-            "Source dimensions changed during capture; retry",
-        ));
+        return Err(CaptureError::new("dimensions", "Source dimensions changed during capture; retry"));
     }
     let copying = Instant::now();
     let captured = image.rgba_data().map_err(native_error)?;
@@ -534,20 +477,13 @@ fn one_shot(
     // it: a short buffer used to panic here rather than report anything.
     let expected = width as usize * height as usize * 4;
     if captured.len() < expected {
-        return Err(CaptureError::new(
-            "pixels",
-            "Capture returned fewer pixels than its stated dimensions",
-        ));
+        return Err(CaptureError::new("pixels", "Capture returned fewer pixels than its stated dimensions"));
     }
     // Crop first, then convert: the conversion is per-pixel, so converting only the
     // rectangle kept is byte-identical and, for a dialogue box on a whole display,
     // a fraction of the work. Proved in `crop_then_convert_matches_convert_then_crop`.
     let [_, _, w, h] = crop;
-    let mut pixels = if cut == [0, 0, width, height] {
-        captured
-    } else {
-        crop_pixels(&captured, width, cut)
-    };
+    let mut pixels = if cut == [0, 0, width, height] { captured } else { crop_pixels(&captured, width, cut) };
     // CoreGraphics bridge returns premultiplied RGBA DeviceRGB. PNG expects straight alpha.
     unpremultiply(&mut pixels);
     Ok(Frame {
@@ -575,10 +511,7 @@ fn one_shot(
 impl MacCapture {
     /// The catalog, listed again only when it is older than `CATALOG_TTL` or `fresh`.
     fn catalog(&mut self, fresh: bool) -> Result<&SCShareableContent> {
-        let stale = self
-            .catalog
-            .as_ref()
-            .is_none_or(|(at, _)| at.elapsed() > CATALOG_TTL);
+        let stale = self.catalog.as_ref().is_none_or(|(at, _)| at.elapsed() > CATALOG_TTL);
         if fresh || stale {
             self.catalog = Some((Instant::now(), content()?));
         }
@@ -614,14 +547,9 @@ impl MacCapture {
 
     /// Make room for one more stream, stopping the one used longest ago.
     fn evict_for_new_stream(&mut self) {
-        self.streams
-            .retain(|_, live| !live.slot.ended.load(Ordering::SeqCst));
+        self.streams.retain(|_, live| !live.slot.ended.load(Ordering::SeqCst));
         while self.streams.len() >= MAX_STREAMS {
-            let oldest = self
-                .streams
-                .iter()
-                .max_by_key(|(_, live)| live.slot.idle_for())
-                .map(|(id, _)| id.clone());
+            let oldest = self.streams.iter().max_by_key(|(_, live)| live.slot.idle_for()).map(|(id, _)| id.clone());
             match oldest {
                 Some(id) => self.drop_stream(&id),
                 None => break,
@@ -656,11 +584,7 @@ impl CaptureBackend for MacCapture {
             result.extend(
                 c.windows()
                     .iter()
-                    .filter(|w| {
-                        w.window_layer() == 0
-                            && w.frame().size.width > 1.0
-                            && w.frame().size.height > 1.0
-                    })
+                    .filter(|w| w.window_layer() == 0 && w.frame().size.width > 1.0 && w.frame().size.height > 1.0)
                     .map(window_source),
             );
             Ok(result)

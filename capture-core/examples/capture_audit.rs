@@ -117,14 +117,7 @@ fn diff(previous: &[u8], current: &[u8], width: u32) -> Option<Diff> {
     if changed == 0 {
         return None;
     }
-    Some(Diff {
-        changed,
-        total,
-        box_x: (x0, x1),
-        box_y: (y0, y1),
-        max_delta,
-        mean_delta: sum_delta / changed as f64,
-    })
+    Some(Diff { changed, total, box_x: (x0, x1), box_y: (y0, y1), max_delta, mean_delta: sum_delta / changed as f64 })
 }
 
 fn percentile(sorted: &[f64], p: f64) -> f64 {
@@ -140,20 +133,12 @@ fn main() {
     // asserts in CGS_REQUIRE_INIT without it.
     #[cfg(target_os = "macos")]
     unsafe {
-        let _: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![objc2::class!(NSApplication), sharedApplication];
+        let _: *mut objc2::runtime::AnyObject = objc2::msg_send![objc2::class!(NSApplication), sharedApplication];
     }
     let source = std::env::var("KIMOCHI_SOURCE").unwrap_or_default();
-    let frames: usize = std::env::var("KIMOCHI_FRAMES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(24);
-    let interval = Duration::from_millis(
-        std::env::var("KIMOCHI_INTERVAL_MS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(250),
-    );
+    let frames: usize = std::env::var("KIMOCHI_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(24);
+    let interval =
+        Duration::from_millis(std::env::var("KIMOCHI_INTERVAL_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(250));
     // Bounded on purpose: a diagnostic that can run away is not a diagnostic.
     let frames = frames.clamp(1, 240);
 
@@ -184,14 +169,10 @@ fn main() {
             println!("sources: {displays} displays, {windows} windows");
             if !list_app.is_empty() {
                 for candidate in sources.iter().filter(|s| {
-                    s.kind == "window"
-                        && s.app.as_deref().is_some_and(|app| app.eq_ignore_ascii_case(&list_app))
+                    s.kind == "window" && s.app.as_deref().is_some_and(|app| app.eq_ignore_ascii_case(&list_app))
                 }) {
                     let bounds = candidate.bounds.map_or((0.0, 0.0), |b| (b.width, b.height));
-                    println!(
-                        "  window {} {}x{} on_screen={:?}",
-                        candidate.id, bounds.0, bounds.1, candidate.on_screen
-                    );
+                    println!("  window {} {}x{} on_screen={:?}", candidate.id, bounds.0, bounds.1, candidate.on_screen);
                 }
             }
             if !source.is_empty() && !sources.iter().any(|s| s.id == source) {
@@ -227,10 +208,7 @@ fn main() {
         println!("cropped to the saved scan region");
     }
 
-    let request = CaptureRequest {
-        source_id: source.clone(),
-        crop,
-    };
+    let request = CaptureRequest { source_id: source.clone(), crop };
 
     println!("probing {source}: {frames} frames, {interval:?} apart\n");
     println!(
@@ -338,12 +316,7 @@ fn main() {
     println!("\n--- summary ----------------------------------------------------");
     println!("captured {} frames in {:?}, {} errors", digests.len(), elapsed, errors);
     println!("frame size {}x{}", dimensions.0, dimensions.1);
-    println!(
-        "distinct frames: {} of {}  |  longest identical run: {}",
-        unique.len(),
-        digests.len(),
-        longest_run
-    );
+    println!("distinct frames: {} of {}  |  longest identical run: {}", unique.len(), digests.len(), longest_run);
     for (name, v) in [("resolve", &r), ("acquire", &a), ("pixels", &p), ("total", &t)] {
         println!(
             "{name:>8} ms  min {:>7.1}  p50 {:>7.1}  p95 {:>7.1}  max {:>7.1}",

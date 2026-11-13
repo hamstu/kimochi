@@ -3,9 +3,7 @@
 //! Startup must not depend on capture: the reader, dictionary, texthooker and settings
 //! work without it. Every capture call answers with the same honest reason, which the
 //! UI shows instead of the app refusing to launch.
-use kimochi_capture::{
-    Capabilities, CaptureBackend, CaptureError, CaptureRequest, Frame, Result, Source,
-};
+use kimochi_capture::{Capabilities, CaptureBackend, CaptureError, CaptureRequest, Frame, Result, Source};
 
 pub struct UnavailableBackend {
     reason: String,
@@ -13,9 +11,7 @@ pub struct UnavailableBackend {
 
 impl UnavailableBackend {
     pub fn new(reason: impl Into<String>) -> Self {
-        Self {
-            reason: reason.into(),
-        }
+        Self { reason: reason.into() }
     }
 
     fn error(&self) -> CaptureError {
@@ -25,12 +21,7 @@ impl UnavailableBackend {
 
 impl CaptureBackend for UnavailableBackend {
     fn capabilities(&self) -> Capabilities {
-        Capabilities {
-            backend: "none",
-            enumeration: false,
-            system_picker_required: false,
-            retained_session: false,
-        }
+        Capabilities { backend: "none", enumeration: false, system_picker_required: false, retained_session: false }
     }
 
     fn permission(&self) -> &'static str {
@@ -66,10 +57,7 @@ mod tests {
         assert!(!backend.request_permission());
         let e = backend.enumerate().unwrap_err();
         assert_eq!((e.code, e.message.as_str()), ("unsupported", "no backend here"));
-        let request = CaptureRequest {
-            source_id: "macos:display:1".into(),
-            crop: None,
-        };
+        let request = CaptureRequest { source_id: "macos:display:1".into(), crop: None };
         assert_eq!(backend.capture(&request).err().unwrap().code, "unsupported");
         assert_eq!(backend.thumbnail("x", 64).err().unwrap().code, "unsupported");
     }

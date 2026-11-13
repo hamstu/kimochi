@@ -4,18 +4,35 @@ import { load } from './load.mjs'
 
 const { createPointerFilter, installPointerFilter, DUPLICATE_MS, GHOST_MS, CLICK_MS } = await load('pointer-dedupe.ts')
 
-const pointer = (type, t, extra = {}) => ({ type, timeStamp: t, pointerType: 'touch', pointerId: 2, clientX: 100, clientY: 50, ...extra })
+const pointer = (type, t, extra = {}) => ({
+  type,
+  timeStamp: t,
+  pointerType: 'touch',
+  pointerId: 2,
+  clientX: 100,
+  clientY: 50,
+  ...extra
+})
 const mouse = (type, t, extra = {}) =>
   type.startsWith('pointer')
     ? pointer(type, t, { pointerType: 'mouse', pointerId: 1, ...extra })
     : { type, timeStamp: t, clientX: 100, clientY: 50, ...extra }
-const touch = (type, t, extra = {}) => ({ type, timeStamp: t, changedTouches: [{ identifier: 0, clientX: 100, clientY: 50, ...extra }] })
+const touch = (type, t, extra = {}) => ({
+  type,
+  timeStamp: t,
+  changedTouches: [{ identifier: 0, clientX: 100, clientY: 50, ...extra }]
+})
 const verdicts = (filter, events) => events.map((event) => filter.classify(event))
 
 test("GTK's doubled touch begin reaches the page once", () => {
   const filter = createPointerFilter()
   assert.deepEqual(
-    verdicts(filter, [touch('touchstart', 10), touch('touchstart', 10), pointer('pointerdown', 10), pointer('pointerdown', 10)]),
+    verdicts(filter, [
+      touch('touchstart', 10),
+      touch('touchstart', 10),
+      pointer('pointerdown', 10),
+      pointer('pointerdown', 10)
+    ]),
     ['pass', 'duplicate', 'pass', 'duplicate']
   )
   // Within a few ms and a pixel still counts; the next tap does not.
@@ -46,7 +63,18 @@ test("a tap's emulated mouse is dropped, and its click comes once", () => {
     mouse('click', 97),
     mouse('click', 140)
   ]
-  assert.deepEqual(verdicts(filter, tap), ['pass', 'pass', 'pass', 'pass', 'ghost', 'ghost', 'ghost', 'ghost', 'pass', 'duplicate'])
+  assert.deepEqual(verdicts(filter, tap), [
+    'pass',
+    'pass',
+    'pass',
+    'pass',
+    'ghost',
+    'ghost',
+    'ghost',
+    'ghost',
+    'pass',
+    'duplicate'
+  ])
 })
 
 test('the mouse after a touch elsewhere, or later, is the mouse', () => {
@@ -61,7 +89,11 @@ test('a touch seen only as touch events leaves the mouse events, the only press 
   const filter = createPointerFilter()
   filter.classify(touch('touchstart', 0))
   filter.classify(touch('touchend', 80))
-  assert.deepEqual(verdicts(filter, [mouse('pointerdown', 85), mouse('mousedown', 85), mouse('click', 86)]), ['pass', 'pass', 'pass'])
+  assert.deepEqual(verdicts(filter, [mouse('pointerdown', 85), mouse('mousedown', 85), mouse('click', 86)]), [
+    'pass',
+    'pass',
+    'pass'
+  ])
 })
 
 test('a mouse double-click, and clicks without a touch, pass', () => {
@@ -118,9 +150,15 @@ test('installed, it stops dropped events in the capture phase and reports when a
   // The emulated mousedown keeps focus where it is, unless it lands on a text field.
   assert.deepEqual(window.dispatch(mouse('mousedown', 85)), { stopped: true, prevented: true })
   const field = { closest: (selector) => (selector.includes('input') ? {} : null) }
-  assert.deepEqual(window.dispatch(mouse('mousedown', 86, { clientX: 120 }), { target: field }), { stopped: true, prevented: false })
+  assert.deepEqual(window.dispatch(mouse('mousedown', 86, { clientX: 120 }), { target: field }), {
+    stopped: true,
+    prevented: false
+  })
   // The app's own synthetic events are never touched.
-  assert.deepEqual(window.dispatch(mouse('pointerdown', 87), { isTrusted: false }), { stopped: false, prevented: false })
+  assert.deepEqual(window.dispatch(mouse('pointerdown', 87), { isTrusted: false }), {
+    stopped: false,
+    prevented: false
+  })
   assert.deepEqual(
     reports.map(({ type, verdict }) => `${type}:${verdict}`),
     ['pointerdown:pass', 'pointerdown:duplicate', 'pointerup:pass', 'mousedown:ghost', 'mousedown:ghost']

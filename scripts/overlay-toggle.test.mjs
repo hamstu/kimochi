@@ -69,9 +69,6 @@ test('a profile with overlay mode off but text shown is repaired by one press', 
   // Reachable by switching overlay mode off in Settings while the session flag
   // is still on: the predicate says hidden, and one press must show it.
   const inconsistent = { liveOverlayEnabled: false, textOverlayVisible: true }
-  assert.equal(
-    isOverlayTextVisible(inconsistent.liveOverlayEnabled, inconsistent.textOverlayVisible),
-    false
-  )
+  assert.equal(isOverlayTextVisible(inconsistent.liveOverlayEnabled, inconsistent.textOverlayVisible), false)
   assert.equal(apply(inconsistent).visible, true)
 })

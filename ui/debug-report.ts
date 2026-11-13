@@ -26,14 +26,12 @@ export interface DebugReport {
   recentEvents?: Json[]
 }
 
-const isObj = (value: unknown): value is Obj =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+const isObj = (value: unknown): value is Obj => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const text = (value: Json | undefined, fallback = 'unknown'): string =>
   value === null || value === undefined || value === '' ? fallback : String(value)
 
-const yesNo = (value: Json | undefined): string =>
-  value === true ? 'yes' : value === false ? 'no' : 'unknown'
+const yesNo = (value: Json | undefined): string => (value === true ? 'yes' : value === false ? 'no' : 'unknown')
 
 /** 34359738368 → "32 GB". */
 export function formatBytes(bytes: Json | undefined): string {
@@ -83,7 +81,9 @@ function windowLine(item: Obj): string {
   ]
     .filter(Boolean)
     .join(', ')
-  const where = bounds ? ` ${text(bounds.width, '?')}×${text(bounds.height, '?')} at (${text(bounds.x, '?')}, ${text(bounds.y, '?')})` : ''
+  const where = bounds
+    ? ` ${text(bounds.width, '?')}×${text(bounds.height, '?')} at (${text(bounds.x, '?')}, ${text(bounds.y, '?')})`
+    : ''
   return `- ${text(item.label)}: ${state}${where}`
 }
 
@@ -98,7 +98,8 @@ export function debugMarkdown(report: DebugReport): string {
   // The language being read changes which engines read and how text is filtered: named with the
   // engine. Unset is Japanese; a report without settings (an older backend) cannot say.
   const language = isObj(report.settings) ? text(report.settings.language, 'ja') : 'unknown'
-  const gpus = Array.isArray(hardware.gpus) && hardware.gpus.length > 0 ? hardware.gpus.map(String).join('; ') : 'unknown'
+  const gpus =
+    Array.isArray(hardware.gpus) && hardware.gpus.length > 0 ? hardware.gpus.map(String).join('; ') : 'unknown'
   const lines: string[] = [
     '### Kimochi debug info',
     `_Generated ${text(report.generatedAt)} (UTC)._`,
@@ -115,7 +116,11 @@ export function debugMarkdown(report: DebugReport): string {
     `- **Verbose logging:** ${report.verboseLogging ? 'on' : 'off'}`
   ]
   const displays = report.displays ?? []
-  lines.push('', `**Displays (${displays.length})**`, ...(displays.length ? displays.map(display) : ['- none reported']))
+  lines.push(
+    '',
+    `**Displays (${displays.length})**`,
+    ...(displays.length ? displays.map(display) : ['- none reported'])
+  )
 
   const engines = isObj(ocr.engines) ? Object.entries(ocr.engines).map(([name, value]) => engine(name, value)) : []
   const models = (ocr.models ?? []).map((item) => `- ${download(item)}`)

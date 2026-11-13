@@ -111,7 +111,8 @@ export function lastSyncLine(at: number | null | undefined, now: number): string
 
 /** The status line under "Sync now". */
 export function syncStateLine(status: SyncStatus, now: number): string {
-  const pending = status.pending > 0 ? ` ${status.pending} change${status.pending === 1 ? '' : 's'} waiting to sync.` : ''
+  const pending =
+    status.pending > 0 ? ` ${status.pending} change${status.pending === 1 ? '' : 's'} waiting to sync.` : ''
   switch (status.state) {
     case 'syncing':
       return 'Syncing…'

@@ -39,10 +39,8 @@ export interface CatalogSource {
   space?: string | null
 }
 
-const isDisplay = (source: CatalogSource): boolean =>
-  source.kind === 'display' || source.kind === 'screen'
-const sourceTitle = (source: CatalogSource): string =>
-  source.app || source.name || 'Untitled window'
+const isDisplay = (source: CatalogSource): boolean => source.kind === 'display' || source.kind === 'screen'
+const sourceTitle = (source: CatalogSource): string => source.app || source.name || 'Untitled window'
 
 // Limit simultaneous native thumbnail work; tiles request only as they approach view.
 let thumbnailJobs = 0
@@ -133,10 +131,10 @@ function Tile({
   const detail = unavailable
     ? unavailable
     : noPreview
-    ? 'Whatever is in front'
-    : source.app && source.name !== source.app
-      ? source.name || 'Untitled window'
-      : null
+      ? 'Whatever is in front'
+      : source.app && source.name !== source.app
+        ? source.name || 'Untitled window'
+        : null
   return (
     <MenuPrimitive.Item
       ref={ref}
@@ -173,11 +171,7 @@ function Tile({
         {source.space && <span className="sg-space">{source.space}</span>}
       </span>
       <span className="sg-caption">
-        {icon ? (
-          <img className="sg-app-icon" src={icon} alt="" />
-        ) : (
-          <Icon className="sg-app-icon" />
-        )}
+        {icon ? <img className="sg-app-icon" src={icon} alt="" /> : <Icon className="sg-app-icon" />}
         <span className="sg-caption-text">
           <span className="sg-caption-title">{sourceTitle(source)}</span>
           {detail && <span className="sg-caption-detail">{detail}</span>}
@@ -248,15 +242,10 @@ export function SourceGrid({
  */
 function GrantCaptureItem({ os }: { os: string }): ReactNode {
   return (
-    <MenuPrimitive.Item
-      className="sg-permission"
-      onSelect={() => void openScreenCapturePreferences()}
-    >
+    <MenuPrimitive.Item className="sg-permission" onSelect={() => void openScreenCapturePreferences()}>
       <ShieldAlert className="sg-permission-icon" />
       <span className="sg-caption-text">
-        <span className="sg-caption-title">
-          {os === 'macos' ? 'Allow Screen Recording…' : 'Allow screen capture…'}
-        </span>
+        <span className="sg-caption-title">{os === 'macos' ? 'Allow Screen Recording…' : 'Allow screen capture…'}</span>
         <span className="sg-caption-detail">
           {os === 'macos'
             ? 'Kimochi needs it to see your windows. Opens System Settings.'
@@ -285,10 +274,10 @@ function WindowGrid({
   const emptyHint = isGamingMode(capabilities)
     ? 'Nothing is running. Start a game from Steam, then choose it here.'
     : !capabilities.capture.canOpenSettings
-    ? 'No windows to read.'
-    : capabilities.os === 'macos'
-      ? 'No windows to read. Enable Screen Recording for Kimochi in System Settings.'
-      : 'No windows to read. Allow screen capture for Kimochi in your system settings.'
+      ? 'No windows to read.'
+      : capabilities.os === 'macos'
+        ? 'No windows to read. Enable Screen Recording for Kimochi in System Settings.'
+        : 'No windows to read. Allow screen capture for Kimochi in your system settings.'
 
   // A fresh list each time the submenu opens: windows come and go.
   useEffect(() => {
@@ -324,7 +313,9 @@ function WindowGrid({
       current={source.id === currentId}
       root={root}
       noPreview={gaming && isDisplay(source)}
-      unavailable={hookable && !targets?.[source.id]?.hookable ? (targets?.[source.id]?.reason ?? 'Cannot be hooked') : undefined}
+      unavailable={
+        hookable && !targets?.[source.id]?.hookable ? (targets?.[source.id]?.reason ?? 'Cannot be hooked') : undefined
+      }
       onChoose={() => onChoose(source)}
     />
   )
@@ -355,15 +346,15 @@ function WindowGrid({
           Finding windows…
         </div>
       )}
-      {sources && sources.length === 0 && (
-        <div className="sg-status">{emptyHint}</div>
-      )}
+      {sources && sources.length === 0 && <div className="sg-status">{emptyHint}</div>}
       {!gaming && screens}
       {root && windows.length > 0 && (
         <section className="sg-section" aria-label={gaming ? 'Games and apps' : 'App windows'}>
           <h3 className="sg-section-title">
             {gaming ? 'Games and apps' : hookable ? 'Apps to hook' : 'App windows'}{' '}
-            <span className="k-num">{hookable ? windows.filter((s) => targets?.[s.id]?.hookable).length : windows.length}</span>
+            <span className="k-num">
+              {hookable ? windows.filter((s) => targets?.[s.id]?.hookable).length : windows.length}
+            </span>
           </h3>
           <div className="sg-grid">{windows.map(tile)}</div>
         </section>

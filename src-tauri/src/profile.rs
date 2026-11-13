@@ -86,10 +86,7 @@ pub fn is_private(key: &str) -> bool {
 pub fn strip_private(value: &Value) -> Value {
     match value {
         Value::Object(map) => Value::Object(
-            map.iter()
-                .filter(|(k, _)| !is_private(k))
-                .map(|(k, v)| (k.clone(), strip_private(v)))
-                .collect(),
+            map.iter().filter(|(k, _)| !is_private(k)).map(|(k, v)| (k.clone(), strip_private(v))).collect(),
         ),
         Value::Array(items) => Value::Array(items.iter().map(strip_private).collect()),
         other => other.clone(),
@@ -308,7 +305,15 @@ mod tests {
         });
         let out = synced_part(&settings);
         let text = out.to_string();
-        for secret in ["secret-1", "secret-2", "portalRestoreToken", "apiKey", "windowPositions", "texthookerSourceSessions", "overlayHoverLookup"] {
+        for secret in [
+            "secret-1",
+            "secret-2",
+            "portalRestoreToken",
+            "apiKey",
+            "windowPositions",
+            "texthookerSourceSessions",
+            "overlayHoverLookup",
+        ] {
             assert!(!text.contains(secret), "{secret} leaked: {text}");
         }
         assert_eq!(out["superTexthooker"]["fontSizePx"], 16);

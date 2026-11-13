@@ -61,9 +61,30 @@ export const DEFAULT_BUTTONS = {
  * same names as Settings (frontend/bridge/useGamepad.ts), with arrows for the D-pad.
  */
 export const BUTTON_NAMES = [
-  'A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', '▲', '▼', '◀', '▶', 'Home',
+  'A',
+  'B',
+  'X',
+  'Y',
+  'LB',
+  'RB',
+  'LT',
+  'RT',
+  'View',
+  'Menu',
+  'LS',
+  'RS',
+  '▲',
+  '▼',
+  '◀',
+  '▶',
+  'Home',
   // The Steam Deck's own: back grips and trackpad clicks (src-tauri/src/platform/linux/deck_input.rs).
-  'L4', 'R4', 'L5', 'R5', 'Left pad', 'Right pad'
+  'L4',
+  'R4',
+  'L5',
+  'R5',
+  'Left pad',
+  'Right pad'
 ]
 
 /** A button's on-screen name, or null for none. */
@@ -137,8 +158,7 @@ export class ControllerInput {
 
   /** The command a button stands for, if any. */
   commandFor(button) {
-    const { confirm, back, toggleUnit, playAudio, previousDefinition, nextDefinition, showControls } =
-      this.buttons
+    const { confirm, back, toggleUnit, playAudio, previousDefinition, nextDefinition, showControls } = this.buttons
     if (button === confirm) return { type: 'confirm' }
     if (button === back) return { type: 'cancel' }
     if (button === toggleUnit) return { type: 'unit' }

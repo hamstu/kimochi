@@ -29,12 +29,22 @@ function req(result, error = null) {
 function fakeIndexedDB() {
   const dbs = new Map()
   const handle = (db) => ({
-    get version() { return db.version },
+    get version() {
+      return db.version
+    },
     objectStoreNames: { [Symbol.iterator]: () => db.stores.keys() },
     createObjectStore(name, options = {}) {
-      const store = { keyPath: options.keyPath ?? null, autoIncrement: Boolean(options.autoIncrement), indexes: new Map(), records: new Map() }
+      const store = {
+        keyPath: options.keyPath ?? null,
+        autoIncrement: Boolean(options.autoIncrement),
+        indexes: new Map(),
+        records: new Map()
+      }
       db.stores.set(name, store)
-      return { createIndex: (n, keyPath, o = {}) => store.indexes.set(n, { keyPath, unique: Boolean(o.unique), multiEntry: Boolean(o.multiEntry) }) }
+      return {
+        createIndex: (n, keyPath, o = {}) =>
+          store.indexes.set(n, { keyPath, unique: Boolean(o.unique), multiEntry: Boolean(o.multiEntry) })
+      }
     },
     transaction(name) {
       return {
@@ -47,10 +57,11 @@ function fakeIndexedDB() {
             index: (n) => store.indexes.get(n),
             getAllKeys: () => req(() => [...store.records.keys()].sort()),
             get: (key) => req(() => store.records.get(key)),
-            put: (value, key) => req(() => {
-              store.records.set(key ?? value[store.keyPath], value)
-              return key
-            })
+            put: (value, key) =>
+              req(() => {
+                store.records.set(key ?? value[store.keyPath], value)
+                return key
+              })
           }
         }
       }
@@ -83,7 +94,9 @@ function fakeIndexedDB() {
 function fakeStorage(entries = []) {
   const map = new Map(entries)
   return {
-    get length() { return map.size },
+    get length() {
+      return map.size
+    },
     key: (i) => [...map.keys()][i],
     getItem: (k) => map.get(k) ?? null,
     setItem: (k, v) => map.set(k, String(v)),
@@ -118,11 +131,18 @@ test('stored values survive encoding: bytes, Blobs, Dates, nested objects', asyn
 })
 
 test('a part keeps its header and binary parts byte for byte', () => {
-  const packed = packPart({ kind: 'record', key: { $v: '/dicts/a' } }, [new Uint8Array([1, 2]), new Uint8Array(0), new Uint8Array([3])])
+  const packed = packPart({ kind: 'record', key: { $v: '/dicts/a' } }, [
+    new Uint8Array([1, 2]),
+    new Uint8Array(0),
+    new Uint8Array([3])
+  ])
   const { header, parts } = unpackPart(packed.buffer)
   assert.equal(header.kind, 'record')
   assert.deepEqual(header.sizes, [2, 0, 1])
-  assert.deepEqual(parts.map((p) => [...p]), [[1, 2], [], [3]])
+  assert.deepEqual(
+    parts.map((p) => [...p]),
+    [[1, 2], [], [3]]
+  )
   assert.throws(() => unpackPart(packed.slice(0, packed.length - 1)), /wrong length/)
 })
 
@@ -130,25 +150,42 @@ test('an IDBFS mount and localStorage copy across origins and verify', async () 
   const from = fakeIndexedDB()
   const open = await new Promise((resolve) => {
     const r = from.open('/dicts', 21)
-    r.onupgradeneeded = () => r.result.createObjectStore('FILE_DATA').createIndex('timestamp', 'timestamp', { unique: false })
+    r.onupgradeneeded = () =>
+      r.result.createObjectStore('FILE_DATA').createIndex('timestamp', 'timestamp', { unique: false })
     r.onsuccess = () => resolve(r.result)
   })
   const files = {
     '/dicts': { timestamp: new Date(1), mode: 16877 },
     '/dicts/.hdw-generation-1/Jitendex': { timestamp: new Date(2), mode: 16877 },
-    '/dicts/.hdw-generation-1/Jitendex/terms.bin': { timestamp: new Date(3), mode: 33206, contents: new Uint8Array(4096).fill(7) },
-    '/dicts/.hdw-generation-1/Jitendex/index.bin': { timestamp: new Date(4), mode: 33206, contents: new Blob([new Uint8Array(2048).fill(3)]) }
+    '/dicts/.hdw-generation-1/Jitendex/terms.bin': {
+      timestamp: new Date(3),
+      mode: 33206,
+      contents: new Uint8Array(4096).fill(7)
+    },
+    '/dicts/.hdw-generation-1/Jitendex/index.bin': {
+      timestamp: new Date(4),
+      mode: 33206,
+      contents: new Blob([new Uint8Array(2048).fill(3)])
+    }
   }
   for (const [key, value] of Object.entries(files)) {
-    await new Promise((resolve) => { open.transaction('FILE_DATA').objectStore().put(value, key).onsuccess = resolve })
+    await new Promise((resolve) => {
+      open.transaction('FILE_DATA').objectStore().put(value, key).onsuccess = resolve
+    })
   }
   const staged = []
-  const exported = await exportStorage({ idb: from, storage: fakeStorage([['kimochi.extensionStore', 'S123']]), put: async (bytes) => staged.push(bytes) })
+  const exported = await exportStorage({
+    idb: from,
+    storage: fakeStorage([['kimochi.extensionStore', 'S123']]),
+    put: async (bytes) => staged.push(bytes)
+  })
   assert.deepEqual(exported, { records: 4, bytes: 4096 + 2048 })
 
   const to = fakeIndexedDB()
   // Left by an earlier, interrupted attempt: replaced, never merged.
-  await new Promise((resolve) => { to.open('stale', 1).onsuccess = resolve })
+  await new Promise((resolve) => {
+    to.open('stale', 1).onsuccess = resolve
+  })
   const storage = fakeStorage([['leftover', 'x']])
   const imported = await importStorage({ idb: to, storage, parts: staged.length, get: async (i) => staged[i].buffer })
   assert.deepEqual(imported, exported)
@@ -158,7 +195,10 @@ test('an IDBFS mount and localStorage copy across origins and verify', async () 
   assert.equal(store.keyPath, null)
   assert.deepEqual(store.indexes.get('timestamp'), { keyPath: 'timestamp', unique: false, multiEntry: false })
   assert.deepEqual([...store.records.keys()].sort(), Object.keys(files).sort())
-  assert.deepEqual([...store.records.get('/dicts/.hdw-generation-1/Jitendex/terms.bin').contents].slice(0, 3), [7, 7, 7])
+  assert.deepEqual(
+    [...store.records.get('/dicts/.hdw-generation-1/Jitendex/terms.bin').contents].slice(0, 3),
+    [7, 7, 7]
+  )
   assert.deepEqual([...storage.map], [['kimochi.extensionStore', 'S123']])
 })
 
@@ -169,7 +209,12 @@ test('a record that does not read back as written fails the copy', async () => {
     r.onupgradeneeded = () => r.result.createObjectStore('FILE_DATA')
     r.onsuccess = () => resolve(r.result)
   })
-  await new Promise((resolve) => { db.transaction('FILE_DATA').objectStore().put({ contents: new Uint8Array([1]) }, '/dicts/x').onsuccess = resolve })
+  await new Promise((resolve) => {
+    db
+      .transaction('FILE_DATA')
+      .objectStore()
+      .put({ contents: new Uint8Array([1]) }, '/dicts/x').onsuccess = resolve
+  })
   const staged = []
   await exportStorage({ idb: from, storage: fakeStorage(), put: async (bytes) => staged.push(bytes) })
   const to = fakeIndexedDB()
@@ -182,10 +227,32 @@ test('a record that does not read back as written fails the copy', async () => {
       const tx = h.transaction.bind(h)
       h.transaction = (n) => {
         const t = tx(n)
-        return { objectStore: () => ({ ...t.objectStore(), put: (value, key) => t.objectStore().put({ ...value, contents: new Uint8Array([2]) }, key) }) }
+        return {
+          objectStore: () => ({
+            ...t.objectStore(),
+            put: (value, key) => t.objectStore().put({ ...value, contents: new Uint8Array([2]) }, key)
+          })
+        }
       }
     }
-    const wrap = { set onsuccess(fn) { r.onsuccess = () => { done(); fn() } }, set onupgradeneeded(fn) { r.onupgradeneeded = fn }, set onerror(fn) { r.onerror = fn }, set onblocked(fn) {}, get result() { return r.result } }
+    const wrap = {
+      set onsuccess(fn) {
+        r.onsuccess = () => {
+          done()
+          fn()
+        }
+      },
+      set onupgradeneeded(fn) {
+        r.onupgradeneeded = fn
+      },
+      set onerror(fn) {
+        r.onerror = fn
+      },
+      set onblocked(fn) {},
+      get result() {
+        return r.result
+      }
+    }
     return wrap
   }
   await assert.rejects(
@@ -197,7 +264,10 @@ test('a record that does not read back as written fails the copy', async () => {
 test('on the loopback origin the extension window reaches its commands through kimochi-ext', async () => {
   const { extCommand, extTauri } = await import('../host/ext/primitives.js')
   const calls = []
-  const tauri = { core: { invoke: async (...args) => calls.push(args), Channel: class {} }, event: { listen: async () => {} } }
+  const tauri = {
+    core: { invoke: async (...args) => calls.push(args), Channel: class {} },
+    event: { listen: async () => {} }
+  }
   // Everywhere but Hachidori's loopback origin: untouched.
   assert.equal(extCommand({}, 'ext_relay'), 'ext_relay')
   assert.equal(extTauri({ __TAURI__: tauri }), tauri)

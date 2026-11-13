@@ -13,8 +13,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
-    AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _, EventMask, StackMode,
-    Window,
+    AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _, EventMask, StackMode, Window,
 };
 use x11rb::rust_connection::RustConnection;
 
@@ -66,12 +65,7 @@ pub fn cursor() -> Option<PointerSample> {
         x: to_desktop(reply.root_x),
         y: to_desktop(reply.root_y),
         down: held.primary,
-        modifiers: Modifiers {
-            shift: held.shift,
-            ctrl: held.ctrl,
-            alt: held.alt,
-            meta: held.meta,
-        },
+        modifiers: Modifiers { shift: held.shift, ctrl: held.ctrl, alt: held.alt, meta: held.meta },
     })
 }
 
@@ -89,8 +83,7 @@ pub fn workarea() -> Option<rules::Area> {
         .and_then(|v| v.first().copied())
         .unwrap_or(0);
     let values = d.property32(d.root, d.atoms._NET_WORKAREA, AtomEnum::CARDINAL)?;
-    rules::workarea_for_desktop(&values, current as usize)
-        .or_else(|| rules::workarea_for_desktop(&values, 0))
+    rules::workarea_for_desktop(&values, current as usize).or_else(|| rules::workarea_for_desktop(&values, 0))
 }
 
 pub fn display_source_id_of(id: u32) -> String {
@@ -142,10 +135,7 @@ pub fn front_window() -> Option<FrontWindow> {
     let info = d.window_info(active)?;
     let pid = info.pid?;
     let readable = info.on_screen() && matches!(info.kind, WindowKind::Normal | WindowKind::Dialog);
-    Some(FrontWindow {
-        window: readable.then(|| window_source_id(active, Some(pid))),
-        pid,
-    })
+    Some(FrontWindow { window: readable.then(|| window_source_id(active, Some(pid))), pid })
 }
 
 pub fn frontmost_pid() -> Option<u32> {
@@ -159,10 +149,7 @@ pub fn frontmost_app() -> Option<String> {
 
 /// Every client window owned by `pid`, front to back.
 fn windows_of(d: &Desktop, pid: u32) -> Vec<Window> {
-    d.clients()
-        .into_iter()
-        .filter(|&w| d.pid(w) == Some(pid))
-        .collect()
+    d.clients().into_iter().filter(|&w| d.pid(w) == Some(pid)).collect()
 }
 
 /// PNG of an application's icon from `_NET_WM_ICON` on one of its windows, the
@@ -177,9 +164,7 @@ pub fn app_icon_png(name: &str, pid: Option<u32>, target: isize) -> Option<Vec<u
             .clients()
             .into_iter()
             .filter(|&w| {
-                d.pid(w)
-                    .and_then(kimochi_capture::x11::process_name)
-                    .is_some_and(|n| n.eq_ignore_ascii_case(name))
+                d.pid(w).and_then(kimochi_capture::x11::process_name).is_some_and(|n| n.eq_ignore_ascii_case(name))
             })
             .collect(),
     };
@@ -215,12 +200,7 @@ fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
 fn client_message(d: &Desktop, window: Window, kind: u32, data: [u32; 5]) -> Result<(), String> {
     let event = ClientMessageEvent::new(32, window, kind, data);
     d.conn
-        .send_event(
-            false,
-            d.root,
-            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
-            event,
-        )
+        .send_event(false, d.root, EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY, event)
         .map_err(|e| e.to_string())?;
     d.conn.flush().map_err(|e| e.to_string())
 }
@@ -240,10 +220,7 @@ pub fn raise(window: Window) -> Result<(), String> {
     let d = desktop().ok_or("native: no X server")?;
     client_message(d, window, d.atoms._NET_RESTACK_WINDOW, [2, 0, 0, 0, 0])?;
     d.conn
-        .configure_window(
-            window,
-            &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
-        )
+        .configure_window(window, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE))
         .map_err(|e| e.to_string())?;
     d.conn.flush().map_err(|e| e.to_string())
 }
@@ -309,12 +286,7 @@ pub fn pointer_in(window: Window) -> Option<(f64, f64)> {
     if at.child != top && at.child != window {
         return None;
     }
-    let local = d
-        .conn
-        .translate_coordinates(d.root, window, at.root_x, at.root_y)
-        .ok()?
-        .reply()
-        .ok()?;
+    let local = d.conn.translate_coordinates(d.root, window, at.root_x, at.root_y).ok()?.reply().ok()?;
     let geometry = d.conn.get_geometry(window).ok()?.reply().ok()?;
     let (x, y) = (f64::from(local.dst_x), f64::from(local.dst_y));
     if !rules::inside(x, y, f64::from(geometry.width), f64::from(geometry.height)) {
@@ -336,12 +308,7 @@ pub fn has_input_shape() -> bool {
         let Some(d) = desktop() else {
             return false;
         };
-        let present = d
-            .conn
-            .extension_information(x11rb::protocol::shape::X11_EXTENSION_NAME)
-            .ok()
-            .flatten()
-            .is_some();
+        let present = d.conn.extension_information(x11rb::protocol::shape::X11_EXTENSION_NAME).ok().flatten().is_some();
         present
             && d.conn
                 .shape_query_version()
@@ -363,47 +330,21 @@ pub fn set_input_shape(window: Window, regions: Option<&[Rect]>) -> Result<(), S
     use x11rb::protocol::xproto::{ClipOrdering, Rectangle};
     let d = desktop().ok_or("native: no X server")?;
     let cookie = match regions {
-        None => d
-            .conn
-            .shape_mask(SO::SET, SK::INPUT, window, 0, 0, x11rb::NONE)
-            .map_err(|e| e.to_string())?,
+        None => d.conn.shape_mask(SO::SET, SK::INPUT, window, 0, 0, x11rb::NONE).map_err(|e| e.to_string())?,
         Some(regions) => {
-            let geometry = d
-                .conn
-                .get_geometry(window)
-                .map_err(|e| e.to_string())?
-                .reply()
-                .map_err(|e| e.to_string())?;
-            let css: Vec<[f64; 4]> = regions
-                .iter()
-                .map(|r| [r.x, r.y, r.width, r.height])
+            let geometry =
+                d.conn.get_geometry(window).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
+            let css: Vec<[f64; 4]> = regions.iter().map(|r| [r.x, r.y, r.width, r.height]).collect();
+            let rects: Vec<Rectangle> = rules::input_shape(&css, scale(), (geometry.width, geometry.height))
+                .into_iter()
+                .map(|r| Rectangle { x: r.x, y: r.y, width: r.width, height: r.height })
                 .collect();
-            let rects: Vec<Rectangle> =
-                rules::input_shape(&css, scale(), (geometry.width, geometry.height))
-                    .into_iter()
-                    .map(|r| Rectangle {
-                        x: r.x,
-                        y: r.y,
-                        width: r.width,
-                        height: r.height,
-                    })
-                    .collect();
             d.conn
-                .shape_rectangles(
-                    SO::SET,
-                    SK::INPUT,
-                    ClipOrdering::UNSORTED,
-                    window,
-                    0,
-                    0,
-                    &rects,
-                )
+                .shape_rectangles(SO::SET, SK::INPUT, ClipOrdering::UNSORTED, window, 0, 0, &rects)
                 .map_err(|e| e.to_string())?
         }
     };
-    cookie
-        .check()
-        .map_err(|e| format!("native: input shape: {e}"))
+    cookie.check().map_err(|e| format!("native: input shape: {e}"))
 }
 
 /// Names of a window's `_NET_WM_STATE` and `_NET_WM_WINDOW_TYPE` atoms, its WM_HINTS
@@ -453,9 +394,7 @@ pub fn own_windows() -> Vec<Window> {
     windows_of(d, std::process::id())
         .into_iter()
         .filter(|&w| {
-            let types = d
-                .property32(w, d.atoms._NET_WM_WINDOW_TYPE, AtomEnum::ATOM)
-                .unwrap_or_default();
+            let types = d.property32(w, d.atoms._NET_WM_WINDOW_TYPE, AtomEnum::ATOM).unwrap_or_default();
             !types.contains(&d.atoms._NET_WM_WINDOW_TYPE_UTILITY)
         })
         .collect()

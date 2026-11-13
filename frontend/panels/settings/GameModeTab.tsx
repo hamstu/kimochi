@@ -27,7 +27,8 @@ export function GameModeTab(): ReactNode {
           type="single"
           value={view}
           onValueChange={(next) =>
-            next && void setGameMode({ ...DEFAULT_GAME_MODE_SETTINGS, ...gameMode, dictionaryView: next as GameDictionaryView })
+            next &&
+            void setGameMode({ ...DEFAULT_GAME_MODE_SETTINGS, ...gameMode, dictionaryView: next as GameDictionaryView })
           }
           className="read-along-views"
           aria-label="Dictionary in Read along"

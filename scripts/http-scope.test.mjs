@@ -12,10 +12,7 @@ import { build } from 'esbuild'
 const capability = JSON.parse(
   await readFile(new URL('../src-tauri/capabilities/network.json', import.meta.url), 'utf8')
 )
-const source = await readFile(
-  fileURLToPath(new URL('../frontend/bridge/net.ts', import.meta.url)),
-  'utf8'
-)
+const source = await readFile(fileURLToPath(new URL('../frontend/bridge/net.ts', import.meta.url)), 'utf8')
 
 const scopeFromCapability = capability.permissions
   .filter((permission) => typeof permission === 'object' && permission.identifier === 'http:default')
@@ -44,16 +41,33 @@ test('AnkiConnect is outside the plugin scope at every address: it is reached fr
   const { scopeFromCapability, scopeAllows } = await import('./ext-dev-server.mjs')
   const scope = scopeFromCapability(capability)
   const bundled = await build({
-    stdin: { contents: source, loader: 'ts' }, bundle: true, format: 'esm', write: false,
-    plugins: [{ name: 'unused-http-transport', setup(builder) {
-      builder.onResolve({ filter: /^@tauri-apps\/plugin-http$/ }, () => ({ path: 'http', namespace: 'stub' }))
-      builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: 'export const fetch = () => { throw Error("not used") }' }))
-    } }]
+    stdin: { contents: source, loader: 'ts' },
+    bundle: true,
+    format: 'esm',
+    write: false,
+    plugins: [
+      {
+        name: 'unused-http-transport',
+        setup(builder) {
+          builder.onResolve({ filter: /^@tauri-apps\/plugin-http$/ }, () => ({ path: 'http', namespace: 'stub' }))
+          builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
+            contents: 'export const fetch = () => { throw Error("not used") }'
+          }))
+        }
+      }
+    ]
   })
-  const { isWithinHttpScope } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`)
+  const { isWithinHttpScope } = await import(
+    `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`
+  )
   // plugin-http would send the webview's Origin, which AnkiConnect's default config refuses
   // (HTTP 403); the anki_* commands and anki_connect_relay (host/anki-relay.js) send none.
-  for (const url of ['http://127.0.0.1:8765/', 'http://localhost:8765/', 'http://192.0.2.42:8765/', 'http://127.0.0.1:8770/']) {
+  for (const url of [
+    'http://127.0.0.1:8765/',
+    'http://localhost:8765/',
+    'http://192.0.2.42:8765/',
+    'http://127.0.0.1:8770/'
+  ]) {
     assert.equal(scopeAllows(scope, url), false, url)
     assert.equal(isWithinHttpScope(url), false, url)
   }
@@ -64,10 +78,7 @@ test('AnkiConnect is outside the plugin scope at every address: it is reached fr
 })
 
 test('the Yomitan API client goes through the native command, not the plugin scope', async () => {
-  const yomitan = await readFile(
-    fileURLToPath(new URL('../frontend/bridge/yomitan.ts', import.meta.url)),
-    'utf8'
-  )
+  const yomitan = await readFile(fileURLToPath(new URL('../frontend/bridge/yomitan.ts', import.meta.url)), 'utf8')
   // A user-configured URL cannot be limited to an enumerated allow-list, so it is validated in
   // Rust instead. If this ever reverts to httpFetch, most addresses silently stop working.
   assert.ok(yomitan.includes("invoke<T>('yomitan_request'"), 'expected yomitan_request transport')
@@ -79,7 +90,9 @@ test('the extension windows get event listening and the same HTTP scope as netwo
   const read = async (name) => JSON.parse(await readFile(new URL(name, dir), 'utf8'))
   const extension = await read('extension-windows.json')
   assert.deepEqual(extension.windows.slice().sort(), ['ext-hachidori', 'ext-tenten'])
-  const names = extension.permissions.map((permission) => (typeof permission === 'string' ? permission : permission.identifier))
+  const names = extension.permissions.map((permission) =>
+    typeof permission === 'string' ? permission : permission.identifier
+  )
   assert.deepEqual(names, ['core:event:allow-listen', 'http:default'])
   const scope = extension.permissions
     .filter((permission) => typeof permission === 'object' && permission.identifier === 'http:default')

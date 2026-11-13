@@ -13,14 +13,9 @@ interface CapturePreviewProps {
 }
 
 const sourceUrl = (imageData: string): string =>
-  imageData.startsWith('capture:') || imageData.startsWith('data:')
-    ? imageData
-    : `data:image/png;base64,${imageData}`
+  imageData.startsWith('capture:') || imageData.startsWith('data:') ? imageData : `data:image/png;base64,${imageData}`
 
-export default function CapturePreview({
-  visible,
-  imageData
-}: CapturePreviewProps): JSX.Element | null {
+export default function CapturePreview({ visible, imageData }: CapturePreviewProps): JSX.Element | null {
   const [failed, setFailed] = useState<string | null>(null)
   if (!visible) return null
   return (

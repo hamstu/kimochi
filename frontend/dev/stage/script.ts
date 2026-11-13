@@ -84,7 +84,10 @@ export function parseRuby(line: string): Run[] {
   return runs
 }
 
-export const plainText = (line: string): string => parseRuby(line).map((run) => run.text).join('')
+export const plainText = (line: string): string =>
+  parseRuby(line)
+    .map((run) => run.text)
+    .join('')
 
 /** The entry for a lookup starting at `text`: its longest known word, else its first character. */
 export function lookupWord(script: StageScript, text: string): { term: string; word: StageWord | null } {

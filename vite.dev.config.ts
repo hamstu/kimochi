@@ -171,10 +171,9 @@ function kimochiDev(): Plugin {
       server.ws.send({ type: 'custom', event: RELOAD_EVENT })
       outcome = 'reloaded the ui/ pages'
     }
-    server.config.logger.info(
-      `[kimochi] dist/ updated in ${Date.now() - started} ms (${names}); ${outcome}`,
-      { timestamp: true }
-    )
+    server.config.logger.info(`[kimochi] dist/ updated in ${Date.now() - started} ms (${names}); ${outcome}`, {
+      timestamp: true
+    })
     const injected = hostFiles.filter((file) => /[\\/]host[\\/](yomitan[\\/]|ext[\\/])/.test(file))
     if (injected.length > 0 && !relaunching) {
       server.config.logger.warn(
@@ -254,7 +253,9 @@ function kimochiDev(): Plugin {
         // The harness's stand-in for native's all-frames Yomitan shim (see ext-dev-server.mjs).
         if (url.split('?')[0] === '/settings.html' && !harnessInjectsYomitanShim(req.headers.cookie)) {
           const html = await readFile(file, 'utf8')
-          res.end(req.method === 'HEAD' ? undefined : injectHostScript(html, '<script src="/spike/panel-shim.js"></script>'))
+          res.end(
+            req.method === 'HEAD' ? undefined : injectHostScript(html, '<script src="/spike/panel-shim.js"></script>')
+          )
           return
         }
         if (file.endsWith('.html') && harnessInjectsYomitanShim(req.headers.cookie)) {

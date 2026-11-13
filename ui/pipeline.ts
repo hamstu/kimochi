@@ -27,9 +27,7 @@ export interface ScanJob<Request = unknown, Source = unknown> {
 
 /** Stable identity for a selection, so a change can be detected by comparison. */
 export function selectionKey(selection: Selection): string {
-  const crop = selection.crop
-    ? JSON.stringify(selection.crop, Object.keys(selection.crop as object).sort())
-    : 'full'
+  const crop = selection.crop ? JSON.stringify(selection.crop, Object.keys(selection.crop as object).sort()) : 'full'
   return `${selection.sourceId ?? 'none'}|${crop}`
 }
 

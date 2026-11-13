@@ -1,7 +1,5 @@
 //! Linux has no portable capture-exclusion flag. Suppress annotation surfaces while acquiring pixels.
-use kimochi_capture::{
-    Capabilities, CaptureBackend, CaptureError, CaptureRequest, Frame, Result, Source,
-};
+use kimochi_capture::{Capabilities, CaptureBackend, CaptureError, CaptureRequest, Frame, Result, Source};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -22,15 +20,8 @@ pub fn suppressed() -> bool {
     SUPPRESSED.load(Ordering::SeqCst)
 }
 // The dictionary pop-up and the ones nested on it (`reader::popover::LEVELS`).
-const LABELS: [&str; 7] = [
-    "overlay",
-    "popup-host",
-    "reader-popup",
-    "reader-popup-2",
-    "reader-popup-3",
-    "reader-popup-4",
-    "reader-popup-5",
-];
+const LABELS: [&str; 7] =
+    ["overlay", "popup-host", "reader-popup", "reader-popup-2", "reader-popup-3", "reader-popup-4", "reader-popup-5"];
 pub fn annotation_window(label: &str) -> bool {
     LABELS.contains(&label)
 }
@@ -51,9 +42,9 @@ impl Drop for Hidden {
                 SUPPRESSED.store(false, Ordering::SeqCst);
                 for label in visible {
                     if label == "overlay"
-                        && app.try_state::<crate::state::Shared>().is_some_and(|s| {
-                            !s.view.lock().unwrap().overlay_visible && !super::region_editing()
-                        })
+                        && app
+                            .try_state::<crate::state::Shared>()
+                            .is_some_and(|s| !s.view.lock().unwrap().overlay_visible && !super::region_editing())
                     {
                         continue;
                     }
@@ -74,10 +65,7 @@ impl Drop for Hidden {
 
 fn hide(app: &AppHandle) -> Result<Hidden> {
     if super::region_editing() {
-        return Err(CaptureError::new(
-            "busy",
-            "Finish crop editing before capturing",
-        ));
+        return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
     }
     let handle = app.clone();
     let (tx, rx) = mpsc::channel();
@@ -115,11 +103,7 @@ fn hide(app: &AppHandle) -> Result<Hidden> {
     let (visible, error, after) = rx
         .recv_timeout(Duration::from_secs(5))
         .map_err(|e| CaptureError::new("native", format!("Overlay hide did not complete: {e}")))?;
-    let guard = Hidden {
-        app: app.clone(),
-        visible,
-        after,
-    };
+    let guard = Hidden { app: app.clone(), visible, after };
     if let Some(error) = error {
         return Err(CaptureError::new("native", error));
     }
@@ -145,12 +129,14 @@ impl CaptureBackend for Protected {
         self.inner.request_permission()
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
-        let mut sources=self.inner.enumerate()?;
+        let mut sources = self.inner.enumerate()?;
         let native = kimochi_capture::linux_native::inventory();
         for source in &mut sources {
             super::gnome::decorate_source(source);
             super::gaming_sources::decorate(source);
-            if let Some(inventory) = &native { super::native::decorate(source, inventory); }
+            if let Some(inventory) = &native {
+                super::native::decorate(source, inventory);
+            }
         }
         Ok(sources)
     }
@@ -183,7 +169,9 @@ impl CaptureBackend for Protected {
         if super::region_editing() {
             return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
         }
-        let _gnome = if isolated_window { None } else {
+        let _gnome = if isolated_window {
+            None
+        } else {
             Some(super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?)
         };
         let hidden = if isolated_window { None } else { Some(hide(&self.app)?) };
@@ -203,7 +191,13 @@ impl CaptureBackend for Protected {
                 before = super::gnome::match_window(&request.source_id, frame.info.full_width, frame.info.full_height);
             }
         }
-        if let (Some(before), Some(after), Ok(frame)) = (before, result.as_ref().ok().and_then(|frame| super::gnome::tracked_frame_bounds(&request.source_id, frame.info.full_width, frame.info.full_height)), result.as_mut()) {
+        if let (Some(before), Some(after), Ok(frame)) = (
+            before,
+            result.as_ref().ok().and_then(|frame| {
+                super::gnome::tracked_frame_bounds(&request.source_id, frame.info.full_width, frame.info.full_height)
+            }),
+            result.as_mut(),
+        ) {
             if before.width == after.width && before.height == after.height {
                 let sx = f64::from(frame.info.full_width) / after.width;
                 let sy = f64::from(frame.info.full_height) / after.height;
@@ -213,7 +207,11 @@ impl CaptureBackend for Protected {
                 }
             }
         }
-        if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
+        if result.is_ok() {
+            if let Some(service) = self.app.try_state::<crate::state::Shared>() {
+                super::gnome::refresh_identity(&service, &request.source_id);
+            }
+        }
         if let Ok(frame) = result.as_mut() {
             super::tracking::enrich(frame);
             super::native::enrich(frame);

@@ -13,8 +13,8 @@ use crate::{Frame, FrameInfo};
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::AllocAnyThread;
 use objc2_app_kit::{
-    NSBitmapImageRep, NSColor, NSDeviceRGBColorSpace, NSFont, NSFontAttributeName,
-    NSForegroundColorAttributeName, NSGraphicsContext, NSStringDrawing,
+    NSBitmapImageRep, NSColor, NSDeviceRGBColorSpace, NSFont, NSFontAttributeName, NSForegroundColorAttributeName,
+    NSGraphicsContext, NSStringDrawing,
 };
 use objc2_foundation::{NSDictionary, NSPoint, NSString};
 
@@ -36,8 +36,7 @@ pub struct Placement {
 pub fn japanese_frame(width: u32, height: u32, lines: &[(&str, Placement)]) -> Frame {
     let pixels = autoreleasepool(|_| {
         let rep = bitmap(width, height);
-        let context = NSGraphicsContext::graphicsContextWithBitmapImageRep(&rep)
-            .expect("a bitmap graphics context");
+        let context = NSGraphicsContext::graphicsContextWithBitmapImageRep(&rep).expect("a bitmap graphics context");
         NSGraphicsContext::saveGraphicsState_class();
         NSGraphicsContext::setCurrentContext(Some(&context));
 
@@ -51,23 +50,15 @@ pub fn japanese_frame(width: u32, height: u32, lines: &[(&str, Placement)]) -> F
         for (text, placement) in lines {
             let font = NSFont::systemFontOfSize(placement.size);
             let attributes = NSDictionary::from_slices(
-                &[unsafe { NSFontAttributeName }, unsafe {
-                    NSForegroundColorAttributeName
-                }],
-                &[
-                    &*font as &objc2::runtime::AnyObject,
-                    &*NSColor::blackColor() as &objc2::runtime::AnyObject,
-                ],
+                &[unsafe { NSFontAttributeName }, unsafe { NSForegroundColorAttributeName }],
+                &[&*font as &objc2::runtime::AnyObject, &*NSColor::blackColor() as &objc2::runtime::AnyObject],
             );
             // AppKit draws from a bottom-left origin; the placement is given from
             // the top because that is how every other coordinate here is stated.
             let baseline = f64::from(height) - placement.top - placement.size * 1.3;
             let string = NSString::from_str(text);
             unsafe {
-                string.drawAtPoint_withAttributes(
-                    NSPoint::new(placement.x, baseline),
-                    Some(&attributes),
-                );
+                string.drawAtPoint_withAttributes(NSPoint::new(placement.x, baseline), Some(&attributes));
             }
         }
 

@@ -17,7 +17,12 @@ pub struct GUID {
 
 impl GUID {
     pub const fn from_u128(v: u128) -> Self {
-        Self { data1: (v >> 96) as u32, data2: (v >> 80) as u16, data3: (v >> 64) as u16, data4: (v as u64).to_be_bytes() }
+        Self {
+            data1: (v >> 96) as u32,
+            data2: (v >> 80) as u16,
+            data3: (v >> 64) as u16,
+            data4: (v as u64).to_be_bytes(),
+        }
     }
 }
 

@@ -19,12 +19,25 @@ Branch from `main`, then before opening a PR run:
 
 ```sh
 npm test             # node --test over scripts/*.test.mjs (first run downloads the dictionary engines)
-npm run typecheck
-npm run lint
+npm run typecheck    # TypeScript 7
+npm run lint         # oxlint
+npm run format       # oxfmt for JS, TS, CSS, HTML, JSON and YAML; rustfmt for Rust
 npm run check:rust   # cargo clippy -D warnings
 ```
 
-CI runs the same checks, plus the `capture-core` tests and a bundle, on macOS, Windows and Linux.
+**Formatting is automatic.** `npm install` points git at `.githooks/`, whose pre-commit hook
+formats what you commit (oxfmt, rustfmt) and lints it (oxlint). It works on the staged version of
+each file, so a partly staged file keeps its unstaged changes; `git commit --no-verify` skips it.
+The style lives in `.oxfmtrc.json`, `rustfmt.toml` and `.oxlintrc.json`; Markdown is not
+formatted. Editors with the oxc extension (VS Code, Zed, JetBrains) can format on save from the
+same config.
+
+**Pull requests** run CI on GitHub's runners: `Lint` (formatting, oxlint, typecheck, the
+workflows), then `Checks` (the tests, clippy and the native crates' tests) on macOS, Windows x64
+and Linux x64; a change to the website or Markdown alone runs `Lint` only. The `CI` status sums
+the run up and is the one `main` requires, so a pull request set to auto-merge
+(`gh pr merge --auto --squash`) merges as soon as it is green. Pushes to `main` run the checks on
+all five platforms (adding the ARM64 builds).
 
 On macOS, Screen Recording permission belongs to the certificate an app was signed with, not just
 its bundle id. `npm run bundle` signs with your Developer ID certificate if you have one (else
@@ -84,7 +97,7 @@ pop-up placement and the misses. Both must pass before the new pin ships.
 release notes and the app's "What's new". Refactors, CI and tests don't need one.
 
 **Releases** are cut by the maintainer. `main` is the development line: every push that changes the app
-runs the checks on every platform but builds no bundles (website- and documentation-only pushes run nothing), and nothing on `main` is offered to users as an update. A release
+runs the checks on every platform (on GitHub's runners) but builds no bundles (website- and documentation-only pushes run nothing), and nothing on `main` is offered to users as an update. A release
 is a `v<x.y.z>` tag made by `npm run release -- <x.y.z>` on a clean `main`; CI builds, signs and
 publishes it, and installed copies update to it. Never bump the version or tag by hand.
 

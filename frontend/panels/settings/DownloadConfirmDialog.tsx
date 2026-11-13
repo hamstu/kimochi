@@ -8,11 +8,7 @@ import { ConfirmDialog } from '@kit'
 import { downloadPrompt } from '@ui/model-download'
 import type { DownloadConfirmation } from '../../bridge/useEngineSelection'
 
-export function DownloadConfirmDialog({
-  confirmation
-}: {
-  confirmation: DownloadConfirmation | null
-}): ReactNode {
+export function DownloadConfirmDialog({ confirmation }: { confirmation: DownloadConfirmation | null }): ReactNode {
   // The last question asked, so its words stay put while the dialog fades out.
   const [last, setLast] = useState(confirmation)
   if (confirmation && confirmation !== last) setLast(confirmation)

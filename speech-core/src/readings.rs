@@ -60,9 +60,9 @@ fn voiced(c: char) -> &'static [char] {
 /// reading's stem before the kana written after it, 分 of 分かる), its first sound perhaps voiced.
 pub fn reads(readings: &[Vec<char>], run: &[char]) -> bool {
     let Some((&first, rest)) = run.split_first() else { return false };
-    readings.iter().any(|r| {
-        r.len() >= run.len() && r[1..run.len()] == *rest && (r[0] == first || voiced(r[0]).contains(&first))
-    })
+    readings
+        .iter()
+        .any(|r| r.len() >= run.len() && r[1..run.len()] == *rest && (r[0] == first || voiced(r[0]).contains(&first)))
 }
 
 /// Whether `c` is kana (what a reading is made of).

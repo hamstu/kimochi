@@ -30,8 +30,7 @@ export interface DirEntry {
 const files = new Map<string, Data>()
 const dirs = new Set<string>([''])
 
-const norm = (path: string | URL): string =>
-  String(path).replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '')
+const norm = (path: string | URL): string => String(path).replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '')
 
 function addParents(path: string): void {
   const parts = path.split('/')
@@ -78,10 +77,7 @@ export async function readTextFile(path: string | URL, _options?: ReadFileOption
   return typeof data === 'string' ? data : decoder.decode(data)
 }
 
-export async function readFile(
-  path: string | URL,
-  _options?: ReadFileOptions
-): Promise<Uint8Array<ArrayBuffer>> {
+export async function readFile(path: string | URL, _options?: ReadFileOptions): Promise<Uint8Array<ArrayBuffer>> {
   const p = norm(path)
   const data = files.get(p)
   if (data === undefined) throw missing(p)
@@ -91,11 +87,7 @@ export async function readFile(
   return copy
 }
 
-export async function writeTextFile(
-  path: string | URL,
-  data: string,
-  options?: WriteFileOptions
-): Promise<void> {
+export async function writeTextFile(path: string | URL, data: string, options?: WriteFileOptions): Promise<void> {
   const p = norm(path)
   addParents(p)
   const prior = options?.append ? await readTextFile(p).catch(() => '') : ''
@@ -130,11 +122,7 @@ export async function writeFile(
   files.set(p, out)
 }
 
-export async function rename(
-  oldPath: string | URL,
-  newPath: string | URL,
-  _options?: RenameOptions
-): Promise<void> {
+export async function rename(oldPath: string | URL, newPath: string | URL, _options?: RenameOptions): Promise<void> {
   const from = norm(oldPath)
   const to = norm(newPath)
   const data = files.get(from)
@@ -158,11 +146,9 @@ export async function readDir(path: string | URL, _options?: ReadDirOptions): Pr
   const prefix = p ? `${p}/` : ''
   const names = new Map<string, boolean>()
   for (const k of files.keys())
-    if (k.startsWith(prefix) && !k.slice(prefix.length).includes('/'))
-      names.set(k.slice(prefix.length), false)
+    if (k.startsWith(prefix) && !k.slice(prefix.length).includes('/')) names.set(k.slice(prefix.length), false)
   for (const k of dirs)
-    if (k && k.startsWith(prefix) && !k.slice(prefix.length).includes('/'))
-      names.set(k.slice(prefix.length), true)
+    if (k && k.startsWith(prefix) && !k.slice(prefix.length).includes('/')) names.set(k.slice(prefix.length), true)
   return [...names].map(([name, isDirectory]) => ({
     name,
     isDirectory,

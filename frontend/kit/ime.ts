@@ -41,6 +41,6 @@ export function useSteadyValue<E extends Field>(
       const typed = event.target.value
       setState((s) => steadyTyped(s, typed))
       onChange?.(event)
-    },
+    }
   }
 }

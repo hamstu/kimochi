@@ -17,10 +17,9 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Power::RegisterSuspendResumeNotification;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, RegisterClassExW, DEVICE_NOTIFY_WINDOW_HANDLE,
-    EVENT_SYSTEM_FOREGROUND, HWND_MESSAGE, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND,
-    PBT_APMSUSPEND, WINDOW_EX_STYLE, WINDOW_STYLE, WINEVENT_OUTOFCONTEXT, WM_POWERBROADCAST,
-    WNDCLASSEXW,
+    CreateWindowExW, DefWindowProcW, RegisterClassExW, DEVICE_NOTIFY_WINDOW_HANDLE, EVENT_SYSTEM_FOREGROUND,
+    HWND_MESSAGE, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND, PBT_APMSUSPEND, WINDOW_EX_STYLE, WINDOW_STYLE,
+    WINEVENT_OUTOFCONTEXT, WM_POWERBROADCAST, WNDCLASSEXW,
 };
 
 struct Handlers {
@@ -92,8 +91,7 @@ pub fn observe_workspace(
         ) {
             Ok(hwnd) => {
                 // The handle is intentionally leaked: it lives as long as the process.
-                let _ =
-                    RegisterSuspendResumeNotification(HANDLE(hwnd.0), DEVICE_NOTIFY_WINDOW_HANDLE);
+                let _ = RegisterSuspendResumeNotification(HANDLE(hwnd.0), DEVICE_NOTIFY_WINDOW_HANDLE);
             }
             Err(e) => eprintln!("platform: power notifications unavailable: {e}"),
         }
@@ -112,12 +110,7 @@ pub fn observe_workspace(
     }
 }
 
-unsafe extern "system" fn power_proc(
-    hwnd: HWND,
-    msg: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
+unsafe extern "system" fn power_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if msg == WM_POWERBROADCAST {
         let event = match wparam.0 as u32 {
             PBT_APMSUSPEND => Some(rules::PowerEvent::Suspend),

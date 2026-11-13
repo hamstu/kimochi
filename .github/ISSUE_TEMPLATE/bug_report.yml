@@ -1,6 +1,6 @@
 name: Bug report
 description: Something in Kimochi doesn't work the way it should.
-labels: ["bug"]
+labels: ['bug']
 body:
   - type: markdown
     attributes:
@@ -21,20 +21,20 @@ body:
     attributes:
       label: Reporter / source
       description: If this came from somewhere else (a Discord message, a forum post), link it here and say who reported it.
-      placeholder: "Discord #general: https://discord.com/channels/…"
+      placeholder: 'Discord #general: https://discord.com/channels/…'
   - type: textarea
     id: debug-info
     attributes:
       label: Debug info
       description: Paste what **Settings → About → Debug info → Copy** gives you. It has your Kimochi version, OS, CPU/GPU, monitors and scaling, OCR engine and dictionary.
-      placeholder: "### Kimochi debug info …"
+      placeholder: '### Kimochi debug info …'
     validations:
       required: true
   - type: textarea
     id: environment
     attributes:
       label: Environment (if you couldn't copy debug info)
-      description: "Kimochi version (Settings → About), OS and build (Windows: Win+R → `winver`), GPU, number of monitors with resolution and scaling %, and for a game, exclusive or borderless fullscreen."
+      description: 'Kimochi version (Settings → About), OS and build (Windows: Win+R → `winver`), GPU, number of monitors with resolution and scaling %, and for a game, exclusive or borderless fullscreen.'
       placeholder: |
         Kimochi 0.2.0, Windows 11 24H2 (26100), RTX 4070, 2 monitors (2560×1440 @150%, 1920×1080 @100%), borderless fullscreen
   - type: textarea

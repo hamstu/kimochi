@@ -11,8 +11,7 @@ const {
   keyPlatformOf,
   formatAccelerator,
   mouseButtonAccelerator
-} =
-  await load('../frontend/panels/settings/accelerator.ts')
+} = await load('../frontend/panels/settings/accelerator.ts')
 const { fallbackCapabilities, normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
 
 const MAC = { os: 'macos', keys: { primaryModifier: 'meta' } }
@@ -46,7 +45,11 @@ test('without native capabilities, the default still follows navigator hints', (
 
 test('a partial capabilities payload is completed from the default', () => {
   const caps = normalizeCapabilities(
-    { os: 'windows', keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' }, ocrEngines: { mangaocr: { available: false, reason: 'No' } } },
+    {
+      os: 'windows',
+      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' },
+      ocrEngines: { mangaocr: { available: false, reason: 'No' } }
+    },
     DEFAULT_CAPABILITIES_MACOS
   )
   assert.equal(caps.os, 'windows')
@@ -71,8 +74,14 @@ test('formats accelerators as platform key caps', () => {
 })
 
 test('converts key presses to Tauri accelerators', () => {
-  assert.equal(acceleratorFromEvent(press('Digit8', '*', { metaKey: true, shiftKey: true }), 'mac'), 'CommandOrControl+Shift+8')
-  assert.equal(acceleratorFromEvent(press('Digit8', '*', { ctrlKey: true, shiftKey: true }), 'windows'), 'CommandOrControl+Shift+8')
+  assert.equal(
+    acceleratorFromEvent(press('Digit8', '*', { metaKey: true, shiftKey: true }), 'mac'),
+    'CommandOrControl+Shift+8'
+  )
+  assert.equal(
+    acceleratorFromEvent(press('Digit8', '*', { ctrlKey: true, shiftKey: true }), 'windows'),
+    'CommandOrControl+Shift+8'
+  )
   assert.equal(acceleratorFromEvent(press('KeyK', 'k', { ctrlKey: true }), 'mac'), 'Control+K')
   assert.equal(acceleratorFromEvent(press('KeyJ', '∆', { altKey: true }), 'mac'), 'Alt+J')
   assert.equal(acceleratorFromEvent(press('ArrowUp', 'ArrowUp', { metaKey: true }), 'mac'), 'CommandOrControl+Up')
@@ -85,7 +94,10 @@ test('keys that type nothing can be a shortcut on their own or with Shift (#19)'
   for (const platform of ['windows', 'linux', 'mac']) {
     assert.equal(acceleratorFromEvent(press('Insert', 'Insert'), platform), 'Insert')
     assert.equal(acceleratorFromEvent(press('Pause', 'Pause'), platform), platform === 'mac' ? null : 'Pause')
-    assert.equal(acceleratorFromEvent(press('ScrollLock', 'ScrollLock'), platform), platform === 'mac' ? null : 'ScrollLock')
+    assert.equal(
+      acceleratorFromEvent(press('ScrollLock', 'ScrollLock'), platform),
+      platform === 'mac' ? null : 'ScrollLock'
+    )
     assert.equal(acceleratorFromEvent(press('F8', 'F8', { shiftKey: true }), platform), 'Shift+F8')
     assert.equal(acceleratorFromEvent(press('Insert', 'Insert', { shiftKey: true }), platform), 'Shift+Insert')
   }
@@ -93,7 +105,14 @@ test('keys that type nothing can be a shortcut on their own or with Shift (#19)'
   assert.deepEqual(acceleratorCaps('Shift+ScrollLock', 'windows'), ['Shift', 'ScrLk'])
   assert.deepEqual(acceleratorCaps('Pause', 'linux'), ['Pause'])
   // Keys that move the cursor or scroll stay modifier-only: taking them globally breaks every app.
-  for (const [code, key] of [['Home', 'Home'], ['PageDown', 'PageDown'], ['ArrowUp', 'ArrowUp'], ['Space', ' '], ['Enter', 'Enter'], ['Digit8', '8']]) {
+  for (const [code, key] of [
+    ['Home', 'Home'],
+    ['PageDown', 'PageDown'],
+    ['ArrowUp', 'ArrowUp'],
+    ['Space', ' '],
+    ['Enter', 'Enter'],
+    ['Digit8', '8']
+  ]) {
     assert.equal(acceleratorFromEvent(press(code, key), 'windows'), null, code)
   }
 })
@@ -128,9 +147,18 @@ test('recording maps the primary modifier per platform', () => {
     assert.equal(acceleratorFromEvent(press('KeyK', 'k', { ctrlKey: true }), platform), 'CommandOrControl+K')
     assert.equal(acceleratorFromEvent(press('KeyK', 'k', { metaKey: true }), platform), 'Super+K')
   }
-  assert.deepEqual(heldModifierCaps({ metaKey: true, ctrlKey: true, altKey: false, shiftKey: false }, 'windows'), ['Ctrl', 'Win'])
-  assert.deepEqual(heldModifierCaps({ metaKey: true, ctrlKey: true, altKey: false, shiftKey: false }, 'linux'), ['Ctrl', 'Super'])
-  assert.deepEqual(heldModifierCaps({ metaKey: true, ctrlKey: true, altKey: false, shiftKey: false }, 'mac'), ['⌃', '⌘'])
+  assert.deepEqual(heldModifierCaps({ metaKey: true, ctrlKey: true, altKey: false, shiftKey: false }, 'windows'), [
+    'Ctrl',
+    'Win'
+  ])
+  assert.deepEqual(heldModifierCaps({ metaKey: true, ctrlKey: true, altKey: false, shiftKey: false }, 'linux'), [
+    'Ctrl',
+    'Super'
+  ])
+  assert.deepEqual(heldModifierCaps({ metaKey: true, ctrlKey: true, altKey: false, shiftKey: false }, 'mac'), [
+    '⌃',
+    '⌘'
+  ])
 })
 
 test('app shortcuts use ⌘ alone on macOS and Ctrl alone elsewhere', () => {
@@ -171,9 +199,15 @@ test('mouse accelerators read as their button on every platform', () => {
 test('mouse buttons are offered only where native says they can fire', () => {
   // An older backend that never mentions them, and the default before native replies: never.
   assert.equal(DEFAULT_CAPABILITIES_MACOS.keys.mouseButtons, 'unsupported')
-  const old = normalizeCapabilities({ os: 'windows', keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' } })
+  const old = normalizeCapabilities({
+    os: 'windows',
+    keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' }
+  })
   assert.equal(old.keys.mouseButtons, 'unsupported')
-  assert.equal(fallbackCapabilities({ platform: 'Win32', userAgent: 'Windows NT 10.0' }).keys.mouseButtons, 'unsupported')
+  assert.equal(
+    fallbackCapabilities({ platform: 'Win32', userAgent: 'Windows NT 10.0' }).keys.mouseButtons,
+    'unsupported'
+  )
   const windows = normalizeCapabilities({ os: 'windows', keys: { mouseButtons: 'available' } })
   assert.equal(windows.keys.mouseButtons, 'available')
 })

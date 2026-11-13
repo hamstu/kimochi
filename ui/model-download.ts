@@ -50,22 +50,14 @@ export interface ModelStatus extends DownloadStatus {
   message: string | null
 }
 
-const STATES: readonly ModelState[] = [
-  'absent',
-  'downloading',
-  'paused',
-  'failed',
-  'verifying',
-  'ready'
-]
+const STATES: readonly ModelState[] = ['absent', 'downloading', 'paused', 'failed', 'verifying', 'ready']
 const SOURCES: readonly ModelSource[] = ['downloaded', 'bundled', 'development', 'browser']
 
 /** Whether an `ocrMode` value is a local OCR engine with downloaded models. */
 export const isModelEngine = (mode: unknown): mode is OcrModelEngine =>
   mode === 'meikiocr' || mode === 'mangaocr' || mode === 'ppocr' || mode === 'screenai' || mode === 'vocr'
 
-const isDownloadable = (engine: unknown): engine is ModelEngine =>
-  isModelEngine(engine) || engine === 'sensevoice'
+const isDownloadable = (engine: unknown): engine is ModelEngine => isModelEngine(engine) || engine === 'sensevoice'
 
 const count = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
@@ -180,9 +172,7 @@ export function actionLabel(action: ModelAction, status: DownloadStatus): string
  * picked engine's model status, null when it has none (a cloud engine, an older backend).
  */
 export function engineChoice(mode: string, status: ModelStatus | null): 'confirm' | 'select' {
-  return isModelEngine(mode) && status?.engine === mode && status.state === 'absent'
-    ? 'confirm'
-    : 'select'
+  return isModelEngine(mode) && status?.engine === mode && status.state === 'absent' ? 'confirm' : 'select'
 }
 
 /** The wording of the confirmation `engineChoice` asks for. */

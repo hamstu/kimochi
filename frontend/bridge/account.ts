@@ -80,7 +80,11 @@ export function useAccount(): AccountStatus {
 
 /** The last `account-link` update (a sign-in denied, expired or failed), for its message. */
 export function useLinkEvent(): LinkEvent | null {
-  return useSyncExternalStore(subscribe, () => lastLink, () => lastLink)
+  return useSyncExternalStore(
+    subscribe,
+    () => lastLink,
+    () => lastLink
+  )
 }
 
 export function clearAccountEvents(): void {

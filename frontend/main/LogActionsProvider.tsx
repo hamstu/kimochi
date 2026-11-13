@@ -19,8 +19,7 @@ import { LogActionsContext, type LogActions } from './logActions'
 
 type Pending = 'clear' | 'stats' | 'delete' | null
 
-const plural = (n: number, one: string, many: string): string =>
-  `${n.toLocaleString()} ${n === 1 ? one : many}`
+const plural = (n: number, one: string, many: string): string => `${n.toLocaleString()} ${n === 1 ? one : many}`
 
 export function LogActionsProvider({ children }: { children: ReactNode }): ReactNode {
   const [pending, setPending] = useState<Pending>(null)
@@ -75,8 +74,8 @@ export function LogActionsProvider({ children }: { children: ReactNode }): React
         title={`Clear the log of “${subject.name}”?`}
         description={
           <>
-            {plural(subject.lines, 'line', 'lines')} will be deleted. This can’t be undone. The
-            session, its notebook and its stats are kept.
+            {plural(subject.lines, 'line', 'lines')} will be deleted. This can’t be undone. The session, its notebook
+            and its stats are kept.
             {error && <span className="main-dialog-error">{error}</span>}
           </>
         }
@@ -91,8 +90,7 @@ export function LogActionsProvider({ children }: { children: ReactNode }): React
         title={`Reset the stats of “${subject.name}”?`}
         description={
           <>
-            Reading time, character count and speed start again from zero. This can’t be undone.
-            Lines are kept.
+            Reading time, character count and speed start again from zero. This can’t be undone. Lines are kept.
             {error && <span className="main-dialog-error">{error}</span>}
           </>
         }
@@ -107,8 +105,8 @@ export function LogActionsProvider({ children }: { children: ReactNode }): React
         title={`Delete “${subject.name}”?`}
         description={
           <>
-            The session, its {plural(subject.lines, 'line', 'lines')}, its notebook and its stats
-            will be deleted. This can’t be undone.
+            The session, its {plural(subject.lines, 'line', 'lines')}, its notebook and its stats will be deleted. This
+            can’t be undone.
             {error && <span className="main-dialog-error">{error}</span>}
           </>
         }
@@ -151,8 +149,7 @@ function SessionDetailsForm({ onDone }: { onDone: () => void }): ReactNode {
   const save = async (): Promise<void> => {
     try {
       if (name.trim() && name.trim() !== session.name) await renameSession(session.id, name.trim())
-      if (description !== session.description)
-        await updateSessionDescription(session.id, description)
+      if (description !== session.description) await updateSessionDescription(session.id, description)
       onDone()
     } catch (caught) {
       setError(String(caught))
@@ -186,11 +183,7 @@ function SessionDetailsForm({ onDone }: { onDone: () => void }): ReactNode {
       >
         <label className="main-form-field">
           <span className="main-form-label">Name</span>
-          <Input
-            id="session-details-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
+          <Input id="session-details-name" value={name} onChange={(event) => setName(event.target.value)} />
         </label>
         <label className="main-form-field">
           <span className="main-form-label">Description</span>

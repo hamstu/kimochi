@@ -23,12 +23,45 @@ await build({
 const { detectAnkiSetup, familyMappings, noteFamily, searchName } = await import(pathToFileURL(outfile).href)
 test.after(() => rm(outDir, { recursive: true, force: true }))
 
-const LAPIS = ['Expression', 'ExpressionFurigana', 'ExpressionReading', 'ExpressionAudio', 'SelectionText',
-  'MainDefinition', 'DefinitionPicture', 'Sentence', 'SentenceFurigana', 'SentenceAudio', 'Picture', 'Glossary',
-  'Hint', 'IsWordAndSentenceCard', 'IsClickCard', 'IsSentenceCard', 'PitchPosition', 'PitchCategories',
-  'Frequency', 'FreqSort', 'MiscInfo']
-const SENREN = ['word', 'reading', 'sentence', 'sentenceFurigana', 'sentenceTranslation', 'picture', 'wordAudio',
-  'sentenceAudio', 'selectionText', 'definition', 'glossary', 'pitchAccents', 'frequencies', 'miscInfo']
+const LAPIS = [
+  'Expression',
+  'ExpressionFurigana',
+  'ExpressionReading',
+  'ExpressionAudio',
+  'SelectionText',
+  'MainDefinition',
+  'DefinitionPicture',
+  'Sentence',
+  'SentenceFurigana',
+  'SentenceAudio',
+  'Picture',
+  'Glossary',
+  'Hint',
+  'IsWordAndSentenceCard',
+  'IsClickCard',
+  'IsSentenceCard',
+  'PitchPosition',
+  'PitchCategories',
+  'Frequency',
+  'FreqSort',
+  'MiscInfo'
+]
+const SENREN = [
+  'word',
+  'reading',
+  'sentence',
+  'sentenceFurigana',
+  'sentenceTranslation',
+  'picture',
+  'wordAudio',
+  'sentenceAudio',
+  'selectionText',
+  'definition',
+  'glossary',
+  'pitchAccents',
+  'frequencies',
+  'miscInfo'
+]
 
 const asMap = (mappings) => Object.fromEntries(mappings.map((m) => [m.ankiField, m.marker ?? `(${m.mappingType})`]))
 
@@ -38,7 +71,8 @@ test('only Lapis, Kiku and Senren count, by a name that starts with the family',
   assert.equal(noteFamily('Lapis'), 'lapis')
   assert.equal(noteFamily('Kiku v2'), 'kiku')
   assert.equal(noteFamily('senren 5.1'), 'senren')
-  for (const other of ['My Kiku', 'Kikuchi', 'Tango Card Format', 'Kaishi 1.5k']) assert.equal(noteFamily(other), null, other)
+  for (const other of ['My Kiku', 'Kikuchi', 'Tango Card Format', 'Kaishi 1.5k'])
+    assert.equal(noteFamily(other), null, other)
 })
 
 test("a family's fields map onto the note type, and without its core fields it is not one", () => {
@@ -113,7 +147,9 @@ test('the mining note type with the most notes wins, in the deck holding most of
 })
 
 test('nothing to suggest, or a tie, says why', async () => {
-  const none = await detectAnkiSetup(anki({ 'Tango Card Format': TANGO }, notes('Tango Card Format', 'Default', 5, 1), ['Default']))
+  const none = await detectAnkiSetup(
+    anki({ 'Tango Card Format': TANGO }, notes('Tango Card Format', 'Default', 5, 1), ['Default'])
+  )
   assert.equal(none.ok, false)
   assert.match(none.reason, /No Lapis, Kiku or Senren/)
   const empty = await detectAnkiSetup(anki({ Lapis: LAPIS }, [], ['Default']))
@@ -121,7 +157,9 @@ test('nothing to suggest, or a tie, says why', async () => {
   const emptyBoth = await detectAnkiSetup(anki({ Lapis: LAPIS, 'Senren v5': SENREN, Kiku: LAPIS }, [], ['Default']))
   assert.match(emptyBoth.reason, / and .* note types have no notes yet/)
   assert.doesNotMatch(emptyBoth.reason, /note type has/)
-  const tied = await detectAnkiSetup(anki({ Lapis: LAPIS }, [...notes('Lapis', 'A', 3, 1), ...notes('Lapis', 'B', 3, 10)], ['A', 'B']))
+  const tied = await detectAnkiSetup(
+    anki({ Lapis: LAPIS }, [...notes('Lapis', 'A', 3, 1), ...notes('Lapis', 'B', 3, 10)], ['A', 'B'])
+  )
   assert.match(tied.reason, /Two decks have the most Lapis notes/)
 })
 
@@ -138,46 +176,60 @@ const audioAnki = (types) => ({
 })
 
 test('the sentence audio field comes from the note type with the most notes', async () => {
-  const found = await detectSentenceAudioField(audioAnki({
-    Lapis: { fields: LAPIS, notes: 40 },
-    'Senren 5': { fields: SENREN, notes: 900 },
-    Tango: { fields: TANGO, notes: 6000 }
-  }))
+  const found = await detectSentenceAudioField(
+    audioAnki({
+      Lapis: { fields: LAPIS, notes: 40 },
+      'Senren 5': { fields: SENREN, notes: 900 },
+      Tango: { fields: TANGO, notes: 6000 }
+    })
+  )
   assert.deepEqual(found, { ok: true, field: 'sentenceAudio', modelName: 'Senren 5' })
 })
 
 test('any note type with a sentence audio field counts, spelled with a space or underscore', async () => {
-  const found = await detectSentenceAudioField(audioAnki({
-    Mine: { fields: ['Front', 'Sentence_Audio'], notes: 3 },
-    Lapis: { fields: LAPIS, notes: 0 }
-  }))
+  const found = await detectSentenceAudioField(
+    audioAnki({
+      Mine: { fields: ['Front', 'Sentence_Audio'], notes: 3 },
+      Lapis: { fields: LAPIS, notes: 0 }
+    })
+  )
   assert.deepEqual(found, { ok: true, field: 'Sentence_Audio', modelName: 'Mine' })
 })
 
 test('no sentence audio field, or a tie between different names, is left to the person', async () => {
   assert.equal((await detectSentenceAudioField(audioAnki({ Tango: { fields: TANGO, notes: 10 } }))).ok, false)
-  const tied = await detectSentenceAudioField(audioAnki({
-    Lapis: { fields: LAPIS, notes: 5 },
-    Senren: { fields: SENREN, notes: 5 }
-  }))
+  const tied = await detectSentenceAudioField(
+    audioAnki({
+      Lapis: { fields: LAPIS, notes: 5 },
+      Senren: { fields: SENREN, notes: 5 }
+    })
+  )
   assert.equal(tied.ok, false)
   // The same name on both is no question.
-  const same = await detectSentenceAudioField(audioAnki({
-    Lapis: { fields: LAPIS, notes: 5 },
-    'Kiku v2': { fields: LAPIS, notes: 5 }
-  }))
+  const same = await detectSentenceAudioField(
+    audioAnki({
+      Lapis: { fields: LAPIS, notes: 5 },
+      'Kiku v2': { fields: LAPIS, notes: 5 }
+    })
+  )
   assert.equal(same.ok && same.field, 'SentenceAudio')
 })
 
 test('the note type the Yomitan API mines with wins when it has the field', async () => {
-  const found = await detectSentenceAudioField(audioAnki({
-    Lapis: { fields: LAPIS, notes: 900 },
-    'Senren 5': { fields: SENREN, notes: 3 }
-  }), 'Senren 5')
+  const found = await detectSentenceAudioField(
+    audioAnki({
+      Lapis: { fields: LAPIS, notes: 900 },
+      'Senren 5': { fields: SENREN, notes: 3 }
+    }),
+    'Senren 5'
+  )
   assert.deepEqual(found, { ok: true, field: 'sentenceAudio', modelName: 'Senren 5' })
-  const fallback = await detectSentenceAudioField(audioAnki({
-    Lapis: { fields: LAPIS, notes: 900 },
-    Tango: { fields: TANGO, notes: 3 }
-  }), 'Tango')
+  const fallback = await detectSentenceAudioField(
+    audioAnki({
+      Lapis: { fields: LAPIS, notes: 900 },
+      Tango: { fields: TANGO, notes: 3 }
+    }),
+    'Tango'
+  )
   assert.equal(fallback.ok && fallback.field, 'SentenceAudio')
 })

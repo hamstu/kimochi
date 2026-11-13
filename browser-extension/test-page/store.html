@@ -1,64 +1,194 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kimochi · store screenshots</title>
-<!--
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kimochi · store screenshots</title>
+    <!--
   The Chrome Web Store / Edge Add-ons screenshots (1280x800): a caption beside a picture, with the
   real extension running on it. ?scene=read|look|game|menu picks the caption and picture.
 -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;650;750&display=swap" rel="stylesheet">
-<style>
-  :root { --ink: #1c2024; --ink2: #60646c; --accent: #3e63dd; --bg: #f9f9fb; --line: #00002d17; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body { font-family: Figtree, system-ui, sans-serif; color: var(--ink); background: var(--bg); overflow: hidden;
-    display: grid; grid-template-columns: 440px 1fr; -webkit-font-smoothing: antialiased; }
-  .caption { padding: 72px 48px 0 64px; min-height: 100vh; display: flex; flex-direction: column; gap: 22px;
-    background: linear-gradient(180deg, #ffffff 0%, var(--bg) 100%); border-right: 1px solid var(--line); }
-  .brand { display: flex; align-items: center; gap: 12px; font-weight: 650; font-size: 20px; letter-spacing: -0.01em; }
-  .brand img { width: 40px; height: 40px; }
-  h1 { margin: 34px 0 0; font-size: 42px; line-height: 1.12; font-weight: 750; letter-spacing: -0.025em; }
-  h1 em { font-style: normal; color: var(--accent); }
-  p { margin: 0; font-size: 19px; line-height: 1.5; color: var(--ink2); font-weight: 450; max-width: 330px; }
-  /* The extension does nothing without the app: every screenshot says so. */
-  .needs { margin-top: auto; margin-bottom: 128px; display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px;
-    border-radius: 14px; background: #0047f112; border: 1px solid #3e63dd33; max-width: 340px; }
-  .needs svg { flex: none; width: 22px; height: 22px; margin-top: 1px; color: var(--accent); }
-  .needs b { display: block; font-size: 16px; font-weight: 650; line-height: 1.35; }
-  .needs span { display: block; font-size: 14.5px; color: var(--ink2); line-height: 1.45; margin-top: 3px; }
-  .stage { display: grid; place-items: center; background: #e9e8e4; padding: 24px 24px 96px; }
-  .stage img { display: block; max-height: 660px; max-width: 100%; box-shadow: 0 10px 40px -12px rgba(0,0,0,.35); border-radius: 4px; }
-  /* Up top, so a menu opened from the toolbar leaves the game's text in view. */
-  .stage.wide { align-items: start; padding-top: 40px; }
-  .stage.wide img { max-height: none; width: 100%; max-width: 620px; }
-</style>
-</head>
-<body>
-  <section class="caption">
-    <div class="brand"><img src="icon.svg" alt="">Kimochi</div>
-    <h1 id="h"></h1>
-    <p id="p"></p>
-    <div class="needs">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      <div><b>Needs the free Kimochi app</b><span>This extension is a companion to the Kimochi desktop app for Mac, Windows and Linux. Get it at kimochiapp.com.</span></div>
-    </div>
-  </section>
-  <section class="stage" id="stage"><img id="pic" alt=""></section>
-<script>
-  const SCENES = {
-    read: ['Read the Japanese in <em>any picture</em>', 'Pick a manga page, a game screenshot or a sign. The Kimochi app on your computer reads it, and the text lands right on top.', 'manga.png'],
-    look: ['Look words up with <em>your dictionary</em>', 'Hold Shift over the text and 10ten, Yomitan or Hachidori shows the word, as on any web page.', 'manga.png'],
-    game: ['Your OCR, <em>your Log</em>', 'It reads with the OCR model you chose in the Kimochi app, and every line lands in your Kimochi Log with its picture.', 'dialogue.png', 'wide'],
-    menu: ['Turn the page, it <em>keeps reading</em>', 'Auto follows the reader as pages change, and each site gets its own session in the Kimochi app.', 'manga2.png'],
-  }
-  const [h, p, src, wide] = SCENES[new URLSearchParams(location.search).get('scene')] ?? SCENES.read
-  document.getElementById('h').innerHTML = h
-  document.getElementById('p').textContent = p
-  document.getElementById('pic').src = src
-  if (wide) document.getElementById('stage').classList.add('wide')
-</script>
-</body>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;650;750&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --ink: #1c2024;
+        --ink2: #60646c;
+        --accent: #3e63dd;
+        --bg: #f9f9fb;
+        --line: #00002d17;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font-family: Figtree, system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 440px 1fr;
+        -webkit-font-smoothing: antialiased;
+      }
+      .caption {
+        padding: 72px 48px 0 64px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        background: linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
+        border-right: 1px solid var(--line);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 650;
+        font-size: 20px;
+        letter-spacing: -0.01em;
+      }
+      .brand img {
+        width: 40px;
+        height: 40px;
+      }
+      h1 {
+        margin: 34px 0 0;
+        font-size: 42px;
+        line-height: 1.12;
+        font-weight: 750;
+        letter-spacing: -0.025em;
+      }
+      h1 em {
+        font-style: normal;
+        color: var(--accent);
+      }
+      p {
+        margin: 0;
+        font-size: 19px;
+        line-height: 1.5;
+        color: var(--ink2);
+        font-weight: 450;
+        max-width: 330px;
+      }
+      /* The extension does nothing without the app: every screenshot says so. */
+      .needs {
+        margin-top: auto;
+        margin-bottom: 128px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        padding: 16px 18px;
+        border-radius: 14px;
+        background: #0047f112;
+        border: 1px solid #3e63dd33;
+        max-width: 340px;
+      }
+      .needs svg {
+        flex: none;
+        width: 22px;
+        height: 22px;
+        margin-top: 1px;
+        color: var(--accent);
+      }
+      .needs b {
+        display: block;
+        font-size: 16px;
+        font-weight: 650;
+        line-height: 1.35;
+      }
+      .needs span {
+        display: block;
+        font-size: 14.5px;
+        color: var(--ink2);
+        line-height: 1.45;
+        margin-top: 3px;
+      }
+      .stage {
+        display: grid;
+        place-items: center;
+        background: #e9e8e4;
+        padding: 24px 24px 96px;
+      }
+      .stage img {
+        display: block;
+        max-height: 660px;
+        max-width: 100%;
+        box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.35);
+        border-radius: 4px;
+      }
+      /* Up top, so a menu opened from the toolbar leaves the game's text in view. */
+      .stage.wide {
+        align-items: start;
+        padding-top: 40px;
+      }
+      .stage.wide img {
+        max-height: none;
+        width: 100%;
+        max-width: 620px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="caption">
+      <div class="brand"><img src="icon.svg" alt="" />Kimochi</div>
+      <h1 id="h"></h1>
+      <p id="p"></p>
+      <div class="needs">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect width="20" height="14" x="2" y="3" rx="2" />
+          <path d="M8 21h8M12 17v4" />
+        </svg>
+        <div>
+          <b>Needs the free Kimochi app</b
+          ><span
+            >This extension is a companion to the Kimochi desktop app for Mac, Windows and Linux. Get it at
+            kimochiapp.com.</span
+          >
+        </div>
+      </div>
+    </section>
+    <section class="stage" id="stage"><img id="pic" alt="" /></section>
+    <script>
+      const SCENES = {
+        read: [
+          'Read the Japanese in <em>any picture</em>',
+          'Pick a manga page, a game screenshot or a sign. The Kimochi app on your computer reads it, and the text lands right on top.',
+          'manga.png'
+        ],
+        look: [
+          'Look words up with <em>your dictionary</em>',
+          'Hold Shift over the text and 10ten, Yomitan or Hachidori shows the word, as on any web page.',
+          'manga.png'
+        ],
+        game: [
+          'Your OCR, <em>your Log</em>',
+          'It reads with the OCR model you chose in the Kimochi app, and every line lands in your Kimochi Log with its picture.',
+          'dialogue.png',
+          'wide'
+        ],
+        menu: [
+          'Turn the page, it <em>keeps reading</em>',
+          'Auto follows the reader as pages change, and each site gets its own session in the Kimochi app.',
+          'manga2.png'
+        ]
+      }
+      const [h, p, src, wide] = SCENES[new URLSearchParams(location.search).get('scene')] ?? SCENES.read
+      document.getElementById('h').innerHTML = h
+      document.getElementById('p').textContent = p
+      document.getElementById('pic').src = src
+      if (wide) document.getElementById('stage').classList.add('wide')
+    </script>
+  </body>
 </html>
