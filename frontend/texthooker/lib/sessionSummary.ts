@@ -19,9 +19,11 @@ export const RECENT_LINES = 5;
 
 export function summarizeLines(
   id: string,
-  lines: readonly Pick<Line, "text" | "ts">[],
+  all: readonly Pick<Line, "text" | "ts" | "source">[],
   idleMs: number,
 ): SessionSummary {
+  // What was read: the person's notes are neither lines nor reading time.
+  const lines = all.filter((line) => line.source !== "note");
   const times = lines
     .map((line) => line.ts)
     .filter((ts) => Number.isFinite(ts))

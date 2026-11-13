@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -35,6 +36,8 @@ import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
 import { LogMoreMenu } from "./components/LogMoreMenu";
 import { LineContextMenu } from "./components/LineActionsMenu";
+import { AddNote } from "./components/AddNote";
+import { useAddNoteHotkey } from "./hooks/useAddNoteHotkey";
 import { SessionMenu } from "../main/SessionMenu";
 import { ActivityTicker } from "./components/ActivityTicker";
 import { useActivity } from "../bridge/activity";
@@ -49,6 +52,14 @@ import { useTextHookInput } from "./hooks/useTextHookInput";
 import type { SocketStatus } from "./websocket-input";
 import { useScanMode } from "./hooks/useScanMode";
 import { useLineHotkeys } from "./hooks/useLineHotkeys";
+import { onLogDoubleClick, stopEditing } from "./lib/lineEdit";
+import {
+  onRevealRequest,
+  pendingReveal,
+  requestNotesFilter,
+  takeReveal,
+} from "./lib/noteNav";
+import { isNote } from "./lib/types";
 import { usePanelDictionary } from "../shell/panelDictionary";
 import { openSettings } from "../bridge/tauri";
 import { useAccount } from "../bridge/account";
@@ -178,6 +189,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   useTextHookInput();
   useScanMode(apiMode);
   useLineHotkeys();
+  useAddNoteHotkey(visible);
   // Another session opened (chosen here, or switched to for a browser tab's lines): start at
   // its newest line, wherever the last one was scrolled to.
   const shownSession = useRef(snap.sessions.activeId);
@@ -185,6 +197,8 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     if (shownSession.current !== snap.sessions.activeId) {
       shownSession.current = snap.sessions.activeId;
       follow.current = true;
+      // Its lines are numbered afresh: an edit open in the last session is not one of them.
+      stopEditing();
     }
     if (follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
@@ -199,6 +213,39 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     retrying: "warn",
     invalid: "danger",
   };
+  // Show in Log (a note in the Notebook): once the Log shows, lay out lines back to that one,
+  // centre it and mark it for a moment. Following new lines stops, so it stays where it is.
+  const [revealing, setRevealing] = useState(pendingReveal);
+  useEffect(() => onRevealRequest(() => setRevealing(pendingReveal())), []);
+  useLayoutEffect(() => {
+    if (!revealing || !visible) return;
+    const index = snap.lines.findIndex((line) => line.uid === revealing);
+    const done = () => {
+      takeReveal();
+      setRevealing(null);
+    };
+    if (index === -1) return done();
+    follow.current = false;
+    const need = snap.lines.length - index;
+    if (shown < need) {
+      // Lay out back to the line first; this effect scrolls to it on the next pass.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShown(need);
+      return;
+    }
+    done();
+    const row = scroll.current?.querySelector<HTMLElement>(
+      `.log-lines [data-line-id="${snap.lines[index].id}"]`,
+    );
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    row.removeAttribute("data-flash");
+    void row.offsetWidth;
+    row.setAttribute("data-flash", "");
+    window.setTimeout(() => row.removeAttribute("data-flash"), 2000);
+  }, [revealing, visible, shown, snap.lines]);
+  const noteCount = useMemo(() => snap.lines.filter(isNote).length, [snap.lines]);
+
   const shownLines = snap.lines.slice(-shown);
   // A divider above each day's first line, once the session spans more than one day.
   const newDays = dayStarts(snap.lines, shownLines);
@@ -278,6 +325,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           >
             <div
               className="jp-text scan-region log-lines"
+              onDoubleClick={(e) => onLogDoubleClick(e, snap.lines)}
               translate="no"
               lang="ja"
               style={{ fontSize: settings.fontSizePx }}
@@ -292,6 +340,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
                   <LineRow line={line} translateEnabled={translateEnabled} />
                 </Fragment>
               ))}
+              <AddNote />
             </div>
           </LineContextMenu>
         </main>
@@ -299,7 +348,14 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
         {settings.inputSource !== "hook" && <ActivityTicker visible={visible} />}
       </div>
       <Bar position="bottom">
-        <StatsFooter lineCount={snap.lines.length} />
+        <StatsFooter
+          lineCount={snap.lines.length - noteCount}
+          noteCount={noteCount}
+          onOpenNotes={() => {
+            requestNotesFilter();
+            onOpenNotebook();
+          }}
+        />
         <BarSpacer />
         <div className="log-bar-actions">
           <Tooltip content="Smaller text">

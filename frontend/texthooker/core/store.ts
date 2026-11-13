@@ -9,7 +9,7 @@ import { getSettings, onSettingsChange } from "../lib/settings";
 import { currentLinesPath, getManifest } from "./sessions";
 import { writesPaused } from "./profile";
 import { forgetLines, reportLine } from "../lib/sentenceAudio";
-import type { Line, LineSource } from "../lib/types";
+import { isNote, type Line, type LineSource } from "../lib/types";
 
 const DIR = BaseDirectory.AppLocalData;
 const DEBOUNCE_MS = 2000;
@@ -249,21 +249,68 @@ export function appendLine(opts: {
     emit({ type: "trim", dropped });
   }
   emit({ type: "append", line });
-  reportLine(line);
+  if (!isNote(line)) reportLine(line);
   scheduleSave();
   return line;
 }
 
-/** Replace the last line's text (used by start-merge). */
+/** Adds the person's note (Markdown) at the end of the Log, timed now. */
+export function addNote(text: string): Line | null {
+  const value = text.replace(/\r\n?/g, "\n").trim();
+  if (!value) return null;
+  return appendLine({ text: value, source: "note" });
+}
+
+/** The lines that were read, without the person's notes: what new text is compared with. */
+export function readLines(): Line[] {
+  return lines.filter((line) => !isNote(line));
+}
+
+/** Replace the last line's text (used by start-merge). A fuller reading replaces any edit made
+    to the line: what was recorded is then this reading. */
 export function replaceLastLineText(text: string): Line | null {
   if (lines.length === 0) return null;
   const idx = lines.length - 1;
   const updated: Line = { ...lines[idx], text };
+  delete updated.originalText;
   lines[idx] = updated;
   emit({ type: "update", line: updated });
   reportLine(updated);
   scheduleSave();
   return updated;
+}
+
+/** The text a line was recorded with, before any edit. Ingest compares new text with this, so
+    an edited line still catches the next reading of the same text as a duplicate. */
+export function recordedText(line: Line): string {
+  return line.originalText ?? line.text;
+}
+
+/**
+ * The person corrected a line's text (Edit line). The first edit keeps what was recorded in
+ * `originalText`; an edit back to it drops that again. The translation and explanation were of
+ * the old text, so they go. Empty or unchanged text changes nothing.
+ */
+export function setLineText(id: number, text: string) {
+  const idx = lines.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  const value = text.replace(/\r\n?/g, "\n").trim();
+  const line = lines[idx];
+  if (!value || value === line.text) return;
+  const updated: Line = { ...line, text: value };
+  // A note has nothing recorded to keep: it is what was written.
+  if (!isNote(line)) {
+    const recorded = recordedText(line);
+    if (value === recorded) delete updated.originalText;
+    else updated.originalText = recorded;
+  }
+  delete updated.translation;
+  delete updated.showTranslation;
+  delete updated.explanation;
+  lines[idx] = updated;
+  emit({ type: "update", line: updated });
+  if (!isNote(updated)) reportLine(updated);
+  scheduleSave();
 }
 
 /** Cache a translation on a line and (by default) switch the row to it. */
@@ -330,15 +377,20 @@ export function lineCount(): number {
 }
 
 export function lastLineText(): string | null {
-  return lines.length ? lines[lines.length - 1].text : null;
+  // A note written after the last line ends it: what is read next is not its continuation.
+  const last = lines.at(-1);
+  return last && !isNote(last) ? recordedText(last) : null;
 }
 
-/** Exact-match dedupe over the last `depth` lines. */
+/** Exact-match dedupe over the last `depth` lines read (notes are passed over, and not counted),
+    as recorded or as edited. */
 export function isDuplicateInRecent(text: string, depth: number): boolean {
   if (depth <= 0) return false;
-  const start = Math.max(0, lines.length - depth);
-  for (let i = lines.length - 1; i >= start; i--) {
-    if (lines[i].text === text) return true;
+  let seen = 0;
+  for (let i = lines.length - 1; i >= 0 && seen < depth; i--) {
+    if (isNote(lines[i])) continue;
+    seen++;
+    if (lines[i].text === text || lines[i].originalText === text) return true;
   }
   return false;
 }

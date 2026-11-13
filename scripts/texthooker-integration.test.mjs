@@ -474,6 +474,58 @@ test("lines carry uids for Sync, old lines get the same uid Rust derives, and de
   assert.equal(file.lines[0].uid, fresh.uid, "uids are written to the file");
 });
 
+test("an edited line keeps what was recorded, drops its old translation, and still catches a repeat", async () => {
+  const h = await harness({ superTexthooker: { inputSource: "clipboard", autoMatchSource: false } });
+  await h.call("host", "ingest", ["かれが来た", "clipboard"]);
+  const id = h.snapshot().lines[0].id;
+  await h.call("store", "setLineTranslation", [id, "He came", true]);
+  await h.call("store", "setLineText", [id, "  かれが来た。 "]);
+  let line = h.snapshot().lines[0];
+  assert.equal(line.text, "かれが来た。", "trimmed");
+  assert.equal(line.originalText, "かれが来た");
+  assert.equal(line.translation, undefined, "the old text's translation goes");
+  assert.equal(line.showTranslation, undefined);
+  // A second edit keeps the first recording, and nothing (empty, unchanged) changes nothing.
+  await h.call("store", "setLineText", [id, "彼が来た。"]);
+  await h.call("store", "setLineText", [id, "   "]);
+  line = h.snapshot().lines[0];
+  assert.equal(line.text, "彼が来た。");
+  assert.equal(line.originalText, "かれが来た");
+  // The next reading of the same screen is the recorded text: still a duplicate.
+  await h.call("host", "ingest", ["かれが来た", "clipboard"]);
+  await h.call("host", "ingest", ["彼が来た。", "clipboard"]);
+  assert.equal(h.snapshot().lines.length, 1);
+  // Edited back to what was recorded, it is no longer an edit.
+  await h.call("store", "setLineText", [id, "かれが来た"]);
+  assert.equal(h.snapshot().lines[0].originalText, undefined);
+  await h.call("store", "setLineText", [id, "彼が来た。"]);
+  await h.call("stats", "resetStats");
+});
+
+test("a note is the person's own line: never compared with what is read, and edited without a recording", async () => {
+  const h = await harness({ superTexthooker: { inputSource: "clipboard", autoMatchSource: false } });
+  await h.call("host", "ingest", ["猫が鳴いた", "clipboard"]);
+  assert.equal(await h.call("store", "addNote", ["   "]), null, "a blank note is let go");
+  await h.call("store", "addNote", ["**Place:** 東京\r\nthe station"]);
+  let lines = h.snapshot().lines;
+  assert.equal(lines.length, 2);
+  const note = lines[1];
+  assert.equal(note.source, "note");
+  assert.equal(note.text, "**Place:** 東京\nthe station");
+  assert.match(note.uid, /^[0-9a-f-]{36}$/, "it syncs like any line");
+  // The next reading of the line before the note is still that line's repeat.
+  await h.call("host", "ingest", ["猫が鳴いた", "clipboard"]);
+  assert.equal(h.snapshot().lines.length, 2);
+  // A note's text that is then read is a new line, not a repeat of the note.
+  await h.call("host", "ingest", ["**Place:** 東京\nthe station", "clipboard"]);
+  assert.equal(h.snapshot().lines.length, 3);
+  await h.call("store", "setLineText", [note.id, "Tokyo station"]);
+  lines = h.snapshot().lines;
+  assert.equal(lines[1].text, "Tokyo station");
+  assert.equal(lines[1].originalText, undefined, "a note keeps no recorded text");
+  await h.call("stats", "resetStats");
+});
+
 test("Sync's hold pauses the Log's writes, and its release reloads the merged lines", async () => {
   const h = await harness();
   await h.setSetting("scannedTextHistory", [entry("1", "Game A")]);

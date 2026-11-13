@@ -6,7 +6,13 @@ import { DEFAULT_JAPANESE_FILTER, type JapaneseFilterMode } from "../../../ui/ja
 export type { TranslationProvider };
 
 /** Where a line came from. `cli` is `kimochi log add` (src-tauri/src/cli/), taken whatever the input is. */
-export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket" | "hook" | "cli";
+/** Where a line came from. "note" is one the person wrote in the Log (Add a note), in Markdown. */
+export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket" | "hook" | "cli" | "note";
+
+/** A line the person wrote (Add a note), not one that was read. */
+export function isNote(line: { source: LineSource }): boolean {
+  return line.source === "note";
+}
 
 export interface Line {
   ocr?: { scanId: string; groupId: string; groupIndex: number; groupCount: number; engine?: string; orientation: "horizontal" | "vertical" };
@@ -18,7 +24,11 @@ export interface Line {
   /** Identifies the line across computers for Sync. Lines written before uids existed are given
       one derived from their session, id, time and text (`derivedLineUid`). */
   uid?: string;
+  /** What the line says: as recorded, or as the person corrected it (Edit line). */
   text: string;
+  /** The text as recorded, kept once the line has been edited (absent while it hasn't). Ingest
+      compares new text with this (`recordedText`). */
+  originalText?: string;
   source: LineSource;
   ts: number;
   /** Cached DeepL translation. Persisted with lines.json so a line is only
