@@ -185,6 +185,8 @@ pub fn lens_code(language: &Language) -> &str {
 }
 
 /// Apple Live Text's recognition locale. Japanese stays the bare `ja` the app always sent.
+/// macOS only (Live Text); the tests run everywhere.
+#[cfg(any(target_os = "macos", test))]
 pub fn apple_locale(language: &Language) -> &str {
     match language.code.as_str() {
         "ko" => "ko-KR",
@@ -206,6 +208,7 @@ pub fn apple_locale(language: &Language) -> &str {
 
 /// The locales Live Text is asked to read: the language first, then English, which keeps a line
 /// of Latin UI text from being forced into the language's script (`["ja", "en"]` for Japanese).
+#[cfg(any(target_os = "macos", test))]
 pub fn live_text_locales(language: &Language) -> Vec<String> {
     let first = apple_locale(language);
     if first.starts_with("en") {
