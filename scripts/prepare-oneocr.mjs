@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, copyFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cargoTargetDir } from "./cargo-target-dir.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 if (process.platform === "win32") {
@@ -33,8 +34,8 @@ if (process.platform === "win32") {
       );
     await copyFile(
       path.join(
-        root,
-        `oneocr-worker/target/${target}/release/kimochi-oneocr-worker.exe`,
+        cargoTargetDir(path.join(root, "oneocr-worker")),
+        `${target}/release/kimochi-oneocr-worker.exe`,
       ),
       path.join(destination, `kimochi-oneocr-${arch}.exe`),
     );
