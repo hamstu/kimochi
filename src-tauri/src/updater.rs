@@ -25,6 +25,7 @@
 //!                 failed (stage: check) --check-->
 //! ```
 //!
+//! A `tauri dev` binary may check by hand but never downloads or installs ([`installable`]).
 //! Automatic checks run only in release builds (a `tauri dev` binary has no bundle to replace):
 //! once shortly after launch and then every six hours, quietly. A failed automatic check goes to
 //! the evidence log and leaves the status alone; only a manual check reports its failure.
@@ -162,6 +163,18 @@ fn now_ms() -> u64 {
 fn automatic() -> bool {
     !cfg!(debug_assertions) || std::env::var_os("KIMOCHI_UPDATE_ENDPOINT").is_some()
 }
+
+/// Whether this build may download and install an update. A `tauri dev` binary may check, but
+/// installing would replace the *installed* Kimochi (Windows runs the release's installer into
+/// the install folder), not this build; and the installer's parent is a dev server that exits
+/// with the app, taking the half-done installer with it. `KIMOCHI_UPDATE_ENDPOINT` still allows
+/// it, for testing against a local manifest.
+fn installable() -> bool {
+    automatic()
+}
+
+const DEV_BUILD_NO_INSTALL: &str =
+    "development builds don't install updates; they would replace the installed Kimochi. Install the release from GitHub instead.";
 
 /// The plugin's errors read well enough, but a few are worth saying in the app's words.
 fn describe(error: tauri_plugin_updater::Error) -> String {
@@ -320,6 +333,12 @@ impl Updates {
                 State::Available | State::Failed => {}
                 _ => return Err("invalid: there is no update to download".into()),
             }
+            if !installable() {
+                inner.status.fail(Stage::Install, DEV_BUILD_NO_INSTALL.into());
+                drop(inner);
+                self.emit();
+                return Ok(self.status());
+            }
             let Some(update) = inner.update.clone() else {
                 return Err("invalid: there is no update to download".into());
             };
@@ -431,6 +450,9 @@ impl Updates {
             if inner.status.state != State::Ready {
                 return Err("invalid: no update has been downloaded".into());
             }
+            if !installable() {
+                return Err(format!("invalid: {DEV_BUILD_NO_INSTALL}"));
+            }
             let (Some(update), Some(bytes)) = (inner.update.clone(), inner.bytes.take()) else {
                 return Err("invalid: no update has been downloaded".into());
             };
@@ -446,6 +468,16 @@ impl Updates {
                 "status": "started",
                 "version": updates.status().version,
             }));
+            // Windows: run the installer ourselves, out of reach of whatever started Kimochi.
+            // Never returns when the installer starts; when it cannot, the plugin's own way runs.
+            #[cfg(windows)]
+            if let Err(e) = windows_installer::launch(&updates, &update, &bytes) {
+                (updates.report)(json!({
+                    "check": "update-install",
+                    "status": "fallback",
+                    "detail": e,
+                }));
+            }
             match update.install(&bytes) {
                 Ok(()) => {
                     // macOS and Linux: the new bundle is in place; relaunch into it. (Windows
@@ -522,6 +554,74 @@ fn manifest_size(update: &Update) -> Option<u64> {
         .find(|platform| platform.get("url").and_then(Value::as_str) == Some(url))?
         .get("size")?
         .as_u64()
+}
+
+/// Running the Windows installer so that it outlives everything that started Kimochi.
+///
+/// The plugin starts the NSIS installer with `ShellExecuteW` and exits. The installer then
+/// belongs to the same job object as Kimochi, and a launcher, terminal or dev server that kills
+/// its job when it ends (Herdr's terminals do; so do some game launchers) kills the installer
+/// with it, partway through replacing `kimochi.exe`: the empty file it leaves cannot be started
+/// ("This app can't run on your PC") until Kimochi is reinstalled. Started with
+/// `CREATE_BREAKAWAY_FROM_JOB`, the installer leaves that job. With the same arguments the plugin
+/// passes (`plugins.updater.windows.installMode`, `/UPDATE`, and `/R /ARGS …` to relaunch).
+#[cfg(windows)]
+mod windows_installer {
+    use super::Updates;
+    use std::{os::windows::process::CommandExt, process::Command};
+    use tauri_plugin_updater::Update;
+
+    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+
+    /// The installer's arguments for an install mode (`passive` unless configured).
+    pub(super) fn arguments(install_mode: &str, relaunch_args: &[String]) -> Vec<String> {
+        let mut args: Vec<String> = match install_mode {
+            "quiet" => vec!["/S".into()],
+            "basicUi" => vec![],
+            _ => vec!["/P".into()],
+        };
+        args.push("/UPDATE".into());
+        if install_mode != "basicUi" {
+            args.push("/R".into());
+        }
+        args.push("/ARGS".into());
+        args.extend(relaunch_args.iter().cloned());
+        args
+    }
+
+    /// Write the verified installer, start it out of Kimochi's job and exit. Returns only when
+    /// it could not be started, so the caller can fall back to the plugin.
+    pub(super) fn launch(updates: &Updates, update: &Update, bytes: &[u8]) -> Result<(), String> {
+        let mode = updates
+            .app
+            .config()
+            .plugins
+            .0
+            .get("updater")
+            .and_then(|u| u.pointer("/windows/installMode"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("passive")
+            .to_string();
+        let name = &updates.app.package_info().name;
+        let dir = std::env::temp_dir().join(format!("{name}-{}-updater", update.version));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let path = dir.join(format!("{name}-{}-installer.exe", update.version));
+        std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        let relaunch: Vec<String> = std::env::args().skip(1).collect();
+        let mut command = Command::new(&path);
+        command.args(arguments(&mode, &relaunch));
+        // The job may not allow leaving it: then start it as the plugin would have.
+        command.creation_flags(CREATE_BREAKAWAY_FROM_JOB);
+        let started = command.spawn().or_else(|_| {
+            command.creation_flags(0);
+            command.spawn()
+        });
+        started.map_err(|e| format!("{}: {e}", path.display()))?;
+        (updates.report)(serde_json::json!({ "check": "update-install", "status": "installer-started" }));
+        (updates.before_exit)();
+        updates.app.cleanup_before_exit();
+        std::process::exit(0);
+    }
 }
 
 /// Install the updates service: the shared status, and the periodic check in builds that
@@ -627,6 +727,15 @@ mod tests {
     #[test]
     fn changelog_is_embedded() {
         assert!(changelog().contains("\n## ["), "CHANGELOG.md has a version section");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_installer_gets_the_plugins_arguments() {
+        use windows_installer::arguments;
+        assert_eq!(arguments("passive", &[]), ["/P", "/UPDATE", "/R", "/ARGS"]);
+        assert_eq!(arguments("quiet", &["--minimized".into()]), ["/S", "/UPDATE", "/R", "/ARGS", "--minimized"]);
+        assert_eq!(arguments("basicUi", &[]), ["/UPDATE", "/ARGS"]);
     }
 
     #[test]

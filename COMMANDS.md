@@ -2196,10 +2196,16 @@ activity feed (key `update`).
 a failed automatic check goes to `evidence.jsonl` (`update-check`) and leaves the status alone
 (`idle` before any successful check, `none` after one), so a laptop that is offline never nags.
 A `tauri dev` binary (`debug_assertions`) does not check on its own (there is no `.app` or
-AppImage to replace) and says so in Settings; `KIMOCHI_UPDATE_ENDPOINT` replaces the endpoint and
-turns automatic checks on, for testing against a local manifest. The download is held in memory until the user restarts; quitting discards it. On
-Windows the NSIS installer runs passively (`plugins.updater.windows.installMode`) and relaunches
-the app; on Linux an AppImage is replaced in place and a `.deb` goes through `pkexec dpkg -i`
+AppImage to replace) and says so in Settings. It may check by hand, but Download fails at once
+(`failed`, stage `install`): installing would replace the installed Kimochi, not the dev build.
+`KIMOCHI_UPDATE_ENDPOINT` replaces the endpoint and turns automatic checks and installing on, for
+testing against a local manifest. The download is held in memory until the user restarts;
+quitting discards it. On Windows the NSIS installer runs passively
+(`plugins.updater.windows.installMode`) and relaunches the app. Kimochi starts it itself, with
+`CREATE_BREAKAWAY_FROM_JOB` and the plugin's arguments (`/P /UPDATE /R /ARGS …`), so a launcher,
+terminal or dev server that kills its job object when it ends cannot kill the installer partway
+through replacing `kimochi.exe`; when it cannot be started that way, the plugin's own
+`ShellExecuteW` runs it (`update-install` `fallback` in `evidence.jsonl`). On Linux an AppImage is replaced in place and a `.deb` goes through `pkexec dpkg -i`
 (`latest.json` carries a `linux-<arch>-deb` entry beside `linux-<arch>`; the plugin picks by
 the installed bundle type). Before the process is replaced the platform's own threads are
 stopped exactly as `app_quit` does.
