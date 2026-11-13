@@ -50,7 +50,8 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::Manager;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::core::w;
+use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -59,13 +60,14 @@ use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindow
 use windows::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, BringWindowToTop, GetAncestor, GetClientRect, GetForegroundWindow, GetWindow,
     GetWindowLongPtrW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible, LoadCursorW,
-    SendMessageTimeoutW, SetCursor, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, WindowFromPoint,
-    ASFW_ANY, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_TOP, HWND_TOPMOST, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS,
-    IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_WAIT,
-    MA_NOACTIVATE, SC_KEYMENU, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, SW_SHOWNA, WA_INACTIVE, WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE,
-    WM_NCDESTROY, WM_NULL, WM_STYLECHANGING, WM_SYSCOMMAND, WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    RemovePropW, SendMessageTimeoutW, SetCursor, SetForegroundWindow, SetPropW, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, WindowFromPoint, ASFW_ANY, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_TOP, HWND_TOPMOST,
+    IDC_APPSTARTING, IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW,
+    IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_WAIT, MA_NOACTIVATE, SC_KEYMENU, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT,
+    STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, SW_SHOWNA,
+    WA_INACTIVE, WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NULL, WM_STYLECHANGING, WM_SYSCOMMAND,
+    WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT,
 };
 
 fn hwnd(w: &tauri::WebviewWindow) -> Result<HWND, String> {
@@ -526,6 +528,16 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
             SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER,
         );
     }
+    // Never a full-screen app, however much of the display it covers. The OCR overlay is the
+    // size of the game's display, and the shell takes a window covering a monitor for a
+    // full-screen app and drops that monitor's taskbar behind every window, so the game drew
+    // over it for as long as Kimochi ran. `NonRudeHWND` opts out of that detection
+    // (https://devblogs.microsoft.com/oldnewthing/20250522-00/?p=111211). It is read when the
+    // shell re-evaluates the window, which the overlay's placement over the display does.
+    // `panel_proc` removes it again on `WM_NCDESTROY`, as window properties must be.
+    unsafe {
+        let _ = SetPropW(hwnd, NON_RUDE, Some(HANDLE(1 as _)));
+    }
     // A tool window applied to an already-visible window keeps its taskbar button until
     // the taskbar is told; tao does that through ITaskbarList.
     let _ = w.set_skip_taskbar(true);
@@ -576,6 +588,8 @@ unsafe extern "system" fn key_menu_proc(
 const PANEL_EX: u32 = WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0;
 /// Our subclass id; tao uses its own, and the pair (proc, id) is what identifies one.
 const PANEL_SUBCLASS_ID: usize = 0x4B49_4D4F; // "KIMO"
+/// The window property that keeps the shell from taking a panel for a full-screen app.
+const NON_RUDE: windows::core::PCWSTR = w!("NonRudeHWND");
 
 /// Windows converted by `make_panel`, and those of them currently in editing mode.
 /// Raw handle values; touched on the main thread in practice, a mutex keeps it sound.
@@ -639,6 +653,7 @@ unsafe extern "system" fn panel_proc(
             PANELS.lock().unwrap().retain(|h| *h != raw);
             set_editing(hwnd, false);
             let _ = unsafe { RemoveWindowSubclass(hwnd, Some(panel_proc), PANEL_SUBCLASS_ID) };
+            let _ = unsafe { RemovePropW(hwnd, NON_RUDE) };
         }
         _ => {}
     }
