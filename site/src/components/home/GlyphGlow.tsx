@@ -1,14 +1,16 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 
 /**
- * A soft orb of kana and kanji glowing out from the top centre of the hero, like ASCII art drawn
- * with Japanese, in one WebGL2 fragment pass.
+ * A soft orb of letters glowing out from the top centre of the hero, like ASCII art drawn with
+ * the world's writing systems (kana and kanji, Hangul, hanzi, Cyrillic, Greek, Thai, Devanagari and
+ * accented Latin), in one WebGL2 fragment pass.
  *
  * The page is a fixed grid of glyph cells. Each cell's intensity is a squashed radial falloff from
  * the orb's centre, times slow, domain-warped fbm noise that drifts and morphs, so patches of the
  * glow brighten and dim like breathing. Intensity sets a cell's opacity, and (through the glyph it
- * picks) its density: the atlas is sorted from the sparsest stroke (ヽ, 一) to the densest (響, 靄),
- * so the core is drawn in heavy kanji and the rim in light kana. Glyphs change rarely, each cell on
+ * picks) its density: the atlas is sorted from the sparsest stroke (ヽ, ı) to the densest (響, 靄),
+ * so the core is drawn in heavy kanji and hanzi and the rim in light kana and letters; the scripts
+ * mix wherever their densities meet. Glyphs change rarely, each cell on
  * its own clock, cross-fading into the next instead of snapping. Nothing is simulated on the CPU:
  * a frame is a pure function of time, so it costs one draw call.
  *
@@ -19,16 +21,35 @@ import { useEffect, useRef, type CSSProperties } from 'react'
 
 // From sparse to dense; the atlas re-sorts them by measured ink, so this order is only a guide.
 const GLYPHS = Array.from(
+  // Japanese: kana and kanji
   'ヽ丶一ノ・ーニ二ヘへくしつソンシハ人入八十小リりいこ' +
-    'アイウエオカキクケコサスセタチツテトナヌネホマミムメモヤユヨラルレロワヲ' +
-    'あうえおかきけさすせそたちてとなにぬねのはひふほまみむめもやゆよらるれろわをん' +
+    'アイウカキクケコサスタツテトナホマミムモヤヨラルレロワヲ' +
+    'あうおかきさすたちてとなにのはふまみむもやよるれわをん' +
     '日月山川木水火土心気本文言音光空星雨花風雪海夜夢字読語声葉持' +
-    '雲霧響輝露願靄漂癒瀬曙霞燈鶴龍',
+    '雲霧響輝露願靄漂癒瀬曙霞燈鶴龍' +
+    // Korean
+    '가나다라마바사아자하한글말빛꿈별달물봄길눈' +
+    // Chinese (simplified forms)
+    '书学读说话爱梦龙风门马鸟东乐' +
+    // Cyrillic
+    'ЖДФЯЩЮЛБИЦжлдяю' +
+    // Greek
+    'αβγδλπσωΩΣΨΦΞ' +
+    // Latin with diacritics
+    'éèñüçøåßłőžşãâ' +
+    // Thai
+    'กขคงจนบมรสอ' +
+    // Devanagari
+    'कखगघचजतनमरस',
 )
 
 const ATLAS_COLS = 12
 const CELL = 96 // atlas cell, device pixels
-const FONT = '"Noto Sans JP Variable", "Hiragino Sans", sans-serif'
+// Japanese first (the site's own font), then a face per script that visitors' systems have.
+const FONT =
+  '"Noto Sans JP Variable", "Hiragino Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", ' +
+  '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", ' +
+  '"Sukhumvit Set", Thonburi, "Leelawadee UI", "Noto Sans Thai", "Segoe UI", "Noto Sans", sans-serif'
 const FADE_MS = 1800
 
 const VERT = `#version 300 es
@@ -205,11 +226,11 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
   const s = gl.createShader(type)!
   gl.shaderSource(s, src)
   gl.compileShader(s)
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(`KanaGlow shader: ${gl.getShaderInfoLog(s)}`)
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(`GlyphGlow shader: ${gl.getShaderInfoLog(s)}`)
   return s
 }
 
-export function KanaGlow({ className = '', style }: { className?: string; style?: CSSProperties }) {
+export function GlyphGlow({ className = '', style }: { className?: string; style?: CSSProperties }) {
   const ref = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -230,7 +251,7 @@ export function KanaGlow({ className = '', style }: { className?: string; style?
       gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT))
       gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FRAG))
       gl.linkProgram(prog)
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`KanaGlow link: ${gl.getProgramInfoLog(prog)}`)
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`GlyphGlow link: ${gl.getProgramInfoLog(prog)}`)
     } catch (err) {
       console.warn(err)
       return

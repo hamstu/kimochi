@@ -1,10 +1,13 @@
 import { DownloadButton } from '../DownloadButton'
 import { DiscordButton } from '../DiscordButton'
-import { KanaGlow } from './KanaGlow'
+import { useState } from 'react'
+import { GlyphGlow } from './GlyphGlow'
+import { LanguageFlipper } from './LanguageFlipper'
 
 /**
  * The home hero: the app icon, wordmark, promise, lede, the download button and a quieter Discord
- * link, centred, over a glow of kana.
+ * link, centred, over a glow of letters from many writing systems. The headline's last word flips
+ * through languages (LanguageFlipper); screen readers hear "Read and play in any language".
  */
 // Fades the glow out towards the bottom and thins it behind the headline and lede.
 const GLOW_MASK = {
@@ -14,12 +17,13 @@ const GLOW_MASK = {
 } as const
 
 export function Hero() {
+  const [hovered, setHovered] = useState(false)
   return (
     // z-10 and no overflow clip here: the download button's menu hangs below the hero, over the demo.
     <section className="relative isolate z-10">
-      {/* A glow of kana behind the top of the hero, fading out before the headline and lede. */}
+      {/* A glow of glyphs behind the top of the hero, fading out before the headline and lede. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <KanaGlow className="absolute inset-x-0 top-0 h-[52rem] w-full md:h-[64rem]" style={GLOW_MASK} />
+        <GlyphGlow className="absolute inset-x-0 top-0 h-[52rem] w-full md:h-[64rem]" style={GLOW_MASK} />
       </div>
 
       <div className="container-page flex flex-col items-center pt-16 pb-16 text-center md:pt-24 md:pb-24">
@@ -31,11 +35,21 @@ export function Hero() {
           className="size-32 drop-shadow-[0_22px_34px_color-mix(in_oklab,var(--k-accent)_32%,transparent)] md:size-40"
         />
         <p className="mt-7 text-[1.375rem] font-semibold tracking-[-0.015em] text-ink">Kimochi</p>
-        <h1 className="mt-5 max-w-[18ch] text-display text-ink">Read and play in Japanese.</h1>
+        <h1
+          className="mt-5 text-display text-ink"
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+        >
+          Read and play in <span className="sr-only">any language</span>
+          <span className="lf-line">
+            <LanguageFlipper paused={hovered} />
+          </span>
+        </h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
-          Kimochi is a free, open-source desktop app for Japanese learners. It reads the Japanese in
-          your games, visual novels, manga and videos directly, or with OCR, so you can hover any word to look it
-          up in your favorite dictionary and make flash cards for Anki.
+          Kimochi is a free, open-source desktop app for language learners. It reads the text in your games,
+          visual novels, manga and videos directly, or with OCR, so you can hover any word to look it up in your
+          favorite dictionary and make flash cards for Anki. Built for Japanese, and now for the language you’re
+          learning too (experimental).
         </p>
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
         <div id="get-kimochi" className="mt-10 scroll-mt-24">
