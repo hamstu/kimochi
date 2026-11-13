@@ -28,6 +28,18 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
 
     <Screenshot id="settings-general" alt="Settings, General page." width={760} />
   </TabItem>
+  <TabItem label="Language">
+    The language you're learning. See [Choosing a language](/language/).
+
+    | Setting | Default | Notes |
+    | --- | --- | --- |
+    | **Language** | Japanese | One of [49 languages](/language/support/#languages); every one but Japanese is experimental. Part of your account's preferences, so it syncs. |
+
+    The page also lists what Kimochi assumes about the language's text, the OCR engines on this
+    computer that read it, and, with Yomitan, the account's Yomitan profile.
+
+    <Screenshot id="settings-language" alt="Settings, Language page." width={760} />
+  </TabItem>
   <TabItem label="Sources">
     Where the Log's lines come from. See [Sources and crop](/reading/sources/) and
     [Texthookers and clipboard](/reading/texthookers/).
@@ -55,7 +67,7 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | **Speaker names apart** | On |
     | **Repeated characters** | Undo automatically |
     | **Join split lines** | On |
-    | **Remove script codes** | On |
+    | **Remove script codes** | On (Off in languages that separate words with spaces) |
     | **Auto align** | On |
     | **Text size** | Medium |
     | **Background opacity** | 100% |
@@ -83,8 +95,8 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | **Engine** | Google Lens |
     | **Overlay mode** | Off |
     | **Group text into regions** | Off |
-    | **Filter out furigana and small text** | On, strength Balanced |
-    | **Drop lines** | No Japanese |
+    | **Filter out furigana and small text** (Japanese only) | On, strength Balanced |
+    | **Drop lines** | No Japanese (named for [your language](/language/support/#text-in-your-language)) |
     | **Click through text to the game** | On |
     | **Exclude overlay from screen recording** | On |
     | **Overlay look**: **Highlight colour** / **Highlight opacity** / **Cards** | Indigo / 40% / Same as Kimochi |
@@ -103,8 +115,8 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | Setting | Default | Notes |
     | --- | --- | --- |
     | **Text size** | 14 px | 12–48 px; also A− and A+ in the Log's footer. |
-    | **Read-aloud voice** / **Voice model** | Eleven v3 | With Kimochi Cloud. |
-    | **Drop lines** | No Japanese | Or **Mostly not Japanese**, or **Off**. Applies to the overlay too. |
+    | **Read-aloud voice** / **Voice model** | Eleven v3 | With Kimochi Cloud, in Japanese. |
+    | **Drop lines** | No Japanese | Or **Mostly not Japanese**, or **Off**, named for the language you're learning. Applies to the overlay too. |
     | **Skip repeats** | 1 | Drop a line that matches any of the last N lines (1–20). |
     | **Merge streamed lines** | Off | Characters to compare: 4. |
     | **Keep at most** | 5000 | Lines per session. |
@@ -117,7 +129,7 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
 
     | Setting | Default |
     | --- | --- |
-    | **Engine** | Yomitan |
+    | **Engine** | Yomitan (Hachidori and 10ten for Japanese only) |
     | **Open … settings** | The engine's settings page (Yomitan, Hachidori, 10ten). |
     | **Pop-up size** (10ten) | Compact (Medium and Large too) |
     | **API address** (Yomitan API) | `http://127.0.0.1:19633` |
@@ -135,7 +147,7 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | **Mining** tab: **Open … Anki settings** (Yomitan, Hachidori) | The engine's Anki settings, AnkiConnect address and key included |
     | ↳ **Enable Mining** / **Deck** / **Note type** (Yomitan API) | Off / — / — |
     | ↳ **Detect from Anki** / **Import from Yomitan** / **Field mapping** (Yomitan API) | — |
-    | **Card enhancement** tab: **Enhance with sentence audio** | Off (turning it on downloads the speech model) |
+    | **Card enhancement** tab: **Enhance with sentence audio** | Off (turning it on in Japanese downloads the speech model) |
     | ↳ **Audio field** | `SentenceAudio`, found in Anki when turned on |
     | ↳ **Advanced**: **Start offset** / **End offset** / **Seconds kept** / **Clips kept** | 0 ms / 0 ms / 30 / 15 |
     | **Card enhancement** tab: **Enhance with screenshot** | On |
@@ -184,6 +196,10 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
   <TabItem label="Account">
     Optional. See [Accounts and plans](/cloud/) and
     [Sync and backup](/cloud/sync/).
+
+    | Section | What it has |
+    | --- | --- |
+    | **Dictionary profile** | With Yomitan: the **Yomitan profile** this account looks words up with, and **Manage profiles**. See [A dictionary profile for each account](/language/support/#a-dictionary-profile-for-each-account). |
   </TabItem>
   <TabItem label="Command line">
     The `kimochi` command, to control Kimochi from a terminal and scripts. See
@@ -201,7 +217,7 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | Section | What it has |
     | --- | --- |
     | **Updates** | Your version, when it last checked, **What's new** and **Check for updates** (or the update's download and **Restart to update**). See [Updates](/install/#updates). |
-    | **Debug info** | For bug reports: **Copy debug info** (your version, system and displays, OCR engine, dictionary and recent errors, as text), **Save debug bundle** (the same with recent logs, as a zip) and **Verbose logging** (records extra detail until Kimochi quits). Tokens, keys, e-mail addresses and your user name are left out. See [Still stuck?](/help/troubleshooting/#still-stuck) |
+    | **Debug info** | For bug reports: **Copy debug info** (your version, system and displays, language, OCR engine, dictionary and recent errors, as text), **Save debug bundle** (the same with recent logs, as a zip) and **Verbose logging** (records extra detail until Kimochi quits). Tokens, keys, e-mail addresses and your user name are left out. See [Still stuck?](/help/troubleshooting/#still-stuck) |
     | **Links** | Website, Documentation, Discord and Source code. |
     | **Acknowledgements** | The open-source projects Kimochi is built on, with their licences. |
   </TabItem>

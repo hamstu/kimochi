@@ -6,7 +6,8 @@ description: Translate a line with DeepL or Kimochi Cloud, ask for a grammar exp
 import Screenshot from '../../../components/Screenshot.astro'
 
 For a line you can't read yet, the Log can translate it, explain it, or read it aloud. All three are
-in each line's menu (hover a line and press **⋯**, or right-click it).
+in each line's menu (hover a line and press **⋯**, or right-click it). Translations and
+explanations are in English, whatever [language you're learning](/language/support/#translation-and-ai).
 
 <Screenshot id="line-actions" alt="A line's menu in the Log: Copy text, Translate, Explain and Delete line." width={720} />
 
@@ -19,7 +20,7 @@ in each line's menu (hover a line and press **⋯**, or right-click it).
 | Option | What it uses |
 | --- | --- |
 | **Kimochi cloud** | Kimochi's server (DeepL behind it). Needs [Kimochi Cloud](/cloud/); offered once you have it. |
-| **Your DeepL key** | Your own [DeepL API](https://www.deepl.com/pro-api) key, entered below it. |
+| **Your DeepL key** | Your own [DeepL API](https://www.deepl.com/pro-api) key, entered below it. Only for languages DeepL translates from ([the list](/language/support/#languages)); for others, Settings says so. |
 
 Until you choose, Kimochi uses Kimochi cloud if your account has Kimochi Cloud, and your DeepL key
 otherwise.
@@ -45,12 +46,18 @@ inside the explanation too.
 | **Claude CLI** | Runs the `claude` command-line tool. Model: Opus (default), Sonnet, Haiku or Fable. |
 | **Kimochi cloud** | Kimochi's server, with Kimochi Cloud. |
 
-The **Prompt** is yours to edit, with `{{context}}` (the previous lines) and `{{sentence}}`
-placeholders; **Reset to default** restores it.
+The **Prompt** is yours to edit, with `{{language}}` (the language you're learning), `{{context}}`
+(the previous lines) and `{{sentence}}` placeholders; **Reset to default** restores it. The default
+prompt follows the language; one you edited is sent as written, and in a language other than
+Japanese the dialog says so.
 
 <Screenshot id="explain-settings" alt="The Explain settings dialog: Provider, model and the prompt." width={760} />
 
 ## Read aloud
+
+:::note[Japanese only]
+Read aloud's voices are Japanese, so it's hidden while you're learning another language.
+:::
 
 With [Kimochi Cloud](/cloud/), each line's menu has **Read aloud**, which plays the line in an
 ElevenLabs voice. Choose the **Read-aloud voice** and **Voice model** (Eleven v3, v4 or v4 Turbo) in

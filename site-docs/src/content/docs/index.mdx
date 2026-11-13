@@ -5,12 +5,15 @@ description: What Kimochi is, who it is for, and the words this guide uses for i
 
 import Screenshot from '../../components/Screenshot.astro'
 
-Kimochi is a free, open-source desktop app that helps you read any Japanese on your screen: games,
-visual novels, manga, videos and streams. It
+Kimochi is a free, open-source desktop app that helps you read the language you're learning
+wherever it is on your screen: games, visual novels, manga, videos and streams. It
 captures the text with OCR, can draw it back over what you're reading as an overlay, and lets you
 hover any word to look it up in your favourite dictionary and save it to Anki.
 
-<Screenshot id="main-window-tour" alt="The main window with numbered parts: 1 the source card, 2 the Auto OCR and Show overlay switches, 3 the OCR model, 4 the dictionary, 5 the Log and Notebook tabs, 6 a line in the Log, 7 the reading stats." width={900} />
+Kimochi was made for Japanese, and Japanese is the default. You can also choose one of 48 other
+languages, experimentally; see [Choosing a language](/language/).
+
+<Screenshot id="main-window-tour" alt="The main window with numbered parts: 1 the source card, 2 the Auto OCR and Show overlay switches, 3 the OCR model, 4 the dictionary, 5 the Log and Notebook tabs, 6 a line in the Log, 7 the reading stats, 8 the language you're learning." width={900} />
 
 1. **Source**: the window or screen Kimochi reads, with a live preview, **Crop area** and **Change source**.
 2. **Auto OCR**, **Enhance Anki cards** and **Show overlay**: scan whenever the text changes, add the line’s audio to your cards, and draw the text over what you’re reading.
@@ -18,12 +21,15 @@ hover any word to look it up in your favourite dictionary and save it to Anki.
 4. **Dictionary**: the pop-up dictionary engine used for lookups.
 5. **Log**, **Notebook** and **Anki**: the views of the main window. The Anki tab lists the cards you made this session.
 6. **A line**: every scan adds its text to the Log, with the time it arrived.
-7. **Reading stats**: reading time, lines, characters and speed for this session.
+7. **Reading stats**: reading time, lines, characters (or words) and speed for this session.
+8. **Language**: the code of the language you're learning (**JA** for Japanese); click it to change
+   the language in [Settings → Language](/language/).
 
 ## Words used in this guide
 
 | Term | Meaning |
 | --- | --- |
+| Language | The language you're learning: what Kimochi reads, looks up and logs. Japanese by default. |
 | Source | The window or screen Kimochi reads, or another input: Quick Shot, Clipboard, WebSocket or Browser. |
 | Text hooking | A switch under a game's source card: Kimochi reads the game's text from inside the game instead of with OCR (Windows games, on Windows and on Linux through Proton or Wine). |
 | Crop area | Part of the source to read, such as a game’s dialogue box or a video’s subtitles. |

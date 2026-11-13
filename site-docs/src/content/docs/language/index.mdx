@@ -1,0 +1,84 @@
+---
+title: Choosing a language
+description: Choose the language you're learning in the welcome guide or Settings → Language, and see what Kimochi changes with it.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+import Todo from '../../../components/Todo.astro'
+
+Kimochi reads, looks up and logs text in **the language you're learning**. Japanese is the default
+and the language Kimochi was made for. The 48 other languages it lists, all written left to right,
+are **experimental**: they work, but they've seen far less use than Japanese, and some features
+are Japanese-only for now.
+
+See [What works in each language](/language/support/) for the full list of languages and which OCR
+engines, dictionaries and translation each one gets, and [Japanese-only features](/language/japanese-only/)
+for what isn't available in other languages yet.
+
+## Choosing it
+
+**In the welcome guide.** Straight after its first page, **What language are you learning?** lists
+every language, each with its name in English and in itself. Scroll or search, pick yours and press
+**Continue**: the OCR and dictionary steps after it are set up for that language.
+
+<Screenshot id="welcome-language" alt="The welcome guide's language step: What language are you learning?, a searchable list with Japanese ticked, then Korean, Chinese, Cantonese, English and more, and a Continue button." width={640} />
+
+**In Settings → Language**, the second page of Settings. A change takes effect at once.
+
+<Screenshot id="settings-language" alt="Settings, Language with Japanese chosen: the Language picker, About Japanese, the supported OCR engines with Google Lens in use, and the Dictionary profile." width={760} />
+
+**From the main window.** The foot of the sidebar shows the language's code. With no account in
+use, it's the globe and code at the right of **Settings** (**JA** for Japanese). With an account in
+use, the code sits on the account row, and the row's menu has **Language: Japanese**. Either one
+opens Settings → Language.
+
+<Screenshot id="sidebar-language" alt="The foot of the main window's sidebar: Settings, and beside it a globe with the code JA, highlighted." width={272} />
+
+<Screenshot id="account-menu-language" alt="The account menu in the sidebar's foot: Use Kimochi as, the account and Local, then Language: Japanese, highlighted, and Settings; the account row below shows JA." width={272} />
+
+## The language goes with your account
+
+The language is one of your account's preferences. With a [Kimochi account](/cloud/) it
+[syncs](/cloud/sync/) to your other computers, and each account on a computer keeps its own
+language, so switching account can switch language too. Without an account, it is kept with the
+Local Log on this computer.
+
+## The Language page
+
+| Part | What it shows |
+| --- | --- |
+| **Language** | The language you're learning. |
+| **Heads up** | For any language but Japanese: Kimochi was made for Japanese, so not everything works perfectly and some features may be missing. **reach out for support** opens Help. |
+| **About …** | What Kimochi assumes about the language's text: its script, whether words are separated by spaces, whether vertical text is looked for, and, for Japanese, that furigana can be filtered out of scans. |
+| A warning | Only when the OCR engine in use can't read the language, with **Choose another engine**. |
+| **Supported OCR engines** | The engines on this computer that read the language, the one in use marked **In use**, and below them the ones that can't. |
+| **Dictionary profile** | With Yomitan as your dictionary: the Yomitan profile this account looks words up with, and **Account settings** to change it (see [Dictionary profiles](/language/support/#a-dictionary-profile-for-each-account)). |
+
+<Screenshot id="settings-language-korean" alt="Settings, Language with Korean chosen: the Heads up note, About Korean (written in Hangul, words separated by spaces), the OCR engines that read Korean (Google Lens in use, Screen AI, Apple Live Text), those that can't, and the Dictionary profile Korean." width={760} />
+
+## What changes with the language
+
+- **OCR engines.** Only engines that can read the language are listed. If yours can't, Kimochi
+  switches to one that can, and brings back the engine you used for a language when you return to
+  it. See [OCR engines by language](/language/support/#ocr-engines).
+- **The text.** Lines in the language are kept by the line filter, words are joined with spaces
+  where the language uses them, a lookup takes the whole word under the pointer, Read along and the
+  controller step through it word by word, and it is drawn in fonts for its script. See
+  [Text in your language](/language/support/#text-in-your-language).
+- **Dictionaries.** Hachidori and 10ten read Japanese only; Yomitan and the Yomitan API work with
+  any language, and Yomitan keeps a profile for each account. See
+  [Dictionaries](/language/support/#dictionaries).
+- **Translation and Explain.** Translations and explanations are in English whatever the language;
+  Explain's prompt names the language. See [Translation and AI](/language/support/#translation-and-ai).
+- **Japanese-only features**, such as read aloud, are hidden in other languages. See
+  [Japanese-only features](/language/japanese-only/).
+
+## What is experimental
+
+Every language but Japanese. Kimochi was built and tested with Japanese games, visual novels and
+manga; other languages use the same tools, but some things may work less well, and the Language page
+and the welcome guide say so. If something doesn't work in your language, ask in
+[Kimochi's Discord](https://discord.gg/vdMge6TBZQ) or open an issue on
+[GitHub](https://github.com/hamstu/kimochi/issues).
+
+<Todo>TODO(hamish): the sample sentences and words shown for other languages (Settings → OCR &amp; Overlay's overlay preview, the Text Hooker card's example, the welcome guide's test lookup) were machine-written and not yet checked by native speakers. Say so here, or leave it out once they're checked?</Todo>

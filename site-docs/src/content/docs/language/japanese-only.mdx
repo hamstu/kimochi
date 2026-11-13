@@ -1,0 +1,37 @@
+---
+title: Japanese-only features
+description: What works only in Japanese for now, what you get instead in other languages, and the known limits of other languages.
+---
+
+import Todo from '../../../components/Todo.astro'
+
+Kimochi was made for Japanese, and a few features rely on Japanese text, Japanese voices or
+Japanese dictionaries. In any other language they are hidden or can't be chosen, and the rest of
+Kimochi works as usual.
+
+| Feature | In other languages |
+| --- | --- |
+| **MeikiOCR**, **Manga OCR** and **VOCR6** ([OCR engines](/reading/ocr-engines/)) | Not listed: their models were trained on Japanese. Use another [engine that reads your language](/language/support/#ocr-engines). |
+| **Hachidori** and **10ten** ([dictionaries](/lookups/dictionaries/)) | Listed but can't be chosen; Yomitan looks words up in their place. |
+| **Install Jitendex** (the welcome guide's quick dictionary setup) | The guide points you to [Yomitan's dictionary list](https://yomitan.wiki/dictionaries/) instead. |
+| **Filter out furigana and small text** ([overlay options](/reading/overlay/#options)) | Not offered; nothing is left out for being small. |
+| **Read aloud** ([Translation and AI](/lookups/translation-and-ai/#read-aloud)): the line menu's **Read aloud**, the <kbd>R</kbd> key and the voice settings | Hidden: the voices are Japanese. |
+| [Sentence audio](/lookups/anki/#sentence-audio) finding a line by its words | Each line's clip is found by timing alone, and the speech model isn't downloaded. |
+| Word audio on cards (`(word audio)` in the card builder's field mapping) | Not offered. |
+| The `pitch-accents` and `sentence-furigana` [card builder](/lookups/anki/#card-builder-yomitan-api) markers | Not offered; **Detect from Anki** leaves those fields unmapped. |
+| Readings in the [Notebook](/log/notebook/) (the **Reading** fields, and readings filled in by [VNDB import](/log/notebook/#import-from-vndb)) | Not shown. |
+| Tooltips explaining each inflection step in the Yomitan API pop-up | The steps are shown without them. |
+
+## Known limits in other languages
+
+- **No right-to-left languages yet.** Arabic, Hebrew, Persian and other right-to-left languages
+  aren't listed: the overlay can't lay them out.
+- **Text hooking** decodes games that don't use Unicode as Japanese (Shift-JIS), so an older game
+  in another language may come through garbled. Read it with
+  [OCR](/reading/sources/#choosing-a-window-or-screen) instead.
+- **The browser extension** hasn't been adapted yet: it reads pictures with your OCR engine, but
+  draws their text over the picture spaced as it would Japanese.
+- **Word counts** (the Log's words and words per hour) aren't synced between computers yet.
+- Translations and explanations are always in English.
+
+<Todo>TODO(hamish): confirm the text hooking limit (hookd still gives LunaHook code page 932 for non-Unicode hooks) and the browser extension one (square-glyph layout in content.js) are worth stating to users, or will be fixed before release.</Todo>

@@ -58,7 +58,10 @@ With the Yomitan API engine, Kimochi's pop-up builds the cards. Below the connec
 | **Field mapping** | — | For each field of the note type: a Yomitan marker, `(sentence)`, or literal text. |
 
 The markers are `expression`, `reading`, `glossary`, `dictionary`, `frequencies`, `pitch-accents`,
-`part-of-speech`, `tags`, `conjugation`, `audio`, `sentence` and `sentence-furigana`.
+`part-of-speech`, `tags`, `conjugation`, `audio`, `sentence` and `sentence-furigana`. With sentence
+audio on, `(sentence audio)` and `(word audio)` fill a field with the line's or the word's audio.
+`pitch-accents`, `sentence-furigana` and `(word audio)` are for Japanese only, and aren't offered in
+[other languages](/language/japanese-only/).
 
 <Screenshot id="settings-anki" alt="Settings, Anki, Mining with the Yomitan API: Enable mining, Deck, Note type, Detect from Anki and Import from Yomitan." width={760} />
 
@@ -108,9 +111,10 @@ last **Seconds kept** of audio are held (30 by default), so a later shot finds n
 line. Raise **Seconds kept** under **Advanced** if you need
 longer.
 
-Turning it on downloads the speech model (240 MB), which listens for each
+For Japanese, turning it on downloads the speech model (240 MB), which listens for each
 line's words to find where it was said. Recording starts once the model is downloaded; the section
-shows the download's progress until then.
+shows the download's progress until then. In other languages, each line's clip is found by timing
+alone, with no model to download, and cards get no word audio.
 
 **Audio field** is the field in your note that gets the line's audio. Kimochi finds it in Anki
 when you turn the feature on, and again when the AnkiConnect address or the Yomitan API's note type

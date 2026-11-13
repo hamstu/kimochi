@@ -22,6 +22,8 @@ the keys under **Show popup** in **Settings → Dictionary → Open 10ten settin
 
 Hold <kbd>Shift</kbd> over a word in any line. The pop-up shows the entry for the longest word
 that starts there, with its reading, definitions and (for most engines) audio and an Anki button.
+In a language that separates its words with spaces, the lookup starts at the beginning of the word
+under the pointer, so any letter of a word looks up the whole word.
 
 <Screenshot id="word-lookup" alt="A line in the Log with 世界線 selected under the pointer and its dictionary pop-up above it: world line; timeline, alternate reality, from JMdict." width={560} />
 
@@ -60,8 +62,9 @@ the first word) or **Read along** (step through the last scan):
 | **B** | Back |
 
 Words are split the way the dictionary sees them: with Yomitan, the longest dictionary match
-with deinflection, so 食べられなかった is one stop, not seven. The Yomitan API uses its own tokenizer,
-and Hachidori and 10ten a general word splitter. On the keyboard, the arrows,
+with deinflection, so <span lang="ja">食べられなかった</span> is one stop, not seven. The Yomitan API uses its own tokenizer,
+and Hachidori and 10ten a general word splitter. Where the dictionary has no answer, the word
+splitter for [the language you're learning](/language/) stands in. On the keyboard, the arrows,
 <kbd>Return</kbd>, <kbd>Space</kbd> (by word or by character) and <kbd>Esc</kbd> do the same while
 the menu is open. **Settings → Game Mode** can show the dictionary full screen instead; see
 [Pop-up or full screen](/controller/#pop-up-or-full-screen).
