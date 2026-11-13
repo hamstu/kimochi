@@ -7,7 +7,7 @@
 //! line far longer than a game says at once (a backlog opened, a skip through a scene, sent as
 //! one) is dropped. Per game: script codes taken out (unless turned off), repeated characters
 //! undone (`ここここ` → `こ`), and the reader's own find-and-replace rules; and whether a line the
-//! game sends in pieces (one call per row of its text box) is joined back up ([`continues`]).
+//! game sends in pieces (one call per row of its text box) is joined back up ([`continues_in`]).
 use crate::language::Language;
 use regex::{NoExpand, Regex};
 use serde_json::Value;
@@ -57,7 +57,7 @@ pub struct GameConfig {
     pub spaces: bool,
     /// The longest line shown at once ([`max_line_chars`]).
     pub max_chars: usize,
-    /// Sentences end, and speech opens and closes, as Japanese's do alone ([`continues`]).
+    /// Sentences end, and speech opens and closes, as Japanese's do alone ([`continues_in`]).
     pub japanese: bool,
     pub hook_codes: Vec<String>,
     pub replacements: Vec<Replacement>,
@@ -246,11 +246,12 @@ fn is_code(run: &str) -> bool {
 /// sentence ends (`。！？`, a closing bracket, an ellipsis or a dash), whatever `after` starts with
 /// (`電話で叔母さんから` then `「よろしくね」と念を押されたことも`). How soon after is the
 /// caller's to judge.
+#[cfg(test)]
 pub fn continues(before: &str, after: &str) -> bool {
     continues_in(before, after, true)
 }
 
-/// [`continues`] for the language being read: outside Japanese, a closing quote (`”`, `"`, `»`)
+/// `continues` for the language being read: outside Japanese, a closing quote (`”`, `"`, `»`)
 /// also ends a sentence, and speech opened with `“` or `«` is still open until it is closed.
 pub fn continues_in(before: &str, after: &str, japanese: bool) -> bool {
     const ENDS: &str = "。．.！!？?」』）)】〉》］]｝}…‥―─—～〜♪♡☆★";
