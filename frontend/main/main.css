@@ -219,7 +219,7 @@ html[data-mini] .main-help { display: none; }
   flex: 1;
 }
 /* Without an account in use the foot is two buttons of equal width, a line between them: Settings,
-   and the language being learned (its flag and name), which opens Settings → Language. */
+   and the language being learned (a globe and its name), which opens Settings → Language. */
 .sb-foot-split {
   display: flex;
   flex: 1;
@@ -270,9 +270,6 @@ html[data-mini] .main-help { display: none; }
   align-items: center;
   gap: var(--k-space-1-5);
   color: var(--k-text-3);
-}
-.sb-account-flag {
-  --language-flag-size: var(--k-icon-sm);
 }
 .sb-account-chevron {
   width: var(--k-icon-sm);

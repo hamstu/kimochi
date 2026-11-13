@@ -2,7 +2,7 @@
  * The sidebar's account switcher, in the foot of the sidebar in place of the Settings row while an
  * account is in use: one row, the account's avatar (or initial) and name (or the email before
  * "@"). Clicking opens a menu of the accounts signed in to on this computer, the active one
- * checked, the language being learned (its flag is on the row too; it opens Settings → Language)
+ * checked, the language being learned (its code is a badge on the row too; it opens Settings → Language)
  * and Settings (adding an account and signing out are in Settings → Account, which a
  * failed switch opens). Each account has its own
  * Log, notebook and preferences, so choosing one switches everything (native reloads the windows
@@ -13,6 +13,7 @@
 import { useState, type JSX } from 'react'
 import { ChevronsUpDown, Globe, Settings } from 'lucide-react'
 import {
+  Badge,
   Menu,
   MenuContent,
   MenuItem,
@@ -29,7 +30,6 @@ import { accountSwitch, useAccount } from '../bridge/account'
 import { useSync } from '../bridge/sync'
 import { useLanguage } from '../bridge/useLanguage'
 import { AccountAvatar } from '../components/AccountAvatar'
-import { LanguageFlag } from '../components/LanguageFlag'
 
 const LOCAL = 'local'
 
@@ -88,7 +88,7 @@ export function AccountBar({
           trailing={
             <span className="sb-account-trailing">
               {attention && <StatusDot tone={sync.state === 'error' || !active.signedIn ? 'danger' : 'warn'} />}
-              <LanguageFlag language={language} className="sb-account-flag" />
+              <Badge className="sb-account-language">{language.code.split('-')[0].toUpperCase()}</Badge>
               <ChevronsUpDown className="sb-account-chevron" />
             </span>
           }

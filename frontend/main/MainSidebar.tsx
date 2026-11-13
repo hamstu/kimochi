@@ -10,7 +10,7 @@
  * with a way back. Resizable from its right edge.
  */
 import { useEffect, useState, type JSX } from 'react'
-import { ArrowLeft, Settings } from 'lucide-react'
+import { ArrowLeft, Globe, Settings } from 'lucide-react'
 import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
@@ -44,7 +44,6 @@ import { UpdateNotice } from './UpdateNotice'
 import { activeAccount } from '@ui/account'
 import { useAccount } from '../bridge/account'
 import { AccountBar } from './AccountBar'
-import { LanguageFlag } from '../components/LanguageFlag'
 
 export type MainView = 'source' | 'log' | 'notebook' | 'anki' | 'settings'
 
@@ -352,7 +351,7 @@ export function MainSidebar({
             </Row>
             <Row
               className="sb-foot-language"
-              icon={<LanguageFlag language={language} />}
+              icon={<Globe />}
               onClick={() => onSettingsTab('language')}
               aria-label={`Language: ${language.name}`}
               title={`Language: ${language.name}`}
