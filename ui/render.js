@@ -27,7 +27,7 @@ import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
 import { joiner } from './script-text.js'
 import { languageOf } from './languages.js'
-import { layoutParts, characterCells, charsOf, squeezeMargins } from './text-layout.js'
+import { layoutParts, characterCells, charsOf, squeezeMargins, wholeWords } from './text-layout.js'
 import { textStyle, textUnits, wordPieces, estimateAdvance, TEXT_FONT_PROPERTY } from './language-style.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
 import { shownForHits } from './hit-visible.js'
@@ -267,6 +267,30 @@ function runElement(run, origin, vertical, inline, measure) {
   return span
 }
 
+/**
+ * A box's runs, one after another in its flow. In a language that spaces its words
+ * (`measure.language`; Japanese has none), a run that does not end in a space is closed with one
+ * (`joiner`), so a lookup that reads on from line to line reads "téseras para", not
+ * "téseraspara", which a word lookup cannot find. A run is a zero-size inline block, so the space
+ * moves nothing. It has a span of its own, so the controller's word cursor, which reads each run's
+ * own text node (controller.js `readUnits`), never takes it for a line's text. Vertical columns
+ * are joined with nothing.
+ */
+function appendRuns(parent, runs, origin, vertical, measure) {
+  runs.forEach((run, index) => {
+    const element = runElement(run, origin, vertical, true, measure)
+    const following = runs[index + 1]
+    const space = following && !vertical ? joiner(run.text, following.text, measure.language) : ''
+    if (space) {
+      const span = document.createElement('span')
+      span.className = 'ocr-joiner'
+      span.textContent = space
+      element.append(span)
+    }
+    parent.append(element)
+  })
+}
+
 /** Whether a run is drawn as more than its plain text: see `appendRunText`. */
 const placedGlyphs = (run) => Boolean(run.squeeze || run.offsets)
 
@@ -274,14 +298,22 @@ const placedGlyphs = (run) => Boolean(run.squeeze || run.offsets)
  * A run's text, as the layout placed it (text-layout.js `fit`): each mark it squeezed (SQUEEZE)
  * in a span whose margins cut the blank half of its em, as a font's half-width alternate would,
  * and each glyph the engine's boxes moved off the even pitch (`offsets`) moved by a margin before
- * it. Plain inline spans, so the text stays one flow for the engines' scanners.
+ * it. A word set between spaces (`wholeWords`) moves as one, and its span holds all of it, not its
+ * first letter alone: a scanner walking back to a word's start stops at an element. Plain inline
+ * spans, so the text stays one flow for the engines' scanners.
  */
 function appendRunText(element, run, measure) {
   if (!placedGlyphs(run)) return void element.append(document.createTextNode(run.text))
+  // Characters as the layout counted them: a letter and its combining marks are one glyph.
+  const all = charsOf(run.text, measure)
+  // Each whole word's first character index → its last.
+  const words = new Map(wholeWords(run.text, measure))
   let plain = ''
   let previous = 0
-  // Characters as the layout counted them: a letter and its combining marks are one glyph.
-  charsOf(run.text, measure).forEach((character, index) => {
+  // The last character a span has already drawn: the rest of a moved word is in its span.
+  let drawnTo = -1
+  all.forEach((character, index) => {
+    if (index <= drawnTo) return
     const margins = squeezeMargins(character, run.squeeze)
     const offset = run.offsets?.[index] ?? 0
     const move = offset - previous
@@ -296,7 +328,8 @@ function appendRunText(element, run, measure) {
     glyph.className = 'ocr-glyph'
     glyph.style.marginLeft = `${(margins?.before ?? 0) * run.fontSize + move}px`
     if (margins?.after) glyph.style.marginRight = `${margins.after * run.fontSize}px`
-    glyph.textContent = character
+    drawnTo = words.get(index) ?? index
+    glyph.textContent = all.slice(index, drawnTo + 1).join('')
     element.append(glyph)
   })
   if (plain) element.append(document.createTextNode(plain))
@@ -1122,7 +1155,7 @@ export class TextOverlayRenderer {
         if (placedGlyphs(runs[0])) appendRunText(current, runs[0], measure)
         else current.textContent = box.text
       } else {
-        for (const run of runs) current.append(runElement(run, flow, vertical, true, measure))
+        appendRuns(current, runs, flow, vertical, measure)
       }
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
@@ -1296,7 +1329,7 @@ export class TextOverlayRenderer {
       }
       Object.assign(body.style, { width: `${inner.width}px`, height: `${inner.height}px` })
       const flow = { x: vertical ? corner.x + inner.width : corner.x, y: corner.y }
-      for (const run of runs) body.append(runElement(run, flow, vertical, true, measure))
+      appendRuns(body, runs, flow, vertical, measure)
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = '' // Semantic groups must not extend a lookup into another bubble.

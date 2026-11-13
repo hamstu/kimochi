@@ -709,7 +709,10 @@ export function fit(run, vertical, measure, size = null) {
   const placed = squeeze
     ? { ...fitWith(run, vertical, squeezed(measure, squeeze), size), squeeze }
     : fitWith(run, vertical, measure, size)
-  const offsets = vertical || shaped(measure) ? null : snapOffsets(placed, squeezed(measure, placed.squeeze))
+  const offsets =
+    vertical || shaped(measure)
+      ? null
+      : wordOffsets(snapOffsets(placed, squeezed(measure, placed.squeeze)), placed.text, measure)
   return offsets ? { ...placed, offsets } : placed
 }
 
@@ -801,6 +804,44 @@ function snapOffsets(run, measure) {
     return ra + ((rb - ra) * (k - a)) / (b - a)
   })
   return offsets.some((offset) => Math.abs(offset) > 0.02 * f) ? offsets : null
+}
+
+/**
+ * The words of `text` in a language that sets them between spaces (`measure.style.spaces`: Spanish,
+ * French, English, Korean), as [first, last] indices into the characters the layout counts
+ * (`charsOf`): each run of them between spaces that has a letter. A dictionary scans such a word
+ * whole, back from the pointer to its start, and stops at an element (Yomitan's
+ * `DOMTextScanner`), so each is moved and drawn as one piece (`wordOffsets`, render.js
+ * `appendRunText`). None in Japanese (a measure without a style), which is scanned by character
+ * and keeps its glyphs exactly as before, nor in a language that does not space its words.
+ */
+export function wholeWords(text, measure) {
+  if (!measure?.style?.spaces) return []
+  const words = []
+  let at = 0
+  // Words and the spaces between them, in turn; character indices, as `offsets` has them.
+  for (const piece of text.split(/(\s+)/u)) {
+    const length = charsOf(piece, measure).length
+    if (/\p{L}/u.test(piece)) words.push([at, at + length - 1])
+    at += length
+  }
+  return words
+}
+
+/**
+ * `offsets` (`snapOffsets`, which may be null) with each of the run's whole words (`wholeWords`)
+ * moved as one: by the offset at its centre, which is where its box was fitted, so the word stays
+ * one piece of text over its box.
+ */
+function wordOffsets(offsets, text, measure) {
+  if (!offsets) return null
+  const moved = [...offsets]
+  for (const [first, last] of wholeWords(text, measure)) {
+    // Between the two middle glyphs of a word with an even count.
+    const centre = (offsets[Math.floor((first + last) / 2)] + offsets[Math.ceil((first + last) / 2)]) / 2
+    moved.fill(centre, first, last + 1)
+  }
+  return moved
 }
 
 /**
