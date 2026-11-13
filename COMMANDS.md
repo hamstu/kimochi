@@ -1876,10 +1876,21 @@ the prefix's `Z:` drive. Process ids in the protocol are then the prefix's, foun
 Linux path (through the prefix's drive links), which keys what is remembered per game. Linux x64
 bundles ship the sidecar (cross-built with MinGW); Linux ARM64 bundles do not.
 
+A game in a Flatpak sandbox (Bottles, Lutris, Heroic or Steam from Flathub; `/.flatpak-info` in
+its root) has its own `/tmp`, where its wineserver listens, and sees little of the home folder.
+There the sidecar runs inside the sandbox (`flatpak enter <game pid> env … <wine> …`), and it and
+the hooker's folder are copied into the prefix
+(`drive_c/users/<user>/AppData/Local/kimochi-texthook/<name>-<content hash>/`), each copy made
+once per content. The game's paths (its Wine, prefix and image) are the sandbox's, read through
+`/proc/<pid>/root`. Any other game whose wineserver Kimochi cannot reach is not hookable, rather
+than a second wineserver being started on its prefix. On X11 a window's process is the one the X
+server reports for its client (XRes), else `_NET_WM_PID`, which a sandboxed client sets to its id
+inside the sandbox.
+
 | Command | Signature |
 | --- | --- |
 | `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames |
-| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher) |
+| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher). When the game cannot be hooked at all, the session becomes the window's, `failed` with the reason in `detail`, and the command rejects with it |
 | `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |
 | `texthook_status` | `() -> HookStatus` |
 | `texthook_select` | `({key}) -> HookStatus` — the thread the Log reads, remembered for the game; `key: null` forgets it and chooses automatically again |

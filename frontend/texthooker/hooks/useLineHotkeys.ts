@@ -1,9 +1,10 @@
 import { snapshotLines, deleteLine } from "@texthooker/lib/store";
 import { openExplain } from "@texthooker/lib/explain";
+import { editLine } from "@texthooker/lib/lineEdit";
 import { getSettings } from "@texthooker/lib/settings";
 import { toggleTranslation } from "@texthooker/lib/translate";
 import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
-import type { Line } from "@texthooker/lib/types";
+import { isNote, type Line } from "@texthooker/lib/types";
 import { useCapabilities } from "../../bridge/capabilities";
 import { getSetting, DEFAULT_VOICE_ID } from "../../bridge/settings";
 import type { AudioSettings } from "../../bridge/types";
@@ -17,17 +18,21 @@ import { useRowHotkeys } from "./useRowHotkeys";
  *   r — read it aloud (with a Kimochi account, in Japanese: the voices are Japanese)
  *   c — copy what the row shows (English when translated)
  *   t — translate it, or back to the original
- *   e — explain it
+ *   x — explain it
+ *   e — edit its text
  *   d — delete it
+ *
+ * A note (Add a note) takes c, e and d. A, anywhere in the Log, starts a new note (`useAddNoteHotkey`).
  */
 export function useLineHotkeys() {
   // Read aloud and Kimochi's explanations run on Kimochi cloud, as in the menu.
   const { cloudAccess } = useCapabilities();
   const [language] = useLanguage();
-  const onLine = (action: (line: Line) => void) => (row: HTMLElement) => {
+  const onLine = (action: (line: Line) => void, notes = true) => (row: HTMLElement) => {
     const id = Number(row.dataset.lineId);
     const line = snapshotLines().find((l) => l.id === id);
-    if (line) action(line);
+    // A note is not read aloud, translated or explained (its menu has no such items).
+    if (line && (notes || !isNote(line))) action(line);
   };
   useRowHotkeys(".line[data-line-id]", {
     r: cloudAccess && language.code === "ja"
@@ -35,17 +40,18 @@ export function useLineHotkeys() {
           void getSetting<AudioSettings>("audioSettings")
             .then((audio) => speak(line.text, audio?.voiceId || DEFAULT_VOICE_ID))
             .catch((err) => console.warn("read aloud failed", err));
-        })
+        }, false)
       : undefined,
     c: onLine((line) => {
       const shown = line.showTranslation && line.translation ? line.translation : line.text;
       void writeTextSelf(shown).catch((err) => console.warn("copy failed", err));
     }),
-    t: onLine(toggleTranslation),
-    e:
+    t: onLine(toggleTranslation, false),
+    x:
       cloudAccess || getSettings().explainProvider !== "kimochi"
-        ? onLine(openExplain)
+        ? onLine(openExplain, false)
         : undefined,
+    e: onLine((line) => editLine(line.id)),
     d: onLine((line) => deleteLine(line.id)),
   });
 }

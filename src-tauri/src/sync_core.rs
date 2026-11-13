@@ -431,7 +431,9 @@ pub struct Local {
     pub images: HashMap<String, PathBuf>,
 }
 
-const LINE_FIELDS: &[&str] = &["text", "source", "ts", "ocr", "translation", "showTranslation", "explanation"];
+const LINE_FIELDS: &[&str] = &["text", "originalText", "source", "ts", "ocr", "translation", "showTranslation", "explanation"];
+/// Line fields that describe its text, so a line whose text was edited keeps only its own.
+const TEXT_BOUND_FIELDS: &[&str] = &["originalText", "translation", "showTranslation", "explanation"];
 
 pub fn line_record(sid: &str, uid: &str, line: &Value) -> Value {
     let mut data = Map::new();
@@ -1248,12 +1250,18 @@ fn merge_remote(ctx: &mut Ctx, local: &mut Local, remote: &[RemoteRecord], repor
                     let remote_wins = first || r.hlc.as_str() > my_stamp.as_str();
                     let (winner, loser) = if remote_wins { (&r.data, &mine) } else { (&mine, &r.data) };
                     let mut merged = winner.clone();
+                    let same_text = winner.get("text") == loser.get("text");
                     if let (Some(out), Some(loser_map)) = (merged.as_object_mut(), loser.as_object()) {
                         for (field, value) in loser_map {
+                            // A translation, explanation or recorded text belongs to the loser's
+                            // text: an edit dropped them on purpose.
+                            if !same_text && TEXT_BOUND_FIELDS.contains(&field.as_str()) {
+                                continue;
+                            }
                             out.entry(field.clone()).or_insert_with(|| value.clone());
                         }
                     }
-                    if winner.get("text") != loser.get("text") {
+                    if !same_text {
                         let (loser_stamp, loser_device) = if remote_wins {
                             (my_stamp.clone(), ctx.device_id.to_string())
                         } else {
@@ -1753,6 +1761,38 @@ pub mod tests {
         b.sync(&server);
         assert_eq!(b.read("sessions.json")["sessions"][0]["name"], "Renamed on A");
         assert!(a.conflicts().is_empty() && b.conflicts().is_empty());
+    }
+
+    #[test]
+    fn an_edited_line_travels_with_its_recorded_text_and_drops_the_old_translation() {
+        let server = MemServer::default();
+        let mut a = Device::new("A", "edit");
+        let mut b = Device::new("B", "edit");
+        a.session("s1", "Novel", json!([line(1, "u1", "ひか", 10)]));
+        a.sync(&server);
+        b.sync(&server);
+        // While apart, B translates the line as read; A corrects it, later.
+        let mut lines = b.lines("s1");
+        lines[0]["translation"] = json!("old reading");
+        lines[0]["showTranslation"] = json!(true);
+        b.write("sessions/s1/lines.json", json!({ "version": 1, "lines": lines }));
+        b.touch();
+        b.sync(&server);
+        let mut lines = a.lines("s1");
+        lines[0]["text"] = json!("ひが");
+        lines[0]["originalText"] = json!("ひか");
+        a.write("sessions/s1/lines.json", json!({ "version": 1, "lines": lines }));
+        a.touch();
+        a.clock.set(b.clock.get() + 50_000);
+        a.sync(&server);
+        b.touch();
+        b.sync(&server);
+        for device in [&a, &b] {
+            let l = &device.lines("s1")[0];
+            assert_eq!(l["text"], "ひが");
+            assert_eq!(l["originalText"], "ひか", "the recorded text travels: {l}");
+            assert!(l.get("translation").is_none(), "the old text's translation stays gone: {l}");
+        }
     }
 
     #[test]

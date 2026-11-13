@@ -243,10 +243,12 @@ test('only the panel relay scopes its scanner, to the marker the Log lines carry
 test('every form of a transcript line carries the marker', () => {
   const row = read('frontend/texthooker/components/LineRow.tsx')
   assert.match(row, /const groupProps = \{\s*'data-yomitan-scan': '',/)
-  const rows = row.match(/className="line[ "]/g) ?? []
+  // The row being edited holds a text box, which lookups leave alone: it alone has no marker.
+  const rows = row.match(/className="line(?! line-editing)[ "]/g) ?? []
   const spreads = row.match(/\{\.\.\.groupProps\}/g) ?? []
   assert.ok(rows.length >= 4, 'LineRow renders its row forms')
   assert.equal(spreads.length, rows.length, 'each .line row spreads groupProps')
+  assert.match(row, /className=\{`line line-editing[^`]*`\}\s*data-line-id=\{lineId\}\s*>/, 'the editing row has no marker')
 })
 
 test('the vendored seams the scope relies on are still there', () => {

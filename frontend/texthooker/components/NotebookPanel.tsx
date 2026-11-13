@@ -11,6 +11,7 @@ import {
   BookOpen,
   Download,
   EyeOff,
+  NotebookPen,
   Plus,
   Search,
   SearchX,
@@ -48,6 +49,17 @@ import {
 import { VndbImportDialog } from "./VndbImportDialog";
 import { EditEntryModal } from "./EditEntryModal";
 import { EntryAvatar } from "./notebookParts";
+import { NotePane, NoteRows, type NoteActions } from "./NotebookNotes";
+import { getSnapshot, subscribe } from "../bridge";
+import {
+  isNoteItemId,
+  noteForItem,
+  noteItemId,
+  onNotesFilterRequest,
+  revealLine,
+  takeNotesFilter,
+} from "@texthooker/lib/noteNav";
+import { deleteLine } from "@texthooker/lib/store";
 import {
   KIND_META,
   KIND_ORDER,
@@ -63,10 +75,12 @@ import {
   subscribeNotebook,
 } from "@texthooker/lib/notebook";
 import { openEditModal } from "@texthooker/lib/editModal";
-import type {
-  NotebookEntry,
-  NotebookFile,
-  NotebookKind,
+import {
+  isNote,
+  type Line,
+  type NotebookEntry,
+  type NotebookFile,
+  type NotebookKind,
 } from "@texthooker/lib/types";
 import "../notebook.css";
 import { useTextLang } from "../../bridge/useTextLang";
@@ -76,7 +90,8 @@ const EDITOR_MIN = 280;
 const EDITOR_MAX = 640;
 const EDITOR_WIDTH = 336;
 
-type Filter = "all" | NotebookKind;
+/** "notes" shows the person's notes from the Log (NotebookNotes.tsx). */
+type Filter = "all" | NotebookKind | "notes";
 
 const CREATE: Record<NotebookKind, () => Promise<NotebookEntry>> = {
   person: createPerson,
@@ -92,6 +107,8 @@ interface Props {
   /** A problem opening an edit request from another window. */
   notice?: string;
   onDismissNotice?: () => void;
+  /** Shows the Log (Show in Log on a note, which the Log then scrolls to). */
+  onShowLog?: () => void;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -110,11 +127,13 @@ export function NotebookPanel({
   onCloseEditor,
   notice,
   onDismissNotice,
+  onShowLog,
 }: Props) {
   const [nb, setNb] = useState<NotebookFile>(() => getNotebook());
   const [vndbOpen, setVndbOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  // The Log footer's note count opens the Notebook on the notes.
+  const [filter, setFilter] = useState<Filter>(() => (takeNotesFilter() ? "notes" : "all"));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<NotebookEntry | null>(null);
   const [editorWidth, setEditorWidth] = useSetting<number>(
@@ -127,6 +146,53 @@ export function NotebookPanel({
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeNotebook((next) => setNb(next)), []);
+  useEffect(
+    () =>
+      onNotesFilterRequest(() => {
+        if (!takeNotesFilter()) return;
+        setQuery("");
+        setFilter("notes");
+      }),
+    [],
+  );
+  // The person's notes are lines of the Log: newest first.
+  const [lines, setLines] = useState<readonly Line[]>(() => getSnapshot().lines);
+  useEffect(() => subscribe((snap) => setLines(snap.lines)), []);
+  const notes = useMemo(() => lines.filter(isNote).reverse(), [lines]);
+  const noteActions: NoteActions = {
+    onEdit: (note) => {
+      const id = noteItemId(note);
+      setActiveId(id);
+      onEdit(id);
+    },
+    onShowInLog: (note) => {
+      if (!note.uid) return;
+      revealLine(note.uid);
+      onShowLog?.();
+    },
+  };
+  const pointedNote = (row: HTMLElement) =>
+    notes.find((n) => noteItemId(n) === row.dataset.noteItem);
+  useRowHotkeys(".nb-row-wrap[data-note-item]", {
+    e: (row) => {
+      const note = pointedNote(row);
+      if (note) noteActions.onEdit(note);
+    },
+    l: (row) => {
+      const note = pointedNote(row);
+      if (note) noteActions.onShowInLog(note);
+    },
+    c: (row) => {
+      const note = pointedNote(row);
+      if (note) void writeTextSelf(note.text).catch(() => {});
+    },
+    d: (row) => {
+      const note = pointedNote(row);
+      if (!note) return;
+      if (noteItemId(note) === editingId) onCloseEditor();
+      void deleteLine(note.id);
+    },
+  });
 
   // The ⋯ menu's letters, for the entry under the pointer (EntryActionsMenu).
   const pointed = (row: HTMLElement) =>
@@ -161,7 +227,7 @@ export function NotebookPanel({
 
   const needle = query.trim().toLowerCase();
   const groups = useMemo(() => {
-    const kinds = filter === "all" ? KIND_ORDER : [filter];
+    const kinds = filter === "all" ? KIND_ORDER : filter === "notes" ? [] : [filter];
     return kinds
       .map((kind) => ({
         kind,
@@ -174,6 +240,18 @@ export function NotebookPanel({
       .filter((group) => group.entries.length > 0);
   }, [nb, filter, needle, haystacks]);
   const visible = useMemo(() => groups.flatMap((g) => g.entries), [groups]);
+  const shownNotes = useMemo(
+    () =>
+      filter === "all" || filter === "notes"
+        ? notes.filter((n) => !needle || n.text.toLowerCase().includes(needle))
+        : [],
+    [notes, filter, needle],
+  );
+  // Every row the list shows, in order: entries, then notes. Arrow keys move through these.
+  const visibleIds = useMemo(
+    () => [...visible.map((e) => e.id), ...shownNotes.map(noteItemId)],
+    [visible, shownNotes],
+  );
 
   const focusRow = useCallback((id: string) => {
     const row = listRef.current?.querySelector<HTMLElement>(
@@ -215,9 +293,7 @@ export function NotebookPanel({
   }, []);
 
   const current =
-    activeId && visible.some((e) => e.id === activeId)
-      ? activeId
-      : (visible[0]?.id ?? null);
+    activeId && visibleIds.includes(activeId) ? activeId : (visibleIds[0] ?? null);
 
   const move = (id: string | undefined) => {
     if (!id) return;
@@ -227,20 +303,20 @@ export function NotebookPanel({
   };
 
   const onListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const index = visible.findIndex((e) => e.id === current);
+    const index = current ? visibleIds.indexOf(current) : -1;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      move(visible[Math.min(visible.length - 1, index + 1)]?.id);
+      move(visibleIds[Math.min(visibleIds.length - 1, index + 1)]);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       if (index <= 0) searchRef.current?.focus();
-      else move(visible[index - 1]?.id);
+      else move(visibleIds[index - 1]);
     } else if (event.key === "Home") {
       event.preventDefault();
-      move(visible[0]?.id);
+      move(visibleIds[0]);
     } else if (event.key === "End") {
       event.preventDefault();
-      move(visible[visible.length - 1]?.id);
+      move(visibleIds[visibleIds.length - 1]);
     } else if (event.key === "Escape" && editingId) {
       event.preventDefault();
       onCloseEditor();
@@ -281,14 +357,30 @@ export function NotebookPanel({
     if (id) requestAnimationFrame(() => focusRow(id));
   };
 
-  const total = nb.entries.length;
+  const total = nb.entries.length + notes.length;
   const filterOptions = [
     { value: "all" as const, label: <FilterLabel label="All" count={total} /> },
     ...KIND_ORDER.map((kind) => ({
       value: kind,
       label: <FilterLabel label={KIND_META[kind].many} count={counts[kind]} />,
     })),
+    { value: "notes" as const, label: <FilterLabel label="Notes" count={notes.length} /> },
   ];
+  const filterName =
+    filter === "all" ? "" : filter === "notes" ? "notes" : KIND_META[filter].many.toLowerCase();
+  const resizeHandle = (
+    <ResizeHandle
+      edge="start"
+      width={liveWidth ?? editorWidth}
+      min={EDITOR_MIN}
+      max={EDITOR_MAX}
+      reset={EDITOR_WIDTH}
+      label="Resize editor"
+      onLive={setLiveWidth}
+      onCommit={(width) => void setEditorWidth(width)}
+    />
+  );
+  const editingNote = isNoteItemId(editingId) ? noteForItem(lines, editingId) : undefined;
 
   return (
     <div className="nb">
@@ -386,7 +478,7 @@ export function NotebookPanel({
                 <AddMenu onAdd={add} />
               </div>
 
-              {visible.length === 0 ? (
+              {visibleIds.length === 0 ? (
                 needle ? (
                   <EmptyState
                     className="nb-empty"
@@ -400,10 +492,16 @@ export function NotebookPanel({
                   >
                     Search looks at names, readings, aliases, descriptions and
                     notes
-                    {filter !== "all"
-                      ? ` in ${KIND_META[filter].many.toLowerCase()}`
-                      : ""}
+                    {filterName ? ` in ${filterName}` : ""}
                     .
+                  </EmptyState>
+                ) : filter === "notes" ? (
+                  <EmptyState
+                    className="nb-empty"
+                    icon={<NotebookPen />}
+                    title="No notes yet"
+                  >
+                    Press A in the Log, or choose Add a note at its end, to write one.
                   </EmptyState>
                 ) : filter !== "all" ? (
                   <EmptyState
@@ -451,6 +549,16 @@ export function NotebookPanel({
                         onDelete={setDeleting}
                       />
                     ))}
+                    {shownNotes.length > 0 ? (
+                      <NoteRows
+                        notes={shownNotes}
+                        showLabel={filter === "all"}
+                        current={current}
+                        highlight={activeId !== null || editingId !== null}
+                        editingId={editingId}
+                        {...noteActions}
+                      />
+                    ) : null}
                   </div>
                 </EntryContextMenu>
               )}
@@ -458,33 +566,32 @@ export function NotebookPanel({
           )}
         </div>
 
-        <EditEntryModal
-          presentation="pane"
-          entryId={editingId}
-          onClose={closeEditor}
-          paneWidth={liveWidth ?? editorWidth}
-          resizeHandle={
-            <ResizeHandle
-              edge="start"
-              width={liveWidth ?? editorWidth}
-              min={EDITOR_MIN}
-              max={EDITOR_MAX}
-              reset={EDITOR_WIDTH}
-              label="Resize editor"
-              onLive={setLiveWidth}
-              onCommit={(width) => void setEditorWidth(width)}
-            />
-          }
-        />
+        {editingNote ? (
+          <NotePane
+            note={editingNote}
+            width={liveWidth ?? editorWidth}
+            resizeHandle={resizeHandle}
+            onClose={closeEditor}
+            onShowInLog={noteActions.onShowInLog}
+          />
+        ) : (
+          <EditEntryModal
+            presentation="pane"
+            entryId={isNoteItemId(editingId) ? null : editingId}
+            onClose={closeEditor}
+            paneWidth={liveWidth ?? editorWidth}
+            resizeHandle={resizeHandle}
+          />
+        )}
       </div>
 
       {/* Across the whole notebook, under the editor too: the count, the keys and the session. */}
       <Bar position="bottom" className="nb-foot">
         {total > 0 ? (
           <span className="k-num">
-            {visible.length === total
+            {visibleIds.length === total
               ? `${total} ${total === 1 ? "entry" : "entries"}`
-              : `${visible.length} of ${total}`}
+              : `${visibleIds.length} of ${total}`}
           </span>
         ) : null}
         <BarSpacer />

@@ -3,6 +3,7 @@ import {
   appendLine,
   isDuplicateInRecent,
   lastLineText,
+  recordedText,
   replaceLastLineText,
 } from "./store";
 import { getSettings } from "@texthooker/lib/settings";
@@ -78,7 +79,7 @@ export const ingestText = async (
   // 7 — the rest of the last line (the Text Hooker's typewriter, paused longer than it waits)
   const last = snapshotLines().at(-1);
   if (replaces && last?.ingestIds?.includes(replaces)) {
-    const prev = last.text;
+    const prev = recordedText(last);
     const merged = replaceLastLineText(value);
     if (merged && ingestId)
       merged.ingestIds = [...(merged.ingestIds || []), ingestId];

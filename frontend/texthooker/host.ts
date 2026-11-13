@@ -183,13 +183,13 @@ interface ScanEntry {
  * screen can be left alone for many minutes before its mark is misread.
  */
 function repeatsLastReading(texts: string[]): boolean {
-  const lines = store.snapshotLines();
+  const lines = store.readLines();
   const last = lines.at(-1);
   if (!last || !texts.length) return false;
   const scan = last.ocr?.scanId;
   let first = lines.length - 1;
   while (scan && first > 0 && lines[first - 1].ocr?.scanId === scan) first--;
-  const previous = lines.slice(first).map((line) => line.text);
+  const previous = lines.slice(first).map(store.recordedText);
   return previous.length === texts.length && previous.every((text, i) => text === texts[i]);
 }
 async function ingestHistory(entries: ScanEntry[]): Promise<void> {
@@ -263,6 +263,8 @@ const allowed: Record<string, string[]> = {
     "setLineTranslation",
     "setLineTranslationVisible",
     "setLineExplanation",
+    "setLineText",
+    "addNote",
   ],
   notebook: [
     "createPerson",
