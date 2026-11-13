@@ -60,9 +60,15 @@ test('the dictionary panel: the download leads until the engine is ready', () =>
 test('a row only views: the listbox selection is the viewed engine, never a choice', async () => {
   for (const file of CHOOSERS) {
     const source = await read(file)
-    assert.ok(source.includes('role="listbox"') && source.includes('role="option"'), `${file} lost its listbox semantics`)
+    assert.ok(
+      source.includes('role="listbox"') && source.includes('role="option"'),
+      `${file} lost its listbox semantics`
+    )
     assert.ok(source.includes('aria-selected={viewed}'), `${file}: aria-selected no longer tracks the viewed engine`)
-    assert.ok(source.includes("aria-current={inUse ? 'true' : undefined}"), `${file}: the engine in use is not aria-current`)
+    assert.ok(
+      source.includes("aria-current={inUse ? 'true' : undefined}"),
+      `${file}: the engine in use is not aria-current`
+    )
     assert.ok(source.includes('onFocus={onView}'), `${file}: focusing a row no longer views it`)
     assert.ok(
       source.includes('onClick={(event) => event.currentTarget.focus()}'),
@@ -87,20 +93,33 @@ test('a row only views: the listbox selection is the viewed engine, never a choi
 test('"Use <name>" is the only way to choose, and it is the panel\'s', async () => {
   const ocr = await read('frontend/panels/settings/EngineChooser.tsx')
   assert.ok(ocr.includes('onUse={() => use(viewed)}'), 'the OCR panel does not choose the engine it shows')
-  assert.match(ocr, /const use = \(mode: OcrMode\): void => \{[\s\S]*?engineSelectable\(engines\[mode\]\)[\s\S]*?choose\(mode\)/,
-    'the OCR chooser no longer refuses an engine this computer cannot run, or skips useEngineSelection')
+  assert.match(
+    ocr,
+    /const use = \(mode: OcrMode\): void => \{[\s\S]*?engineSelectable\(engines\[mode\]\)[\s\S]*?choose\(mode\)/,
+    'the OCR chooser no longer refuses an engine this computer cannot run, or skips useEngineSelection'
+  )
   assert.ok(ocr.includes("disabled={action === 'unavailable'}"), 'an engine that cannot run offers an enabled Use')
   assert.ok(ocr.includes('aria-describedby={action'), 'the disabled Use does not point at its reason')
   const dictionary = await read('frontend/panels/settings/DictionaryChooser.tsx')
-  assert.ok(dictionary.includes('onUse={() => use(viewed)}'), 'the dictionary panel does not choose the engine it shows')
+  assert.ok(
+    dictionary.includes('onUse={() => use(viewed)}'),
+    'the dictionary panel does not choose the engine it shows'
+  )
   assert.match(dictionary, /const use = \(engine: DictionaryEngine\): void => \{[\s\S]*?onChoose\(engine\)/)
   // Choosing the Yomitan API ("Use Yomitan API", or the sidebar's picker) checks that it answers,
   // and opens its wizard only if it has not within the grace period: both go through
   // useDictionarySwitch, and both render the wizard it opens.
   const hook = await read('frontend/panels/settings/useDictionarySwitch.ts')
-  assert.match(hook, /if \(engine === 'custom-api'\) setVerifyingApi\(/, 'choosing the Yomitan API no longer checks it answers')
-  assert.match(hook, /apiCheck\([\s\S]*?Date\.now\(\) >= deadline[\s\S]*?openSetup\(true\)/,
-    'a Yomitan API that does not answer in time no longer opens its setup')
+  assert.match(
+    hook,
+    /if \(engine === 'custom-api'\) setVerifyingApi\(/,
+    'choosing the Yomitan API no longer checks it answers'
+  )
+  assert.match(
+    hook,
+    /apiCheck\([\s\S]*?Date\.now\(\) >= deadline[\s\S]*?openSetup\(true\)/,
+    'a Yomitan API that does not answer in time no longer opens its setup'
+  )
   for (const file of ['frontend/panels/settings/DictionaryTab.tsx', 'frontend/main/MainSidebar.tsx']) {
     const source = await read(file)
     assert.ok(source.includes("useDictionarySwitch('"), `${file} does not switch through useDictionarySwitch`)
@@ -110,7 +129,8 @@ test('"Use <name>" is the only way to choose, and it is the panel\'s', async () 
 
 test('every engine has a picture, and every picture file exists', async () => {
   // The OCR engines' pictures have their own module (shared with the browser extension's menu).
-  const source = (await read('frontend/components/EngineIcon.tsx')) + (await read('frontend/components/enginePictures.tsx'))
+  const source =
+    (await read('frontend/components/EngineIcon.tsx')) + (await read('frontend/components/enginePictures.tsx'))
   for (const mode of Object.keys(OCR_MODES)) {
     assert.match(source, new RegExp(`\\n  ${mode}: \\{`), `OCR engine ${mode} has no picture`)
   }

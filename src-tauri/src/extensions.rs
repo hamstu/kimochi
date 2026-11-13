@@ -41,10 +41,7 @@ pub fn is_extension_window(label: &str) -> bool {
 /// The document an extension window opens: the generic host's background page on the
 /// engine's origin (`<origin>/__kimochi/ext-background.html?engine=<id>`).
 pub fn background_url(id: &str) -> String {
-    format!(
-        "{}/__kimochi/ext-background.html?engine={id}",
-        crate::platform::extension_origin(id)
-    )
+    format!("{}/__kimochi/ext-background.html?engine={id}", crate::platform::extension_origin(id))
 }
 
 /// The app commands an extension window may invoke. Its top document runs the extension's
@@ -85,13 +82,7 @@ pub fn selected_engine(settings: &Settings) -> String {
 /// The host engine the setting names, whatever the language: what the user chose, which a launch
 /// downloads when it is missing (never an engine they did not choose).
 pub fn chosen_engine(settings: &Settings) -> String {
-    engine_for(
-        settings
-            .get_path(&["yomitanSettings", "popupType"])
-            .ok()
-            .flatten()
-            .as_ref(),
-    )
+    engine_for(settings.get_path(&["yomitanSettings", "popupType"]).ok().flatten().as_ref())
 }
 
 /// The languages an extension engine reads: Japanese alone for both (Hachidori 0.3.0, 10ten).
@@ -170,10 +161,7 @@ pub fn backup_file(extension: &str, now_ms: u128) -> Result<String, String> {
 }
 
 fn valid_extension_id(id: &str) -> bool {
-    (1..=32).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    (1..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// What a request path on an extension's scheme names.
@@ -199,10 +187,7 @@ pub fn target(uri_path: &str) -> Option<Target> {
         return None;
     }
     let segments: Vec<&str> = path.split('/').collect();
-    if segments
-        .iter()
-        .any(|s| s.is_empty() || *s == "." || *s == ".." || s.contains(['\\', '\0']))
-    {
+    if segments.iter().any(|s| s.is_empty() || *s == "." || *s == ".." || s.contains(['\\', '\0'])) {
         return None;
     }
     match segments.split_first() {
@@ -232,10 +217,7 @@ fn percent_decode(input: &str) -> Option<String> {
 /// `Content-Type` by extension. The extensions' own module scripts, WASM and fonts are
 /// loaded cross-origin, where a wrong type is a hard failure rather than a sniff.
 pub fn mime_for(path: &str) -> &'static str {
-    let ext = path
-        .rsplit_once('.')
-        .map(|(_, e)| e.to_ascii_lowercase())
-        .unwrap_or_default();
+    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     match ext.as_str() {
         "html" | "htm" => "text/html; charset=utf-8",
         "md" | "txt" => "text/plain; charset=utf-8",
@@ -267,12 +249,7 @@ pub fn mime_for(path: &str) -> &'static str {
 pub fn exact_asset(app: &tauri::AppHandle, key: &str) -> Option<Vec<u8>> {
     if !cfg!(dev) {
         static KEYS: OnceLock<HashSet<String>> = OnceLock::new();
-        let keys = KEYS.get_or_init(|| {
-            app.asset_resolver()
-                .iter()
-                .map(|(k, _)| k.into_owned())
-                .collect()
-        });
+        let keys = KEYS.get_or_init(|| app.asset_resolver().iter().map(|(k, _)| k.into_owned()).collect());
         if !keys.contains(key) {
             return None;
         }
@@ -412,11 +389,7 @@ pub fn respond(
 /// host (the build step that makes it may not have run in a working tree yet): it is
 /// reported and the window is built without it. A release bundle without the host is
 /// broken, so there it is an error like any other missing script.
-pub fn init_script(
-    app: &tauri::AppHandle,
-    window: &str,
-    asset: &str,
-) -> Result<Option<String>, String> {
+pub fn init_script(app: &tauri::AppHandle, window: &str, asset: &str) -> Result<Option<String>, String> {
     let Some(bytes) = exact_asset(app, asset) else {
         if asset == EXT_HOST && cfg!(debug_assertions) {
             let report = json!({
@@ -431,13 +404,9 @@ pub fn init_script(
             }
             return Ok(None);
         }
-        return Err(format!(
-            "invalid: {window} needs {asset}, which is not in the bundle"
-        ));
+        return Err(format!("invalid: {window} needs {asset}, which is not in the bundle"));
     };
-    String::from_utf8(bytes)
-        .map(Some)
-        .map_err(|_| format!("invalid: {asset} is not valid UTF-8"))
+    String::from_utf8(bytes).map(Some).map_err(|_| format!("invalid: {asset} is not valid UTF-8"))
 }
 
 /// Publishes the active dictionary engine and the extension origins before any page or
@@ -449,10 +418,8 @@ pub fn init_script(
 /// `dictionary_engine_apply` reload, so deriving it from the origin is what keeps an
 /// extension frame right after a switch.
 pub fn engine_prelude(engine: &str) -> String {
-    let origins: serde_json::Map<String, Value> = IDS
-        .iter()
-        .map(|id| (id.to_string(), json!(crate::platform::extension_origin(id))))
-        .collect();
+    let origins: serde_json::Map<String, Value> =
+        IDS.iter().map(|id| (id.to_string(), json!(crate::platform::extension_origin(id)))).collect();
     format!(
         ";(function(){{try{{\
 var o={};\
@@ -475,10 +442,8 @@ pub const SAVE_WINDOWS: &[&str] = &["dictionary", "welcome"];
 /// directories, no control characters, no leading dots, at most 200 characters.
 pub fn download_name(suggested: &str) -> String {
     let base = suggested.rsplit(['/', '\\']).next().unwrap_or_default();
-    let cleaned: String = base
-        .chars()
-        .filter(|c| !c.is_control() && !matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
-        .collect();
+    let cleaned: String =
+        base.chars().filter(|c| !c.is_control() && !matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|')).collect();
     let cleaned = cleaned.trim().trim_start_matches('.').trim();
     if cleaned.is_empty() {
         "download".into()
@@ -516,14 +481,9 @@ pub async fn ext_save_file(
     };
     let bytes = bytes.clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title("Save download")
-        .set_file_name(&name)
-        .set_parent(&window)
-        .save_file(move |path| {
-            let _ = tx.send(path);
-        });
+    app.dialog().file().set_title("Save download").set_file_name(&name).set_parent(&window).save_file(move |path| {
+        let _ = tx.send(path);
+    });
     let Some(path) = rx.await.map_err(|e| format!("native: {e}"))? else {
         return Ok(json!({ "saved": false }));
     };
@@ -562,8 +522,22 @@ mod script_dialogs {
 
     const FIRST_BUTTON: isize = 1000;
 
-    type AlertPanel = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject, *mut AnyObject, *mut Block<dyn Fn()>);
-    type ConfirmPanel = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject, *mut AnyObject, *mut Block<dyn Fn(Bool)>);
+    type AlertPanel = unsafe extern "C-unwind" fn(
+        *mut AnyObject,
+        Sel,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut Block<dyn Fn()>,
+    );
+    type ConfirmPanel = unsafe extern "C-unwind" fn(
+        *mut AnyObject,
+        Sel,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut Block<dyn Fn(Bool)>,
+    );
     type PromptPanel = unsafe extern "C-unwind" fn(
         *mut AnyObject,
         Sel,
@@ -859,10 +833,7 @@ mod tests {
         assert_eq!(storage_file(Some("a-1")).unwrap(), format!("chrome-local-a-1{ext}"));
         let long = "a".repeat(33);
         for bad in ["", "Tenten", "../x", "a/b", "a.b", "a b", "é", long.as_str()] {
-            assert!(
-                storage_file(Some(bad)).unwrap_err().starts_with("invalid:"),
-                "{bad:?}"
-            );
+            assert!(storage_file(Some(bad)).unwrap_err().starts_with("invalid:"), "{bad:?}");
         }
         assert!(storage_file(Some(&"a".repeat(32))).is_ok());
     }
@@ -916,10 +887,7 @@ mod tests {
         }
         assert_eq!(
             background_url("tenten"),
-            format!(
-                "{}/__kimochi/ext-background.html?engine=tenten",
-                crate::platform::extension_origin("tenten")
-            )
+            format!("{}/__kimochi/ext-background.html?engine=tenten", crate::platform::extension_origin("tenten"))
         );
         // The URL is on the engine's own origin, so its window's allowlist admits it.
         let url: tauri::Url = background_url("hachidori").parse().unwrap();
@@ -989,13 +957,9 @@ mod tests {
         // The committed copy of each release's manifest (host/ext/engines.js reads the same).
         for id in IDS {
             let path = format!("{}/../extensions/{id}.manifest.json", env!("CARGO_MANIFEST_DIR"));
-            let manifest: Value =
-                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let manifest: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
             let policy = |key: &str| manifest[key]["value"].as_str().map(str::to_owned);
-            let declared = match (
-                policy("cross_origin_opener_policy"),
-                policy("cross_origin_embedder_policy"),
-            ) {
+            let declared = match (policy("cross_origin_opener_policy"), policy("cross_origin_embedder_policy")) {
                 (Some(opener), Some(embedder)) => Some((opener, embedder)),
                 _ => None,
             };

@@ -47,12 +47,16 @@ test('the notes come from the traits, and Japanese reads as before', () => {
     'Vertical text is looked for as well as horizontal.',
     'Furigana, the small readings beside kanji, can be filtered out of scans.'
   ])
-  assert.deepEqual(languageNotes(languageOf('es')), ['Written in the Latin alphabet.', 'Words are separated by spaces.'])
+  assert.deepEqual(languageNotes(languageOf('es')), [
+    'Written in the Latin alphabet.',
+    'Words are separated by spaces.'
+  ])
   assert.deepEqual(languageNotes(languageOf('sh')), [
     'Written in the Latin alphabet or the Cyrillic alphabet.',
     'Words are separated by spaces.'
   ])
-  for (const language of LANGUAGES) assert.ok(!languageNotes(language).some((note) => note.includes('undefined')), language.code)
+  for (const language of LANGUAGES)
+    assert.ok(!languageNotes(language).some((note) => note.includes('undefined')), language.code)
 })
 
 test('every flag the table names is bundled by name, from a file the package has', async () => {
@@ -74,7 +78,10 @@ test('every flag the table names is bundled by name, from a file the package has
   const pkg = JSON.parse(await read('package.json'))
   assert.match(pkg.dependencies['circle-flags'], /^\d+\.\d+\.\d+$/, 'circle-flags is pinned')
   assert.ok((await read('NOTICE')).includes('circle-flags'), 'NOTICE does not credit circle-flags')
-  assert.ok((await read('frontend/credits/credits.ts')).includes("id: 'circle-flags'"), 'the credits do not list circle-flags')
+  assert.ok(
+    (await read('frontend/credits/credits.ts')).includes("id: 'circle-flags'"),
+    'the credits do not list circle-flags'
+  )
 })
 
 test('Settings → Language is the second page, registered everywhere a page is', async () => {

@@ -138,7 +138,13 @@ function Changed({ onReset }: { onReset: () => void }): ReactNode {
 type Scope = { kind: 'defaults' } | { kind: 'game'; exe: string; game: HookGame }
 
 /** The settings every game has, for the defaults or for one game. */
-function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<Record<'hooking' | 'text' | 'card', ReactNode>> }): ReactNode {
+function HookSettingsSections({
+  scope,
+  extra
+}: {
+  scope: Scope
+  extra?: Partial<Record<'hooking' | 'text' | 'card', ReactNode>>
+}): ReactNode {
   const [defaults, setDefaults, resetDefault, shipped] = useHookDefaults()
   const value = scope.kind === 'defaults' ? defaults : hookSettings(defaults, scope.game)
   const changed = (key: keyof HookSettings): boolean =>
@@ -194,7 +200,11 @@ function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<
         >
           <Switch id={id('speakers')} checked={value.speakerNames} onCheckedChange={(on) => set('speakerNames', on)} />
         </SettingsRow>
-        <SettingsRow label="Repeated characters" badge={badge('repeats')} description="For games that send ここここ for こ.">
+        <SettingsRow
+          label="Repeated characters"
+          badge={badge('repeats')}
+          description="For games that send ここここ for こ."
+        >
           <Select
             aria-label="Repeated characters"
             value={String(value.repeats)}
@@ -286,7 +296,9 @@ function HookCodes({ exe, game, hooked }: { exe: string; game: HookGame; hooked:
             <IconButton
               label="Remove hook code"
               size="sm"
-              onClick={() => void updateHookGame(exe, (g) => ({ ...g, hookCodes: (g.hookCodes ?? []).filter((c) => c !== code) }))}
+              onClick={() =>
+                void updateHookGame(exe, (g) => ({ ...g, hookCodes: (g.hookCodes ?? []).filter((c) => c !== code) }))
+              }
             >
               <X />
             </IconButton>
@@ -335,7 +347,11 @@ function Replacements({ exe, game }: { exe: string; game: HookGame }): ReactNode
     }
   }
   return (
-    <SettingsRow stacked label="Replacements" description="Applied to this game’s lines, in order, before they’re shown.">
+    <SettingsRow
+      stacked
+      label="Replacements"
+      description="Applied to this game’s lines, in order, before they’re shown."
+    >
       <div className="th-list">
         {rules.map((rule, index) => (
           <div key={index} className="th-list-row th-rule" data-off={rule.enabled === false || undefined}>
@@ -372,7 +388,10 @@ function Replacements({ exe, game }: { exe: string; game: HookGame }): ReactNode
           <Button
             size="sm"
             onClick={() =>
-              void updateHookGame(exe, (g) => ({ ...g, replacements: [...(g.replacements ?? []), { find: '', replace: '' }] }))
+              void updateHookGame(exe, (g) => ({
+                ...g,
+                replacements: [...(g.replacements ?? []), { find: '', replace: '' }]
+              }))
             }
           >
             <Plus /> Add rule
@@ -511,7 +530,11 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
               }}
             />
             <p className="k-description th-game-meta">
-              {hooked ? <span className="th-live">Hooked now</span> : when(game.hookedAt) && `Last hooked ${when(game.hookedAt)}`}
+              {hooked ? (
+                <span className="th-live">Hooked now</span>
+              ) : (
+                when(game.hookedAt) && `Last hooked ${when(game.hookedAt)}`
+              )}
               <span className="th-path" title={exe}>
                 {exe}
               </span>
@@ -598,8 +621,8 @@ function GameList({ onOpen }: { onOpen: (key: string) => void }): ReactNode {
   return (
     <SettingsSection title="Games">
       {list.map(([key, game]) => {
-        const changes = (Object.keys(HOOK_DEFAULTS) as (keyof HookSettings)[]).filter(
-          (k) => overrides(game, k, defaults)
+        const changes = (Object.keys(HOOK_DEFAULTS) as (keyof HookSettings)[]).filter((k) =>
+          overrides(game, k, defaults)
         ).length
         const detail = [
           key === hookedKey ? 'Hooked now' : when(game.hookedAt) && `Hooked ${when(game.hookedAt)}`,

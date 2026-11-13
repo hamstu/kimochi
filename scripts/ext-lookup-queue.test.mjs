@@ -14,7 +14,10 @@ test('a hover burst executes the current word and the newest waiting word only',
   assert.deepEqual(sent, [{ index: 0, capture: 'line-0' }])
   replies[0].resolve('first')
   assert.equal(await jobs[0], 'first')
-  assert.deepEqual(sent, [{ index: 0, capture: 'line-0' }, { index: 99, capture: 'line-99' }])
+  assert.deepEqual(sent, [
+    { index: 0, capture: 'line-0' },
+    { index: 99, capture: 'line-99' }
+  ])
   replies[1].resolve('last')
   const results = await settled
   assert.equal(results[99].value, 'last')

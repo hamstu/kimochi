@@ -22,10 +22,13 @@ const built = await build({
       name: 'stand-ins',
       setup(builder) {
         // Only the file system and the settings are replaced; the timing is the real module's.
-        builder.onResolve({ filter: /^(?:\.\/files|\.\/profile|@tauri-apps\/plugin-fs|\.\.\/lib\/settings)$/ }, (args) => ({
-          path: args.path,
-          namespace: 'stand-in'
-        }))
+        builder.onResolve(
+          { filter: /^(?:\.\/files|\.\/profile|@tauri-apps\/plugin-fs|\.\.\/lib\/settings)$/ },
+          (args) => ({
+            path: args.path,
+            namespace: 'stand-in'
+          })
+        )
         builder.onLoad({ filter: /.*/, namespace: 'stand-in' }, () => ({
           contents: `const env = globalThis[${JSON.stringify(ENV_KEY)}];
             export const BaseDirectory = { AppLocalData: 1 };

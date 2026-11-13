@@ -56,7 +56,10 @@ test('each output limits the editor to its own part of the screen', () => {
 test('a region is clipped to what the output shows, and to the frame', () => {
   const crop = cropFromOutput({ x: -50, y: -50, width: 100, height: 100 }, RIGHT, RIGHT, { width: 2560, height: 1440 })
   assert.deepEqual(crop, { x: 0, y: 0, width: 50, height: 50, reference_width: 2560, reference_height: 1440 })
-  assert.equal(cropFromOutput({ x: 3000, y: 0, width: 10, height: 10 }, RIGHT, RIGHT, { width: 2560, height: 1440 }), null)
+  assert.equal(
+    cropFromOutput({ x: 3000, y: 0, width: 10, height: 10 }, RIGHT, RIGHT, { width: 2560, height: 1440 }),
+    null
+  )
 })
 
 test('negative layouts: a monitor left of and above the primary', () => {
@@ -65,7 +68,10 @@ test('negative layouts: a monitor left of and above the primary', () => {
   const outputs = [LEFT, leftOfPrimary, above]
   assert.deepEqual(startOutput(leftOfPrimary, outputs, { current: LEFT }), leftOfPrimary)
   assert.deepEqual(startOutput(above, outputs, { current: LEFT }), above)
-  const crop = cropFromOutput({ x: 10, y: 20, width: 30, height: 40 }, leftOfPrimary, leftOfPrimary, { width: 1920, height: 1080 })
+  const crop = cropFromOutput({ x: 10, y: 20, width: 30, height: 40 }, leftOfPrimary, leftOfPrimary, {
+    width: 1920,
+    height: 1080
+  })
   assert.deepEqual([crop.x, crop.y, crop.width, crop.height], [10, 20, 30, 40])
 })
 

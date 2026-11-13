@@ -29,21 +29,45 @@
   object-fit: contain;
 }
 /* An avatar-style logo fills its badge edge to edge. */
-.credit-tile[data-logo="fill"] img {
+.credit-tile[data-logo='fill'] img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.credit-tint-amber { --credit-tint: oklch(0.82 0.15 80 / 0.28); }
-.credit-tint-orange { --credit-tint: oklch(0.75 0.15 55 / 0.26); }
-.credit-tint-red { --credit-tint: oklch(0.68 0.17 25 / 0.24); }
-.credit-tint-pink { --credit-tint: oklch(0.72 0.15 350 / 0.24); }
-.credit-tint-violet { --credit-tint: oklch(0.66 0.15 300 / 0.24); }
-.credit-tint-indigo { --credit-tint: oklch(0.62 0.14 275 / 0.24); }
-.credit-tint-blue { --credit-tint: oklch(0.68 0.13 250 / 0.24); }
-.credit-tint-cyan { --credit-tint: oklch(0.78 0.11 215 / 0.26); }
-.credit-tint-teal { --credit-tint: oklch(0.74 0.11 185 / 0.26); }
-.credit-tint-green { --credit-tint: oklch(0.74 0.14 150 / 0.26); }
-.credit-tint-lime { --credit-tint: oklch(0.84 0.16 125 / 0.28); }
-.credit-tint-gray { --credit-tint: oklch(0.75 0 0 / 0.2); }
+.credit-tint-amber {
+  --credit-tint: oklch(0.82 0.15 80 / 0.28);
+}
+.credit-tint-orange {
+  --credit-tint: oklch(0.75 0.15 55 / 0.26);
+}
+.credit-tint-red {
+  --credit-tint: oklch(0.68 0.17 25 / 0.24);
+}
+.credit-tint-pink {
+  --credit-tint: oklch(0.72 0.15 350 / 0.24);
+}
+.credit-tint-violet {
+  --credit-tint: oklch(0.66 0.15 300 / 0.24);
+}
+.credit-tint-indigo {
+  --credit-tint: oklch(0.62 0.14 275 / 0.24);
+}
+.credit-tint-blue {
+  --credit-tint: oklch(0.68 0.13 250 / 0.24);
+}
+.credit-tint-cyan {
+  --credit-tint: oklch(0.78 0.11 215 / 0.26);
+}
+.credit-tint-teal {
+  --credit-tint: oklch(0.74 0.11 185 / 0.26);
+}
+.credit-tint-green {
+  --credit-tint: oklch(0.74 0.14 150 / 0.26);
+}
+.credit-tint-lime {
+  --credit-tint: oklch(0.84 0.16 125 / 0.28);
+}
+.credit-tint-gray {
+  --credit-tint: oklch(0.75 0 0 / 0.2);
+}

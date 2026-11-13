@@ -12,13 +12,15 @@ const ON = new URLSearchParams(location.search).get('screenshots') !== '0'
 const W = 1280
 const H = 720
 
-const escape = (text: string): string =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const escape = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** A game scene: sky, hills, a figure, and a dialogue box with `lines` in it. */
 function scene(lines: string[], hue: number): string {
   const text = lines
-    .map((line, i) => `<text x="120" y="${560 + i * 52}" font-size="34" fill="#fff" font-family="Hiragino Sans, sans-serif">${escape(line.slice(0, 30))}</text>`)
+    .map(
+      (line, i) =>
+        `<text x="120" y="${560 + i * 52}" font-size="34" fill="#fff" font-family="Hiragino Sans, sans-serif">${escape(line.slice(0, 30))}</text>`
+    )
     .join('')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${hue} 60% 70%)"/><stop offset="1" stop-color="hsl(${hue + 30} 70% 88%)"/></linearGradient></defs>
@@ -56,7 +58,12 @@ export function shotOf(scan: string, at: number, texts: string[], i: number): Sh
     crop: [80, 500, 1120, 190],
     marks: texts.map((text, j) => ({
       text,
-      bbox: [112, 526 + j * 52, 112 + Math.min(30, text.length) * 34 + 8, 572 + j * 52] as [number, number, number, number]
+      bbox: [112, 526 + j * 52, 112 + Math.min(30, text.length) * 34 + 8, 572 + j * 52] as [
+        number,
+        number,
+        number,
+        number
+      ]
     }))
   }
 }

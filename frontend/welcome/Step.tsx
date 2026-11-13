@@ -21,11 +21,7 @@ export default function Step({
 }): JSX.Element {
   const id = labelledBy ?? 'step-title'
   return (
-    <section
-      className={style.step}
-      data-centered={centered || undefined}
-      aria-labelledby={id}
-    >
+    <section className={style.step} data-centered={centered || undefined} aria-labelledby={id}>
       <header className={style.header}>
         <h1 id={id} className={style.title}>
           {title}

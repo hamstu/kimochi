@@ -65,7 +65,10 @@ test('every connection state reads as what to do next', () => {
   const said = (status) => anki.describeAnkiStatus(status)
   assert.equal(said(null).tone, 'neutral')
   assert.deepEqual(
-    [said({ state: 'connected', url, version: 6, latencyMs: 3, keyRequired: false }).tone, said({ state: 'connected', url, version: 6, latencyMs: 3, keyRequired: false }).title],
+    [
+      said({ state: 'connected', url, version: 6, latencyMs: 3, keyRequired: false }).tone,
+      said({ state: 'connected', url, version: 6, latencyMs: 3, keyRequired: false }).title
+    ],
     ['ok', 'Connected']
   )
   assert.match(said({ state: 'connected', url, version: 6, latencyMs: 3, keyRequired: false }).detail, /API version 6/)
@@ -85,7 +88,10 @@ test('every connection state reads as what to do next', () => {
 })
 
 test('the check runs again sooner while it is not connected', () => {
-  assert.ok(anki.nextCheckMs({ state: 'notRunning', url: '', suggestion: null }) < anki.nextCheckMs({ state: 'connected', url: '', version: 6, latencyMs: 1, keyRequired: false }))
+  assert.ok(
+    anki.nextCheckMs({ state: 'notRunning', url: '', suggestion: null }) <
+      anki.nextCheckMs({ state: 'connected', url: '', version: 6, latencyMs: 1, keyRequired: false })
+  )
 })
 
 test('each engine has its way of adding cards', () => {

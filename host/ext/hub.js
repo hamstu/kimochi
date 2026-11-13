@@ -93,7 +93,12 @@ export class Hub {
       this.store.local = json(seed.local ?? {})
       this.store.sync = json(seed.sync ?? {})
       this.hostState = {}
-      this.report({ check: 'ext-host-storage-load-failed', engine: this.engine, action: 'read-only', error: this.storageUnreadable })
+      this.report({
+        check: 'ext-host-storage-load-failed',
+        engine: this.engine,
+        action: 'read-only',
+        error: this.storageUnreadable
+      })
       // In memory only, like the seed: `persist` stands down for this session.
       this.migrateStorage()
       return
@@ -143,13 +148,15 @@ export class Hub {
   persist() {
     if (this.storageUnreadable) return Promise.resolve()
     if (!this.pendingSave) {
-      const next = this.saveChain.catch(() => {}).then(() => {
-        this.pendingSave = null
-        return this.invoke('storage_save', {
-          extension: this.engine,
-          value: { local: this.store.local, sync: this.store.sync, host: this.hostState }
+      const next = this.saveChain
+        .catch(() => {})
+        .then(() => {
+          this.pendingSave = null
+          return this.invoke('storage_save', {
+            extension: this.engine,
+            value: { local: this.store.local, sync: this.store.sync, host: this.hostState }
+          })
         })
-      })
       this.pendingSave = next
       this.saveChain = next
     }
@@ -185,7 +192,8 @@ export class Hub {
     const byTab = new Map([[1, { id: 1, url: this.win.location.href, label: this.label }]])
     for (const rec of this.contexts.values()) {
       if (rec.kind !== 'content') continue
-      if (rec.tabId === 1 || !byTab.has(rec.tabId)) byTab.set(rec.tabId, { id: rec.tabId, url: rec.url, label: rec.label })
+      if (rec.tabId === 1 || !byTab.has(rec.tabId))
+        byTab.set(rec.tabId, { id: rec.tabId, url: rec.url, label: rec.label })
     }
     return [...byTab.values()].map((t, index) => ({
       id: t.id,
@@ -209,11 +217,31 @@ export class Hub {
   }
 
   tab(tabId) {
-    return this.tabs().find((t) => t.id === tabId) ?? { id: tabId, index: 0, windowId: 1, active: true, url: '', incognito: false }
+    return (
+      this.tabs().find((t) => t.id === tabId) ?? {
+        id: tabId,
+        index: 0,
+        windowId: 1,
+        active: true,
+        url: '',
+        incognito: false
+      }
+    )
   }
 
   window(populate) {
-    const win = { id: 1, focused: true, top: 0, left: 0, width: this.win.innerWidth || 0, height: this.win.innerHeight || 0, incognito: false, type: 'normal', state: 'normal', alwaysOnTop: false }
+    const win = {
+      id: 1,
+      focused: true,
+      top: 0,
+      left: 0,
+      width: this.win.innerWidth || 0,
+      height: this.win.innerHeight || 0,
+      incognito: false,
+      type: 'normal',
+      state: 'normal',
+      alwaysOnTop: false
+    }
     if (populate) win.tabs = this.tabs()
     return win
   }
@@ -367,7 +395,9 @@ export class Hub {
       case 'captureVisibleTab':
         return this.captureVisibleTab(args)
       case 'windows':
-        return args.action === 'getAll' ? [this.window(args.args?.[0]?.populate)] : this.window(args.args?.[1]?.populate)
+        return args.action === 'getAll'
+          ? [this.window(args.args?.[0]?.populate)]
+          : this.window(args.args?.[1]?.populate)
       case 'getContexts':
         return this.getContexts(args.filter ?? {})
       case 'offscreen':
@@ -396,7 +426,14 @@ export class Hub {
       navigate = this.lastOpen.url
       this.lastOpen = null
     }
-    return { hub: this.instance, engine: this.engine, ready: this.engineReady, error: this.engineError, setup: this.setup, navigate }
+    return {
+      hub: this.instance,
+      engine: this.engine,
+      ready: this.engineReady,
+      error: this.engineError,
+      setup: this.setup,
+      navigate
+    }
   }
 
   status() {
@@ -404,7 +441,14 @@ export class Hub {
       const rec = [...this.contexts.values()].find((r) => r.kind === kind)
       return rec ? (rec.ready ? 'ready' : 'loading') : 'absent'
     }
-    return { hub: this.instance, engine: this.engine, ready: this.engineReady, error: this.engineError, background: state('background'), offscreen: this.descriptor.offscreen ? state('offscreen') : 'not-used' }
+    return {
+      hub: this.instance,
+      engine: this.engine,
+      ready: this.engineReady,
+      error: this.engineError,
+      background: state('background'),
+      offscreen: this.descriptor.offscreen ? state('offscreen') : 'not-used'
+    }
   }
 
   /**
@@ -419,11 +463,17 @@ export class Hub {
     // Native can open settings before the hidden engine window has even registered. Pages
     // also need the offscreen listeners: otherwise their first status request sticks at empty.
     // Offscreen itself must only wait for the background, or its config request deadlocks.
-    await this.until(() => {
-      if (this.failure) throw Error(this.failure)
-      return this.readyContext('background') &&
-        (caller.kind !== 'page' || !this.descriptor.offscreen || this.readyContext('offscreen'))
-    }, OFFSCREEN_WAIT_MS, 'The extension message receivers did not start')
+    await this.until(
+      () => {
+        if (this.failure) throw Error(this.failure)
+        return (
+          this.readyContext('background') &&
+          (caller.kind !== 'page' || !this.descriptor.offscreen || this.readyContext('offscreen'))
+        )
+      },
+      OFFSCREEN_WAIT_MS,
+      'The extension message receivers did not start'
+    )
   }
 
   extensionTargets(from) {
@@ -454,7 +504,14 @@ export class Hub {
     if (targets.length === 0) return Promise.reject(Error(NO_RECEIVER))
     const id = ++this.nextDelivery
     return new Promise((resolve, reject) => {
-      const d = { resolve, reject, initial: new Set(targets.map((t) => t.id)), pending: new Set(), sawListener: false, closed: false }
+      const d = {
+        resolve,
+        reject,
+        initial: new Set(targets.map((t) => t.id)),
+        pending: new Set(),
+        sawListener: false,
+        closed: false
+      }
       d.timer = setTimeout(() => {
         if (d.initial.size === 0) return
         this.report({ check: 'ext-host-delivery-unacknowledged', contexts: [...d.initial] })
@@ -499,9 +556,10 @@ export class Hub {
   // ---------------------------------------------------------------- ports
 
   connect(opener, { port: id, name, tabId, frameId, documentId }) {
-    const targets = tabId === undefined || tabId === null
-      ? this.extensionTargets(opener.id)
-      : this.contentTargets(tabId, { frameId, documentId })
+    const targets =
+      tabId === undefined || tabId === null
+        ? this.extensionTargets(opener.id)
+        : this.contentTargets(tabId, { frameId, documentId })
     const port = { id, name, opener: opener.id, receivers: new Set(targets.map((t) => t.id)), accepted: false }
     if (targets.length === 0) {
       opener.link.send(opener.id, { type: 'port-close', port: id, error: NO_RECEIVER })
@@ -517,7 +575,8 @@ export class Hub {
     const port = this.ports.get(id)
     if (!port) throw Error('Attempting to use a disconnected port object')
     if (ctx === port.opener) {
-      for (const receiver of port.receivers) this.contexts.get(receiver)?.link.send(receiver, { type: 'port-message', port: id, message })
+      for (const receiver of port.receivers)
+        this.contexts.get(receiver)?.link.send(receiver, { type: 'port-message', port: id, message })
     } else if (port.receivers.has(ctx)) {
       port.accepted = true
       this.contexts.get(port.opener)?.link.send(port.opener, { type: 'port-message', port: id, message })
@@ -528,14 +587,17 @@ export class Hub {
   closePortFrom(port, ctx, noListener) {
     if (ctx === port.opener) {
       this.ports.delete(port.id)
-      for (const receiver of port.receivers) this.contexts.get(receiver)?.link.send(receiver, { type: 'port-close', port: port.id })
+      for (const receiver of port.receivers)
+        this.contexts.get(receiver)?.link.send(receiver, { type: 'port-close', port: port.id })
       return
     }
     if (!port.receivers.delete(ctx)) return
     if (!noListener) port.accepted = true
     if (port.receivers.size > 0) return
     this.ports.delete(port.id)
-    this.contexts.get(port.opener)?.link.send(port.opener, { type: 'port-close', port: port.id, error: port.accepted ? undefined : NO_RECEIVER })
+    this.contexts
+      .get(port.opener)
+      ?.link.send(port.opener, { type: 'port-close', port: port.id, error: port.accepted ? undefined : NO_RECEIVER })
   }
 
   // ---------------------------------------------------------------- storage
@@ -550,7 +612,10 @@ export class Hub {
       case 'getKeys':
         return Object.keys(data)
       case 'getBytesInUse': {
-        const chosen = keys === null || keys === undefined ? data : select(Array.isArray(keys) || typeof keys === 'string' ? keys : Object.keys(keys))
+        const chosen =
+          keys === null || keys === undefined
+            ? data
+            : select(Array.isArray(keys) || typeof keys === 'string' ? keys : Object.keys(keys))
         return new TextEncoder().encode(JSON.stringify(chosen)).length
       }
       case 'set':
@@ -665,9 +730,25 @@ export class Hub {
     for (const rec of this.contexts.values()) {
       let entry
       if (rec.kind === 'offscreen' && rec.ready) {
-        entry = { contextType: 'OFFSCREEN_DOCUMENT', tabId: -1, windowId: -1, frameId: 0, documentId: rec.documentId, documentUrl: rec.url, documentOrigin: safeOrigin(rec.url) }
+        entry = {
+          contextType: 'OFFSCREEN_DOCUMENT',
+          tabId: -1,
+          windowId: -1,
+          frameId: 0,
+          documentId: rec.documentId,
+          documentUrl: rec.url,
+          documentOrigin: safeOrigin(rec.url)
+        }
       } else if (rec.kind === 'page') {
-        entry = { contextType: 'TAB', tabId: tabIdFor(rec.label), windowId: 1, frameId: 0, documentId: rec.documentId, documentUrl: rec.url, documentOrigin: safeOrigin(rec.url) }
+        entry = {
+          contextType: 'TAB',
+          tabId: tabIdFor(rec.label),
+          windowId: 1,
+          frameId: 0,
+          documentId: rec.documentId,
+          documentUrl: rec.url,
+          documentOrigin: safeOrigin(rec.url)
+        }
       } else if (rec.kind === 'background' && rec.ready) {
         entry = { contextType: 'BACKGROUND', tabId: -1, windowId: -1, frameId: -1 }
       } else continue
@@ -703,7 +784,10 @@ export class Hub {
     if (!this.descriptor.offscreen) throw Error('Offscreen documents are not available for this engine')
     const wanted = new URL(String(url ?? this.descriptor.offscreen).replace(/^\/+/, ''), this.origin + '/').href
     await this.until(
-      () => [...this.contexts.values()].find((rec) => rec.kind === 'offscreen' && rec.ready && rec.url.split(/[?#]/)[0] === wanted.split(/[?#]/)[0]),
+      () =>
+        [...this.contexts.values()].find(
+          (rec) => rec.kind === 'offscreen' && rec.ready && rec.url.split(/[?#]/)[0] === wanted.split(/[?#]/)[0]
+        ),
       OFFSCREEN_WAIT_MS,
       `The offscreen document ${wanted} did not load within ${OFFSCREEN_WAIT_MS / 1000}s`
     )
@@ -754,7 +838,9 @@ export class Hub {
     const previous = this.hostState.installed
     if (previous?.version === version) return { event: 'startup' }
     this.hostState.installed = { version, at: new Date().toISOString() }
-    await this.persist().catch((error) => this.report({ check: 'ext-host-storage-save-failed', error: describe(error) }))
+    await this.persist().catch((error) =>
+      this.report({ check: 'ext-host-storage-save-failed', error: describe(error) })
+    )
     return previous
       ? { event: 'installed', details: { reason: 'update', previousVersion: previous.version } }
       : { event: 'installed', details: { reason: 'install' } }
@@ -791,7 +877,17 @@ export class Hub {
         backup = await this.invoke('storage_backup', { extension: this.engine })
       } catch (backupError) {
         // Without a backup nothing is removed: a stale list is recoverable, a lost one is not.
-        this.report({ check: 'ext-host-storage-desync', engine: this.engine, action: 'kept', reason: 'backup-failed', error: describe(backupError), tag, store, fresh, missing: missing.slice(0, 20) })
+        this.report({
+          check: 'ext-host-storage-desync',
+          engine: this.engine,
+          action: 'kept',
+          reason: 'backup-failed',
+          error: describe(backupError),
+          tag,
+          store,
+          fresh,
+          missing: missing.slice(0, 20)
+        })
         return { ...outcome, action: 'kept' }
       }
       await this.mutate('local', (local) => {
@@ -814,9 +910,12 @@ export class Hub {
       })
     }
     if (store && tag !== store) {
-      if (outcome.action === 'in-sync') this.report({ check: 'ext-host-storage-tagged', engine: this.engine, tag, store, fresh, checked })
+      if (outcome.action === 'in-sync')
+        this.report({ check: 'ext-host-storage-tagged', engine: this.engine, tag, store, fresh, checked })
       this.hostState.store = store
-      await this.persist().catch((saveError) => this.report({ check: 'ext-host-storage-save-failed', error: describe(saveError) }))
+      await this.persist().catch((saveError) =>
+        this.report({ check: 'ext-host-storage-save-failed', error: describe(saveError) })
+      )
     }
     return outcome
   }

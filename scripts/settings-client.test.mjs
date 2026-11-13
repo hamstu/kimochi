@@ -9,11 +9,13 @@ const compiled = await build({
   write: false,
   format: 'esm',
   alias: { '@ui': fileURLToPath(new URL('../ui', import.meta.url)) },
-  plugins: [{
-    name: 'settings-transport',
-    setup(builder) {
-      builder.onResolve({ filter: /^\.\/tauri$/ }, () => ({ path: 'transport', namespace: 'test' }))
-      builder.onLoad({ filter: /.*/, namespace: 'test' }, () => ({ contents: `
+  plugins: [
+    {
+      name: 'settings-transport',
+      setup(builder) {
+        builder.onResolve({ filter: /^\.\/tauri$/ }, () => ({ path: 'transport', namespace: 'test' }))
+        builder.onLoad({ filter: /.*/, namespace: 'test' }, () => ({
+          contents: `
         const backend = globalThis.__settingsClientTest;
         export const settingsGet = key => backend.get(key);
         export const settingsSet = (key, value) => backend.set(key, value);
@@ -22,9 +24,11 @@ const compiled = await build({
           backend.change = callback;
           return Promise.resolve(() => {});
         };
-      ` }))
+      `
+        }))
+      }
     }
-  }]
+  ]
 })
 let sequence = 0
 async function client(backend) {
@@ -36,11 +40,21 @@ async function client(backend) {
 test('concurrent setting reads share one IPC but keep each caller’s fallback', async () => {
   let calls = 0
   let resolve
-  const api = await client({ get: () => { calls++; return new Promise(r => { resolve = r }) } })
+  const api = await client({
+    get: () => {
+      calls++
+      return new Promise((r) => {
+        resolve = r
+      })
+    }
+  })
   const requests = Array.from({ length: 100 }, (_, i) => api.getSetting('custom-key', i))
   assert.equal(calls, 1)
   resolve(null)
-  assert.deepEqual(await Promise.all(requests), Array.from({ length: 100 }, (_, i) => i))
+  assert.deepEqual(
+    await Promise.all(requests),
+    Array.from({ length: 100 }, (_, i) => i)
+  )
   const next = api.getSetting('custom-key')
   assert.equal(calls, 2, 'settled values are not cached')
   resolve('fresh')
@@ -49,14 +63,14 @@ test('concurrent setting reads share one IPC but keep each caller’s fallback',
 
 test('failed setting reads can be retried', async () => {
   let calls = 0
-  const api = await client({ get: () => ++calls === 1 ? Promise.reject(Error('offline')) : Promise.resolve(42) })
+  const api = await client({ get: () => (++calls === 1 ? Promise.reject(Error('offline')) : Promise.resolve(42)) })
   await assert.rejects(api.getSetting('custom-key'), /offline/)
   assert.equal(await api.getSetting('custom-key'), 42)
 })
 
 test('writes and external changes invalidate pending reads without old cleanup dropping a new read', async () => {
   const resolves = []
-  const backend = { get: () => new Promise(r => resolves.push(r)), set: async () => {} }
+  const backend = { get: () => new Promise((r) => resolves.push(r)), set: async () => {} }
   const api = await client(backend)
   api.onSettingsChange(() => {})
   const first = api.getSetting('custom-key')

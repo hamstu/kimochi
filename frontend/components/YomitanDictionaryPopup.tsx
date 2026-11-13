@@ -135,11 +135,7 @@ function renderStructuredContent(content: any, depth = 0): JSX.Element | JSX.Ele
         )
       }
 
-      return (
-        <Tag style={{ margin: '0.5em 0', ...item.style }}>
-          {renderStructuredContent(item.content, depth + 1)}
-        </Tag>
-      )
+      return <Tag style={{ margin: '0.5em 0', ...item.style }}>{renderStructuredContent(item.content, depth + 1)}</Tag>
     }
 
     // Handle list items
@@ -186,10 +182,7 @@ function renderStructuredContent(content: any, depth = 0): JSX.Element | JSX.Ele
   return ''
 }
 
-export default function YomitanDictionaryPopup({
-  word,
-  apiUrl
-}: YomitanDictionaryPopupProps): JSX.Element {
+export default function YomitanDictionaryPopup({ word, apiUrl }: YomitanDictionaryPopupProps): JSX.Element {
   const textLang = useTextLang()
   const [data, setData] = useState<TermEntriesResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -262,9 +255,7 @@ export default function YomitanDictionaryPopup({
               <header className="ydp-headword" lang={textLang}>
                 <span className="ydp-term">{headword.term}</span>
                 {headword.reading && <span className="ydp-reading">{headword.reading}</span>}
-                {rules.length > 0 && (
-                  <span className="ydp-rules">{rules.map((rule) => rule.name).join(' ')}</span>
-                )}
+                {rules.length > 0 && <span className="ydp-rules">{rules.map((rule) => rule.name).join(' ')}</span>}
               </header>
             )}
 
@@ -287,21 +278,17 @@ export default function YomitanDictionaryPopup({
                 {/* Dictionary entries */}
                 {def.entries.map((entry, entryIndex) => (
                   <div key={entryIndex} className="ydp-gloss">
-                    {typeof entry === 'string' ? (
-                      entry
-                    ) : entry.type === 'structured-content' ? (
-                      Array.isArray(entry.content) ? (
-                        entry.content.map((item: unknown, i: number) => (
-                          <div key={i} className="ydp-sc">
-                            {renderStructuredContent(item)}
-                          </div>
-                        ))
-                      ) : (
-                        renderStructuredContent(entry.content)
-                      )
-                    ) : (
-                      JSON.stringify(entry)
-                    )}
+                    {typeof entry === 'string'
+                      ? entry
+                      : entry.type === 'structured-content'
+                        ? Array.isArray(entry.content)
+                          ? entry.content.map((item: unknown, i: number) => (
+                              <div key={i} className="ydp-sc">
+                                {renderStructuredContent(item)}
+                              </div>
+                            ))
+                          : renderStructuredContent(entry.content)
+                        : JSON.stringify(entry)}
                   </div>
                 ))}
               </div>

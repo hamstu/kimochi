@@ -57,20 +57,14 @@ export default function DebugPanel(): JSX.Element {
   useEffect(() => {
     let active = true
     const load = async (): Promise<void> => {
-      const results = await Promise.allSettled([
-        nativeDisplays(),
-        systemState(),
-        panel('overlay', 'inspect')
-      ])
+      const results = await Promise.allSettled([nativeDisplays(), systemState(), panel('overlay', 'inspect')])
       if (!active) return
       const [displayResult, systemResult, overlayResult] = results
       if (displayResult.status === 'fulfilled') setDisplays(displayResult.value)
       if (systemResult.status === 'fulfilled') setSystem(systemResult.value)
       if (overlayResult.status === 'fulfilled') setOverlay(overlayResult.value)
       const failure = results.find((result) => result.status === 'rejected')
-      setProbeError(
-        failure && failure.status === 'rejected' ? nativeError(failure.reason).message : null
-      )
+      setProbeError(failure && failure.status === 'rejected' ? nativeError(failure.reason).message : null)
     }
     void load()
     const timer = setInterval(() => void load(), REFRESH_MS)
@@ -97,8 +91,7 @@ export default function DebugPanel(): JSX.Element {
     })
     const sorted = [...heights].sort((a, b) => a - b)
     const middle = Math.floor(sorted.length / 2)
-    const median =
-      sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+    const median = sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
     return { count: words.length, min: sorted[0], max: sorted[sorted.length - 1], median }
   }, [state.scan])
 
@@ -110,15 +103,11 @@ export default function DebugPanel(): JSX.Element {
         <span className="k-num">Refreshes every {REFRESH_MS / 1000}s</span>
       </Bar>
       <div className="diag-terminal diag-scroll">
-
-        {(error || probeError) && (
-          <div style={{ color: '#ff8080', marginBottom: 8 }}>{error ?? probeError}</div>
-        )}
+        {(error || probeError) && <div style={{ color: '#ff8080', marginBottom: 8 }}>{error ?? probeError}</div>}
 
         <Section title="Session">
           <div>
-            <span style={label}>revision:</span> {state.revision} <span style={label}>via</span>{' '}
-            {transport}
+            <span style={label}>revision:</span> {state.revision} <span style={label}>via</span> {transport}
           </div>
           <div>
             <span style={label}>status:</span> {state.status || '—'}
@@ -130,13 +119,13 @@ export default function DebugPanel(): JSX.Element {
               : 'none'}
           </div>
           <div>
-            <span style={label}>scanning:</span> {String(Boolean(state.isScanning))}{' '}
-            <span style={label}>autoOCR:</span> {String(Boolean(state.autoOcrEnabled))}
+            <span style={label}>scanning:</span> {String(Boolean(state.isScanning))} <span style={label}>autoOCR:</span>{' '}
+            {String(Boolean(state.autoOcrEnabled))}
           </div>
           <div>
-            <span style={label}>overlay:</span> {String(state.overlayVisible ?? true)}{' '}
-            <span style={label}>text:</span> {String(state.textOverlayVisible ?? true)}{' '}
-            <span style={label}>debug:</span> {String(state.debugOverlayVisible ?? false)}
+            <span style={label}>overlay:</span> {String(state.overlayVisible ?? true)} <span style={label}>text:</span>{' '}
+            {String(state.textOverlayVisible ?? true)} <span style={label}>debug:</span>{' '}
+            {String(state.debugOverlayVisible ?? false)}
           </div>
           <div>
             <span style={label}>frontmost app:</span> {system?.frontmostApp ?? 'unknown'}
@@ -150,12 +139,10 @@ export default function DebugPanel(): JSX.Element {
                 <span style={label}>capture id:</span> {state.scan.id}
               </div>
               <div>
-                <span style={label}>captured px:</span> {state.scan.info.width} ×{' '}
-                {state.scan.info.height}
+                <span style={label}>captured px:</span> {state.scan.info.width} × {state.scan.info.height}
               </div>
               <div>
-                <span style={label}>full source px:</span> {state.scan.info.full_width} ×{' '}
-                {state.scan.info.full_height}
+                <span style={label}>full source px:</span> {state.scan.info.full_width} × {state.scan.info.full_height}
               </div>
             </>
           ) : (
@@ -180,9 +167,8 @@ export default function DebugPanel(): JSX.Element {
             <span style={label}>bounds:</span> {rect(overlay?.bounds)}
           </div>
           <div>
-            <span style={label}>scale:</span> {overlay?.scale ?? '—'}{' '}
-            <span style={label}>level:</span> {overlay?.native?.level ?? '—'}{' '}
-            <span style={label}>click-through:</span>{' '}
+            <span style={label}>scale:</span> {overlay?.scale ?? '—'} <span style={label}>level:</span>{' '}
+            {overlay?.native?.level ?? '—'} <span style={label}>click-through:</span>{' '}
             {overlay ? String(overlay.native.ignores_mouse) : '—'}
           </div>
           <div>
@@ -209,17 +195,12 @@ export default function DebugPanel(): JSX.Element {
         <Section title={`Displays (${displayList.length})`}>
           <>
             {displayList.map((display, index) => (
-              <div
-                key={index}
-                style={{ paddingLeft: 8, borderLeft: '2px solid #444', marginBottom: 4 }}
-              >
+              <div key={index} style={{ paddingLeft: 8, borderLeft: '2px solid #444', marginBottom: 4 }}>
                 <div>
                   <span style={label}>#{display.id ?? index}</span> bounds {rect(display.bounds)}
                 </div>
                 {display.workArea && <div>&nbsp;&nbsp;workArea {rect(display.workArea)}</div>}
-                {display.scaleFactor !== undefined && (
-                  <div>&nbsp;&nbsp;scaleFactor {display.scaleFactor}</div>
-                )}
+                {display.scaleFactor !== undefined && <div>&nbsp;&nbsp;scaleFactor {display.scaleFactor}</div>}
               </div>
             ))}
           </>
@@ -232,12 +213,11 @@ export default function DebugPanel(): JSX.Element {
                 <span style={label}>words:</span> {stats.count}
               </div>
               <div>
-                <span style={label}>height px:</span> min {stats.min}, median {stats.median}, max{' '}
-                {stats.max}
+                <span style={label}>height px:</span> min {stats.min}, median {stats.median}, max {stats.max}
               </div>
               <div style={{ color: '#aaa', marginTop: 4 }}>
-                The small-text (furigana) filter itself runs in the overlay; these are the raw boxes
-                the backend returned.
+                The small-text (furigana) filter itself runs in the overlay; these are the raw boxes the backend
+                returned.
               </div>
             </>
           ) : (

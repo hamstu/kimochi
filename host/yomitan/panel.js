@@ -97,9 +97,7 @@ function install() {
   const FRAME_BANDS = root.__kimochiFrameBands ?? {}
   const FRAME_BAND_SIZE = root.__kimochiFrameBandSize ?? 1000
   const windowForFrame = (frameId) =>
-    Object.entries(FRAME_BANDS).find(
-      ([, base]) => frameId >= base && frameId < base + FRAME_BAND_SIZE
-    )?.[0] ?? null
+    Object.entries(FRAME_BANDS).find(([, base]) => frameId >= base && frameId < base + FRAME_BAND_SIZE)?.[0] ?? null
 
   if (window === root) {
     let nextFrameId = root.__kimochiFrameBase ?? 0
@@ -258,10 +256,7 @@ function install() {
        */
       async waitForBackend(timeoutMs = 6000) {
         const within = (promise, ms, message) =>
-          Promise.race([
-            promise,
-            new Promise((_, reject) => setTimeout(() => reject(Error(message)), ms))
-          ])
+          Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(Error(message)), ms))])
         try {
           await within(hub.ready, timeoutMs, 'Extension host did not finish starting')
           const deadline = Date.now() + timeoutMs
@@ -277,8 +272,7 @@ function install() {
             } catch (error) {
               const message = String(error?.message ?? error)
               const transient =
-                message.includes('Dictionary backend is not ready') ||
-                message.includes('The overlay did not answer')
+                message.includes('Dictionary backend is not ready') || message.includes('The overlay did not answer')
               if (!transient || Date.now() >= deadline) throw error
               await new Promise((resolve) => setTimeout(resolve, 100))
             }
@@ -308,13 +302,8 @@ function install() {
         while (Date.now() < deadline) {
           const id = ++nextRequest
           const answer = new Promise((resolve) => pending.set(id, { resolve, reject: resolve }))
-          void tauri?.core
-            ?.invoke('ext_relay', { target, payload: { kind: 'ping', id } })
-            .catch(() => {})
-          const reply = await Promise.race([
-            answer,
-            new Promise((resolve) => setTimeout(() => resolve(null), 250))
-          ])
+          void tauri?.core?.invoke('ext_relay', { target, payload: { kind: 'ping', id } }).catch(() => {})
+          const reply = await Promise.race([answer, new Promise((resolve) => setTimeout(() => resolve(null), 250))])
           pending.delete(id)
           if (reply?.ready) return true
         }
@@ -451,14 +440,15 @@ function install() {
         // acknowledgement fails the whole invocation with "already acknowledged", and
         // a redelivered backend broadcast fires every listener twice.
         lane.listen((payload, from) => hub.settle(payload, from, true))
-        await listenRelay(tauri, hub.label, (payload, from) => hub.settle(payload, from), (from, seq) =>
-          hub.log({ check: 'relay-duplicate', from, seq }),
+        await listenRelay(
+          tauri,
+          hub.label,
+          (payload, from) => hub.settle(payload, from),
+          (from, seq) => hub.log({ check: 'relay-duplicate', from, seq }),
           (from, seq, highest) => hub.log({ check: 'relay-reordered', from, seq, highest })
         )
       }
-      await tauri?.core
-        ?.invoke('ext_relay', { target: OVERLAY, payload: { kind: 'hello' } })
-        .catch(() => {})
+      await tauri?.core?.invoke('ext_relay', { target: OVERLAY, payload: { kind: 'hello' } }).catch(() => {})
       await hub.networkReady
     })()
   }
@@ -481,9 +471,7 @@ function install() {
     const nativeFetch = (window.__spikeNativeFetch ??= window.fetch.bind(window))
     window.fetch = (input, init) =>
       hub.networkReady.then(() =>
-        window.fetch === undefined || window.fetch.__deferred
-          ? nativeFetch(input, init)
-          : window.fetch(input, init)
+        window.fetch === undefined || window.fetch.__deferred ? nativeFetch(input, init) : window.fetch(input, init)
       )
     window.fetch.__deferred = true
   }
@@ -535,12 +523,8 @@ function install() {
             url: context.win.location.href
           })
           const channel = new MessageChannel()
-          ctx.events.onConnect.emit(
-            makePort(named(hub.tabId, targetFrameId), identity(target), channel.port1, ctx)
-          )
-          target.events.onConnect.emit(
-            makePort(named(hub.tabId, ctx.id), identity(ctx), channel.port2, target)
-          )
+          ctx.events.onConnect.emit(makePort(named(hub.tabId, targetFrameId), identity(target), channel.port1, ctx))
+          target.events.onConnect.emit(makePort(named(hub.tabId, ctx.id), identity(ctx), channel.port2, target))
           return true
         }
 
@@ -572,9 +556,7 @@ function install() {
       }
       case 'injectStylesheet': {
         const css =
-          params.type === 'file'
-            ? await fetch(chrome.runtime.getURL(params.value)).then((r) => r.text())
-            : params.value
+          params.type === 'file' ? await fetch(chrome.runtime.getURL(params.value)).then((r) => r.text()) : params.value
         const style = document.createElement('style')
         style.textContent = css
         document.head.append(style)
@@ -594,8 +576,7 @@ function install() {
 
   /** chrome.storage is the backend's own store; relay rather than fork it. */
   function storage(area) {
-    const call = (action, params) =>
-      hub.toBackend({ action: '__storage', params: { area, action, ...params } })
+    const call = (action, params) => hub.toBackend({ action: '__storage', params: { area, action, ...params } })
     return {
       get: api((keys) => call('get', { keys: clone(keys) ?? null })),
       set: api((values) => call('set', { values: clone(values) })),
@@ -670,18 +651,26 @@ function install() {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     // A long touch can create a separate GTK context-menu surface. Gamescope
     // cannot present that surface reliably, while its native grab blocks the UI.
-    void tauri.core.invoke('platform_capabilities').then(caps => {
-      if (caps.session.nativeGamescope) {
-        document.addEventListener('contextmenu', event => event.preventDefault())
-      }
-    }).catch(error => hub.log({ check: 'gamescope-context-menu-failed', error: String(error) }))
+    void tauri.core
+      .invoke('platform_capabilities')
+      .then((caps) => {
+        if (caps.session.nativeGamescope) {
+          document.addEventListener('contextmenu', (event) => event.preventDefault())
+        }
+      })
+      .catch((error) => hub.log({ check: 'gamescope-context-menu-failed', error: String(error) }))
     // Settings previews and nested dictionary frames do not call host.start().
     // Give every Linux Yomitan document the same modifier-edge handling.
     // Not the blank document a frame has before its page loads; the page gets its own call.
-    if (platformInfo().os === 'linux' && hub.label === 'popup-host' && window !== root && window.location.href !== 'about:blank') {
+    if (
+      platformInfo().os === 'linux' &&
+      hub.label === 'popup-host' &&
+      window !== root &&
+      window.location.href !== 'about:blank'
+    ) {
       void import(asset('/spike/linux-popup-document.js'))
         .then(({ installLinuxPopupDocument }) => installLinuxPopupDocument(window))
-        .catch(error => hub.log({ check: 'linux-popup-document-failed', error: String(error) }))
+        .catch((error) => hub.log({ check: 'linux-popup-document-failed', error: String(error) }))
     }
     installLinuxScanInput(window, root, (value) => hub.log(value), {
       passive: ['overlay', 'popup-host'].includes(hub.label)
@@ -745,9 +734,9 @@ function install() {
     async function watchOutsideClicks() {
       let seen = null
       if (platformInfo().os === 'linux') {
-        await tauri?.event?.listen('gnome-popup-dismiss', () => root.dispatchEvent(
-          new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
-        ))
+        await tauri?.event?.listen('gnome-popup-dismiss', () =>
+          root.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true }))
+        )
       }
       await tauri?.event?.listen('state', ({ payload }) => {
         const count = payload?.dismiss
@@ -757,9 +746,7 @@ function install() {
           return
         }
         seen = count
-        root.dispatchEvent(
-          new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
-        )
+        root.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true }))
       })
     }
 

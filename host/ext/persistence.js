@@ -91,7 +91,9 @@ export async function probeClaims(win, probe, claimed) {
       if (names.has(probe.database)) {
         const db = await openExisting(win, probe.database)
         try {
-          present = db.objectStoreNames.contains(probe.store) && (await request(db.transaction(probe.store, 'readonly').objectStore(probe.store).count())) > 0
+          present =
+            db.objectStoreNames.contains(probe.store) &&
+            (await request(db.transaction(probe.store, 'readonly').objectStore(probe.store).count())) > 0
         } finally {
           db.close()
         }

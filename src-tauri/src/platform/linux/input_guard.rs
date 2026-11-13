@@ -19,9 +19,7 @@ const EXPIRY: Duration = Duration::from_millis(2500);
 /// The overlay `xid` holds the claim: renew its guard, starting one if needed.
 pub fn renew(xid: u32) {
     let Ok(mut lease) = LEASE.lock() else { return };
-    if lease.as_mut().is_some_and(|(window, lease)| {
-        *window != xid || lease.child.try_wait().ok().flatten().is_some()
-    }) {
+    if lease.as_mut().is_some_and(|(window, lease)| *window != xid || lease.child.try_wait().ok().flatten().is_some()) {
         *lease = None;
     }
     if lease.is_none() {

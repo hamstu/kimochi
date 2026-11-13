@@ -17,7 +17,10 @@ import { build } from 'esbuild'
 const bundleDir = await mkdtemp(path.join(os.tmpdir(), 'kimochi-lane-'))
 const bundle = path.join(bundleDir, 'links.mjs')
 const { outputFiles } = await build({
-  stdin: { contents: "export * from './host/ext/lane.js'; export { connectRelay, serveRelay } from './host/ext/links.js'", resolveDir: path.resolve('.') },
+  stdin: {
+    contents: "export * from './host/ext/lane.js'; export { connectRelay, serveRelay } from './host/ext/links.js'",
+    resolveDir: path.resolve('.')
+  },
   bundle: true,
   format: 'esm',
   platform: 'neutral',
@@ -163,7 +166,10 @@ test('where the frame cannot open channels, the lane says so at once and nothing
   assert.ok(Date.now() - started < 500, 'not after the deadline')
   assert.equal(lane.send('overlay', { kind: 'ext' }), false)
   // No channels at all, or turned off: no lane.
-  assert.equal(await openLane(fakeWindow(APP, { channels: false }), { engine: ENGINE, origin: EXT, label: 'a' }).ready, false)
+  assert.equal(
+    await openLane(fakeWindow(APP, { channels: false }), { engine: ENGINE, origin: EXT, label: 'a' }).ready,
+    false
+  )
   const off = fakeWindow(EXT)
   off.__kimochiNoLane = true
   assert.equal(await openLane(off, { engine: ENGINE, origin: EXT, label: 'b' }).ready, false)
@@ -172,7 +178,11 @@ test('where the frame cannot open channels, the lane says so at once and nothing
 /** A Tauri whose `ext_relay` goes nowhere: whatever arrives came over the lane. */
 const silentTauri = () => {
   const sent = []
-  return { sent, core: { invoke: async (command, args) => void sent.push([command, args]) }, event: { listen: async () => {} } }
+  return {
+    sent,
+    core: { invoke: async (command, args) => void sent.push([command, args]) },
+    event: { listen: async () => {} }
+  }
 }
 
 test('a window whose hello the hub answers over the lane keeps to it, and the hub answers it that way', async () => {
@@ -210,7 +220,12 @@ test('a window whose hello the hub answers over the lane keeps to it, and the hu
   }
   const reports = []
   const clientTauri = silentTauri()
-  const relay = connectRelay(router, { tauri: clientTauri, label: 'ext-hachidori', engine: ENGINE, report: (r) => reports.push(r) })
+  const relay = connectRelay(router, {
+    tauri: clientTauri,
+    label: 'ext-hachidori',
+    engine: ENGINE,
+    report: (r) => reports.push(r)
+  })
   await until(() => router.upstream, 'the hub adopted')
   assert.equal(relay.status.lane, true)
   assert.deepEqual(reports, [{ check: 'ext-host-lane', window: 'ext-hachidori', lane: true }])
@@ -220,8 +235,14 @@ test('a window whose hello the hub answers over the lane keeps to it, and the hu
   assert.equal(link.label, 'ext-hachidori')
   assert.deepEqual(calls, ['hello', 'echo'])
   // Neither side used the native relay for any of it.
-  assert.deepEqual(clientTauri.sent.filter(([command]) => command.startsWith('ext_relay')), [])
-  assert.deepEqual(hubTauri.sent.filter(([command]) => command.startsWith('ext_relay')), [])
+  assert.deepEqual(
+    clientTauri.sent.filter(([command]) => command.startsWith('ext_relay')),
+    []
+  )
+  assert.deepEqual(
+    hubTauri.sent.filter(([command]) => command.startsWith('ext_relay')),
+    []
+  )
 })
 
 test('with no lane the hello, and everything after it, goes over ext_relay as before', async () => {
@@ -257,5 +278,8 @@ test('with no lane the hello, and everything after it, goes over ext_relay as be
   await until(() => router.upstream, 'the hub adopted')
   assert.equal(relay.status.lane, false)
   assert.deepEqual(await router.upstream.call('register', {}), { op: 'register' })
-  assert.deepEqual(sent, [['ext_relay', 'overlay', 'hello'], ['ext_relay', 'overlay', 'register']])
+  assert.deepEqual(sent, [
+    ['ext_relay', 'overlay', 'hello'],
+    ['ext_relay', 'overlay', 'register']
+  ])
 })

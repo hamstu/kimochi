@@ -32,15 +32,33 @@
   if (window.__TAURI__ || window.__harnessNative) return
   const params = new URLSearchParams(location.search)
   const extWindow = /^ext-(hachidori|tenten)$/.exec(params.get('window') ?? '')
-  const engine = extWindow ? extWindow[1] : ['tenten', 'yomitan'].includes(params.get('engine')) ? params.get('engine') : 'hachidori'
-  const label = extWindow ? extWindow[0] : ['dictionary', 'log'].includes(params.get('window')) ? params.get('window') : 'overlay'
+  const engine = extWindow
+    ? extWindow[1]
+    : ['tenten', 'yomitan'].includes(params.get('engine'))
+      ? params.get('engine')
+      : 'hachidori'
+  const label = extWindow
+    ? extWindow[0]
+    : ['dictionary', 'log'].includes(params.get('window'))
+      ? params.get('window')
+      : 'overlay'
   const origins = {
     hachidori: (params.get('hachidori') ?? 'http://127.0.0.1:1440').replace(/\/+$/, ''),
     tenten: (params.get('tenten') ?? 'http://127.0.0.1:1441').replace(/\/+$/, '')
   }
-  const HARNESS_FRAME = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAFElEQVR4nGM4oaFBEmIY1TAoNAAADHGdgai0BAsAAAAASUVORK5CYII='
+  const HARNESS_FRAME =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAFElEQVR4nGM4oaFBEmIY1TAoNAAADHGdgai0BAsAAAAASUVORK5CYII='
   const storageKey = (extension) => `kimochi.harness.chrome-local-${extension ?? 'yomitan'}`
-  const native = (window.__harnessNative = { engine, label, origins, extensionWindow: null, captures: [], http: null, relay: null, reports: [] })
+  const native = (window.__harnessNative = {
+    engine,
+    label,
+    origins,
+    extensionWindow: null,
+    captures: [],
+    http: null,
+    relay: null,
+    reports: []
+  })
 
   if (extWindow) {
     // What native's label and engine preludes publish in the `ext-<id>` window.
@@ -54,9 +72,10 @@
   // Yomitan's harness page relays nothing; the extension engines always need the bus, since their
   // background runs in the extension window's page.
   const relayed = engine !== 'yomitan'
-  const relay = relayed && typeof EventSource === 'function'
-    ? { url: `/__kimochi/relay?channel=${encodeURIComponent(engine)}`, listeners: new Set(), open: null }
-    : null
+  const relay =
+    relayed && typeof EventSource === 'function'
+      ? { url: `/__kimochi/relay?channel=${encodeURIComponent(engine)}`, listeners: new Set(), open: null }
+      : null
   if (relay) {
     native.relay = relay
     const source = new EventSource(relay.url)
@@ -75,7 +94,11 @@
       for (const listener of relay.listeners) listener({ event: 'ext-relay', payload: message })
     }
     relay.post = async (to, payload) => {
-      const response = await fetch(relay.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from: label, to, payload }) })
+      const response = await fetch(relay.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: label, to, payload })
+      })
       if (!response.ok) throw Error(`relay: ${response.status} ${await response.text()}`)
     }
   }
@@ -177,7 +200,11 @@
       invoke: async (command, args, options) => {
         const handler = commands[command]
         if (!handler) {
-          throw Error(extWindow ? `invalid: ${command} is not available to an extension window` : `The harness does not mock ${command}`)
+          throw Error(
+            extWindow
+              ? `invalid: ${command} is not available to an extension window`
+              : `The harness does not mock ${command}`
+          )
         }
         return handler(args, options)
       }
@@ -223,13 +250,20 @@
           body: data ? new Uint8Array(data) : undefined,
           signal: request.controller.signal
         }).catch((error) => {
-          throw request.controller.signal.aborted ? 'Request cancelled' : `error sending request for url (${url}): ${error.message}`
+          throw request.controller.signal.aborted
+            ? 'Request cancelled'
+            : `error sending request for url (${url}): ${error.message}`
         })
         if (!response.headers.has('X-Kimochi-Status')) throw await response.text()
         const finalUrl = response.headers.get('X-Kimochi-Final-Url')
         http.requests.push({ url, finalUrl, status: Number(response.headers.get('X-Kimochi-Status')), at: Date.now() })
         const bodyRid = nextRid++
-        resources.set(bodyRid, { kind: 'body', reader: response.body.getReader(), rest: null, controller: request.controller })
+        resources.set(bodyRid, {
+          kind: 'body',
+          reader: response.body.getReader(),
+          rest: null,
+          controller: request.controller
+        })
         return {
           status: Number(response.headers.get('X-Kimochi-Status')),
           statusText: decodeURIComponent(response.headers.get('X-Kimochi-Status-Text') ?? ''),

@@ -60,8 +60,10 @@ const SETTINGS_TABS = opts(
   ['about', 'About']
 )
 
-const in_ = (param: string, ...values: string[]) => (context: StudioContext) =>
-  values.includes(context[param] ?? '')
+const in_ =
+  (param: string, ...values: string[]) =>
+  (context: StudioContext) =>
+    values.includes(context[param] ?? '')
 
 // ---------------------------------------------------------------- shared groups
 
@@ -177,7 +179,12 @@ const DOWNLOADS: ControlGroup = {
       label: 'Dictionary setup',
       default: 'ready',
       help: 'The engine in use, once downloaded: set up in steps, or stuck.',
-      options: opts(['ready', 'Ready'], ['setup', 'Sets up in steps'], ['failed', 'Failed'], ['setup-needed', 'Needs setting up'])
+      options: opts(
+        ['ready', 'Ready'],
+        ['setup', 'Sets up in steps'],
+        ['failed', 'Failed'],
+        ['setup-needed', 'Needs setting up']
+      )
     }
   ]
 }
@@ -239,7 +246,8 @@ const SETTINGS_JSON = {
 function locateMain(frame: Window): StudioContext {
   const doc = frame.document
   const settings = (frame as unknown as { __previewSettings?: Record<string, unknown> }).__previewSettings
-  if (doc.querySelector('.main-settings')) return { view: 'settings', tab: String(settings?.settingsActiveTab ?? 'general') }
+  if (doc.querySelector('.main-settings'))
+    return { view: 'settings', tab: String(settings?.settingsActiveTab ?? 'general') }
   const selected = doc.querySelector('[role="tab"][aria-selected="true"], [role="tab"][data-state="active"]')
   if (selected?.textContent?.trim().toLowerCase().startsWith('notebook')) return { view: 'notebook' }
   if (selected?.textContent?.trim().toLowerCase().startsWith('anki')) return { view: 'anki' }
@@ -294,7 +302,11 @@ const MAIN: Surface = {
   params: { window: 'log' },
   size: { width: 900, height: 560, minWidth: 520, minHeight: 360 },
   contexts: [
-    { param: 'view', label: 'View', options: opts(['log', 'Log'], ['notebook', 'Notebook'], ['anki', 'Anki'], ['settings', 'Settings']) },
+    {
+      param: 'view',
+      label: 'View',
+      options: opts(['log', 'Log'], ['notebook', 'Notebook'], ['anki', 'Anki'], ['settings', 'Settings'])
+    },
     { param: 'tab', label: 'Settings page', options: SETTINGS_TABS, when: in_('view', 'settings') }
   ],
   locate: locateMain,
@@ -307,7 +319,12 @@ const MAIN: Surface = {
           param: 'input',
           label: 'Log input',
           default: 'ocr',
-          options: opts(['ocr', 'Window (OCR)'], ['hook', 'Window (Text hooking on)'], ['clipboard', 'Clipboard'], ['websocket', 'Texthooker (WebSocket)'])
+          options: opts(
+            ['ocr', 'Window (OCR)'],
+            ['hook', 'Window (Text hooking on)'],
+            ['clipboard', 'Clipboard'],
+            ['websocket', 'Texthooker (WebSocket)']
+          )
         },
         { kind: 'toggle', param: 'nosource', label: 'No source chosen', on: '1' },
         {
@@ -328,7 +345,13 @@ const MAIN: Surface = {
           on: 'gamescope',
           help: 'Linux under Gamescope: Change source lists its games and apps.'
         },
-        { kind: 'toggle', param: 'pick', label: 'System picker cancelled', on: 'cancel', help: 'Linux: the portal shares nothing.' }
+        {
+          kind: 'toggle',
+          param: 'pick',
+          label: 'System picker cancelled',
+          on: 'cancel',
+          help: 'Linux: the portal shares nothing.'
+        }
       ]
     },
     {
@@ -336,7 +359,13 @@ const MAIN: Surface = {
       when: in_('view', 'log', 'notebook'),
       controls: [
         { kind: 'toggle', param: 'empty', label: 'First run (no lines or notebook)', on: '1' },
-        { kind: 'toggle', param: 'activity', label: 'Play scan activity', on: '1', help: 'A scripted run of scans on the activity ticker.' },
+        {
+          kind: 'toggle',
+          param: 'activity',
+          label: 'Play scan activity',
+          on: '1',
+          help: 'A scripted run of scans on the activity ticker.'
+        },
         { kind: 'toggle', param: 'sidebar', label: 'Sidebar', on: '1', off: '0', default: true },
         {
           kind: 'select',
@@ -381,7 +410,13 @@ const MAIN: Surface = {
           param: 'ocr',
           label: 'OCR model',
           default: 'googlelens',
-          options: opts(['googlelens', 'Google Lens'], ['meikiocr', 'MeikiOCR'], ['mangaocr', 'Manga OCR'], ['ppocr', 'PaddleOCR'], ['vocr', 'VOCR6'])
+          options: opts(
+            ['googlelens', 'Google Lens'],
+            ['meikiocr', 'MeikiOCR'],
+            ['mangaocr', 'Manga OCR'],
+            ['ppocr', 'PaddleOCR'],
+            ['vocr', 'VOCR6']
+          )
         },
         ENGINE
       ]
@@ -427,7 +462,12 @@ const WELCOME: Surface = {
           param: 'dict',
           label: 'Jitendex setup',
           default: 'run',
-          options: opts(['run', 'Runs and succeeds'], ['fail', 'Import fails'], ['none', 'Backend unreachable'], ['installed', 'Already set up'])
+          options: opts(
+            ['run', 'Runs and succeeds'],
+            ['fail', 'Import fails'],
+            ['none', 'Backend unreachable'],
+            ['installed', 'Already set up']
+          )
         }
       ]
     },

@@ -55,7 +55,11 @@ test('nothing downloaded and no OS engine falls back to image comparison', () =>
 })
 
 test('a chosen watcher is used when available, otherwise the best one', () => {
-  assert.deepEqual(resolveWatcher('googlelens', mac, 'livetext'), { kind: 'text', engine: 'livetext', because: 'chosen' })
+  assert.deepEqual(resolveWatcher('googlelens', mac, 'livetext'), {
+    kind: 'text',
+    engine: 'livetext',
+    because: 'chosen'
+  })
   assert.deepEqual(resolveWatcher('googlelens', mac, 'image'), { kind: 'image', because: 'chosen' })
   assert.equal(resolveWatcher('googlelens', linuxCpu, 'livetext').engine, 'ppocr')
 })
@@ -63,7 +67,10 @@ test('a chosen watcher is used when available, otherwise the best one', () => {
 test('off macOS, the capabilities Auto OCR reads never offer Live Text as the watcher', async () => {
   const { fallbackCapabilities, normalizeCapabilities } = await load('capabilities.ts')
   // What native sends on Linux before this fix: no livetext key at all.
-  const linux = { os: 'linux', ocrEngines: { googlelens: on(), mangaocr: on('cpu'), ppocr: on('cpu'), meikiocr: on('cpu') } }
+  const linux = {
+    os: 'linux',
+    ocrEngines: { googlelens: on(), mangaocr: on('cpu'), ppocr: on('cpu'), meikiocr: on('cpu') }
+  }
   for (const ua of ['X11; Linux aarch64', 'Windows NT 10.0']) {
     const caps = normalizeCapabilities(linux, fallbackCapabilities({ platform: '', userAgent: ua }))
     assert.equal(caps.ocrEngines.livetext.available, false)

@@ -224,12 +224,30 @@ unsafe fn install_engine(engine: *mut c_void, ver: u8) -> Result<(), String> {
     hook_engine(engine, ver);
     let mut master = null_mut();
     let hr = if v27 {
-        vcall!(engine, create_mastering_voice(true), fn(*mut *mut c_void, u32, u32, u32, u32, *const c_void) -> HRESULT,
-            &mut master, 0, 0, 0, 0, null())
+        vcall!(
+            engine,
+            create_mastering_voice(true),
+            fn(*mut *mut c_void, u32, u32, u32, u32, *const c_void) -> HRESULT,
+            &mut master,
+            0,
+            0,
+            0,
+            0,
+            null()
+        )
     } else {
-        vcall!(engine, create_mastering_voice(false),
+        vcall!(
+            engine,
+            create_mastering_voice(false),
             fn(*mut *mut c_void, u32, u32, u32, *const u16, *const c_void, u32) -> HRESULT,
-            &mut master, 0, 0, 0, null(), null(), 6)
+            &mut master,
+            0,
+            0,
+            0,
+            null(),
+            null(),
+            6
+        )
     };
     if hr < 0 {
         log(&format!("{}: no mastering voice ({hr:#x}); trying a voice with no sends", api(ver)));
@@ -240,9 +258,26 @@ unsafe fn install_engine(engine: *mut c_void, ver: u8) -> Result<(), String> {
     let sends: *const XAUDIO2_VOICE_SENDS = if master.is_null() { &no_sends } else { null() };
     let mut voice = null_mut();
     // Through the hooked CreateSourceVoice, which hooks the voice's vtable.
-    let hr = vcall!(engine, create_source_voice(v27),
-        fn(*mut *mut c_void, *const WAVEFORMATEX, u32, f32, *mut c_void, *const XAUDIO2_VOICE_SENDS, *const c_void) -> HRESULT,
-        &mut voice, &fmt, 0, 2.0, null_mut(), sends, null());
+    let hr = vcall!(
+        engine,
+        create_source_voice(v27),
+        fn(
+            *mut *mut c_void,
+            *const WAVEFORMATEX,
+            u32,
+            f32,
+            *mut c_void,
+            *const XAUDIO2_VOICE_SENDS,
+            *const c_void,
+        ) -> HRESULT,
+        &mut voice,
+        &fmt,
+        0,
+        2.0,
+        null_mut(),
+        sends,
+        null()
+    );
     let result = if hr < 0 || voice.is_null() {
         Err(format!("dummy source voice failed ({hr:#x})"))
     } else {

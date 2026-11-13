@@ -2,16 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const {
-  stabilityKey,
-  identityKey,
-  classify,
-  commonPrefixLength,
-  sameLayout,
-  unionBox,
-  layoutSignature,
-  isEmptyText
-} = await load('observation.ts')
+const { stabilityKey, identityKey, classify, commonPrefixLength, sameLayout, unionBox, layoutSignature, isEmptyText } =
+  await load('observation.ts')
 
 const rel = (a, b) => classify(stabilityKey(a), stabilityKey(b))
 const line = (text, x, y, width = 100, height = 20) => ({ text, box: { x, y, width, height } })

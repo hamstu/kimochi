@@ -1,112 +1,108 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core'
 
 export interface VndbVnRef {
-  id: string;
-  title?: string;
-  role?: "main" | "primary" | "side" | "appears";
+  id: string
+  title?: string
+  role?: 'main' | 'primary' | 'side' | 'appears'
 }
 
 export interface VndbTitle {
-  lang: string;
-  title: string;
-  official?: boolean;
+  lang: string
+  title: string
+  official?: boolean
 }
 
 export interface VndbVn {
-  id: string;
-  title: string;
-  alttitle: string | null;
-  titles: VndbTitle[];
-  image: { url: string; sexual: number } | null;
-  released: string | null;
+  id: string
+  title: string
+  alttitle: string | null
+  titles: VndbTitle[]
+  image: { url: string; sexual: number } | null
+  released: string | null
 }
 
 export interface VndbCharacter {
-  id: string;
-  name: string;
-  original: string | null;
-  aliases: string[];
-  description: string | null;
-  image: { url: string; sexual: number } | null;
-  vns: VndbVnRef[];
+  id: string
+  name: string
+  original: string | null
+  aliases: string[]
+  description: string | null
+  image: { url: string; sexual: number } | null
+  vns: VndbVnRef[]
 }
 
 interface ListResponse<T> {
-  results: T[];
-  more: boolean;
+  results: T[]
+  more: boolean
 }
 
 export async function searchVndbVns(query: string): Promise<VndbVn[]> {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-  const res = (await invoke("vndb_search_vns", {
-    query: trimmed,
-  })) as ListResponse<VndbVn>;
-  return res.results ?? [];
+  const trimmed = query.trim()
+  if (!trimmed) return []
+  const res = (await invoke('vndb_search_vns', {
+    query: trimmed
+  })) as ListResponse<VndbVn>
+  return res.results ?? []
 }
 
-export async function getVndbCharactersForVn(
-  vnId: string,
-): Promise<VndbCharacter[]> {
-  if (!vnId) return [];
-  const res = (await invoke("vndb_characters_by_vn", {
-    vnId,
-  })) as ListResponse<VndbCharacter>;
-  return res.results ?? [];
+export async function getVndbCharactersForVn(vnId: string): Promise<VndbCharacter[]> {
+  if (!vnId) return []
+  const res = (await invoke('vndb_characters_by_vn', {
+    vnId
+  })) as ListResponse<VndbCharacter>
+  return res.results ?? []
 }
 
 interface FetchedImage {
-  base64: string;
-  ext: string;
+  base64: string
+  ext: string
 }
 
 /** Fetch a VNDB image via the Rust proxy and return it as a Blob ready for
  *  attachImage(). Returns null if anything fails — the caller continues without
  *  an image. */
-export async function fetchVndbImageBlob(
-  url: string,
-): Promise<{ blob: Blob; ext: string } | null> {
+export async function fetchVndbImageBlob(url: string): Promise<{ blob: Blob; ext: string } | null> {
   try {
-    const res = (await invoke("vndb_fetch_image", { url })) as FetchedImage;
-    const bin = atob(res.base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const res = (await invoke('vndb_fetch_image', { url })) as FetchedImage
+    const bin = atob(res.base64)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
     const mime =
-      res.ext === "png"
-        ? "image/png"
-        : res.ext === "webp"
-          ? "image/webp"
-          : res.ext === "gif"
-            ? "image/gif"
-            : "image/jpeg";
-    return { blob: new Blob([bytes], { type: mime }), ext: res.ext };
+      res.ext === 'png'
+        ? 'image/png'
+        : res.ext === 'webp'
+          ? 'image/webp'
+          : res.ext === 'gif'
+            ? 'image/gif'
+            : 'image/jpeg'
+    return { blob: new Blob([bytes], { type: mime }), ext: res.ext }
   } catch (err) {
-    console.warn("[vndb] image fetch failed", url, err);
-    return null;
+    console.warn('[vndb] image fetch failed', url, err)
+    return null
   }
 }
 
 /** Pick the best display title for a VN: the Japanese original (titles[lang=ja])
  *  when present, falling back to alttitle, then the romanized `title`. */
 export function bestJapaneseTitle(vn: VndbVn): string {
-  const ja = vn.titles?.find((t) => t.lang === "ja");
-  if (ja?.title) return ja.title;
-  if (vn.alttitle) return vn.alttitle;
-  return vn.title;
+  const ja = vn.titles?.find((t) => t.lang === 'ja')
+  if (ja?.title) return ja.title
+  if (vn.alttitle) return vn.alttitle
+  return vn.title
 }
 
 /** The title to show a learner of `code`: for Japanese, `bestJapaneseTitle`; otherwise the title
  *  in the language being learned when VNDB has one (`pt` also takes `pt-br`/`pt-pt`), else the
  *  main (Latin) title. */
 export function bestTitle(vn: VndbVn, code: string): string {
-  if (code === "ja") return bestJapaneseTitle(vn);
-  const base = code.split("-")[0];
+  if (code === 'ja') return bestJapaneseTitle(vn)
+  const base = code.split('-')[0]
   const own =
     vn.titles?.find((t) => t.lang === code) ??
-    vn.titles?.find((t) => t.lang.split("-")[0] === base && !code.includes("-"));
-  return own?.title || vn.title;
+    vn.titles?.find((t) => t.lang.split('-')[0] === base && !code.includes('-'))
+  return own?.title || vn.title
 }
 
 export function romanizedTitle(vn: VndbVn): string {
-  return vn.title;
+  return vn.title
 }

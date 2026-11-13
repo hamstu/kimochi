@@ -88,9 +88,7 @@ impl Probe {
             .name(format!("kimochi-{name}-probe"))
             .spawn(move || probe.run(name, timeout, load));
         if let Err(e) = spawned {
-            self.record(unavailable(format!(
-                "{name}: could not start its probe: {e}"
-            )));
+            self.record(unavailable(format!("{name}: could not start its probe: {e}")));
         }
         None
     }
@@ -110,15 +108,11 @@ impl Probe {
         load: impl FnOnce() -> Result<Loaded, String> + Send + 'static,
     ) {
         let (send, receive) = mpsc::channel();
-        let spawned = std::thread::Builder::new()
-            .name(format!("kimochi-{name}-load"))
-            .spawn(move || {
-                let _ = send.send(guarded(load));
-            });
+        let spawned = std::thread::Builder::new().name(format!("kimochi-{name}-load")).spawn(move || {
+            let _ = send.send(guarded(load));
+        });
         if let Err(e) = spawned {
-            self.record(unavailable(format!(
-                "{name}: could not start its loader: {e}"
-            )));
+            self.record(unavailable(format!("{name}: could not start its loader: {e}")));
             return;
         }
         match receive.recv_timeout(timeout) {
@@ -133,9 +127,9 @@ impl Probe {
                     self.record(verdict(result));
                 }
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => self.record(unavailable(format!(
-                "{name}: its loader exited without an answer"
-            ))),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                self.record(unavailable(format!("{name}: its loader exited without an answer")))
+            }
         }
     }
 
@@ -175,12 +169,7 @@ fn verdict(result: Result<Loaded, String>) -> Verified {
 }
 
 fn unavailable(reason: String) -> Verified {
-    Verified {
-        available: false,
-        accelerator: None,
-        reason: Some(reason),
-        diagnostics: Vec::new(),
-    }
+    Verified { available: false, accelerator: None, reason: Some(reason), diagnostics: Vec::new() }
 }
 
 #[cfg(test)]
@@ -197,10 +186,7 @@ mod tests {
                     return v;
                 }
             }
-            assert!(
-                start.elapsed() < Duration::from_secs(5),
-                "probe never finished"
-            );
+            assert!(start.elapsed() < Duration::from_secs(5), "probe never finished");
             std::thread::yield_now();
         }
     }
@@ -219,20 +205,14 @@ mod tests {
         let l = loads.clone();
         let load = move || {
             l.fetch_add(1, Ordering::SeqCst);
-            Ok(Loaded {
-                accelerator: "cpu",
-                diagnostics: vec!["runtime: x".into()],
-            })
+            Ok(Loaded { accelerator: "cpu", diagnostics: vec!["runtime: x".into()] })
         };
-        assert!(probe
-            .verified_or_start("test", Duration::from_secs(5), load)
-            .is_none());
+        assert!(probe.verified_or_start("test", Duration::from_secs(5), load).is_none());
         let verified = wait_for(&probe, |_| true);
         assert!(verified.available);
         assert_eq!(verified.accelerator, Some("cpu"));
         // Later calls never run the loader again.
-        let again =
-            probe.verified_or_start("test", Duration::from_secs(5), || panic!("must not reload"));
+        let again = probe.verified_or_start("test", Duration::from_secs(5), || panic!("must not reload"));
         assert_eq!(again, Some(verified));
         assert_eq!(loads.load(Ordering::SeqCst), 1);
         // The verdict is published before the hook runs on the worker thread.
@@ -243,9 +223,7 @@ mod tests {
     #[test]
     fn a_panicking_loader_is_reported_unavailable_with_its_message() {
         let probe = Arc::new(Probe::default());
-        probe.verified_or_start("test", Duration::from_secs(5), || {
-            panic!("missing DirectML.dll")
-        });
+        probe.verified_or_start("test", Duration::from_secs(5), || panic!("missing DirectML.dll"));
         let verified = wait_for(&probe, |_| true);
         assert!(!verified.available);
         assert!(verified.reason.unwrap().contains("missing DirectML.dll"));
@@ -257,10 +235,7 @@ mod tests {
         let (release, gate) = mpsc::channel::<()>();
         probe.verified_or_start("test", Duration::from_millis(20), move || {
             let _ = gate.recv();
-            Ok(Loaded {
-                accelerator: "directml",
-                diagnostics: vec![],
-            })
+            Ok(Loaded { accelerator: "directml", diagnostics: vec![] })
         });
         let timed_out = wait_for(&probe, |_| true);
         assert!(!timed_out.available);

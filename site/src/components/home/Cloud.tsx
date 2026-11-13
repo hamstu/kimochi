@@ -72,11 +72,7 @@ const CLOUD_FEATURES: { icon: ReactNode; title: string; body: string; docs: stri
 export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choice: Choice) => void }) {
   const index = CHOICES.indexOf(value)
   return (
-    <div
-      role="radiogroup"
-      aria-label="Billing"
-      className="plan-toggle relative grid w-full grid-cols-3 rounded-xl p-1"
-    >
+    <div role="radiogroup" aria-label="Billing" className="plan-toggle relative grid w-full grid-cols-3 rounded-xl p-1">
       <span
         aria-hidden
         className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-accent shadow-[0_4px_12px_-2px_color-mix(in_oklab,var(--k-accent)_70%,transparent),inset_0_1px_0_rgb(255_255_255/0.2)] transition-transform duration-200 ease-out motion-reduce:transition-none"
@@ -104,7 +100,9 @@ export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choi
 export function fineprint(choice: Choice, trial: boolean): string {
   if (choice === 'lifetime') return 'One payment, no subscription.'
   const then = choice === 'yearly' ? '$60 a year' : '$6 a month'
-  return trial ? `Free for ${TRIAL_DAYS} days, then ${then}. Cancel before then and you pay nothing.` : `${then}. Cancel any time.`
+  return trial
+    ? `Free for ${TRIAL_DAYS} days, then ${then}. Cancel before then and you pay nothing.`
+    : `${then}. Cancel any time.`
 }
 
 /**
@@ -223,7 +221,9 @@ export function Cloud() {
             <PlanToggle value={choice} onChange={setChoice} />
           </div>
           <p className="mt-5 flex items-baseline gap-1.5">
-            <span className="text-[2.5rem] leading-none font-semibold tracking-[-0.02em] text-ink tnum">{price.amount}</span>
+            <span className="text-[2.5rem] leading-none font-semibold tracking-[-0.02em] text-ink tnum">
+              {price.amount}
+            </span>
             <span className="text-small text-ink-3">{price.per}</span>
           </p>
           <p className="mt-1.5 text-small text-ink-3" aria-live="polite">

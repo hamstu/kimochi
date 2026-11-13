@@ -18,10 +18,10 @@ pub use windows::{capture_border, WgcCapture};
 // queries inside it are Linux-only.
 mod linux_x11;
 #[cfg(target_os = "linux")]
+pub use linux_x11::gamescope_portal_now;
+#[cfg(target_os = "linux")]
 pub use linux_x11::{desktop as x11, X11Capture};
 pub use linux_x11::{is_wayland_session, wayland_session_now};
-#[cfg(target_os = "linux")]
-pub use linux_x11::gamescope_portal_now;
 // Wayland: xdg-desktop-portal ScreenCast + PipeWire. Its ids, stride-aware conversion
 // and restore-token store compile everywhere; the backend is Linux-only.
 mod linux_portal;
@@ -33,9 +33,9 @@ pub use linux_portal::{set_portal_token_store, MemoryTokenStore, TokenStore, PIC
 pub mod linux_gamescope;
 pub mod linux_native;
 #[cfg(target_os = "linux")]
-pub use linux_native::NativeCapture;
-#[cfg(target_os = "linux")]
 pub use linux_gamescope::GamescopeCapture;
+#[cfg(target_os = "linux")]
+pub use linux_native::NativeCapture;
 
 pub mod audio;
 pub mod hash;
@@ -71,10 +71,7 @@ pub struct CaptureError {
 }
 impl CaptureError {
     pub fn new(code: &'static str, message: impl ToString) -> Self {
-        Self {
-            code,
-            message: message.to_string(),
-        }
+        Self { code, message: message.to_string() }
     }
 }
 pub type Result<T> = std::result::Result<T, CaptureError>;
@@ -153,12 +150,8 @@ impl Frame {
             encoder.set_color(png::ColorType::Rgba);
             encoder.set_depth(png::BitDepth::Eight);
             encoder.set_compression(png::Compression::Fast);
-            let mut writer = encoder
-                .write_header()
-                .map_err(|e| CaptureError::new("encode", e))?;
-            writer
-                .write_image_data(&self.pixels)
-                .map_err(|e| CaptureError::new("encode", e))?;
+            let mut writer = encoder.write_header().map_err(|e| CaptureError::new("encode", e))?;
+            writer.write_image_data(&self.pixels).map_err(|e| CaptureError::new("encode", e))?;
         }
         Ok(bytes)
     }
@@ -182,10 +175,7 @@ pub trait CaptureBackend: Send {
     /// that can scale while capturing should, rather than capture full size and shrink.
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
         let _ = edge;
-        self.capture(&CaptureRequest {
-            source_id: source_id.to_string(),
-            crop: None,
-        })
+        self.capture(&CaptureRequest { source_id: source_id.to_string(), crop: None })
     }
     /// A UI-only preview must not interrupt Linux annotation surfaces.
     #[cfg(target_os = "linux")]
@@ -220,10 +210,7 @@ pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        Err(CaptureError::new(
-            "unsupported",
-            "No capture backend exists for this platform",
-        ))
+        Err(CaptureError::new("unsupported", "No capture backend exists for this platform"))
     }
 }
 /// Gaming Mode with Gamescope's PipeWire node: sources are its running apps, no picker.
@@ -245,27 +232,17 @@ pub fn crop_rect(crop: Option<Crop>, width: u32, height: u32) -> Result<[u32; 4]
         || c.reference_height == 0
         || c.width == 0
         || c.height == 0
-        || c.x
-            .checked_add(c.width)
-            .is_none_or(|v| v > c.reference_width)
-        || c.y
-            .checked_add(c.height)
-            .is_none_or(|v| v > c.reference_height)
+        || c.x.checked_add(c.width).is_none_or(|v| v > c.reference_width)
+        || c.y.checked_add(c.height).is_none_or(|v| v > c.reference_height)
     {
-        return Err(CaptureError::new(
-            "invalid_crop",
-            "Crop must be nonempty and inside its reference image",
-        ));
+        return Err(CaptureError::new("invalid_crop", "Crop must be nonempty and inside its reference image"));
     }
     let x = u64::from(c.x) * u64::from(width) / u64::from(c.reference_width);
     let y = u64::from(c.y) * u64::from(height) / u64::from(c.reference_height);
-    let right =
-        (u64::from(c.x + c.width) * u64::from(width)).div_ceil(u64::from(c.reference_width));
-    let bottom =
-        (u64::from(c.y + c.height) * u64::from(height)).div_ceil(u64::from(c.reference_height));
+    let right = (u64::from(c.x + c.width) * u64::from(width)).div_ceil(u64::from(c.reference_width));
+    let bottom = (u64::from(c.y + c.height) * u64::from(height)).div_ceil(u64::from(c.reference_height));
     Ok([x as u32, y as u32, (right - x) as u32, (bottom - y) as u32])
 }
-
 
 #[cfg(target_os = "linux")]
 pub use linux_portal::{last_portal_pick_error, last_portal_pick_info, PortalPickInfo, PortalStreamInfo};
@@ -277,14 +254,7 @@ mod tests {
     fn retina_reference_scaling() {
         assert_eq!(
             crop_rect(
-                Some(Crop {
-                    x: 10,
-                    y: 20,
-                    width: 100,
-                    height: 50,
-                    reference_width: 500,
-                    reference_height: 400
-                }),
+                Some(Crop { x: 10, y: 20, width: 100, height: 50, reference_width: 500, reference_height: 400 }),
                 1000,
                 800
             )
@@ -296,14 +266,7 @@ mod tests {
     fn rejects_overflow_and_outside_crop() {
         for x in [450, u32::MAX] {
             assert!(crop_rect(
-                Some(Crop {
-                    x,
-                    y: 0,
-                    width: 100,
-                    height: 50,
-                    reference_width: 500,
-                    reference_height: 400
-                }),
+                Some(Crop { x, y: 0, width: 100, height: 50, reference_width: 500, reference_height: 400 }),
                 1000,
                 800
             )
@@ -313,19 +276,8 @@ mod tests {
     #[test]
     fn fractional_edges_include_requested_pixels() {
         assert_eq!(
-            crop_rect(
-                Some(Crop {
-                    x: 1,
-                    y: 1,
-                    width: 1,
-                    height: 1,
-                    reference_width: 3,
-                    reference_height: 3
-                }),
-                5,
-                5
-            )
-            .unwrap(),
+            crop_rect(Some(Crop { x: 1, y: 1, width: 1, height: 1, reference_width: 3, reference_height: 3 }), 5, 5)
+                .unwrap(),
             [1, 1, 3, 3]
         );
     }

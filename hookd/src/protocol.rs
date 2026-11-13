@@ -54,15 +54,28 @@ pub fn thread_event(event: &str, thread: &Thread, hookcode: &str, name: &str) {
 pub enum Command {
     /// Attach to a process. `bits` is the image's bitness read by the app from the PE header;
     /// the sidecar retries the other bitness if the first injection never connects.
-    Attach { pid: u32, bits: u32, pc_hooks: PcHooks },
-    Detach { pid: u32 },
+    Attach {
+        pid: u32,
+        bits: u32,
+        pc_hooks: PcHooks,
+    },
+    Detach {
+        pid: u32,
+    },
     /// Insert an H-code (Luna and Textractor share the syntax for the common cases).
-    Insert { pid: u32, code: String },
+    Insert {
+        pid: u32,
+        code: String,
+    },
     /// Insert the generic Windows API hooks (GDI text calls and friends).
-    PcHooks { pid: u32 },
+    PcHooks {
+        pid: u32,
+    },
     /// Decode multibyte (ANSI) text whose hook names no code page with this one from now on (the
     /// language being read changed). Only sent to a helper whose `ready` carried `codepage`.
-    CodePage { codepage: u32 },
+    CodePage {
+        codepage: u32,
+    },
     Quit,
 }
 
@@ -76,12 +89,8 @@ pub enum PcHooks {
 
 pub fn parse_command(line: &str) -> Result<Command, String> {
     let value: Value = serde_json::from_str(line).map_err(|e| format!("bad command: {e}"))?;
-    let pid = || {
-        value["pid"]
-            .as_u64()
-            .and_then(|p| u32::try_from(p).ok())
-            .ok_or_else(|| "command needs a pid".to_string())
-    };
+    let pid =
+        || value["pid"].as_u64().and_then(|p| u32::try_from(p).ok()).ok_or_else(|| "command needs a pid".to_string());
     match value["cmd"].as_str().unwrap_or("") {
         "attach" => Ok(Command::Attach {
             pid: pid()?,
@@ -210,8 +219,9 @@ mod tests {
 
     #[test]
     fn textractor_lines_split_on_the_outer_colons() {
-        let line = parse_textractor_line("[3:1a2c:7ff6a000:1234:0:GetGlyphOutlineW:HW-4@0:gdi32.dll:GetGlyphOutlineW] 今日は")
-            .expect("parsed");
+        let line =
+            parse_textractor_line("[3:1a2c:7ff6a000:1234:0:GetGlyphOutlineW:HW-4@0:gdi32.dll:GetGlyphOutlineW] 今日は")
+                .expect("parsed");
         assert_eq!(line.thread, Thread { pid: 0x1a2c, addr: 0x7ff6a000, ctx: 0x1234, ctx2: 0 });
         assert_eq!(line.name, "GetGlyphOutlineW");
         assert_eq!(line.hookcode, "HW-4@0:gdi32.dll:GetGlyphOutlineW");

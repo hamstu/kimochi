@@ -1,5 +1,5 @@
-import { useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { Copy, Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { Copy, Eye, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import {
   ConfirmDialog,
   ContextMenu,
@@ -10,96 +10,78 @@ import {
   MenuContent,
   MenuItem,
   MenuSeparator,
-  MenuTrigger,
-} from "@kit";
-import { deleteEntry, updateEntry } from "@texthooker/lib/notebook";
-import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
-import type { NotebookEntry } from "@texthooker/lib/types";
-import { entryName, entryTitle } from "./notebookEntry";
+  MenuTrigger
+} from '@kit'
+import { deleteEntry, updateEntry } from '@texthooker/lib/notebook'
+import { writeTextSelf } from '@texthooker/lib/clipboardWrite'
+import type { NotebookEntry } from '@texthooker/lib/types'
+import { entryName, entryTitle } from './notebookEntry'
 
 /** Asks before an entry is deleted with its notes and images. */
 export function DeleteEntryDialog({
   entry,
   onOpenChange,
-  onDeleted,
+  onDeleted
 }: {
   /** The entry to delete; the dialog is open while one is given. */
-  entry: NotebookEntry | null;
-  onOpenChange: (open: boolean) => void;
-  onDeleted?: () => void;
+  entry: NotebookEntry | null
+  onOpenChange: (open: boolean) => void
+  onDeleted?: () => void
 }) {
   return (
     <ConfirmDialog
       open={entry !== null}
       onOpenChange={onOpenChange}
-      title={entry ? `Delete ${entryTitle(entry)}?` : ""}
+      title={entry ? `Delete ${entryTitle(entry)}?` : ''}
       description="Its notes and images are removed from this session’s notebook. This can’t be undone."
       confirmLabel="Delete"
       tone="danger"
       onConfirm={() => {
-        if (!entry) return;
-        onOpenChange(false);
-        void deleteEntry(entry.id);
-        onDeleted?.();
+        if (!entry) return
+        onOpenChange(false)
+        void deleteEntry(entry.id)
+        onDeleted?.()
       }}
     />
-  );
+  )
 }
 
 interface Actions {
-  onEdit: (entry: NotebookEntry) => void;
+  onEdit: (entry: NotebookEntry) => void
   /** Asks to delete; the caller confirms. */
-  onDelete: (entry: NotebookEntry) => void;
+  onDelete: (entry: NotebookEntry) => void
 }
 
 /** What can be done with an entry: its ⋯ menu and a right-click on its row list the same items. */
-function EntryMenuItems({
-  entry,
-  onEdit,
-  onDelete,
-}: Actions & { entry: NotebookEntry }) {
-  const name = entryName(entry);
+function EntryMenuItems({ entry, onEdit, onDelete }: Actions & { entry: NotebookEntry }) {
+  const name = entryName(entry)
   return (
     <>
       <MenuItem icon={<Pencil />} shortcut="e" onSelect={() => onEdit(entry)}>
         Edit
       </MenuItem>
       {name ? (
-        <MenuItem
-          icon={<Copy />}
-          shortcut="c"
-          onSelect={() => void writeTextSelf(name).catch(() => {})}
-        >
+        <MenuItem icon={<Copy />} shortcut="c" onSelect={() => void writeTextSelf(name).catch(() => {})}>
           Copy name
         </MenuItem>
       ) : null}
       <MenuCheckboxItem
         icon={<Eye />}
         checked={entry.matchEnabled}
-        onCheckedChange={(value) =>
-          void updateEntry(entry.id, { matchEnabled: value })
-        }
+        onCheckedChange={(value) => void updateEntry(entry.id, { matchEnabled: value })}
       >
         Match in the Log
       </MenuCheckboxItem>
       <MenuSeparator />
-      <MenuItem
-        icon={<Trash2 />}
-        tone="danger"
-        shortcut="d"
-        onSelect={() => onDelete(entry)}
-      >
+      <MenuItem icon={<Trash2 />} tone="danger" shortcut="d" onSelect={() => onDelete(entry)}>
         Delete…
       </MenuItem>
     </>
-  );
+  )
 }
 
 /** The ⋯ button on an entry's row, shown on hover. */
-export function EntryActionsMenu({
-  entry,
-  ...actions
-}: Actions & { entry: NotebookEntry }) {
+export function EntryActionsMenu({ entry, ...actions }: Actions & { entry: NotebookEntry }) {
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -117,7 +99,7 @@ export function EntryActionsMenu({
         <EntryMenuItems entry={entry} {...actions} />
       </MenuContent>
     </Menu>
-  );
+  )
 }
 
 /** A right-click on any entry's row opens its menu; one menu serves the list. */
@@ -126,41 +108,37 @@ export function EntryContextMenu({
   children,
   ...actions
 }: Actions & { entries: readonly NotebookEntry[]; children: ReactNode }) {
-  const [targetId, setTargetId] = useState<string | null>(null);
+  const [targetId, setTargetId] = useState<string | null>(null)
   // The row the menu is for, lit as a hovered row is while its menu is open.
-  const row = useRef<HTMLElement | null>(null);
-  const entry = entries.find((e) => e.id === targetId);
+  const row = useRef<HTMLElement | null>(null)
+  const entry = entries.find((e) => e.id === targetId)
 
   const onContextMenu = (event: MouseEvent) => {
-    const rowElement = (event.target as Element).closest<HTMLElement>(
-      "[data-entry-menu]",
-    );
-    const id = rowElement?.dataset.entryMenu;
+    const rowElement = (event.target as Element).closest<HTMLElement>('[data-entry-menu]')
+    const id = rowElement?.dataset.entryMenu
     if (!id || !entries.some((e) => e.id === id)) {
-      event.preventDefault();
-      return;
+      event.preventDefault()
+      return
     }
-    row.current?.removeAttribute("data-menu-open");
-    row.current = rowElement;
-    rowElement?.setAttribute("data-menu-open", "");
-    setTargetId(id);
-  };
+    row.current?.removeAttribute('data-menu-open')
+    row.current = rowElement
+    rowElement?.setAttribute('data-menu-open', '')
+    setTargetId(id)
+  }
 
   return (
     <ContextMenu
       onOpenChange={(open) => {
-        if (open) return;
-        row.current?.removeAttribute("data-menu-open");
-        row.current = null;
-        setTargetId(null);
+        if (open) return
+        row.current?.removeAttribute('data-menu-open')
+        row.current = null
+        setTargetId(null)
       }}
     >
       <ContextMenuTrigger asChild onContextMenu={onContextMenu}>
         {children}
       </ContextMenuTrigger>
-      <MenuContent>
-        {entry ? <EntryMenuItems entry={entry} {...actions} /> : null}
-      </MenuContent>
+      <MenuContent>{entry ? <EntryMenuItems entry={entry} {...actions} /> : null}</MenuContent>
     </ContextMenu>
-  );
+  )
 }

@@ -95,9 +95,7 @@ const BOLD_SIZE = 56
 
 /** Each run's weight in its typeface (`run.weight`), heavier where it is big for its page. */
 function weigh(layouts, typefaces) {
-  const sizes = layouts
-    .flatMap((runs) => runs.map((run) => run.fontSize))
-    .sort((a, b) => a - b)
+  const sizes = layouts.flatMap((runs) => runs.map((run) => run.fontSize)).sort((a, b) => a - b)
   // One run alone is its own typical size, so only the absolute bar applies to it.
   const typical = sizes.length > 1 ? sizes[(sizes.length - 1) >> 1] : 0
   return layouts.map((runs, index) => {
@@ -155,8 +153,7 @@ export function measureFor(typeface = 'default', language = undefined) {
         ascent: m.actualBoundingBoxAscent / 100,
         descent: m.actualBoundingBoxDescent / 100
       }
-      const inked =
-        Object.values(ink).every(Number.isFinite) && ink.end > ink.start && ink.ascent + ink.descent > 0
+      const inked = Object.values(ink).every(Number.isFinite) && ink.end > ink.start && ink.ascent + ink.descent > 0
       known = {
         advance: m.width / 100,
         ink: inked ? ink : null,
@@ -178,8 +175,7 @@ export function measureFor(typeface = 'default', language = undefined) {
     : (text) => {
         let ems = 0
         if (canvas()) for (const character of text) ems += glyph(character).advance
-        else
-          for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
+        else for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
         return ems
       }
   measure.typeface = typeface
@@ -213,7 +209,8 @@ export function measureFor(typeface = 'default', language = undefined) {
       }
       at += g.advance
     }
-    if (!ink || !(font.fontAscent + font.fontDescent > 0) || !Number.isFinite(font.fontAscent + font.fontDescent)) return null
+    if (!ink || !(font.fontAscent + font.fontDescent > 0) || !Number.isFinite(font.fontAscent + font.fontDescent))
+      return null
     return { ...ink, advance: at, fontAscent: font.fontAscent, fontDescent: font.fontDescent }
   }
   // Measured before the face loaded, these are the fallback's: forget them once it has.
@@ -310,7 +307,10 @@ function appendRunText(element, run, measure) {
  * gives them. `measure` is the overlay font's (tests pass recorded metrics).
  */
 export function wordLayout(mapped, measure = measureEms) {
-  return weigh(layoutParts(withTypefaces(mapped.map(partOf), mapped, measure), measure), mapped.map((box) => box.typeface))
+  return weigh(
+    layoutParts(withTypefaces(mapped.map(partOf), mapped, measure), measure),
+    mapped.map((box) => box.typeface)
+  )
 }
 
 /**
@@ -472,9 +472,7 @@ function between(boxes, i, j, a, b, vertical) {
     const lines = box.lines?.length ? box.lines : [box]
     return lines.some((rect) => {
       const line = lineMetrics(rect, vertical, box.inkMargin)
-      return (
-        line.em >= small && line.bottom > low && line.top < high && line.end > start && line.start < end
-      )
+      return line.em >= small && line.bottom > low && line.top < high && line.end > start && line.start < end
     })
   })
 }
@@ -495,9 +493,7 @@ function between(boxes, i, j, a, b, vertical) {
  * into from at most one.
  */
 export function continuations(boxes, alone = () => true) {
-  const candidates = boxes.map((box) =>
-    box.granularity === 'block' && !box.bubble && alone(box) ? box : null
-  )
+  const candidates = boxes.map((box) => (box.granularity === 'block' && !box.bubble && alone(box) ? box : null))
   const edges = candidates.map((box) => {
     if (!box) return null
     const vertical = isVerticalBox(box)
@@ -579,8 +575,7 @@ export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = L
  */
 export function selectionExtension(selectedText, startIndex, words, spaced = false) {
   const start = words[startIndex]
-  if (!start || !selectedText || !selectedText.startsWith(start.text))
-    return { extension: '', consumed: [] }
+  if (!start || !selectedText || !selectedText.startsWith(start.text)) return { extension: '', consumed: [] }
   let overflow = selectedText.slice(start.text.length)
   let extension = ''
   const consumed = []
@@ -968,9 +963,7 @@ export class TextOverlayRenderer {
             candidate.className === fresh.className &&
             candidate.renderBox &&
             fresh.renderBox &&
-            ['x', 'y', 'width', 'height'].every(
-              (key) => Math.abs(candidate.renderBox[key] - fresh.renderBox[key]) <= 2
-            )
+            ['x', 'y', 'width', 'height'].every((key) => Math.abs(candidate.renderBox[key] - fresh.renderBox[key]) <= 2)
         )
       }
       if (!old) return fresh
@@ -979,8 +972,7 @@ export class TextOverlayRenderer {
       old.ocrIndex = fresh.ocrIndex
       const ahead = old.querySelector('.ocr-lookahead')
       const nextAhead = fresh.querySelector('.ocr-lookahead')
-      if (ahead && nextAhead && ahead.textContent !== nextAhead.textContent)
-        ahead.textContent = nextAhead.textContent
+      if (ahead && nextAhead && ahead.textContent !== nextAhead.textContent) ahead.textContent = nextAhead.textContent
       const region = this.regions.find((region) => region.element === fresh)
       if (region && oldRegions.has(old)) region.element = old
       const word = this.words.find((word) => word.element === fresh)
@@ -1003,17 +995,13 @@ export class TextOverlayRenderer {
       if (this.container.children[index] !== element)
         this.container.insertBefore(element, this.container.children[index] ?? null)
     })
-    this.selectionIndices = new Set(
-      this.words.filter((word) => selected.has(word.element)).map((word) => word.index)
-    )
+    this.selectionIndices = new Set(this.words.filter((word) => selected.has(word.element)).map((word) => word.index))
     // The extension and the hidden boxes belong to one selection, from the box it started
     // in; if that box did not survive, nothing stays hidden on its account.
     const extendedWord = extended && this.words.find((word) => word.element === extended)
     this.extension = extendedWord ? { index: extendedWord.index, text: this.extension.text } : null
     this.consumedIndices = new Set(
-      extendedWord
-        ? this.words.filter((word) => consumed.has(word.element)).map((word) => word.index)
-        : []
+      extendedWord ? this.words.filter((word) => consumed.has(word.element)).map((word) => word.index) : []
     )
     this.applySelectionMarks()
     this.lastLookupIndex = lookup && keep.has(lookup) ? lookup.ocrIndex : null
@@ -1092,10 +1080,7 @@ export class TextOverlayRenderer {
       }
       const runs = layouts[index]
       // The hovered card reaches this far past the box (overlay-text.css); the text stays put.
-      element.style.setProperty(
-        '--ocr-pad',
-        `${cardPadding(Math.max(...runs.map((run) => run.fontSize), 0))}px`
-      )
+      element.style.setProperty('--ocr-pad', `${cardPadding(Math.max(...runs.map((run) => run.fontSize), 0))}px`)
       // A word or a single line is drawn as the box's own text; a block's lines each as a run.
       const single = runs.length === 1 && runs[0].text === box.text
       // Where the box's text starts to flow: its top-left, or top-right for a vertical-rl line.
@@ -1192,15 +1177,17 @@ export class TextOverlayRenderer {
       }))
     )
     const boxes = partsOf.flat()
-    const typefaces = groups.flatMap((group, index) =>
-      partsOf[index].map(() => group.annotations[0]?.typeface)
-    )
+    const typefaces = groups.flatMap((group, index) => partsOf[index].map(() => group.annotations[0]?.typeface))
     const measure = measureFor('default', grouping.language)
     const fitted = scanning
       ? []
       : weigh(
           layoutParts(
-            withTypefaces(boxes, typefaces.map((typeface) => ({ typeface })), measure),
+            withTypefaces(
+              boxes,
+              typefaces.map((typeface) => ({ typeface })),
+              measure
+            ),
             measure
           ),
           typefaces
@@ -1229,7 +1216,7 @@ export class TextOverlayRenderer {
       const proportional = Boolean(measure.style && !measure.style.fullWidth)
       const ems = (line) => (proportional ? measure(line) : line.length * CHAR_ASPECT_RATIO)
       const longest = Math.max(...lines.map(ems))
-      const semanticBlock = group.annotations.some(a => a.granularity === 'block')
+      const semanticBlock = group.annotations.some((a) => a.granularity === 'block')
       const fontSize = Math.max(
         1,
         Math.min(
@@ -1277,7 +1264,10 @@ export class TextOverlayRenderer {
         for (const line of lines) {
           stack.append(
             shimmer(
-              Math.min(proportional ? measure(line) * fontSize : line.length * fontSize * CHAR_ASPECT_RATIO, rect.width),
+              Math.min(
+                proportional ? measure(line) * fontSize : line.length * fontSize * CHAR_ASPECT_RATIO,
+                rect.width
+              ),
               fontSize,
               fontSize * 0.5
             )
@@ -1435,8 +1425,7 @@ export class TextOverlayRenderer {
 
     if (selected) {
       const anchor = selection?.anchorNode
-      const start =
-        anchor?.nodeType === Node.ELEMENT_NODE ? anchor : (anchor?.parentElement ?? null)
+      const start = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : (anchor?.parentElement ?? null)
       const host = start?.closest?.('[data-ocr-word-box]') ?? null
       const index = this.words.findIndex((word) => word.element === host)
       if (index !== -1) {

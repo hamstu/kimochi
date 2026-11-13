@@ -5,15 +5,7 @@
  */
 import { formatBytes, percent, progressText } from './model-download.js'
 
-export type UpdateState =
-  | 'idle'
-  | 'checking'
-  | 'none'
-  | 'available'
-  | 'downloading'
-  | 'ready'
-  | 'installing'
-  | 'failed'
+export type UpdateState = 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'installing' | 'failed'
 export type UpdateStage = 'check' | 'download' | 'install'
 export type UpdateAction = 'check' | 'download' | 'cancel' | 'install' | 'retry' | 'dismiss'
 
@@ -119,8 +111,7 @@ export const noticeShown = (status: UpdateStatus | null): boolean =>
   updateInPlay(status) &&
   !(status.dismissed && (status.state === 'available' || status.state === 'failed'))
 
-const named = (status: UpdateStatus): string =>
-  status.version ? `Kimochi ${status.version}` : 'A new version'
+const named = (status: UpdateStatus): string => (status.version ? `Kimochi ${status.version}` : 'A new version')
 
 /** The notice's first line. */
 export function noticeTitle(status: UpdateStatus): string {
@@ -259,8 +250,7 @@ export function barPercent(status: UpdateStatus): number {
 
 /** No measurable progress: the swap, or a download whose size the server did not say. */
 export const isIndeterminate = (status: UpdateStatus): boolean =>
-  status.state === 'installing' ||
-  (status.state === 'downloading' && !(status.totalBytes ?? status.size))
+  status.state === 'installing' || (status.state === 'downloading' && !(status.totalBytes ?? status.size))
 
 /** The GitHub release page of the offered version, for "What's new". */
 export const releaseUrl = (repository: string, status: UpdateStatus): string | null =>

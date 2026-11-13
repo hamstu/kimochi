@@ -169,8 +169,7 @@ export function wholeWords(text: string, max: number): string {
 /** The offsets in `text` after its first character where a word starts. */
 export function wordStarts(text: string): number[] {
   const starts: number[] = []
-  for (let i = 1; i < text.length; i++)
-    if (isWordCharacter(text[i]) && !isWordCharacter(text[i - 1])) starts.push(i)
+  for (let i = 1; i < text.length; i++) if (isWordCharacter(text[i]) && !isWordCharacter(text[i - 1])) starts.push(i)
   return starts
 }
 
@@ -213,7 +212,8 @@ export function wordStart(node: Text, offset: number, block: Element | null): Ca
     if (!before || !isWordCharacter(before.data[last])) break
     const a = glyphBox(before, last)
     const b = glyphBox(at.node, 0)
-    const sameLine = a && b && Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) < Math.min(a.height, b.height) / 2
+    const sameLine =
+      a && b && Math.abs(a.top + a.height / 2 - (b.top + b.height / 2)) < Math.min(a.height, b.height) / 2
     if (!sameLine) break
     at = { node: before, offset: wordStartIn(before.data, last) }
   }

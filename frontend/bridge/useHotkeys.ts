@@ -8,14 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { HotkeysSettings } from './types'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
-import {
-  hotkeysLoad,
-  hotkeysReapply,
-  hotkeysSave,
-  hotkeysSuspend,
-  nativeError,
-  type HotkeysApplyResult
-} from './tauri'
+import { hotkeysLoad, hotkeysReapply, hotkeysSave, hotkeysSuspend, nativeError, type HotkeysApplyResult } from './tauri'
 
 export interface HotkeyFailure {
   name: string
@@ -79,11 +72,7 @@ export function useSuspendHotkeys(active: boolean): void {
   }, [active])
 }
 
-export function useHotkeys(): [
-  HotkeysSettings,
-  (hotkeys: HotkeysSettings) => Promise<void>,
-  HotkeyFailure[]
-] {
+export function useHotkeys(): [HotkeysSettings, (hotkeys: HotkeysSettings) => Promise<void>, HotkeyFailure[]] {
   const [hotkeys, setHotkeys] = useState<HotkeysSettings>(() => mergeHotkeysWithOverrides({}))
   const [failures, setFailures] = useState<HotkeyFailure[]>([])
 

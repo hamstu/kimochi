@@ -4,7 +4,7 @@ import { scanWasPublished, markScanPublished } from '../ui/scan-publication.js'
 
 test('native scan outputs are not replayed when an engine switch recreates the overlay', () => {
   const entries = new Map()
-  const session = { getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value) }
+  const session = { getItem: (key) => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value) }
   const output = []
   const apply = (id, storage) => {
     if (!scanWasPublished(id, storage)) {
@@ -22,7 +22,14 @@ test('native scan outputs are not replayed when an engine switch recreates the o
 })
 
 test('unavailable session storage and scans without an ID retain publication', () => {
-  const denied = { getItem() { throw new Error('unavailable') }, setItem() { throw new Error('unavailable') } }
+  const denied = {
+    getItem() {
+      throw new Error('unavailable')
+    },
+    setItem() {
+      throw new Error('unavailable')
+    }
+  }
   assert.equal(scanWasPublished(1, denied), false)
   assert.doesNotThrow(() => markScanPublished(1, denied))
   assert.equal(scanWasPublished(null, denied), false)

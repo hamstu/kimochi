@@ -32,7 +32,9 @@ export function SyncVisual() {
                   </span>
                 </span>
                 {action && (
-                  <span className="rounded-md border border-line-strong bg-field px-1.5 py-0.5 text-[10px] text-ink">{action}</span>
+                  <span className="rounded-md border border-line-strong bg-field px-1.5 py-0.5 text-[10px] text-ink">
+                    {action}
+                  </span>
                 )}
               </li>
             ))}

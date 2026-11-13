@@ -31,7 +31,7 @@ export function matchSequence(a, b) {
     for (let j = m - 1; j >= 0; j--)
       dp[i][j] = fold(a[i]) === fold(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
   const pairs = []
-  for (let i = 0, j = 0; i < n && j < m; ) {
+  for (let i = 0, j = 0; i < n && j < m;) {
     if (fold(a[i]) === fold(b[j])) {
       pairs.push([i, j])
       i++

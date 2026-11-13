@@ -9,98 +9,68 @@
  * A PNG or JPEG of a name wins over the captured WebP, so a screenshot dropped in by hand replaces
  * it without deleting anything.
  */
-import type { ReactNode } from "react";
-import { Maximize2 } from "lucide-react";
-import { Dialog, DialogContent, DialogTrigger } from "@kit";
-import {
-  DICTIONARY_ENGINES,
-  type DictionaryEngine,
-} from "../bridge/dictionaryEngine";
-import "./dictionary-preview.css";
+import type { ReactNode } from 'react'
+import { Maximize2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogTrigger } from '@kit'
+import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
+import './dictionary-preview.css'
 
-const FILES = import.meta.glob<string>(
-  "../assets/dictionary-previews/*.{png,jpg,jpeg,webp}",
-  {
-    eager: true,
-    query: "?url",
-    import: "default",
-  },
-);
+const FILES = import.meta.glob<string>('../assets/dictionary-previews/*.{png,jpg,jpeg,webp}', {
+  eager: true,
+  query: '?url',
+  import: 'default'
+})
 
 /** Formats in order of preference: a hand-made screenshot over the capture. */
-const FORMATS = ["png", "jpg", "jpeg", "webp"];
+const FORMATS = ['png', 'jpg', 'jpeg', 'webp']
 
 function picture(name: string): string | null {
   for (const format of FORMATS) {
-    const url = FILES[`../assets/dictionary-previews/${name}.${format}`];
-    if (url) return url;
+    const url = FILES[`../assets/dictionary-previews/${name}.${format}`]
+    if (url) return url
   }
-  return null;
+  return null
 }
 
-type Theme = "light" | "dark";
+type Theme = 'light' | 'dark'
 
 /** The engine's picture for each theme, falling back to the other theme's; null when it has none. */
-function previewPictures(
-  engine: DictionaryEngine,
-): Record<Theme, string> | null {
-  const light = picture(`${engine}-light`);
-  const dark = picture(`${engine}-dark`);
-  if (!light && !dark) return null;
-  return { light: light ?? dark!, dark: dark ?? light! };
+function previewPictures(engine: DictionaryEngine): Record<Theme, string> | null {
+  const light = picture(`${engine}-light`)
+  const dark = picture(`${engine}-dark`)
+  if (!light && !dark) return null
+  return { light: light ?? dark!, dark: dark ?? light! }
 }
 
 function Picture({
   pictures,
   alt,
-  className,
+  className
 }: {
-  pictures: Record<Theme, string>;
-  alt: string;
-  className: string;
+  pictures: Record<Theme, string>
+  alt: string
+  className: string
 }): ReactNode {
   // Both are in the page; CSS shows the one for the theme, and the hidden one is never fetched.
   return (
     <>
-      <img
-        className={`${className} dictionary-preview-light`}
-        src={pictures.light}
-        alt={alt}
-        loading="lazy"
-      />
-      <img
-        className={`${className} dictionary-preview-dark`}
-        src={pictures.dark}
-        alt={alt}
-        loading="lazy"
-      />
+      <img className={`${className} dictionary-preview-light`} src={pictures.light} alt={alt} loading="lazy" />
+      <img className={`${className} dictionary-preview-dark`} src={pictures.dark} alt={alt} loading="lazy" />
     </>
-  );
+  )
 }
 
-export function DictionaryPreview({
-  engine,
-}: {
-  engine: DictionaryEngine;
-}): ReactNode {
-  const pictures = previewPictures(engine);
-  if (!pictures) return null;
-  const name = DICTIONARY_ENGINES[engine].name;
+export function DictionaryPreview({ engine }: { engine: DictionaryEngine }): ReactNode {
+  const pictures = previewPictures(engine)
+  if (!pictures) return null
+  const name = DICTIONARY_ENGINES[engine].name
   // The pictures show the pop-up's look, whatever the language being read: captioned as an example.
-  const alt = `An example of ${name}'s pop-up, looking up 食べられなかった in a line of game dialogue`;
+  const alt = `An example of ${name}'s pop-up, looking up 食べられなかった in a line of game dialogue`
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button
-          type="button"
-          className="dictionary-preview"
-          aria-label={`Show ${name}'s pop-up larger`}
-        >
-          <Picture
-            pictures={pictures}
-            alt={alt}
-            className="dictionary-preview-image"
-          />
+        <button type="button" className="dictionary-preview" aria-label={`Show ${name}'s pop-up larger`}>
+          <Picture pictures={pictures} alt={alt} className="dictionary-preview-image" />
           <span className="dictionary-preview-expand" aria-hidden>
             <Maximize2 />
           </span>
@@ -111,12 +81,8 @@ export function DictionaryPreview({
         title={`${name} pop-up`}
         description="An example lookup: 食べられなかった (couldn't eat) in a game's dialogue, with entries from JMdict."
       >
-        <Picture
-          pictures={pictures}
-          alt={alt}
-          className="dictionary-preview-full"
-        />
+        <Picture pictures={pictures} alt={alt} className="dictionary-preview-full" />
       </DialogContent>
     </Dialog>
-  );
+  )
 }

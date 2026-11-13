@@ -63,7 +63,10 @@ export function normalizeLinkCode(raw) {
  * @returns {string}
  */
 export function formatCodeInput(raw) {
-  const chars = [...String(raw).toUpperCase()].filter((c) => CODE_ALPHABET.includes(c)).slice(0, 8).join('')
+  const chars = [...String(raw).toUpperCase()]
+    .filter((c) => CODE_ALPHABET.includes(c))
+    .slice(0, 8)
+    .join('')
   return chars.length > 4 ? `${chars.slice(0, 4)}-${chars.slice(4)}` : chars
 }
 

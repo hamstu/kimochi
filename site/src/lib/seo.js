@@ -98,13 +98,49 @@ export const ROUTES = [
     updated: '2026-10-21'
   },
   { path: '/account', title: 'Account · Kimochi', description: 'Your Kimochi account.', index: false, render: 'shell' },
-  { path: '/account/sign-in', title: 'Sign in · Kimochi', description: 'Sign in to your Kimochi account.', index: false, render: 'shell' },
-  { path: '/account/sign-up', title: 'Create an account · Kimochi', description: 'Create a Kimochi account.', index: false, render: 'shell' },
-  { path: '/account/forgot', title: 'Reset password · Kimochi', description: 'Reset your Kimochi password.', index: false, render: 'shell' },
-  { path: '/account/reset', title: 'Choose a new password · Kimochi', description: 'Choose a new Kimochi password.', index: false, render: 'shell' },
-  { path: '/account/verify', title: 'Confirm email · Kimochi', description: 'Confirm your email for Kimochi.', index: false, render: 'shell' },
+  {
+    path: '/account/sign-in',
+    title: 'Sign in · Kimochi',
+    description: 'Sign in to your Kimochi account.',
+    index: false,
+    render: 'shell'
+  },
+  {
+    path: '/account/sign-up',
+    title: 'Create an account · Kimochi',
+    description: 'Create a Kimochi account.',
+    index: false,
+    render: 'shell'
+  },
+  {
+    path: '/account/forgot',
+    title: 'Reset password · Kimochi',
+    description: 'Reset your Kimochi password.',
+    index: false,
+    render: 'shell'
+  },
+  {
+    path: '/account/reset',
+    title: 'Choose a new password · Kimochi',
+    description: 'Choose a new Kimochi password.',
+    index: false,
+    render: 'shell'
+  },
+  {
+    path: '/account/verify',
+    title: 'Confirm email · Kimochi',
+    description: 'Confirm your email for Kimochi.',
+    index: false,
+    render: 'shell'
+  },
   { path: '/account/admin', title: 'Admin · Kimochi', description: 'Kimochi admin.', index: false, render: 'shell' },
-  { path: '/link', title: 'Sign in to Kimochi · Kimochi', description: 'Link the Kimochi app to your account.', index: false, render: 'shell' }
+  {
+    path: '/link',
+    title: 'Sign in to Kimochi · Kimochi',
+    description: 'Link the Kimochi app to your account.',
+    index: false,
+    render: 'shell'
+  }
 ]
 
 /**
@@ -197,10 +233,34 @@ const APP = {
   author: { '@id': PERSON_ID },
   publisher: { '@id': PERSON_ID },
   offers: [
-    { '@type': 'Offer', name: 'Kimochi', price: '0', priceCurrency: PRICE_CURRENCY, description: 'Free forever. No account, no limits.' },
-    { '@type': 'Offer', name: 'Kimochi Cloud (monthly)', price: '6', priceCurrency: PRICE_CURRENCY, description: 'Billed monthly. 14-day free trial.' },
-    { '@type': 'Offer', name: 'Kimochi Cloud (yearly)', price: '60', priceCurrency: PRICE_CURRENCY, description: 'Billed yearly ($5 a month, two months free). 14-day free trial.' },
-    { '@type': 'Offer', name: 'Kimochi Cloud (lifetime)', price: '125', priceCurrency: PRICE_CURRENCY, description: 'One payment.' }
+    {
+      '@type': 'Offer',
+      name: 'Kimochi',
+      price: '0',
+      priceCurrency: PRICE_CURRENCY,
+      description: 'Free forever. No account, no limits.'
+    },
+    {
+      '@type': 'Offer',
+      name: 'Kimochi Cloud (monthly)',
+      price: '6',
+      priceCurrency: PRICE_CURRENCY,
+      description: 'Billed monthly. 14-day free trial.'
+    },
+    {
+      '@type': 'Offer',
+      name: 'Kimochi Cloud (yearly)',
+      price: '60',
+      priceCurrency: PRICE_CURRENCY,
+      description: 'Billed yearly ($5 a month, two months free). 14-day free trial.'
+    },
+    {
+      '@type': 'Offer',
+      name: 'Kimochi Cloud (lifetime)',
+      price: '125',
+      priceCurrency: PRICE_CURRENCY,
+      description: 'One payment.'
+    }
   ],
   downloadUrl: 'https://github.com/hamstu/kimochi/releases/latest',
   sameAs: ['https://github.com/hamstu/kimochi']

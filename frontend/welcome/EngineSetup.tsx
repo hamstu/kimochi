@@ -52,10 +52,7 @@ export default function EngineSetup(): JSX.Element {
   const name = DICTIONARY_ENGINES[target].name
 
   return (
-    <Step
-      title="Choose a pop-up dictionary"
-      lede="Kimochi downloads the one you choose from its official release."
-    >
+    <Step title="Choose a pop-up dictionary" lede="Kimochi downloads the one you choose from its official release.">
       <DictionaryChooser
         active={active}
         chosen={chosen}
@@ -83,19 +80,11 @@ export default function EngineSetup(): JSX.Element {
           Skip for now
         </Button>
         {status?.state === 'absent' ? (
-          <Button
-            variant="primary"
-            disabled={controls.pending !== null}
-            onClick={() => controls.run('download')}
-          >
+          <Button variant="primary" disabled={controls.pending !== null} onClick={() => controls.run('download')}>
             {downloadButtonLabel(status)}
           </Button>
         ) : (
-          <Button
-            variant="primary"
-            disabled={!ready || switching}
-            onClick={() => void navigate(AFTER_ENGINE)}
-          >
+          <Button variant="primary" disabled={!ready || switching} onClick={() => void navigate(AFTER_ENGINE)}>
             {ready && switching ? `Switching to ${name}…` : 'Continue'}
           </Button>
         )}

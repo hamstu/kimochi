@@ -147,9 +147,7 @@ fn keep_unreadable(path: &std::path::Path, bytes: &[u8]) -> Option<PathBuf> {
             }
         }
     }
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
+    let seconds = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let copy = dir.join(format!("{prefix}{seconds}"));
     std::fs::write(&copy, bytes).ok().map(|()| copy)
 }
@@ -213,10 +211,7 @@ impl Settings {
                 }
             }
         }
-        Self {
-            path,
-            doc: Mutex::new(doc),
-        }
+        Self { path, doc: Mutex::new(doc) }
     }
 
     pub fn get(&self, key: &str) -> Result<Option<Value>, String> {
@@ -336,11 +331,7 @@ impl Settings {
 
     /// Typed read with a fallback, for the many call sites that want one field.
     pub fn get_or<T: serde::de::DeserializeOwned>(&self, key: &str, fallback: T) -> T {
-        self.get(key)
-            .ok()
-            .flatten()
-            .and_then(|v| serde_json::from_value(v).ok())
-            .unwrap_or(fallback)
+        self.get(key).ok().flatten().and_then(|v| serde_json::from_value(v).ok()).unwrap_or(fallback)
     }
 
     /// Takes the document by reference so the caller can keep holding the lock.
@@ -352,9 +343,7 @@ impl Settings {
         // Write-then-rename: a crash mid-write leaves the previous file intact. The
         // temp name carries the pid so a second process cannot delete this one's
         // scratch file out from under it mid-rename.
-        let tmp = self
-            .path
-            .with_extension(format!("tmp.{}", std::process::id()));
+        let tmp = self.path.with_extension(format!("tmp.{}", std::process::id()));
         std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
     }
@@ -462,14 +451,8 @@ fn migrate_poc_preferences(doc: &mut Value, legacy: &Value) {
         // The POC held one global crop; the new schema keys it per source descriptor.
         if let Some(crop) = legacy.get("crop").filter(|v| !v.is_null()) {
             let app = source.get("appName").and_then(Value::as_str);
-            let name = source
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let kind = source
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or("window");
+            let name = source.get("name").and_then(Value::as_str).unwrap_or_default();
+            let kind = source.get("type").and_then(Value::as_str).unwrap_or("window");
             let key = crate::state::descriptor_key(kind, name, app);
             doc["cropRegions"][&key] = crop.clone();
             doc["cropScanEnabled"][&key] = json!(true);
@@ -481,9 +464,7 @@ fn migrate_poc_preferences(doc: &mut Value, legacy: &Value) {
 fn segments(key: &str) -> Result<Vec<&str>, String> {
     let parts: Vec<&str> = key.split('.').collect();
     if parts.iter().any(|p| p.is_empty()) {
-        return Err(format!(
-            "invalid: settings key {key:?} has an empty segment"
-        ));
+        return Err(format!("invalid: settings key {key:?} has an empty segment"));
     }
     Ok(parts)
 }
@@ -571,17 +552,9 @@ fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
 /// de-duplicated so two spellings of one chord compare equal.
 pub fn gamepad_chord(definition: &Value) -> Vec<usize> {
     let mut chord: Vec<usize> = match definition.get("gamepadButtons") {
-        Some(Value::Array(buttons)) => buttons
-            .iter()
-            .filter_map(Value::as_u64)
-            .map(|b| b as usize)
-            .collect(),
+        Some(Value::Array(buttons)) => buttons.iter().filter_map(Value::as_u64).map(|b| b as usize).collect(),
         Some(_) => Vec::new(),
-        None => definition
-            .get("gamepadButton")
-            .and_then(Value::as_u64)
-            .map(|b| vec![b as usize])
-            .unwrap_or_default(),
+        None => definition.get("gamepadButton").and_then(Value::as_u64).map(|b| vec![b as usize]).unwrap_or_default(),
     };
     chord.sort_unstable();
     chord.dedup();
@@ -630,10 +603,7 @@ mod tests {
         static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Settings {
-            path: std::env::temp_dir().join(format!(
-                "kimochi-settings-test-{}-{n}.json",
-                std::process::id()
-            )),
+            path: std::env::temp_dir().join(format!("kimochi-settings-test-{}-{n}.json", std::process::id())),
             doc: Mutex::new(defaults()),
         }
     }
@@ -680,10 +650,7 @@ mod tests {
     #[test]
     fn dotted_reads_and_writes_nest() {
         let s = store();
-        assert_eq!(
-            s.get("audioSettings.voiceId").unwrap().unwrap(),
-            "j210dv0vWm7fCknyQpbA"
-        );
+        assert_eq!(s.get("audioSettings.voiceId").unwrap().unwrap(), "j210dv0vWm7fCknyQpbA");
         {
             let mut doc = s.doc.lock().unwrap();
             let mut cursor = &mut *doc;
@@ -702,25 +669,18 @@ mod tests {
     #[test]
     fn map_keys_containing_dots_stay_literal() {
         let s = store();
-        s.set_path(&["cropRegions", "Node.js"], json!({"x": 1}))
-            .unwrap();
+        s.set_path(&["cropRegions", "Node.js"], json!({"x": 1})).unwrap();
         let regions = s.get("cropRegions").unwrap().unwrap();
         // One literal entry, not a nested {"Node": {"js": ...}} object.
         assert!(regions.get("Node.js").is_some());
         assert!(regions.get("Node").is_none());
-        assert_eq!(
-            s.get_path(&["cropRegions", "Node.js", "x"])
-                .unwrap()
-                .unwrap(),
-            1
-        );
+        assert_eq!(s.get_path(&["cropRegions", "Node.js", "x"]).unwrap().unwrap(), 1);
     }
 
     #[test]
     fn null_removes_a_map_entry() {
         let s = store();
-        s.set_path(&["cropRegions", "Safari"], json!({"x": 1}))
-            .unwrap();
+        s.set_path(&["cropRegions", "Safari"], json!({"x": 1})).unwrap();
         s.set_path(&["cropRegions", "Safari"], Value::Null).unwrap();
         let regions = s.get("cropRegions").unwrap().unwrap();
         assert!(regions.get("Safari").is_none());
@@ -735,10 +695,7 @@ mod tests {
             (&["lastSelectedSource"], json!({"name": "Safari"})),
         ])
         .unwrap();
-        assert_eq!(
-            s.get_path(&["cropScanEnabled", "Safari"]).unwrap().unwrap(),
-            true
-        );
+        assert_eq!(s.get_path(&["cropScanEnabled", "Safari"]).unwrap().unwrap(), true);
         assert_eq!(s.get("lastSelectedSource.name").unwrap().unwrap(), "Safari");
     }
 
@@ -783,16 +740,13 @@ mod tests {
 
         // An inherited built-in default must not pin the app to cloud, including the retired
         // `/detect-text` form older settings files stored.
-        s.set("endpoint", json!(format!("{CLOUD_SERVER}/api/v1/ocr")))
-            .unwrap();
+        s.set("endpoint", json!(format!("{CLOUD_SERVER}/api/v1/ocr"))).unwrap();
         assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/api/v1/ocr"));
-        s.set("endpoint", json!(format!("{CLOUD_SERVER}/detect-text")))
-            .unwrap();
+        s.set("endpoint", json!(format!("{CLOUD_SERVER}/detect-text"))).unwrap();
         assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/api/v1/ocr"));
 
         // A real custom endpoint wins over the mode.
-        s.set("endpoint", json!("https://ocr.example.test/detect-text"))
-            .unwrap();
+        s.set("endpoint", json!("https://ocr.example.test/detect-text")).unwrap();
         assert_eq!(resolve_endpoint(&s), "https://ocr.example.test/detect-text");
         assert!(!is_builtin_endpoint(&resolve_endpoint(&s)));
 
@@ -821,10 +775,7 @@ mod tests {
     #[test]
     fn stored_values_win_over_defaults_but_new_defaults_survive() {
         let mut doc = defaults();
-        merge(
-            &mut doc,
-            json!({"overlayOpacity": 40, "autoOCRSettings": {"pollInterval": 9}}),
-        );
+        merge(&mut doc, json!({"overlayOpacity": 40, "autoOCRSettings": {"pollInterval": 9}}));
         assert_eq!(doc["overlayOpacity"], 40);
         assert_eq!(doc["autoOCRSettings"]["pollInterval"], 9);
         // Untouched sibling default must still be present after a partial merge.
@@ -858,7 +809,10 @@ mod tests {
         let defaults = default_hotkeys_for(false);
         let (scan, menu) = (&defaults["triggerScan"]["accelerator"], &defaults["openControllerMenu"]["accelerator"]);
         if cfg!(target_os = "macos") {
-            assert_eq!((scan.as_str(), menu.as_str()), (Some("CommandOrControl+Shift+8"), Some("CommandOrControl+Shift+Space")));
+            assert_eq!(
+                (scan.as_str(), menu.as_str()),
+                (Some("CommandOrControl+Shift+8"), Some("CommandOrControl+Shift+Space"))
+            );
         } else {
             assert_eq!((scan.as_str(), menu.as_str()), (Some("Shift+F8"), Some("Shift+F9")));
         }
@@ -867,25 +821,20 @@ mod tests {
     #[test]
     fn hotkey_overrides_apply_per_field() {
         let s = store();
-        s.doc.lock().unwrap()["hotkeys"] =
-            json!({"triggerScan": {"accelerator": "Alt+1", "enabled": false}});
+        s.doc.lock().unwrap()["hotkeys"] = json!({"triggerScan": {"accelerator": "Alt+1", "enabled": false}});
         let merged = merged_hotkeys(&s);
         assert_eq!(merged["triggerScan"]["accelerator"], "Alt+1");
         assert_eq!(merged["triggerScan"]["enabled"], false);
         // Description comes from the default, not the override.
         assert_eq!(merged["triggerScan"]["name"], "Scan");
         assert_eq!(merged["openControllerMenu"]["accelerator"], DEFAULT_KEYS.1);
-        assert_eq!(
-            merged["openControllerMenu"]["gamepadButtons"],
-            json!([10, 11])
-        );
+        assert_eq!(merged["openControllerMenu"]["gamepadButtons"], json!([10, 11]));
     }
 
     #[test]
     fn retired_actions_are_no_longer_bindable() {
         let s = store();
-        s.doc.lock().unwrap()["hotkeys"] =
-            json!({"playAudio": {"accelerator": "Alt+7", "gamepadButton": 2}});
+        s.doc.lock().unwrap()["hotkeys"] = json!({"playAudio": {"accelerator": "Alt+7", "gamepadButton": 2}});
         let merged = merged_hotkeys(&s);
         let names: Vec<&String> = merged.keys().collect();
         assert_eq!(names, ["openControllerMenu", "triggerScan"]);
@@ -901,10 +850,7 @@ mod tests {
         let merged = merged_hotkeys(&s);
         assert_eq!(merged["triggerScan"]["gamepadButtons"], json!([3]));
         assert!(merged["triggerScan"].get("gamepadButton").is_none());
-        assert_eq!(
-            merged["openControllerMenu"]["gamepadButtons"],
-            json!([8, 9])
-        );
+        assert_eq!(merged["openControllerMenu"]["gamepadButtons"], json!([8, 9]));
 
         // The chord wins over a stale single button, and empty or null clears the default.
         for cleared in [json!([]), Value::Null] {
@@ -916,9 +862,6 @@ mod tests {
         }
         s.doc.lock().unwrap()["hotkeys"] = json!({"openControllerMenu": {"accelerator": "Alt+M"}});
         let merged = merged_hotkeys(&s);
-        assert_eq!(
-            merged["openControllerMenu"]["gamepadButtons"],
-            json!([10, 11])
-        );
+        assert_eq!(merged["openControllerMenu"]["gamepadButtons"], json!([10, 11]));
     }
 }

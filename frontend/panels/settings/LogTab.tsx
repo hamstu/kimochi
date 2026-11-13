@@ -6,15 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
-import {
-  Button,
-  Select,
-  SettingsPage,
-  SettingsRow,
-  SettingsSection,
-  SettingsSubgroup,
-  Switch
-} from '@kit'
+import { Button, Select, SettingsPage, SettingsRow, SettingsSection, SettingsSubgroup, Switch } from '@kit'
 import { ReplacementsEditor } from '@texthooker/components/ReplacementsEditor'
 import { SessionList } from '@texthooker/components/SessionList'
 import { createSession, getManifest, subscribeSessions } from '@texthooker/lib/sessions'
@@ -60,11 +52,7 @@ export function LogTab(): ReactNode {
         {(settings) => (
           <div className="texthooker">
             <SettingsSection title="Reading">
-              <SettingsRow
-                label="Text size"
-                controlId="log-font-size"
-                description="In pixels, 12 to 48."
-              >
+              <SettingsRow label="Text size" controlId="log-font-size" description="In pixels, 12 to 48.">
                 <NumberField
                   id="log-font-size"
                   value={settings.fontSizePx}
@@ -242,11 +230,7 @@ function SessionsSection(): ReactNode {
       }
       footnote={error ?? undefined}
     >
-      <SessionList
-        activeId={manifest.activeId}
-        sessions={manifest.sessions}
-        className="settings-sessions"
-      />
+      <SessionList activeId={manifest.activeId} sessions={manifest.sessions} className="settings-sessions" />
     </SettingsSection>
   )
 }

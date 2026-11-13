@@ -6,7 +6,18 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Check, Copy, ExternalLink, FolderOpen } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
-import { Badge, Button, Callout, IconButton, SettingsPage, SettingsRow, SettingsSection, StatusDot, Switch, Tooltip } from '@kit'
+import {
+  Badge,
+  Button,
+  Callout,
+  IconButton,
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+  StatusDot,
+  Switch,
+  Tooltip
+} from '@kit'
 import { useSetting } from '../../bridge/useSetting'
 import { browserExtensionFolder, useBrowserBridge } from '../../bridge/browserBridge'
 import { writeTextSelf } from '@texthooker/lib/clipboardWrite'
@@ -42,7 +53,12 @@ function CopyValue({ value, label }: { value: string; label: string }): ReactNod
         label={copied ? 'Copied' : `Copy ${label}`}
         size="sm"
         variant="ghost"
-        onClick={() => void writeTextSelf(value).then(() => setCopied(true), () => undefined)}
+        onClick={() =>
+          void writeTextSelf(value).then(
+            () => setCopied(true),
+            () => undefined
+          )
+        }
       >
         {copied ? <Check /> : <Copy />}
       </IconButton>
@@ -86,7 +102,10 @@ export function BrowserTab(): ReactNode {
     : status.error
       ? { tone: 'danger' as const, text: status.error }
       : connected
-        ? { tone: 'ok' as const, text: `Connected: ${[...new Set(status.browsers ?? [])].join(', ') || 'your browser'}` }
+        ? {
+            tone: 'ok' as const,
+            text: `Connected: ${[...new Set(status.browsers ?? [])].join(', ') || 'your browser'}`
+          }
         : { tone: 'neutral' as const, text: 'Waiting for the extension' }
 
   return (
@@ -110,12 +129,17 @@ export function BrowserTab(): ReactNode {
         <Callout tone="warn" className="browser-needs">
           <p className="browser-needs-title">Your browser needs its own pop-up dictionary</p>
           <p className="browser-needs-text">
-            The extension turns pictures into text on the page, and a dictionary extension in your browser looks the words
-            up. Any of these works:
+            The extension turns pictures into text on the page, and a dictionary extension in your browser looks the
+            words up. Any of these works:
           </p>
           <span className="browser-needs-links">
             {DICTIONARIES.map((dictionary) => (
-              <button key={dictionary.name} type="button" className="browser-needs-link" onClick={() => visit(dictionary.url)}>
+              <button
+                key={dictionary.name}
+                type="button"
+                className="browser-needs-link"
+                onClick={() => visit(dictionary.url)}
+              >
                 {dictionary.name}
                 <ExternalLink aria-hidden />
               </button>
@@ -130,7 +154,11 @@ export function BrowserTab(): ReactNode {
           controlId="browser-extension-enabled"
           description="Lets the extension send Kimochi the pictures you pick."
         >
-          <Switch id="browser-extension-enabled" checked={enabled} onCheckedChange={(value) => void setEnabled(value)} />
+          <Switch
+            id="browser-extension-enabled"
+            checked={enabled}
+            onCheckedChange={(value) => void setEnabled(value)}
+          />
         </SettingsRow>
         {enabled ? (
           <SettingsRow label="Status">
@@ -178,11 +206,15 @@ export function BrowserTab(): ReactNode {
       >
         <ol className="browser-steps k-settings-group">
           <Step n={1} title="Open your browser's extensions page">
-            <span className="browser-step-detail">Paste this into the address bar (Edge: edge://extensions, Brave: brave://extensions).</span>
+            <span className="browser-step-detail">
+              Paste this into the address bar (Edge: edge://extensions, Brave: brave://extensions).
+            </span>
             <CopyValue value="chrome://extensions" label="address" />
           </Step>
           <Step n={2} title="Turn on Developer mode">
-            <span className="browser-step-detail">The switch at the top right of the page (in Edge, in the left sidebar).</span>
+            <span className="browser-step-detail">
+              The switch at the top right of the page (in Edge, in the left sidebar).
+            </span>
           </Step>
           <Step n={3} title="Click Load unpacked and choose this folder">
             {folder ? (
@@ -204,8 +236,7 @@ export function BrowserTab(): ReactNode {
           </Step>
           <Step n={4} title="Pin Kimochi and try it">
             <span className="browser-step-detail">
-              Pin it from the puzzle-piece menu, then click it (or press Alt+K) and click a picture with Japanese in
-              it.
+              Pin it from the puzzle-piece menu, then click it (or press Alt+K) and click a picture with Japanese in it.
             </span>
           </Step>
         </ol>

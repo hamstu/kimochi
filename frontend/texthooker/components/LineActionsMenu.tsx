@@ -1,7 +1,7 @@
-import { AudioPlayer } from "../../components/AudioPlayer";
-import { useCapabilities } from "../../bridge/capabilities";
-import { useLanguage } from "../../bridge/useLanguage";
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { AudioPlayer } from '../../components/AudioPlayer'
+import { useCapabilities } from '../../bridge/capabilities'
+import { useLanguage } from '../../bridge/useLanguage'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import {
   BookPlus,
   Copy,
@@ -12,8 +12,8 @@ import {
   Sparkles,
   TextSelect,
   Trash2,
-  Undo2,
-} from "lucide-react";
+  Undo2
+} from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -22,31 +22,31 @@ import {
   MenuContent,
   MenuItem,
   MenuSeparator,
-  MenuTrigger,
-} from "@kit";
-import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
-import { deleteLine, setLineText } from "@texthooker/lib/store";
-import { editLineAfterMenu, openEditAfterMenu } from "@texthooker/lib/lineEdit";
-import { closeAutoFocusFromKeyboardOnly } from "../../kit/focus";
-import { openExplain } from "@texthooker/lib/explain";
-import { getSettings } from "@texthooker/lib/settings";
-import { showOriginal, showTranslation } from "@texthooker/lib/translate";
-import { isNote, type Line } from "@texthooker/lib/types";
+  MenuTrigger
+} from '@kit'
+import { writeTextSelf } from '@texthooker/lib/clipboardWrite'
+import { deleteLine, setLineText } from '@texthooker/lib/store'
+import { editLineAfterMenu, openEditAfterMenu } from '@texthooker/lib/lineEdit'
+import { closeAutoFocusFromKeyboardOnly } from '../../kit/focus'
+import { openExplain } from '@texthooker/lib/explain'
+import { getSettings } from '@texthooker/lib/settings'
+import { showOriginal, showTranslation } from '@texthooker/lib/translate'
+import { isNote, type Line } from '@texthooker/lib/types'
 
 const copy = async (text: string) => {
   try {
-    await writeTextSelf(text);
+    await writeTextSelf(text)
   } catch (err) {
-    console.warn("copy failed", err);
+    console.warn('copy failed', err)
   }
-};
+}
 
-const MENU_SELECTION = "kimochi-menu-selection";
+const MENU_SELECTION = 'kimochi-menu-selection'
 
 /** Where focus goes as a line menu closes: into the editor when Edit line was chosen. */
 const closeFocus = (event: Event) => {
-  if (!openEditAfterMenu(event)) closeAutoFocusFromKeyboardOnly(event);
-};
+  if (!openEditAfterMenu(event)) closeAutoFocusFromKeyboardOnly(event)
+}
 
 /**
  * Draws `ranges` as the selection while the line menu is open (`::highlight` in log.css): hovering
@@ -55,42 +55,42 @@ const closeFocus = (event: Event) => {
  * real selection is put back as it goes instead. None clears it.
  */
 function showKept(ranges: readonly Range[]): () => void {
-  const registry = (globalThis.CSS as { highlights?: Map<string, unknown> } | undefined)?.highlights;
-  const HighlightType = (globalThis as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
-  if (ranges.length === 0) return () => {};
+  const registry = (globalThis.CSS as { highlights?: Map<string, unknown> } | undefined)?.highlights
+  const HighlightType = (globalThis as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight
+  if (ranges.length === 0) return () => {}
   if (registry && HighlightType) {
-    registry.set(MENU_SELECTION, new HighlightType(...ranges));
+    registry.set(MENU_SELECTION, new HighlightType(...ranges))
     // The highlight stands in for the selection (both drawn would double its tint); the menu's
     // close puts the selection back.
-    window.getSelection()?.removeAllRanges();
-    return () => registry.delete(MENU_SELECTION);
+    window.getSelection()?.removeAllRanges()
+    return () => registry.delete(MENU_SELECTION)
   }
   const keep = () => {
-    const selection = window.getSelection();
-    if (selection?.isCollapsed) restore(ranges);
-  };
-  document.addEventListener("selectionchange", keep);
-  return () => document.removeEventListener("selectionchange", keep);
+    const selection = window.getSelection()
+    if (selection?.isCollapsed) restore(ranges)
+  }
+  document.addEventListener('selectionchange', keep)
+  return () => document.removeEventListener('selectionchange', keep)
 }
 
 /** Makes `ranges` the selection; none clears it. */
 function restore(ranges: readonly Range[]): void {
-  const selection = window.getSelection();
-  if (!selection) return;
+  const selection = window.getSelection()
+  if (!selection) return
   const same =
     selection.rangeCount === ranges.length &&
     ranges.every((r, i) => {
-      const now = selection.getRangeAt(i);
+      const now = selection.getRangeAt(i)
       return (
         now.startContainer === r.startContainer &&
         now.startOffset === r.startOffset &&
         now.endContainer === r.endContainer &&
         now.endOffset === r.endOffset
-      );
-    });
-  if (same) return;
-  selection.removeAllRanges();
-  for (const range of ranges) selection.addRange(range);
+      )
+    })
+  if (same) return
+  selection.removeAllRanges()
+  for (const range of ranges) selection.addRange(range)
 }
 
 /**
@@ -102,30 +102,30 @@ function LineMenuItems({
   line,
   translateEnabled,
   selection,
-  onAddToNotebook,
+  onAddToNotebook
 }: {
-  line: Line;
-  translateEnabled: boolean;
-  selection?: string;
-  onAddToNotebook?: (text: string) => void;
+  line: Line
+  translateEnabled: boolean
+  selection?: string
+  onAddToNotebook?: (text: string) => void
 }) {
-  const audioSlot = useRef<HTMLSpanElement>(null);
+  const audioSlot = useRef<HTMLSpanElement>(null)
   // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account.
-  const { cloudAccess } = useCapabilities();
+  const { cloudAccess } = useCapabilities()
   // The voices are Japanese, so read aloud is for Japanese only for now.
-  const [language] = useLanguage();
-  const isTranslated = Boolean(line.showTranslation && line.translation);
-  const displayText = isTranslated ? line.translation! : line.text;
+  const [language] = useLanguage()
+  const isTranslated = Boolean(line.showTranslation && line.translation)
+  const displayText = isTranslated ? line.translation! : line.text
   // A note is the person's own: copied, edited and deleted, not read aloud, translated or
   // explained.
-  const note = isNote(line);
+  const note = isNote(line)
 
   return (
     <>
       {/* Read aloud: the row activates the shared AudioPlayer button, which keeps its own
           playing state and error tooltip. The menu stays open while it plays. Only when signed in
           to a Kimochi account (Kimochi cloud access). */}
-      {cloudAccess && language.code === "ja" && !note && (
+      {cloudAccess && language.code === 'ja' && !note && (
         <MenuItem
           icon={
             <span
@@ -139,8 +139,8 @@ function LineMenuItems({
           }
           shortcut="r"
           onSelect={(e) => {
-            e.preventDefault();
-            audioSlot.current?.querySelector("button")?.click();
+            e.preventDefault()
+            audioSlot.current?.querySelector('button')?.click()
           }}
         >
           Read aloud
@@ -152,88 +152,51 @@ function LineMenuItems({
         </MenuItem>
       ) : null}
       {selection && onAddToNotebook ? (
-        <MenuItem
-          icon={<BookPlus />}
-          onSelect={() => onAddToNotebook(selection)}
-        >
+        <MenuItem icon={<BookPlus />} onSelect={() => onAddToNotebook(selection)}>
           Add to notebook…
         </MenuItem>
       ) : null}
-      <MenuItem
-        icon={<Copy />}
-        shortcut="c"
-        onSelect={() => void copy(displayText)}
-      >
-        Copy {selection ? "line" : "text"}
+      <MenuItem icon={<Copy />} shortcut="c" onSelect={() => void copy(displayText)}>
+        Copy {selection ? 'line' : 'text'}
       </MenuItem>
       {note ? null : isTranslated ? (
-        <MenuItem
-          icon={<Undo2 />}
-          shortcut="t"
-          onSelect={() => showOriginal(line.id)}
-        >
+        <MenuItem icon={<Undo2 />} shortcut="t" onSelect={() => showOriginal(line.id)}>
           Show original
         </MenuItem>
       ) : translateEnabled ? (
         // Fire and forget: the row shows the interim "translating…" state (and any failure
         // note), matching the T hotkey.
-        <MenuItem
-          icon={<Languages />}
-          shortcut="t"
-          onSelect={() => void showTranslation(line)}
-        >
+        <MenuItem icon={<Languages />} shortcut="t" onSelect={() => void showTranslation(line)}>
           Translate
         </MenuItem>
       ) : null}
       {/* Explanations from Kimochi cloud need Kimochi Cloud; the CLI providers always work. */}
-      {!note && (cloudAccess || getSettings().explainProvider !== "kimochi") && (
-        <MenuItem
-          icon={<Sparkles />}
-          shortcut="x"
-          onSelect={() => openExplain(line)}
-        >
+      {!note && (cloudAccess || getSettings().explainProvider !== 'kimochi') && (
+        <MenuItem icon={<Sparkles />} shortcut="x" onSelect={() => openExplain(line)}>
           Explain
         </MenuItem>
       )}
       {/* Corrects the text (a misread が/か); what was recorded is kept (`originalText`). The
           editor opens once the menu has let go of focus (`closeFocus`). */}
-      <MenuItem
-        icon={<Pencil />}
-        shortcut="e"
-        onSelect={() => editLineAfterMenu(line.id)}
-      >
-        {note ? "Edit note" : "Edit line"}
+      <MenuItem icon={<Pencil />} shortcut="e" onSelect={() => editLineAfterMenu(line.id)}>
+        {note ? 'Edit note' : 'Edit line'}
       </MenuItem>
       {line.originalText !== undefined ? (
-        <MenuItem
-          icon={<RotateCcw />}
-          onSelect={() => void setLineText(line.id, line.originalText!)}
-        >
+        <MenuItem icon={<RotateCcw />} onSelect={() => void setLineText(line.id, line.originalText!)}>
           Restore original
         </MenuItem>
       ) : null}
       <MenuSeparator />
-      <MenuItem
-        icon={<Trash2 />}
-        tone="danger"
-        shortcut="d"
-        onSelect={() => deleteLine(line.id)}
-      >
-        {note ? "Delete note" : "Delete line"}
+      <MenuItem icon={<Trash2 />} tone="danger" shortcut="d" onSelect={() => deleteLine(line.id)}>
+        {note ? 'Delete note' : 'Delete line'}
       </MenuItem>
     </>
-  );
+  )
 }
 
 /** The ⋯ button at the end of a line, shown on hover. */
-export function LineActionsMenu({
-  line,
-  translateEnabled,
-}: {
-  line: Line;
-  translateEnabled: boolean;
-}) {
-  const [open, setOpen] = useState(false);
+export function LineActionsMenu({ line, translateEnabled }: { line: Line; translateEnabled: boolean }) {
+  const [open, setOpen] = useState(false)
   return (
     <span className="line-actions">
       <Menu open={open} onOpenChange={setOpen}>
@@ -254,7 +217,7 @@ export function LineActionsMenu({
         </MenuContent>
       </Menu>
     </span>
-  );
+  )
 }
 
 /**
@@ -266,96 +229,86 @@ export function LineContextMenu({
   lines,
   translateEnabled,
   onAddToNotebook,
-  children,
+  children
 }: {
-  lines: readonly Line[];
-  translateEnabled: boolean;
+  lines: readonly Line[]
+  translateEnabled: boolean
   /** Offered for selected text, as the selection's own button does. */
-  onAddToNotebook: (text: string) => void;
-  children: ReactNode;
+  onAddToNotebook: (text: string) => void
+  children: ReactNode
 }) {
   const [target, setTarget] = useState<{
-    id: Line["id"];
-    selection: string;
-  } | null>(null);
+    id: Line['id']
+    selection: string
+  } | null>(null)
   // The row the menu is for, lit as a hovered row is while its menu is open.
-  const row = useRef<HTMLElement | null>(null);
-  const line = target ? lines.find((l) => l.id === target.id) : undefined;
+  const row = useRef<HTMLElement | null>(null)
+  const line = target ? lines.find((l) => l.id === target.id) : undefined
   // The selection when the right button went down. WebKit selects the word under the pointer on
   // a right-click (replacing the user's selection) before `contextmenu`, so the selection then is
   // not one the user made: theirs is put back, and a word the click selected is let go.
-  const before = useRef<{ at: number; text: string; ranges: Range[] } | null>(null);
+  const before = useRef<{ at: number; text: string; ranges: Range[] } | null>(null)
   // The user's selection while the menu is open, kept through the menu taking focus, and how to
   // stop drawing it.
-  const kept = useRef<Range[]>([]);
-  const stopShowing = useRef<() => void>(() => {});
+  const kept = useRef<Range[]>([])
+  const stopShowing = useRef<() => void>(() => {})
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 2) return;
-      const selected = window.getSelection();
-      const some = selected && !selected.isCollapsed;
+      if (event.button !== 2) return
+      const selected = window.getSelection()
+      const some = selected && !selected.isCollapsed
       before.current = {
         at: event.timeStamp,
-        text: some ? selected.toString().trim() : "",
-        ranges: some
-          ? Array.from({ length: selected.rangeCount }, (_, i) => selected.getRangeAt(i).cloneRange())
-          : [],
-      };
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    return () => window.removeEventListener("pointerdown", onPointerDown, true);
-  }, []);
+        text: some ? selected.toString().trim() : '',
+        ranges: some ? Array.from({ length: selected.rangeCount }, (_, i) => selected.getRangeAt(i).cloneRange()) : []
+      }
+    }
+    window.addEventListener('pointerdown', onPointerDown, true)
+    return () => window.removeEventListener('pointerdown', onPointerDown, true)
+  }, [])
 
   const onContextMenu = (event: MouseEvent) => {
-    const rowElement = (event.target as Element).closest<HTMLElement>(
-      "[data-line-id]",
-    );
-    const id = rowElement?.dataset.lineId;
-    const found = id ? lines.find((l) => String(l.id) === id) : undefined;
+    const rowElement = (event.target as Element).closest<HTMLElement>('[data-line-id]')
+    const id = rowElement?.dataset.lineId
+    const found = id ? lines.find((l) => String(l.id) === id) : undefined
     if (!found) {
       // Nothing to act on: no menu at all, the system's included.
-      event.preventDefault();
-      return;
+      event.preventDefault()
+      return
     }
-    const selected = window.getSelection();
-    const inLog =
-      selected &&
-      !selected.isCollapsed &&
-      rowElement?.closest(".log-lines")?.contains(selected.anchorNode);
+    const selected = window.getSelection()
+    const inLog = selected && !selected.isCollapsed && rowElement?.closest('.log-lines')?.contains(selected.anchorNode)
     // A right-click's own pointerdown says what was selected before it (a menu key has none).
-    const pressed =
-      before.current && event.timeStamp - before.current.at < 1000
-        ? before.current
-        : null;
-    let text = inLog ? selected.toString().trim() : "";
-    kept.current = [];
+    const pressed = before.current && event.timeStamp - before.current.at < 1000 ? before.current : null
+    let text = inLog ? selected.toString().trim() : ''
+    kept.current = []
     if (pressed) {
       const inLogBefore = pressed.ranges.some((r) =>
-        rowElement?.closest(".log-lines")?.contains(r.commonAncestorContainer),
-      );
-      text = inLogBefore ? pressed.text : "";
-      kept.current = inLogBefore ? pressed.ranges : [];
-      restore(kept.current);
-      stopShowing.current();
-      stopShowing.current = showKept(kept.current);
+        rowElement?.closest('.log-lines')?.contains(r.commonAncestorContainer)
+      )
+      text = inLogBefore ? pressed.text : ''
+      kept.current = inLogBefore ? pressed.ranges : []
+      restore(kept.current)
+      stopShowing.current()
+      stopShowing.current = showKept(kept.current)
     }
-    row.current?.removeAttribute("data-menu-open");
-    row.current = rowElement;
-    rowElement?.setAttribute("data-menu-open", "");
-    setTarget({ id: found.id, selection: text });
-  };
+    row.current?.removeAttribute('data-menu-open')
+    row.current = rowElement
+    rowElement?.setAttribute('data-menu-open', '')
+    setTarget({ id: found.id, selection: text })
+  }
 
   return (
     <ContextMenu
       onOpenChange={(open) => {
-        if (open) return;
-        stopShowing.current();
-        stopShowing.current = () => {};
-        restore(kept.current);
-        kept.current = [];
-        row.current?.removeAttribute("data-menu-open");
-        row.current = null;
-        setTarget(null);
+        if (open) return
+        stopShowing.current()
+        stopShowing.current = () => {}
+        restore(kept.current)
+        kept.current = []
+        row.current?.removeAttribute('data-menu-open')
+        row.current = null
+        setTarget(null)
       }}
     >
       <ContextMenuTrigger asChild onContextMenu={onContextMenu}>
@@ -372,5 +325,5 @@ export function LineContextMenu({
         ) : null}
       </MenuContent>
     </ContextMenu>
-  );
+  )
 }

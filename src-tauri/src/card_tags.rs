@@ -67,8 +67,11 @@ pub fn after_relay(app: &AppHandle, url: &str, request: &Value, reply_status: u1
 /// `super-texthooker` (the old default) now `kimochi`, then the session's name.
 pub fn migrated(reader: &Value) -> Option<Value> {
     let old: Vec<&str> = reader.get("ankiTags")?.as_array()?.iter().filter_map(Value::as_str).collect();
-    let mut parts: Vec<&str> =
-        old.iter().map(|t| if *t == "super-texthooker" { "kimochi" } else { t }).filter(|t| !t.trim().is_empty()).collect();
+    let mut parts: Vec<&str> = old
+        .iter()
+        .map(|t| if *t == "super-texthooker" { "kimochi" } else { t })
+        .filter(|t| !t.trim().is_empty())
+        .collect();
     parts.push(SESSION_NAME);
     let joined = tags(&parts.join(", "), Some(SESSION_NAME)).join(", ");
     Some(json!({ "enabled": true, "tags": joined }))

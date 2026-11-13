@@ -42,7 +42,15 @@ const BAR_EXIT_MS = 400
  * mounted for one exit transition, full and green, then collapses, rather than vanishing on the
  * same frame the last byte lands.
  */
-function ModelProgress({ status, noun, line: wording }: { status: DownloadStatus; noun: string; line?: string }): ReactNode {
+function ModelProgress({
+  status,
+  noun,
+  line: wording
+}: {
+  status: DownloadStatus
+  noun: string
+  line?: string
+}): ReactNode {
   const value = barPercent(status)
   const line = wording ?? statusLine(status)
   const active = showsBar(status)
@@ -123,9 +131,7 @@ export function ModelDownload({
               <Button
                 key={action}
                 size="sm"
-                variant={
-                  emphasis && action !== 'cancel' && action !== 'pause' ? 'primary' : 'secondary'
-                }
+                variant={emphasis && action !== 'cancel' && action !== 'pause' ? 'primary' : 'secondary'}
                 disabled={pending !== null}
                 onClick={() => run(action)}
               >
@@ -160,11 +166,7 @@ export function RemoveModelDialog({
       open={open && shown !== null}
       onOpenChange={onOpenChange}
       title={shown ? `Remove the ${shown.name} model?` : ''}
-      description={
-        shown
-          ? `This frees ${formatBytes(shown.overallTotal)}.`
-          : undefined
-      }
+      description={shown ? `This frees ${formatBytes(shown.overallTotal)}.` : undefined}
       confirmLabel="Remove"
       tone="danger"
       onConfirm={() => {

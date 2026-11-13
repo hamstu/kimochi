@@ -13,10 +13,7 @@ const { wordAtStart } = await import('data:text/javascript;base64,' + Buffer.fro
 const parse = (...entries) => [{ content: entries.map((entry) => [entry]) }]
 
 test('the word at the start of the window, widened to its inflected form', () => {
-  const chunks = parse(
-    { text: '書き', headwords: [[{ sources: [{ originalText: '書き込み' }] }]] },
-    { text: 'を' }
-  )
+  const chunks = parse({ text: '書き', headwords: [[{ sources: [{ originalText: '書き込み' }] }]] }, { text: 'を' })
   assert.equal(wordAtStart(chunks, '書き込みを見た'), '書き込み')
 })
 

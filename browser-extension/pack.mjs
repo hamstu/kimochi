@@ -18,7 +18,8 @@ const stage = join(dist, 'stage')
 
 const manifest = JSON.parse(readFileSync(join(source, 'manifest.json'), 'utf8'))
 delete manifest.key
-if (manifest.description.length > 132) throw new Error(`description is ${manifest.description.length} characters; the stores allow 132`)
+if (manifest.description.length > 132)
+  throw new Error(`description is ${manifest.description.length} characters; the stores allow 132`)
 
 rmSync(stage, { recursive: true, force: true })
 mkdirSync(stage, { recursive: true })

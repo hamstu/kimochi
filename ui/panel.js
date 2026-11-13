@@ -73,8 +73,7 @@ if ($('pin')) {
     $('pin').textContent = prefs[key] ? 'Pinned' : 'Pin'
   })
 }
-for (const name of ['sources', 'log'])
-  on(name, () => invoke('panel', { label: name, action: 'show', rect: null }))
+for (const name of ['sources', 'log']) on(name, () => invoke('panel', { label: name, action: 'show', rect: null }))
 on('dictionary', () => invoke('dictionary', { open: true }))
 on('clear', () => invoke('clear'))
 async function refresh() {
@@ -188,8 +187,7 @@ on('save-endpoint', async () => {
   await save()
   status('OCR endpoint saved.')
 })
-if ($('debug'))
-  $('debug').onchange = () => localStorage.setItem('debug', String($('debug').checked))
+if ($('debug')) $('debug').onchange = () => localStorage.setItem('debug', String($('debug').checked))
 setInterval(() => {
   if ($('periodic')?.checked && !busy) void run(() => shot(true))
 }, 2000)

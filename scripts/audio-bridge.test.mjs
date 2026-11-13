@@ -41,7 +41,10 @@ test('same-origin files and non-read methods keep the page fetch', async () => {
   await fetch('/data/schemas/custom-audio-list-schema.json')
   await fetch('http://127.0.0.1:8765', { method: 'POST', body: '{}' })
   assert.equal(nativeCalls.length, before)
-  assert.deepEqual(pageCalls.slice(-2).map(([, method]) => method), ['GET', 'POST'])
+  assert.deepEqual(
+    pageCalls.slice(-2).map(([, method]) => method),
+    ['GET', 'POST']
+  )
 })
 
 test('a native failure rejects like a network error, and is reported once', async () => {
@@ -52,10 +55,9 @@ test('a native failure rejects like a network error, and is reported once', asyn
 
 test('an already-aborted request never leaves', async () => {
   const before = nativeCalls.length
-  await assert.rejects(
-    () => fetch('https://example.com/a.mp3', { signal: AbortSignal.abort() }),
-    { name: 'AbortError' }
-  )
+  await assert.rejects(() => fetch('https://example.com/a.mp3', { signal: AbortSignal.abort() }), {
+    name: 'AbortError'
+  })
   assert.equal(nativeCalls.length, before)
 })
 

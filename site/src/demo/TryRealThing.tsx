@@ -42,7 +42,12 @@ export function TryRealThing({
         className={`kd-try flex w-full max-w-[22rem] flex-col overflow-hidden bg-raised ${WINDOW_SHAPE[platform]}`}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <TitleBar platform={platform} title="Kimochi" icon={<img src="/icon.svg" alt="" className="size-3.5" />} onClose={onClose} />
+        <TitleBar
+          platform={platform}
+          title="Kimochi"
+          icon={<img src="/icon.svg" alt="" className="size-3.5" />}
+          onClose={onClose}
+        />
         <div className="flex flex-col items-center gap-3 px-6 pt-6 pb-5 text-center">
           <img src="/icon.svg" alt="" className="size-12" />
           <h3 id="kd-try-title" className="text-[1.0625rem] font-semibold text-ink">
@@ -52,7 +57,11 @@ export function TryRealThing({
             {feature} isn’t in this preview, but it’s all in the app. Free, for macOS, Windows and Linux.
           </p>
           <div className="mt-2 flex items-center gap-2">
-            <button type="button" onClick={onClose} className="kd-try-later rounded-lg px-3.5 py-2 text-small font-medium">
+            <button
+              type="button"
+              onClick={onClose}
+              className="kd-try-later rounded-lg px-3.5 py-2 text-small font-medium"
+            >
               Keep playing
             </button>
             <button

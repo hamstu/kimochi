@@ -208,7 +208,10 @@ mod tests {
     #[test]
     fn full_screen_scaling_fills_the_display_its_surface_covers() {
         let s = full_screen();
-        let displays = [Rect { x: -1920., y: 0., width: 1920., height: 1080. }, Rect { x: 0., y: 0., width: 6880., height: 2880. }];
+        let displays = [
+            Rect { x: -1920., y: 0., width: 1920., height: 1080. },
+            Rect { x: 0., y: 0., width: 6880., height: 2880. },
+        ];
         assert!(s.fills(&displays).is_some_and(|d| same(d, displays[1])));
         assert!(Scaling { windowed: true, ..s }.fills(&displays).is_none());
     }

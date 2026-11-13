@@ -40,16 +40,34 @@ test('the filter comes from the Log settings, and is on unless turned off', () =
 const box = (description, x, granularity = 'line') => ({
   description,
   granularity,
-  boundingPoly: { vertices: [{ x, y: 0 }, { x: x + 100, y: 0 }, { x: x + 100, y: 20 }, { x, y: 20 }] }
+  boundingPoly: {
+    vertices: [
+      { x, y: 0 },
+      { x: x + 100, y: 0 },
+      { x: x + 100, y: 20 },
+      { x, y: 20 }
+    ]
+  }
 })
 
 test('the overlay drops the same lines, and leaves word fragments alone', () => {
   const aggregate = { ...box('all', 0), granularity: 'aggregate' }
-  const annotations = [aggregate, box('猫が好きです', 0), box('Options', 200), box('Options 設定', 400), box('Start', 600, 'fragment')]
+  const annotations = [
+    aggregate,
+    box('猫が好きです', 0),
+    box('Options', 200),
+    box('Options 設定', 400),
+    box('Start', 600, 'fragment')
+  ]
   const grouping = { enabled: false, proximityThreshold: 100, filterSmallText: false, filterSmallTextThreshold: 0.75 }
   const shown = (filter) => visibleAnnotations(annotations, { ...grouping, ...filter }).map((a) => a.description)
   assert.deepEqual(shown({}), ['猫が好きです', 'Options', 'Options 設定', 'Start'])
-  assert.deepEqual(shown(japaneseFilterOf({ japaneseFilter: 'off' })), ['猫が好きです', 'Options', 'Options 設定', 'Start'])
+  assert.deepEqual(shown(japaneseFilterOf({ japaneseFilter: 'off' })), [
+    '猫が好きです',
+    'Options',
+    'Options 設定',
+    'Start'
+  ])
   assert.deepEqual(shown(japaneseFilterOf({})), ['猫が好きです', 'Options 設定', 'Start'])
   assert.deepEqual(shown(japaneseFilterOf({ japaneseFilter: 'mostlyNonJapanese' })), ['猫が好きです', 'Start'])
 })

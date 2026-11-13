@@ -27,9 +27,7 @@
   --ocr-card-rgb: 27, 28, 31;
   --ocr-ink: #edeef0;
   --ocr-card-line: rgba(255, 255, 255, 0.11);
-  --ocr-card-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 10px 28px -6px rgba(0, 0, 0, 0.6);
+  --ocr-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px -6px rgba(0, 0, 0, 0.6);
   --ocr-card-radius: 8px;
   --ocr-fade: 180ms;
 }
@@ -38,9 +36,7 @@
   --ocr-card-rgb: 255, 255, 255;
   --ocr-ink: #1c2024;
   --ocr-card-line: rgba(0, 0, 45, 0.13);
-  --ocr-card-shadow:
-    0 1px 2px rgba(15, 17, 26, 0.1),
-    0 10px 28px -6px rgba(15, 17, 26, 0.28);
+  --ocr-card-shadow: 0 1px 2px rgba(15, 17, 26, 0.1), 0 10px 28px -6px rgba(15, 17, 26, 0.28);
 }
 
 /* Blend: each hovered card takes the colours of the source behind its word, read from the scanned
@@ -86,8 +82,16 @@
   white-space: nowrap;
   text-align: left;
   color: var(--ocr-ink);
-  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif);
+  font-family: var(
+    --kimochi-text-font,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+    'Yu Gothic',
+    'Meiryo',
+    sans-serif
+  );
   font-weight: 400;
   font-kerning: none;
   text-spacing-trim: space-all;
@@ -106,10 +110,7 @@
 .ocr-word::after {
   inset: -2px;
   border-radius: 4px;
-  background: rgba(
-    var(--ocr-hl-rgb, 62, 99, 221),
-    calc((0.1 + 0.12 * var(--ocr-near, 0)) * var(--ocr-hl-strength, 1))
-  );
+  background: rgba(var(--ocr-hl-rgb, 62, 99, 221), calc((0.1 + 0.12 * var(--ocr-near, 0)) * var(--ocr-hl-strength, 1)));
   box-shadow: inset 0 0 0 1px
     rgba(var(--ocr-hl-rgb, 62, 99, 221), calc((0.32 + 0.4 * var(--ocr-near, 0)) * var(--ocr-hl-strength, 1)));
 }
@@ -180,8 +181,16 @@
   text-align: center;
   padding: 6px 8px;
   cursor: default;
-  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif);
+  font-family: var(
+    --kimochi-text-font,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+    'Yu Gothic',
+    'Meiryo',
+    sans-serif
+  );
   font-weight: 400;
   font-kerning: none;
   text-spacing-trim: space-all;
@@ -199,10 +208,7 @@
 }
 .ocr-group::after {
   border-radius: 6px;
-  background: rgba(
-    var(--ocr-hl-rgb, 62, 99, 221),
-    calc((0.1 + 0.12 * var(--ocr-near, 0)) * var(--ocr-hl-strength, 1))
-  );
+  background: rgba(var(--ocr-hl-rgb, 62, 99, 221), calc((0.1 + 0.12 * var(--ocr-near, 0)) * var(--ocr-hl-strength, 1)));
   box-shadow: inset 0 0 0 1px
     rgba(var(--ocr-hl-rgb, 62, 99, 221), calc((0.32 + 0.4 * var(--ocr-near, 0)) * var(--ocr-hl-strength, 1)));
 }
@@ -336,8 +342,16 @@
   white-space: nowrap;
   text-align: left;
   overflow: visible;
-  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif);
+  font-family: var(
+    --kimochi-text-font,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+    'Yu Gothic',
+    'Meiryo',
+    sans-serif
+  );
   font-kerning: none;
   text-spacing-trim: space-all;
 }
@@ -345,8 +359,18 @@
    weight is set per run, heavier for text big for its page. */
 .ocr-manga,
 .ocr-manga .ocr-run {
-  font-family: 'Zen Kaku Gothic Antique', var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
-    'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif);
+  font-family:
+    'Zen Kaku Gothic Antique',
+    var(
+      --kimochi-text-font,
+      'Hiragino Sans',
+      'Hiragino Kaku Gothic ProN',
+      'Noto Sans JP',
+      'Noto Sans CJK JP',
+      'Yu Gothic',
+      'Meiryo',
+      sans-serif
+    );
   font-weight: 500;
 }
 .ocr-vertical .ocr-run,

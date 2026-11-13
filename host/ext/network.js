@@ -59,7 +59,10 @@ function nativeFetch(win, url, init, report) {
 export function createNetworkServer(win, { denied, report, fetch = null }) {
   // `fetch` is given where the server stands in for a document that is itself relayed (the worker
   // shim, worker-network.js): its requests then take that document's own route to the network.
-  const doFetch = fetch ?? ((url, init) => (win.__TAURI_INTERNALS__ ? nativeFetch(win, url, init, report) : win.fetch(url, { ...init, credentials: 'omit' })))
+  const doFetch =
+    fetch ??
+    ((url, init) =>
+      win.__TAURI_INTERNALS__ ? nativeFetch(win, url, init, report) : win.fetch(url, { ...init, credentials: 'omit' }))
   return {
     async serve(request, port, signal, frame) {
       const { id, url, method, headers, body } = request
@@ -85,14 +88,18 @@ export function createNetworkServer(win, { denied, report, fetch = null }) {
             const { done, value } = await reader.read()
             if (done) break
             // A chunk may be a view on a larger buffer; transfer exactly its bytes.
-            const chunk = value.byteOffset === 0 && value.byteLength === value.buffer.byteLength ? value.buffer : value.slice().buffer
+            const chunk =
+              value.byteOffset === 0 && value.byteLength === value.buffer.byteLength
+                ? value.buffer
+                : value.slice().buffer
             port.postMessage({ t: 'fetch-chunk', id, chunk }, [chunk])
           }
         }
         port.postMessage({ t: 'fetch-end', id })
       } catch (error) {
         port.postMessage({ t: 'fetch-error', id, error: describe(error) })
-        if (!signal.aborted) report({ check: 'ext-host-fetch-failed', url: String(url).slice(0, 300), error: describe(error), frame })
+        if (!signal.aborted)
+          report({ check: 'ext-host-fetch-failed', url: String(url).slice(0, 300), error: describe(error), frame })
       }
     }
   }
@@ -106,7 +113,8 @@ export function createNetworkServer(win, { denied, report, fetch = null }) {
  */
 export function installDirectNetwork(win, { denied, report }) {
   const pageFetch = win.fetch.bind(win)
-  const remote = (url, init) => (win.__TAURI_INTERNALS__ ? nativeFetch(win, url, init, report) : pageFetch(url, { ...init, credentials: 'omit' }))
+  const remote = (url, init) =>
+    win.__TAURI_INTERNALS__ ? nativeFetch(win, url, init, report) : pageFetch(url, { ...init, credentials: 'omit' })
   win.fetch = function fetch(input, init) {
     let url
     try {
@@ -115,7 +123,8 @@ export function installDirectNetwork(win, { denied, report }) {
     } catch {
       return pageFetch(input, init)
     }
-    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return pageFetch(input, init)
+    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin)
+      return pageFetch(input, init)
     if (deniedHost(url.hostname, denied)) {
       report({ check: 'ext-host-host-refused', host: url.hostname })
       return Promise.reject(new TypeError('Failed to fetch'))

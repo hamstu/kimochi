@@ -489,10 +489,10 @@
     width var(--k-base) var(--k-ease-out),
     background-color var(--k-base) ease;
 }
-.dots span[data-state="done"] {
+.dots span[data-state='done'] {
   background: var(--k-text-3);
 }
-.dots span[data-state="current"] {
+.dots span[data-state='current'] {
   width: 1rem;
   background: var(--k-accent);
 }

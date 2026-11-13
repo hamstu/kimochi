@@ -55,9 +55,7 @@ pub enum Merge {
 /// The characters that carry the sentence: letters, digits and kana/kanji, plus the long
 /// vowel mark. Punctuation, brackets and spacing differ between readings of the same text.
 fn letters(text: &str) -> Vec<char> {
-    text.chars()
-        .filter(|c| c.is_alphanumeric() || *c == 'ー')
-        .collect()
+    text.chars().filter(|c| c.is_alphanumeric() || *c == 'ー').collect()
 }
 
 /// Is `small` found inside `big`, allowing a few misread characters?
@@ -139,10 +137,7 @@ mod tests {
         let now = 1_000_000;
         // The first line arrives alone, with two characters misread.
         let history = vec![entry("1", FIRST, now - 2000)];
-        assert_eq!(
-            decide(WHOLE, &Value::Null, now, 0, &history),
-            Merge::Replace(vec!["1".into()])
-        );
+        assert_eq!(decide(WHOLE, &Value::Null, now, 0, &history), Merge::Replace(vec!["1".into()]));
         // The whole passage is in; the second line on its own adds nothing.
         let history = vec![entry("2", WHOLE, now - 1000)];
         assert_eq!(decide(SECOND, &Value::Null, now, 0, &history), Merge::Skip);
@@ -154,10 +149,7 @@ mod tests {
     fn different_sentences_are_kept_apart() {
         let now = 1_000_000;
         let history = vec![entry("1", "今日はいい天気ですね", now - 1000)];
-        assert_eq!(
-            decide("明日は雨が降りそうですね", &Value::Null, now, 0, &history),
-            Merge::Add
-        );
+        assert_eq!(decide("明日は雨が降りそうですね", &Value::Null, now, 0, &history), Merge::Add);
         // Short replies must match exactly: はい is not いいえ.
         let history = vec![entry("1", "はい", now - 1000)];
         assert_eq!(decide("いいえ", &Value::Null, now, 0, &history), Merge::Add);
@@ -169,8 +161,7 @@ mod tests {
         let now = 1_000_000;
         let old = vec![entry("1", WHOLE, now - WINDOW_MS - 1)];
         assert_eq!(decide(WHOLE, &Value::Null, now, 0, &old), Merge::Add);
-        let elsewhere =
-            vec![json!({ "id": "1", "text": WHOLE, "timestamp": now, "source": {"name": "x"} })];
+        let elsewhere = vec![json!({ "id": "1", "text": WHOLE, "timestamp": now, "source": {"name": "x"} })];
         assert_eq!(decide(WHOLE, &Value::Null, now, 0, &elsewhere), Merge::Add);
     }
 
@@ -178,10 +169,7 @@ mod tests {
     fn one_reading_can_replace_several_fragments() {
         let now = 1_000_000;
         let history = vec![entry("2", SECOND, now - 500), entry("1", FIRST, now - 1500)];
-        assert_eq!(
-            decide(WHOLE, &Value::Null, now, 0, &history),
-            Merge::Replace(vec!["2".into(), "1".into()])
-        );
+        assert_eq!(decide(WHOLE, &Value::Null, now, 0, &history), Merge::Replace(vec!["2".into(), "1".into()]));
     }
 
     #[test]
@@ -191,22 +179,13 @@ mod tests {
         // The log still shows it: the same passage again is skipped.
         assert_eq!(decide(WHOLE, &Value::Null, now, 0, &history), Merge::Skip);
         // The log was cleared after it was written: scanned again, it is new.
-        assert_eq!(
-            decide(WHOLE, &Value::Null, now, now - 500, &history),
-            Merge::Add
-        );
+        assert_eq!(decide(WHOLE, &Value::Null, now, now - 500, &history), Merge::Add);
         // Nor is a fuller reading tied to a fragment the log no longer shows.
         let history = vec![entry("1", FIRST, now - 1000)];
-        assert_eq!(
-            decide(WHOLE, &Value::Null, now, now - 500, &history),
-            Merge::Add
-        );
+        assert_eq!(decide(WHOLE, &Value::Null, now, now - 500, &history), Merge::Add);
         // Entries written after the clear merge as before.
         let history = vec![entry("2", WHOLE, now - 100), entry("1", WHOLE, now - 1000)];
-        assert_eq!(
-            decide(WHOLE, &Value::Null, now, now - 500, &history),
-            Merge::Skip
-        );
+        assert_eq!(decide(WHOLE, &Value::Null, now, now - 500, &history), Merge::Skip);
     }
 
     #[test]

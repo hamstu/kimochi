@@ -80,10 +80,7 @@ pub(super) fn start(feed: Feed, health: Arc<Health>) -> Result<Stream> {
         .into_iter()
         .next()
         .ok_or_else(|| CaptureError::new("native", "No display to record audio from."))?;
-    let filter = SCContentFilter::create()
-        .with_display(&display)
-        .with_excluding_windows(&[])
-        .build();
+    let filter = SCContentFilter::create().with_display(&display).with_excluding_windows(&[]).build();
     let config = SCStreamConfiguration::new()
         .with_width(2)
         .with_height(2)
@@ -136,10 +133,7 @@ fn push_buffer(feed: &mut Feed, sample: &CMSampleBuffer) -> bool {
         return false;
     }
     let Some(list) = sample.audio_buffer_list() else { return false };
-    let buffers: Vec<(&[u8], usize)> = list
-        .iter()
-        .map(|b| (b.data(), b.number_channels().max(1) as usize))
-        .collect();
+    let buffers: Vec<(&[u8], usize)> = list.iter().map(|b| (b.data(), b.number_channels().max(1) as usize)).collect();
     let width = if float { 4 } else { 2 };
     let channels: usize = buffers.iter().map(|(_, c)| c).sum();
     let Some(frames) = buffers.iter().map(|(data, c)| data.len() / (width * c)).min() else {

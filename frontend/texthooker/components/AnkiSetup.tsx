@@ -1,169 +1,156 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState, type ReactNode } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
-import {
-  Button,
-  Callout,
-  ChoiceGroup,
-  Input,
-  Select,
-  SettingsRow,
-  SettingsSection,
-  Switch,
-} from "@kit";
-import {
-  findNotesByQuery,
-  listDecks,
-  listModelFields,
-  listModels,
-} from "@texthooker/lib/ankiconnect";
-import { detectAnkiSetup } from "@texthooker/lib/ankiDetect";
-import { ankiMiningGap } from "@texthooker/lib/ankiConfig";
-import { DEFAULT_ANKI_CONNECT_URL } from "@ui/anki-connect";
-import { updateSettings } from "@texthooker/lib/settings";
-import { SETTINGS_DEFAULTS, type CardTagsSettings } from "@ui/settings";
-import { getSetting, setSetting } from "../../bridge/settings";
-import { useLanguage } from "../../bridge/useLanguage";
-import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
-import { LOCAL_MARKERS, YOMITAN_MARKERS, markersFor } from "@texthooker/lib/types";
+import { useEffect, useState, type ReactNode } from 'react'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { readTextFile } from '@tauri-apps/plugin-fs'
+import { Button, Callout, ChoiceGroup, Input, Select, SettingsRow, SettingsSection, Switch } from '@kit'
+import { findNotesByQuery, listDecks, listModelFields, listModels } from '@texthooker/lib/ankiconnect'
+import { detectAnkiSetup } from '@texthooker/lib/ankiDetect'
+import { ankiMiningGap } from '@texthooker/lib/ankiConfig'
+import { DEFAULT_ANKI_CONNECT_URL } from '@ui/anki-connect'
+import { updateSettings } from '@texthooker/lib/settings'
+import { SETTINGS_DEFAULTS, type CardTagsSettings } from '@ui/settings'
+import { getSetting, setSetting } from '../../bridge/settings'
+import { useLanguage } from '../../bridge/useLanguage'
+import type { AnkiFieldMapping, Settings } from '@texthooker/lib/types'
+import { LOCAL_MARKERS, YOMITAN_MARKERS, markersFor } from '@texthooker/lib/types'
 import {
   extractConfigFromCardFormat,
   findTermCardFormats,
   type CardFormatOption,
-  type ImportedConfig,
-} from "@texthooker/lib/yomitanImport";
+  type ImportedConfig
+} from '@texthooker/lib/yomitanImport'
 
 interface Props {
-  settings: Settings;
+  settings: Settings
   /** Changes when AnkiConnect (re)connects, so the deck and note type lists are fetched again.
    *  The address, key and connection status are Settings → Anki's (AnkiTab). */
-  connection?: unknown;
-  title?: ReactNode;
-  description?: ReactNode;
+  connection?: unknown
+  title?: ReactNode
+  description?: ReactNode
 }
 
 /** `options` with the saved value added when it is missing (AnkiConnect not answering, or a deck
     renamed in Anki), so the select shows what is saved instead of an empty placeholder. */
 function withSaved(options: string[], saved: string | null): string[] {
-  return saved && !options.includes(saved) ? [saved, ...options] : options;
+  return saved && !options.includes(saved) ? [saved, ...options] : options
 }
 
 /** Adds `tags` to card enhancement's (an import from Yomitan), leaving out ones already there. */
 async function addCardTags(tags: string[]): Promise<void> {
-  const stored = await getSetting<CardTagsSettings>("cardTags").catch(() => null);
-  const current = { ...SETTINGS_DEFAULTS.cardTags, ...stored };
-  const have = current.tags.split(",").map((t) => t.trim().toLowerCase());
-  const added = tags.filter((t) => t.trim() && !have.includes(t.trim().toLowerCase()));
-  if (added.length === 0) return;
-  const tagsText = [current.tags.trim(), ...added].filter(Boolean).join(", ");
-  await setSetting("cardTags", { ...current, tags: tagsText });
+  const stored = await getSetting<CardTagsSettings>('cardTags').catch(() => null)
+  const current = { ...SETTINGS_DEFAULTS.cardTags, ...stored }
+  const have = current.tags.split(',').map((t) => t.trim().toLowerCase())
+  const added = tags.filter((t) => t.trim() && !have.includes(t.trim().toLowerCase()))
+  if (added.length === 0) return
+  const tagsText = [current.tags.trim(), ...added].filter(Boolean).join(', ')
+  await setSetting('cardTags', { ...current, tags: tagsText })
 }
 
 /** The Yomitan API pop-up's Add to Anki: on/off, deck, note type and field mapping. (Its tags are
     card enhancement's, for every dictionary: Settings → Anki → Card enhancement.) */
 export function AnkiSetup({ settings, connection, title, description }: Props) {
   // Empty is AnkiConnect's default address, as Settings → Anki's Address field shows it.
-  const ankiUrl = settings.ankiConnectUrl.trim() || DEFAULT_ANKI_CONNECT_URL;
+  const ankiUrl = settings.ankiConnectUrl.trim() || DEFAULT_ANKI_CONNECT_URL
   // Furigana, pitch accent and word audio are Japanese-only: not offered for other languages.
-  const [language] = useLanguage();
-  const japanese = language.code === "ja";
-  const [decks, setDecks] = useState<string[]>([]);
-  const [models, setModels] = useState<string[]>([]);
-  const [modelFields, setModelFields] = useState<string[]>([]);
-  const [refreshTick, setRefreshTick] = useState(0);
+  const [language] = useLanguage()
+  const japanese = language.code === 'ja'
+  const [decks, setDecks] = useState<string[]>([])
+  const [models, setModels] = useState<string[]>([])
+  const [modelFields, setModelFields] = useState<string[]>([])
+  const [refreshTick, setRefreshTick] = useState(0)
 
   // Yomitan-config import state
-  const [importOptions, setImportOptions] = useState<CardFormatOption[]>([]);
-  const [importIndex, setImportIndex] = useState(0);
-  const [importPreview, setImportPreview] = useState<ImportedConfig | null>(
-    null,
-  );
-  const [importError, setImportError] = useState<string | null>(null);
+  const [importOptions, setImportOptions] = useState<CardFormatOption[]>([])
+  const [importIndex, setImportIndex] = useState(0)
+  const [importPreview, setImportPreview] = useState<ImportedConfig | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
   /** Set when the preview is Detect's rather than an import's: how many notes it found. */
-  const [detected, setDetected] = useState<{ modelNotes: number; deckNotes: number } | null>(null);
-  const [detecting, setDetecting] = useState(false);
+  const [detected, setDetected] = useState<{ modelNotes: number; deckNotes: number } | null>(null)
+  const [detecting, setDetecting] = useState(false)
   /** Detect found nothing to suggest: said plainly, not as an error. */
-  const [detectNote, setDetectNote] = useState<string | null>(null);
+  const [detectNote, setDetectNote] = useState<string | null>(null)
 
   const resetImport = () => {
-    setImportOptions([]);
-    setImportIndex(0);
-    setImportPreview(null);
-    setImportError(null);
-    setDetected(null);
-    setDetectNote(null);
-  };
+    setImportOptions([])
+    setImportIndex(0)
+    setImportPreview(null)
+    setImportError(null)
+    setDetected(null)
+    setDetectNote(null)
+  }
 
   const handleDetectClick = async () => {
-    resetImport();
-    setDetecting(true);
-    const url = ankiUrl;
+    resetImport()
+    setDetecting(true)
+    const url = ankiUrl
     try {
-      const found = await detectAnkiSetup({
-        models: () => listModels(url),
-        fields: (model) => listModelFields(url, model),
-        decks: () => listDecks(url),
-        findNotes: (query) => findNotesByQuery(url, query),
-      }, { japanese });
+      const found = await detectAnkiSetup(
+        {
+          models: () => listModels(url),
+          fields: (model) => listModelFields(url, model),
+          decks: () => listDecks(url),
+          findNotes: (query) => findNotesByQuery(url, query)
+        },
+        { japanese }
+      )
       if (!found.ok) {
-        setDetectNote(found.reason);
-        return;
+        setDetectNote(found.reason)
+        return
       }
-      setDetected({ modelNotes: found.modelNotes, deckNotes: found.deckNotes });
+      setDetected({ modelNotes: found.modelNotes, deckNotes: found.deckNotes })
       setImportPreview({
         deckName: found.deckName,
         modelName: found.modelName,
         fieldMappings: found.fieldMappings,
-        tags: [],
-      });
+        tags: []
+      })
     } catch (err) {
-      setImportError(`Couldn't read your Anki setup: ${err}`);
+      setImportError(`Couldn't read your Anki setup: ${err}`)
     } finally {
-      setDetecting(false);
+      setDetecting(false)
     }
-  };
+  }
 
   const handleImportClick = async () => {
-    resetImport();
-    let picked: string | string[] | null;
+    resetImport()
+    let picked: string | string[] | null
     try {
       picked = await openDialog({
-        title: "Import Yomitan settings",
+        title: 'Import Yomitan settings',
         multiple: false,
-        filters: [{ name: "Yomitan settings JSON", extensions: ["json"] }],
-      });
+        filters: [{ name: 'Yomitan settings JSON', extensions: ['json'] }]
+      })
     } catch (err) {
-      setImportError(String(err));
-      return;
+      setImportError(String(err))
+      return
     }
-    if (!picked || typeof picked !== "string") return;
-    let raw: string;
+    if (!picked || typeof picked !== 'string') return
+    let raw: string
     try {
-      raw = await readTextFile(picked);
+      raw = await readTextFile(picked)
     } catch (err) {
-      setImportError(`Couldn't read file: ${err}`);
-      return;
+      setImportError(`Couldn't read file: ${err}`)
+      return
     }
-    let options: CardFormatOption[];
+    let options: CardFormatOption[]
     try {
-      options = findTermCardFormats(raw);
+      options = findTermCardFormats(raw)
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : String(err));
-      return;
+      setImportError(err instanceof Error ? err.message : String(err))
+      return
     }
-    setImportOptions(options);
-    setImportIndex(0);
-    setImportPreview(extractConfigFromCardFormat(options[0]));
-  };
+    setImportOptions(options)
+    setImportIndex(0)
+    setImportPreview(extractConfigFromCardFormat(options[0]))
+  }
 
   const handleImportSelectIndex = (idx: number) => {
-    setImportIndex(idx);
-    setImportPreview(extractConfigFromCardFormat(importOptions[idx]));
-  };
+    setImportIndex(idx)
+    setImportPreview(extractConfigFromCardFormat(importOptions[idx]))
+  }
 
   const handleImportConfirm = async () => {
-    if (!importPreview) return;
+    if (!importPreview) return
     await updateSettings({
       // Detect is for turning mining on; an import only brings settings over.
       ...(detected ? { ankiEnabled: true } : {}),
@@ -171,83 +158,73 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
       ankiModelName: importPreview.modelName,
       ankiFieldMappings: importPreview.fieldMappings,
       // Clear cached model fields so we refetch for the new model.
-      ankiModelFields: [],
-    });
+      ankiModelFields: []
+    })
     // Yomitan's tags join card enhancement's, which tag every new card.
-    if (importPreview.tags.length > 0) await addCardTags(importPreview.tags);
-    resetImport();
-    setRefreshTick((n) => n + 1);
-  };
+    if (importPreview.tags.length > 0) await addCardTags(importPreview.tags)
+    resetImport()
+    setRefreshTick((n) => n + 1)
+  }
 
   // Load decks + models whenever the URL changes, AnkiConnect connects, or after an import.
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false
     void (async () => {
       try {
-        const [d, m] = await Promise.all([
-          listDecks(ankiUrl),
-          listModels(ankiUrl),
-        ]);
-        if (cancelled) return;
-        setDecks(d);
-        setModels(m);
+        const [d, m] = await Promise.all([listDecks(ankiUrl), listModels(ankiUrl)])
+        if (cancelled) return
+        setDecks(d)
+        setModels(m)
       } catch {
-        if (cancelled) return;
-        setDecks([]);
-        setModels([]);
+        if (cancelled) return
+        setDecks([])
+        setModels([])
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
-  }, [ankiUrl, connection, refreshTick]);
+      cancelled = true
+    }
+  }, [ankiUrl, connection, refreshTick])
 
   // Load fields when the model changes; mirror into settings so the popover
   // can reach them without a round-trip to AnkiConnect on every send.
   useEffect(() => {
-    let cancelled = false;
+    let cancelled = false
     if (!settings.ankiModelName) {
-      setModelFields([]);
+      setModelFields([])
       if (settings.ankiModelFields.length > 0) {
-        void updateSettings({ ankiModelFields: [] });
+        void updateSettings({ ankiModelFields: [] })
       }
-      return;
+      return
     }
     void (async () => {
       try {
-        const fs = await listModelFields(
-          ankiUrl,
-          settings.ankiModelName!,
-        );
-        if (cancelled) return;
-        setModelFields(fs);
-        if (fs.join("|") !== settings.ankiModelFields.join("|")) {
-          void updateSettings({ ankiModelFields: fs });
+        const fs = await listModelFields(ankiUrl, settings.ankiModelName!)
+        if (cancelled) return
+        setModelFields(fs)
+        if (fs.join('|') !== settings.ankiModelFields.join('|')) {
+          void updateSettings({ ankiModelFields: fs })
         }
       } catch {
-        if (cancelled) return;
-        setModelFields([]);
+        if (cancelled) return
+        setModelFields([])
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ankiUrl, settings.ankiModelName, connection, refreshTick]);
+  }, [ankiUrl, settings.ankiModelName, connection, refreshTick])
 
   const setMapping = (ankiField: string, mapping: AnkiFieldMapping | null) => {
-    const rest = settings.ankiFieldMappings.filter(
-      (m) => m.ankiField !== ankiField,
-    );
-    const next = mapping ? [...rest, mapping] : rest;
-    void updateSettings({ ankiFieldMappings: next });
-  };
+    const rest = settings.ankiFieldMappings.filter((m) => m.ankiField !== ankiField)
+    const next = mapping ? [...rest, mapping] : rest
+    void updateSettings({ ankiFieldMappings: next })
+  }
 
   const getMapping = (ankiField: string): AnkiFieldMapping | null => {
-    return (
-      settings.ankiFieldMappings.find((m) => m.ankiField === ankiField) ?? null
-    );
-  };
+    return settings.ankiFieldMappings.find((m) => m.ankiField === ankiField) ?? null
+  }
 
   /** Convert a mapping object → a single string the autocomplete displays.
       Sentinels: "" = unmapped, "(sentence)" = sentence-cloze-style,
@@ -255,47 +232,44 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
       word's, cut out of it. Plain
       strings that match a known marker are markers; anything else is literal. */
   const mappingToValue = (m: AnkiFieldMapping | null): string => {
-    if (!m) return "";
+    if (!m) return ''
     switch (m.mappingType) {
-      case "empty":
-        return "";
-      case "sentence":
-        return "(sentence)";
-      case "sentenceAudio":
-        return "(sentence audio)";
-      case "wordAudio":
-        return "(word audio)";
-      case "marker":
-        return m.marker ?? "";
-      case "literal":
-        return m.literal ?? "";
+      case 'empty':
+        return ''
+      case 'sentence':
+        return '(sentence)'
+      case 'sentenceAudio':
+        return '(sentence audio)'
+      case 'wordAudio':
+        return '(word audio)'
+      case 'marker':
+        return m.marker ?? ''
+      case 'literal':
+        return m.literal ?? ''
     }
-  };
+  }
 
-  const valueToMapping = (
-    ankiField: string,
-    value: string,
-  ): AnkiFieldMapping | null => {
-    const trimmed = value.trim();
-    if (trimmed === "") return null;
-    if (trimmed === "(sentence)") {
-      return { ankiField, mappingType: "sentence" };
+  const valueToMapping = (ankiField: string, value: string): AnkiFieldMapping | null => {
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    if (trimmed === '(sentence)') {
+      return { ankiField, mappingType: 'sentence' }
     }
-    if (trimmed === "(sentence audio)") {
-      return { ankiField, mappingType: "sentenceAudio" };
+    if (trimmed === '(sentence audio)') {
+      return { ankiField, mappingType: 'sentenceAudio' }
     }
-    if (trimmed === "(word audio)") {
-      return { ankiField, mappingType: "wordAudio" };
+    if (trimmed === '(word audio)') {
+      return { ankiField, mappingType: 'wordAudio' }
     }
     if ([...YOMITAN_MARKERS, ...LOCAL_MARKERS].includes(trimmed)) {
-      return { ankiField, mappingType: "marker", marker: trimmed };
+      return { ankiField, mappingType: 'marker', marker: trimmed }
     }
-    return { ankiField, mappingType: "literal", literal: value };
-  };
+    return { ankiField, mappingType: 'literal', literal: value }
+  }
 
   return (
     <>
-      <SettingsSection title={title ?? "Cards from the pop-up"} description={description}>
+      <SettingsSection title={title ?? 'Cards from the pop-up'} description={description}>
         <SettingsRow
           label="Enable Mining"
           controlId="anki-enabled"
@@ -315,8 +289,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         <SettingsRow label="Deck">
           <Select
             aria-label="Deck"
-            value={settings.ankiDeckName ?? ""}
-            onValueChange={(v) => void updateSettings({ ankiDeckName: v === "" ? null : v })}
+            value={settings.ankiDeckName ?? ''}
+            onValueChange={(v) => void updateSettings({ ankiDeckName: v === '' ? null : v })}
             disabled={decks.length === 0 && !settings.ankiDeckName}
             placeholder="Select deck"
             options={withSaved(decks, settings.ankiDeckName).map((d) => ({ value: d, label: d }))}
@@ -325,12 +299,12 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         <SettingsRow label="Note type">
           <Select
             aria-label="Note type"
-            value={settings.ankiModelName ?? ""}
+            value={settings.ankiModelName ?? ''}
             onValueChange={(v) =>
               void updateSettings({
-                ankiModelName: v === "" ? null : v,
+                ankiModelName: v === '' ? null : v,
                 ankiFieldMappings: [],
-                ankiModelFields: [],
+                ankiModelFields: []
               })
             }
             disabled={models.length === 0 && !settings.ankiModelName}
@@ -338,12 +312,9 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
             options={withSaved(models, settings.ankiModelName).map((m) => ({ value: m, label: m }))}
           />
         </SettingsRow>
-        <SettingsRow
-          label="Detect from Anki"
-          description="Reads your Anki mining setup and fills in these settings."
-        >
+        <SettingsRow label="Detect from Anki" description="Reads your Anki mining setup and fills in these settings.">
           <Button size="sm" onClick={() => void handleDetectClick()} disabled={detecting}>
-            {detecting ? "Detecting…" : "Detect"}
+            {detecting ? 'Detecting…' : 'Detect'}
           </Button>
         </SettingsRow>
         <SettingsRow
@@ -375,7 +346,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           </div>
         ) : null}
         {importPreview ? (
-          <SettingsRow stacked label={detected ? "Found in Anki" : "Preview import"}>
+          <SettingsRow stacked label={detected ? 'Found in Anki' : 'Preview import'}>
             <div className="anki-preview">
               {importOptions.length > 1 ? (
                 <>
@@ -387,7 +358,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                     options={importOptions.map((o, i) => ({
                       value: String(i),
                       label: o.profileName,
-                      detail: o.cardFormat.model,
+                      detail: o.cardFormat.model
                     }))}
                   />
                 </>
@@ -398,7 +369,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                   {importPreview.deckName}
                   {detected ? (
                     <span className="k-description">
-                      {" "}(<span className="k-num">{detected.deckNotes.toLocaleString()}</span> notes)
+                      {' '}
+                      (<span className="k-num">{detected.deckNotes.toLocaleString()}</span> notes)
                     </span>
                   ) : null}
                 </dd>
@@ -407,14 +379,15 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                   {importPreview.modelName}
                   {detected ? (
                     <span className="k-description">
-                      {" "}(<span className="k-num">{detected.modelNotes.toLocaleString()}</span> notes)
+                      {' '}
+                      (<span className="k-num">{detected.modelNotes.toLocaleString()}</span> notes)
                     </span>
                   ) : null}
                 </dd>
                 {importPreview.tags.length > 0 ? (
                   <>
                     <dt>Tags</dt>
-                    <dd>{importPreview.tags.join(", ")}</dd>
+                    <dd>{importPreview.tags.join(', ')}</dd>
                   </>
                 ) : null}
               </dl>
@@ -431,17 +404,17 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                     <div key={m.ankiField}>
                       <dt>{m.ankiField}</dt>
                       <dd className="k-mono">
-                        {m.mappingType === "sentence"
-                          ? "(sentence)"
-                          : m.mappingType === "sentenceAudio"
-                            ? "(sentence audio)"
-                            : m.mappingType === "wordAudio"
-                            ? "(word audio)"
-                            : m.mappingType === "marker"
-                            ? m.marker
-                            : m.mappingType === "literal"
-                              ? `"${m.literal ?? ""}"`
-                              : "—"}
+                        {m.mappingType === 'sentence'
+                          ? '(sentence)'
+                          : m.mappingType === 'sentenceAudio'
+                            ? '(sentence audio)'
+                            : m.mappingType === 'wordAudio'
+                              ? '(word audio)'
+                              : m.mappingType === 'marker'
+                                ? m.marker
+                                : m.mappingType === 'literal'
+                                  ? `"${m.literal ?? ''}"`
+                                  : '—'}
                       </dd>
                     </div>
                   ))
@@ -465,18 +438,17 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           title="Field mapping"
           description={
             <>
-              Type a Yomitan marker, <span className="k-mono">(sentence)</span>,{" "}
+              Type a Yomitan marker, <span className="k-mono">(sentence)</span>,{' '}
               {japanese ? (
                 <>
-                  <span className="k-mono">(sentence audio)</span> or{" "}
-                  <span className="k-mono">(word audio)</span> (with Sentence Audio on, below), or
+                  <span className="k-mono">(sentence audio)</span> or <span className="k-mono">(word audio)</span> (with
+                  Sentence Audio on, below), or
                 </>
               ) : (
                 <>
-                  <span className="k-mono">(sentence audio)</span> (with Sentence Audio on,
-                  below), or
+                  <span className="k-mono">(sentence audio)</span> (with Sentence Audio on, below), or
                 </>
-              )}{" "}
+              )}{' '}
               literal text.
             </>
           }
@@ -490,8 +462,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
             ))}
           </datalist>
           {modelFields.map((f) => {
-            const m = getMapping(f);
-            const display = mappingToValue(m);
+            const m = getMapping(f)
+            const display = mappingToValue(m)
             return (
               <SettingsRow key={f} label={f} controlId={`anki-map-${f}`}>
                 <Input
@@ -506,17 +478,17 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                   defaultValue={display}
                   placeholder="(unmapped)"
                   onBlur={(e) => {
-                    const next = valueToMapping(f, e.target.value);
-                    const before = mappingToValue(m);
-                    if (e.target.value === before) return;
-                    setMapping(f, next);
+                    const next = valueToMapping(f, e.target.value)
+                    const before = mappingToValue(m)
+                    if (e.target.value === before) return
+                    setMapping(f, next)
                   }}
                 />
               </SettingsRow>
-            );
+            )
           })}
         </SettingsSection>
       ) : null}
     </>
-  );
+  )
 }

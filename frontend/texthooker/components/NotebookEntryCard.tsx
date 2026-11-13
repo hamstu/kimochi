@@ -1,31 +1,28 @@
-import { ArrowRight, Box, MapPin, UserRound } from "lucide-react";
-import type { ReactNode } from "react";
-import { Button } from "@kit/Button";
-import type { SerializedNotebookEntry } from "@texthooker/lib/types";
-import { NotebookHero } from "./NotebookHero";
-import "../notebook-card.css";
+import { ArrowRight, Box, MapPin, UserRound } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Button } from '@kit/Button'
+import type { SerializedNotebookEntry } from '@texthooker/lib/types'
+import { NotebookHero } from './NotebookHero'
+import '../notebook-card.css'
 import { useTextLang } from '../../bridge/useTextLang'
 
 interface Props {
-  entry: SerializedNotebookEntry;
+  entry: SerializedNotebookEntry
   /** When provided, renders a "Notebook" button that opens the entry there. */
-  onOpen?: (entryId: string) => void;
+  onOpen?: (entryId: string) => void
 }
 
 /* Same words and icons as the Notebook window (notebookEntry.tsx KIND_META); kept
    local so the popup does not pull in the notebook store bridge. */
-const KIND_META: Record<
-  SerializedNotebookEntry["kind"],
-  { label: string; icon: ReactNode }
-> = {
-  person: { label: "Character", icon: <UserRound /> },
-  place: { label: "Place", icon: <MapPin /> },
-  thing: { label: "Thing", icon: <Box /> },
-};
+const KIND_META: Record<SerializedNotebookEntry['kind'], { label: string; icon: ReactNode }> = {
+  person: { label: 'Character', icon: <UserRound /> },
+  place: { label: 'Place', icon: <MapPin /> },
+  thing: { label: 'Thing', icon: <Box /> }
+}
 
 export function NotebookEntryCard({ entry, onOpen }: Props) {
   const textLang = useTextLang()
-  const kind = KIND_META[entry.kind];
+  const kind = KIND_META[entry.kind]
   return (
     <article className="notebook-card">
       <NotebookHero
@@ -35,12 +32,7 @@ export function NotebookEntryCard({ entry, onOpen }: Props) {
         reading={entry.reading || undefined}
         actions={
           onOpen ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onOpen(entry.id)}
-              aria-label="Open in Notebook"
-            >
+            <Button size="sm" variant="ghost" onClick={() => onOpen(entry.id)} aria-label="Open in Notebook">
               Notebook
               <ArrowRight />
             </Button>
@@ -62,7 +54,7 @@ export function NotebookEntryCard({ entry, onOpen }: Props) {
             <div>
               <dt>Nicknames</dt>
               <dd translate="no" lang={textLang} className="notebook-card-alias">
-                {entry.aliases.join("、")}
+                {entry.aliases.join('、')}
               </dd>
             </div>
           ) : null}
@@ -70,9 +62,7 @@ export function NotebookEntryCard({ entry, onOpen }: Props) {
         {entry.description ? (
           <p className="notebook-card-description">{entry.description}</p>
         ) : (
-          <p className="notebook-card-description notebook-card-description-empty">
-            No description yet.
-          </p>
+          <p className="notebook-card-description notebook-card-description-empty">No description yet.</p>
         )}
         {entry.notes.length > 0 ? (
           <section className="notebook-card-notes">
@@ -86,5 +76,5 @@ export function NotebookEntryCard({ entry, onOpen }: Props) {
         ) : null}
       </div>
     </article>
-  );
+  )
 }

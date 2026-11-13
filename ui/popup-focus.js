@@ -223,8 +223,7 @@ export function createPopupFocus({ root, spec, scroller = () => null }) {
  */
 export const YOMITAN_FOCUS = {
   entries: '.entry',
-  controls:
-    '.action-button:not([data-action="menu"]):not([data-action="view-tags"]):not([data-action="view-flags"])',
+  controls: '.action-button:not([data-action="menu"]):not([data-action="view-tags"]):not([data-action="view-flags"])',
   preferred: '[data-action="save-note"]',
   audio: '[data-action="play-audio"]',
   current: '.entry-current'

@@ -1,19 +1,44 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Gallery – picture 1 of 3</title>
-<style>
-  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #1d1d20; color: #eee; }
-  header { padding: 16px 24px; display: flex; gap: 16px; align-items: center; }
-  a { color: #9eb1ff; }
-  .viewer { display: flex; justify-content: center; padding: 12px; }
-  .viewer img { max-height: 80vh; max-width: 92vw; background: #fff; }
-</style>
-</head>
-<body>
-<header><a href="../index.html">← Test page</a><strong>Gallery</strong><span>Picture 1 of 3</span><a href="3.html">← Previous</a><a href="2.html">Next →</a></header>
-<div class="viewer"><img class="photo" src="../manga.png?v=1" alt="Picture 1"></div>
-<!-- Every picture is a full page load, as in a gallery: Auto should follow it. -->
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>Gallery – picture 1 of 3</title>
+    <style>
+      body {
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        margin: 0;
+        background: #1d1d20;
+        color: #eee;
+      }
+      header {
+        padding: 16px 24px;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+      }
+      a {
+        color: #9eb1ff;
+      }
+      .viewer {
+        display: flex;
+        justify-content: center;
+        padding: 12px;
+      }
+      .viewer img {
+        max-height: 80vh;
+        max-width: 92vw;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="../index.html">← Test page</a><strong>Gallery</strong><span>Picture 1 of 3</span
+      ><a href="3.html">← Previous</a><a href="2.html">Next →</a>
+    </header>
+    <div class="viewer"><img class="photo" src="../manga.png?v=1" alt="Picture 1" /></div>
+    <!-- Every picture is a full page load, as in a gallery: Auto should follow it. -->
+  </body>
 </html>

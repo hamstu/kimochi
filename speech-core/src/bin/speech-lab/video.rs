@@ -118,7 +118,8 @@ fn read(video: &Path, dir: &Path, fps: f64, crop: Option<&str>) -> Result<(), St
         previous = text;
     }
     let _ = child.wait();
-    let meta = Meta { audio: "audio.wav".into(), audio_start_ms: T0, notes: Some(format!("video {}", video.display())) };
+    let meta =
+        Meta { audio: "audio.wav".into(), audio_start_ms: T0, notes: Some(format!("video {}", video.display())) };
     session::write(dir, &meta, &lines, &screen)?;
     println!("{} lines from {} frames, in {}", lines.len(), k, dir.display());
     Ok(())

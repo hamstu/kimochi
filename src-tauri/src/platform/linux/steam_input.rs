@@ -38,19 +38,16 @@ fn identity(pid: u32) -> Option<String> {
     Some(start_time(&stat)?.to_owned())
 }
 fn steam() -> Option<(u32, String)> {
-    std::fs::read_dir("/proc")
-        .ok()?
-        .flatten()
-        .find_map(|entry| {
-            let pid = entry.file_name().to_str()?.parse().ok()?;
-            // Do not take ownership of a process another tool has already stopped.
-            let stat = std::fs::read_to_string(entry.path().join("stat")).ok()?;
-            let state = stat.rsplit_once(')')?.1.split_whitespace().next()?;
-            if matches!(state, "T" | "t" | "Z" | "X") {
-                return None;
-            }
-            Some((pid, identity(pid)?))
-        })
+    std::fs::read_dir("/proc").ok()?.flatten().find_map(|entry| {
+        let pid = entry.file_name().to_str()?.parse().ok()?;
+        // Do not take ownership of a process another tool has already stopped.
+        let stat = std::fs::read_to_string(entry.path().join("stat")).ok()?;
+        let state = stat.rsplit_once(')')?.1.split_whitespace().next()?;
+        if matches!(state, "T" | "t" | "Z" | "X") {
+            return None;
+        }
+        Some((pid, identity(pid)?))
+    })
 }
 pub(super) struct Lease {
     pub(super) child: Child,
@@ -58,12 +55,7 @@ pub(super) struct Lease {
 }
 pub(super) fn spawn_lease(args: &[&str]) -> Result<Lease, String> {
     let mut command = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
-    command
-        .arg(FLAG)
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::inherit());
+    command.arg(FLAG).args(args).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::inherit());
     unsafe {
         command.pre_exec(|| {
             if libc::setsid() < 0 {
@@ -89,17 +81,12 @@ impl Drop for Lease {
     }
 }
 pub fn update(active: bool) -> Result<(), String> {
-    let mut lease = LEASE
-        .lock()
-        .map_err(|_| "Steam input lease lock poisoned")?;
+    let mut lease = LEASE.lock().map_err(|_| "Steam input lease lock poisoned")?;
     if !active {
         *lease = None;
         return Ok(());
     }
-    if lease
-        .as_mut()
-        .is_some_and(|lease| lease.child.try_wait().ok().flatten().is_some())
-    {
+    if lease.as_mut().is_some_and(|lease| lease.child.try_wait().ok().flatten().is_some()) {
         *lease = None;
         return Err("Steam input watchdog expired; close and reopen controller navigation".into());
     }
@@ -178,7 +165,9 @@ pub fn run_watchdog() -> bool {
     if !super::gamescope::active() || identity(pid).as_deref() != Some(token) {
         return true;
     }
-    let Some(owner) = args.get(4).and_then(|value| value.parse::<u32>().ok()) else { return true; };
+    let Some(owner) = args.get(4).and_then(|value| value.parse::<u32>().ok()) else {
+        return true;
+    };
     signals(c"kimochi-input");
     let mut last_heartbeat = std::time::Instant::now();
     let mut paused = false;
@@ -211,14 +200,14 @@ pub fn run_watchdog() -> bool {
             paused_at = std::time::Instant::now();
             eprintln!("Gamescope input watchdog: let Steam run for 500 ms after {} s paused", MAX_PAUSE.as_secs());
         }
-        let mut poll = libc::pollfd {
-            fd: 0,
-            events: libc::POLLIN,
-            revents: 0,
-        };
+        let mut poll = libc::pollfd { fd: 0, events: libc::POLLIN, revents: 0 };
         let ready = unsafe { libc::poll(&mut poll, 1, 100) };
-        if ready < 0 { break; }
-        if ready == 0 { continue; }
+        if ready < 0 {
+            break;
+        }
+        if ready == 0 {
+            continue;
+        }
         let mut buffer = [0_u8; 32];
         let count = unsafe { libc::read(0, buffer.as_mut_ptr().cast(), buffer.len()) };
         if count <= 0 {
@@ -239,10 +228,7 @@ pub fn run_watchdog() -> bool {
             if identity(pid).as_deref() != Some(token) {
                 break;
             }
-            resume = Some(Resume {
-                pid,
-                token: token.clone(),
-            });
+            resume = Some(Resume { pid, token: token.clone() });
             if unsafe { libc::kill(pid as i32, libc::SIGSTOP) } != 0 {
                 break;
             }
@@ -263,19 +249,16 @@ mod tests {
     use super::start_time;
     #[test]
     fn stat_handles_spaces_and_parentheses_in_name() {
-        let suffix = (3..=22)
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join(" ");
-        assert_eq!(
-            start_time(&format!("123 (steam (test)) {suffix}")),
-            Some("22")
-        );
+        let suffix = (3..=22).map(|v| v.to_string()).collect::<Vec<_>>().join(" ");
+        assert_eq!(start_time(&format!("123 (steam (test)) {suffix}")), Some("22"));
     }
     #[test]
     fn display_comes_from_the_environment_block() {
         use super::display_of;
-        assert_eq!(display_of(b"HOME=/home/deck\0DISPLAY=:0\0GAMESCOPE_WAYLAND_DISPLAY=gamescope-0\0"), Some(&b":0"[..]));
+        assert_eq!(
+            display_of(b"HOME=/home/deck\0DISPLAY=:0\0GAMESCOPE_WAYLAND_DISPLAY=gamescope-0\0"),
+            Some(&b":0"[..])
+        );
         assert_eq!(display_of(b"WAYLAND_DISPLAY=wayland-0\0"), None);
         assert_eq!(display_of(b""), None);
     }

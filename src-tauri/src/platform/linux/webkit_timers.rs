@@ -63,7 +63,10 @@ pub fn install<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
         // looked up by name, and the feature list is released after use.
         let found = unsafe { keep_timers(raw.cast()) };
         if found < OFF.len() {
-            eprintln!("[kimochi] {label}: WebKit hidden-page timer throttling stays on ({found} of {} switches)", OFF.len());
+            eprintln!(
+                "[kimochi] {label}: WebKit hidden-page timer throttling stays on ({found} of {} switches)",
+                OFF.len()
+            );
         }
     });
     if let Err(error) = result {

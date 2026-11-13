@@ -23,8 +23,7 @@ export const autoScanStarted = (): ActivityPost => scan('Screen settled, scannin
 export const recognising = (mode: unknown): ActivityPost => scan(`Recognising with ${engineName(mode)}…`, 'busy')
 export const noSource = (): ActivityPost => scan('Choose a source before scanning', 'warn')
 export const nothingRecognised = (): ActivityPost => scan('Nothing recognised', 'warn')
-export const sourceChanged = (): ActivityPost =>
-  scan('Scan discarded: the source changed while it was running', 'warn')
+export const sourceChanged = (): ActivityPost => scan('Scan discarded: the source changed while it was running', 'warn')
 
 /** A manual scan that could not start because another one holds the pipeline. */
 export const scanBusy = (): ActivityPost => ({

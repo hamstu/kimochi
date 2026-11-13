@@ -6,16 +6,13 @@ import { fileURLToPath } from 'node:url'
 export function summarize(records) {
   const passes = records.filter((r) => r.kind === 'first-pass')
   const count = (xs, key) =>
-    Object.fromEntries(
-      [...new Set(xs.map(key))].map((k) => [k, xs.filter((x) => key(x) === k).length])
-    )
+    Object.fromEntries([...new Set(xs.map(key))].map((k) => [k, xs.filter((x) => key(x) === k).length]))
   const timing = (xs, key) => {
     const values = xs
       .map((r) => r[key])
       .filter((v) => typeof v === 'number' && Number.isFinite(v))
       .sort((a, b) => a - b)
-    const at = (p) =>
-      values.length ? Math.round(values[Math.ceil(p * values.length) - 1] * 10) / 10 : null
+    const at = (p) => (values.length ? Math.round(values[Math.ceil(p * values.length) - 1] * 10) / 10 : null)
     return { samples: values.length, p50: at(0.5), p95: at(0.95), max: at(1) }
   }
   const decisions = records.filter((r) => r.kind === 'decision')
@@ -23,25 +20,18 @@ export function summarize(records) {
   const requestRows = records.filter((r) => r.kind === 'second-pass-start')
   return {
     session: records[0]?.session,
-    from: records.length
-      ? new Date(records.reduce((at, r) => Math.min(at, r.at), Infinity)).toISOString()
-      : null,
-    to: records.length
-      ? new Date(records.reduce((at, r) => Math.max(at, r.at), -Infinity)).toISOString()
-      : null,
+    from: records.length ? new Date(records.reduce((at, r) => Math.min(at, r.at), Infinity)).toISOString() : null,
+    to: records.length ? new Date(records.reduce((at, r) => Math.max(at, r.at), -Infinity)).toISOString() : null,
     captures: passes.length,
     captureFailures: records.filter((r) => r.kind === 'capture-failed').length,
     firstPass: {
       pixelsChanged: passes.filter((r) => r.pixelsChanged === true).length,
-      pixelChangesWithUnchangedText: passes.filter(
-        (r) => r.pixelsChanged === true && r.normalizedTextChanged === false
-      ).length,
-      normalizedTextChanges: passes.filter((r) => r.normalizedTextChanged === true).length,
-      numberOnlyChanges: passes.filter((r) => r.normalizedTextChanged === true && r.numericOnly)
+      pixelChangesWithUnchangedText: passes.filter((r) => r.pixelsChanged === true && r.normalizedTextChanged === false)
         .length,
-      punctuationOrWhitespaceOnly: passes.filter(
-        (r) => r.rawTextChanged === true && r.normalizedTextChanged === false
-      ).length,
+      normalizedTextChanges: passes.filter((r) => r.normalizedTextChanged === true).length,
+      numberOnlyChanges: passes.filter((r) => r.normalizedTextChanged === true && r.numericOnly).length,
+      punctuationOrWhitespaceOnly: passes.filter((r) => r.rawTextChanged === true && r.normalizedTextChanged === false)
+        .length,
       layoutOnly: passes.filter((r) => r.rawTextChanged === false && r.changedLines > 0).length,
       relations: count(passes, (r) => r.relation)
     },
@@ -137,9 +127,7 @@ async function main() {
     console.log(`Marked ${new Date(at).toLocaleTimeString()}: ${note.slice(0, 500)}`)
     return
   }
-  console.log(
-    JSON.stringify({ directory, malformedLines: malformed, ...summarize(selected) }, null, 2)
-  )
+  console.log(JSON.stringify({ directory, malformedLines: malformed, ...summarize(selected) }, null, 2))
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

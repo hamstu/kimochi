@@ -19,23 +19,103 @@
     <script src="/spike/shim.js"></script>
     <title>Dictionary engine harness</title>
     <style>
-      :root { color-scheme: light; font: 15px -apple-system, system-ui, "Segoe UI", sans-serif; }
-      body { margin: 0; background: #fff; color: #162824; }
-      header { background: #153c32; color: #fff; padding: 10px 16px; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
-      header h1 { font-size: 16px; margin: 0; }
-      header code { color: #bfe3d6; }
-      main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 16px; }
-      @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-      section { min-width: 0; }
-      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #4b635c; margin: 0 0 6px; }
-      #fixture p { font-size: 38px; line-height: 1.6; margin: 6px 0; }
-      #controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
-      button { font: inherit; padding: 6px 10px; }
-      pre { background: #f3f6f5; border: 1px solid #d5dfdb; padding: 8px; overflow: auto; font: 12px ui-monospace, Menlo, monospace; margin: 0; }
-      #status { min-height: 2.5em; }
-      #log { height: 320px; white-space: pre-wrap; word-break: break-word; }
-      #options { width: 100%; height: 520px; border: 1px solid #d5dfdb; display: block; }
-      #popup-outline { position: fixed; pointer-events: none; outline: 2px dashed #e0457b; display: none; z-index: 2147483646; }
+      :root {
+        color-scheme: light;
+        font:
+          15px -apple-system,
+          system-ui,
+          'Segoe UI',
+          sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #fff;
+        color: #162824;
+      }
+      header {
+        background: #153c32;
+        color: #fff;
+        padding: 10px 16px;
+        display: flex;
+        gap: 16px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      header h1 {
+        font-size: 16px;
+        margin: 0;
+      }
+      header code {
+        color: #bfe3d6;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+        padding: 16px;
+      }
+      @media (max-width: 900px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      section {
+        min-width: 0;
+      }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #4b635c;
+        margin: 0 0 6px;
+      }
+      #fixture p {
+        font-size: 38px;
+        line-height: 1.6;
+        margin: 6px 0;
+      }
+      #controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 12px 0;
+      }
+      button {
+        font: inherit;
+        padding: 6px 10px;
+      }
+      pre {
+        background: #f3f6f5;
+        border: 1px solid #d5dfdb;
+        padding: 8px;
+        overflow: auto;
+        font:
+          12px ui-monospace,
+          Menlo,
+          monospace;
+        margin: 0;
+      }
+      #status {
+        min-height: 2.5em;
+      }
+      #log {
+        height: 320px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #options {
+        width: 100%;
+        height: 520px;
+        border: 1px solid #d5dfdb;
+        display: block;
+      }
+      #popup-outline {
+        position: fixed;
+        pointer-events: none;
+        outline: 2px dashed #e0457b;
+        display: none;
+        z-index: 2147483646;
+      }
     </style>
   </head>
   <body>

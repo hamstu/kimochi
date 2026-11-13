@@ -21,7 +21,6 @@ static O_CLOSE: AtomicUsize = AtomicUsize::new(0);
 static O_PAUSE: AtomicUsize = AtomicUsize::new(0);
 static O_RESTART: AtomicUsize = AtomicUsize::new(0);
 
-
 const WAVE_FORMAT_QUERY: u32 = 0x1;
 const WHDR_BEGINLOOP: u32 = 0x4;
 
@@ -55,14 +54,26 @@ fn key(h: *mut c_void) -> sink::Key {
     (3, h as usize)
 }
 
-unsafe extern "system" fn open(out: *mut *mut c_void, dev: u32, fmt: *const WAVEFORMATEX, cb: usize, inst: usize, flags: u32) -> u32 {
+unsafe extern "system" fn open(
+    out: *mut *mut c_void,
+    dev: u32,
+    fmt: *const WAVEFORMATEX,
+    cb: usize,
+    inst: usize,
+    flags: u32,
+) -> u32 {
     let o: unsafe extern "system" fn(*mut *mut c_void, u32, *const WAVEFORMATEX, usize, usize, u32) -> u32 =
         std::mem::transmute(O_OPEN.load(Ordering::SeqCst));
     let r = o(out, dev, fmt, cb, inst, flags);
     if r == 0 && flags & WAVE_FORMAT_QUERY == 0 && !out.is_null() && !crate::internal() {
         guard(|| unsafe {
             let h = *out;
-            sink::send(Ev::Create { key: key(h), api: "waveout", fmt: vh_common::wfx_bytes(fmt), info: json!({"device": dev}) });
+            sink::send(Ev::Create {
+                key: key(h),
+                api: "waveout",
+                fmt: vh_common::wfx_bytes(fmt),
+                info: json!({"device": dev}),
+            });
         });
     }
     r
@@ -76,7 +87,8 @@ unsafe extern "system" fn write(h: *mut c_void, hdr: *mut WaveHdr, size: u32) ->
             sink::send(Ev::Data { key: key(h), bytes, eos: false, looping, region: None, info: json!({}) });
         }
     });
-    let o: unsafe extern "system" fn(*mut c_void, *mut WaveHdr, u32) -> u32 = std::mem::transmute(O_WRITE.load(Ordering::SeqCst));
+    let o: unsafe extern "system" fn(*mut c_void, *mut WaveHdr, u32) -> u32 =
+        std::mem::transmute(O_WRITE.load(Ordering::SeqCst));
     o(h, hdr, size)
 }
 

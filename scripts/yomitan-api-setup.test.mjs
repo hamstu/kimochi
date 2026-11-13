@@ -45,7 +45,11 @@ const api = (server, yomitan, version = null) => ({
 })
 
 const NOTHING = host(null, [])
-const KIMOCHI = host('kimochi', [browser('Chrome', 'kimochi'), browser('Brave', 'kimochi'), browser('Firefox', 'kimochi')])
+const KIMOCHI = host('kimochi', [
+  browser('Chrome', 'kimochi'),
+  browser('Brave', 'kimochi'),
+  browser('Firefox', 'kimochi')
+])
 const OFFICIAL = host('official', [browser('Chrome', 'official')])
 const BROKEN = host(null, [browser('Chrome', 'kimochi', false)])
 
@@ -62,7 +66,10 @@ test('what is installed, in words', () => {
   assert.match(setup.describeHost(BROKEN), /program is missing/)
   assert.equal(setup.describeHost(KIMOCHI), "Kimochi's helper, for Chrome, Brave and Firefox.")
   assert.equal(setup.describeHost(OFFICIAL), 'The official Yomitan API helper, for Chrome.')
-  assert.deepEqual(setup.brokenBrowsers(BROKEN).map((b) => b.browserName), ['Chrome'])
+  assert.deepEqual(
+    setup.brokenBrowsers(BROKEN).map((b) => b.browserName),
+    ['Chrome']
+  )
   assert.deepEqual(setup.workingBrowsers(BROKEN), [])
 })
 

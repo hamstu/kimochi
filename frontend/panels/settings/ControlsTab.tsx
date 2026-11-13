@@ -6,10 +6,7 @@ import { GamepadSections } from './GamepadSections'
 
 export function ControlsTab(): ReactNode {
   return (
-    <SettingsPage
-      title="Shortcuts & Controls"
-      description="Keyboard shortcuts and a game controller."
-    >
+    <SettingsPage title="Shortcuts & Controls" description="Keyboard shortcuts and a game controller.">
       <ShortcutsSections />
       <GamepadSections />
     </SettingsPage>

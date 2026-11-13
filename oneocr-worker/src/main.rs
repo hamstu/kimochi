@@ -47,38 +47,22 @@ fn check(code: i64, operation: &str) -> Result<(), String> {
     if code == 0 {
         Ok(())
     } else {
-        Err(format!(
-            "OneOCR {operation} failed (code {code}, 0x{:016X})",
-            code as u64
-        ))
+        Err(format!("OneOCR {operation} failed (code {code}, 0x{:016X})", code as u64))
     }
 }
 
 /// Keep the engine's line text authoritative. Glyph boxes are useful evidence,
 /// but Japanese glyph gaps must not become spaces or independent font sizes.
 fn line_group(index: i64, text: &str, polygon: &Value) -> Result<Value, String> {
-    let vertices = polygon["vertices"]
-        .as_array()
-        .ok_or("OneOCR line has no vertices")?;
+    let vertices = polygon["vertices"].as_array().ok_or("OneOCR line has no vertices")?;
     if vertices.len() != 4 {
         return Err("OneOCR line needs four vertices".into());
     }
-    let mut bbox = [
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    ];
+    let mut bbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     let mut points = Vec::new();
     for vertex in vertices {
-        let x = vertex["x"]
-            .as_f64()
-            .filter(|x| x.is_finite())
-            .ok_or("OneOCR line has invalid x")?;
-        let y = vertex["y"]
-            .as_f64()
-            .filter(|y| y.is_finite())
-            .ok_or("OneOCR line has invalid y")?;
+        let x = vertex["x"].as_f64().filter(|x| x.is_finite()).ok_or("OneOCR line has invalid x")?;
+        let y = vertex["y"].as_f64().filter(|y| y.is_finite()).ok_or("OneOCR line has invalid y")?;
         bbox[0] = bbox[0].min(x);
         bbox[1] = bbox[1].min(y);
         bbox[2] = bbox[2].max(x);
@@ -87,11 +71,7 @@ fn line_group(index: i64, text: &str, polygon: &Value) -> Result<Value, String> 
     }
     let width = bbox[2] - bbox[0];
     let height = bbox[3] - bbox[1];
-    let orientation = if text.chars().count() > 1 && height > width * 1.5 {
-        "vertical"
-    } else {
-        "horizontal"
-    };
+    let orientation = if text.chars().count() > 1 && height > width * 1.5 { "vertical" } else { "horizontal" };
     Ok(json!({
         "id": format!("oneocr-line-{index}"), "text": text,
         "bbox": if width > 0. && height > 0. { Some(bbox) } else { None },
@@ -109,47 +89,23 @@ impl Native {
         // Absolute paths, without SetDllDirectory or a process-wide PATH change.
         let runtime = unsafe { Library::new(root.join("onnxruntime.dll")) }
             .map_err(|e| format!("OneOCR load onnxruntime.dll: {e:?}"))?;
-        let library = unsafe { Library::new(root.join("oneocr.dll")) }
-            .map_err(|e| format!("OneOCR load oneocr.dll: {e:?}"))?;
-        let mut native = Self {
-            library,
-            _runtime: runtime,
-            init: 0,
-            pipeline: 0,
-            options: 0,
-        };
+        let library =
+            unsafe { Library::new(root.join("oneocr.dll")) }.map_err(|e| format!("OneOCR load oneocr.dll: {e:?}"))?;
+        let mut native = Self { library, _runtime: runtime, init: 0, pipeline: 0, options: 0 };
         unsafe {
-            check(
-                native.function::<Create>(b"CreateOcrInitOptions\0")?(&mut native.init),
-                "CreateOcrInitOptions",
-            )?;
-            let delay = native.function::<unsafe extern "system" fn(i64, u8) -> i64>(
-                b"OcrInitOptionsSetUseModelDelayLoad\0",
-            )?;
+            check(native.function::<Create>(b"CreateOcrInitOptions\0")?(&mut native.init), "CreateOcrInitOptions")?;
+            let delay = native
+                .function::<unsafe extern "system" fn(i64, u8) -> i64>(b"OcrInitOptionsSetUseModelDelayLoad\0")?;
             check(delay(native.init, 0), "OcrInitOptionsSetUseModelDelayLoad")?;
-            let create = native.function::<unsafe extern "system" fn(
-                *const c_char,
-                *const c_char,
-                i64,
-                *mut i64,
-            ) -> i64>(b"CreateOcrPipeline\0")?;
-            let model = CString::new(
-                root.join("oneocr.onemodel")
-                    .to_str()
-                    .ok_or("OneOCR model path is not Unicode")?,
-            )
-            .map_err(|e| e.to_string())?;
+            let create = native
+                .function::<unsafe extern "system" fn(*const c_char, *const c_char, i64, *mut i64) -> i64>(
+                    b"CreateOcrPipeline\0",
+                )?;
+            let model = CString::new(root.join("oneocr.onemodel").to_str().ok_or("OneOCR model path is not Unicode")?)
+                .map_err(|e| e.to_string())?;
             // Snipping Tool's model-format key; this is part of the native ABI.
             let key = b"kj)TGtrK>f]b[Piow.gU+nC@s\"\"\"\"\"\"4\0";
-            check(
-                create(
-                    model.as_ptr(),
-                    key.as_ptr().cast(),
-                    native.init,
-                    &mut native.pipeline,
-                ),
-                "CreateOcrPipeline",
-            )?;
+            check(create(model.as_ptr(), key.as_ptr().cast(), native.init, &mut native.pipeline), "CreateOcrPipeline")?;
             check(
                 native.function::<Create>(b"CreateOcrProcessOptions\0")?(&mut native.options),
                 "CreateOcrProcessOptions",
@@ -157,10 +113,7 @@ impl Native {
             let max = native.function::<unsafe extern "system" fn(i64, i64) -> i64>(
                 b"OcrProcessOptionsSetMaxRecognitionLineCount\0",
             )?;
-            check(
-                max(native.options, 1000),
-                "OcrProcessOptionsSetMaxRecognitionLineCount",
-            )?;
+            check(max(native.options, 1000), "OcrProcessOptionsSetMaxRecognitionLineCount")?;
         }
         Ok(native)
     }
@@ -191,9 +144,7 @@ impl Native {
         let mut result = 0;
         unsafe {
             let run = self
-                .function::<unsafe extern "system" fn(i64, *const Image, i64, *mut i64) -> i64>(
-                    b"RunOcrPipeline\0",
-                )?;
+                .function::<unsafe extern "system" fn(i64, *const Image, i64, *mut i64) -> i64>(b"RunOcrPipeline\0")?;
             let release = self.function::<Release>(b"ReleaseOcrResult\0")?;
             let code = run(self.pipeline, &input, self.options, &mut result);
             if let Err(error) = check(code, "RunOcrPipeline") {
@@ -216,23 +167,11 @@ impl Native {
         if p.is_null() {
             return Err("OneOCR returned null text".into());
         }
-        CStr::from_ptr(p)
-            .to_str()
-            .map(str::to_owned)
-            .map_err(|e| format!("OneOCR text is not UTF-8: {e}"))
+        CStr::from_ptr(p).to_str().map(str::to_owned).map_err(|e| format!("OneOCR text is not UTF-8: {e}"))
     }
-    unsafe fn polygon(
-        &self,
-        handle: i64,
-        name: &[u8],
-        width: u32,
-        height: u32,
-    ) -> Result<Value, String> {
+    unsafe fn polygon(&self, handle: i64, name: &[u8], width: u32, height: u32) -> Result<Value, String> {
         let mut p = std::ptr::null();
-        check(
-            self.function::<GetQuad>(name)?(handle, &mut p),
-            "read bounding box",
-        )?;
+        check(self.function::<GetQuad>(name)?(handle, &mut p), "read bounding box")?;
         if p.is_null() {
             return Err("OneOCR returned null bounding box".into());
         }
@@ -246,10 +185,7 @@ impl Native {
     }
     unsafe fn count(&self, handle: i64, name: &[u8]) -> Result<i64, String> {
         let mut n = 0;
-        check(
-            self.function::<GetCount>(name)?(handle, &mut n),
-            "read count",
-        )?;
+        check(self.function::<GetCount>(name)?(handle, &mut n), "read count")?;
         if !(0..=10000).contains(&n) {
             return Err(format!("OneOCR invalid result count {n}"));
         }
@@ -257,10 +193,7 @@ impl Native {
     }
     unsafe fn child(&self, handle: i64, index: i64, name: &[u8]) -> Result<i64, String> {
         let mut child = 0;
-        check(
-            self.function::<GetHandle>(name)?(handle, index, &mut child),
-            "read result handle",
-        )?;
+        check(self.function::<GetHandle>(name)?(handle, index, &mut child), "read result handle")?;
         if child == 0 {
             return Err("OneOCR returned a null child handle".into());
         }
@@ -279,10 +212,7 @@ impl Native {
             lines.push(text.clone());
             let polygon = self.polygon(line, b"GetOcrLineBoundingBox\0", width, height)?;
             let group = line_group(index, &text, &polygon)?;
-            let orientation = group["orientation"]
-                .as_str()
-                .ok_or("OneOCR line has no orientation")?
-                .to_owned();
+            let orientation = group["orientation"].as_str().ok_or("OneOCR line has no orientation")?.to_owned();
             groups.push(group);
             let count = self.count(line, b"GetOcrLineWordCount\0")?;
             if count == 0 {
@@ -295,9 +225,8 @@ impl Native {
                     continue;
                 }
                 let mut confidence = 0f32;
-                let get = self.function::<unsafe extern "system" fn(i64, *mut f32) -> i64>(
-                    b"GetOcrWordConfidence\0",
-                )?;
+                let get =
+                    self.function::<unsafe extern "system" fn(i64, *mut f32) -> i64>(b"GetOcrWordConfidence\0")?;
                 check(get(word, &mut confidence), "GetOcrWordConfidence")?;
                 if !confidence.is_finite() {
                     return Err("OneOCR returned non-finite confidence".into());
@@ -335,9 +264,7 @@ fn send(value: Value) -> io::Result<()> {
     out.flush()
 }
 fn serve() -> Result<(), String> {
-    let root = std::env::args_os()
-        .nth(1)
-        .ok_or("OneOCR worker needs a runtime directory")?;
+    let root = std::env::args_os().nth(1).ok_or("OneOCR worker needs a runtime directory")?;
     let engine = Native::load(Path::new(&root))?;
     send(json!({"ready":true})).map_err(|e| e.to_string())?;
     for line in io::stdin().lock().lines() {
@@ -345,9 +272,7 @@ fn serve() -> Result<(), String> {
         let result = (|| {
             let value: Value = serde_json::from_str(&request).map_err(|e| e.to_string())?;
             let encoded = value["png"].as_str().ok_or("OneOCR request needs png")?;
-            let png = base64::engine::general_purpose::STANDARD
-                .decode(encoded)
-                .map_err(|e| e.to_string())?;
+            let png = base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|e| e.to_string())?;
             engine.recognize(&png)
         })();
         send(match result {
@@ -378,10 +303,7 @@ mod tests {
     #[test]
     fn native_errors_keep_exact_status() {
         assert_eq!(check(0, "scan"), Ok(()));
-        assert_eq!(
-            check(-1, "scan").unwrap_err(),
-            "OneOCR scan failed (code -1, 0xFFFFFFFFFFFFFFFF)"
-        );
+        assert_eq!(check(-1, "scan").unwrap_err(), "OneOCR scan failed (code -1, 0xFFFFFFFFFFFFFFFF)");
     }
     #[test]
     fn semantic_line_preserves_japanese_and_real_spaces_with_one_box() {

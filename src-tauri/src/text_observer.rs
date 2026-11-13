@@ -193,9 +193,7 @@ fn build(app: &tauri::AppHandle, engine: &'static str) -> Box<dyn TextObserver> 
         "screenai" => Box::new(EngineObserver::screenai(app.clone())),
         #[cfg(target_os = "windows")]
         "oneocr" => Box::new(EngineObserver::oneocr(app.clone())),
-        _ => unsupported(format!(
-            "Automatic scanning can't watch with {engine}."
-        )),
+        _ => unsupported(format!("Automatic scanning can't watch with {engine}.")),
     };
     Box::new(CachedObserver::new(inner))
 }
@@ -412,50 +410,57 @@ impl EngineObserver {
     /// shorter than half that are widened, so none reaches it more than twice enlarged.
     pub fn meiki(app: tauri::AppHandle) -> Self {
         let regions = Some((480, 272));
-        Self::new(app, "meikiocr", "MeikiOCR", |app| crate::meiki_ocr::models_ready(app).map(|_| ()), |app| {
-            let mut engine = None;
-            let mut failed: Option<String> = None;
-            Box::new(move |Request { image, plan }| -> Answer {
-                if let Some(reason) = &failed {
-                    return Err(Failure::Unavailable(reason.clone()));
-                }
-                if engine.is_none() {
-                    let loaded = crate::meiki_ocr::engine_root(&app)
-                        .and_then(|root| crate::meiki_ocr::load_engine(&root));
-                    match loaded {
-                        Ok(loaded) => engine = Some(loaded),
-                        Err(reason) => {
-                            failed = Some(reason.clone());
-                            return Err(Failure::Unavailable(reason));
+        Self::new(
+            app,
+            "meikiocr",
+            "MeikiOCR",
+            |app| crate::meiki_ocr::models_ready(app).map(|_| ()),
+            |app| {
+                let mut engine = None;
+                let mut failed: Option<String> = None;
+                Box::new(move |Request { image, plan }| -> Answer {
+                    if let Some(reason) = &failed {
+                        return Err(Failure::Unavailable(reason.clone()));
+                    }
+                    if engine.is_none() {
+                        let loaded =
+                            crate::meiki_ocr::engine_root(&app).and_then(|root| crate::meiki_ocr::load_engine(&root));
+                        match loaded {
+                            Ok(loaded) => engine = Some(loaded),
+                            Err(reason) => {
+                                failed = Some(reason.clone());
+                                return Err(Failure::Unavailable(reason));
+                            }
                         }
                     }
-                }
-                let Some(meiki) = engine.as_mut() else {
-                    return Err(Failure::Inference("MeikiOCR engine missing".into()));
-                };
-                let started = Instant::now();
-                let read = read_planned(&image, plan, |part| {
-                    crate::meiki_ocr::infer(meiki, part).map_err(Failure::Inference)
-                });
-                match read {
-                    Ok((lines, partial)) => Ok(Read {
-                        lines: text_lines(&lines, image.width(), image.height()),
-                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
-                        scan: crate::meiki_ocr::scan_result(&lines, meiki),
-                        raw: lines,
-                        partial,
-                    }),
-                    Err(Failure::Inference(e)) => {
-                        // A panicking session may be left inconsistent: rebuild it next time.
-                        if e.starts_with(crate::engine_probe::PANIC_PREFIX) {
-                            engine = None;
+                    let Some(meiki) = engine.as_mut() else {
+                        return Err(Failure::Inference("MeikiOCR engine missing".into()));
+                    };
+                    let started = Instant::now();
+                    let read = read_planned(&image, plan, |part| {
+                        crate::meiki_ocr::infer(meiki, part).map_err(Failure::Inference)
+                    });
+                    match read {
+                        Ok((lines, partial)) => Ok(Read {
+                            lines: text_lines(&lines, image.width(), image.height()),
+                            duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                            scan: crate::meiki_ocr::scan_result(&lines, meiki),
+                            raw: lines,
+                            partial,
+                        }),
+                        Err(Failure::Inference(e)) => {
+                            // A panicking session may be left inconsistent: rebuild it next time.
+                            if e.starts_with(crate::engine_probe::PANIC_PREFIX) {
+                                engine = None;
+                            }
+                            Err(Failure::Inference(e))
                         }
-                        Err(Failure::Inference(e))
+                        Err(failure) => Err(failure),
                     }
-                    Err(failure) => Err(failure),
-                }
-            })
-        }, regions)
+                })
+            },
+            regions,
+        )
     }
 
     /// PaddleOCR on the scan engine, which loads (and keeps) it on first use.
@@ -466,32 +471,39 @@ impl EngineObserver {
     /// whole frames, whose size does not change.
     pub fn paddle(app: tauri::AppHandle) -> Self {
         let regions = Some((0, 0));
-        Self::new(app, "ppocr", "PaddleOCR", crate::pp_ocr::models_ready, |app| {
-            // Learned from the first read, which is always whole.
-            let mut on_cpu = false;
-            Box::new(move |Request { image, plan }| -> Answer {
-                let started = Instant::now();
-                let plan = plan.filter(|_| on_cpu);
-                let mut backend = Value::Null;
-                let read = read_planned(&image, plan, |part| match crate::pp_ocr::read_lines(&app, part) {
-                    Ok((lines, used)) => {
-                        backend = used;
-                        Ok(lines)
-                    }
-                    Err(crate::pp_ocr::ReadError::Unavailable(reason)) => Err(Failure::Unavailable(reason)),
-                    Err(crate::pp_ocr::ReadError::Inference(reason)) => Err(Failure::Inference(reason)),
-                });
-                let (lines, partial) = read?;
-                on_cpu = crate::pp_ocr::runs_on_cpu(&backend);
-                Ok(Read {
-                    lines: text_lines(&lines, image.width(), image.height()),
-                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
-                    scan: crate::pp_ocr::scan_result(&lines, backend),
-                    raw: lines,
-                    partial,
+        Self::new(
+            app,
+            "ppocr",
+            "PaddleOCR",
+            crate::pp_ocr::models_ready,
+            |app| {
+                // Learned from the first read, which is always whole.
+                let mut on_cpu = false;
+                Box::new(move |Request { image, plan }| -> Answer {
+                    let started = Instant::now();
+                    let plan = plan.filter(|_| on_cpu);
+                    let mut backend = Value::Null;
+                    let read = read_planned(&image, plan, |part| match crate::pp_ocr::read_lines(&app, part) {
+                        Ok((lines, used)) => {
+                            backend = used;
+                            Ok(lines)
+                        }
+                        Err(crate::pp_ocr::ReadError::Unavailable(reason)) => Err(Failure::Unavailable(reason)),
+                        Err(crate::pp_ocr::ReadError::Inference(reason)) => Err(Failure::Inference(reason)),
+                    });
+                    let (lines, partial) = read?;
+                    on_cpu = crate::pp_ocr::runs_on_cpu(&backend);
+                    Ok(Read {
+                        lines: text_lines(&lines, image.width(), image.height()),
+                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                        scan: crate::pp_ocr::scan_result(&lines, backend),
+                        raw: lines,
+                        partial,
+                    })
                 })
-            })
-        }, regions)
+            },
+            regions,
+        )
     }
 
     /// VOCR6 on the scan engine, which loads (and keeps) it on first use.
@@ -499,63 +511,84 @@ impl EngineObserver {
     /// Always whole frames: its line spotter reads the frame at one scale, chosen from the frame's
     /// size, and a whole frame takes about 11 ms on a desktop CPU anyway.
     pub fn vocr(app: tauri::AppHandle) -> Self {
-        Self::new(app, "vocr", "VOCR6", crate::vocr::models_ready, |app| {
-            Box::new(move |Request { image, .. }| -> Answer {
-                let started = Instant::now();
-                let (width, height) = (image.width() as usize, image.height() as usize);
-                let grey = kimochi_vocr::Grey::from_interleaved(image.as_raw(), width, height, width * 3, 3);
-                let lines = crate::vocr::read_lines(&app, &grey).map_err(|e| match e {
-                    crate::pp_ocr::ReadError::Unavailable(reason) => Failure::Unavailable(reason),
-                    crate::pp_ocr::ReadError::Inference(reason) => Failure::Inference(reason),
-                })?;
-                Ok(Read {
-                    lines: text_lines(&lines, image.width(), image.height()),
-                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
-                    scan: crate::vocr::scan_result(&lines),
-                    raw: lines,
-                    partial: false,
+        Self::new(
+            app,
+            "vocr",
+            "VOCR6",
+            crate::vocr::models_ready,
+            |app| {
+                Box::new(move |Request { image, .. }| -> Answer {
+                    let started = Instant::now();
+                    let (width, height) = (image.width() as usize, image.height() as usize);
+                    let grey = kimochi_vocr::Grey::from_interleaved(image.as_raw(), width, height, width * 3, 3);
+                    let lines = crate::vocr::read_lines(&app, &grey).map_err(|e| match e {
+                        crate::pp_ocr::ReadError::Unavailable(reason) => Failure::Unavailable(reason),
+                        crate::pp_ocr::ReadError::Inference(reason) => Failure::Inference(reason),
+                    })?;
+                    Ok(Read {
+                        lines: text_lines(&lines, image.width(), image.height()),
+                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                        scan: crate::vocr::scan_result(&lines),
+                        raw: lines,
+                        partial: false,
+                    })
                 })
-            })
-        }, None)
+            },
+            None,
+        )
     }
 
     /// Chrome Screen AI through the scan's worker process (`screen_ai`), whole frames, its lines.
     pub fn screenai(app: tauri::AppHandle) -> Self {
-        Self::new(app, "screenai", "Screen AI", |_| Ok(()), |app| {
-            Box::new(move |Request { image, .. }| -> Answer {
-                let started = Instant::now();
-                let result = crate::screen_ai::recognize_rgb(&app, &image).map_err(Failure::Inference)?;
-                Ok(Read {
-                    lines: line_annotation_lines(&result),
-                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
-                    scan: result,
-                    raw: Vec::new(),
-                    partial: false,
+        Self::new(
+            app,
+            "screenai",
+            "Screen AI",
+            |_| Ok(()),
+            |app| {
+                Box::new(move |Request { image, .. }| -> Answer {
+                    let started = Instant::now();
+                    let result = crate::screen_ai::recognize_rgb(&app, &image).map_err(Failure::Inference)?;
+                    Ok(Read {
+                        lines: line_annotation_lines(&result),
+                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                        scan: result,
+                        raw: Vec::new(),
+                        partial: false,
+                    })
                 })
-            })
-        }, None)
+            },
+            None,
+        )
     }
 
     /// The Snipping Tool engine through its worker process, line by line.
     #[cfg(target_os = "windows")]
     pub fn oneocr(app: tauri::AppHandle) -> Self {
-        Self::new(app, "oneocr", "OneOCR", |_| Ok(()), |app| {
-            Box::new(move |Request { image, .. }| -> Answer {
-                let started = Instant::now();
-                let mut png = Vec::new();
-                image::DynamicImage::ImageRgb8(image)
-                    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-                    .map_err(|e| Failure::Inference(format!("OneOCR frame: {e}")))?;
-                let result = crate::oneocr::recognize(&app, &png).map_err(Failure::Inference)?;
-                Ok(Read {
-                    lines: annotation_lines(&result),
-                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
-                    scan: result,
-                    raw: Vec::new(),
-                    partial: false,
+        Self::new(
+            app,
+            "oneocr",
+            "OneOCR",
+            |_| Ok(()),
+            |app| {
+                Box::new(move |Request { image, .. }| -> Answer {
+                    let started = Instant::now();
+                    let mut png = Vec::new();
+                    image::DynamicImage::ImageRgb8(image)
+                        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                        .map_err(|e| Failure::Inference(format!("OneOCR frame: {e}")))?;
+                    let result = crate::oneocr::recognize(&app, &png).map_err(Failure::Inference)?;
+                    Ok(Read {
+                        lines: annotation_lines(&result),
+                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                        scan: result,
+                        raw: Vec::new(),
+                        partial: false,
+                    })
                 })
-            })
-        }, None)
+            },
+            None,
+        )
     }
 
     /// Take `read` as the reading of `frame` (whose `frame_key` is `key`): what the scan reuses,
@@ -595,20 +628,13 @@ impl TextObserver for EngineObserver {
             private_api: false,
             detail: match reason {
                 Some(reason) => unavailable_detail(self.name, reason),
-                None => format!(
-                    "Automatic scanning reads each changed frame with {}.",
-                    self.name
-                ),
+                None => format!("Automatic scanning reads each changed frame with {}.", self.name),
             },
             timeouts: self.timeouts,
         }
     }
 
-    fn observe(
-        &mut self,
-        frame: &Frame,
-        timeout: Duration,
-    ) -> kimochi_capture::Result<Observation> {
+    fn observe(&mut self, frame: &Frame, timeout: Duration) -> kimochi_capture::Result<Observation> {
         if let Some(reason) = &self.unsupported {
             return Err(CaptureError::new("unsupported", unavailable_detail(self.name, reason)));
         }
@@ -641,9 +667,7 @@ impl TextObserver for EngineObserver {
         // `KIMOCHI_WATCH_FULL` reads every look whole, for comparing the two.
         let incremental = std::env::var_os("KIMOCHI_WATCH_FULL").is_none();
         let plan = match (self.regions, &self.previous) {
-            (Some(min_size), Some(previous))
-                if incremental && self.partial_looks < crate::incremental::FULL_EVERY =>
-            {
+            (Some(min_size), Some(previous)) if incremental && self.partial_looks < crate::incremental::FULL_EVERY => {
                 crate::incremental::plan(previous, frame, min_size)
             }
             _ => None,
@@ -683,9 +707,7 @@ impl TextObserver for EngineObserver {
                 self.unsupported = Some(reason);
                 Err(error)
             }
-            Outcome::Ready(Err(Failure::Inference(message))) => {
-                Err(CaptureError::new("observe", message))
-            }
+            Outcome::Ready(Err(Failure::Inference(message))) => Err(CaptureError::new("observe", message)),
             Outcome::Busy { running_for } => {
                 self.timeouts += 1;
                 Err(busy_error(name, running_for))
@@ -735,10 +757,8 @@ fn annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
             .filter_map(|group| {
                 let text = group["text"].as_str()?.trim();
                 let bbox = group["bbox"].as_array()?;
-                let [left, top, right, bottom] = <[f64; 4]>::try_from(
-                    bbox.iter().map(|v| v.as_f64()).collect::<Option<Vec<_>>>()?,
-                )
-                .ok()?;
+                let [left, top, right, bottom] =
+                    <[f64; 4]>::try_from(bbox.iter().map(|v| v.as_f64()).collect::<Option<Vec<_>>>()?).ok()?;
                 (!text.is_empty() && right > left && bottom > top).then(|| TextLine {
                     text: text.to_string(),
                     x: left,
@@ -808,10 +828,7 @@ pub(crate) fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImag
     let (width, height) = (frame.info.width as usize, frame.info.height as usize);
     let stride = frame.info.stride.max(width * 4);
     if width == 0 || height == 0 || frame.pixels.len() < stride * (height - 1) + width * 4 {
-        return Err(CaptureError::new(
-            "observe",
-            "the frame is empty or shorter than its geometry",
-        ));
+        return Err(CaptureError::new("observe", "the frame is empty or shorter than its geometry"));
     }
     let rgb = kimochi_capture::pixels::rgba_rows_to_rgb(&frame.pixels, width, height, stride);
     image::RgbImage::from_raw(frame.info.width, frame.info.height, rgb)
@@ -933,59 +950,40 @@ struct LatestWorker<I, O> {
 impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
     fn spawn(name: &str, mut run: impl FnMut(I) -> O + Send + 'static) -> std::io::Result<Self> {
         let channel = Arc::new(Channel {
-            slot: Mutex::new(Slot {
-                pending: None,
-                running: None,
-                done: None,
-                closed: false,
-                exited: false,
-            }),
+            slot: Mutex::new(Slot { pending: None, running: None, done: None, closed: false, exited: false }),
             changed: Condvar::new(),
         });
         let shared = channel.clone();
-        let thread = std::thread::Builder::new()
-            .name(name.into())
-            .spawn(move || {
-                'serve: loop {
-                    let job = {
-                        let mut slot = shared.lock();
-                        loop {
-                            if slot.closed {
-                                break 'serve;
-                            }
-                            if let Some(job) = slot.pending.take() {
-                                slot.running = Some(Running {
-                                    generation: job.generation,
-                                    key: job.key,
-                                    started: Instant::now(),
-                                });
-                                break job;
-                            }
-                            slot = shared.changed.wait(slot).unwrap_or_else(|p| p.into_inner());
-                        }
-                    };
-                    let output = run(job.input);
+        let thread = std::thread::Builder::new().name(name.into()).spawn(move || {
+            'serve: loop {
+                let job = {
                     let mut slot = shared.lock();
-                    slot.running = None;
-                    slot.done = Some(Done {
-                        generation: job.generation,
-                        key: job.key,
-                        output,
-                    });
-                    shared.changed.notify_all();
-                }
-                // The engine goes with `run`, here on the worker, before saying so.
-                drop(run);
-                shared.lock().exited = true;
+                    loop {
+                        if slot.closed {
+                            break 'serve;
+                        }
+                        if let Some(job) = slot.pending.take() {
+                            slot.running =
+                                Some(Running { generation: job.generation, key: job.key, started: Instant::now() });
+                            break job;
+                        }
+                        slot = shared.changed.wait(slot).unwrap_or_else(|p| p.into_inner());
+                    }
+                };
+                let output = run(job.input);
+                let mut slot = shared.lock();
+                slot.running = None;
+                slot.done = Some(Done { generation: job.generation, key: job.key, output });
                 shared.changed.notify_all();
-            })?;
+            }
+            // The engine goes with `run`, here on the worker, before saying so.
+            drop(run);
+            shared.lock().exited = true;
+            shared.changed.notify_all();
+        })?;
         let stop: Arc<dyn Stop> = channel.clone();
         WORKERS.lock().unwrap_or_else(|p| p.into_inner()).push(Arc::downgrade(&stop));
-        Ok(Self {
-            channel,
-            generation: 0,
-            _thread: thread,
-        })
+        Ok(Self { channel, generation: 0, _thread: thread })
     }
 
     /// Ask for `input` (whose content is identified by `key`) and wait at most
@@ -1001,35 +999,20 @@ impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
             Some(running) => running.generation,
             None => {
                 self.generation += 1;
-                slot.pending = Some(Job {
-                    generation: self.generation,
-                    key,
-                    input,
-                });
+                slot.pending = Some(Job { generation: self.generation, key, input });
                 self.channel.changed.notify_all();
                 self.generation
             }
         };
         loop {
-            if let Some(done) = slot
-                .done
-                .as_ref()
-                .filter(|done| done.generation == generation || done.key == key)
-            {
+            if let Some(done) = slot.done.as_ref().filter(|done| done.generation == generation || done.key == key) {
                 return Outcome::Ready(done.output.clone());
             }
             let now = Instant::now();
             if now >= deadline {
-                return Outcome::Busy {
-                    running_for: slot.running.as_ref().map(|r| r.started.elapsed()),
-                };
+                return Outcome::Busy { running_for: slot.running.as_ref().map(|r| r.started.elapsed()) };
             }
-            slot = self
-                .channel
-                .changed
-                .wait_timeout(slot, deadline - now)
-                .unwrap_or_else(|p| p.into_inner())
-                .0;
+            slot = self.channel.changed.wait_timeout(slot, deadline - now).unwrap_or_else(|p| p.into_inner()).0;
         }
     }
 }
@@ -1082,25 +1065,15 @@ mod tests {
     #[test]
     fn meiki_boxes_become_frame_pixel_lines() {
         let lines = text_lines(
-            &[
-                meiki("日本語", [10, 20, 90, 40]),
-                meiki("  ", [0, 0, 5, 5]),
-                meiki("はみ出す", [150, 90, 260, 130]),
-            ],
+            &[meiki("日本語", [10, 20, 90, 40]), meiki("  ", [0, 0, 5, 5]), meiki("はみ出す", [150, 90, 260, 130])],
             200,
             100,
         );
         assert_eq!(lines.len(), 2, "blank lines are dropped");
         assert_eq!(lines[0].text, "日本語");
-        assert_eq!(
-            (lines[0].x, lines[0].y, lines[0].width, lines[0].height),
-            (10.0, 20.0, 80.0, 20.0)
-        );
+        assert_eq!((lines[0].x, lines[0].y, lines[0].width, lines[0].height), (10.0, 20.0, 80.0, 20.0));
         // Clamped to the frame rather than reaching outside it.
-        assert_eq!(
-            (lines[1].x, lines[1].y, lines[1].width, lines[1].height),
-            (150.0, 90.0, 50.0, 10.0)
-        );
+        assert_eq!((lines[1].x, lines[1].y, lines[1].width, lines[1].height), (150.0, 90.0, 50.0, 10.0));
         assert_eq!(join_lines(&lines), "日本語\nはみ出す");
     }
 
@@ -1268,9 +1241,11 @@ mod tests {
     fn oneocr_groups_are_its_lines_and_fragments_are_not_counted_again() {
         // What the worker sends for a line with words: the line as a group, each word a
         // fragment, and no `line` annotation at all (oneocr-worker/src/main.rs `parse`).
-        let poly = |x: f64, y: f64| serde_json::json!({"vertices": [
-            {"x": x, "y": y}, {"x": x + 40.0, "y": y}, {"x": x + 40.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
-        ]});
+        let poly = |x: f64, y: f64| {
+            serde_json::json!({"vertices": [
+                {"x": x, "y": y}, {"x": x + 40.0, "y": y}, {"x": x + 40.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
+            ]})
+        };
         let result = serde_json::json!({
             "fullText": "今日は\n猫",
             "groups": [
@@ -1287,7 +1262,10 @@ mod tests {
         });
         let lines = annotation_lines(&result);
         assert_eq!(lines.len(), 2);
-        assert_eq!((lines[0].text.as_str(), lines[0].x, lines[0].y, lines[0].width, lines[0].height), ("今日は", 10.0, 30.0, 100.0, 20.0));
+        assert_eq!(
+            (lines[0].text.as_str(), lines[0].x, lines[0].y, lines[0].width, lines[0].height),
+            ("今日は", 10.0, 30.0, 100.0, 20.0)
+        );
         assert_eq!(lines[1].text.as_str(), "猫");
         assert_eq!(join_lines(&lines), "今日は\n猫");
     }
@@ -1295,9 +1273,11 @@ mod tests {
     #[test]
     fn oneocr_line_annotations_become_lines_and_its_fragments_do_not() {
         // A result without groups (an older worker): its `line` annotations are the lines.
-        let poly = |x: f64, y: f64| serde_json::json!({"vertices": [
-            {"x": x, "y": y}, {"x": x + 100.0, "y": y}, {"x": x + 100.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
-        ]});
+        let poly = |x: f64, y: f64| {
+            serde_json::json!({"vertices": [
+                {"x": x, "y": y}, {"x": x + 100.0, "y": y}, {"x": x + 100.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
+            ]})
+        };
         let result = serde_json::json!({"textAnnotations": [
             {"description": "全部", "granularity": "aggregate", "boundingPoly": poly(0.0, 0.0)},
             {"description": "今日は", "granularity": "line", "boundingPoly": poly(10.0, 30.0)},
@@ -1317,11 +1297,7 @@ mod tests {
     }
 
     /// The worker, the sender that releases one run, and the inputs it ran.
-    type Gated = (
-        LatestWorker<u32, u32>,
-        mpsc::Sender<()>,
-        Arc<Mutex<Vec<u32>>>,
-    );
+    type Gated = (LatestWorker<u32, u32>, mpsc::Sender<()>, Arc<Mutex<Vec<u32>>>);
 
     /// A worker whose runs each wait for a release, recording what they ran.
     fn gated() -> Gated {
@@ -1350,9 +1326,7 @@ mod tests {
     #[test]
     fn a_timeout_is_busy_and_the_late_answer_serves_identical_pixels() {
         let (mut worker, release, ran) = gated();
-        let Outcome::Busy { running_for } = worker.submit(7, 7, SHORT) else {
-            panic!("should time out")
-        };
+        let Outcome::Busy { running_for } = worker.submit(7, 7, SHORT) else { panic!("should time out") };
         assert!(running_for.is_some(), "the job is in flight");
         release.send(()).unwrap();
         // Same pixels again: waits for the in-flight read instead of queueing a twin.

@@ -111,11 +111,7 @@ async function prepareMangaFont() {
   const rules = []
   for (const weight of MANGA_FONT_WEIGHTS) {
     const css = await readFile(at(MANGA_FONT_PACKAGE, `${weight}.css`), 'utf8')
-    rules.push(
-      css
-        .replace(/,\s*url\([^)]*\.woff\)\s*format\('woff'\)/g, '')
-        .replace(/url\(\.\/files\//g, 'url(./')
-    )
+    rules.push(css.replace(/,\s*url\([^)]*\.woff\)\s*format\('woff'\)/g, '').replace(/url\(\.\/files\//g, 'url(./'))
     for (const match of css.matchAll(/url\(\.\/files\/([^)]+\.woff2)\)/g))
       await cp(at(MANGA_FONT_PACKAGE, 'files', match[1]), path.join(out, match[1]))
   }
@@ -162,9 +158,7 @@ async function checkUiSpecifiers() {
     }
   }
   if (unresolved.length > 0) {
-    throw Error(
-      `dist/ui modules have specifiers a browser cannot resolve:\n  ${unresolved.join('\n  ')}`
-    )
+    throw Error(`dist/ui modules have specifiers a browser cannot resolve:\n  ${unresolved.join('\n  ')}`)
   }
 }
 

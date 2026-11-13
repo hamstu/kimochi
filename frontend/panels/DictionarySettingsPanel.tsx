@@ -100,9 +100,7 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
     const pending = acceptNavigation(engine, extensionHost()?.pendingNavigate)
     const section = takeDictionarySection()
     const options = optionsUrl(engine)
-    return section && options
-      ? { src: `${options}#${section}`, section }
-      : { src: pending ?? options, section: null }
+    return section && options ? { src: `${options}#${section}`, section } : { src: pending ?? options, section: null }
   })
   const [src, setSrc] = useState<string | null>(first.src)
   useEffect(() => {
@@ -198,8 +196,8 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
     return (
       <div className="dictionary-settings dictionary-settings-note">
         <Callout tone="warn">
-          {name}&apos;s settings page cannot be shown here: this window does not know where {name}{' '}
-          is served from. Restart Kimochi; if it persists, report it from Diagnostics.
+          {name}&apos;s settings page cannot be shown here: this window does not know where {name} is served from.
+          Restart Kimochi; if it persists, report it from Diagnostics.
         </Callout>
       </div>
     )
@@ -209,17 +207,25 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
     <div className="dictionary-settings">
       {!loaded && (
         <div className="dictionary-settings-loading">
-          {failed ? <>
-            <span>{name} settings did not finish loading. An import may still be running.</span>
-            <Button onClick={() => {
-              setLoaded(false)
-              setFailed(false)
-              setAttempt((current) => current + 1)
-            }}>Retry</Button>
-          </> : <>
-            <Spinner label={`Loading ${name} settings`} />
-            <span>Loading {name} settings…</span>
-          </>}
+          {failed ? (
+            <>
+              <span>{name} settings did not finish loading. An import may still be running.</span>
+              <Button
+                onClick={() => {
+                  setLoaded(false)
+                  setFailed(false)
+                  setAttempt((current) => current + 1)
+                }}
+              >
+                Retry
+              </Button>
+            </>
+          ) : (
+            <>
+              <Spinner label={`Loading ${name} settings`} />
+              <span>Loading {name} settings…</span>
+            </>
+          )}
         </div>
       )}
       <iframe
@@ -247,8 +253,8 @@ function NotDownloadedNote({ engine }: { engine: Exclude<DictionaryEngine, 'cust
   return (
     <div className="dictionary-settings dictionary-settings-note">
       <p className="k-description">
-        {name} is not downloaded yet, so there are no settings to show and words are not looked up.
-        Download it, or choose another dictionary, in Settings → Dictionary.
+        {name} is not downloaded yet, so there are no settings to show and words are not looked up. Download it, or
+        choose another dictionary, in Settings → Dictionary.
       </p>
       <div>
         <Button
@@ -270,9 +276,8 @@ function YomitanApiNote(): JSX.Element {
   return (
     <div className="dictionary-settings dictionary-settings-note">
       <p className="k-description">
-        The Yomitan API uses the dictionaries in your browser&apos;s Yomitan, so there is nothing to
-        manage here. Its connection, pop-up size and audio are in Settings → Dictionary, and its Anki
-        cards in Settings → Anki.
+        The Yomitan API uses the dictionaries in your browser&apos;s Yomitan, so there is nothing to manage here. Its
+        connection, pop-up size and audio are in Settings → Dictionary, and its Anki cards in Settings → Anki.
       </p>
       <div>
         <Button

@@ -89,7 +89,11 @@ export const PRESETS: readonly PresetGroup<Preset>[] = [
         id: 'all-downloading',
         label: 'Everything setting up',
         detail: 'MeikiOCR downloading; Hachidori downloading, then starting and fetching its dictionaries.',
-        state: { surface: 'main', values: { ocr: 'meikiocr', model: 'downloading', popup: 'hachidori', ext: 'downloading', readiness: 'setup' }, size: TALL }
+        state: {
+          surface: 'main',
+          values: { ocr: 'meikiocr', model: 'downloading', popup: 'hachidori', ext: 'downloading', readiness: 'setup' },
+          size: TALL
+        }
       }
     ]
   },
@@ -193,7 +197,12 @@ export const FLOWS: readonly PresetGroup<Flow>[] = [
           { label: 'Reading with Google Lens', after: 0 },
           { label: 'Choose Manga OCR: its model downloads', run: (p) => p.setSetting('ocrMode', 'mangaocr') },
           { label: 'Pause the download', after: 3000, run: (p) => p.model.pause('mangaocr') },
-          { label: 'Resume it', after: 2500, run: (p) => p.model.start('mangaocr', { fresh: false }), until: modelReady }
+          {
+            label: 'Resume it',
+            after: 2500,
+            run: (p) => p.model.start('mangaocr', { fresh: false }),
+            until: modelReady
+          }
         ]
       }
     ]

@@ -44,24 +44,34 @@ fn main() -> ExitCode {
             let lines: Vec<Line> = args
                 .get(2)
                 .and_then(|p| std::fs::read_to_string(p).ok())
-                .map(|t| t.lines().filter_map(|l| serde_json::from_str(l.trim_start_matches('\u{feff}')).ok()).collect())
+                .map(|t| {
+                    t.lines().filter_map(|l| serde_json::from_str(l.trim_start_matches('\u{feff}')).ok()).collect()
+                })
                 .unwrap_or_default();
             let verdicts = classify(&cap, &lines);
             println!("{} clips, {} lines\n\ngroups (voice likelihood):", cap.clips.len(), lines.len());
             for v in &verdicts {
-                println!("  {:>5.2}  {:<46} {:>4} clips  median {:>5.1}s  {}", v.voice, v.group, v.clips, v.median_dur, v.reasons.join("; "));
+                println!(
+                    "  {:>5.2}  {:<46} {:>4} clips  median {:>5.1}s  {}",
+                    v.voice,
+                    v.group,
+                    v.clips,
+                    v.median_dur,
+                    v.reasons.join("; ")
+                );
             }
             let voice = voice_groups(&verdicts);
             println!("\nvoice: {}", if voice.is_empty() { "(none decided)".to_string() } else { voice.join(", ") });
             // speech.jsonl (vh-speechcheck): VAD speech share per clip, as the speech check.
-            let speech: std::collections::HashMap<u64, f64> = std::fs::read_to_string(Path::new(dir).join("speech.jsonl"))
-                .map(|t| {
-                    t.lines()
-                        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-                        .filter_map(|v| Some((v["seq"].as_u64()?, v["speech"].as_f64()?)))
-                        .collect()
-                })
-                .unwrap_or_default();
+            let speech: std::collections::HashMap<u64, f64> =
+                std::fs::read_to_string(Path::new(dir).join("speech.jsonl"))
+                    .map(|t| {
+                        t.lines()
+                            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                            .filter_map(|v| Some((v["seq"].as_u64()?, v["speech"].as_f64()?)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
             if !speech.is_empty() {
                 println!("speech check: {} clips from speech.jsonl", speech.len());
             }
@@ -70,15 +80,39 @@ fn main() -> ExitCode {
                 println!("\nlines:");
                 for m in match_lines_with(&cap, &voice, &lines, if speech.is_empty() { None } else { Some(&check) }) {
                     match m.clip {
-                        Some(c) => println!("  {:<10} {:+6.0} ms  {}  {}", m.uid, m.offset_ms.unwrap_or(0.0), c.file.unwrap_or_default(), c.source.unwrap_or_default()),
+                        Some(c) => println!(
+                            "  {:<10} {:+6.0} ms  {}  {}",
+                            m.uid,
+                            m.offset_ms.unwrap_or(0.0),
+                            c.file.unwrap_or_default(),
+                            c.source.unwrap_or_default()
+                        ),
                         None => println!("  {:<10} (no voice clip)", m.uid),
                     }
                 }
             } else {
-                let voiced: Vec<&Clip> = cap.clips.iter().filter(|c| voice.contains(&c.group()) && !c.looping && name_says(&format!("{} {}", c.source.as_deref().unwrap_or(""), c.channel.as_deref().unwrap_or(""))).0 >= 0).collect();
+                let voiced: Vec<&Clip> = cap
+                    .clips
+                    .iter()
+                    .filter(|c| {
+                        voice.contains(&c.group())
+                            && !c.looping
+                            && name_says(&format!(
+                                "{} {}",
+                                c.source.as_deref().unwrap_or(""),
+                                c.channel.as_deref().unwrap_or("")
+                            ))
+                            .0 >= 0
+                    })
+                    .collect();
                 println!("\nvoice clips ({}):", voiced.len());
                 for c in voiced.iter().take(40) {
-                    println!("  {:>5.1}s  {}  {}", c.dur, c.file.as_deref().unwrap_or("-"), c.source.as_deref().unwrap_or(""));
+                    println!(
+                        "  {:>5.1}s  {}  {}",
+                        c.dur,
+                        c.file.as_deref().unwrap_or("-"),
+                        c.source.as_deref().unwrap_or("")
+                    );
                 }
             }
             ExitCode::SUCCESS

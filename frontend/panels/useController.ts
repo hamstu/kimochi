@@ -143,20 +143,16 @@ export function useController(): ControllerWiring {
     onSelectAndScan: () => attempt('Select and scan', () => triggerAction('selectAndScan')),
     // Drawn over the source itself by the overlay, window or screen alike.
     onEditCropArea: () => attempt('Edit region', () => triggerAction('setCropArea')),
-    onEditAnkiCropArea: () =>
-      attempt('Edit Anki crop area', () => triggerAction('setAnkiCropArea')),
+    onEditAnkiCropArea: () => attempt('Edit Anki crop area', () => triggerAction('setAnkiCropArea')),
     onOpenLog: () => attempt('Show Kimochi', () => panel('log', 'show')),
-    onToggleTextOverlayVisibility: () =>
-      attempt('Toggle overlay text', () => triggerAction('toggleTextOverlay')),
+    onToggleTextOverlayVisibility: () => attempt('Toggle overlay text', () => triggerAction('toggleTextOverlay')),
     onToggleDebugOverlay,
     onOpenSettings: () => attempt('Open settings', () => openSettings()),
     onOpenSource: () => attempt('Open source picker', () => openSourcePicker()),
     onCloseApp: () => attempt('Quit', () => quitApp()),
     // Hover hints are cosmetic: a failure here must not put an error strip on screen.
     onSelectRegionHover: (hovered) =>
-      void triggerAction(hovered ? 'hoverSelectRegionOn' : 'hoverSelectRegionOff').catch(
-        () => undefined
-      ),
+      void triggerAction(hovered ? 'hoverSelectRegionOn' : 'hoverSelectRegionOff').catch(() => undefined),
     onActivateSource: () => {
       const sourceId = state.source?.sourceId
       if (!sourceId) return
@@ -178,8 +174,7 @@ export function useController(): ControllerWiring {
       void triggerAction('hoverSourceDismiss').catch(() => undefined)
       attempt('Clear source', () => clearSource())
     },
-    onSourceHover: (hovered) =>
-      void triggerAction(hovered ? 'hoverSourceOn' : 'hoverSourceOff').catch(() => undefined)
+    onSourceHover: (hovered) => void triggerAction(hovered ? 'hoverSourceOn' : 'hoverSourceOff').catch(() => undefined)
   }
 
   return { props, status: state.status, error, dismissError: () => setError(null) }

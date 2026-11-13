@@ -29,7 +29,9 @@ async function loadFrontend(entry) {
 
 const prompt = await loadFrontend('texthooker/lib/explainPrompt.ts')
 const { countWords } = await loadFrontend('texthooker/core/wordCount.ts')
-const { DEEPL_SOURCES, deeplTranslates, translationErrorMessage } = await loadFrontend('texthooker/lib/translateLanguage.ts')
+const { DEEPL_SOURCES, deeplTranslates, translationErrorMessage } = await loadFrontend(
+  'texthooker/lib/translateLanguage.ts'
+)
 const { JAPANESE_ONLY_MARKERS, YOMITAN_MARKERS, markersFor } = await loadFrontend('texthooker/lib/types.ts')
 const { detectAnkiSetup } = await loadFrontend('texthooker/lib/ankiDetect.ts')
 const { bestWatcher, resolveWatcher, watcherOffered } = await load('watcher.ts')
@@ -65,8 +67,13 @@ test('the Explain prompt for Korean names Korean and has none of the Japanese-on
   assert.ok(sent.includes('PREVIOUS LINES (oldest first):\n앞 줄\n'))
 })
 
-test('a stored default follows the language; the reader\'s own prompt is sent as written', () => {
-  for (const stored of [prompt.LEGACY_EXPLAIN_PROMPT, prompt.defaultExplainPrompt('ja'), prompt.defaultExplainPrompt('fr'), '  ']) {
+test("a stored default follows the language; the reader's own prompt is sent as written", () => {
+  for (const stored of [
+    prompt.LEGACY_EXPLAIN_PROMPT,
+    prompt.defaultExplainPrompt('ja'),
+    prompt.defaultExplainPrompt('fr'),
+    '  '
+  ]) {
     assert.equal(prompt.isDefaultExplainPrompt(stored), true)
     assert.equal(prompt.explainTemplate(stored, 'de'), prompt.defaultExplainPrompt('de'))
   }
@@ -90,7 +97,11 @@ const on = (accelerator) => ({ available: true, ...(accelerator ? { accelerator 
 const JA = ['ja']
 
 test('the watcher passes over engines that cannot read the language; MeikiOCR is a fallback for Japanese only', () => {
-  const engines = { ppocr: { available: false }, meikiocr: { ...on('cpu'), languages: JA }, vocr: { ...on(), languages: JA } }
+  const engines = {
+    ppocr: { available: false },
+    meikiocr: { ...on('cpu'), languages: JA },
+    vocr: { ...on(), languages: JA }
+  }
   // Japanese: unchanged.
   assert.equal(bestWatcher(engines), 'meikiocr')
   assert.equal(bestWatcher(engines, 'ja'), 'meikiocr')
@@ -104,7 +115,11 @@ test('the watcher passes over engines that cannot read the language; MeikiOCR is
   assert.equal(watcherOffered({ meikiocr: on('cpu') }, 'meikiocr', 'ko'), false)
   assert.equal(watcherOffered({ meikiocr: on('cpu') }, 'meikiocr', 'ja'), true)
   // Engines listing the language, or listing none, watch.
-  const mac = { ppocr: on('cpu'), livetext: { ...on(), languages: ['ja', 'ko', 'en'] }, meikiocr: { ...on(), languages: JA } }
+  const mac = {
+    ppocr: on('cpu'),
+    livetext: { ...on(), languages: ['ja', 'ko', 'en'] },
+    meikiocr: { ...on(), languages: JA }
+  }
   assert.equal(bestWatcher(mac, 'ko'), 'livetext')
   assert.equal(bestWatcher(mac, 'hi'), 'ppocr')
   assert.equal(resolveWatcher('googlelens', mac, 'livetext', 'hi').engine, 'ppocr')
@@ -121,7 +136,10 @@ test('the Text Hooker strips script codes by default only where words are not sp
 
 test("DeepL's languages are native's, and its refusal reads as a sentence naming the language", async () => {
   const rust = await readFile(new URL('../src-tauri/src/language.rs', import.meta.url), 'utf8')
-  const body = rust.slice(rust.indexOf('pub fn deepl_source'), rust.indexOf('_ => return None', rust.indexOf('pub fn deepl_source')))
+  const body = rust.slice(
+    rust.indexOf('pub fn deepl_source'),
+    rust.indexOf('_ => return None', rust.indexOf('pub fn deepl_source'))
+  )
   const codes = body
     .split('\n')
     .filter((line) => line.includes('=>'))
@@ -130,18 +148,32 @@ test("DeepL's languages are native's, and its refusal reads as a sentence naming
   assert.equal(deeplTranslates('ja'), true)
   assert.equal(deeplTranslates('hi'), false)
   assert.equal(
-    translationErrorMessage('DeepL cannot translate from this language (hi). Choose Kimochi cloud translation instead.', 'hi'),
+    translationErrorMessage(
+      'DeepL cannot translate from this language (hi). Choose Kimochi cloud translation instead.',
+      'hi'
+    ),
     "DeepL can't translate from Hindi. Choose Kimochi cloud in Settings → Translation & AI."
   )
   assert.equal(translationErrorMessage('DeepL HTTP 403 (invalid key?)', 'ja'), 'DeepL HTTP 403 (invalid key?)')
 })
 
-const LAPIS = ['Expression', 'ExpressionReading', 'ExpressionAudio', 'MainDefinition', 'Sentence', 'SentenceFurigana', 'Frequency']
+const LAPIS = [
+  'Expression',
+  'ExpressionReading',
+  'ExpressionAudio',
+  'MainDefinition',
+  'Sentence',
+  'SentenceFurigana',
+  'Frequency'
+]
 const SENREN = ['word', 'reading', 'definition', 'sentence', 'sentenceFurigana', 'pitchAccents']
 
 test('furigana and pitch markers are offered, and detected, for Japanese only', async () => {
   assert.deepEqual(markersFor(true), YOMITAN_MARKERS)
-  assert.deepEqual(markersFor(false), YOMITAN_MARKERS.filter((m) => !JAPANESE_ONLY_MARKERS.includes(m)))
+  assert.deepEqual(
+    markersFor(false),
+    YOMITAN_MARKERS.filter((m) => !JAPANESE_ONLY_MARKERS.includes(m))
+  )
   assert.ok(!markersFor(false).includes('sentence-furigana') && !markersFor(false).includes('pitch-accents'))
   const anki = (fields) => ({
     models: async () => ['Lapis', 'Senren'],
@@ -156,11 +188,17 @@ test('furigana and pitch markers are offered, and detected, for Japanese only', 
   const markers = (found) => found.fieldMappings.map((m) => m.marker).filter(Boolean)
   assert.ok(markers(ja).includes('sentence-furigana'))
   assert.ok(!markers(ko).includes('sentence-furigana'))
-  assert.deepEqual(markers(ko), markers(ja).filter((m) => !JAPANESE_ONLY_MARKERS.includes(m)))
+  assert.deepEqual(
+    markers(ko),
+    markers(ja).filter((m) => !JAPANESE_ONLY_MARKERS.includes(m))
+  )
 })
 
 test('the debug summary names the language beside the OCR engine', () => {
-  assert.match(debugMarkdown({ ocr: { selected: 'ppocr' }, settings: { language: 'ko' } }), /\*\*OCR engine:\*\* ppocr, \*\*language:\*\* ko/)
+  assert.match(
+    debugMarkdown({ ocr: { selected: 'ppocr' }, settings: { language: 'ko' } }),
+    /\*\*OCR engine:\*\* ppocr, \*\*language:\*\* ko/
+  )
   assert.match(debugMarkdown({ ocr: { selected: 'ppocr' }, settings: {} }), /\*\*language:\*\* ja/)
   assert.match(debugMarkdown({}), /\*\*language:\*\* unknown/)
 })

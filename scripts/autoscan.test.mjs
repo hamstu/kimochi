@@ -2,8 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const { AutoScanner, DEFAULT_AUTO_OCR_SETTINGS, migrateAutoScanSettings } =
-  await load('autoscan.ts')
+const { AutoScanner, DEFAULT_AUTO_OCR_SETTINGS, migrateAutoScanSettings } = await load('autoscan.ts')
 
 const HASH_A = '0000000000000000'
 const HASH_B = 'ffffffffffffffff'
@@ -109,16 +108,10 @@ function harness(overrides = {}, depOverrides = {}) {
         return typeof state.recognized === 'function' ? state.recognized(frame) : state.recognized
       },
       retainFrame: async (frame) => {
-        if (
-          state.retainGate &&
-          (state.retainGateFor === null || state.retainGateFor === frame.id)
-        ) {
+        if (state.retainGate && (state.retainGateFor === null || state.retainGateFor === frame.id)) {
           await state.retainGate
         }
-        if (
-          state.retainError &&
-          (state.retainErrorFor === null || state.retainErrorFor === frame.id)
-        ) {
+        if (state.retainError && (state.retainErrorFor === null || state.retainErrorFor === frame.id)) {
           throw new Error(state.retainError)
         }
         state.retained.push(frame.id)
@@ -167,8 +160,7 @@ function harness(overrides = {}, depOverrides = {}) {
     state.lines = lines
   }
   const published = () => state.results.filter((r) => r.publish).map((r) => r.text)
-  const skips = (reason) =>
-    state.events.filter((e) => e.type === 'skip' && e.reason === reason).length
+  const skips = (reason) => state.events.filter((e) => e.type === 'skip' && e.reason === reason).length
 
   /** Stand in for the manual path trying to take the shared lock. */
   const tryManual = () => lock.acquire()
@@ -541,10 +533,7 @@ test('rapid new dialogue never builds a backlog: only the latest waits', async (
     2,
     'four new lines during one slow request cost one extra request, not four'
   )
-  assert.ok(
-    h.published().includes('cloud:台詞E'),
-    'and the newest line is the one that got through'
-  )
+  assert.ok(h.published().includes('cloud:台詞E'), 'and the newest line is the one that got through')
   assert.ok(!h.published().includes('cloud:台詞C'), 'the ones the reader has passed are gone')
 })
 
@@ -562,10 +551,7 @@ test('the loop keeps watching the screen while a slow recognition is out', async
   const before = h.state.captures.length
 
   for (let i = 0; i < 5; i++) await h.stepAsync()
-  assert.ok(
-    h.state.captures.length > before,
-    'a 45-second endpoint must not blind the loop for 45 seconds'
-  )
+  assert.ok(h.state.captures.length > before, 'a 45-second endpoint must not blind the loop for 45 seconds')
   release()
   await h.scanner.idle()
 })
@@ -1051,11 +1037,7 @@ test('the cadence tightens on new text and backs off on a frozen screen', async 
   assert.equal(h.scanner.currentInterval, adaptivePollMin, 'new text drops it to the floor')
 
   for (let i = 0; i < 30; i++) await h.step()
-  assert.equal(
-    h.scanner.currentInterval,
-    adaptivePollMax,
-    'a still screen backs off to the ceiling'
-  )
+  assert.equal(h.scanner.currentInterval, adaptivePollMax, 'a still screen backs off to the ceiling')
 
   h.sees('新しい台詞')
   await h.step()
@@ -1418,11 +1400,7 @@ test('a second recognition cannot start while the first is still publishing', as
   await h.stepAsync()
   await h.stepAsync()
   await flush()
-  assert.equal(
-    h.state.recognizeCalls.length,
-    1,
-    'the next line waits rather than overlapping the one being published'
-  )
+  assert.equal(h.state.recognizeCalls.length, 1, 'the next line waits rather than overlapping the one being published')
 
   releaseResult()
   await first
@@ -1617,20 +1595,12 @@ test('a slow accurate result keeps unchanged dialogue when a HUD line changes, a
   finish({
     fullText: '猫が好きです HP12',
     geometry: true,
-    textAnnotations: [
-      annotation('whole page', 0, 100),
-      annotation('猫が好きです', 0),
-      annotation('HP12', 50)
-    ]
+    textAnnotations: [annotation('whole page', 0, 100), annotation('猫が好きです', 0), annotation('HP12', 50)]
   })
   await h.scanner.idle()
   assert.equal(h.state.results.length, 1)
   assert.equal(h.state.results[0].text, '猫が好きです')
-  assert.equal(
-    h.state.results[0].publish,
-    false,
-    'a partial page must not become a history fragment'
-  )
+  assert.equal(h.state.results[0].publish, false, 'a partial page must not become a history fragment')
   assert.ok(h.state.events.some((e) => e.type === 'result' && e.reason === 'partial-current-lines'))
   h.sees('猫が好きですHP10', [dialogue, hud('HP10')])
   await h.stepAsync()
@@ -1653,9 +1623,7 @@ test('a manual overlay-enable result carries local line evidence into the next H
     false
   )
   await h.step()
-  assert.deepEqual(h.state.events.find((e) => e.type === 'visual-invalidated').keepBoxes, [
-    dialogue.box
-  ])
+  assert.deepEqual(h.state.events.find((e) => e.type === 'visual-invalidated').keepBoxes, [dialogue.box])
   h.scanner.stop()
 })
 
@@ -1730,14 +1698,8 @@ test('a new menu item settles independently of continuously changing background 
   assert.equal(h.state.recognizeCalls.length, 0)
   h.sees('たたかう背景乙', [menu, line('背景乙', 0, 100)])
   await h.step(500)
-  assert.equal(
-    h.state.recognizeCalls.length,
-    1,
-    'the second menu observation is enough; the whole page never settled'
-  )
-  assert.ok(
-    h.state.events.some((e) => e.type === 'request' && !e.queued && e.reason === 'stable-line')
-  )
+  assert.equal(h.state.recognizeCalls.length, 1, 'the second menu observation is enough; the whole page never settled')
+  assert.ok(h.state.events.some((e) => e.type === 'request' && !e.queued && e.reason === 'stable-line'))
   for (const text of ['背景丙', '背景丁', '背景戊', '背景己']) {
     h.sees(`たたかう${text}`, [menu, line(text, 0, 100)])
     await h.step(500)
@@ -1750,15 +1712,34 @@ test('a new menu item settles independently of continuously changing background 
   h.scanner.stop()
 })
 
-test('a hover pause during capture prevents observation and visual invalidation until a fresh capture', async()=>{
- let release
- const {scanner,state}=harness({}, {captureFrame:()=>new Promise(resolve=>{release=()=>resolve({frame:1,generation:state.generation,observation:{text:'新しい文章',lines:[line('新しい文章')]}})})})
- const pending=scanner.tick()
- scanner.pause();release()
- assert.equal(await pending,'paused')
- assert.equal(scanner.stats().observations,0)
- assert.equal(state.events.some(e=>e.type==='visual-invalidated'),false)
- scanner.resume()
- const fresh=scanner.tick();release();await fresh
- assert.equal(scanner.stats().observations,1)
+test('a hover pause during capture prevents observation and visual invalidation until a fresh capture', async () => {
+  let release
+  const { scanner, state } = harness(
+    {},
+    {
+      captureFrame: () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              frame: 1,
+              generation: state.generation,
+              observation: { text: '新しい文章', lines: [line('新しい文章')] }
+            })
+        })
+    }
+  )
+  const pending = scanner.tick()
+  scanner.pause()
+  release()
+  assert.equal(await pending, 'paused')
+  assert.equal(scanner.stats().observations, 0)
+  assert.equal(
+    state.events.some((e) => e.type === 'visual-invalidated'),
+    false
+  )
+  scanner.resume()
+  const fresh = scanner.tick()
+  release()
+  await fresh
+  assert.equal(scanner.stats().observations, 1)
 })

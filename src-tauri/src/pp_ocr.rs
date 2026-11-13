@@ -55,8 +55,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<PpOcr, String> {
     crate::meiki_ocr::onnx_runtime(app)?;
     let config = config(compiled_cache(app));
     engine_probe::guarded(|| {
-        PpOcr::with_config(ModelPaths::from_dir(models, TIER), config)
-            .map_err(|e| format!("PaddleOCR models: {e}"))
+        PpOcr::with_config(ModelPaths::from_dir(models, TIER), config).map_err(|e| format!("PaddleOCR models: {e}"))
     })
 }
 
@@ -90,9 +89,9 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
                 diagnostics: info.fallback_reasons.iter().map(|r| format!("fallback: {r}")).collect(),
             }
         };
-        let selected = probe_app.try_state::<crate::state::Shared>().is_some_and(|service| {
-            service.settings.get_or::<String>("ocrMode", String::new()) == "ppocr"
-        });
+        let selected = probe_app
+            .try_state::<crate::state::Shared>()
+            .is_some_and(|service| service.settings.get_or::<String>("ocrMode", String::new()) == "ppocr");
         if selected {
             if let Some(state) = probe_app.try_state::<PpState>() {
                 let mut slot = state.0.lock().map_err(|_| "PaddleOCR worker unavailable".to_string())?;
@@ -153,7 +152,9 @@ fn read(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<(Vec<ppocr::T
     let state = app.state::<PpState>();
     let mut engine = state.0.lock().map_err(|_| ReadError::Inference("PaddleOCR worker unavailable".into()))?;
     if engine.is_none() {
-        *engine = Some(load_engine(app).map_err(|reason| ReadError::Unavailable(format!("PaddleOCR is not ready: {reason}")))?);
+        *engine = Some(
+            load_engine(app).map_err(|reason| ReadError::Unavailable(format!("PaddleOCR is not ready: {reason}")))?,
+        );
     }
     let engine = engine.as_mut().ok_or(ReadError::Inference("PaddleOCR initialization failed".into()))?;
     // Shares Meiki's lock: two DirectML runs on one adapter contend for its command queue.
@@ -217,8 +218,8 @@ mod tests {
     fn reads_a_fixture_through_the_scan_path() {
         let models = std::env::var("PPOCR_MODEL_DIR").unwrap();
         let mut engine = PpOcr::with_config(ModelPaths::from_dir(models, TIER), config(None)).unwrap();
-        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../scripts/fixtures/overlay-alignment/dialogue.png");
+        let fixture =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/fixtures/overlay-alignment/dialogue.png");
         let image = image::open(fixture).unwrap().to_rgb8();
         let mut lines = engine.ocr(&image, OcrOptions::default()).unwrap();
         ppocr::japanese::fix_lines(&mut lines);

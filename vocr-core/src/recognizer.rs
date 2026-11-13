@@ -5,7 +5,7 @@ use crate::grey::{preprocess, Grey};
 use crate::lm::CharLm;
 use crate::onnx::{self, Meta};
 use crate::Error;
-use ort::session::run_options::{OutputSelector, RunOptions, HasSelectedOutputs};
+use ort::session::run_options::{HasSelectedOutputs, OutputSelector, RunOptions};
 use ort::session::Session;
 use ort::value::{Tensor, TensorRef};
 use std::path::Path;
@@ -102,7 +102,8 @@ impl Recognizer {
         let sp = chars::spans(best);
         let greedy: String = sp.iter().map(|&(c, _, _)| self.vocab[c as usize].as_str()).collect();
         let (mut cmin, mut cmean) = (1.0f32, 1.0f32);
-        let p: Vec<f32> = sp.iter().map(|&(_, f0, _)| chars::topk_conf(&topv[f0 as usize * k..(f0 as usize + 1) * k])).collect();
+        let p: Vec<f32> =
+            sp.iter().map(|&(_, f0, _)| chars::topk_conf(&topv[f0 as usize * k..(f0 as usize + 1) * k])).collect();
         if !sp.is_empty() {
             cmin = p.iter().copied().fold(f32::INFINITY, f32::min);
             let mut s = 0f32;

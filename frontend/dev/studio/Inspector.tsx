@@ -83,19 +83,16 @@ function ControlRow({
 }): ReactNode {
   const id = `studio-${control.param}`
   return (
-    <div className={cn('studio-control', control.kind === 'toggle' && 'studio-control-inline')} data-changed={changed || undefined}>
+    <div
+      className={cn('studio-control', control.kind === 'toggle' && 'studio-control-inline')}
+      data-changed={changed || undefined}
+    >
       <label htmlFor={id}>
         <span>{control.label}</span>
         {control.help && <small>{control.help}</small>}
       </label>
       {control.kind === 'select' && (
-        <Select
-          aria-label={control.label}
-          size="sm"
-          value={value}
-          onValueChange={onChange}
-          options={control.options}
-        />
+        <Select aria-label={control.label} size="sm" value={value} onValueChange={onChange} options={control.options} />
       )}
       {control.kind === 'toggle' && (
         <Switch
@@ -173,7 +170,12 @@ function JsonEditor({
           >
             <WandSparkles />
           </IconButton>
-          <IconButton size="sm" label="Back to the default" disabled={text === undefined && !dirty} onClick={() => onApply(undefined)}>
+          <IconButton
+            size="sm"
+            label="Back to the default"
+            disabled={text === undefined && !dirty}
+            onClick={() => onApply(undefined)}
+          >
             <RotateCcw />
           </IconButton>
         </span>
@@ -242,7 +244,16 @@ export function CopyPanel({
     if (!note.trim()) return
     onChanges([
       ...changes,
-      { key: `note:${Date.now()}`, surface: surface.label, place, where: 'note', tag: 'note', before: '', after: '', note: note.trim() }
+      {
+        key: `note:${Date.now()}`,
+        surface: surface.label,
+        place,
+        where: 'note',
+        tag: 'note',
+        before: '',
+        after: '',
+        note: note.trim()
+      }
     ])
     setNote('')
   }
@@ -296,7 +307,11 @@ export function CopyPanel({
                 <div className="studio-change-where">
                   <span>{c.place}</span>
                   {c.before && <span>{c.where}</span>}
-                  <IconButton size="sm" label="Remove" onClick={() => onChanges(changes.filter((x) => x.key !== c.key))}>
+                  <IconButton
+                    size="sm"
+                    label="Remove"
+                    onClick={() => onChanges(changes.filter((x) => x.key !== c.key))}
+                  >
                     <Trash2 />
                   </IconButton>
                 </div>
@@ -309,7 +324,9 @@ export function CopyPanel({
                       value={c.note ?? ''}
                       placeholder="Why (optional)"
                       onChange={(e) =>
-                        onChanges(changes.map((x) => (x.key === c.key ? { ...x, note: e.target.value || undefined } : x)))
+                        onChanges(
+                          changes.map((x) => (x.key === c.key ? { ...x, note: e.target.value || undefined } : x))
+                        )
                       }
                     />
                   </>

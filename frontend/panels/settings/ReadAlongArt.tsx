@@ -76,8 +76,17 @@ export function PopupArt(): ReactNode {
       <path
         className="ra-line"
         d={
-          words(90.5, [[20, 40], [44, 58], [94, 118], [122, 152]]) +
-          words(99.5, [[20, 52], [56, 84], [88, 110]])
+          words(90.5, [
+            [20, 40],
+            [44, 58],
+            [94, 118],
+            [122, 152]
+          ]) +
+          words(99.5, [
+            [20, 52],
+            [56, 84],
+            [88, 110]
+          ])
         }
       />
       <rect className="ra-mark" x={59.5} y={86.5} width={31} height={8} rx={2} />
@@ -93,7 +102,16 @@ export function FullscreenArt(): ReactNode {
   return (
     <Screen sun={false}>
       <rect className="ra-dim" x={1} y={1} width={W - 2} height={H - 2} rx={5.5} />
-      <path className="ra-line" d={words(13.5, [[14, 34], [38, 52], [92, 116], [120, 144], [148, 178]])} />
+      <path
+        className="ra-line"
+        d={words(13.5, [
+          [14, 34],
+          [38, 52],
+          [92, 116],
+          [120, 144],
+          [148, 178]
+        ])}
+      />
       <rect className="ra-mark" x={53.5} y={8.5} width={35} height={10} rx={2} />
       <path className="ra-accent" d={words(13.5, [[57, 85]])} />
       <rect className="ra-panel" x={10.5} y={26.5} width={171} height={83} rx={3} />

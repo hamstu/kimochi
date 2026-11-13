@@ -21,7 +21,14 @@ export function WindowsMark({ className = 'size-5' }: { className?: string }) {
 
 export function LinuxMark({ className = 'size-5' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={`${className} shrink-0`} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      className={`${className} shrink-0`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
       <rect x="2.75" y="4.25" width="18.5" height="15.5" rx="2.5" />
       <path d="m7 10 3 2.5L7 15M12.5 15.25H17" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -30,7 +37,14 @@ export function LinuxMark({ className = 'size-5' }: { className?: string }) {
 
 export function DeckMark({ className = 'size-5' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={`${className} shrink-0`} fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      className={`${className} shrink-0`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden
+    >
       <rect x="1.5" y="6.5" width="21" height="11" rx="4" />
       <rect x="7.5" y="8.75" width="9" height="6.5" rx="0.8" fill="currentColor" stroke="none" opacity="0.3" />
       <circle cx="4.6" cy="10" r="1.1" fill="currentColor" stroke="none" />

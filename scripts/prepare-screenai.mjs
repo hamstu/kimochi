@@ -45,7 +45,12 @@ for (const [triple, name] of builds) {
       `Screen AI worker build failed (${built.status})${triple ? ` for ${triple}; install that Rust target and its C++ tools` : ''}.`
     )
   const binary = process.platform === 'win32' ? 'kimochi-screenai-worker.exe' : 'kimochi-screenai-worker'
-  const built_path = path.join(cargoTargetDir(path.join(root, 'screenai')), ...(triple ? [triple] : []), 'release', binary)
+  const built_path = path.join(
+    cargoTargetDir(path.join(root, 'screenai')),
+    ...(triple ? [triple] : []),
+    'release',
+    binary
+  )
   await copyFile(built_path, path.join(destination, name))
 }
 console.log(`Screen AI worker staged in ${path.relative(root, destination)}.`)

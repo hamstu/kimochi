@@ -81,12 +81,7 @@ fn socket() -> Option<PathBuf> {
     if signature.is_empty() || signature.contains('/') || signature.contains("..") {
         return None;
     }
-    Some(
-        PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?)
-            .join("hypr")
-            .join(signature)
-            .join(".socket.sock"),
-    )
+    Some(PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?).join("hypr").join(signature).join(".socket.sock"))
 }
 pub fn available() -> bool {
     socket().is_some_and(|path| path.exists())
@@ -129,12 +124,8 @@ pub(super) fn events() -> Option<UnixStream> {
 /// One request on Hyprland's command socket and its raw reply (`hyprland_binds` sends commands).
 pub(super) fn request(command: &[u8]) -> Option<Vec<u8>> {
     let mut stream = UnixStream::connect(socket()?).ok()?;
-    stream
-        .set_read_timeout(Some(Duration::from_millis(100)))
-        .ok()?;
-    stream
-        .set_write_timeout(Some(Duration::from_millis(100)))
-        .ok()?;
+    stream.set_read_timeout(Some(Duration::from_millis(100))).ok()?;
+    stream.set_write_timeout(Some(Duration::from_millis(100))).ok()?;
     stream.write_all(command).ok()?;
     let mut data = Vec::new();
     stream.take(2_000_001).read_to_end(&mut data).ok()?;
@@ -169,10 +160,7 @@ fn snapshot() -> Option<Snapshot> {
         {
             return None;
         }
-        Some(Snapshot {
-            clients: query(b"j/clients")?,
-            monitor,
-        })
+        Some(Snapshot { clients: query(b"j/clients")?, monitor })
     })();
     *cache = Some((Instant::now(), value.clone()));
     value
@@ -195,32 +183,22 @@ fn unique_match(snapshot: &Snapshot, width: u32, height: u32) -> Option<&Client>
 /// Kimochi's own windows (`own`) are never the shared one, so they do not make a size ambiguous:
 /// on a tiling desktop the Log and the game often split the screen into equal halves.
 fn unique_match_besides(snapshot: &Snapshot, width: u32, height: u32, own: u32) -> Option<&Client> {
-    let mut matches = snapshot
-        .clients
-        .iter()
-        .filter(|c| c.pid != own && matches_frame(c, &snapshot.monitor, width, height));
+    let mut matches =
+        snapshot.clients.iter().filter(|c| c.pid != own && matches_frame(c, &snapshot.monitor, width, height));
     let candidate = matches.next()?;
     (matches.next().is_none() && candidate.mapped && !candidate.hidden).then_some(candidate)
 }
 fn rect(client: &Client) -> Option<Rect> {
-    client
-        .at
-        .iter()
-        .chain(&client.size)
-        .all(|v| v.is_finite())
-        .then_some(Rect {
-            x: client.at[0],
-            y: client.at[1],
-            width: client.size[0],
-            height: client.size[1],
-        })
+    client.at.iter().chain(&client.size).all(|v| v.is_finite()).then_some(Rect {
+        x: client.at[0],
+        y: client.at[1],
+        width: client.size[0],
+        height: client.size[1],
+    })
 }
 fn resolve<'a>(snapshot: &'a Snapshot, binding: &Binding) -> Option<&'a Client> {
     snapshot.clients.iter().find(|c| {
-        c.address == binding.address
-            && c.stable_id == binding.stable_id
-            && c.pid == binding.pid
-            && c.app == binding.app
+        c.address == binding.address && c.stable_id == binding.stable_id && c.pid == binding.pid && c.app == binding.app
     })
 }
 pub fn clear() {
@@ -272,24 +250,15 @@ pub fn frame_bounds(source: &str, width: u32, height: u32) -> Option<Rect> {
             app: client.app.clone(),
             bounds: rect(client)?,
         });
-        eprintln!(
-            "Hyprland portal window linked: source={source} pid={} frame={width}x{height}",
-            client.pid
-        );
+        eprintln!("Hyprland portal window linked: source={source} pid={} frame={width}x{height}", client.pid);
     }
     let client = resolve(&snapshot, binding.as_ref()?)?;
-    (client.mapped
-        && !client.hidden
-        && matches_frame(client, &snapshot.monitor, width, height))
-    .then(|| rect(client))
-    .flatten()
+    (client.mapped && !client.hidden && matches_frame(client, &snapshot.monitor, width, height))
+        .then(|| rect(client))
+        .flatten()
 }
 pub fn enrich(frame: &mut Frame) {
-    if let Some(bounds) = frame_bounds(
-        &frame.info.source_id,
-        frame.info.full_width,
-        frame.info.full_height,
-    ) {
+    if let Some(bounds) = frame_bounds(&frame.info.source_id, frame.info.full_width, frame.info.full_height) {
         frame.info.scale_factor = f64::from(frame.info.full_width) / bounds.width;
         frame.info.source_bounds = Some(bounds);
     }
@@ -378,9 +347,8 @@ fn entry_for(class: &str, stem: &str, text: &str) -> Option<(String, String)> {
 pub fn status(source: &str) -> serde_json::Value {
     let snapshot = snapshot();
     let binding = BINDING.lock().ok().and_then(|b| b.clone());
-    let linked = binding.is_some_and(|b| {
-        b.source == source && snapshot.as_ref().is_some_and(|s| resolve(s, &b).is_some())
-    });
+    let linked =
+        binding.is_some_and(|b| b.source == source && snapshot.as_ref().is_some_and(|s| resolve(s, &b).is_some()));
     let tracked = tracked(source);
     serde_json::json!({"available":snapshot.is_some(),"linked":linked,
         "bounds":tracked.map(|(bounds,_)|bounds),"visible":tracked.is_some_and(|(_,visible)|visible)})
@@ -391,25 +359,16 @@ fn candidates_in(snapshot: &Snapshot, width: u32, height: u32) -> Vec<&Client> {
         .clients
         .iter()
         .filter(|c| {
-            c.mapped
-                && !c.hidden
-                && c.pid != std::process::id()
-                && matches_frame(c, &snapshot.monitor, width, height)
+            c.mapped && !c.hidden && c.pid != std::process::id() && matches_frame(c, &snapshot.monitor, width, height)
         })
         .collect()
 }
-fn explicit_match<'a>(
-    snapshot: &'a Snapshot,
-    address: &str,
-    width: u32,
-    height: u32,
-) -> Option<&'a Client> {
-    candidates_in(snapshot, width, height)
-        .into_iter()
-        .find(|c| c.address == address)
+fn explicit_match<'a>(snapshot: &'a Snapshot, address: &str, width: u32, height: u32) -> Option<&'a Client> {
+    candidates_in(snapshot, width, height).into_iter().find(|c| c.address == address)
 }
 pub fn candidates(width: u32, height: u32) -> Result<serde_json::Value, String> {
-    let snapshot = snapshot().ok_or("Native window linking currently needs Hyprland with one unrotated output at the desktop origin")?;
+    let snapshot = snapshot()
+        .ok_or("Native window linking currently needs Hyprland with one unrotated output at the desktop origin")?;
     Ok(candidates_in(&snapshot, width, height)
         .into_iter()
         .map(|c| serde_json::json!({"address":c.address,"title":c.title,"app":c.app}))
@@ -427,10 +386,7 @@ pub fn link(source: &str, address: &str, width: u32, height: u32) -> Result<(), 
         app: client.app.clone(),
         bounds: rect(client).ok_or("Invalid window bounds")?,
     });
-    eprintln!(
-        "Hyprland portal window explicitly linked: source={source} pid={}",
-        client.pid
-    );
+    eprintln!("Hyprland portal window explicitly linked: source={source} pid={}", client.pid);
     Ok(())
 }
 
@@ -441,18 +397,24 @@ mod tests {
     fn a_desktop_entry_names_the_windows_it_claims() {
         let entry = "[Desktop Entry]\nName=Firefox\nIcon=firefox\nStartupWMClass=firefox\n[Desktop Action new]\nName=New Window\n";
         assert_eq!(entry_for("firefox", "org.mozilla.firefox", entry), Some(("Firefox".into(), "firefox".into())));
-        assert_eq!(entry_for("Steam", "steam", "[Desktop Entry]\nName=Steam\n"), Some(("Steam".into(), "Steam".into())));
-        assert_eq!(entry_for("org.gnome.Nautilus", "org.gnome.Nautilus", "[Desktop Entry]\nName=Files\nIcon=nautilus\n"), Some(("Files".into(), "nautilus".into())));
+        assert_eq!(
+            entry_for("Steam", "steam", "[Desktop Entry]\nName=Steam\n"),
+            Some(("Steam".into(), "Steam".into()))
+        );
+        assert_eq!(
+            entry_for("org.gnome.Nautilus", "org.gnome.Nautilus", "[Desktop Entry]\nName=Files\nIcon=nautilus\n"),
+            Some(("Files".into(), "nautilus".into()))
+        );
         assert_eq!(entry_for("mpv", "other", "[Desktop Entry]\nName=Other\n"), None);
         assert_eq!(entry_for("mpv", "mpv", "[Desktop Entry]\nName=mpv\nNoDisplay=true\n"), None);
     }
     fn sample() -> Snapshot {
-        let monitor = serde_json::from_value(serde_json::json!({"id":0,"x":0,"y":0,"width":3440,"height":1440,"scale":1.33,"activeWorkspace":{"id":1}})).unwrap();
+        let monitor = serde_json::from_value(
+            serde_json::json!({"id":0,"x":0,"y":0,"width":3440,"height":1440,"scale":1.33,"activeWorkspace":{"id":1}}),
+        )
+        .unwrap();
         let client = serde_json::from_value(serde_json::json!({"address":"0x1","pid":42,"class":"game","at":[100,40],"size":[1245,1030],"mapped":true,"hidden":false,"monitor":0,"workspace":{"id":1}})).unwrap();
-        Snapshot {
-            clients: vec![client],
-            monitor,
-        }
+        Snapshot { clients: vec![client], monitor }
     }
     #[test]
     fn fractional_buffer_matches_but_different_or_stale_shapes_do_not() {
@@ -505,10 +467,7 @@ mod tests {
         second.address = "0x2".into();
         s.clients.push(second);
         assert!(unique_match(&s, 1660, 1373).is_none());
-        assert_eq!(
-            explicit_match(&s, "0x2", 1660, 1373).unwrap().address,
-            "0x2"
-        );
+        assert_eq!(explicit_match(&s, "0x2", 1660, 1373).unwrap().address, "0x2");
         assert!(explicit_match(&s, "0x3", 1660, 1373).is_none());
         assert!(explicit_match(&s, "0x2", 1000, 800).is_none());
         s.clients[1].hidden = true;

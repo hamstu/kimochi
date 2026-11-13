@@ -24,11 +24,26 @@ test('every CI target maps to the keys the updater looks up', () => {
 test('the plan names the file the app downloads for each key', () => {
   const mac = plan('aarch64-apple-darwin', '0.2.0', ['macos/Kimochi.app', 'macos/Kimochi.app.zip'])
   assert.deepEqual(mac, [
-    { key: 'darwin-aarch64', bundle: 'app', source: 'macos/Kimochi.app', asset: 'Kimochi_0.2.0_aarch64.app.tar.gz', archive: true }
+    {
+      key: 'darwin-aarch64',
+      bundle: 'app',
+      source: 'macos/Kimochi.app',
+      asset: 'Kimochi_0.2.0_aarch64.app.tar.gz',
+      archive: true
+    }
   ])
-  const win = plan('x86_64-pc-windows-msvc', '0.2.0', ['nsis/Kimochi_0.2.0_x64-setup.exe', 'nsis/Kimochi_0.2.0_x64-setup.exe.sig'])
+  const win = plan('x86_64-pc-windows-msvc', '0.2.0', [
+    'nsis/Kimochi_0.2.0_x64-setup.exe',
+    'nsis/Kimochi_0.2.0_x64-setup.exe.sig'
+  ])
   assert.deepEqual(win, [
-    { key: 'windows-x86_64', bundle: 'nsis', source: 'nsis/Kimochi_0.2.0_x64-setup.exe', asset: 'Kimochi_0.2.0_x64-setup.exe', archive: false }
+    {
+      key: 'windows-x86_64',
+      bundle: 'nsis',
+      source: 'nsis/Kimochi_0.2.0_x64-setup.exe',
+      asset: 'Kimochi_0.2.0_x64-setup.exe',
+      archive: false
+    }
   ])
   const linux = plan('x86_64-unknown-linux-gnu', '0.2.0', [
     'appimage/Kimochi_0.2.0_amd64.AppImage',
@@ -37,11 +52,24 @@ test('the plan names the file the app downloads for each key', () => {
     'deb/Kimochi_0.2.0_amd64.deb'
   ])
   assert.deepEqual(linux, [
-    { key: 'linux-x86_64', bundle: 'appimage', source: 'appimage/Kimochi_0.2.0_amd64.AppImage', asset: 'Kimochi_0.2.0_amd64.AppImage', archive: false },
-    { key: 'linux-x86_64-deb', bundle: 'deb', source: 'deb/Kimochi_0.2.0_amd64.deb', asset: 'Kimochi_0.2.0_amd64.deb', archive: false }
+    {
+      key: 'linux-x86_64',
+      bundle: 'appimage',
+      source: 'appimage/Kimochi_0.2.0_amd64.AppImage',
+      asset: 'Kimochi_0.2.0_amd64.AppImage',
+      archive: false
+    },
+    {
+      key: 'linux-x86_64-deb',
+      bundle: 'deb',
+      source: 'deb/Kimochi_0.2.0_amd64.deb',
+      asset: 'Kimochi_0.2.0_amd64.deb',
+      archive: false
+    }
   ])
   assert.throws(
-    () => plan('x86_64-pc-windows-msvc', '0.2.0', ['nsis/Kimochi_0.2.0_x64-setup.exe', 'nsis/Kimochi_0.2.0_x64-setup.exe']),
+    () =>
+      plan('x86_64-pc-windows-msvc', '0.2.0', ['nsis/Kimochi_0.2.0_x64-setup.exe', 'nsis/Kimochi_0.2.0_x64-setup.exe']),
     /expected one Kimochi_0\.2\.0_\*-setup\.exe in nsis\/, found 2/
   )
   assert.throws(() => plan('aarch64-apple-darwin', '0.2.0', []), /expected one Kimochi\.app in macos\/, found 0/)
@@ -50,12 +78,24 @@ test('the plan names the file the app downloads for each key', () => {
 test('a stale bundle of another name or version beside this build is left alone', () => {
   const mac = plan('aarch64-apple-darwin', '0.2.0', ['macos/Kimochi Next POC.app', 'macos/Kimochi.app'])
   assert.equal(mac[0].source, 'macos/Kimochi.app')
-  const win = plan('x86_64-pc-windows-msvc', '0.2.0', ['nsis/Kimochi_0.1.0_x64-setup.exe', 'nsis/Kimochi_0.2.0_x64-setup.exe'])
+  const win = plan('x86_64-pc-windows-msvc', '0.2.0', [
+    'nsis/Kimochi_0.1.0_x64-setup.exe',
+    'nsis/Kimochi_0.2.0_x64-setup.exe'
+  ])
   assert.equal(win[0].asset, 'Kimochi_0.2.0_x64-setup.exe')
-  const named = plan('x86_64-unknown-linux-gnu', '1.0.0', ['appimage/Kimochi Beta_1.0.0_amd64.AppImage', 'deb/Kimochi Beta_1.0.0_amd64.deb'], 'Kimochi Beta')
+  const named = plan(
+    'x86_64-unknown-linux-gnu',
+    '1.0.0',
+    ['appimage/Kimochi Beta_1.0.0_amd64.AppImage', 'deb/Kimochi Beta_1.0.0_amd64.deb'],
+    'Kimochi Beta'
+  )
   assert.equal(named[0].asset, 'Kimochi Beta_1.0.0_amd64.AppImage')
   assert.equal(named[1].asset, 'Kimochi Beta_1.0.0_amd64.deb')
-  assert.throws(() => plan('x86_64-pc-windows-msvc', '0.2.0', ['nsis/Kimochi_0.1.0_x64-setup.exe']), /found 0/, 'an old version is not this build')
+  assert.throws(
+    () => plan('x86_64-pc-windows-msvc', '0.2.0', ['nsis/Kimochi_0.1.0_x64-setup.exe']),
+    /found 0/,
+    'an old version is not this build'
+  )
 })
 
 const sidecars = [

@@ -8,7 +8,12 @@
  * long enough to cross the gap between a word and its pop-up, short enough to read as "it went
  * away when I moved on".
  */
-export interface LeaveRect { x: number; y: number; width: number; height: number }
+export interface LeaveRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 export class PopupLeave {
   private awaySince: number | null = null
@@ -17,8 +22,9 @@ export class PopupLeave {
 
   /** True exactly once, when the open pop-up should close. `rects` are the words and the pop-up. */
   update(now: number, pointer: { x: number; y: number } | null, rects: LeaveRect[], popupOpen: boolean): boolean {
-    const inside = pointer !== null && rects.some((r) =>
-      pointer.x >= r.x && pointer.y >= r.y && pointer.x < r.x + r.width && pointer.y < r.y + r.height)
+    const inside =
+      pointer !== null &&
+      rects.some((r) => pointer.x >= r.x && pointer.y >= r.y && pointer.x < r.x + r.width && pointer.y < r.y + r.height)
     if (!popupOpen || inside) {
       this.awaySince = null
       return false

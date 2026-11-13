@@ -48,15 +48,26 @@ test('a second account learning another language gets a new profile, copied from
     language: 'ko',
     link: { profile: 'Korean', language: 'ko' }
   })
-  const options = { profileCurrent: 0, profiles: [{ name: 'Default', options: { general: { language: 'ja' }, dictionaries: [{ name: 'Jitendex', enabled: true }] } }] }
-  const targets = planModifications(result, options, { ko: [{ modification: { action: 'set', path: 'scanning.scanResolution', value: 'word' } }] })
+  const options = {
+    profileCurrent: 0,
+    profiles: [
+      { name: 'Default', options: { general: { language: 'ja' }, dictionaries: [{ name: 'Jitendex', enabled: true }] } }
+    ]
+  }
+  const targets = planModifications(result, options, {
+    ko: [{ modification: { action: 'set', path: 'scanning.scanResolution', value: 'word' } }]
+  })
   assert.equal(targets[0].action, 'splice')
   assert.equal(targets[0].start, 1)
   const made = targets[0].items[0]
   assert.equal(made.name, 'Korean')
   assert.equal(made.options.general.language, 'ko')
   assert.equal(made.options.scanning.scanResolution, 'word')
-  assert.deepEqual(made.options.dictionaries, [{ name: 'Jitendex', enabled: true }], 'dictionaries are left as they are')
+  assert.deepEqual(
+    made.options.dictionaries,
+    [{ name: 'Jitendex', enabled: true }],
+    'dictionaries are left as they are'
+  )
   assert.equal(options.profiles[0].options.general.language, 'ja', 'the default profile is not touched')
   assert.deepEqual(targets[1], { scope: 'global', action: 'set', path: 'profileCurrent', value: 1 })
 })
@@ -82,11 +93,14 @@ test('a Japanese account never linked leaves Yomitan alone on any trigger, whate
 
 test('a profile already in the language is used, and a name in use is not taken twice', () => {
   const state = { profiles: [profile('Default'), profile('English', 'en')], current: 0 }
-  assert.deepEqual(plan({ account: 'a', language: 'en', state, links: { local: { profile: 'Default', language: 'ja' } } }), {
-    kind: 'use',
-    index: 1,
-    link: { profile: 'English', language: 'en' }
-  })
+  assert.deepEqual(
+    plan({ account: 'a', language: 'en', state, links: { local: { profile: 'Default', language: 'ja' } } }),
+    {
+      kind: 'use',
+      index: 1,
+      link: { profile: 'English', language: 'en' }
+    }
+  )
   assert.equal(uniqueProfileName('English', state.profiles), 'English (2)')
   assert.equal(uniqueProfileName('French', state.profiles), 'French')
 })
@@ -96,7 +110,10 @@ test('a first run in another language: the empty default profile takes the langu
   const result = plan({ language: 'en', state })
   assert.deepEqual(result, { kind: 'adopt', index: 0, language: 'en', link: { profile: 'Default', language: 'en' } })
   const targets = planModifications(result, { profiles: [{ options: {} }] }, {})
-  assert.deepEqual(targets.map((t) => t.path), ['profiles[0].options.general.language', 'profileCurrent'])
+  assert.deepEqual(
+    targets.map((t) => t.path),
+    ['profiles[0].options.general.language', 'profileCurrent']
+  )
   // Not when another account uses it.
   assert.equal(plan({ language: 'en', state, links: { other: { profile: 'Default', language: 'ja' } } }).kind, 'create')
 })
@@ -201,12 +218,25 @@ test('codes, links and options are read defensively', () => {
   })
   assert.deepEqual(normalizeLinks('junk'), {})
   assert.deepEqual(
-    profileState({ profileCurrent: 9, profiles: [{ name: 'A', options: { general: { language: 'en' }, dictionaries: [{ enabled: true }, { enabled: false }] } }] }),
+    profileState({
+      profileCurrent: 9,
+      profiles: [
+        { name: 'A', options: { general: { language: 'en' }, dictionaries: [{ enabled: true }, { enabled: false }] } }
+      ]
+    }),
     { profiles: [{ name: 'A', language: 'en', dictionaries: 1 }], current: 0 }
   )
   assert.deepEqual(plan({ state: { profiles: [], current: 0 } }), { kind: 'keep' })
   assert.deepEqual(
-    recommendedSets({ en: [{ modification: { action: 'set', path: 'a.b', value: 1 } }, { modification: { action: 'delete', path: 'c' } }] }, 'en'),
+    recommendedSets(
+      {
+        en: [
+          { modification: { action: 'set', path: 'a.b', value: 1 } },
+          { modification: { action: 'delete', path: 'c' } }
+        ]
+      },
+      'en'
+    ),
     [{ path: 'a.b', value: 1 }]
   )
 })

@@ -158,23 +158,12 @@ pub fn app_of(source_id: &str) -> Option<u32> {
 }
 
 fn source(id: String, kind: &'static str, name: String, bounds: Option<Rect>) -> Source {
-    Source {
-        id,
-        kind,
-        name,
-        app: None,
-        bounds,
-        on_screen: Some(true),
-    }
+    Source { id, kind, name, app: None, bounds, on_screen: Some(true) }
 }
 
 /// The app the user last ran, if this is one we were started from (`KIMOCHI_STEAM_APP_ID`).
 fn own_app() -> Option<u32> {
-    std::env::var("KIMOCHI_STEAM_APP_ID")
-        .ok()?
-        .parse()
-        .ok()
-        .filter(|v| *v != 0)
+    std::env::var("KIMOCHI_STEAM_APP_ID").ok()?.parse().ok().filter(|v| *v != 0)
 }
 
 #[cfg(target_os = "linux")]
@@ -188,8 +177,8 @@ mod backend {
     use crate::linux_x11::desktop::Desktop;
     use crate::pixels::{box_downscale, crop_pixels, fit_within, unpremultiply};
     use crate::{
-        crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop,
-        Frame, FrameInfo, Result,
+        crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, FrameInfo,
+        Result,
     };
     use pipewire as pw;
     use pw::spa;
@@ -237,13 +226,8 @@ mod backend {
     }
 
     fn root_values(d: &Desktop, name: &[u8]) -> Vec<u32> {
-        let Some(atom) = d
-            .conn
-            .intern_atom(true, name)
-            .ok()
-            .and_then(|c| c.reply().ok())
-            .map(|r| r.atom)
-            .filter(|a| *a != 0)
+        let Some(atom) =
+            d.conn.intern_atom(true, name).ok().and_then(|c| c.reply().ok()).map(|r| r.atom).filter(|a| *a != 0)
         else {
             return Vec::new();
         };
@@ -275,12 +259,7 @@ mod backend {
     /// The output, in root pixels: every Gamescope frame is composed at this size.
     fn output() -> Option<Rect> {
         let r = desktop()?.root_rect();
-        Some(Rect {
-            x: 0.,
-            y: 0.,
-            width: f64::from(r.width),
-            height: f64::from(r.height),
-        })
+        Some(Rect { x: 0., y: 0., width: f64::from(r.width), height: f64::from(r.height) })
     }
 
     /// The screen, then each running app. Names are window titles (or empty).
@@ -288,12 +267,7 @@ mod backend {
         let bounds = output();
         let mut out = vec![super::source(display_source_id(), "display", "Screen".into(), bounds)];
         for app in running() {
-            let mut s = super::source(
-                app_source_id(app.app_id, app.pid),
-                "window",
-                app.title.clone(),
-                bounds,
-            );
+            let mut s = super::source(app_source_id(app.app_id, app.pid), "window", app.title.clone(), bounds);
             s.app = Some(app.app_id.to_string());
             out.push(s);
         }
@@ -305,19 +279,16 @@ mod backend {
         static AVAILABLE: OnceLock<bool> = OnceLock::new();
         *AVAILABLE.get_or_init(|| {
             let (tx, rx) = mpsc::channel();
-            let _ = std::thread::Builder::new()
-                .name("kimochi-gamescope-probe".into())
-                .spawn(move || {
-                    let _ = tx.send(probe().unwrap_or(false));
-                });
+            let _ = std::thread::Builder::new().name("kimochi-gamescope-probe".into()).spawn(move || {
+                let _ = tx.send(probe().unwrap_or(false));
+            });
             rx.recv_timeout(START_WAIT).unwrap_or(false)
         })
     }
 
     fn is_gamescope_node(props: Option<&spa::utils::dict::DictRef>) -> bool {
         props.is_some_and(|p| {
-            p.get("node.name") == Some(NODE_NAME)
-                && p.get("media.class").is_some_and(|c| c.starts_with("Video/Source"))
+            p.get("node.name") == Some(NODE_NAME) && p.get("media.class").is_some_and(|c| c.starts_with("Video/Source"))
         })
     }
 
@@ -770,7 +741,10 @@ mod backend {
                     return Ok(frame);
                 }
                 // A still app sends nothing new; what it last drew is still on screen.
-                eprintln!("Gamescope capture: no new frame {} ms after resuming; using the last one", RESUME_WAIT.as_millis());
+                eprintln!(
+                    "Gamescope capture: no new frame {} ms after resuming; using the last one",
+                    RESUME_WAIT.as_millis()
+                );
                 return shared.kept(app).ok_or_else(|| idle(app));
             }
             if streaming == app {
@@ -808,9 +782,7 @@ mod backend {
             let (fw, fh) = (frame.width, frame.height);
             let copying = Instant::now();
             let rect = crop_rect(crop, fw, fh)?;
-            let source = frame
-                .pixels()
-                .ok_or_else(|| native("Gamescope sent a frame Kimochi could not read"))?;
+            let source = frame.pixels().ok_or_else(|| native("Gamescope sent a frame Kimochi could not read"))?;
             let mut pixels = if rect == [0, 0, fw, fh] { source.clone() } else { crop_pixels(source, fw, rect) };
             let bounds = output();
             let base = bounds.map_or(1., |b| f64::from(fw) / b.width.max(1.));
@@ -891,7 +863,9 @@ mod tests {
     #[test]
     fn running_apps_skip_steam_and_ourselves_and_keep_gamescope_order() {
         // Measured on SteamOS 3.8: Sea of Stars, Steam's client, Undertale; Kimochi is pid 500.
-        let windows = window_triples(&[77594625, 391540, 88238, 39845941, 769, 76043, 33554433, 1244090, 87749, 9, 3148519714, 500]);
+        let windows = window_triples(&[
+            77594625, 391540, 88238, 39845941, 769, 76043, 33554433, 1244090, 87749, 9, 3148519714, 500,
+        ]);
         let apps = running_apps(&[391540, 769, 1244090, 3148519714, 391540], &windows, 500, None, |w| format!("w{w}"));
         assert_eq!(
             apps,
@@ -910,10 +884,12 @@ mod tests {
         // Kimochi's own Steam app ID, and the first game listed again.
         let windows = window_triples(&[11, 391540, 88, 12, 769, 76, 13, 0, 5, 14, 3148519714, 500, 15, 2999444207, 90]);
         let verdicts: Vec<(u32, AppVerdict)> =
-            classify_apps(&[391540, 769, 0, 3148519714, 2999444207, 391540], &windows, 500, Some(2999444207), |w| format!("w{w}"))
-                .into_iter()
-                .map(|(app, verdict)| (app.app_id, verdict))
-                .collect();
+            classify_apps(&[391540, 769, 0, 3148519714, 2999444207, 391540], &windows, 500, Some(2999444207), |w| {
+                format!("w{w}")
+            })
+            .into_iter()
+            .map(|(app, verdict)| (app.app_id, verdict))
+            .collect();
         assert_eq!(
             verdicts,
             vec![

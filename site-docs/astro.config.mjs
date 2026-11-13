@@ -29,7 +29,16 @@ export default defineConfig({
         '@fontsource-variable/caveat': here('node_modules/@fontsource-variable/caveat')
       }
     },
-    server: { fs: { allow: [here('.'), here('../site/src/styles'), here('../frontend/assets/dictionary-previews'), here('../CHANGELOG.md')] } }
+    server: {
+      fs: {
+        allow: [
+          here('.'),
+          here('../site/src/styles'),
+          here('../frontend/assets/dictionary-previews'),
+          here('../CHANGELOG.md')
+        ]
+      }
+    }
   },
   integrations: [
     starlight({

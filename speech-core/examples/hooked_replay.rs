@@ -28,7 +28,15 @@ fn main() {
         .collect();
     lines.sort_by(|a, b| a.ts.total_cmp(&b.ts));
     let log = std::fs::read_to_string(dir.join("events.jsonl")).unwrap();
-    let mut events: Vec<(f64, String)> = log.lines().map(|l| (serde_json::from_str::<serde_json::Value>(l).ok().and_then(|v| v["t"].as_f64()).unwrap_or(0.0), l.to_owned())).collect();
+    let mut events: Vec<(f64, String)> = log
+        .lines()
+        .map(|l| {
+            (
+                serde_json::from_str::<serde_json::Value>(l).ok().and_then(|v| v["t"].as_f64()).unwrap_or(0.0),
+                l.to_owned(),
+            )
+        })
+        .collect();
     events.sort_by(|a, b| a.0.total_cmp(&b.0));
     std::fs::write(dir.join("events.jsonl"), "").unwrap();
     let mut shown = 0;
@@ -52,7 +60,12 @@ fn main() {
         }
         if !more.is_empty() {
             use std::io::Write;
-            std::fs::OpenOptions::new().append(true).open(dir.join("events.jsonl")).unwrap().write_all(more.as_bytes()).unwrap();
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(dir.join("events.jsonl"))
+                .unwrap()
+                .write_all(more.as_bytes())
+                .unwrap();
         }
         while next < lines.len() && lines[next].ts <= now {
             hooked.line(lines[next].clone());

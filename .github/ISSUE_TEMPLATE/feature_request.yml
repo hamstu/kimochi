@@ -1,6 +1,6 @@
 name: Feature request
 description: Suggest something Kimochi could do.
-labels: ["enhancement"]
+labels: ['enhancement']
 body:
   - type: markdown
     attributes:

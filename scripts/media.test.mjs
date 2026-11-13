@@ -16,10 +16,7 @@ const {
 test('media relay unwraps the original runtime API response envelope', () => {
   const records = [{ path: 'cat.png', dictionary: 'fixture', content: 'YQ==' }]
   assert.deepEqual(mediaFromReply({ result: records }), records)
-  assert.throws(
-    () => mediaFromReply({ error: { message: 'Database unavailable' } }),
-    /Database unavailable/
-  )
+  assert.throws(() => mediaFromReply({ error: { message: 'Database unavailable' } }), /Database unavailable/)
   assert.throws(() => mediaFromReply(records), /Invalid dictionary media response/)
 })
 
@@ -48,10 +45,7 @@ test('requests for the same image are merged into one lookup', () => {
 })
 
 test('the same path in two dictionaries is two different images', () => {
-  const groups = groupMediaRequests([
-    request('img/cat.png', 'JMdict', 0),
-    request('img/cat.png', 'Daijirin', 1)
-  ])
+  const groups = groupMediaRequests([request('img/cat.png', 'JMdict', 0), request('img/cat.png', 'Daijirin', 1)])
   assert.equal(groups.length, 2)
   assert.notEqual(mediaKey(groups[0]), mediaKey(groups[1]))
 })
@@ -95,13 +89,8 @@ test('records are matched back to their group by path and dictionary', () => {
 })
 
 test('a dictionary referencing media it does not contain is reported, not fatal', () => {
-  const groups = groupMediaRequests([
-    request('img/cat.png', 'JMdict', 0),
-    request('img/missing.png', 'JMdict', 1)
-  ])
-  const records = [
-    { path: 'img/cat.png', dictionary: 'JMdict', content: '', mediaType: 'image/png' }
-  ]
+  const groups = groupMediaRequests([request('img/cat.png', 'JMdict', 0), request('img/missing.png', 'JMdict', 1)])
+  const records = [{ path: 'img/cat.png', dictionary: 'JMdict', content: '', mediaType: 'image/png' }]
   assert.deepEqual(
     missingMedia(groups, records).map((g) => g.path),
     ['img/missing.png']

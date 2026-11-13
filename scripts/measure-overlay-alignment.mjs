@@ -183,7 +183,9 @@ async function captureTruth(name, images) {
     await browser.close()
   }
   await writeFile(file, truthJson(truth) + '\n')
-  console.log(`${name}: ${truth.lines.reduce((n, line) => n + line.glyphs.filter((g) => g.ink).length, 0)} glyphs with ink`)
+  console.log(
+    `${name}: ${truth.lines.reduce((n, line) => n + line.glyphs.filter((g) => g.ink).length, 0)} glyphs with ink`
+  )
 }
 
 /**
@@ -251,9 +253,10 @@ async function fixtures(images) {
     const truthFile = path.join(FIXTURES, `${sample}.truth.json`)
     if (!existsSync(truthFile)) continue
     const truth = JSON.parse(await readFile(truthFile, 'utf8'))
-    const image = [path.join(FIXTURES, `${sample}.png`), images && path.join(images, truth.image ?? `${sample}.png`)].find(
-      (candidate) => candidate && existsSync(candidate)
-    )
+    const image = [
+      path.join(FIXTURES, `${sample}.png`),
+      images && path.join(images, truth.image ?? `${sample}.png`)
+    ].find((candidate) => candidate && existsSync(candidate))
     out.push({ sample, engine, truth, ocr: JSON.parse(await readFile(path.join(FIXTURES, file), 'utf8')), image })
   }
   return out

@@ -9,23 +9,23 @@ use crate::mouse_buttons::{self, Button, Step};
 use crate::state::Service;
 use kimochi_capture::{Rect, SourceId};
 use std::cell::RefCell;
-use std::time::{Duration, Instant};
 use std::sync::{
     atomic::{AtomicBool, AtomicU32, Ordering},
     mpsc::{self, SyncSender},
     Mutex,
 };
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM, POINT};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetAncestor, GetMessageW, GetSystemMetrics, IsWindowVisible,
-    PeekMessageW, PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-    WindowFromPoint, GetCursorPos, GetForegroundWindow, GA_ROOT, HC_ACTION, MSG, MSLLHOOKSTRUCT, KBDLLHOOKSTRUCT, PM_NOREMOVE, SM_SWAPBUTTON,
-    WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_USER,
-    WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, LLMHF_INJECTED,
-    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_XBUTTONDOWN, WM_XBUTTONUP, XBUTTON1, XBUTTON2,
+    CallNextHookEx, DispatchMessageW, GetAncestor, GetCursorPos, GetForegroundWindow, GetMessageW, GetSystemMetrics,
+    IsWindowVisible, PeekMessageW, PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
+    WindowFromPoint, GA_ROOT, HC_ACTION, KBDLLHOOKSTRUCT, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE,
+    SM_SWAPBUTTON, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN,
+    WM_MBUTTONUP, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WM_XBUTTONDOWN,
+    WM_XBUTTONUP, XBUTTON1, XBUTTON2,
 };
 
 #[derive(Clone, Copy)]
@@ -60,7 +60,11 @@ fn press_origin(flags: u32, extra: usize) -> (&'static str, bool) {
     const TOUCH: usize = 0x80;
     const LLMHF_INJECTED: u32 = 0x1;
     let kind = if extra & SIGNATURE_MASK == PEN_OR_TOUCH {
-        if extra & TOUCH != 0 { "touch" } else { "pen" }
+        if extra & TOUCH != 0 {
+            "touch"
+        } else {
+            "pen"
+        }
     } else {
         "mouse"
     };
@@ -92,12 +96,22 @@ static LAST_HOVER: Mutex<Option<Instant>> = Mutex::new(None);
 static LAST_FOCUS_TRY: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn modifier_bit(key: u32) -> u32 {
-    match key { 16 | 160 => 1, 161 => 2, 17 | 162 => 4, 163 => 8, _ => 0 }
+    match key {
+        16 | 160 => 1,
+        161 => 2,
+        17 | 162 => 4,
+        163 => 8,
+        _ => 0,
+    }
 }
 
 pub(super) fn modifier_down(key: u16) -> bool {
     let bits = BLOCKED_MODIFIERS.load(Ordering::Relaxed);
-    match key { 16 => bits & 3 != 0, 17 => bits & 12 != 0, _ => false }
+    match key {
+        16 => bits & 3 != 0,
+        17 => bits & 12 != 0,
+        _ => false,
+    }
 }
 
 pub fn set_keyboard_guard(region: bool, navigation: bool) {
@@ -107,9 +121,14 @@ pub fn set_keyboard_guard(region: bool, navigation: bool) {
 
 fn key_name(key: u32) -> Option<&'static str> {
     match key {
-        13 => Some("Enter"), 27 => Some("Escape"), 32 => Some(" "),
-        37 => Some("ArrowLeft"), 38 => Some("ArrowUp"),
-        39 => Some("ArrowRight"), 40 => Some("ArrowDown"), _ => None,
+        13 => Some("Enter"),
+        27 => Some("Escape"),
+        32 => Some(" "),
+        37 => Some("ArrowLeft"),
+        38 => Some("ArrowUp"),
+        39 => Some("ArrowRight"),
+        40 => Some("ArrowDown"),
+        _ => None,
     }
 }
 
@@ -210,59 +229,94 @@ fn update_hover_focus(app: &tauri::AppHandle) {
     let mut point = POINT::default();
     let foreground = unsafe { GetForegroundWindow() }.0 as usize;
     let leased = HOVER_LEASE.load(Ordering::Relaxed);
-    let target = unsafe { GetCursorPos(&mut point) }.ok().and_then(|()| target_at(point))
-        .filter(|target| foreground == target.source || foreground == target.window
-            || leased && super::window_pid(HWND(foreground as *mut _)) == std::process::id());
+    let target = unsafe { GetCursorPos(&mut point) }.ok().and_then(|()| target_at(point)).filter(|target| {
+        foreground == target.source
+            || foreground == target.window
+            || leased && super::window_pid(HWND(foreground as *mut _)) == std::process::id()
+    });
     if REGION.load(Ordering::Relaxed) || NAV.load(Ordering::Relaxed) {
         *LAST_HOVER.lock().unwrap() = Some(Instant::now());
         return;
     }
-    if target.is_some() { *LAST_HOVER.lock().unwrap() = Some(Instant::now()); }
-    if target.is_none() && leased && LAST_HOVER.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(120)) { return; }
-    if target.is_none() && leased && crate::gamepad::buttons_held()
-        && LAST_HOVER.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(1500)) { return; }
-    if target.is_none() && !HOVER_LEASE.load(Ordering::Relaxed) { return; }
-    if target.is_some() && HOVER_LEASE.load(Ordering::Relaxed) { return; }
+    if target.is_some() {
+        *LAST_HOVER.lock().unwrap() = Some(Instant::now());
+    }
+    if target.is_none()
+        && leased
+        && LAST_HOVER.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(120))
+    {
+        return;
+    }
+    if target.is_none()
+        && leased
+        && crate::gamepad::buttons_held()
+        && LAST_HOVER.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(1500))
+    {
+        return;
+    }
+    if target.is_none() && !HOVER_LEASE.load(Ordering::Relaxed) {
+        return;
+    }
+    if target.is_some() && HOVER_LEASE.load(Ordering::Relaxed) {
+        return;
+    }
     if !leased {
-        if !lease_wanted(crate::gamepad::buttons_held()) { return; }
-        if target.is_none_or(|target| target.source == 0 || target.source != foreground) { return; }
+        if !lease_wanted(crate::gamepad::buttons_held()) {
+            return;
+        }
+        if target.is_none_or(|target| target.source == 0 || target.source != foreground) {
+            return;
+        }
         let mut retry = LAST_FOCUS_TRY.lock().unwrap();
-        if retry.is_some_and(|t| t.elapsed() < Duration::from_millis(500)) { return; }
+        if retry.is_some_and(|t| t.elapsed() < Duration::from_millis(500)) {
+            return;
+        }
         *retry = Some(Instant::now());
     }
-    if FOCUS_PENDING.swap(true, Ordering::Relaxed) { return; }
+    if FOCUS_PENDING.swap(true, Ordering::Relaxed) {
+        return;
+    }
     let handle = app.clone();
-    if app.run_on_main_thread(move || {
-        if !REGION.load(Ordering::Relaxed) && !NAV.load(Ordering::Relaxed) {
-            let foreground = unsafe { GetForegroundWindow() };
-            let mut previous = RETURN_WINDOW.lock().unwrap();
-            let was_leased = previous.is_some();
-            if let Some(target) = target {
-                if target.source != 0 && foreground.0 as usize == target.source {
-                    let label = if target.popup { "popup-host" } else { "overlay" };
-                    if let Some(window) = handle.get_webview_window(label) {
-                        if super::promote_to_key(&window).unwrap_or(false) {
-                            *previous = Some((target.source, target.window));
+    if app
+        .run_on_main_thread(move || {
+            if !REGION.load(Ordering::Relaxed) && !NAV.load(Ordering::Relaxed) {
+                let foreground = unsafe { GetForegroundWindow() };
+                let mut previous = RETURN_WINDOW.lock().unwrap();
+                let was_leased = previous.is_some();
+                if let Some(target) = target {
+                    if target.source != 0 && foreground.0 as usize == target.source {
+                        let label = if target.popup { "popup-host" } else { "overlay" };
+                        if let Some(window) = handle.get_webview_window(label) {
+                            if super::promote_to_key(&window).unwrap_or(false) {
+                                *previous = Some((target.source, target.window));
+                            }
                         }
                     }
+                } else if let Some((source, owner)) = previous.take() {
+                    if foreground.0 as usize == owner {
+                        super::window::restore_input_focus(HWND(source as *mut _));
+                    }
                 }
-            } else if let Some((source, owner)) = previous.take() {
-                if foreground.0 as usize == owner {
-                    super::window::restore_input_focus(HWND(source as *mut _));
+                HOVER_LEASE.store(previous.is_some(), Ordering::Relaxed);
+                if was_leased != previous.is_some() {
+                    if let Some(service) = handle.try_state::<crate::state::Shared>() {
+                        crate::record(
+                            &handle,
+                            &service,
+                            serde_json::json!({
+                                "check": "windows-input-focus", "hover": previous.is_some(),
+                                "foreground": unsafe { GetForegroundWindow() }.0 as usize,
+                            }),
+                        );
+                    }
                 }
             }
-            HOVER_LEASE.store(previous.is_some(), Ordering::Relaxed);
-            if was_leased != previous.is_some() {
-              if let Some(service) = handle.try_state::<crate::state::Shared>() {
-                crate::record(&handle, &service, serde_json::json!({
-                    "check": "windows-input-focus", "hover": previous.is_some(),
-                    "foreground": unsafe { GetForegroundWindow() }.0 as usize,
-                }));
-              }
-            }
-        }
+            FOCUS_PENDING.store(false, Ordering::Relaxed);
+        })
+        .is_err()
+    {
         FOCUS_PENDING.store(false, Ordering::Relaxed);
-    }).is_err() { FOCUS_PENDING.store(false, Ordering::Relaxed); }
+    }
 }
 
 pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
@@ -313,7 +367,9 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                 DispatchMessageW(&msg);
             }
             let _ = UnhookWindowsHookEx(hook);
-            if let Ok(keyboard) = keyboard { let _ = UnhookWindowsHookEx(keyboard); }
+            if let Ok(keyboard) = keyboard {
+                let _ = UnhookWindowsHookEx(keyboard);
+            }
             HOOK.with(|state| state.borrow_mut().take());
             PRIMARY_DOWN.store(false, Ordering::Relaxed);
             BLOCKED_MODIFIERS.store(0, Ordering::Relaxed);
@@ -323,28 +379,34 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
     let app = app.clone();
     let key_app = app.clone();
     let button_app = app.clone();
-    std::thread::Builder::new().name("kimochi-mouse-shortcuts".into()).spawn(move || {
-        for button in button_receiver {
-            mouse_buttons::fire(&button_app, button);
-        }
-    }).map_err(|e| e.to_string())?;
-    std::thread::Builder::new().name("kimochi-key-delivery".into()).spawn(move || {
-        for (key, down, region, nav) in key_receiver {
-            let Some(name) = key_name(key) else { continue };
-            let payload = serde_json::json!({ "key": name, "type": if down { "keydown" } else { "keyup" } });
-            if region && matches!(key, 13 | 27 | 32) { let _ = key_app.emit("region-key", &payload); }
-            if nav { let _ = key_app.emit("controller-key", &payload); }
-        }
-    }).map_err(|e| e.to_string())?;
+    std::thread::Builder::new()
+        .name("kimochi-mouse-shortcuts".into())
+        .spawn(move || {
+            for button in button_receiver {
+                mouse_buttons::fire(&button_app, button);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    std::thread::Builder::new()
+        .name("kimochi-key-delivery".into())
+        .spawn(move || {
+            for (key, down, region, nav) in key_receiver {
+                let Some(name) = key_name(key) else { continue };
+                let payload = serde_json::json!({ "key": name, "type": if down { "keydown" } else { "keyup" } });
+                if region && matches!(key, 13 | 27 | 32) {
+                    let _ = key_app.emit("region-key", &payload);
+                }
+                if nav {
+                    let _ = key_app.emit("controller-key", &payload);
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
     std::thread::Builder::new()
         .name("kimochi-mouse-delivery".into())
         .spawn(move || {
             for press in receiver {
-                let label = if press.target.popup {
-                    "popup-host"
-                } else {
-                    "overlay"
-                };
+                let label = if press.target.popup { "popup-host" } else { "overlay" };
                 let x = (f64::from(press.x) - press.target.origin.0) / press.target.scale;
                 let y = (f64::from(press.y) - press.target.origin.1) / press.target.scale;
                 let _ = app.emit_to(
@@ -355,18 +417,21 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                 // A Quick Shot box starts where this press says; a ghost anchor shows up here
                 // as a point away from where the page's own pointer events put the cursor.
                 let (origin, injected) = press_origin(press.flags, press.extra);
-                crate::debug_report::trace(&app, serde_json::json!({
-                    "check": "pointer-press",
-                    "window": label,
-                    "button": press.button,
-                    "down": press.down,
-                    "screen": [press.x, press.y],
-                    "local": [x, y],
-                    "targetOrigin": [press.target.origin.0, press.target.origin.1],
-                    "targetScale": press.target.scale,
-                    "source": origin,
-                    "injected": injected,
-                }));
+                crate::debug_report::trace(
+                    &app,
+                    serde_json::json!({
+                        "check": "pointer-press",
+                        "window": label,
+                        "button": press.button,
+                        "down": press.down,
+                        "screen": [press.x, press.y],
+                        "local": [x, y],
+                        "targetOrigin": [press.target.origin.0, press.target.origin.1],
+                        "targetScale": press.target.scale,
+                        "source": origin,
+                        "injected": injected,
+                    }),
+                );
             }
         })
         .map_err(|error| error.to_string())?;
@@ -389,20 +454,45 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 let ours = super::window_pid(foreground) == std::process::id();
                 let mut point = POINT::default();
                 let hover = unsafe { GetCursorPos(&mut point) }.is_ok() && target_at(point).is_some();
-                let source = TARGETS.try_lock().ok().is_some_and(|targets| targets.iter().any(|t| t.source == foreground.0 as usize));
+                let source = TARGETS
+                    .try_lock()
+                    .ok()
+                    .is_some_and(|targets| targets.iter().any(|t| t.source == foreground.0 as usize));
                 let owned = hook.key_owners[key as usize];
                 let was_down = hook.keys_down[key as usize];
                 hook.keys_down[key as usize] = down;
-                if !captures_key(owned, down, was_down, region || nav, hover, ours, region_key_target(region, key, source)) { return false; }
-                if down && (region || nav) && key_name(key).is_some()
-                    && hook.keys.try_send((key, true, region, nav)).is_err() { return owned; }
-                if up { let _ = hook.keys.try_send((key, false, region, nav)); }
+                if !captures_key(
+                    owned,
+                    down,
+                    was_down,
+                    region || nav,
+                    hover,
+                    ours,
+                    region_key_target(region, key, source),
+                ) {
+                    return false;
+                }
+                if down
+                    && (region || nav)
+                    && key_name(key).is_some()
+                    && hook.keys.try_send((key, true, region, nav)).is_err()
+                {
+                    return owned;
+                }
+                if up {
+                    let _ = hook.keys.try_send((key, false, region, nav));
+                }
                 hook.key_owners[key as usize] = down;
-                if down { BLOCKED_MODIFIERS.fetch_or(modifier_bit(key), Ordering::Relaxed); }
-                else { BLOCKED_MODIFIERS.fetch_and(!modifier_bit(key), Ordering::Relaxed); }
+                if down {
+                    BLOCKED_MODIFIERS.fetch_or(modifier_bit(key), Ordering::Relaxed);
+                } else {
+                    BLOCKED_MODIFIERS.fetch_and(!modifier_bit(key), Ordering::Relaxed);
+                }
                 true
             });
-            if consumed { return LRESULT(1); }
+            if consumed {
+                return LRESULT(1);
+            }
         }
     }
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
@@ -421,12 +511,13 @@ mod tests {
             assert!(captures_key(false, true, false, true, false, false, target));
             // Closing the selector on key-down must not leak the matching release.
             assert!(captures_key(true, false, true, false, false, false, false));
-            assert!(!captures_key(false, true, false, false, false, false,
-                region_key_target(false, key, false)));
+            assert!(!captures_key(false, true, false, false, false, false, region_key_target(false, key, false)));
         }
         for key in [9, 18, 65, 91, 162] {
-            assert!(!captures_key(false, true, false, true, false, false,
-                region_key_target(true, key, false)), "foreign app keeps key {key}");
+            assert!(
+                !captures_key(false, true, false, true, false, false, region_key_target(true, key, false)),
+                "foreign app keeps key {key}"
+            );
         }
     }
 
@@ -468,8 +559,12 @@ mod tests {
 
     #[test]
     fn system_escape_routes_stay_available_but_menu_modifiers_are_guarded() {
-        for key in [9, 18, 91, 92, 164, 165] { assert!(protected_key(key)); }
-        for key in [13, 16, 17, 27, 37, 160, 163] { assert!(!protected_key(key)); }
+        for key in [9, 18, 91, 92, 164, 165] {
+            assert!(protected_key(key));
+        }
+        for key in [13, 16, 17, 27, 37, 160, 163] {
+            assert!(!protected_key(key));
+        }
         assert_eq!(modifier_bit(160) | modifier_bit(161), 3);
         assert_eq!(modifier_bit(162) | modifier_bit(163), 12);
     }
@@ -480,13 +575,20 @@ fn target_at(point: POINT) -> Option<Target> {
     // Where the reader sees the cursor, over a game Magpie scales (as in `mouse_proc`).
     let (x, y) = super::magpie::shown_press((f64::from(point.x), f64::from(point.y)))
         .unwrap_or((f64::from(point.x), f64::from(point.y)));
-    TARGETS.try_lock().ok()?.iter().find(|target| {
-        let r = target.rect;
-        x >= r.x && x < r.x + r.width
-            && y >= r.y && y < r.y + r.height
-            && unsafe { IsWindowVisible(HWND(target.window as *mut _)) }.as_bool()
-            && (root.0 as usize == target.window || root.0 as usize == target.source)
-    }).copied()
+    TARGETS
+        .try_lock()
+        .ok()?
+        .iter()
+        .find(|target| {
+            let r = target.rect;
+            x >= r.x
+                && x < r.x + r.width
+                && y >= r.y
+                && y < r.y + r.height
+                && unsafe { IsWindowVisible(HWND(target.window as *mut _)) }.as_bool()
+                && (root.0 as usize == target.window || root.0 as usize == target.source)
+        })
+        .copied()
 }
 
 /// Whether a bound mouse button can fire: the hook that catches it is the mouse guard, which
@@ -556,11 +658,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                 let Some(hook) = state.as_mut() else {
                     return false;
                 };
-                let button = if physical == usize::from(hook.swapped) {
-                    0
-                } else {
-                    2
-                };
+                let button = if physical == usize::from(hook.swapped) { 0 } else { 2 };
                 // While Magpie hands the mouse to the game it scales, the press is at the game's
                 // real (hidden) window; the reader pressed where the cursor is shown, on the picture
                 // the regions are placed over. Which window gets the press is still `info.pt`'s.
@@ -580,8 +678,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                                     return false;
                                 }
                                 let window = HWND(target.window as *mut _);
-                                let root =
-                                    unsafe { GetAncestor(WindowFromPoint(info.pt), GA_ROOT) };
+                                let root = unsafe { GetAncestor(WindowFromPoint(info.pt), GA_ROOT) };
                                 unsafe { IsWindowVisible(window) }.as_bool()
                                     && !root.is_invalid()
                                     && (root == window
@@ -594,15 +691,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                             .copied()
                     });
                     if let Some(target) = target {
-                        let press = Press {
-                            target,
-                            x,
-                            y,
-                            button,
-                            down,
-                            flags: info.flags,
-                            extra: info.dwExtraInfo,
-                        };
+                        let press = Press { target, x, y, button, down, flags: info.flags, extra: info.dwExtraInfo };
                         if hook.sender.try_send(press).is_ok() {
                             hook.owners[physical] = Some(target);
                             if button == 0 {

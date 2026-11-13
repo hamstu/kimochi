@@ -2,16 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const {
-  SCAN_KEY,
-  autoScanSkipped,
-  autoScanStatus,
-  engineName,
-  recognising,
-  scanFailed,
-  scanOutcome,
-  scanStarted
-} = await load('scan-activity.ts')
+const { SCAN_KEY, autoScanSkipped, autoScanStatus, engineName, recognising, scanFailed, scanOutcome, scanStarted } =
+  await load('scan-activity.ts')
 const { ActivityFeed } = await load('activity.ts')
 const { publishOcrResult } = await load('output.js')
 
@@ -29,10 +21,7 @@ test('engines are named as the settings name them', () => {
 test('a scan outcome says how many lines the Log gained, or why none', () => {
   assert.deepEqual(said(scanOutcome({ lines: 3, duplicate: false })), ['Added 3 lines', 'ok'])
   assert.deepEqual(said(scanOutcome({ lines: 1, duplicate: false })), ['Added 1 line', 'ok'])
-  assert.deepEqual(said(scanOutcome({ lines: 0, duplicate: true })), [
-    'Same text as before, not added',
-    'info'
-  ])
+  assert.deepEqual(said(scanOutcome({ lines: 0, duplicate: true })), ['Same text as before, not added', 'info'])
   assert.deepEqual(said(scanOutcome({ lines: 0, duplicate: false })), ['Nothing recognised', 'warn'])
   assert.deepEqual(said(scanOutcome(null)), ['Nothing recognised', 'warn'])
   // The automatic loop reading nothing new is its normal case.
@@ -45,14 +34,14 @@ test('native error prefixes become plain sentences with the right tone', () => {
     'Scan skipped: a capture is already running',
     'info'
   ])
-  assert.deepEqual(
-    said(scanFailed(new Error('permission: Screen Recording is off'), 'capture', 'cloud')),
-    ['Screen capture is not permitted: Screen Recording is off', 'error']
-  )
-  assert.deepEqual(
-    said(scanFailed('gone: pick-again: that shared source has closed', 'capture', 'cloud')),
-    ['The source is gone: that shared source has closed', 'warn']
-  )
+  assert.deepEqual(said(scanFailed(new Error('permission: Screen Recording is off'), 'capture', 'cloud')), [
+    'Screen capture is not permitted: Screen Recording is off',
+    'error'
+  ])
+  assert.deepEqual(said(scanFailed('gone: pick-again: that shared source has closed', 'capture', 'cloud')), [
+    'The source is gone: that shared source has closed',
+    'warn'
+  ])
   assert.deepEqual(
     said(scanFailed('gone: hidden: Window is minimized; restore it before capturing.', 'capture', 'cloud')),
     ['The window is out of view: Window is minimized; restore it before capturing.', 'warn']
@@ -88,24 +77,12 @@ test('native error prefixes become plain sentences with the right tone', () => {
 test('an engine held back by its model says where the model stands', () => {
   const failed = (reason, mode = 'meikiocr') =>
     said(scanFailed(`${engineName(mode)} is not ready: ${reason}`, 'recognise', mode))
-  assert.deepEqual(failed('Downloading model… 42%'), [
-    'MeikiOCR model is still downloading (42%)',
-    'warn'
-  ])
-  assert.deepEqual(failed('Verifying model…', 'mangaocr'), [
-    'Manga OCR model is still being verified',
-    'warn'
-  ])
+  assert.deepEqual(failed('Downloading model… 42%'), ['MeikiOCR model is still downloading (42%)', 'warn'])
+  assert.deepEqual(failed('Verifying model…', 'mangaocr'), ['Manga OCR model is still being verified', 'warn'])
   assert.deepEqual(failed('Model not downloaded'), ['MeikiOCR model is not downloaded yet', 'warn'])
   assert.deepEqual(failed('Model download paused'), ['MeikiOCR model download is paused', 'warn'])
-  assert.deepEqual(failed('Model download failed: HTTP 503'), [
-    'MeikiOCR model download failed: HTTP 503',
-    'error'
-  ])
-  assert.deepEqual(failed('the runtime is missing'), [
-    'MeikiOCR is not available: the runtime is missing',
-    'warn'
-  ])
+  assert.deepEqual(failed('Model download failed: HTTP 503'), ['MeikiOCR model download failed: HTTP 503', 'error'])
+  assert.deepEqual(failed('the runtime is missing'), ['MeikiOCR is not available: the runtime is missing', 'warn'])
   assert.deepEqual(said(scanFailed('OneOCR is available on Windows only.', 'recognise', 'oneocr')), [
     'OneOCR is available on Windows only',
     'warn'
@@ -148,7 +125,12 @@ test('publishing reports how many lines the Log will show', async () => {
   const onPublication = (report) => reports.push(report)
   const group = (id, text) => ({ id, text, orientation: 'horizontal' })
   await publishOcrResult(
-    { geometry: false, fullText: 'あ\nい', textAnnotations: [], groups: [group('a', 'あ'), group('b', 'い'), group('c', ' ')] },
+    {
+      geometry: false,
+      fullText: 'あ\nい',
+      textAnnotations: [],
+      groups: [group('a', 'あ'), group('b', 'い'), group('c', ' ')]
+    },
     { onPublication }
   )
   await publishOcrResult({ geometry: false, fullText: 'う', textAnnotations: [], groups: [] }, { onPublication })

@@ -148,7 +148,10 @@ export function ConfirmDialog({
                 )}
               </div>
             </div>
-            <div className="k-dialog-footer" style={{ borderTop: 0, background: 'transparent', paddingTop: 'var(--k-space-2)' }}>
+            <div
+              className="k-dialog-footer"
+              style={{ borderTop: 0, background: 'transparent', paddingTop: 'var(--k-space-2)' }}
+            >
               <AlertPrimitive.Cancel className="k-button k-button-secondary">{cancelLabel}</AlertPrimitive.Cancel>
               <AlertPrimitive.Action
                 className={cn('k-button', tone === 'danger' ? 'k-button-danger' : 'k-button-primary')}

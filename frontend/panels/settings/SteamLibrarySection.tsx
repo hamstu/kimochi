@@ -8,8 +8,7 @@ import { Badge, Button, Callout, SettingsRow, SettingsSection, Spinner } from '@
 import { useSteamLibrary } from '../../bridge/steamLibrary'
 
 function description(added: boolean, artwork: boolean, gamingMode: boolean): string {
-  if (added && !artwork)
-    return 'Kimochi is in your Steam library. Its artwork appears once Steam restarts.'
+  if (added && !artwork) return 'Kimochi is in your Steam library. Its artwork appears once Steam restarts.'
   if (added) return 'Kimochi is in your Steam library. Start it there in Gaming Mode, then your game.'
   if (gamingMode)
     return 'Adds Kimochi as a non-Steam game with its own artwork. Steam shows it after you next return to the library.'
@@ -38,11 +37,8 @@ export function SteamLibrarySection(): ReactNode {
       </SettingsRow>
       {failed && (
         <Callout tone={result.state === 'failed' ? 'danger' : 'warn'}>
-          {result.state === 'steamNotRunning'
-            ? 'Steam is not running. Open Steam, then try again.'
-            : result.message}{' '}
-          Or add it yourself: in Steam, choose Add a Game → Add a Non-Steam Game, tick Kimochi, then
-          Add Selected Programs.
+          {result.state === 'steamNotRunning' ? 'Steam is not running. Open Steam, then try again.' : result.message} Or
+          add it yourself: in Steam, choose Add a Game → Add a Non-Steam Game, tick Kimochi, then Add Selected Programs.
         </Callout>
       )}
     </SettingsSection>

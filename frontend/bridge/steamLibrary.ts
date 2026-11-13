@@ -43,10 +43,10 @@ export interface SteamAddResult {
 export const offersSteamStep = (status: SteamLibraryStatus | null): boolean =>
   Boolean(
     status?.supported &&
-      (status.steamDeck || status.steamOs) &&
-      status.steamInstalled &&
-      !status.gamingMode &&
-      !status.added
+    (status.steamDeck || status.steamOs) &&
+    status.steamInstalled &&
+    !status.gamingMode &&
+    !status.added
   )
 
 interface Store {

@@ -107,10 +107,7 @@ fn account() -> Result<&'static Account, String> {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -237,10 +234,7 @@ pub fn install(app: &AppHandle) -> Result<(), String> {
     let index = match load_index(&data_dir) {
         Some(index) => index,
         None => {
-            let mode = app
-                .try_state::<Shared>()
-                .map(|s| settings::server_mode(&s.settings))
-                .unwrap_or("cloud");
+            let mode = app.try_state::<Shared>().map(|s| settings::server_mode(&s.settings)).unwrap_or("cloud");
             let (index, migrated) = migrate_legacy(&data_dir, &local_dir, mode);
             notes = migrated;
             if save_index(&data_dir, &index).is_ok() {
@@ -381,15 +375,11 @@ fn status_value() -> Value {
         return json!({ "signedIn": false, "accounts": [] });
     };
     let index = lock(&account.index).clone();
-    let current_mode = account
-        .app
-        .try_state::<Shared>()
-        .map(|s| settings::server_mode(&s.settings))
-        .unwrap_or("cloud");
+    let current_mode = account.app.try_state::<Shared>().map(|s| settings::server_mode(&s.settings)).unwrap_or("cloud");
     let link_mode = link_mode();
-    let linking = lock(&account.link).as_ref().map(|link| {
-        json!({ "code": link.code, "verifyUrl": link.verify_url, "expiresAt": link.expires_at_ms })
-    });
+    let linking = lock(&account.link)
+        .as_ref()
+        .map(|link| json!({ "code": link.code, "verifyUrl": link.verify_url, "expiresAt": link.expires_at_ms }));
     let active = index.active.as_deref().and_then(|k| index.accounts.iter().find(|e| e.key == k));
     let mut accounts: Vec<&Entry> = index.accounts.iter().collect();
     accounts.sort_by_key(|e| std::cmp::Reverse(e.last_used_at));
@@ -442,10 +432,7 @@ fn announce_capabilities() {
 
 pub fn base() -> Result<String, String> {
     let account = account()?;
-    let service = account
-        .app
-        .try_state::<Shared>()
-        .ok_or("native: Kimochi is still starting")?;
+    let service = account.app.try_state::<Shared>().ok_or("native: Kimochi is still starting")?;
     Ok(settings::server_base(&service.settings))
 }
 
@@ -555,11 +542,7 @@ pub fn usage_changed() {
 
 fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
     let http = client(Duration::from_secs(15))?;
-    let response = http
-        .get(format!("{base}{path}"))
-        .bearer_auth(token)
-        .send()
-        .map_err(|_| OFFLINE.to_string())?;
+    let response = http.get(format!("{base}{path}")).bearer_auth(token).send().map_err(|_| OFFLINE.to_string())?;
     if !response.status().is_success() {
         return Err(failure(cloud::Feature::Account, base, response));
     }
@@ -585,7 +568,10 @@ fn refresh_blocking() -> Result<Value, String> {
     update_entry(&entry.key, |e| e.user = user)?;
     if cloud != had_cloud {
         // Kimochi Cloud came or went: the windows show or hide its features, and Sync starts or stops.
-        sync::log("account", if cloud { "Kimochi Cloud is on for this account" } else { "Kimochi Cloud is off for this account" });
+        sync::log(
+            "account",
+            if cloud { "Kimochi Cloud is on for this account" } else { "Kimochi Cloud is off for this account" },
+        );
         announce_capabilities();
         sync::kick();
     }
@@ -604,16 +590,15 @@ const PROFILE_WINDOWS: &[&str] = &[panels::MAIN, "settings", "diagnostics", "syn
 
 fn settings_store() -> Result<std::sync::Arc<settings::Settings>, String> {
     let account = account()?;
-    Ok(account
-        .app
-        .try_state::<Shared>()
-        .ok_or("native: Kimochi is still starting")?
-        .settings
-        .clone())
+    Ok(account.app.try_state::<Shared>().ok_or("native: Kimochi is still starting")?.settings.clone())
 }
 
 /// Put a profile's preferences in place of the current ones, keeping this computer's own keys.
-fn load_profile_settings(app: &AppHandle, store: &std::sync::Arc<settings::Settings>, dir: &Path) -> Result<(), String> {
+fn load_profile_settings(
+    app: &AppHandle,
+    store: &std::sync::Arc<settings::Settings>,
+    dir: &Path,
+) -> Result<(), String> {
     let saved = profile::read_json(&dir.join(profile::SETTINGS_FILE)).unwrap_or_else(|| json!({}));
     let target = profile::with_defaults(&settings::defaults(), &saved);
     let updates = profile::switch_updates(&store.all(), &target);
@@ -679,7 +664,13 @@ fn prepare_profile(account: &Account, entry: &Entry) -> Result<(), String> {
             );
             sync_core::save_state(&dir, &state)?;
             if let Err(e) = sync::initial_sync(&entry.key, entry.base(), token.as_deref().unwrap_or(""), &dir) {
-                sync::log("error", &format!("Downloading {who}'s data did not finish ({}); it continues in the background", e.trim_start_matches("native: ")));
+                sync::log(
+                    "error",
+                    &format!(
+                        "Downloading {who}'s data did not finish ({}); it continues in the background",
+                        e.trim_start_matches("native: ")
+                    ),
+                );
             }
             return Ok(());
         }
@@ -710,7 +701,10 @@ fn activate(target: Option<String>) -> Result<(), String> {
     };
     if let (Some(forced), Some(entry)) = (settings::server_mode_override(), &entry) {
         if entry.mode != forced {
-            return Err(format!("invalid: {}={forced} picks the server for this run; that account is on the other one", settings::SERVER_ENV));
+            return Err(format!(
+                "invalid: {}={forced} picks the server for this run; that account is on the other one",
+                settings::SERVER_ENV
+            ));
         }
     }
     account.switching_flag.store(true, Ordering::SeqCst);
@@ -772,9 +766,7 @@ pub fn profile_current() -> Value {
 
 #[tauri::command]
 pub async fn account_switch(key: Option<String>) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || activate(key))
-        .await
-        .map_err(|e| e.to_string())??;
+    tauri::async_runtime::spawn_blocking(move || activate(key)).await.map_err(|e| e.to_string())??;
     Ok(status_value())
 }
 
@@ -816,9 +808,7 @@ pub fn computer_name() -> String {
 #[allow(deprecated)] // the shell plugin's `open` is the opener the app already uses
 fn open_in_browser(app: &AppHandle, url: &str) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
-    app.shell()
-        .open(url, None)
-        .map_err(|e| format!("native: could not open the browser: {e}"))
+    app.shell().open(url, None).map_err(|e| format!("native: could not open the browser: {e}"))
 }
 
 /// Bring the main window to the front and focus it; on `account`, on Settings → Account.
@@ -828,10 +818,7 @@ pub fn bring_forward(app: &AppHandle, account_page: bool) {
         let Some(service) = handle.try_state::<Shared>() else { return };
         let settings = service.settings.clone();
         if account_page && settings.set("settingsActiveTab", json!("account")).is_ok() {
-            let _ = handle.emit(
-                "settings:changed",
-                json!({ "key": "settingsActiveTab", "value": "account" }),
-            );
+            let _ = handle.emit("settings:changed", json!({ "key": "settingsActiveTab", "value": "account" }));
         }
         let _ = panels::act_existing(&handle, &settings, panels::MAIN, "show", None);
         if let Some(main) = handle.get_webview_window(panels::MAIN) {
@@ -871,9 +858,7 @@ fn deep_link_page(url: &str) -> Option<&'static str> {
 
 fn link_event(status: &str, code: &str, message: Option<&str>) {
     let Some(account) = ACCOUNT.get() else { return };
-    let _ = account
-        .app
-        .emit("account-link", json!({ "status": status, "code": code, "message": message }));
+    let _ = account.app.emit("account-link", json!({ "status": status, "code": code, "message": message }));
 }
 
 fn end_link(seq: u64) {
@@ -913,9 +898,7 @@ pub async fn account_link_start(app: AppHandle) -> Result<Value, String> {
         if !response.status().is_success() {
             return Err(failure(cloud::Feature::Account, &base, response));
         }
-        response
-            .json::<LinkStart>()
-            .map_err(|_| "native: Kimochi cloud sent an unreadable answer".to_string())
+        response.json::<LinkStart>().map_err(|_| "native: Kimochi cloud sent an unreadable answer".to_string())
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -983,10 +966,7 @@ fn poll(seq: u64, base: String, code: String, poll_token: String, interval: Dura
             announce();
             return;
         }
-        let answer = http
-            .post(format!("{base}/api/v1/link/poll"))
-            .json(&json!({ "pollToken": poll_token }))
-            .send();
+        let answer = http.post(format!("{base}/api/v1/link/poll")).json(&json!({ "pollToken": poll_token })).send();
         let response = match answer {
             Ok(response) => response,
             Err(_) => {
@@ -1033,7 +1013,14 @@ fn poll(seq: u64, base: String, code: String, poll_token: String, interval: Dura
                 let user = body.get("user").cloned().unwrap_or(Value::Null);
                 end_link(seq);
                 if let Err(e) = approved(&base, token, user) {
-                    link_event("error", &code, Some(&format!("Signed in, but switching to the account failed: {}", e.trim_start_matches("native: ").trim_start_matches("invalid: "))));
+                    link_event(
+                        "error",
+                        &code,
+                        Some(&format!(
+                            "Signed in, but switching to the account failed: {}",
+                            e.trim_start_matches("native: ").trim_start_matches("invalid: ")
+                        )),
+                    );
                     announce();
                     return;
                 }
@@ -1117,13 +1104,14 @@ pub async fn account_sign_out(key: Option<String>) -> Result<Value, String> {
     let token = read_token(&account.data_dir, &key);
     if active_key().as_deref() == Some(key.as_str()) {
         let target = None;
-        tauri::async_runtime::spawn_blocking(move || activate(target))
-            .await
-            .map_err(|e| e.to_string())??;
+        tauri::async_runtime::spawn_blocking(move || activate(target)).await.map_err(|e| e.to_string())??;
     }
     // The local sign-out is what counts: the file goes even when the server cannot be reached.
     save_token(&account.data_dir, &key, None)?;
-    sync::log("profile", &format!("Signed out of {}; its data stays on this computer", entry.user["email"].as_str().unwrap_or(&key)));
+    sync::log(
+        "profile",
+        &format!("Signed out of {}; its data stays on this computer", entry.user["email"].as_str().unwrap_or(&key)),
+    );
     announce();
     announce_capabilities();
     if let Some(token) = token {
@@ -1166,9 +1154,7 @@ pub async fn account_refresh() -> Result<Value, String> {
     if !signed_in() {
         return Ok(status_value());
     }
-    tauri::async_runtime::spawn_blocking(refresh_blocking)
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(refresh_blocking).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1244,9 +1230,11 @@ mod tests {
         let (data, local) = (root.join("data"), root.join("local"));
         std::fs::create_dir_all(local.join("sessions/s1")).unwrap();
         std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(local.join("sessions.json"), r#"{"version":1,"activeId":"s1","sessions":[{"id":"s1"}]}"#).unwrap();
+        std::fs::write(local.join("sessions.json"), r#"{"version":1,"activeId":"s1","sessions":[{"id":"s1"}]}"#)
+            .unwrap();
         std::fs::write(local.join("sessions/s1/lines.json"), r#"{"version":1,"lines":[]}"#).unwrap();
-        std::fs::write(data.join("account.json"), r#"{"token":"kmc_cloud","user":{"id":"usr_1","email":"a@b.c"}}"#).unwrap();
+        std::fs::write(data.join("account.json"), r#"{"token":"kmc_cloud","user":{"id":"usr_1","email":"a@b.c"}}"#)
+            .unwrap();
         std::fs::write(data.join("account-local.json"), r#"{"token":"kmc_local","user":{"id":"usr_2"}}"#).unwrap();
         let (index, notes) = migrate_legacy(&data, &local, "cloud");
         assert_eq!(index.accounts.len(), 2);

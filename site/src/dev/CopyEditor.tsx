@@ -133,8 +133,15 @@ function findBlocks(root: Element): HTMLElement[] {
 function summary(changes: Change[]): string {
   const byPath = new Map<string, Change[]>()
   for (const c of changes) byPath.set(c.path, [...(byPath.get(c.path) ?? []), c])
-  const quote = (s: string): string => s.split('\n').map((line) => `     > ${line}`).join('\n')
-  const lines = [`Website copy edits (${changes.length}), made in the dev copy editor. Please make these in the site's source:`, '']
+  const quote = (s: string): string =>
+    s
+      .split('\n')
+      .map((line) => `     > ${line}`)
+      .join('\n')
+  const lines = [
+    `Website copy edits (${changes.length}), made in the dev copy editor. Please make these in the site's source:`,
+    ''
+  ]
   for (const [path, list] of byPath) {
     lines.push(`## Page ${path}`, '')
     list.forEach((c, i) => {
@@ -176,7 +183,14 @@ function CopyEditor() {
     setChanges((list) => {
       const rest = list.filter((c) => c.key !== key)
       if (after === before) return rest
-      const change: Change = { key, path: location.pathname, where: locate(el), tag: el.tagName.toLowerCase(), before, after }
+      const change: Change = {
+        key,
+        path: location.pathname,
+        where: locate(el),
+        tag: el.tagName.toLowerCase(),
+        before,
+        after
+      }
       const at = list.findIndex((c) => c.key === key)
       if (at === -1) return [...rest, change]
       const next = [...list]
@@ -308,7 +322,10 @@ function CopyEditor() {
   }
 
   return (
-    <div data-copy-editor className="fixed bottom-4 left-4 z-[2147483000] flex flex-col items-start gap-2 font-sans text-[13px]">
+    <div
+      data-copy-editor
+      className="fixed bottom-4 left-4 z-[2147483000] flex flex-col items-start gap-2 font-sans text-[13px]"
+    >
       {open && (
         <div className="flex max-h-[min(70vh,560px)] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-hairline bg-raised text-ink shadow-pop">
           <div className="flex items-center gap-3 border-b border-hairline px-3.5 py-2.5">
@@ -316,11 +333,21 @@ function CopyEditor() {
             <span className="text-ink-3">dev only</span>
             <label className="ml-auto flex cursor-pointer items-center gap-2 text-ink-2">
               Highlight
-              <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} className="accent-[var(--k-accent)]" />
+              <input
+                type="checkbox"
+                checked={marks}
+                onChange={(e) => setMarks(e.target.checked)}
+                className="accent-[var(--k-accent)]"
+              />
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-ink-2">
               Editing
-              <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} className="accent-[var(--k-accent)]" />
+              <input
+                type="checkbox"
+                checked={editing}
+                onChange={(e) => setEditing(e.target.checked)}
+                className="accent-[var(--k-accent)]"
+              />
             </label>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -346,7 +373,9 @@ function CopyEditor() {
                         Undo
                       </button>
                     </div>
-                    <p className="whitespace-pre-wrap text-ink-3 line-through decoration-[color-mix(in_oklab,currentColor_50%,transparent)]">{c.before}</p>
+                    <p className="whitespace-pre-wrap text-ink-3 line-through decoration-[color-mix(in_oklab,currentColor_50%,transparent)]">
+                      {c.before}
+                    </p>
                     <p className="mt-0.5 whitespace-pre-wrap text-ink">{c.after}</p>
                   </li>
                 ))}
@@ -355,7 +384,11 @@ function CopyEditor() {
           </div>
           <div className="flex items-center gap-2 border-t border-hairline px-3.5 py-2.5">
             {changes.length > 0 && (
-              <button type="button" onClick={clear} className="rounded-md px-2 py-1 text-ink-3 hover:bg-hover hover:text-ink">
+              <button
+                type="button"
+                onClick={clear}
+                className="rounded-md px-2 py-1 text-ink-3 hover:bg-hover hover:text-ink"
+              >
                 Clear
               </button>
             )}
@@ -376,12 +409,23 @@ function CopyEditor() {
         className={`flex items-center gap-2 rounded-full border border-hairline px-3 py-1.5 font-medium shadow-pop ${editing ? 'bg-accent text-accent-contrast' : 'bg-raised text-ink-2 hover:text-ink'}`}
         title="Copy editor (dev only)"
       >
-        <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+        <svg
+          viewBox="0 0 16 16"
+          className="size-3.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          aria-hidden="true"
+        >
           <path d="M10.5 2.5l3 3L6 13H3v-3z" strokeLinejoin="round" />
         </svg>
         {editing ? 'Editing copy' : 'Edit copy'}
         {changes.length > 0 && (
-          <span className={`rounded-full px-1.5 text-[11px] tnum ${editing ? 'bg-white/20' : 'bg-accent text-accent-contrast'}`}>{changes.length}</span>
+          <span
+            className={`rounded-full px-1.5 text-[11px] tnum ${editing ? 'bg-white/20' : 'bg-accent text-accent-contrast'}`}
+          >
+            {changes.length}
+          </span>
         )}
       </button>
     </div>

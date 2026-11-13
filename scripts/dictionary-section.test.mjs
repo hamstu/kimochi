@@ -80,7 +80,10 @@ test('a page that never finishes, a missing section or no document gives up quie
 test('the dictionary window uses it for Built-in Yomitan on load, and leaves Hachidori to its own fragment', async () => {
   const panel = await readFile(new URL('../frontend/panels/DictionarySettingsPanel.tsx', import.meta.url), 'utf8')
   assert.match(panel, /engine === 'yomitan' \? first\.section : null/)
-  assert.match(panel, /onLoad=\{\(\) => \{\s*if \(engine !== 'yomitan' \|\| dictionaryPageReady\(frameDocument\(frame.current\)\)\) setLoaded\(true\)\s*revealYomitanSection\(\)/)
+  assert.match(
+    panel,
+    /onLoad=\{\(\) => \{\s*if \(engine !== 'yomitan' \|\| dictionaryPageReady\(frameDocument\(frame.current\)\)\) setLoaded\(true\)\s*revealYomitanSection\(\)/
+  )
   assert.match(panel, /revealSectionWhenLoaded\(\(\) => frameDocument\(frame\.current\), section\)/)
 })
 
@@ -88,7 +91,10 @@ test('a navigation request to a page already shown navigates the frame, not its 
   // 10ten's pop-up cog asks for its options page while that page is open in the hidden-not-closed
   // dictionary window: an unchanged `src` loads nothing, so "Loading…" must not be reset for it.
   const panel = await readFile(new URL('../frontend/panels/DictionarySettingsPanel.tsx', import.meta.url), 'utf8')
-  const onNavigate = panel.slice(panel.indexOf('const onNavigate'), panel.indexOf("window.addEventListener('kimochi-dictionary-navigate'"))
+  const onNavigate = panel.slice(
+    panel.indexOf('const onNavigate'),
+    panel.indexOf("window.addEventListener('kimochi-dictionary-navigate'")
+  )
   assert.match(onNavigate, /if \(view && frame\.current\?\.dataset\.loaded\) \{\s*view\.location\.href = next\s*return/)
   assert.doesNotMatch(onNavigate, /setLoaded\(false\)/)
 })

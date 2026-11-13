@@ -3,66 +3,58 @@
  * the way to the full guide on the docs site. The command itself is the app's own executable in
  * command-line mode (src-tauri/src/cli/).
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Check, Copy, ExternalLink } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
-import {
-  Badge,
-  Button,
-  Callout,
-  IconButton,
-  SettingsPage,
-  SettingsRow,
-  SettingsSection,
-} from "@kit";
-import { useCapabilities } from "../../bridge/capabilities";
-import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
-import "./cli.css";
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Check, Copy, ExternalLink } from 'lucide-react'
+import { invoke } from '@tauri-apps/api/core'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
+import { Badge, Button, Callout, IconButton, SettingsPage, SettingsRow, SettingsSection } from '@kit'
+import { useCapabilities } from '../../bridge/capabilities'
+import { writeTextSelf } from '@texthooker/lib/clipboardWrite'
+import './cli.css'
 
-export const CLI_DOCS_URL = "https://docs.kimochiapp.com/reference/cli/";
+export const CLI_DOCS_URL = 'https://docs.kimochiapp.com/reference/cli/'
 
 /** `cli_status` (cli/install.rs `Status`). */
 export interface CliStatus {
-  installed: boolean;
-  builtIn: boolean;
-  stale: boolean;
-  path: string | null;
-  target: string | null;
-  onPath: boolean;
-  note: string | null;
+  installed: boolean
+  builtIn: boolean
+  stale: boolean
+  path: string | null
+  target: string | null
+  onPath: boolean
+  note: string | null
 }
 
-type Os = "macos" | "windows" | "linux";
+type Os = 'macos' | 'windows' | 'linux'
 
 /** The command that pipes the clipboard in, on each system. */
 const PASTE: Record<Os, string> = {
-  macos: "pbpaste | kimochi log add",
-  windows: "Get-Clipboard | kimochi log add",
-  linux: "wl-paste | kimochi log add",
-};
+  macos: 'pbpaste | kimochi log add',
+  windows: 'Get-Clipboard | kimochi log add',
+  linux: 'wl-paste | kimochi log add'
+}
 
 function examples(os: Os): { command: string; what: string }[] {
   return [
-    { command: "kimochi status", what: "What Kimochi is reading, with which engine, and the open session." },
-    { command: "kimochi scan --wait", what: "Scan the source now and print the text it read." },
-    { command: "kimochi log --follow", what: "Print every new line of the Log as it comes in." },
-    { command: 'kimochi session switch "Persona 5"', what: "Open another session by name." },
-    { command: "kimochi ocr meikiocr", what: "Switch the OCR engine." },
-    { command: PASTE[os], what: "Add the clipboard's text to the Log as a line." },
-  ];
+    { command: 'kimochi status', what: 'What Kimochi is reading, with which engine, and the open session.' },
+    { command: 'kimochi scan --wait', what: 'Scan the source now and print the text it read.' },
+    { command: 'kimochi log --follow', what: 'Print every new line of the Log as it comes in.' },
+    { command: 'kimochi session switch "Persona 5"', what: 'Open another session by name.' },
+    { command: 'kimochi ocr meikiocr', what: 'Switch the OCR engine.' },
+    { command: PASTE[os], what: "Add the clipboard's text to the Log as a line." }
+  ]
 }
 
 function CopyButton({ text }: { text: string }): ReactNode {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(false)
   useEffect(() => {
-    if (!copied) return;
-    const id = setTimeout(() => setCopied(false), 1500);
-    return () => clearTimeout(id);
-  }, [copied]);
+    if (!copied) return
+    const id = setTimeout(() => setCopied(false), 1500)
+    return () => clearTimeout(id)
+  }, [copied])
   return (
     <IconButton
-      label={copied ? "Copied" : `Copy ${text}`}
+      label={copied ? 'Copied' : `Copy ${text}`}
       size="sm"
       onClick={() =>
         void writeTextSelf(text)
@@ -72,62 +64,61 @@ function CopyButton({ text }: { text: string }): ReactNode {
     >
       {copied ? <Check /> : <Copy />}
     </IconButton>
-  );
+  )
 }
 
 /** What the install row says about the command. */
 function describe(status: CliStatus | null, os: Os): string {
-  if (!status) return "Checking…";
-  if (status.builtIn) return `It came with this install: ${status.path}.`;
-  if (status.installed) return `Installed at ${status.path}.`;
-  if (status.stale) return `${status.path} runs another copy of Kimochi. Install it again to use this one.`;
-  if (os === "macos") return "Adds a link at /usr/local/bin/kimochi. macOS asks for an administrator's password.";
-  if (os === "windows") return "Adds a kimochi command to your user PATH.";
-  return "Adds a link at ~/.local/bin/kimochi.";
+  if (!status) return 'Checking…'
+  if (status.builtIn) return `It came with this install: ${status.path}.`
+  if (status.installed) return `Installed at ${status.path}.`
+  if (status.stale) return `${status.path} runs another copy of Kimochi. Install it again to use this one.`
+  if (os === 'macos') return "Adds a link at /usr/local/bin/kimochi. macOS asks for an administrator's password."
+  if (os === 'windows') return 'Adds a kimochi command to your user PATH.'
+  return 'Adds a link at ~/.local/bin/kimochi.'
 }
 
-const errorText = (error: unknown): string =>
-  String(error).replace(/^(invalid|native|busy|gone):\s*/, "");
+const errorText = (error: unknown): string => String(error).replace(/^(invalid|native|busy|gone):\s*/, '')
 
 export function CliTab(): ReactNode {
-  const os = (useCapabilities().os ?? "macos") as Os;
-  const [status, setStatus] = useState<CliStatus | null>(null);
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const os = (useCapabilities().os ?? 'macos') as Os
+  const [status, setStatus] = useState<CliStatus | null>(null)
+  const [working, setWorking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
-    void invoke<CliStatus>("cli_status")
+    void invoke<CliStatus>('cli_status')
       .then(setStatus)
-      .catch((e: unknown) => setError(errorText(e)));
-  }, []);
-  useEffect(refresh, [refresh]);
+      .catch((e: unknown) => setError(errorText(e)))
+  }, [])
+  useEffect(refresh, [refresh])
 
-  const change = (command: "cli_install" | "cli_uninstall"): void => {
-    setWorking(true);
-    setError(null);
+  const change = (command: 'cli_install' | 'cli_uninstall'): void => {
+    setWorking(true)
+    setError(null)
     void invoke<CliStatus>(command)
       .then(setStatus)
       .catch((e: unknown) => {
-        const message = errorText(e);
-        if (message !== "cancelled") setError(message);
+        const message = errorText(e)
+        if (message !== 'cancelled') setError(message)
       })
-      .finally(() => setWorking(false));
-  };
+      .finally(() => setWorking(false))
+  }
 
   const action = (() => {
-    if (!status || status.builtIn) return null;
+    if (!status || status.builtIn) return null
     if (status.installed)
       return (
-        <Button size="sm" disabled={working} onClick={() => change("cli_uninstall")}>
+        <Button size="sm" disabled={working} onClick={() => change('cli_uninstall')}>
           Remove
         </Button>
-      );
+      )
     return (
-      <Button size="sm" variant="primary" disabled={working} onClick={() => change("cli_install")}>
-        {status.stale ? "Install again" : "Install"}
+      <Button size="sm" variant="primary" disabled={working} onClick={() => change('cli_install')}>
+        {status.stale ? 'Install again' : 'Install'}
       </Button>
-    );
-  })();
+    )
+  })()
 
   return (
     <SettingsPage
@@ -152,9 +143,7 @@ export function CliTab(): ReactNode {
         </div>
         {error && <Callout tone="danger">{error}</Callout>}
         {status?.note && <Callout tone="warn">{status.note}</Callout>}
-        {status?.installed && os === "windows" && !status.note && (
-          <Callout>Open a new terminal to use it.</Callout>
-        )}
+        {status?.installed && os === 'windows' && !status.note && <Callout>Open a new terminal to use it.</Callout>}
       </SettingsSection>
 
       <SettingsSection
@@ -162,17 +151,13 @@ export function CliTab(): ReactNode {
         description="Add --json to any command for output a script can read."
         footnote={
           <>
-            Every command, the events <code className="cli-inline">kimochi watch</code> streams, and
-            scripting recipes are in the guide.
+            Every command, the events <code className="cli-inline">kimochi watch</code> streams, and scripting recipes
+            are in the guide.
           </>
         }
       >
         {examples(os).map(({ command, what }) => (
-          <SettingsRow
-            key={command}
-            label={<code className="cli-command">{command}</code>}
-            description={what}
-          >
+          <SettingsRow key={command} label={<code className="cli-command">{command}</code>} description={what}>
             <CopyButton text={command} />
           </SettingsRow>
         ))}
@@ -187,5 +172,5 @@ export function CliTab(): ReactNode {
         </SettingsRow>
       </SettingsSection>
     </SettingsPage>
-  );
+  )
 }

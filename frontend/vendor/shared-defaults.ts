@@ -29,10 +29,7 @@ export const DEFAULT_HOTKEYS: HotkeysSettings = {
 }
 
 /** A binding's chord: `gamepadButtons` when present (even null), else the legacy single button. */
-export function gamepadChord(binding: {
-  gamepadButtons?: number[] | null
-  gamepadButton?: number
-}): number[] {
+export function gamepadChord(binding: { gamepadButtons?: number[] | null; gamepadButton?: number }): number[] {
   const buttons =
     binding.gamepadButtons !== undefined
       ? (binding.gamepadButtons ?? [])
@@ -50,8 +47,7 @@ export function mergeHotkeysWithOverrides(overrides: HotkeyOverrides = {}): Hotk
   for (const [key, defaultHotkey] of Object.entries(DEFAULT_HOTKEYS)) {
     const override = overrides[key]
     const hasChord =
-      override !== undefined &&
-      (override.gamepadButtons !== undefined || override.gamepadButton !== undefined)
+      override !== undefined && (override.gamepadButtons !== undefined || override.gamepadButton !== undefined)
     merged[key] = {
       ...defaultHotkey,
       ...(override && {

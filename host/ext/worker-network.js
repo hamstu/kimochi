@@ -157,7 +157,8 @@ export function keepIdbRecordsAsBytes(scope, { minBytes = BLOB_RECORD_MIN_BYTES 
     constructor(parts, options) {
       super(parts, options)
       const only = Array.isArray(parts) && parts.length === 1 ? parts[0] : null
-      if (only instanceof Uint8Array && only.byteLength >= minBytes && only.byteLength === this.size) sources.set(this, only)
+      if (only instanceof Uint8Array && only.byteLength >= minBytes && only.byteLength === this.size)
+        sources.set(this, only)
     }
 
     // Blobs made anywhere else (IndexedDB, `slice`, `Response.blob`) are still Blobs.
@@ -234,12 +235,14 @@ export function runWorkerShim(scope, { load = (src) => import(/* @vite-ignore */
       scope.dispatchEvent(new scope.MessageEvent('message', { data: event.data, ports: [...(event.ports ?? [])] }))
     }
   }
-  return Promise.resolve().then(() => load(src)).then(release, (error) => {
-    release()
-    report({ check: 'ext-host-worker-failed', error: String(error?.message ?? error) })
-    // As an uncaught error, so the creator's `worker.onerror` sees it as it would without the shim.
-    setTimeout(() => {
-      throw error
-    }, 0)
-  })
+  return Promise.resolve()
+    .then(() => load(src))
+    .then(release, (error) => {
+      release()
+      report({ check: 'ext-host-worker-failed', error: String(error?.message ?? error) })
+      // As an uncaught error, so the creator's `worker.onerror` sees it as it would without the shim.
+      setTimeout(() => {
+        throw error
+      }, 0)
+    })
 }

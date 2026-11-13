@@ -31,7 +31,8 @@ export const patchesFile = (id, rel) => PATCHES.some((patch) => patch.engine ===
 export function patchProblems(patch, text) {
   const problems = []
   const found = occurrences(text, patch.find)
-  if (found !== 1) problems.push(`${patch.id}: \`find\` occurs ${found} times in ${patch.engine}/${patch.file}, not once`)
+  if (found !== 1)
+    problems.push(`${patch.id}: \`find\` occurs ${found} times in ${patch.engine}/${patch.file}, not once`)
   for (const name of patch.requires ?? []) {
     if (!text.includes(name)) problems.push(`${patch.id}: ${patch.engine}/${patch.file} no longer has \`${name}\``)
   }

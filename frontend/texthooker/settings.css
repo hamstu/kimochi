@@ -2,21 +2,62 @@
  * Settings → Texthooker. The page follows the kit settings pattern; shared field widths, notes and
  * slider readouts come from panels/settings-panel.css (this tab only renders in the settings window).
  */
-.texthooker-settings-status { padding: var(--k-space-5) var(--k-space-6); }
+.texthooker-settings-status {
+  padding: var(--k-space-5) var(--k-space-6);
+}
 
 /* Text replacements: one editable rule per row. */
-.replacement-row { gap: var(--k-space-2); min-height: var(--k-row-h); padding-block: var(--k-space-1-5); padding-left: var(--k-space-2); }
-.replacement-row[data-dragging] { opacity: 0.5; }
-.replacement-grip { flex: none; width: var(--k-icon-sm); height: var(--k-icon-sm); color: var(--k-text-3); cursor: grab; }
-.replacement-pattern { flex: 1; min-width: 0; }
-.replacement-flags { flex: none; width: 2.75rem; }
+.replacement-row {
+  gap: var(--k-space-2);
+  min-height: var(--k-row-h);
+  padding-block: var(--k-space-1-5);
+  padding-left: var(--k-space-2);
+}
+.replacement-row[data-dragging] {
+  opacity: 0.5;
+}
+.replacement-grip {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-3);
+  cursor: grab;
+}
+.replacement-pattern {
+  flex: 1;
+  min-width: 0;
+}
+.replacement-flags {
+  flex: none;
+  width: 2.75rem;
+}
 
 /* Anki: field mapping rows and the Yomitan import preview. */
-.anki-mapping-field { width: 13rem; max-width: 100%; }
-.anki-preview { display: flex; flex-direction: column; gap: var(--k-space-2); width: 100%; }
-.anki-preview-meta { display: grid; grid-template-columns: auto 1fr; gap: var(--k-space-0-5) var(--k-space-3); margin: 0; font-size: var(--k-text-sm); }
-.anki-preview-meta dt { color: var(--k-text-2); }
-.anki-preview-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.anki-mapping-field {
+  width: 13rem;
+  max-width: 100%;
+}
+.anki-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  width: 100%;
+}
+.anki-preview-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--k-space-0-5) var(--k-space-3);
+  margin: 0;
+  font-size: var(--k-text-sm);
+}
+.anki-preview-meta dt {
+  color: var(--k-text-2);
+}
+.anki-preview-meta dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .anki-preview-map {
   max-height: 8rem;
   overflow-y: auto;
@@ -25,23 +66,64 @@
   border-block: 1px solid var(--k-line);
   font-size: var(--k-text-sm);
 }
-.anki-preview-map > div { display: flex; justify-content: space-between; gap: var(--k-space-3); padding-block: var(--k-space-0-5); }
-.anki-preview-map > div + div { border-top: 1px solid var(--k-line); }
-.anki-preview-map dt { color: var(--k-text); }
-.anki-preview-map dd { margin: 0; color: var(--k-text-2); }
-.anki-preview-actions { display: flex; justify-content: flex-end; gap: var(--k-space-2); width: 100%; }
+.anki-preview-map > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  padding-block: var(--k-space-0-5);
+}
+.anki-preview-map > div + div {
+  border-top: 1px solid var(--k-line);
+}
+.anki-preview-map dt {
+  color: var(--k-text);
+}
+.anki-preview-map dd {
+  margin: 0;
+  color: var(--k-text-2);
+}
+.anki-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--k-space-2);
+  width: 100%;
+}
 
 /* Explain settings dialog. */
-.explain-settings { display: flex; flex-direction: column; gap: var(--k-space-3); }
-.explain-prompt { min-height: 18rem; line-height: var(--k-leading-sm); }
-.explain-prompt-head { display: flex; align-items: center; justify-content: space-between; gap: var(--k-space-2); }
+.explain-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+}
+.explain-prompt {
+  min-height: 18rem;
+  line-height: var(--k-leading-sm);
+}
+.explain-prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-2);
+}
 
 /* Command output inside a callout. */
-.texthooker-pre { margin: 0; overflow-x: auto; white-space: pre-wrap; font-family: var(--k-font-mono); font-size: var(--k-text-xs); }
-.preset-actions { display: inline-flex; gap: var(--k-space-1); }
+.texthooker-pre {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-xs);
+}
+.preset-actions {
+  display: inline-flex;
+  gap: var(--k-space-1);
+}
 
 /* Input source: a single-select list of Controller-style rows inside the group. */
-.input-source-list { display: flex; flex-direction: column; }
+.input-source-list {
+  display: flex;
+  flex-direction: column;
+}
 .input-source-row {
   display: flex;
   /* Icon and check sit on the label's line, not centred on label + detail. */
@@ -59,13 +141,51 @@
   transition: background-color var(--k-fast);
 }
 .input-source-row + .input-source-row,
-.input-source-list + .k-settings-row { border-top: 1px solid var(--k-line); }
-.input-source-row:hover { background: var(--k-press); }
-.input-source-row[data-state="on"] { background: var(--k-selected); }
-.input-source-row:focus-visible { outline: 2px solid var(--k-focus); outline-offset: -2px; }
-.input-source-icon { display: flex; flex: none; align-items: center; height: var(--k-leading-md); color: var(--k-text-2); }
-.input-source-icon > svg { width: var(--k-icon); height: var(--k-icon); }
-.input-source-text { display: flex; flex: 1; flex-direction: column; gap: var(--k-space-0-5); min-width: 0; }
-.input-source-label { font-size: var(--k-text-md); line-height: var(--k-leading-md); font-weight: var(--k-weight-medium); }
-.input-source-detail { font-size: var(--k-text-sm); line-height: var(--k-leading-sm); color: var(--k-text-2); }
-.input-source-check { flex: none; width: var(--k-icon); height: var(--k-icon); margin-top: calc((var(--k-leading-md) - var(--k-icon)) / 2); color: var(--k-accent-text); }
+.input-source-list + .k-settings-row {
+  border-top: 1px solid var(--k-line);
+}
+.input-source-row:hover {
+  background: var(--k-press);
+}
+.input-source-row[data-state='on'] {
+  background: var(--k-selected);
+}
+.input-source-row:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
+.input-source-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--k-leading-md);
+  color: var(--k-text-2);
+}
+.input-source-icon > svg {
+  width: var(--k-icon);
+  height: var(--k-icon);
+}
+.input-source-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+}
+.input-source-label {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  font-weight: var(--k-weight-medium);
+}
+.input-source-detail {
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+.input-source-check {
+  flex: none;
+  width: var(--k-icon);
+  height: var(--k-icon);
+  margin-top: calc((var(--k-leading-md) - var(--k-icon)) / 2);
+  color: var(--k-accent-text);
+}

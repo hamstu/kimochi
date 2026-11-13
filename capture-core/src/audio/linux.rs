@@ -145,7 +145,9 @@ fn run(feed: Feed, health: Arc<Health>, ready: Rc<RefCell<Option<Ready>>>) -> Re
                 use pw::stream::StreamState as S;
                 let gone = match &new {
                     S::Error(e) => Some(format!("PipeWire: {e}")),
-                    S::Unconnected if !matches!(old, S::Unconnected) => Some("PipeWire closed the audio stream.".into()),
+                    S::Unconnected if !matches!(old, S::Unconnected) => {
+                        Some("PipeWire closed the audio stream.".into())
+                    }
                     _ => None,
                 };
                 if let Some(why) = gone {
@@ -203,7 +205,8 @@ fn run(feed: Feed, health: Arc<Health>, ready: Rc<RefCell<Option<Ready>>>) -> Re
         .map_err(|e| CaptureError::new("native", e.to_string()))?;
 
     let format = format_pod().ok_or_else(|| CaptureError::new("native", "could not build the audio format request"))?;
-    let format = spa::pod::Pod::from_bytes(&format).ok_or_else(|| CaptureError::new("native", "invalid audio format pod"))?;
+    let format =
+        spa::pod::Pod::from_bytes(&format).ok_or_else(|| CaptureError::new("native", "invalid audio format pod"))?;
     stream
         .connect(
             spa::utils::Direction::Input,

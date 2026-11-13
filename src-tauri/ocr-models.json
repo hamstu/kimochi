@@ -165,9 +165,7 @@
           "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/mac-arm64/+/version:153.07",
           "sha256": "23739d43889e7772066aab5699b6dce7fce2640135bcb67470f0c8e4c0773f33",
           "size": 78164700,
-          "platforms": [
-            "mac-arm64"
-          ],
+          "platforms": ["mac-arm64"],
           "unpack": true
         },
         {
@@ -177,9 +175,7 @@
           "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/mac-amd64/+/version:153.07",
           "sha256": "af7441cd969b6c1bea4353573345f815ed5b575244104a4e055dade01b2ded5f",
           "size": 81291243,
-          "platforms": [
-            "mac-amd64"
-          ],
+          "platforms": ["mac-amd64"],
           "unpack": true
         },
         {
@@ -189,10 +185,7 @@
           "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/windows-amd64/+/version:153.07",
           "sha256": "6e486dcce0225033cbf22354e89426c1f3f5a0e0110a324cde0472980892e724",
           "size": 76721301,
-          "platforms": [
-            "windows-amd64",
-            "windows-arm64"
-          ],
+          "platforms": ["windows-amd64", "windows-arm64"],
           "unpack": true
         },
         {
@@ -202,9 +195,7 @@
           "url": "https://chrome-infra-packages.appspot.com/dl/chromium/third_party/screen-ai/linux/+/version:153.07",
           "sha256": "dd835442283554b7af65cfce991525373f8db2769c58ce7d6a61a504668cd253",
           "size": 78476584,
-          "platforms": [
-            "linux-amd64"
-          ],
+          "platforms": ["linux-amd64"],
           "unpack": true
         }
       ]

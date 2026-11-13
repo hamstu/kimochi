@@ -174,9 +174,7 @@ impl Manifest {
                     return Err(format!("{} is unpacked but is not a .zip", file.name));
                 }
             }
-            models
-                .files
-                .retain(|f| f.platforms.is_empty() || f.platforms.iter().any(|p| p == platform));
+            models.files.retain(|f| f.platforms.is_empty() || f.platforms.iter().any(|p| p == platform));
             for file in &models.files {
                 let plain = !file.name.is_empty()
                     && !file.name.contains(['/', '\\'])
@@ -187,10 +185,7 @@ impl Manifest {
                     return Err(format!("{:?} is not a plain file name", file.name));
                 }
                 let hex = file.sha256.len() == 64
-                    && file
-                        .sha256
-                        .bytes()
-                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+                    && file.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
                 if !hex {
                     return Err(format!("{} has no valid SHA-256", file.name));
                 }
@@ -213,9 +208,7 @@ impl Manifest {
 /// The compiled-in manifest (`src-tauri/ocr-models.json`).
 pub fn manifest() -> &'static Manifest {
     static MANIFEST: OnceLock<Manifest> = OnceLock::new();
-    MANIFEST.get_or_init(|| {
-        Manifest::parse(MANIFEST_JSON).expect("src-tauri/ocr-models.json is checked by the tests")
-    })
+    MANIFEST.get_or_init(|| Manifest::parse(MANIFEST_JSON).expect("src-tauri/ocr-models.json is checked by the tests"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -234,14 +227,8 @@ pub enum Engine {
 }
 
 impl Engine {
-    pub const ALL: [Engine; 6] = [
-        Engine::Meiki,
-        Engine::Manga,
-        Engine::PpOcr,
-        Engine::Vocr,
-        Engine::SenseVoice,
-        Engine::ScreenAi,
-    ];
+    pub const ALL: [Engine; 6] =
+        [Engine::Meiki, Engine::Manga, Engine::PpOcr, Engine::Vocr, Engine::SenseVoice, Engine::ScreenAi];
     /// The OCR engines among them whose models are their only requirement.
     pub const OCR: [Engine; 4] = [Engine::Meiki, Engine::Manga, Engine::PpOcr, Engine::Vocr];
 
@@ -282,23 +269,10 @@ impl Engine {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Phase {
     Absent,
-    Downloading {
-        file: String,
-        received: u64,
-        total: u64,
-        overall_received: u64,
-    },
-    Paused {
-        overall_received: u64,
-    },
-    Failed {
-        message: String,
-        overall_received: u64,
-    },
-    Verifying {
-        file: String,
-        overall_received: u64,
-    },
+    Downloading { file: String, received: u64, total: u64, overall_received: u64 },
+    Paused { overall_received: u64 },
+    Failed { message: String, overall_received: u64 },
+    Verifying { file: String, overall_received: u64 },
     Ready,
 }
 
@@ -318,16 +292,10 @@ impl Phase {
         match self {
             Phase::Absent => 0,
             Phase::Ready => overall_total,
-            Phase::Downloading {
-                overall_received, ..
-            }
+            Phase::Downloading { overall_received, .. }
             | Phase::Paused { overall_received }
-            | Phase::Failed {
-                overall_received, ..
-            }
-            | Phase::Verifying {
-                overall_received, ..
-            } => *overall_received,
+            | Phase::Failed { overall_received, .. }
+            | Phase::Verifying { overall_received, .. } => *overall_received,
         }
     }
 }
@@ -346,12 +314,9 @@ pub fn reason(phase: &Phase, overall_total: u64) -> Option<String> {
     Some(match phase {
         Phase::Ready => return None,
         Phase::Absent => "Model not downloaded".into(),
-        Phase::Downloading {
-            overall_received, ..
-        } => format!(
-            "Downloading model… {}%",
-            percent(*overall_received, overall_total)
-        ),
+        Phase::Downloading { overall_received, .. } => {
+            format!("Downloading model… {}%", percent(*overall_received, overall_total))
+        }
         Phase::Verifying { .. } => "Verifying model…".into(),
         Phase::Paused { .. } => "Model download paused".into(),
         Phase::Failed { message, .. } => format!("Model download failed: {message}"),
@@ -402,12 +367,7 @@ pub struct ModelStatus {
 impl ModelStatus {
     /// The status for a store phase. Models found outside the store (`fallback`) make an
     /// engine with nothing downloaded `ready`.
-    pub fn new(
-        engine: Engine,
-        models: &EngineModels,
-        phase: &Phase,
-        fallback: Option<Source>,
-    ) -> Self {
+    pub fn new(engine: Engine, models: &EngineModels, phase: &Phase, fallback: Option<Source>) -> Self {
         let overall_total = models.total_size();
         let (phase, source) = match (phase, fallback) {
             (Phase::Ready, _) => (&Phase::Ready, Some(Source::Downloaded)),
@@ -427,12 +387,7 @@ impl ModelStatus {
             message: None,
         };
         match phase {
-            Phase::Downloading {
-                file,
-                received,
-                total,
-                ..
-            } => {
+            Phase::Downloading { file, received, total, .. } => {
                 status.file = Some(file.clone());
                 status.received_bytes = Some(*received);
                 status.total_bytes = Some(*total);
@@ -477,19 +432,13 @@ struct Marker {
 }
 
 fn read_marker(dir: &Path) -> Marker {
-    fs::read(dir.join(MARKER))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+    fs::read(dir.join(MARKER)).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
 }
 
 fn write_marker(dir: &Path, marker: &Marker) -> io::Result<()> {
     let target = dir.join(MARKER);
     let staged = dir.join(format!("{MARKER}.tmp"));
-    fs::write(
-        &staged,
-        serde_json::to_vec_pretty(marker).map_err(io::Error::other)?,
-    )?;
+    fs::write(&staged, serde_json::to_vec_pretty(marker).map_err(io::Error::other)?)?;
     // std's rename replaces an existing file on every platform (MoveFileExW on Windows).
     fs::rename(staged, target)
 }
@@ -510,10 +459,7 @@ fn unpack(dir: &Path, file: &ModelFile) -> Result<(), Stop> {
     let failed = |e: String| Stop::Failed(format!("could not unpack {}: {e}", file.name));
     let zip_path = dir.join(&file.name);
     let target = file.installed(dir);
-    let staging = dir.join(format!(
-        ".staging-{}",
-        target.file_name().unwrap_or_default().to_string_lossy()
-    ));
+    let staging = dir.join(format!(".staging-{}", target.file_name().unwrap_or_default().to_string_lossy()));
     remove_dir(&staging).map_err(|e| failed(e.to_string()))?;
     let zip = fs::read(&zip_path).map_err(|e| failed(e.to_string()))?;
     for entry in crate::extension_store::zip_entries(&zip).map_err(failed)? {
@@ -558,9 +504,7 @@ pub fn scan_disk(dir: &Path, files: &[ModelFile]) -> Phase {
     }
     match (all, any) {
         (true, _) => Phase::Ready,
-        (false, true) => Phase::Paused {
-            overall_received: received,
-        },
+        (false, true) => Phase::Paused { overall_received: received },
         (false, false) => Phase::Absent,
     }
 }
@@ -576,11 +520,7 @@ pub(crate) fn sha256_file(path: &Path) -> io::Result<String> {
         }
         hasher.update(&buffer[..n]);
     }
-    Ok(hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
+    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 pub(crate) fn remove_dir(dir: &Path) -> io::Result<()> {
@@ -627,11 +567,7 @@ impl Fetch for HttpFetch {
             .client
             .get_or_init(|| {
                 reqwest::blocking::Client::builder()
-                    .user_agent(concat!(
-                        "Kimochi/",
-                        env!("CARGO_PKG_VERSION"),
-                        " (model download)"
-                    ))
+                    .user_agent(concat!("Kimochi/", env!("CARGO_PKG_VERSION"), " (model download)"))
                     .connect_timeout(Duration::from_secs(15))
                     // Applies to the response headers and to each body read, not the whole file.
                     .timeout(Duration::from_secs(30))
@@ -644,19 +580,13 @@ impl Fetch for HttpFetch {
         if offset > 0 {
             request = request.header(reqwest::header::RANGE, format!("bytes={offset}-"));
         }
-        let response = request
-            .send()
-            .map_err(|e| format!("network error: {}", e.without_url()))?;
+        let response = request.send().map_err(|e| format!("network error: {}", e.without_url()))?;
         let status = response.status();
         if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
             return Ok(Opened::RangeNotSatisfiable);
         }
         if !status.is_success() {
-            let host = response
-                .url()
-                .host_str()
-                .unwrap_or("the server")
-                .to_string();
+            let host = response.url().host_str().unwrap_or("the server").to_string();
             return Err(format!("{host} answered HTTP {}", status.as_u16()));
         }
         Ok(Opened::Body(Body {
@@ -706,10 +636,7 @@ fn open_body(fetch: &dyn Fetch, file: &ModelFile, offset: &mut u64) -> Result<Bo
             match fetch.open(&file.url, 0).map_err(failed)? {
                 Opened::Body(body) => body,
                 Opened::RangeNotSatisfiable => {
-                    return Err(Stop::Failed(format!(
-                        "the server refused to send {}",
-                        file.name
-                    )))
+                    return Err(Stop::Failed(format!("the server refused to send {}", file.name)))
                 }
             }
         }
@@ -731,8 +658,7 @@ pub fn download_file(
     progress: &mut dyn FnMut(Progress),
 ) -> Result<(), Stop> {
     let part = part_path(dir, &file.name);
-    let io_failed =
-        |action: &str, e: io::Error| Stop::Failed(format!("could not {action} {}: {e}", file.name));
+    let io_failed = |action: &str, e: io::Error| Stop::Failed(format!("could not {action} {}: {e}", file.name));
     let mut offset = resume_offset(fs::metadata(&part).ok().map(|m| m.len()), file.size);
     if offset < file.size {
         let mut body = open_body(fetch, file, &mut offset)?;
@@ -746,12 +672,8 @@ pub fn download_file(
                 )));
             }
         }
-        let mut out = if offset == 0 {
-            File::create(&part)
-        } else {
-            OpenOptions::new().append(true).open(&part)
-        }
-        .map_err(|e| io_failed("write", e))?;
+        let mut out = if offset == 0 { File::create(&part) } else { OpenOptions::new().append(true).open(&part) }
+            .map_err(|e| io_failed("write", e))?;
         progress(Progress::Bytes(offset));
         let mut buffer = vec![0u8; 256 * 1024];
         loop {
@@ -774,13 +696,9 @@ pub fn download_file(
             if offset + n as u64 > file.size {
                 drop(out);
                 let _ = fs::remove_file(&part);
-                return Err(Stop::Failed(format!(
-                    "{} is larger than expected; the download was discarded",
-                    file.name
-                )));
+                return Err(Stop::Failed(format!("{} is larger than expected; the download was discarded", file.name)));
             }
-            out.write_all(&buffer[..n])
-                .map_err(|e| io_failed("write", e))?;
+            out.write_all(&buffer[..n]).map_err(|e| io_failed("write", e))?;
             offset += n as u64;
             progress(Progress::Bytes(offset));
         }
@@ -804,10 +722,7 @@ pub fn download_file(
     let digest = sha256_file(&part).map_err(|e| io_failed("verify", e))?;
     if digest != file.sha256 {
         let _ = fs::remove_file(&part);
-        return Err(Stop::Failed(format!(
-            "{} did not match its checksum; the download was discarded",
-            file.name
-        )));
+        return Err(Stop::Failed(format!("{} did not match its checksum; the download was discarded", file.name)));
     }
     fs::rename(&part, dir.join(&file.name)).map_err(|e| io_failed("install", e))
 }
@@ -860,10 +775,9 @@ impl ModelStore {
 
     fn with_slot<R>(&self, engine: Engine, f: impl FnOnce(&mut Slot) -> R) -> R {
         let mut slots = self.slots.lock().unwrap_or_else(|p| p.into_inner());
-        let slot = slots.entry(engine).or_insert_with(|| Slot {
-            phase: scan_disk(&self.dir(engine), &self.models(engine).files),
-            control: None,
-        });
+        let slot = slots
+            .entry(engine)
+            .or_insert_with(|| Slot { phase: scan_disk(&self.dir(engine), &self.models(engine).files), control: None });
         f(slot)
     }
 
@@ -880,8 +794,7 @@ impl ModelStore {
     /// The store directory when its models are ready and still all present.
     pub fn ready_dir(&self, engine: Engine) -> Option<PathBuf> {
         let dir = self.dir(engine);
-        (self.phase(engine) == Phase::Ready && complete(&dir, &self.models(engine).files))
-            .then_some(dir)
+        (self.phase(engine) == Phase::Ready && complete(&dir, &self.models(engine).files)).then_some(dir)
     }
 
     /// Start (or resume, or retry) a download. A no-op while one runs or once ready.
@@ -899,10 +812,7 @@ impl ModelStore {
                 return None;
             }
             if !self.models(engine).offered() {
-                slot.phase = Phase::Failed {
-                    message: NOT_OFFERED.into(),
-                    overall_received: 0,
-                };
+                slot.phase = Phase::Failed { message: NOT_OFFERED.into(), overall_received: 0 };
                 return None;
             }
             let total = self.models(engine).total_size();
@@ -920,18 +830,12 @@ impl ModelStore {
         self.emit(engine, true);
         let store = self.clone();
         let worker = control.clone();
-        let spawned = std::thread::Builder::new()
-            .name(format!("kimochi-{}-download", engine.key()))
-            .spawn(move || {
-                let outcome = store.download(engine, &worker);
-                store.finish(engine, &worker, outcome);
-            });
+        let spawned = std::thread::Builder::new().name(format!("kimochi-{}-download", engine.key())).spawn(move || {
+            let outcome = store.download(engine, &worker);
+            store.finish(engine, &worker, outcome);
+        });
         if let Err(e) = spawned {
-            self.finish(
-                engine,
-                &control,
-                Err(Stop::Failed(format!("could not start the download: {e}"))),
-            );
+            self.finish(engine, &control, Err(Stop::Failed(format!("could not start the download: {e}"))));
         }
     }
 
@@ -1002,8 +906,7 @@ impl ModelStore {
     /// The worker: every file not already verified, in manifest order.
     fn download(&self, engine: Engine, control: &AtomicU8) -> Result<(), Stop> {
         let dir = self.dir(engine);
-        fs::create_dir_all(&dir)
-            .map_err(|e| Stop::Failed(format!("could not create {}: {e}", dir.display())))?;
+        fs::create_dir_all(&dir).map_err(|e| Stop::Failed(format!("could not create {}: {e}", dir.display())))?;
         let mut marker = read_marker(&dir);
         let mut done = 0u64;
         let mut last: Option<Instant> = None;
@@ -1032,13 +935,9 @@ impl ModelStore {
                         },
                         false,
                     ),
-                    Progress::Verifying => (
-                        Phase::Verifying {
-                            file: file.name.clone(),
-                            overall_received: done + file.size,
-                        },
-                        true,
-                    ),
+                    Progress::Verifying => {
+                        (Phase::Verifying { file: file.name.clone(), overall_received: done + file.size }, true)
+                    }
                 };
                 let due = match last {
                     Some(at) => at.elapsed() >= PROGRESS_INTERVAL,
@@ -1054,8 +953,7 @@ impl ModelStore {
                 unpack(&dir, file)?;
             }
             marker.files.insert(file.name.clone(), file.sha256.clone());
-            write_marker(&dir, &marker)
-                .map_err(|e| Stop::Failed(format!("could not record {}: {e}", file.name)))?;
+            write_marker(&dir, &marker).map_err(|e| Stop::Failed(format!("could not record {}: {e}", file.name)))?;
             done += file.size;
         }
         Ok(())
@@ -1080,14 +978,11 @@ impl ModelStore {
                 Err(Stop::Paused) => match scan_disk(&dir, files) {
                     Phase::Paused { overall_received } => Phase::Paused { overall_received },
                     // Paused before a byte arrived.
-                    _ => Phase::Paused {
-                        overall_received: 0,
-                    },
+                    _ => Phase::Paused { overall_received: 0 },
                 },
                 Err(Stop::Failed(message)) => Phase::Failed {
                     message,
-                    overall_received: scan_disk(&dir, files)
-                        .overall_received(self.models(engine).total_size()),
+                    overall_received: scan_disk(&dir, files).overall_received(self.models(engine).total_size()),
                 },
             };
             // `start` cleared a pause or cancel the worker had already acted on.
@@ -1122,11 +1017,7 @@ impl ModelTicker {
     }
 
     /// The post this status calls for, if any.
-    pub fn next(
-        &mut self,
-        status: &ModelStatus,
-        now: Instant,
-    ) -> Option<(String, crate::activity::Tone)> {
+    pub fn next(&mut self, status: &ModelStatus, now: Instant) -> Option<(String, crate::activity::Tone)> {
         use crate::activity::Tone;
         let name = format!("{} model", status.name);
         let pct = percent(status.overall_received, status.overall_total);
@@ -1134,24 +1025,16 @@ impl ModelTicker {
         let changed = previous != Some(status.state);
         let post = match status.state {
             "downloading" => {
-                let due = self
-                    .posted
-                    .is_none_or(|at| now.duration_since(at) >= ACTIVITY_PROGRESS_INTERVAL);
-                (changed || (due && pct != self.percent))
-                    .then(|| (format!("Downloading {name}… {pct}%"), Tone::Busy))
+                let due = self.posted.is_none_or(|at| now.duration_since(at) >= ACTIVITY_PROGRESS_INTERVAL);
+                (changed || (due && pct != self.percent)).then(|| (format!("Downloading {name}… {pct}%"), Tone::Busy))
             }
             _ if !changed => None,
             "verifying" => Some((format!("Verifying {name}…"), Tone::Busy)),
             // Only a download finishing is news; an engine found ready is not.
-            "ready" => previous
-                .is_some()
-                .then(|| (format!("{name} ready"), Tone::Ok)),
+            "ready" => previous.is_some().then(|| (format!("{name} ready"), Tone::Ok)),
             "paused" => Some((format!("{name} download paused at {pct}%"), Tone::Info)),
             "failed" => Some((
-                format!(
-                    "{name} download failed: {}",
-                    status.message.as_deref().unwrap_or("unknown error")
-                ),
+                format!("{name} download failed: {}", status.message.as_deref().unwrap_or("unknown error")),
                 Tone::Error,
             )),
             "absent" => Some(match previous {
@@ -1183,18 +1066,14 @@ fn fallbacks(app: &tauri::AppHandle, engine: Engine) -> Vec<(Source, PathBuf)> {
     }
     dirs.push((
         Source::Development,
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join(engine.key())
-            .join("models"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join(engine.key()).join("models"),
     ));
     dirs
 }
 
 fn store(app: &tauri::AppHandle) -> Option<Arc<ModelStore>> {
     use tauri::Manager;
-    app.try_state::<Arc<ModelStore>>()
-        .map(|s| s.inner().clone())
+    app.try_state::<Arc<ModelStore>>().map(|s| s.inner().clone())
 }
 
 /// Create the store under `<app local data>/models` and announce its changes.
@@ -1203,23 +1082,15 @@ fn store(app: &tauri::AppHandle) -> Option<Arc<ModelStore>> {
 /// is `%LOCALAPPDATA%` rather than the roaming profile, which must not carry 500 MB.
 pub fn install(app: &tauri::AppHandle) -> Result<(), String> {
     use tauri::{Emitter, Manager};
-    let root = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("models");
+    let root = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("models");
     let store = ModelStore::new(root, manifest().clone(), Arc::new(HttpFetch::default()));
     let handle = app.clone();
     let announced: Mutex<Option<Instant>> = Mutex::new(None);
     let tickers: Mutex<HashMap<Engine, ModelTicker>> = Mutex::new(HashMap::new());
     store.on_change(move |engine, transition| {
         let current = status(&handle, engine);
-        let post = tickers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .entry(engine)
-            .or_default()
-            .next(&current, Instant::now());
+        let post =
+            tickers.lock().unwrap_or_else(|p| p.into_inner()).entry(engine).or_default().next(&current, Instant::now());
         if let Some((text, tone)) = post {
             crate::activity::post(&handle, &text, tone, Some(&ModelTicker::key(engine)));
         }
@@ -1258,20 +1129,14 @@ pub fn models_dir(app: &tauri::AppHandle, engine: Engine) -> Result<PathBuf, Str
     }
     let phase = store.map_or(Phase::Absent, |s| s.phase(engine));
     // A store that says ready but lost a file is reported as not downloaded.
-    let phase = if phase == Phase::Ready {
-        Phase::Absent
-    } else {
-        phase
-    };
+    let phase = if phase == Phase::Ready { Phase::Absent } else { phase };
     Err(reason(&phase, models.total_size()).unwrap_or_default())
 }
 
 /// The model state when it is what keeps an engine from scanning, for the capabilities'
 /// `ocrEngines.<engine>.model`; `None` when its models are usable.
 pub fn gate(app: &tauri::AppHandle, engine: Engine) -> Option<&'static str> {
-    models_dir(app, engine)
-        .err()
-        .map(|_| status(app, engine).state)
+    models_dir(app, engine).err().map(|_| status(app, engine).state)
 }
 
 /// The status the UI shows.
@@ -1280,9 +1145,7 @@ pub fn status(app: &tauri::AppHandle, engine: Engine) -> ModelStatus {
     let store = store(app);
     let phase = store.as_ref().map_or(Phase::Absent, |s| s.phase(engine));
     let fallback = match phase {
-        Phase::Absent if engine == Engine::ScreenAi => {
-            crate::screen_ai::browser_copy().map(|_| Source::Browser)
-        }
+        Phase::Absent if engine == Engine::ScreenAi => crate::screen_ai::browser_copy().map(|_| Source::Browser),
         Phase::Absent => resolve(None, &fallbacks(app, engine), &models.files).map(|(_, s)| s),
         _ => None,
     };
@@ -1315,9 +1178,7 @@ pub fn on_engine_selected(app: &tauri::AppHandle, mode: &str) {
         if store.phase(engine) == Phase::Absent {
             // Off the caller's thread (the main thread, for `settings_set` and setup): starting
             // announces the new capabilities, which takes the capture and observer locks.
-            let _ = std::thread::Builder::new()
-                .name("kimochi-model-start".into())
-                .spawn(move || store.start(engine));
+            let _ = std::thread::Builder::new().name("kimochi-model-start".into()).spawn(move || store.start(engine));
         }
     }
 }
@@ -1348,9 +1209,7 @@ fn engine_arg(engine: &str) -> Result<Engine, String> {
 async fn act(
     app: tauri::AppHandle,
     engine: String,
-    operation: impl FnOnce(&tauri::AppHandle, Arc<ModelStore>, Engine) -> Result<(), String>
-        + Send
-        + 'static,
+    operation: impl FnOnce(&tauri::AppHandle, Arc<ModelStore>, Engine) -> Result<(), String> + Send + 'static,
 ) -> Result<ModelStatus, String> {
     let engine = engine_arg(&engine)?;
     let store = store(&app).ok_or_else(|| "native: the model store is not running".to_string())?;
@@ -1368,10 +1227,7 @@ pub async fn model_status(app: tauri::AppHandle, engine: String) -> Result<Model
 }
 
 #[tauri::command]
-pub async fn model_download_start(
-    app: tauri::AppHandle,
-    engine: String,
-) -> Result<ModelStatus, String> {
+pub async fn model_download_start(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     act(app, engine, |_, store, engine| {
         store.start(engine);
         Ok(())
@@ -1380,26 +1236,17 @@ pub async fn model_download_start(
 }
 
 #[tauri::command]
-pub async fn model_download_resume(
-    app: tauri::AppHandle,
-    engine: String,
-) -> Result<ModelStatus, String> {
+pub async fn model_download_resume(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     model_download_start(app, engine).await
 }
 
 #[tauri::command]
-pub async fn model_download_retry(
-    app: tauri::AppHandle,
-    engine: String,
-) -> Result<ModelStatus, String> {
+pub async fn model_download_retry(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     model_download_start(app, engine).await
 }
 
 #[tauri::command]
-pub async fn model_download_pause(
-    app: tauri::AppHandle,
-    engine: String,
-) -> Result<ModelStatus, String> {
+pub async fn model_download_pause(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     act(app, engine, |_, store, engine| {
         store.pause(engine);
         Ok(())
@@ -1408,10 +1255,7 @@ pub async fn model_download_pause(
 }
 
 #[tauri::command]
-pub async fn model_download_cancel(
-    app: tauri::AppHandle,
-    engine: String,
-) -> Result<ModelStatus, String> {
+pub async fn model_download_cancel(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     act(app, engine, |_, store, engine| store.cancel(engine)).await
 }
 
@@ -1478,10 +1322,7 @@ mod tests {
     }
 
     fn sha(bytes: &[u8]) -> String {
-        Sha256::digest(bytes)
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect()
+        Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
     }
 
     fn file(name: &str, content: &[u8]) -> ModelFile {
@@ -1542,11 +1383,7 @@ mod tests {
         fn open(&self, url: &str, offset: u64) -> Result<Opened, String> {
             self.requests.lock().unwrap().push((url.into(), offset));
             let quirks = self.quirks.lock().unwrap().clone();
-            let mut data = self
-                .files
-                .get(url)
-                .cloned()
-                .ok_or_else(|| "models.test answered HTTP 404".to_string())?;
+            let mut data = self.files.get(url).cloned().ok_or_else(|| "models.test answered HTTP 404".to_string())?;
             if quirks.corrupt {
                 data.iter_mut().for_each(|b| *b ^= 0xff);
             }
@@ -1554,29 +1391,19 @@ mod tests {
             if offset > data.len() {
                 return Ok(Opened::RangeNotSatisfiable);
             }
-            let (partial, body) = if offset > 0 && !quirks.ignore_range {
-                (true, data[offset..].to_vec())
-            } else {
-                (false, data)
-            };
+            let (partial, body) =
+                if offset > 0 && !quirks.ignore_range { (true, data[offset..].to_vec()) } else { (false, data) };
             Ok(Opened::Body(Body {
                 partial,
                 length: Some(body.len() as u64),
-                reader: Box::new(Chunked {
-                    stop: quirks.drop_after,
-                    data: body,
-                    at: 0,
-                }),
+                reader: Box::new(Chunked { stop: quirks.drop_after, data: body, at: 0 }),
             }))
         }
     }
 
     fn server(files: &[(&ModelFile, &[u8])]) -> FakeServer {
         FakeServer {
-            files: files
-                .iter()
-                .map(|(f, bytes)| (f.url.clone(), bytes.to_vec()))
-                .collect(),
+            files: files.iter().map(|(f, bytes)| (f.url.clone(), bytes.to_vec())).collect(),
             ..Default::default()
         }
     }
@@ -1588,20 +1415,9 @@ mod tests {
     #[test]
     fn the_checked_in_manifest_parses_and_names_what_the_engines_load() {
         let manifest = Manifest::parse(MANIFEST_JSON).unwrap();
-        let names = |engine| -> Vec<String> {
-            manifest
-                .engine(engine)
-                .files
-                .iter()
-                .map(|f| f.name.clone())
-                .collect()
-        };
+        let names = |engine| -> Vec<String> { manifest.engine(engine).files.iter().map(|f| f.name.clone()).collect() };
         let meiki = meikiocr::ModelPaths::from_dir("");
-        for path in [
-            meiki.detection,
-            meiki.recognition,
-            meiki.vertical_recognition,
-        ] {
+        for path in [meiki.detection, meiki.recognition, meiki.vertical_recognition] {
             assert!(names(Engine::Meiki).contains(&path.to_string_lossy().into_owned()));
         }
         let manga = mangaocr::ModelPaths::from_dir("");
@@ -1643,7 +1459,8 @@ mod tests {
 
     #[test]
     fn screen_ai_offers_one_package_per_platform_and_none_where_google_publishes_none() {
-        let files = |platform| Manifest::parse_for(MANIFEST_JSON, platform).unwrap().engine(Engine::ScreenAi).files.clone();
+        let files =
+            |platform| Manifest::parse_for(MANIFEST_JSON, platform).unwrap().engine(Engine::ScreenAi).files.clone();
         for platform in ["mac-arm64", "mac-amd64", "windows-amd64", "linux-amd64"] {
             let files = files(platform);
             assert_eq!(files.len(), 1, "{platform}");
@@ -1750,11 +1567,16 @@ mod tests {
         store.start(Engine::ScreenAi);
         // The fake server's small chunks make 78 MB slow; wait longer than `wait_until` does.
         let started = Instant::now();
-        while store.with_slot(Engine::ScreenAi, |s| s.control.is_some()) && started.elapsed() < Duration::from_secs(600) {
+        while store.with_slot(Engine::ScreenAi, |s| s.control.is_some()) && started.elapsed() < Duration::from_secs(600)
+        {
             std::thread::sleep(Duration::from_millis(50));
         }
         assert_eq!(store.phase(Engine::ScreenAi), Phase::Ready);
-        let found = kimochi_screenai::locate::package_in(&package.installed(&store.dir(Engine::ScreenAi)), std::env::consts::OS).unwrap();
+        let found = kimochi_screenai::locate::package_in(
+            &package.installed(&store.dir(Engine::ScreenAi)),
+            std::env::consts::OS,
+        )
+        .unwrap();
         assert!(found.dir.join(kimochi_screenai::locate::library_name(std::env::consts::OS)).is_file());
     }
 
@@ -1787,65 +1609,28 @@ mod tests {
         assert_eq!(percent(329, 1000), 32);
         assert_eq!(percent(999, 1000), 99);
         assert_eq!(percent(2000, 1000), 100);
-        let downloading = Phase::Downloading {
-            file: "a".into(),
-            received: 1,
-            total: 2,
-            overall_received: 32,
-        };
-        assert_eq!(
-            reason(&downloading, 100).as_deref(),
-            Some("Downloading model… 32%")
-        );
-        assert_eq!(
-            reason(
-                &Phase::Paused {
-                    overall_received: 5
-                },
-                100
-            )
-            .as_deref(),
-            Some("Model download paused")
-        );
-        let failed = Phase::Failed {
-            message: "huggingface.co answered HTTP 503".into(),
-            overall_received: 0,
-        };
-        assert_eq!(
-            reason(&failed, 100).as_deref(),
-            Some("Model download failed: huggingface.co answered HTTP 503")
-        );
-        assert_eq!(
-            reason(&Phase::Absent, 100).as_deref(),
-            Some("Model not downloaded")
-        );
+        let downloading = Phase::Downloading { file: "a".into(), received: 1, total: 2, overall_received: 32 };
+        assert_eq!(reason(&downloading, 100).as_deref(), Some("Downloading model… 32%"));
+        assert_eq!(reason(&Phase::Paused { overall_received: 5 }, 100).as_deref(), Some("Model download paused"));
+        let failed = Phase::Failed { message: "huggingface.co answered HTTP 503".into(), overall_received: 0 };
+        assert_eq!(reason(&failed, 100).as_deref(), Some("Model download failed: huggingface.co answered HTTP 503"));
+        assert_eq!(reason(&Phase::Absent, 100).as_deref(), Some("Model not downloaded"));
         assert_eq!(reason(&Phase::Ready, 100), None);
     }
 
     #[test]
     fn the_activity_feed_hears_state_changes_and_throttled_progress() {
         use crate::activity::Tone;
-        let models = EngineModels {
-            name: "MeikiOCR".into(),
-            files: vec![file("a.onnx", &[0; 100])],
-        };
+        let models = EngineModels { name: "MeikiOCR".into(), files: vec![file("a.onnx", &[0; 100])] };
         let at = |phase: Phase| ModelStatus::new(Engine::Meiki, &models, &phase, None);
         let downloading = |received| {
-            at(Phase::Downloading {
-                file: "a.onnx".into(),
-                received,
-                total: 100,
-                overall_received: received,
-            })
+            at(Phase::Downloading { file: "a.onnx".into(), received, total: 100, overall_received: received })
         };
         let start = Instant::now();
         let later = |ms| start + Duration::from_millis(ms);
         let mut ticker = ModelTicker::default();
 
-        assert_eq!(
-            ticker.next(&downloading(0), start),
-            Some(("Downloading MeikiOCR model… 0%".into(), Tone::Busy))
-        );
+        assert_eq!(ticker.next(&downloading(0), start), Some(("Downloading MeikiOCR model… 0%".into(), Tone::Busy)));
         // Bytes arriving inside the second are not news yet.
         assert_eq!(ticker.next(&downloading(10), later(250)), None);
         assert_eq!(ticker.next(&downloading(20), later(500)), None);
@@ -1856,39 +1641,18 @@ mod tests {
         // Nor is a second without progress.
         assert_eq!(ticker.next(&downloading(42), later(2500)), None);
         assert_eq!(
-            ticker.next(
-                &at(Phase::Verifying {
-                    file: "a.onnx".into(),
-                    overall_received: 100
-                }),
-                later(2600)
-            ),
+            ticker.next(&at(Phase::Verifying { file: "a.onnx".into(), overall_received: 100 }), later(2600)),
             Some(("Verifying MeikiOCR model…".into(), Tone::Busy))
         );
-        assert_eq!(
-            ticker.next(&at(Phase::Ready), later(2700)),
-            Some(("MeikiOCR model ready".into(), Tone::Ok))
-        );
+        assert_eq!(ticker.next(&at(Phase::Ready), later(2700)), Some(("MeikiOCR model ready".into(), Tone::Ok)));
         assert_eq!(ticker.next(&at(Phase::Ready), later(2800)), None);
-        assert_eq!(
-            ticker.next(&at(Phase::Absent), later(2900)),
-            Some(("MeikiOCR model removed".into(), Tone::Info))
-        );
+        assert_eq!(ticker.next(&at(Phase::Absent), later(2900)), Some(("MeikiOCR model removed".into(), Tone::Info)));
 
         let mut ticker = ModelTicker::default();
         ticker.next(&downloading(50), start);
         assert_eq!(
-            ticker.next(
-                &at(Phase::Failed {
-                    message: "HTTP 503".into(),
-                    overall_received: 50
-                }),
-                later(100)
-            ),
-            Some((
-                "MeikiOCR model download failed: HTTP 503".into(),
-                Tone::Error
-            ))
+            ticker.next(&at(Phase::Failed { message: "HTTP 503".into(), overall_received: 50 }), later(100)),
+            Some(("MeikiOCR model download failed: HTTP 503".into(), Tone::Error))
         );
         assert_eq!(
             ticker.next(&at(Phase::Absent), later(200)),
@@ -1906,10 +1670,7 @@ mod tests {
         let f = file("det.onnx", &content);
         let fake = server(&[(&f, &content)]);
         let mut events = Vec::new();
-        download_file(&fake, &dir.0, &f, &AtomicU8::new(RUN), &mut |p| {
-            events.push(p)
-        })
-        .unwrap();
+        download_file(&fake, &dir.0, &f, &AtomicU8::new(RUN), &mut |p| events.push(p)).unwrap();
         assert_eq!(fs::read(dir.0.join("det.onnx")).unwrap(), content);
         assert!(!part_path(&dir.0, "det.onnx").exists());
         assert_eq!(events.first(), Some(&Progress::Bytes(0)));
@@ -1980,10 +1741,7 @@ mod tests {
         };
         assert!(message.contains("interrupted"), "{message}");
         assert!(!dir.0.join("big.bin").exists());
-        assert_eq!(
-            fs::metadata(part_path(&dir.0, "big.bin")).unwrap().len(),
-            120
-        );
+        assert_eq!(fs::metadata(part_path(&dir.0, "big.bin")).unwrap().len(), 120);
         fake.quirks.lock().unwrap().drop_after = None;
         run(&fake, &dir.0, &f).unwrap();
         assert_eq!(fake.requests.lock().unwrap()[1].1, 120);
@@ -2003,21 +1761,13 @@ mod tests {
             }
         });
         assert_eq!(stop, Err(Stop::Paused));
-        assert_eq!(
-            fs::metadata(part_path(&dir.0, "rec.onnx")).unwrap().len(),
-            14
-        );
+        assert_eq!(fs::metadata(part_path(&dir.0, "rec.onnx")).unwrap().len(), 14);
         assert!(!dir.0.join("rec.onnx").exists());
         control.store(CANCEL, Ordering::SeqCst);
         assert_eq!(run_with(&fake, &dir.0, &f, &control), Err(Stop::Cancelled));
     }
 
-    fn run_with(
-        fetch: &dyn Fetch,
-        dir: &Path,
-        f: &ModelFile,
-        control: &AtomicU8,
-    ) -> Result<(), Stop> {
+    fn run_with(fetch: &dyn Fetch, dir: &Path, f: &ModelFile, control: &AtomicU8) -> Result<(), Stop> {
         download_file(fetch, dir, f, control, &mut |_| {})
     }
 
@@ -2029,12 +1779,7 @@ mod tests {
         let files = vec![file("a.onnx", &a), file("b.onnx", &b)];
         assert_eq!(scan_disk(&dir.0, &files), Phase::Absent);
         fs::write(part_path(&dir.0, "a.onnx"), &a[..2]).unwrap();
-        assert_eq!(
-            scan_disk(&dir.0, &files),
-            Phase::Paused {
-                overall_received: 2
-            }
-        );
+        assert_eq!(scan_disk(&dir.0, &files), Phase::Paused { overall_received: 2 });
         fs::remove_file(part_path(&dir.0, "a.onnx")).unwrap();
         fs::write(dir.0.join("a.onnx"), &a).unwrap();
         fs::write(dir.0.join("b.onnx"), &b).unwrap();
@@ -2048,12 +1793,7 @@ mod tests {
         assert_eq!(scan_disk(&dir.0, &files), Phase::Ready);
         // A verified file whose size changed since is not ready.
         fs::write(dir.0.join("b.onnx"), b"tampered").unwrap();
-        assert_eq!(
-            scan_disk(&dir.0, &files),
-            Phase::Paused {
-                overall_received: a.len() as u64
-            }
-        );
+        assert_eq!(scan_disk(&dir.0, &files), Phase::Paused { overall_received: a.len() as u64 });
     }
 
     #[test]
@@ -2073,34 +1813,16 @@ mod tests {
         let bundled = dir("bundled", true);
         let development = dir("development", true);
         let empty = dir("empty", false);
-        let fallbacks = vec![
-            (Source::Bundled, bundled.clone()),
-            (Source::Development, development.clone()),
-        ];
-        assert_eq!(
-            resolve(Some(store.clone()), &fallbacks, &files),
-            Some((store, Source::Downloaded))
-        );
-        assert_eq!(
-            resolve(None, &fallbacks, &files),
-            Some((bundled, Source::Bundled))
-        );
-        let incomplete_bundle = vec![
-            (Source::Bundled, empty.clone()),
-            (Source::Development, development.clone()),
-        ];
-        assert_eq!(
-            resolve(Some(empty.clone()), &incomplete_bundle, &files),
-            Some((development, Source::Development))
-        );
+        let fallbacks = vec![(Source::Bundled, bundled.clone()), (Source::Development, development.clone())];
+        assert_eq!(resolve(Some(store.clone()), &fallbacks, &files), Some((store, Source::Downloaded)));
+        assert_eq!(resolve(None, &fallbacks, &files), Some((bundled, Source::Bundled)));
+        let incomplete_bundle = vec![(Source::Bundled, empty.clone()), (Source::Development, development.clone())];
+        assert_eq!(resolve(Some(empty.clone()), &incomplete_bundle, &files), Some((development, Source::Development)));
         assert_eq!(resolve(None, &[(Source::Bundled, empty)], &files), None);
     }
 
     fn test_manifest(meiki: &[ModelFile], manga: &[ModelFile]) -> Manifest {
-        let engine = |name: &str, files: &[ModelFile]| EngineModels {
-            name: name.into(),
-            files: files.to_vec(),
-        };
+        let engine = |name: &str, files: &[ModelFile]| EngineModels { name: name.into(), files: files.to_vec() };
         Manifest {
             engines: BTreeMap::from([
                 ("meikiocr".to_string(), engine("MeikiOCR", meiki)),
@@ -2117,10 +1839,7 @@ mod tests {
             if idle && done(&phase) {
                 return phase;
             }
-            assert!(
-                start.elapsed() < Duration::from_secs(10),
-                "stuck in {phase:?}"
-            );
+            assert!(start.elapsed() < Duration::from_secs(10), "stuck in {phase:?}");
             std::thread::sleep(Duration::from_millis(5));
         }
     }
@@ -2143,24 +1862,15 @@ mod tests {
         });
         assert_eq!(store.phase(Engine::Meiki), Phase::Absent);
         store.start(Engine::Meiki);
-        assert_eq!(
-            wait_until(&store, Engine::Meiki, |p| *p == Phase::Ready),
-            Phase::Ready
-        );
-        assert_eq!(
-            store.ready_dir(Engine::Meiki),
-            Some(root.0.join("meikiocr"))
-        );
+        assert_eq!(wait_until(&store, Engine::Meiki, |p| *p == Phase::Ready), Phase::Ready);
+        assert_eq!(store.ready_dir(Engine::Meiki), Some(root.0.join("meikiocr")));
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.first(), Some(&"downloading"));
         assert!(seen.contains(&"verifying"));
         assert_eq!(seen.last(), Some(&"ready"));
         // A second store over the same directory finds it ready without the network.
-        let again = ModelStore::new(
-            root.0.clone(),
-            test_manifest(&files, &files[..1]),
-            Arc::new(FakeServer::default()),
-        );
+        let again =
+            ModelStore::new(root.0.clone(), test_manifest(&files, &files[..1]), Arc::new(FakeServer::default()));
         assert_eq!(again.phase(Engine::Meiki), Phase::Ready);
         // Delete removes it.
         again.delete(Engine::Meiki).unwrap();
@@ -2195,12 +1905,7 @@ mod tests {
         fs::create_dir_all(root.0.join("mangaocr")).unwrap();
         fs::write(part_path(&root.0.join("mangaocr"), "a.onnx"), &a[..10]).unwrap();
         let fresh = ModelStore::new(root.0.clone(), test_manifest(&files, &files), fake);
-        assert_eq!(
-            fresh.phase(Engine::Manga),
-            Phase::Paused {
-                overall_received: 10
-            }
-        );
+        assert_eq!(fresh.phase(Engine::Manga), Phase::Paused { overall_received: 10 });
         fresh.cancel(Engine::Manga).unwrap();
         assert_eq!(fresh.phase(Engine::Manga), Phase::Absent);
         assert!(!root.0.join("mangaocr").exists());
@@ -2215,16 +1920,12 @@ mod tests {
         fake.quirks.lock().unwrap().corrupt = true;
         let store = ModelStore::new(root.0.clone(), test_manifest(&files, &files), fake);
         store.start(Engine::Meiki);
-        let Phase::Failed { message, .. } =
-            wait_until(&store, Engine::Meiki, |p| matches!(p, Phase::Failed { .. }))
+        let Phase::Failed { message, .. } = wait_until(&store, Engine::Meiki, |p| matches!(p, Phase::Failed { .. }))
         else {
             unreachable!()
         };
         assert!(message.contains("checksum"), "{message}");
-        assert_eq!(
-            reason(&store.phase(Engine::Meiki), 10).unwrap(),
-            format!("Model download failed: {message}")
-        );
+        assert_eq!(reason(&store.phase(Engine::Meiki), 10).unwrap(), format!("Model download failed: {message}"));
         assert!(!root.0.join("meikiocr/a.onnx").exists());
         assert!(!part_path(&root.0.join("meikiocr"), "a.onnx").exists());
     }
@@ -2250,35 +1951,16 @@ mod tests {
 
     #[test]
     fn status_reports_bundled_models_as_ready_and_progress_in_bytes() {
-        let models = EngineModels {
-            name: "MeikiOCR".into(),
-            files: vec![file("a", b"12345"), file("b", b"67890")],
-        };
-        let bundled = ModelStatus::new(
-            Engine::Meiki,
-            &models,
-            &Phase::Absent,
-            Some(Source::Bundled),
-        );
+        let models = EngineModels { name: "MeikiOCR".into(), files: vec![file("a", b"12345"), file("b", b"67890")] };
+        let bundled = ModelStatus::new(Engine::Meiki, &models, &Phase::Absent, Some(Source::Bundled));
         assert_eq!((bundled.state, bundled.source), ("ready", Some("bundled")));
         let absent = ModelStatus::new(Engine::Meiki, &models, &Phase::Absent, None);
-        assert_eq!(
-            (absent.state, absent.source, absent.overall_total),
-            ("absent", None, 10)
-        );
-        let downloading = Phase::Downloading {
-            file: "b".into(),
-            received: 2,
-            total: 5,
-            overall_received: 7,
-        };
+        assert_eq!((absent.state, absent.source, absent.overall_total), ("absent", None, 10));
+        let downloading = Phase::Downloading { file: "b".into(), received: 2, total: 5, overall_received: 7 };
         let status = ModelStatus::new(Engine::Meiki, &models, &downloading, Some(Source::Bundled));
         assert_eq!(status.state, "downloading");
         assert_eq!(status.file.as_deref(), Some("b"));
-        assert_eq!(
-            (status.received_bytes, status.total_bytes),
-            (Some(2), Some(5))
-        );
+        assert_eq!((status.received_bytes, status.total_bytes), (Some(2), Some(5)));
         assert_eq!((status.overall_received, status.overall_total), (7, 10));
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["receivedBytes"], 2);
@@ -2300,23 +1982,12 @@ mod tests {
         struct Slow;
         impl Fetch for Slow {
             fn open(&self, _: &str, _: u64) -> Result<Opened, String> {
-                Ok(Opened::Body(Body {
-                    partial: false,
-                    length: None,
-                    reader: Box::new(Endless),
-                }))
+                Ok(Opened::Body(Body { partial: false, length: None, reader: Box::new(Endless) }))
             }
         }
         let root = TempDir::new("shutdown");
-        let files = vec![ModelFile {
-            size: 1 << 40,
-            ..file("huge.bin", b"x")
-        }];
-        let store = ModelStore::new(
-            root.0.clone(),
-            test_manifest(&files, &files),
-            Arc::new(Slow),
-        );
+        let files = vec![ModelFile { size: 1 << 40, ..file("huge.bin", b"x") }];
+        let store = ModelStore::new(root.0.clone(), test_manifest(&files, &files), Arc::new(Slow));
         store.start(Engine::Manga);
         std::thread::sleep(Duration::from_millis(30));
         store.shutdown(Duration::from_secs(5));

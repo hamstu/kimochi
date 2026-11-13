@@ -63,16 +63,23 @@ function relaySender(tauri) {
     const key = target ?? '*'
     const next = (chains.get(key) ?? Promise.resolve())
       .catch(() => {})
-      .then(() => typeof tauri.core.Channel === 'function' && typeof target === 'string'
-        ? tauri.core.invoke('ext_relay_bytes', new TextEncoder().encode(JSON.stringify(payload)), { headers: { 'x-kimochi-target': target } })
-        : tauri.core.invoke('ext_relay', { target, payload }))
+      .then(() =>
+        typeof tauri.core.Channel === 'function' && typeof target === 'string'
+          ? tauri.core.invoke('ext_relay_bytes', new TextEncoder().encode(JSON.stringify(payload)), {
+              headers: { 'x-kimochi-target': target }
+            })
+          : tauri.core.invoke('ext_relay', { target, payload })
+      )
     chains.set(key, next)
     return next
   }
 }
 
 /** What a dropped or late relay message was, for the evidence log: never its arguments. */
-const relayWhat = (payload) => ({ type: payload?.type ?? payload?.kind ?? null, op: typeof payload?.op === 'string' ? payload.op : null })
+const relayWhat = (payload) => ({
+  type: payload?.type ?? payload?.kind ?? null,
+  op: typeof payload?.op === 'string' ? payload.op : null
+})
 
 /**
  * Listen to `ext-relay` with the shared address filter and per-sender de-duplication. A late
@@ -85,7 +92,8 @@ const listenRelay = (tauri, label, onPayload, report) =>
     label,
     onPayload,
     (from, seq, payload) => report({ check: 'ext-host-relay-duplicate', from, seq, ...relayWhat(payload) }),
-    (from, seq, highest, payload) => report({ check: 'ext-host-relay-reordered', from, seq, highest, ...relayWhat(payload) })
+    (from, seq, highest, payload) =>
+      report({ check: 'ext-host-relay-reordered', from, seq, highest, ...relayWhat(payload) })
   )
 
 // ---------------------------------------------------------------- Router
@@ -154,7 +162,12 @@ export class Router {
    * top}`; `onEvent` receives the hub's events for it. Returns `{call, detach, registered}`.
    */
   attach(registration, onEvent) {
-    const endpoint = { local: ++this.nextLocal, registration: { label: this.label, ...registration }, onEvent, hubCtx: null }
+    const endpoint = {
+      local: ++this.nextLocal,
+      registration: { label: this.label, ...registration },
+      onEvent,
+      hubCtx: null
+    }
     this.endpoints.set(endpoint.local, endpoint)
     endpoint.registered = this.register(endpoint)
     endpoint.registered.catch(() => {})
@@ -191,7 +204,8 @@ export class Router {
       detach: () => {
         if (!this.endpoints.delete(endpoint.local)) return
         for (const [id, d] of this.localDeliveries) {
-          if (d.initial.delete(endpoint.local) || (d.pending.delete(endpoint.local) && (d.closed = true))) this.settleLocal(id, d)
+          if (d.initial.delete(endpoint.local) || (d.pending.delete(endpoint.local) && (d.closed = true)))
+            this.settleLocal(id, d)
         }
         if (endpoint.hubCtx !== null) {
           this.byHub.delete(endpoint.hubCtx)
@@ -240,7 +254,14 @@ export class Router {
     const id = -++this.nextDelivery
     const sender = this.senderFor(from)
     return new Promise((resolve, reject) => {
-      const d = { resolve, reject, initial: new Set(targets.map((t) => t.local)), pending: new Set(), sawListener: false, closed: false }
+      const d = {
+        resolve,
+        reject,
+        initial: new Set(targets.map((t) => t.local)),
+        pending: new Set(),
+        sawListener: false,
+        closed: false
+      }
       d.timer = setTimeout(() => {
         if (d.initial.size === 0) return
         this.report({ check: 'ext-host-delivery-unacknowledged', local: true })
@@ -345,7 +366,12 @@ export class Router {
         event.stopImmediatePropagation()
         const port = event.ports?.[0]
         if (event.origin !== this.origin || !this.isOwnFrame(event.source) || !port || data.engine !== this.engine) {
-          this.report({ check: 'ext-host-frame-refused', origin: event.origin, engine: data.engine, ownFrame: this.isOwnFrame(event.source) })
+          this.report({
+            check: 'ext-host-frame-refused',
+            origin: event.origin,
+            engine: data.engine,
+            ownFrame: this.isOwnFrame(event.source)
+          })
           port?.close?.()
           return
         }
@@ -384,18 +410,27 @@ export class Router {
         return
       }
       if (data.t === 'save') {
-        const answer = (ok, value) => port.postMessage(ok ? { t: 'reply', id: data.id, ok, value } : { t: 'reply', id: data.id, ok, error: value })
-        if (kind !== 'page' || typeof this.save !== 'function' || Object.prototype.toString.call(data.bytes) !== '[object ArrayBuffer]') {
+        const answer = (ok, value) =>
+          port.postMessage(ok ? { t: 'reply', id: data.id, ok, value } : { t: 'reply', id: data.id, ok, error: value })
+        if (
+          kind !== 'page' ||
+          typeof this.save !== 'function' ||
+          Object.prototype.toString.call(data.bytes) !== '[object ArrayBuffer]'
+        ) {
           answer(false, 'Saving files is not available here')
           return
         }
         Promise.resolve()
           .then(() => this.save(String(data.name ?? 'download'), data.bytes))
-          .then((value) => answer(true, json(value ?? null)), (error) => answer(false, describe(error)))
+          .then(
+            (value) => answer(true, json(value ?? null)),
+            (error) => answer(false, describe(error))
+          )
         return
       }
       if (data.t !== 'call') return
-      const reply = (ok, value) => port.postMessage(ok ? { t: 'reply', id: data.id, ok, value } : { t: 'reply', id: data.id, ok, error: value })
+      const reply = (ok, value) =>
+        port.postMessage(ok ? { t: 'reply', id: data.id, ok, value } : { t: 'reply', id: data.id, ok, error: value })
       if (data.op === 'log') {
         if (Date.now() - windowStart > 60000) {
           windowStart = Date.now()
@@ -428,7 +463,11 @@ function safePath(url) {
 // ---------------------------------------------------------------- hub ↔ router in one document
 
 export function localUpstream(hub, router) {
-  const link = { label: hub.label, owns: new Set(), send: (ctx, event) => queueMicrotask(() => router.dispatch(ctx, json(event))) }
+  const link = {
+    label: hub.label,
+    owns: new Set(),
+    send: (ctx, event) => queueMicrotask(() => router.dispatch(ctx, json(event)))
+  }
   return { instance: hub.instance, link, call: (op, args) => hub.handle(link, op, json(args)) }
 }
 
@@ -451,7 +490,11 @@ export async function serveRelay(hub, { tauri, label, engine, report }) {
   const linkFor = (from) => {
     let link = links.get(from)
     if (!link) {
-      link = { label: from, owns: new Set(), send: (ctx, event) => void post(from, { kind: 'ext', engine, type: 'event', ctx, event }).catch(() => {}) }
+      link = {
+        label: from,
+        owns: new Set(),
+        send: (ctx, event) => void post(from, { kind: 'ext', engine, type: 'event', ctx, event }).catch(() => {})
+      }
       links.set(from, link)
     }
     return link
@@ -468,10 +511,19 @@ export async function serveRelay(hub, { tauri, label, engine, report }) {
       if (overLane) viaLane.add(from)
       else viaLane.delete(from)
     }
-    hub.handle(linkFor(from), payload.op, payload.args ?? {}).then(
-      (value) => post(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: true, value: json(value) }, overLane),
-      (error) => post(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: false, error: describe(error) }, overLane)
-    ).catch(() => {})
+    hub
+      .handle(linkFor(from), payload.op, payload.args ?? {})
+      .then(
+        (value) =>
+          post(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: true, value: json(value) }, overLane),
+        (error) =>
+          post(
+            from,
+            { kind: 'ext', engine, type: 'reply', id: payload.id, ok: false, error: describe(error) },
+            overLane
+          )
+      )
+      .catch(() => {})
   }
   lane.listen((payload, from) => onCall(payload, from, true))
   // Answer nothing until the lane is open (or known not to be), so a window saying hello finds the
@@ -609,26 +661,31 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate,
     else if (payload.type === 'event') router.dispatch(payload.ctx, payload.event)
   })
 
-  void listenRelay(tauri, label, (payload, from) => {
-    if (payload.kind === 'navigate' && from === 'overlay' && typeof payload.url === 'string') {
-      onNavigate?.(payload.url)
-      return
-    }
-    if (payload.kind !== 'ext' || payload.engine !== engine) return
-    if (payload.type === 'reply') {
-      onReply(payload)
-    } else if (payload.type === 'event') {
-      router.dispatch(payload.ctx, payload.event)
-    } else if (payload.type === 'setup') {
-      onSetup?.(payload.setup)
-    } else if (payload.type === 'ready') {
-      status.ready = true
-      if (payload.hub !== hubInstance) void hello()
-    } else if (payload.type === 'serving') {
-      // A hub has just started listening: say hello now rather than at the next backoff step.
-      if (payload.hub !== hubInstance) void hello()
-    }
-  }, report).then(() => hello())
+  void listenRelay(
+    tauri,
+    label,
+    (payload, from) => {
+      if (payload.kind === 'navigate' && from === 'overlay' && typeof payload.url === 'string') {
+        onNavigate?.(payload.url)
+        return
+      }
+      if (payload.kind !== 'ext' || payload.engine !== engine) return
+      if (payload.type === 'reply') {
+        onReply(payload)
+      } else if (payload.type === 'event') {
+        router.dispatch(payload.ctx, payload.event)
+      } else if (payload.type === 'setup') {
+        onSetup?.(payload.setup)
+      } else if (payload.type === 'ready') {
+        status.ready = true
+        if (payload.hub !== hubInstance) void hello()
+      } else if (payload.type === 'serving') {
+        // A hub has just started listening: say hello now rather than at the next backoff step.
+        if (payload.hub !== hubInstance) void hello()
+      }
+    },
+    report
+  ).then(() => hello())
 
   return {
     status,
@@ -739,7 +796,10 @@ export function extensionWindowLabel(win, engine) {
  * as `connectToParent`: `{linked, call, post}`; `post` is unused here (this document fetches
  * through plugin-http itself, see network.js `installDirectNetwork`).
  */
-export function connectViaRelay(win, { engine, descriptor, origin, label, kind, documentId, report, network, onEvent }) {
+export function connectViaRelay(
+  win,
+  { engine, descriptor, origin, label, kind, documentId, report, network, onEvent }
+) {
   const router = new Router({ win, engine, descriptor, origin, label, report, network })
   router.acceptChildren()
   const relay = connectRelay(router, { tauri: extTauri(win), label, engine, report })

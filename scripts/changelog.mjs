@@ -104,7 +104,8 @@ export function promoteUnreleased(text, version, date) {
   const promoted = `${text.slice(0, end)}${newline}${newline}## [${version}] - ${date}${text.slice(end)}`
   return promoted.replace(
     UNRELEASED_LINK,
-    (_, base) => `[Unreleased]: ${base}/compare/v${version}...HEAD${newline}[${version}]: ${base}/releases/tag/v${version}`
+    (_, base) =>
+      `[Unreleased]: ${base}/compare/v${version}...HEAD${newline}[${version}]: ${base}/releases/tag/v${version}`
   )
 }
 
@@ -129,7 +130,9 @@ if (invoked) {
       writeFileSync(file, promoteUnreleased(readFileSync(file, 'utf8'), version, date))
       console.log(`CHANGELOG.md: Unreleased is now ${version} (${date})`)
     } else {
-      console.error('Usage: node scripts/changelog.mjs section <x.y.z>\n       node scripts/changelog.mjs promote <x.y.z> [--date YYYY-MM-DD]')
+      console.error(
+        'Usage: node scripts/changelog.mjs section <x.y.z>\n       node scripts/changelog.mjs promote <x.y.z> [--date YYYY-MM-DD]'
+      )
       process.exit(2)
     }
   } catch (error) {

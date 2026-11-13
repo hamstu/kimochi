@@ -76,9 +76,7 @@ export function groupMediaRequests(requests: DrawMediaRequest[]): GroupedMediaRe
 }
 
 /** The distinct `{path, dictionary}` pairs to ask the backend for. */
-export function mediaTargets(
-  groups: GroupedMediaRequest[]
-): { path: string; dictionary: string }[] {
+export function mediaTargets(groups: GroupedMediaRequest[]): { path: string; dictionary: string }[] {
   return groups.map(({ path, dictionary }) => ({ path, dictionary }))
 }
 
@@ -87,10 +85,7 @@ export function indexMedia(records: MediaRecord[]): Map<string, MediaRecord> {
 }
 
 /** Match Yomitan API._invoke: runtime messages return {result} or {error}. */
-export function mediaFromReply(reply: {
-  result?: MediaRecord[]
-  error?: { message?: string }
-}): MediaRecord[] {
+export function mediaFromReply(reply: { result?: MediaRecord[]; error?: { message?: string } }): MediaRecord[] {
   if (reply?.error) throw new Error(reply.error.message ?? 'Dictionary media lookup failed')
   if (!Array.isArray(reply?.result)) throw new Error('Invalid dictionary media response')
   return reply.result
@@ -119,10 +114,7 @@ export function isVectorMedia(mediaType: string): boolean {
 }
 
 /** A group with no matching record: the dictionary references media it lacks. */
-export function missingMedia(
-  groups: GroupedMediaRequest[],
-  records: MediaRecord[]
-): GroupedMediaRequest[] {
+export function missingMedia(groups: GroupedMediaRequest[], records: MediaRecord[]): GroupedMediaRequest[] {
   const found = indexMedia(records)
   return groups.filter((group) => !found.has(mediaKey(group)))
 }

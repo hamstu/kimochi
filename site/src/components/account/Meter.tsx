@@ -37,7 +37,10 @@ export function Meter({ label, used, limit, format = (n) => n.toLocaleString('en
           aria-valuetext={text}
           className="mt-2 h-1.5 overflow-hidden rounded-full bg-press"
         >
-          <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.max(frac * 100, used > 0 ? 2 : 0)}%` }} />
+          <div
+            className={`h-full rounded-full ${fill}`}
+            style={{ width: `${Math.max(frac * 100, used > 0 ? 2 : 0)}%` }}
+          />
         </div>
       )}
     </div>

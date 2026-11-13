@@ -8,7 +8,11 @@ test('streamed and fallback relays share address checks and sequence deduplicati
   let receiver
   const tauri = {
     core: {
-      Channel: class { constructor(onmessage) { this.onmessage = onmessage } },
+      Channel: class {
+        constructor(onmessage) {
+          this.onmessage = onmessage
+        }
+      },
       invoke: async (command, { channel }) => {
         assert.equal(command, 'ext_relay_listen')
         receiver = channel
@@ -41,7 +45,8 @@ test('a message that arrives after a later one is delivered, and only a seq rece
     (from, seq) => duplicates.push(seq),
     (from, seq, highest) => reordered.push([seq, highest])
   )
-  const send = (seq, payload) => listeners.get('ext-relay:ext-hachidori')({ payload: { from: 'overlay', to: 'ext-hachidori', seq, payload } })
+  const send = (seq, payload) =>
+    listeners.get('ext-relay:ext-hachidori')({ payload: { from: 'overlay', to: 'ext-hachidori', seq, payload } })
   send(42, 'a')
   send(44, 'c')
   send(43, 'b')

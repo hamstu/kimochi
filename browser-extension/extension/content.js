@@ -76,7 +76,8 @@
     plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
     monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
     cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
-    pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+    pencil:
+      '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>'
   }
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`
   const LOGO_URL = chrome.runtime.getURL('icons/logo.svg')
@@ -263,7 +264,8 @@
     menuAnchor().setAttribute('data-menu-open', '')
     menuAnchor().setAttribute('aria-expanded', 'true')
     placeMenu()
-    const focus = menu.querySelector('input') ?? menu.querySelector('.item[aria-checked=true]') ?? menu.querySelector('.item')
+    const focus =
+      menu.querySelector('input') ?? menu.querySelector('.item[aria-checked=true]') ?? menu.querySelector('.item')
     focus?.focus()
     // Renaming starts with the old name selected, to type over.
     if (focus instanceof HTMLInputElement) focus.select()
@@ -341,7 +343,10 @@
       event.stopPropagation()
       closeMenu()
       buttons.session.focus()
-    } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && (menuMode === 'list' || menuMode === 'engines')) {
+    } else if (
+      (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+      (menuMode === 'list' || menuMode === 'engines')
+    ) {
       event.preventDefault()
       const items = [...menu.querySelectorAll('.item')]
       const at = items.indexOf(shadow.activeElement)
@@ -357,7 +362,11 @@
     true
   )
   shadow.addEventListener('pointerdown', (event) => {
-    if (menu.hasAttribute('data-on') && !event.composedPath().some((el) => el === menu || el === buttons.session || el === engineButton)) closeMenu()
+    if (
+      menu.hasAttribute('data-on') &&
+      !event.composedPath().some((el) => el === menu || el === buttons.session || el === engineButton)
+    )
+      closeMenu()
   })
 
   // ------------------------------------------------------------------ the OCR model
@@ -486,7 +495,12 @@
   // Another extension's overlay (a dictionary's popup or puck), never the page's own lightbox.
   const DICTIONARIES = /^(tenten-|hachidori|yomitan|gsm-hoshidicts)/i
   function foreignOverlay(el) {
-    if (DICTIONARIES.test(el.id) || DICTIONARIES.test(el.localName) || [...el.classList].some((c) => DICTIONARIES.test(c))) return true
+    if (
+      DICTIONARIES.test(el.id) ||
+      DICTIONARIES.test(el.localName) ||
+      [...el.classList].some((c) => DICTIONARIES.test(c))
+    )
+      return true
     // Overlay containers that let the pointer through (10ten's is the whole viewport) aren't viewers.
     return getComputedStyle(el).pointerEvents === 'none'
   }
@@ -579,7 +593,12 @@
     raiseTimer = setInterval(() => {
       if (!active) return
       const parent = layerParent()
-      if (LAYERS.some((el) => el.parentNode !== parent) || needTop() !== onTop || (onTop && LAYERS.some((el) => !el.matches(':popover-open')))) raise()
+      if (
+        LAYERS.some((el) => el.parentNode !== parent) ||
+        needTop() !== onTop ||
+        (onTop && LAYERS.some((el) => !el.matches(':popover-open')))
+      )
+        raise()
     }, 700)
   }
 
@@ -792,7 +811,10 @@
     return r.width >= MIN_SIZE && r.height >= MIN_SIZE
   }
   const isPicture = (el) =>
-    el instanceof HTMLImageElement || el instanceof HTMLCanvasElement || el instanceof HTMLVideoElement || el instanceof SVGSVGElement
+    el instanceof HTMLImageElement ||
+    el instanceof HTMLCanvasElement ||
+    el instanceof HTMLVideoElement ||
+    el instanceof SVGSVGElement
   const hasBackground = (el) => {
     const image = getComputedStyle(el).backgroundImage
     return image && image !== 'none' && image.includes('url(')
@@ -831,7 +853,12 @@
       return
     }
     const r = candidate.getBoundingClientRect()
-    Object.assign(pickBox.style, { left: `${r.left - 2}px`, top: `${r.top - 2}px`, width: `${r.width + 4}px`, height: `${r.height + 4}px` })
+    Object.assign(pickBox.style, {
+      left: `${r.left - 2}px`,
+      top: `${r.top - 2}px`,
+      width: `${r.width + 4}px`,
+      height: `${r.height + 4}px`
+    })
     pickBox.setAttribute('data-on', '')
   }
 
@@ -890,7 +917,12 @@
           stopPicking()
           if (!target) stop()
           else render()
-        } else if (event.key === 'ArrowUp' && candidate?.parentElement && candidate.parentElement !== document.body && candidate.parentElement !== document.documentElement) {
+        } else if (
+          event.key === 'ArrowUp' &&
+          candidate?.parentElement &&
+          candidate.parentElement !== document.body &&
+          candidate.parentElement !== document.documentElement
+        ) {
           event.preventDefault()
           widened.push(candidate)
           candidate = candidate.parentElement
@@ -971,7 +1003,8 @@
     if (!box) return
     const into = event.relatedTarget?.closest?.('.ocr-word')
     if (into && into.dataset.group === box.dataset.group) return
-    for (const el of boxLayer.querySelectorAll(`[data-group="${CSS.escape(box.dataset.group)}"]`)) el.removeAttribute('data-lit')
+    for (const el of boxLayer.querySelectorAll(`[data-group="${CSS.escape(box.dataset.group)}"]`))
+      el.removeAttribute('data-lit')
     if (held && !shift) {
       held = false
       gate()
@@ -985,7 +1018,10 @@
       proximityFrame = 0
       for (const el of boxLayer.querySelectorAll('.ocr-word:not(.kx-grouped), .ocr-group')) {
         const r = el.getBoundingClientRect()
-        const near = Math.max(0, 1 - Math.hypot(pointer.x - (r.left + r.width / 2), pointer.y - (r.top + r.height / 2)) / PROXIMITY)
+        const near = Math.max(
+          0,
+          1 - Math.hypot(pointer.x - (r.left + r.width / 2), pointer.y - (r.top + r.height / 2)) / PROXIMITY
+        )
         el.style.setProperty('--ocr-near', String(Math.round(near * 100) / 100))
       }
     })
@@ -1042,7 +1078,11 @@
     let top = Math.max(0, r.top)
     let right = Math.min(innerWidth, r.right)
     let bottom = Math.min(innerHeight, r.bottom)
-    for (let a = el.parentElement; a && a !== document.documentElement && right > left && bottom > top; a = a.parentElement) {
+    for (
+      let a = el.parentElement;
+      a && a !== document.documentElement && right > left && bottom > top;
+      a = a.parentElement
+    ) {
       const cs = getComputedStyle(a)
       if (cs.overflowX === 'visible' && cs.overflowY === 'visible' && cs.clipPath === 'none') continue
       const b = a.getBoundingClientRect()
@@ -1068,7 +1108,9 @@
   /** The pictures the scope holds that are in view, in reading order (right to left, as manga pages). */
   function picturesIn(scope) {
     if (isPicture(scope)) return inView(scope, true) ? [scope] : []
-    const found = [...scope.querySelectorAll('img, canvas, video')].filter((el) => !isOurs(el) && sized(el) && inView(el))
+    const found = [...scope.querySelectorAll('img, canvas, video')].filter(
+      (el) => !isOurs(el) && sized(el) && inView(el)
+    )
     if (!found.length) return inView(scope, true) ? [scope] : []
     return found
       .map((el) => ({ el, v: visibleRect(el) }))
@@ -1104,7 +1146,8 @@
       context.drawImage(img, 0, 0, 12, 12)
       const { data } = context.getImageData(0, 0, 12, 12)
       let print = 'px:'
-      for (let i = 0; i < data.length; i += 4) print += ((data[i] * 3 + data[i + 1] * 6 + data[i + 2]) / 160 | 0).toString(16)
+      for (let i = 0; i < data.length; i += 4)
+        print += (((data[i] * 3 + data[i + 1] * 6 + data[i + 2]) / 160) | 0).toString(16)
       return print
     } catch {
       return null
@@ -1177,15 +1220,22 @@
    */
   function replacementAt(spot, old) {
     // Its centre, or the nearest point of it on screen (a spot taken while it was sliding away).
-    const x = Math.min(Math.max(spot.left + spot.width / 2, Math.max(0, spot.left)), Math.min(innerWidth, spot.right) - 1)
-    const y = Math.min(Math.max(spot.top + spot.height / 2, Math.max(0, spot.top)), Math.min(innerHeight, spot.bottom) - 1)
+    const x = Math.min(
+      Math.max(spot.left + spot.width / 2, Math.max(0, spot.left)),
+      Math.min(innerWidth, spot.right) - 1
+    )
+    const y = Math.min(
+      Math.max(spot.top + spot.height / 2, Math.max(0, spot.top)),
+      Math.min(innerHeight, spot.bottom) - 1
+    )
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight || x < spot.left || y < spot.top) return null
     const stack = document.elementsFromPoint(x, y).filter((el) => !isOurs(el))
     const found = new Set(stack)
     const picture = stack.find((el) => isPicture(el)) ?? pictureUnder(stack, x, y)
     for (let a = picture; a && a !== document.body; a = a.parentElement) found.add(a)
     const classes = stableClasses(old)
-    const shared = (a, b) => (a.length || b.length ? a.filter((c) => b.includes(c)).length / new Set([...a, ...b]).size : 1)
+    const shared = (a, b) =>
+      a.length || b.length ? a.filter((c) => b.includes(c)).length / new Set([...a, ...b]).size : 1
     let best = null
     let bestLike = 0
     for (const el of found) {
@@ -1201,13 +1251,26 @@
     return best
   }
   const similarSize = (a, b) =>
-    !a.width || !b.width ? 0 : Math.min(a.width / b.width, b.width / a.width) * Math.min(a.height / b.height, b.height / a.height)
+    !a.width || !b.width
+      ? 0
+      : Math.min(a.width / b.width, b.width / a.width) * Math.min(a.height / b.height, b.height / a.height)
 
   function addPic(el, key, reason) {
     const layer = document.createElement('div')
     layer.className = 'kx-pic'
     boxLayer.append(layer)
-    const p = { id: ++picSeq, el, key, layer, lines: [], region: null, state: 'new', fetchFailed: false, stashed: null, size: '' }
+    const p = {
+      id: ++picSeq,
+      el,
+      key,
+      layer,
+      lines: [],
+      region: null,
+      state: 'new',
+      fetchFailed: false,
+      stashed: null,
+      size: ''
+    }
     pics.set(el, p)
     place(p, reason)
   }
@@ -1308,7 +1371,7 @@
       viewport: plan.viewport ?? null,
       region: plan.region,
       page: { title: document.title, url: location.href },
-      session,
+      session
     })
   }
 
@@ -1335,7 +1398,7 @@
       const r = msg.region ?? { x: 0, y: 0, w: 1, h: 1 }
       const lines = (result.lines ?? []).map((line) => ({
         ...line,
-        points: line.points.map(([x, y]) => [r.x + x * r.w, r.y + y * r.h]),
+        points: line.points.map(([x, y]) => [r.x + x * r.w, r.y + y * r.h])
       }))
       setLines(p, lines, r)
       p.stashed = null
@@ -1344,7 +1407,8 @@
         cache.set(p.key, { lines, region: r })
         if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value)
       }
-      if (result.geometry === false) setMessage(`Kimochi's engine (${result.engine}) reads text without places: it's in the Log`, 'warn')
+      if (result.geometry === false)
+        setMessage(`Kimochi's engine (${result.engine}) reads text without places: it's in the Log`, 'warn')
       else setMessage('', 'ok')
       layout()
     })
@@ -1387,8 +1451,8 @@
         x: (left - content.left) / content.width,
         y: (top - content.top) / content.height,
         w: (right - left) / content.width,
-        h: (bottom - top) / content.height,
-      },
+        h: (bottom - top) / content.height
+      }
     }
   }
 
@@ -1433,7 +1497,7 @@
       parentClasses: el.parentElement ? stableClasses(el.parentElement) : [],
       rect: { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height },
       session,
-      auto: autoMode,
+      auto: autoMode
     }
   }
 
@@ -1442,13 +1506,18 @@
    * (`page-12`, hashes), and no slider states that move to the next slide as the page turns
    * (`is-active`, `is-prev`, `swiper-slide-active`, `slick-current`, `glide__slide--active`, …).
    */
-  const STATE_CLASS = /^(is|has)[-_]|(^|[-_])(active|current|visible|selected|prev|previous|next|hidden|shown?|open|loaded|loading|cloned?)$/i
+  const STATE_CLASS =
+    /^(is|has)[-_]|(^|[-_])(active|current|visible|selected|prev|previous|next|hidden|shown?|open|loaded|loading|cloned?)$/i
   const stableClasses = (el) => [...el.classList].filter((c) => !/\d/.test(c) && !STATE_CLASS.test(c)).slice(0, 6)
 
   /** A CSS path from the nearest stable id (or the body) down to the element. */
   function cssPath(el) {
     const parts = []
-    for (let node = el; node && node.nodeType === 1 && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+    for (
+      let node = el;
+      node && node.nodeType === 1 && node !== document.body && node !== document.documentElement;
+      node = node.parentElement
+    ) {
       if (node.id && !/\d/.test(node.id)) {
         parts.unshift(`#${CSS.escape(node.id)}`)
         break
@@ -1486,10 +1555,18 @@
       const r = el.getBoundingClientRect()
       const like = similarSize(r, want)
       if (like < 0.3) continue
-      const distance = Math.hypot(r.left + scrollX + r.width / 2 - (spot.x + spot.w / 2), r.top + scrollY + r.height / 2 - (spot.y + spot.h / 2))
+      const distance = Math.hypot(
+        r.left + scrollX + r.width / 2 - (spot.x + spot.w / 2),
+        r.top + scrollY + r.height / 2 - (spot.y + spot.h / 2)
+      )
       if (distance > reach) continue
-      const shared = (a, b) => (a.length || b.length ? a.filter((c) => b.includes(c)).length / new Set([...a, ...b]).size : 0)
-      const score = like * 2 + shared(stableClasses(el), signature.classes) + shared(el.parentElement ? stableClasses(el.parentElement) : [], signature.parentClasses) - distance / reach
+      const shared = (a, b) =>
+        a.length || b.length ? a.filter((c) => b.includes(c)).length / new Set([...a, ...b]).size : 0
+      const score =
+        like * 2 +
+        shared(stableClasses(el), signature.classes) +
+        shared(el.parentElement ? stableClasses(el.parentElement) : [], signature.parentClasses) -
+        distance / reach
       if (score > bestScore) {
         bestScore = score
         best = el
@@ -1605,7 +1682,12 @@
     let top = r.top + px(cs.borderTopWidth) + px(cs.paddingTop)
     let width = r.width - px(cs.borderLeftWidth) - px(cs.paddingLeft) - px(cs.borderRightWidth) - px(cs.paddingRight)
     let height = r.height - px(cs.borderTopWidth) - px(cs.paddingTop) - px(cs.borderBottomWidth) - px(cs.paddingBottom)
-    const natural = el instanceof HTMLImageElement ? [el.naturalWidth, el.naturalHeight] : el instanceof HTMLVideoElement ? [el.videoWidth, el.videoHeight] : null
+    const natural =
+      el instanceof HTMLImageElement
+        ? [el.naturalWidth, el.naturalHeight]
+        : el instanceof HTMLVideoElement
+          ? [el.videoWidth, el.videoHeight]
+          : null
     const fit = cs.objectFit
     if (natural && natural[0] && natural[1] && (fit === 'contain' || fit === 'cover' || fit === 'scale-down')) {
       const scale = (fit === 'cover' ? Math.max : Math.min)(width / natural[0], height / natural[1])
@@ -1647,9 +1729,16 @@
         continue
       }
       p.layer.hidden = false
-      Object.assign(p.layer.style, { left: `${c.left}px`, top: `${c.top}px`, width: `${c.width}px`, height: `${c.height}px` })
+      Object.assign(p.layer.style, {
+        left: `${c.left}px`,
+        top: `${c.top}px`,
+        width: `${c.width}px`,
+        height: `${c.height}px`
+      })
       // Boxes stop where the picture stops showing (a slider's frame, a scrolling box).
-      const clip = [v.top - c.top, c.left + c.width - v.right, c.top + c.height - v.bottom, v.left - c.left].map((n) => `${Math.max(0, n)}px`)
+      const clip = [v.top - c.top, c.left + c.width - v.right, c.top + c.height - v.bottom, v.left - c.left].map(
+        (n) => `${Math.max(0, n)}px`
+      )
       p.layer.style.clipPath = `inset(${clip.join(' ')})`
       const size = `${Math.round(c.width)}x${Math.round(c.height)}:${p.lines.length}:${settings?.grouping}`
       if (size === p.size) continue
@@ -1686,7 +1775,7 @@
         fontSize: `${font}px`,
         lineHeight: `${thickness}px`,
         letterSpacing: `${spacing}px`,
-        transform: box.angle ? `rotate(${box.angle}rad)` : '',
+        transform: box.angle ? `rotate(${box.angle}rad)` : ''
       })
       el.style.setProperty('--ocr-pad', `${Math.round(Math.max(5, Math.min(14, font * 0.32)))}px`)
       if (line.surface) {
@@ -1702,7 +1791,13 @@
       el.append(text)
       fragment.append(el)
       if (grouped) {
-        const g = groups.get(key) ?? { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity, surface: line.surface }
+        const g = groups.get(key) ?? {
+          left: Infinity,
+          top: Infinity,
+          right: -Infinity,
+          bottom: -Infinity,
+          surface: line.surface
+        }
         g.left = Math.min(g.left, box.cx - box.w / 2)
         g.top = Math.min(g.top, box.cy - box.h / 2)
         g.right = Math.max(g.right, box.cx + box.w / 2)
@@ -1722,7 +1817,7 @@
         top: `${g.top - pad}px`,
         width: `${g.right - g.left + pad * 2}px`,
         height: `${g.bottom - g.top + pad * 2}px`,
-        padding: '0',
+        padding: '0'
       })
       if (g.surface) {
         el.dataset.surface = g.surface.ink
@@ -1768,14 +1863,27 @@
       { capture: true, passive: true }
     )
   }
-  window.addEventListener('resize', () => {
-    scheduleLayout()
-    scheduleRefresh()
-  }, { passive: true })
+  window.addEventListener(
+    'resize',
+    () => {
+      scheduleLayout()
+      scheduleRefresh()
+    },
+    { passive: true }
+  )
   // A picture in the scope finished loading (a slider's next page, a lazy image).
-  document.addEventListener('load', (event) => {
-    if (target && event.target instanceof HTMLImageElement && (target === event.target || target.contains(event.target))) scheduleRefresh()
-  }, true)
+  document.addEventListener(
+    'load',
+    (event) => {
+      if (
+        target &&
+        event.target instanceof HTMLImageElement &&
+        (target === event.target || target.contains(event.target))
+      )
+        scheduleRefresh()
+    },
+    true
+  )
 
   let scrollTimer = 0
   window.addEventListener(
@@ -1817,14 +1925,25 @@
     watchers.push(() => clearInterval(poll))
     const mutations = new MutationObserver((all) => {
       // Our own layers live inside the page's modal dialog while one is open: not the page's changes.
-      const records = all.filter((r) => !isOurs(r.target) && !(r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].every((n) => LAYERS.includes(n))))
+      const records = all.filter(
+        (r) =>
+          !isOurs(r.target) &&
+          !(r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].every((n) => LAYERS.includes(n)))
+      )
       if (!records.length) return
       scheduleLayout()
       // A new picture (a source, or content put in): at once, so its old boxes never show over it.
-      if (records.some((r) => r.type === 'childList' || r.attributeName === 'src' || r.attributeName === 'srcset')) refresh('auto')
+      if (records.some((r) => r.type === 'childList' || r.attributeName === 'src' || r.attributeName === 'srcset'))
+        refresh('auto')
       else scheduleRefresh()
     })
-    mutations.observe(target, { attributes: true, attributeFilter: ['src', 'srcset', 'style', 'class'], childList: true, subtree: true, characterData: true })
+    mutations.observe(target, {
+      attributes: true,
+      attributeFilter: ['src', 'srcset', 'style', 'class'],
+      childList: true,
+      subtree: true,
+      characterData: true
+    })
     watchers.push(() => mutations.disconnect())
   }
 
@@ -1906,7 +2025,15 @@
     engineButton.disabled = !connected
     buttons.open.dataset.tip = connected ? 'Open Kimochi' : 'Start Kimochi'
     // The pip on the logo: green while connected, amber while waiting on Kimochi, red without it.
-    hudPip.dataset.tone = !connected ? (status === 'offline' && !opening ? 'danger' : 'busy') : reading ? 'busy' : messageTone === 'danger' ? 'danger' : 'ok'
+    hudPip.dataset.tone = !connected
+      ? status === 'offline' && !opening
+        ? 'danger'
+        : 'busy'
+      : reading
+        ? 'busy'
+        : messageTone === 'danger'
+          ? 'danger'
+          : 'ok'
     let text = message
     let tone = messageTone
     if (status === 'connecting' || status === 'idle') text = 'Connecting to Kimochi…'
@@ -1916,7 +2043,8 @@
     } else if (picking) text = 'Pick a picture'
     else if (reading) text = 'Reading…'
     else if (!target) text = 'Pick a picture to read'
-    else if (!text) text = lines ? `${lines} line${lines === 1 ? '' : 's'} found` : pics.size ? 'No text found' : 'No picture in view'
+    else if (!text)
+      text = lines ? `${lines} line${lines === 1 ? '' : 's'} found` : pics.size ? 'No text found' : 'No picture in view'
     hudMsg.dataset.tone = tone === 'danger' ? 'danger' : ''
     hudMsg.textContent = text
     // Without the app nothing works: say where to get it.

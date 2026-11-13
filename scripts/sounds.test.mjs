@@ -475,7 +475,11 @@ test('a sound output with nothing to play is suspended, and the next sound resum
       this.state = 'suspended'
       return Promise.resolve()
     },
-    decodeAudioData: async () => ({ numberOfChannels: 1, sampleRate: 1000, getChannelData: () => new Float32Array([1]) }),
+    decodeAudioData: async () => ({
+      numberOfChannels: 1,
+      sampleRate: 1000,
+      getChannelData: () => new Float32Array([1])
+    }),
     createGain: () => ({ gain: { value: 1 }, connect() {} }),
     createBufferSource: () => ({ buffer: null, connect() {}, start() {} })
   }
@@ -509,7 +513,10 @@ test('the volume setting is half by default, clamped, and read at each sound', (
   play('click')
   level = 0.8
   play('scan-done')
-  assert.deepEqual(played, [['click', 0.2], ['scan-done', 0.8]])
+  assert.deepEqual(played, [
+    ['click', 0.2],
+    ['scan-done', 0.8]
+  ])
   setSoundVolume(undefined)
   assert.equal(currentSoundVolume(), SOUND_VOLUME)
 })
@@ -524,7 +531,11 @@ test('an element takes the volume at each play, so a change applies to the next 
       return Promise.resolve()
     }
   }
-  const audioPlay = createAudioPlayer(FakeAudio, (name) => name, () => level)
+  const audioPlay = createAudioPlayer(
+    FakeAudio,
+    (name) => name,
+    () => level
+  )
   assert.equal(audioPlay('click').volume, 0.3)
   level = 0.9
   // The same (ended) element again, at the new level.

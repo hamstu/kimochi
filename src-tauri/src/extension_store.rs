@@ -50,8 +50,8 @@
 //! the user; the earlier release stays in use throughout. Nothing is ever downloaded for an
 //! engine the user never downloaded, or removed.
 use crate::model_store::{
-    self, download_file, percent, remove_dir, sha256_file, Fetch, HttpFetch, ModelFile, Phase,
-    Progress, Stop, CANCEL, PAUSE, PROGRESS_INTERVAL, RUN,
+    self, download_file, percent, remove_dir, sha256_file, Fetch, HttpFetch, ModelFile, Phase, Progress, Stop, CANCEL,
+    PAUSE, PROGRESS_INTERVAL, RUN,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -201,8 +201,7 @@ impl Engine {
             return Err(format!("{id}.source.json: version {:?} is not a plain name", pin.version));
         }
         check_files(&format!("{id}.sha256.json"), &files)?;
-        let previous: Vec<Release> =
-            serde_json::from_str(previous).map_err(|e| format!("{id}.previous.json: {e}"))?;
+        let previous: Vec<Release> = serde_json::from_str(previous).map_err(|e| format!("{id}.previous.json: {e}"))?;
         for (i, release) in previous.iter().enumerate() {
             let what = format!("{id}.previous.json {:?}", release.version);
             if !plain(&release.version) || release.version == pin.version {
@@ -236,8 +235,8 @@ pub fn engines() -> &'static BTreeMap<String, Engine> {
     ENGINES.get_or_init(|| {
         PINS.iter()
             .map(|(id, source, files, previous)| {
-                let engine = Engine::parse(id, source, files, previous)
-                    .expect("the extensions/ pins are checked by the tests");
+                let engine =
+                    Engine::parse(id, source, files, previous).expect("the extensions/ pins are checked by the tests");
                 (id.to_string(), engine)
             })
             .collect()
@@ -264,19 +263,14 @@ pub fn safe_entry_path(name: &str) -> Result<String, String> {
         return Err(format!("Zip entry name contains a backslash: {name}"));
     }
     let bytes = name.as_bytes();
-    if name.starts_with('/') || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
-    {
+    if name.starts_with('/') || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':') {
         return Err(format!("Zip entry is absolute: {name}"));
     }
     let parts: Vec<&str> = name.split('/').collect();
     if parts.contains(&"..") {
         return Err(format!("Zip entry escapes the target: {name}"));
     }
-    Ok(parts
-        .into_iter()
-        .filter(|p| !p.is_empty() && *p != ".")
-        .collect::<Vec<_>>()
-        .join("/"))
+    Ok(parts.into_iter().filter(|p| !p.is_empty() && *p != ".").collect::<Vec<_>>().join("/"))
 }
 
 const EOCD: u32 = 0x0605_4b50;
@@ -297,9 +291,7 @@ pub struct ZipEntry {
 }
 
 fn u16_at(b: &[u8], at: usize) -> Result<u16, String> {
-    b.get(at..at + 2)
-        .map(|s| u16::from_le_bytes([s[0], s[1]]))
-        .ok_or_else(|| "Corrupt zip (truncated)".to_string())
+    b.get(at..at + 2).map(|s| u16::from_le_bytes([s[0], s[1]])).ok_or_else(|| "Corrupt zip (truncated)".to_string())
 }
 
 fn u32_at(b: &[u8], at: usize) -> Result<u32, String> {
@@ -342,9 +334,7 @@ pub fn zip_entries(zip: &[u8]) -> Result<Vec<ZipEntry>, String> {
         let comment_len = u16_at(zip, offset + 32)? as usize;
         let external = u32_at(zip, offset + 38)?;
         let local = u32_at(zip, offset + 42)? as usize;
-        let raw = zip
-            .get(offset + 46..offset + 46 + name_len)
-            .ok_or("Corrupt zip (truncated)")?;
+        let raw = zip.get(offset + 46..offset + 46 + name_len).ok_or("Corrupt zip (truncated)")?;
         let raw = String::from_utf8_lossy(raw).into_owned();
         offset += 46 + name_len + extra_len + comment_len;
         if flags & 0x1 != 0 {
@@ -360,15 +350,7 @@ pub fn zip_entries(zip: &[u8]) -> Result<Vec<ZipEntry>, String> {
         if !directory && method != 0 && method != 8 {
             return Err(format!("Unsupported zip compression method {method}: {raw}"));
         }
-        entries.push(ZipEntry {
-            name,
-            directory,
-            method,
-            crc,
-            compressed,
-            size,
-            local,
-        });
+        entries.push(ZipEntry { name, directory, method, crc, compressed, size, local });
     }
     Ok(entries)
 }
@@ -378,13 +360,9 @@ pub(crate) fn entry_data(zip: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, String
     if u32_at(zip, entry.local)? != LOCAL {
         return Err(format!("Corrupt local header: {}", entry.name));
     }
-    let start = entry.local
-        + 30
-        + u16_at(zip, entry.local + 26)? as usize
-        + u16_at(zip, entry.local + 28)? as usize;
-    let raw = zip
-        .get(start..start + entry.compressed)
-        .ok_or_else(|| format!("Corrupt zip (truncated): {}", entry.name))?;
+    let start = entry.local + 30 + u16_at(zip, entry.local + 26)? as usize + u16_at(zip, entry.local + 28)? as usize;
+    let raw =
+        zip.get(start..start + entry.compressed).ok_or_else(|| format!("Corrupt zip (truncated): {}", entry.name))?;
     let data = if entry.method == 0 {
         raw.to_vec()
     } else {
@@ -410,10 +388,7 @@ fn hex(digest: impl AsRef<[u8]>) -> String {
 }
 
 /// Differences between two hash maps, as `compareHashes` words them; empty when equal.
-pub fn compare_hashes(
-    expected: &BTreeMap<String, String>,
-    actual: &BTreeMap<String, String>,
-) -> Vec<String> {
+pub fn compare_hashes(expected: &BTreeMap<String, String>, actual: &BTreeMap<String, String>) -> Vec<String> {
     let mut problems = Vec::new();
     for (name, hash) in expected {
         match actual.get(name) {
@@ -482,11 +457,7 @@ pub fn unpack(
         }
         let data = entry_data(zip, &entry).map_err(failed)?;
         // `create_new`: a second entry with the same name would otherwise replace the first.
-        let mut out = File::options()
-            .write(true)
-            .create_new(true)
-            .open(&target)
-            .map_err(|e| io("write", e))?;
+        let mut out = File::options().write(true).create_new(true).open(&target).map_err(|e| io("write", e))?;
         out.write_all(&data).map_err(|e| io("write", e))?;
         out.sync_all().map_err(|e| io("write", e))?;
         actual.insert(name, hex(Sha256::digest(&data)));
@@ -539,10 +510,7 @@ pub fn installed_previous<'a>(root: &Path, engine: &'a Engine) -> Option<&'a Rel
     if version_dir(root, engine).is_dir() {
         return None;
     }
-    engine
-        .previous
-        .iter()
-        .find(|release| root.join(&engine.pin.id).join(&release.version).is_dir())
+    engine.previous.iter().find(|release| root.join(&engine.pin.id).join(&release.version).is_dir())
 }
 
 /// The version `installed.json` names: some release was downloaded once, even one too old to be
@@ -570,13 +538,9 @@ pub fn scan_disk(root: &Path, engine: &Engine) -> Phase {
     }
     let file = engine.zip_file();
     let done = fs::metadata(dir.join(&file.name)).ok().map(|m| m.len().min(file.size));
-    let part = fs::metadata(model_store::part_path(&dir, &file.name))
-        .ok()
-        .map(|m| m.len().min(file.size));
+    let part = fs::metadata(model_store::part_path(&dir, &file.name)).ok().map(|m| m.len().min(file.size));
     match done.or(part) {
-        Some(received) => Phase::Paused {
-            overall_received: received,
-        },
+        Some(received) => Phase::Paused { overall_received: received },
         None => Phase::Absent,
     }
 }
@@ -589,12 +553,8 @@ pub fn scan_disk(root: &Path, engine: &Engine) -> Phase {
 pub fn clean(root: &Path, engine: &Engine, also: Option<&str>) -> Vec<String> {
     let dir = root.join(&engine.pin.id);
     let version = &engine.pin.version;
-    let mut keep = vec![
-        version.clone(),
-        format!("{version}.zip"),
-        format!("{version}.zip.part"),
-        INSTALLED.to_string(),
-    ];
+    let mut keep =
+        vec![version.clone(), format!("{version}.zip"), format!("{version}.zip.part"), INSTALLED.to_string()];
     keep.extend(installed_previous(root, engine).map(|release| release.version.clone()));
     keep.extend(also.map(str::to_string));
     let mut removed = Vec::new();
@@ -686,30 +646,17 @@ pub fn plan_update(
             };
             (plan, Some(record.clone()))
         }
-        _ => (
-            UpdatePlan::Start { new: true },
-            Some(UpdateRecord {
-                pin: pin.to_string(),
-                failures: 0,
-            }),
-        ),
+        _ => (UpdatePlan::Start { new: true }, Some(UpdateRecord { pin: pin.to_string(), failures: 0 })),
     }
 }
 
 /// How long the store waits before trying a failed update again this session, by the number of
 /// failures so far.
-pub const RETRY_DELAYS: &[Duration] = &[
-    Duration::from_secs(60),
-    Duration::from_secs(5 * 60),
-    Duration::from_secs(15 * 60),
-    Duration::from_secs(30 * 60),
-];
+pub const RETRY_DELAYS: &[Duration] =
+    &[Duration::from_secs(60), Duration::from_secs(5 * 60), Duration::from_secs(15 * 60), Duration::from_secs(30 * 60)];
 
 fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------- store
@@ -770,10 +717,8 @@ impl ExtensionStore {
         retry_delays: Vec<Duration>,
     ) -> Arc<Self> {
         // A missing or unreadable record is no outstanding update: launch plans afresh.
-        let updates = fs::read(root.join(UPDATES))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
+        let updates =
+            fs::read(root.join(UPDATES)).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
         Arc::new(Self {
             root,
             engines,
@@ -846,11 +791,7 @@ impl ExtensionStore {
             if version == engine.pin.version {
                 Some((engine.pin.version.as_str(), &engine.files))
             } else {
-                engine
-                    .previous
-                    .iter()
-                    .find(|r| r.version == version)
-                    .map(|r| (r.version.as_str(), &r.files))
+                engine.previous.iter().find(|r| r.version == version).map(|r| (r.version.as_str(), &r.files))
             }
         };
         let mut active = self.active.lock().unwrap_or_else(|p| p.into_inner());
@@ -870,19 +811,13 @@ impl ExtensionStore {
             (release.version.as_str(), &release.files)
         };
         active.insert(id.to_string(), version.to_string());
-        Some(Serving {
-            dir: self.root.join(id).join(version),
-            version,
-            files,
-        })
+        Some(Serving { dir: self.root.join(id).join(version), version, files })
     }
 
     /// The earlier release an engine is served from while its pinned one downloads, if it is.
     pub fn serving_previous(&self, id: &str) -> Option<String> {
         let engine = self.engines.get(id)?;
-        self.serving(id)
-            .map(|s| s.version.to_string())
-            .filter(|version| *version != engine.pin.version)
+        self.serving(id).map(|s| s.version.to_string()).filter(|version| *version != engine.pin.version)
     }
 
     /// When a failed update is tried again, if it will be this session.
@@ -904,9 +839,7 @@ impl ExtensionStore {
         self.engines
             .values()
             .flat_map(|engine| {
-                clean(&self.root, engine, None)
-                    .into_iter()
-                    .map(move |name| format!("{}/{name}", engine.pin.id))
+                clean(&self.root, engine, None).into_iter().map(move |name| format!("{}/{name}", engine.pin.id))
             })
             .collect()
     }
@@ -942,12 +875,10 @@ impl ExtensionStore {
         let store = self.clone();
         let worker = control.clone();
         let owned = id.to_string();
-        let spawned = std::thread::Builder::new()
-            .name(format!("kimochi-{id}-download"))
-            .spawn(move || {
-                let outcome = store.download(&owned, &worker);
-                store.finish(&owned, &worker, outcome);
-            });
+        let spawned = std::thread::Builder::new().name(format!("kimochi-{id}-download")).spawn(move || {
+            let outcome = store.download(&owned, &worker);
+            store.finish(&owned, &worker, outcome);
+        });
         if let Err(e) = spawned {
             self.finish(id, &control, Err(Stop::Failed(format!("could not start the download: {e}"))));
         }
@@ -967,10 +898,7 @@ impl ExtensionStore {
         if self.phase(id) == Phase::Ready {
             return Ok(());
         }
-        let keep = self
-            .engines
-            .get(id)
-            .is_some_and(|engine| installed_previous(&self.root, engine).is_some());
+        let keep = self.engines.get(id).is_some_and(|engine| installed_previous(&self.root, engine).is_some());
         self.discard(id, !keep)
     }
 
@@ -1033,20 +961,12 @@ impl ExtensionStore {
     fn download(&self, id: &str, control: &AtomicU8) -> Result<(), Stop> {
         let engine = self.engines.get(id).ok_or_else(|| Stop::Failed(format!("unknown engine {id}")))?;
         let dir = self.root.join(id);
-        fs::create_dir_all(&dir)
-            .map_err(|e| Stop::Failed(format!("could not create {}: {e}", dir.display())))?;
+        fs::create_dir_all(&dir).map_err(|e| Stop::Failed(format!("could not create {}: {e}", dir.display())))?;
         let file = engine.zip_file();
         let zip = dir.join(&file.name);
         let size = file.size;
         if zip.exists() {
-            self.set_phase(
-                id,
-                Phase::Verifying {
-                    file: file.name.clone(),
-                    overall_received: size,
-                },
-                true,
-            );
+            self.set_phase(id, Phase::Verifying { file: file.name.clone(), overall_received: size }, true);
             if sha256_file(&zip).ok().as_deref() != Some(file.sha256.as_str()) {
                 let _ = fs::remove_file(&zip);
             }
@@ -1064,13 +984,7 @@ impl ExtensionStore {
                         },
                         false,
                     ),
-                    Progress::Verifying => (
-                        Phase::Verifying {
-                            file: file.name.clone(),
-                            overall_received: size,
-                        },
-                        true,
-                    ),
+                    Progress::Verifying => (Phase::Verifying { file: file.name.clone(), overall_received: size }, true),
                 };
                 if transition || last.is_none_or(|at| at.elapsed() >= PROGRESS_INTERVAL) {
                     last = Some(Instant::now());
@@ -1079,14 +993,7 @@ impl ExtensionStore {
             };
             download_file(self.fetch.as_ref(), &dir, &file, control, &mut progress)?;
         }
-        self.set_phase(
-            id,
-            Phase::Verifying {
-                file: "unpacking".into(),
-                overall_received: size,
-            },
-            true,
-        );
+        self.set_phase(id, Phase::Verifying { file: "unpacking".into(), overall_received: size }, true);
         self.install(engine, &zip, control)
     }
 
@@ -1101,18 +1008,13 @@ impl ExtensionStore {
                 let _ = remove_dir(&entry.path());
             }
         }
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
+        let nanos =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
         let staging = dir.join(format!("{STAGING}{version}-{}-{nanos}", std::process::id()));
-        fs::create_dir(&staging)
-            .map_err(|e| Stop::Failed(format!("could not create {}: {e}", staging.display())))?;
+        fs::create_dir(&staging).map_err(|e| Stop::Failed(format!("could not create {}: {e}", staging.display())))?;
         let unpacked = fs::read(zip)
             .map_err(|e| Stop::Failed(format!("could not read the download: {e}")))
-            .and_then(|bytes| {
-                unpack(&bytes, &staging, &engine.pin.unpack.strip_prefix, &engine.files, control)
-            });
+            .and_then(|bytes| unpack(&bytes, &staging, &engine.pin.unpack.strip_prefix, &engine.files, control));
         if let Err(stop) = unpacked {
             let _ = remove_dir(&staging);
             if matches!(stop, Stop::Failed(_)) {
@@ -1144,16 +1046,14 @@ impl ExtensionStore {
     /// for its files) and the switch hook reloads the engine's windows onto the new one.
     fn activate(&self, engine: &Engine) {
         let id = &engine.pin.id;
-        let was = self
-            .active
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .insert(id.clone(), engine.pin.version.clone());
+        let was = self.active.lock().unwrap_or_else(|p| p.into_inner()).insert(id.clone(), engine.pin.version.clone());
         let switched = was.as_deref().filter(|version| *version != engine.pin.version);
         clean(&self.root, engine, switched);
         self.forget_update(id);
         if let Some(from) = switched {
-            report(json!({ "check": "extension-update-switched", "engine": id, "from": from, "to": engine.pin.version }));
+            report(
+                json!({ "check": "extension-update-switched", "engine": id, "from": from, "to": engine.pin.version }),
+            );
             if let Some(switch) = self.switch.get() {
                 switch(id);
             }
@@ -1194,14 +1094,11 @@ impl ExtensionStore {
                     }
                     Err(Stop::Paused) => match scan_disk(&self.root, engine) {
                         Phase::Paused { overall_received } => Phase::Paused { overall_received },
-                        _ => Phase::Paused {
-                            overall_received: 0,
-                        },
+                        _ => Phase::Paused { overall_received: 0 },
                     },
                     Err(Stop::Failed(message)) => Phase::Failed {
                         message,
-                        overall_received: scan_disk(&self.root, engine)
-                            .overall_received(engine.pin.asset.size),
+                        overall_received: scan_disk(&self.root, engine).overall_received(engine.pin.asset.size),
                     },
                 };
                 stopped && control.load(Ordering::SeqCst) == RUN
@@ -1344,31 +1241,26 @@ impl ExtensionStore {
             .or(self.retry_delays.last())
             .copied()
             .unwrap_or(Duration::from_secs(60));
-        self.retry_at
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .insert(id.to_string(), unix_now() + delay.as_secs());
+        self.retry_at.lock().unwrap_or_else(|p| p.into_inner()).insert(id.to_string(), unix_now() + delay.as_secs());
         let store = Arc::downgrade(self);
         let owned = id.to_string();
-        let _ = std::thread::Builder::new()
-            .name(format!("kimochi-{id}-update-retry"))
-            .spawn(move || {
-                let due = Instant::now() + delay;
-                while Instant::now() < due {
-                    std::thread::sleep(Duration::from_millis(50).min(delay));
-                    match store.upgrade() {
-                        Some(store) if !store.closing.load(Ordering::SeqCst) => {}
-                        _ => return,
-                    }
+        let _ = std::thread::Builder::new().name(format!("kimochi-{id}-update-retry")).spawn(move || {
+            let due = Instant::now() + delay;
+            while Instant::now() < due {
+                std::thread::sleep(Duration::from_millis(50).min(delay));
+                match store.upgrade() {
+                    Some(store) if !store.closing.load(Ordering::SeqCst) => {}
+                    _ => return,
                 }
-                let Some(store) = store.upgrade() else { return };
-                // Still failed and still wanted: not retried, removed or finished meanwhile.
-                let waiting = store.retry_at.lock().unwrap_or_else(|p| p.into_inner()).remove(&owned).is_some();
-                if waiting && matches!(store.phase(&owned), Phase::Failed { .. }) {
-                    store.queue.lock().unwrap_or_else(|p| p.into_inner()).push_front(owned);
-                    store.pump();
-                }
-            });
+            }
+            let Some(store) = store.upgrade() else { return };
+            // Still failed and still wanted: not retried, removed or finished meanwhile.
+            let waiting = store.retry_at.lock().unwrap_or_else(|p| p.into_inner()).remove(&owned).is_some();
+            if waiting && matches!(store.phase(&owned), Phase::Failed { .. }) {
+                store.queue.lock().unwrap_or_else(|p| p.into_inner()).push_front(owned);
+                store.pump();
+            }
+        });
     }
 }
 
@@ -1440,9 +1332,7 @@ impl ExtensionStatus {
             update: None,
         };
         match phase {
-            Phase::Downloading {
-                file, received, total, ..
-            } => {
+            Phase::Downloading { file, received, total, .. } => {
                 status.file = Some(file.clone());
                 status.received_bytes = Some(*received);
                 status.total_bytes = Some(*total);
@@ -1516,9 +1406,7 @@ impl ExtensionTicker {
             let version = &status.version;
             let post = match update.state {
                 "downloading" => {
-                    let due = self
-                        .posted
-                        .is_none_or(|at| now.duration_since(at) >= Duration::from_secs(1));
+                    let due = self.posted.is_none_or(|at| now.duration_since(at) >= Duration::from_secs(1));
                     (changed || (due && pct != self.percent))
                         .then(|| (format!("Updating {name} to {version}… {pct}%"), Tone::Busy))
                 }
@@ -1552,21 +1440,15 @@ impl ExtensionTicker {
         let changed = previous != Some(status.state);
         let post = match status.state {
             "downloading" => {
-                let due = self
-                    .posted
-                    .is_none_or(|at| now.duration_since(at) >= Duration::from_secs(1));
-                (changed || (due && pct != self.percent))
-                    .then(|| (format!("Downloading {name}… {pct}%"), Tone::Busy))
+                let due = self.posted.is_none_or(|at| now.duration_since(at) >= Duration::from_secs(1));
+                (changed || (due && pct != self.percent)).then(|| (format!("Downloading {name}… {pct}%"), Tone::Busy))
             }
             _ if !changed => None,
             "verifying" => Some((format!("Verifying {name}…"), Tone::Busy)),
             "ready" => previous.is_some().then(|| (format!("{name} ready"), Tone::Ok)),
             "paused" => Some((format!("{name} download paused at {pct}%"), Tone::Info)),
             "failed" => Some((
-                format!(
-                    "{name} download failed: {}",
-                    status.message.as_deref().unwrap_or("unknown error")
-                ),
+                format!("{name} download failed: {}", status.message.as_deref().unwrap_or("unknown error")),
                 Tone::Error,
             )),
             "absent" => Some(match previous {
@@ -1597,10 +1479,7 @@ fn verified() -> &'static Mutex<HashSet<(String, PathBuf, String)>> {
 }
 
 fn forget_verified(id: &str) {
-    verified()
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .retain(|(engine, _, _)| engine != id);
+    verified().lock().unwrap_or_else(|p| p.into_inner()).retain(|(engine, _, _)| engine != id);
 }
 
 fn report(value: Value) {
@@ -1680,7 +1559,9 @@ pub fn read(id: &str, rel: &str) -> Option<Vec<u8>> {
 fn read_verified(id: &str, tree: &Path, rel: &str, expected: &str) -> Option<Vec<u8>> {
     let Some(path) = file_without_links(tree, rel) else {
         if fs::symlink_metadata(tree.join(rel)).is_ok() {
-            report(json!({ "check": "extension-file-refused", "engine": id, "file": rel, "reason": "not a regular file" }));
+            report(
+                json!({ "check": "extension-file-refused", "engine": id, "file": rel, "reason": "not a regular file" }),
+            );
         }
         return None;
     };
@@ -1689,7 +1570,9 @@ fn read_verified(id: &str, tree: &Path, rel: &str, expected: &str) -> Option<Vec
     let seen = verified().lock().unwrap_or_else(|p| p.into_inner()).contains(&key);
     if !seen {
         if hex(Sha256::digest(&bytes)) != expected {
-            report(json!({ "check": "extension-file-refused", "engine": id, "file": rel, "reason": "does not match the pinned release" }));
+            report(
+                json!({ "check": "extension-file-refused", "engine": id, "file": rel, "reason": "does not match the pinned release" }),
+            );
             return None;
         }
         verified().lock().unwrap_or_else(|p| p.into_inner()).insert(key);
@@ -1768,8 +1651,12 @@ impl<R: tauri::Runtime> tauri::Assets<R> for EngineAssets<R> {
 /// navigated document receiving it. Install the relayed host before Yomitan's settings
 /// module runs as well; its document-scoped guard makes ordinary initialization a no-op.
 fn settings_host(rel: &str, bytes: Vec<u8>) -> Vec<u8> {
-    if rel != "settings.html" { return bytes; }
-    let Ok(html) = std::str::from_utf8(&bytes) else { return bytes; };
+    if rel != "settings.html" {
+        return bytes;
+    }
+    let Ok(html) = std::str::from_utf8(&bytes) else {
+        return bytes;
+    };
     html.replacen("<head>", "<head><script src=\"/spike/panel-shim.js\"></script>", 1).into_bytes()
 }
 
@@ -1805,11 +1692,7 @@ pub fn install(
     on_switch: impl Fn(&tauri::AppHandle, &str) + Send + Sync + 'static,
 ) -> Result<Arc<ExtensionStore>, String> {
     use tauri::{Emitter, Manager};
-    let root = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("extensions");
+    let root = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("extensions");
     let _ = REPORT.set(Box::new(report_to));
     let store = ExtensionStore::new(root, engines().clone(), Arc::new(HttpFetch::default()));
     let _ = STORE.set(store.clone());
@@ -1821,9 +1704,8 @@ pub fn install(
     let tickers: Mutex<HashMap<String, ExtensionTicker>> = Mutex::new(HashMap::new());
     store.on_change(move |id, transition| {
         let Some(current) = status(&handle, id) else { return };
-        let selected = handle
-            .try_state::<crate::state::Shared>()
-            .map(|state| crate::extensions::selected_engine(&state.settings));
+        let selected =
+            handle.try_state::<crate::state::Shared>().map(|state| crate::extensions::selected_engine(&state.settings));
         let post = {
             let mut tickers = tickers.lock().unwrap_or_else(|p| p.into_inner());
             let ticker = tickers.entry(id.to_string()).or_default();
@@ -1875,10 +1757,7 @@ pub fn shutdown(app: &tauri::AppHandle) {
 }
 
 fn id_arg(id: &str) -> Result<&'static str, String> {
-    IDS.iter()
-        .copied()
-        .find(|known| *known == id)
-        .ok_or_else(|| format!("invalid: unknown dictionary engine {id}"))
+    IDS.iter().copied().find(|known| *known == id).ok_or_else(|| format!("invalid: unknown dictionary engine {id}"))
 }
 
 async fn act(
@@ -1998,14 +1877,7 @@ mod tests {
         crc: Option<u32>,
     }
     fn item(name: &'static str, data: &[u8]) -> Item {
-        Item {
-            name,
-            data: data.to_vec(),
-            method: 8,
-            mode: 0o100644,
-            flags: 0,
-            crc: None,
-        }
+        Item { name, data: data.to_vec(), method: 8, mode: 0o100644, flags: 0, crc: None }
     }
 
     fn make_zip(items: &[Item]) -> Vec<u8> {
@@ -2134,11 +2006,7 @@ mod tests {
         let dir = TempDir::new("unpack");
         let a = b"manifest".to_vec();
         let b = b"console.log(1)".repeat(50);
-        let zip = make_zip(&[
-            item("js/", b""),
-            item("manifest.json", &a),
-            Item { method: 0, ..item("js/bg.js", &b) },
-        ]);
+        let zip = make_zip(&[item("js/", b""), item("manifest.json", &a), Item { method: 0, ..item("js/bg.js", &b) }]);
         let expected = map(&[("manifest.json", &a), ("js/bg.js", &b)]);
         let out = dir.0.join("out");
         fs::create_dir(&out).unwrap();
@@ -2159,9 +2027,7 @@ mod tests {
         let zip = make_zip(&[item("ext/manifest.json", &a), item("other.js", b"x")]);
         let out = dir.0.join("out2");
         fs::create_dir(&out).unwrap();
-        let Err(Stop::Failed(m)) = unpack(&zip, &out, "ext", &map(&[("manifest.json", &a)]), &run()) else {
-            panic!()
-        };
+        let Err(Stop::Failed(m)) = unpack(&zip, &out, "ext", &map(&[("manifest.json", &a)]), &run()) else { panic!() };
         assert!(m.contains("outside"), "{m}");
     }
 
@@ -2278,11 +2144,7 @@ mod tests {
             Ok(Opened::Body(Body {
                 partial: offset > 0,
                 length: Some(body.len() as u64),
-                reader: Box::new(Chunked {
-                    data: body,
-                    at: 0,
-                    stop: *self.drop_after.lock().unwrap(),
-                }),
+                reader: Box::new(Chunked { data: body, at: 0, stop: *self.drop_after.lock().unwrap() }),
             }))
         }
     }
@@ -2321,11 +2183,7 @@ mod tests {
     }
 
     fn store_with(root: &Path, engine: &Engine, server: Arc<FakeServer>) -> Arc<ExtensionStore> {
-        ExtensionStore::new(
-            root.to_path_buf(),
-            BTreeMap::from([("demo".to_string(), engine.clone())]),
-            server,
-        )
+        ExtensionStore::new(root.to_path_buf(), BTreeMap::from([("demo".to_string(), engine.clone())]), server)
     }
 
     fn server(engine: &Engine, zip: &[u8]) -> Arc<FakeServer> {
@@ -2459,7 +2317,8 @@ mod tests {
     #[test]
     fn pause_keeps_the_part_and_cancel_removes_everything() {
         let root = TempDir::new("pause");
-        let (engine, zip) = demo("1.0", &[("manifest.json", &(0..200_000u32).map(|i| (i * 7) as u8).collect::<Vec<_>>())]);
+        let (engine, zip) =
+            demo("1.0", &[("manifest.json", &(0..200_000u32).map(|i| (i * 7) as u8).collect::<Vec<_>>())]);
         fs::create_dir_all(root.0.join("demo")).unwrap();
         fs::write(root.0.join("demo/1.0.zip.part"), &zip[..100]).unwrap();
         let store = store_with(&root.0, &engine, server(&engine, &zip));
@@ -2524,10 +2383,7 @@ mod tests {
     /// The next app version's pin of `old`: `version`, remembering `old`'s release.
     fn repinned(old: &Engine, version: &str, items: &[(&'static str, &[u8])]) -> (Engine, Vec<u8>) {
         let (mut engine, zip) = engine_at(&old.pin.id, version, items);
-        engine.previous = vec![Release {
-            version: old.pin.version.clone(),
-            files: old.files.clone(),
-        }];
+        engine.previous = vec![Release { version: old.pin.version.clone(), files: old.files.clone() }];
         (engine, zip)
     }
 
@@ -2672,7 +2528,8 @@ mod tests {
         wait_for(&store, "demo", |p| matches!(p, Phase::Failed { .. }));
         let at = store.retry_at("demo").unwrap();
         assert!(at >= unix_now() + 590, "{at}");
-        let status = ExtensionStatus::new(&new, &store.phase("demo"), false).updating_from("1.0", store.retry_at("demo"));
+        let status =
+            ExtensionStatus::new(&new, &store.phase("demo"), false).updating_from("1.0", store.retry_at("demo"));
         let update = status.update.unwrap();
         assert_eq!((status.state, update.state, update.retry_at), ("ready", "failed", Some(at)));
         assert!(update.message.unwrap().contains("offline"));

@@ -152,7 +152,9 @@ fn launch(args: &[String]) -> ExitCode {
         eprintln!("voicehook: cannot create {}: {e}", out.display());
         return ExitCode::FAILURE;
     }
-    let out = std::fs::canonicalize(&out).map(|p| PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\"))).unwrap_or(out);
+    let out = std::fs::canonicalize(&out)
+        .map(|p| PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\")))
+        .unwrap_or(out);
     // Inherited by the game: where the hook writes.
     std::env::set_var("VOICEHOOK_OUT", &out);
     let (process, pid) = match inject::launch(&exe, &args[i + 1..], &dll) {
@@ -162,7 +164,12 @@ fn launch(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("voicehook: {} running as pid {pid} ({}-bit), capturing to\n  {}", exe.display(), if x64 { 64 } else { 32 }, out.display());
+    println!(
+        "voicehook: {} running as pid {pid} ({}-bit), capturing to\n  {}",
+        exe.display(),
+        if x64 { 64 } else { 32 },
+        out.display()
+    );
     if !wait {
         return ExitCode::SUCCESS;
     }
@@ -265,8 +272,13 @@ fn report(dir: &Path) -> Result<(), String> {
         match e["ev"].as_str().unwrap_or("") {
             "start" => println!("process: {} ({}-bit)", e["exe"].as_str().unwrap_or("?"), e["bits"]),
             "modules" => {
-                let list: Vec<&str> = e["audio"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
-                println!("{} {}", if e["first"].as_bool() == Some(true) { "audio-ish modules at start:" } else { "loaded later:" }, list.join(", "));
+                let list: Vec<&str> =
+                    e["audio"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+                println!(
+                    "{} {}",
+                    if e["first"].as_bool() == Some(true) { "audio-ish modules at start:" } else { "loaded later:" },
+                    list.join(", ")
+                );
             }
             "stream" => {
                 let st = streams.entry(s).or_default();
@@ -291,7 +303,10 @@ fn report(dir: &Path) -> Result<(), String> {
         }
     }
     println!("\nstreams ({}):", streams.len());
-    println!("  {:>4}  {:<10} {:<22} {:>5} {:>6} {:>8} {:>8} {:>5} {:>7}", "id", "api", "format", "clips", "silent", "total s", "median s", "loop", "replays");
+    println!(
+        "  {:>4}  {:<10} {:<22} {:>5} {:>6} {:>8} {:>8} {:>5} {:>7}",
+        "id", "api", "format", "clips", "silent", "total s", "median s", "loop", "replays"
+    );
     for (id, st) in &streams {
         if st.clips.is_empty() && st.silent == 0 && st.data_events == 0 {
             continue;

@@ -45,7 +45,11 @@ pub fn is_unity_failure(code: &str) -> bool {
 pub fn is_mono_game(exe: &Path) -> bool {
     let (Some(dir), Some(stem)) = (exe.parent(), exe.file_stem()) else { return false };
     dir.join("UnityPlayer.dll").is_file()
-        && dir.join(format!("{}_Data", stem.to_string_lossy())).join("Managed").join("UnityEngine.CoreModule.dll").is_file()
+        && dir
+            .join(format!("{}_Data", stem.to_string_lossy()))
+            .join("Managed")
+            .join("UnityEngine.CoreModule.dll")
+            .is_file()
 }
 
 /// A Unity game built with IL2CPP: its scripts are compiled into GameAssembly.dll beside the exe.
@@ -93,13 +97,7 @@ pub fn capture_dir(base: &Path, pid: u32) -> Option<PathBuf> {
         .ok()?
         .flatten()
         .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
-        .max_by_key(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .trim_start_matches(&prefix)
-                .parse::<u64>()
-                .unwrap_or(0)
-        })
+        .max_by_key(|e| e.file_name().to_string_lossy().trim_start_matches(&prefix).parse::<u64>().unwrap_or(0))
         .map(|e| e.path())
 }
 
@@ -127,8 +125,7 @@ pub fn read_texts(file: &Path, offset: &mut u64) -> Vec<Text> {
                     continue;
                 };
                 if event["ev"] == "text" {
-                    if let (Some(obj), Some(text)) = (event["obj"].as_str(), event["text"].as_str())
-                    {
+                    if let (Some(obj), Some(text)) = (event["obj"].as_str(), event["text"].as_str()) {
                         out.push(Text {
                             obj: obj.to_string(),
                             method: event["method"].as_str().unwrap_or("TMP_Text.set_text").to_string(),
@@ -155,10 +152,13 @@ pub fn wait_for_watch(base: &Path, pid: u32, limit: Duration) -> bool {
                 .is_ok_and(|t| t.elapsed().is_ok_and(|e| e < Duration::from_secs(60)))
         });
         if let Some(dir) = fresh {
-            if std::fs::read_to_string(dir.join("events.jsonl")).is_ok_and(|e| e.contains("\"adapter\":\"unity-text\"")) {
+            if std::fs::read_to_string(dir.join("events.jsonl")).is_ok_and(|e| e.contains("\"adapter\":\"unity-text\""))
+            {
                 return true;
             }
-            if std::fs::read_to_string(dir.join("voicehook.log")).is_ok_and(|l| l.contains("unity: no text watch") || l.contains("no late-attach API")) {
+            if std::fs::read_to_string(dir.join("voicehook.log"))
+                .is_ok_and(|l| l.contains("unity: no text watch") || l.contains("no late-attach API"))
+            {
                 return false;
             }
         }
@@ -220,7 +220,12 @@ impl Settle {
     }
     /// The texts that have settled by `now`, in the order they did.
     pub fn take(&mut self, now: u64) -> Vec<Text> {
-        let settled: Vec<String> = self.pending.iter().filter(|(_, (_, last, _))| now.saturating_sub(*last) >= SETTLE_MS).map(|(obj, _)| obj.clone()).collect();
+        let settled: Vec<String> = self
+            .pending
+            .iter()
+            .filter(|(_, (_, last, _))| now.saturating_sub(*last) >= SETTLE_MS)
+            .map(|(obj, _)| obj.clone())
+            .collect();
         let mut out = std::mem::take(&mut self.done);
         out.extend(settled.into_iter().filter_map(|obj| self.pending.remove(&obj).map(|(text, ..)| text)));
         out
@@ -300,9 +305,7 @@ mod tests {
 
     #[test]
     fn only_the_hookers_unity_hooks_count() {
-        assert!(is_unity_failure(
-            "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY"
-        ));
+        assert!(is_unity_failure("EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY"));
         assert!(!is_unity_failure("HS0@4A2F10:game.exe"));
     }
 
@@ -323,7 +326,12 @@ mod tests {
         let mut offset = 0;
         assert_eq!(
             read_texts(&file, &mut offset),
-            vec![Text { obj: "0x10".into(), method: "TMP_Text.set_text".into(), text: "「おはよう」".into(), at: Some(1000) }]
+            vec![Text {
+                obj: "0x10".into(),
+                method: "TMP_Text.set_text".into(),
+                text: "「おはよう」".into(),
+                at: Some(1000)
+            }]
         );
         assert_eq!(read_texts(&file, &mut offset), vec![]);
         std::fs::write(
@@ -351,7 +359,8 @@ mod tests {
         // Live Unity: the box is set to every longer prefix, with single characters set
         // in between to measure them for line breaks; one Log line came of each set.
         let mut settle = Settle::default();
-        for (i, text) in ["「", "「メ", "イ", "「メイ", "「メ", "「メイド", "「メイドです」"].iter().enumerate() {
+        for (i, text) in ["「", "「メ", "イ", "「メイ", "「メ", "「メイド", "「メイドです」"].iter().enumerate()
+        {
             settle.push(set("0x10", text, 1000 + 50 * i as u64), 0);
         }
         settle.push(set("0x20", "選択", 1000), 0);
@@ -374,7 +383,13 @@ mod tests {
         settle.push(set("0x10", "「二", 1300), 0);
         settle.push(set("0x10", "「二つ目」", 1340), 0);
         assert_eq!(settle.take(1400), vec![set("0x10", "「一つ目」", 1000)]);
-        assert_eq!(settle.take(1700), vec![set("0x10", "「二", 1300)].into_iter().map(|t| Text { text: "「二つ目」".into(), ..t }).collect::<Vec<_>>());
+        assert_eq!(
+            settle.take(1700),
+            vec![set("0x10", "「二", 1300)]
+                .into_iter()
+                .map(|t| Text { text: "「二つ目」".into(), ..t })
+                .collect::<Vec<_>>()
+        );
         // Set for measuring within a millisecond: one burst, not lines.
         settle.push(set("0x20", "m m", 5000), 0);
         settle.push(set("0x20", "mm", 5001), 0);
@@ -401,10 +416,7 @@ mod tests {
         for name in ["42-100", "42-300", "421-900", "7-500"] {
             std::fs::create_dir_all(base.join(name)).unwrap();
         }
-        assert_eq!(
-            capture_dir(&base, 42).unwrap().file_name().unwrap(),
-            "42-300"
-        );
+        assert_eq!(capture_dir(&base, 42).unwrap().file_name().unwrap(), "42-300");
         assert_eq!(capture_dir(&base, 9), None);
         std::fs::remove_dir_all(&base).unwrap();
     }

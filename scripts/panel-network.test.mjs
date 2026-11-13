@@ -39,7 +39,8 @@ test('Windows IPC and capture use native fetch while external URLs use the scope
     { URL, EventTarget, Event, console, structuredClone },
     { microtaskMode: 'afterEvaluate' }
   )
-  vm.runInContext(`
+  vm.runInContext(
+    `
     window = globalThis; top = window;
     location = {href:'http://tauri.localhost/app/panel.html',origin:'http://tauri.localhost'};
     __KIMOCHI_PLATFORM__ = {os:'windows',arch:'x86_64'};
@@ -47,16 +48,23 @@ test('Windows IPC and capture use native fetch while external URLs use the scope
     XMLHttpRequest = class {};
     localCalls = []; remoteCalls = [];
     fetch = async (input) => { localCalls.push(input); return {local:true} };
-  `, context)
+  `,
+    context
+  )
   vm.runInContext(adapter, context)
-  vm.runInContext(`
+  vm.runInContext(
+    `
     __extensionHost.installNetwork(window);
     fetch('http://ipc.localhost/settings_all');
     fetch('http://capture.localhost/live/1');
     fetch('https://example.test/dictionary.zip');
-  `, context, { timeout: 500 })
+  `,
+    context,
+    { timeout: 500 }
+  )
   assert.deepEqual(Array.from(context.localCalls), [
-    'http://ipc.localhost/settings_all', 'http://capture.localhost/live/1'
+    'http://ipc.localhost/settings_all',
+    'http://capture.localhost/live/1'
   ])
   assert.equal(context.remoteCalls.length, 1)
   assert.equal(context.remoteCalls[0][0], 'https://example.test/dictionary.zip')
@@ -92,11 +100,9 @@ test('panel startup keeps native local fetch when the deferred network adapter i
   })
   assert.equal(context.localDone, true)
   assert.equal(context.localCalls.filter((x) => x === '/manifest.json').length, 2)
-  vm.runInContext(
-    `fetch('https://example.test/dictionary.zip').then(() => { remoteDone = true });`,
-    context,
-    { timeout: 500 }
-  )
+  vm.runInContext(`fetch('https://example.test/dictionary.zip').then(() => { remoteDone = true });`, context, {
+    timeout: 500
+  })
   assert.equal(context.remoteDone, true)
   assert.equal(context.remoteCalls.length, 1)
 })
@@ -116,9 +122,7 @@ test('host scripts that native injects resolve their own dynamic imports absolut
       // The rule is about code, and the files explain it in prose above the fix.
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/(^|[^:'"`])\/\/.*$/gm, '$1')
-    const rootRelative = [...source.matchAll(/\bimport\s*\(\s*['"](\/[^'"]*)['"]/g)].map(
-      (match) => match[1]
-    )
+    const rootRelative = [...source.matchAll(/\bimport\s*\(\s*['"](\/[^'"]*)['"]/g)].map((match) => match[1])
     assert.deepEqual(
       rootRelative,
       [],
@@ -129,7 +133,11 @@ test('host scripts that native injects resolve their own dynamic imports absolut
   for (const name of Object.keys(YOMITAN_SHIMS)) {
     const bundle = await yomitanShimSource(name)
     assert.doesNotMatch(bundle, /\bimport\s*\(\s*['"]\//, `dist/spike/${name}`)
-    assert.doesNotMatch(bundle, /\bimport\.meta\b|^\s*(import|export)\s/m, `dist/spike/${name} must be a classic script`)
+    assert.doesNotMatch(
+      bundle,
+      /\bimport\.meta\b|^\s*(import|export)\s/m,
+      `dist/spike/${name} must be a classic script`
+    )
   }
 })
 

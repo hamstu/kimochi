@@ -28,20 +28,22 @@ const status = {
   reason: mode === null ? 'Steam is not installed for this user.' : null
 }
 
-const later = <T>(value: T, ms = 1500): Promise<T> =>
-  new Promise((resolve) => setTimeout(() => resolve(value), ms))
+const later = <T>(value: T, ms = 1500): Promise<T> => new Promise((resolve) => setTimeout(() => resolve(value), ms))
 
 export const STEAM_HANDLERS: Record<string, () => unknown> = {
   steam_library_status: () => ({ ...status }),
   steam_library_add: () => {
     switch (mode) {
       case 'notrunning':
-        return later({
-          state: 'steamNotRunning',
-          message: 'Steam is not running. Open Steam, then try again, or add Kimochi by hand.',
-          appId: null,
-          status: { ...status }
-        }, 600)
+        return later(
+          {
+            state: 'steamNotRunning',
+            message: 'Steam is not running. Open Steam, then try again, or add Kimochi by hand.',
+            appId: null,
+            status: { ...status }
+          },
+          600
+        )
       case 'fail':
         return later({
           state: 'failed',

@@ -94,10 +94,8 @@ const MINIMUM_DRAG = 1
 const BUBBLE_GAP = 16
 const BUBBLE_EASE = 0.3
 
-const nextFrame = (callback) =>
-  globalThis.requestAnimationFrame?.(callback) ?? setTimeout(callback, 16)
-const cancelFrame = (id) =>
-  globalThis.cancelAnimationFrame ? globalThis.cancelAnimationFrame(id) : clearTimeout(id)
+const nextFrame = (callback) => globalThis.requestAnimationFrame?.(callback) ?? setTimeout(callback, 16)
+const cancelFrame = (id) => (globalThis.cancelAnimationFrame ? globalThis.cancelAnimationFrame(id) : clearTimeout(id))
 
 /** Frame geometry, in points: the ring around the box and the thick edge holding the controls. */
 const RING = 4
@@ -202,15 +200,11 @@ function roundRect(rect) {
 
 function isRect(value) {
   return (
-    value &&
-    [value.x, value.y, value.width, value.height].every(Number.isFinite) &&
-    value.width > 0 &&
-    value.height > 0
+    value && [value.x, value.y, value.width, value.height].every(Number.isFinite) && value.width > 0 && value.height > 0
   )
 }
 
-const bigEnough = (rect) =>
-  isRect(rect) && rect.width >= MINIMUM_DRAG && rect.height >= MINIMUM_DRAG
+const bigEnough = (rect) => isRect(rect) && rect.width >= MINIMUM_DRAG && rect.height >= MINIMUM_DRAG
 
 /**
  * How long after the editor opens a press of the shortcut that opened it is ignored. Every native
@@ -749,8 +743,7 @@ export class RegionSelect {
     if (!gesture) {
       const point = this._point(event)
       const zone = this._editing ? zoneOf(point, this._rect, this._grab(event)) : 'outside'
-      this._container.style.cursor =
-        zone === 'outside' && !this._inArea(point) ? 'default' : CURSORS[zone]
+      this._container.style.cursor = zone === 'outside' && !this._inArea(point) ? 'default' : CURSORS[zone]
       return
     }
     if (gesture.pointerId !== event.pointerId) {
@@ -975,16 +968,13 @@ export class RegionSelect {
       display: 'flex',
       minWidth: `${frameWidth}px`,
       top: `${place === 'below' ? rect.y + rect.height : place === 'above' ? rect.y - this._foot : rect.y + rect.height - this._foot}px`,
-      borderRadius:
-        place === 'below' ? '0 0 6px 6px' : place === 'above' ? '6px 6px 0 0' : '6px'
+      borderRadius: place === 'below' ? '0 0 6px 6px' : place === 'above' ? '6px 6px 0 0' : '6px'
     })
     // Wider than the box (a small selection) and out of room on the right: hang it from the
     // box's right edge instead of its left, so it stays attached and on the display.
     const footWidth = Math.max(els.foot.offsetWidth || 0, frameWidth)
     const left =
-      frameLeft + footWidth > viewport.width
-        ? Math.max(0, frameLeft + frameWidth - footWidth)
-        : Math.max(0, frameLeft)
+      frameLeft + footWidth > viewport.width ? Math.max(0, frameLeft + frameWidth - footWidth) : Math.max(0, frameLeft)
     els.foot.style.left = `${left}px`
   }
 

@@ -309,16 +309,11 @@ fn distance_sq(r: &Rect, (x, y): (f64, f64)) -> f64 {
 /// The item whose `area` contains `point`, else the nearest one. First wins ties, and
 /// displays are listed primary first.
 fn display_near<T>(point: (f64, f64), items: &[T], area: impl Fn(&T) -> Rect) -> Option<&T> {
-    items
-        .iter()
-        .find(|d| contains(&area(d), point))
-        .or_else(|| {
-            items.iter().min_by(|a, b| {
-                distance_sq(&area(a), point)
-                    .partial_cmp(&distance_sq(&area(b), point))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+    items.iter().find(|d| contains(&area(d), point)).or_else(|| {
+        items.iter().min_by(|a, b| {
+            distance_sq(&area(a), point).partial_cmp(&distance_sq(&area(b), point)).unwrap_or(std::cmp::Ordering::Equal)
         })
+    })
 }
 
 /// The item whose `area` a rectangle overlaps most, else the nearest to its centre.
@@ -330,13 +325,7 @@ fn display_under<T>(rect: Rect, items: &[T], area: impl Fn(&T) -> Rect) -> Optio
             best = Some((d, shared));
         }
     }
-    best.map(|(d, _)| d).or_else(|| {
-        display_near(
-            (rect.x + rect.width / 2., rect.y + rect.height / 2.),
-            items,
-            area,
-        )
-    })
+    best.map(|(d, _)| d).or_else(|| display_near((rect.x + rect.width / 2., rect.y + rect.height / 2.), items, area))
 }
 
 /// Desktop-point origins for raw displays, laid out as described in the section comment.
@@ -344,10 +333,7 @@ fn layout_origins(displays: &[DisplayInfo]) -> Vec<(f64, f64)> {
     const EDGE: f64 = 1.; // Raw pixels of slack when deciding two monitors touch.
     let scale = |d: &DisplayInfo| positive(d.scale_factor);
     let mut origins: Vec<Option<(f64, f64)>> = vec![None; displays.len()];
-    let root = displays
-        .iter()
-        .position(|d| contains(&d.bounds, (0., 0.)))
-        .unwrap_or(0);
+    let root = displays.iter().position(|d| contains(&d.bounds, (0., 0.))).unwrap_or(0);
     if let Some(d) = displays.get(root) {
         origins[root] = Some((d.bounds.x / scale(d), d.bounds.y / scale(d)));
     }
@@ -429,22 +415,12 @@ impl Placed {
 
     fn rect_to_points(&self, r: Rect) -> Rect {
         let (x, y) = self.to_points((r.x, r.y));
-        Rect {
-            x,
-            y,
-            width: r.width / self.scale(),
-            height: r.height / self.scale(),
-        }
+        Rect { x, y, width: r.width / self.scale(), height: r.height / self.scale() }
     }
 
     fn rect_to_raw(&self, r: Rect) -> Rect {
         let (x, y) = self.to_raw((r.x, r.y));
-        Rect {
-            x,
-            y,
-            width: r.width * self.scale(),
-            height: r.height * self.scale(),
-        }
+        Rect { x, y, width: r.width * self.scale(), height: r.height * self.scale() }
     }
 }
 
@@ -460,20 +436,12 @@ pub struct DesktopGeometry {
 impl DesktopGeometry {
     pub fn new(unit: DesktopUnit, displays: Vec<DisplayInfo>) -> Self {
         let displays = match unit {
-            DesktopUnit::Points => displays
-                .into_iter()
-                .map(|info| Placed {
-                    origin: (info.bounds.x, info.bounds.y),
-                    info,
-                })
-                .collect(),
+            DesktopUnit::Points => {
+                displays.into_iter().map(|info| Placed { origin: (info.bounds.x, info.bounds.y), info }).collect()
+            }
             DesktopUnit::PhysicalPixels => {
                 let origins = layout_origins(&displays);
-                displays
-                    .into_iter()
-                    .zip(origins)
-                    .map(|(info, origin)| Placed { info, origin })
-                    .collect()
+                displays.into_iter().zip(origins).map(|(info, origin)| Placed { info, origin }).collect()
             }
         };
         Self { unit, displays }
@@ -539,8 +507,7 @@ impl DesktopGeometry {
         if self.is_identity() {
             return raw;
         }
-        self.under_raw_rect(raw)
-            .map_or(raw, |d| d.rect_to_points(raw))
+        self.under_raw_rect(raw).map_or(raw, |d| d.rect_to_points(raw))
     }
 
     pub fn rect_from_desktop(&self, rect: Rect) -> Rect {
@@ -552,10 +519,7 @@ impl DesktopGeometry {
 
     /// Every display in desktop points (see [`Self::display_to_desktop`]).
     pub fn desktop_displays(&self) -> Vec<DisplayInfo> {
-        self.displays
-            .iter()
-            .map(|d| self.display_to_desktop(&d.info))
-            .collect()
+        self.displays.iter().map(|d| self.display_to_desktop(&d.info)).collect()
     }
 
     /// A display in desktop points. `scale_factor` stays the display's own (physical
@@ -584,10 +548,7 @@ impl DesktopGeometry {
     /// `scale_factor` in frame pixels per desktop point, so "frame pixel → desktop
     /// point" is `source_bounds.width / full_width` on every OS. Pixel fields (`width`,
     /// `full_*`, `crop_pixels`) are untouched: they describe the frame, not the desktop.
-    pub fn frame_info_to_desktop(
-        &self,
-        info: &kimochi_capture::FrameInfo,
-    ) -> kimochi_capture::FrameInfo {
+    pub fn frame_info_to_desktop(&self, info: &kimochi_capture::FrameInfo) -> kimochi_capture::FrameInfo {
         let mut out = info.clone();
         if self.is_identity() {
             return out;
@@ -603,10 +564,7 @@ impl DesktopGeometry {
 
     /// A capture source with its bounds in desktop points.
     pub fn source_to_desktop(&self, source: kimochi_capture::Source) -> kimochi_capture::Source {
-        kimochi_capture::Source {
-            bounds: source.bounds.map(|b| self.rect_to_desktop(b)),
-            ..source
-        }
+        kimochi_capture::Source { bounds: source.bounds.map(|b| self.rect_to_desktop(b)), ..source }
     }
 }
 
@@ -628,10 +586,7 @@ pub fn desktop_displays() -> Vec<Rect> {
     if desktop_unit() == DesktopUnit::Points {
         return displays();
     }
-    desktop_display_infos()
-        .into_iter()
-        .map(|d| d.bounds)
-        .collect()
+    desktop_display_infos().into_iter().map(|d| d.bounds).collect()
 }
 
 /// `display_infos()` with bounds and work areas in desktop points.
@@ -663,10 +618,7 @@ pub fn desktop_window_bounds(id: &kimochi_capture::SourceId) -> Option<(Rect, bo
 pub fn desktop_picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     let sources = picker_sources()?;
     let geometry = DesktopGeometry::current();
-    Ok(sources
-        .into_iter()
-        .map(|s| geometry.source_to_desktop(s))
-        .collect())
+    Ok(sources.into_iter().map(|s| geometry.source_to_desktop(s)).collect())
 }
 
 /// A capture frame's description for the UI (see
@@ -796,10 +748,7 @@ pub fn window_state(
 }
 
 /// `window_state` for a source, in desktop points; `None` when the window is gone.
-pub fn desktop_window_state(
-    id: &kimochi_capture::SourceId,
-    previous: Option<&WindowState>,
-) -> Option<WindowState> {
+pub fn desktop_window_state(id: &kimochi_capture::SourceId, previous: Option<&WindowState>) -> Option<WindowState> {
     let (bounds, on_screen) = desktop_window_bounds(id)?;
     let native = window_fullscreen(id);
     let displays = desktop_displays();
@@ -826,7 +775,8 @@ fn windows_native_state(mut state: WindowState, bounds: Rect, native: Option<boo
     state.bounds = bounds;
     state.fullscreen = native.unwrap_or(state.fullscreen);
     state.settling = false;
-    state.display = state.fullscreen.then(|| displays.iter().copied().find(|display| covers_display(bounds, *display))).flatten();
+    state.display =
+        state.fullscreen.then(|| displays.iter().copied().find(|display| covers_display(bounds, *display))).flatten();
     state
 }
 
@@ -842,9 +792,7 @@ fn clamp_within(rect: Rect, screens: &[DisplayInfo]) -> Rect {
     let area = screens
         .iter()
         .max_by(|a, b| {
-            overlap(&rect, &a.work_area)
-                .partial_cmp(&overlap(&rect, &b.work_area))
-                .unwrap_or(std::cmp::Ordering::Equal)
+            overlap(&rect, &a.work_area).partial_cmp(&overlap(&rect, &b.work_area)).unwrap_or(std::cmp::Ordering::Equal)
         })
         .map(|s| s.work_area)
         .unwrap();
@@ -964,9 +912,7 @@ pub fn scheme_origin(id: &str) -> String {
 
 /// Whether a navigation target is on one of the dictionary extensions' origins.
 pub fn is_extension_url(url: &tauri::Url) -> bool {
-    crate::extensions::IDS
-        .iter()
-        .any(|id| is_extension_url_of(url, id))
+    crate::extensions::IDS.iter().any(|id| is_extension_url_of(url, id))
 }
 
 /// Whether a navigation target is on the origin of the extension `id` exactly: the
@@ -1046,11 +992,7 @@ pub(crate) fn spawn_cli(
     use std::io::Write;
     use std::process::Stdio;
     command
-        .stdin(if stdin.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
+        .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|e| e.to_string())?;
@@ -1131,10 +1073,7 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "gamepad": false,
     });
     merge(&mut payload, capabilities());
-    let accelerators = payload
-        .as_object_mut()
-        .and_then(|o| o.remove("ocrAccelerators"))
-        .unwrap_or(Value::Null);
+    let accelerators = payload.as_object_mut().and_then(|o| o.remove("ocrAccelerators")).unwrap_or(Value::Null);
     if dynamic.capture.backend == "none" {
         payload["capture"]["authorization"] = json!("unsupported");
         payload["capture"]["windowCapture"] = json!(false);
@@ -1201,18 +1140,15 @@ mod tests {
         let corrected = super::windows_native_state(initial, oversized, Some(true), &[bounds]);
         assert!(corrected.fullscreen);
         assert!(!corrected.settling);
-        assert_eq!((corrected.bounds.x, corrected.bounds.y, corrected.bounds.width, corrected.bounds.height),
-            (oversized.x, oversized.y, oversized.width, oversized.height));
+        assert_eq!(
+            (corrected.bounds.x, corrected.bounds.y, corrected.bounds.width, corrected.bounds.height),
+            (oversized.x, oversized.y, oversized.width, oversized.height)
+        );
     }
     use super::*;
 
     fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
-        Rect {
-            x,
-            y,
-            width,
-            height,
-        }
+        Rect { x, y, width, height }
     }
 
     const ULTRAWIDE: Rect = Rect { x: 1728., y: 0., width: 3440., height: 1440. };
@@ -1325,10 +1261,7 @@ mod tests {
             id,
             source_id: format!("test:display:{id}"),
             bounds,
-            work_area: Rect {
-                height: bounds.height - 48. * scale,
-                ..bounds
-            },
+            work_area: Rect { height: bounds.height - 48. * scale, ..bounds },
             scale_factor: scale,
         }
     }
@@ -1371,11 +1304,7 @@ mod tests {
 
     #[test]
     fn the_build_reports_its_desktop_unit() {
-        let expected = if cfg!(target_os = "windows") {
-            DesktopUnit::PhysicalPixels
-        } else {
-            DesktopUnit::Points
-        };
+        let expected = if cfg!(target_os = "windows") { DesktopUnit::PhysicalPixels } else { DesktopUnit::Points };
         assert_eq!(desktop_unit(), expected);
     }
 
@@ -1385,10 +1314,7 @@ mod tests {
         // so the backing scale must never touch a coordinate.
         let mac = DesktopGeometry::new(
             DesktopUnit::Points,
-            vec![
-                display(1, rect(0., 0., 1512., 982.), 2.),
-                display(2, rect(-1920., -200., 1920., 1080.), 1.),
-            ],
+            vec![display(1, rect(0., 0., 1512., 982.), 2.), display(2, rect(-1920., -200., 1920., 1080.), 1.)],
         );
         assert!(mac.is_identity());
         for p in [(10.5, 20.25), (-1000., -150.), (5000., 5000.)] {
@@ -1408,10 +1334,7 @@ mod tests {
         let out = mac.frame_info_to_desktop(&info);
         assert_rect(out.source_bounds.unwrap(), (100., 50., 640., 400.));
         assert_eq!(out.scale_factor, 2.);
-        assert_eq!(
-            serde_json::to_value(&out).unwrap(),
-            serde_json::to_value(&info).unwrap()
-        );
+        assert_eq!(serde_json::to_value(&out).unwrap(), serde_json::to_value(&info).unwrap());
     }
 
     #[test]
@@ -1426,10 +1349,7 @@ mod tests {
             assert!(close(back.0, 300. * scale) && close(back.1, 150. * scale));
             let r = g.rect_to_desktop(rect(100. * scale, 40. * scale, 640. * scale, 480. * scale));
             assert_rect(r, (100., 40., 640., 480.));
-            assert_rect(
-                g.rect_from_desktop(r),
-                (100. * scale, 40. * scale, 640. * scale, 480. * scale),
-            );
+            assert_rect(g.rect_from_desktop(r), (100. * scale, 40. * scale, 640. * scale, 480. * scale));
             let d = g.display_to_desktop(&g.displays[0].info);
             assert_rect(d.bounds, (0., 0., 1920., 1080.));
             assert_rect(d.work_area, (0., 0., 1920., 1032.));
@@ -1468,39 +1388,31 @@ mod tests {
         // Two 150 % monitors side by side, and a 125 % one left of the primary: with a
         // single scale per side, desktop points are physical / scale, as Chromium's
         // `screenX` reports them.
-        let g = windows(vec![
-            display(1, rect(0., 0., 2880., 1620.), 1.5),
-            display(2, rect(2880., 0., 2880., 1620.), 1.5),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 2880., 1620.), 1.5), display(2, rect(2880., 0., 2880., 1620.), 1.5)]);
         let screens = g.desktop_displays();
         assert_rect(screens[0].bounds, (0., 0., 1920., 1080.));
         assert_rect(screens[1].bounds, (1920., 0., 1920., 1080.));
         let p = g.point_to_desktop((3000., 300.));
         assert!(close(p.0, 2000.) && close(p.1, 200.), "{p:?}");
         // 150 % primary, 100 % monitor to its right.
-        let g = windows(vec![
-            display(1, rect(0., 0., 2880., 1620.), 1.5),
-            display(2, rect(2880., 300., 1920., 1080.), 1.),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 2880., 1620.), 1.5), display(2, rect(2880., 300., 1920., 1080.), 1.)]);
         let screens = g.desktop_displays();
         assert_rect(screens[1].bounds, (1920., 200., 1920., 1080.));
         let p = g.point_to_desktop((2980., 400.));
         assert!(close(p.0, 2020.) && close(p.1, 300.), "{p:?}");
         assert_eq!(g.point_from_desktop(p), (2980., 400.));
         // A monitor touching nothing falls back to physical / scale.
-        let g = windows(vec![
-            display(1, rect(0., 0., 1920., 1080.), 1.),
-            display(2, rect(5000., 0., 2500., 1000.), 1.25),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 1920., 1080.), 1.), display(2, rect(5000., 0., 2500., 1000.), 1.25)]);
         assert_rect(g.desktop_displays()[1].bounds, (4000., 0., 2000., 800.));
     }
 
     #[test]
     fn windows_straddling_rect_uses_the_monitor_it_overlaps_most() {
-        let g = windows(vec![
-            display(1, rect(0., 0., 1920., 1080.), 1.),
-            display(2, rect(1920., 0., 2880., 1620.), 1.5),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 1920., 1080.), 1.), display(2, rect(1920., 0., 2880., 1620.), 1.5)]);
         // 120 px on the primary, 280 px on the 150 % monitor.
         let raw = rect(1800., 90., 400., 300.);
         assert_eq!(g.scale_for_rect(raw), 1.5);
@@ -1532,10 +1444,8 @@ mod tests {
     fn a_pointer_over_the_overlay_lands_on_its_css_pixels() {
         // The overlay is placed from a desktop-point rect; the pointer is sampled raw.
         // Their difference must equal the page's own CSS coordinates (raw offset / DPI).
-        let g = windows(vec![
-            display(1, rect(0., 0., 1920., 1080.), 1.),
-            display(2, rect(1920., -300., 3840., 2160.), 2.),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 1920., 1080.), 1.), display(2, rect(1920., -300., 3840., 2160.), 2.)]);
         let overlay_points = g.display_to_desktop(&g.displays[1].info).bounds;
         let overlay_raw = g.rect_from_desktop(overlay_points);
         assert_rect(overlay_raw, (1920., -300., 3840., 2160.));
@@ -1551,10 +1461,8 @@ mod tests {
     fn windows_frame_info_maps_frame_pixels_onto_desktop_points() {
         // A window of 900×600 physical pixels on a 150 % monitor right of the primary;
         // capture-core reports a full frame at 1 frame pixel per physical pixel.
-        let g = windows(vec![
-            display(1, rect(0., 0., 1920., 1080.), 1.),
-            display(2, rect(1920., 0., 2880., 1620.), 1.5),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 1920., 1080.), 1.), display(2, rect(1920., 0., 2880., 1620.), 1.5)]);
         let raw = rect(2400., 300., 900., 600.);
         let info = frame_info(Some(raw), (900, 600), 1.);
         let out = g.frame_info_to_desktop(&info);
@@ -1566,10 +1474,8 @@ mod tests {
         assert_eq!(out.crop_pixels, info.crop_pixels);
         // The UI's mapping (ui/geometry.ts mapRect): frame pixel → desktop point.
         let (fx, fy) = (90., 60.);
-        let desktop = (
-            b.x + fx * b.width / f64::from(out.full_width),
-            b.y + fy * b.height / f64::from(out.full_height),
-        );
+        let desktop =
+            (b.x + fx * b.width / f64::from(out.full_width), b.y + fy * b.height / f64::from(out.full_height));
         assert!(close(desktop.0, 2300.) && close(desktop.1, 240.));
         // …which is exactly the physical pixel the frame pixel came from.
         let physical = g.point_from_desktop(desktop);
@@ -1585,10 +1491,8 @@ mod tests {
 
     #[test]
     fn clamping_happens_in_desktop_points() {
-        let g = windows(vec![
-            display(1, rect(0., 0., 1920., 1080.), 1.),
-            display(2, rect(1920., 0., 3840., 2160.), 2.),
-        ]);
+        let g =
+            windows(vec![display(1, rect(0., 0., 1920., 1080.), 1.), display(2, rect(1920., 0., 3840., 2160.), 2.)]);
         let screens = g.desktop_displays();
         // The 200 % monitor is 1920×1080 points wide starting at 1920.
         let clamped = clamp_within(rect(3700., 900., 400., 300.), &screens);

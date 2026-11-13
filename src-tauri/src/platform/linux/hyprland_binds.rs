@@ -86,8 +86,18 @@ impl Combo {
         format!("{}, {}", self.mods.join(" "), self.key)
     }
     fn label(&self) -> String {
-        self.mods.iter().map(|m| match *m { "CTRL" => "Ctrl", "SHIFT" => "Shift", "ALT" => "Alt", _ => "Super" })
-            .map(str::to_owned).chain([self.key.clone()]).collect::<Vec<_>>().join("+")
+        self.mods
+            .iter()
+            .map(|m| match *m {
+                "CTRL" => "Ctrl",
+                "SHIFT" => "Shift",
+                "ALT" => "Alt",
+                _ => "Super",
+            })
+            .map(str::to_owned)
+            .chain([self.key.clone()])
+            .collect::<Vec<_>>()
+            .join("+")
     }
 }
 
@@ -156,10 +166,14 @@ fn command(legacy: String, lua: String) -> Option<String> {
 }
 
 fn add(combo: &Combo, global: &str, description: &str, passive: bool) -> Option<String> {
-    let (flags, options) = if passive { ("nti", ", non_consuming = true, transparent = true, ignore_mods = true") } else { ("", "") };
+    let (flags, options) =
+        if passive { ("nti", ", non_consuming = true, transparent = true, ignore_mods = true") } else { ("", "") };
     command(
         format!("keyword bind{flags}d {},{MARK}{description},global,{global}", combo.legacy()),
-        format!("eval hl.bind(\"{}\", hl.dsp.global(\"{global}\"), {{description = \"{MARK}{description}\"{options}}})", combo.lua()),
+        format!(
+            "eval hl.bind(\"{}\", hl.dsp.global(\"{global}\"), {{description = \"{MARK}{description}\"{options}}})",
+            combo.lua()
+        ),
     )
 }
 
@@ -188,8 +202,14 @@ pub fn bind(shortcuts: Vec<Shortcut>) -> Vec<(String, String)> {
 }
 
 fn apply(shortcuts: &[Shortcut]) -> Vec<(String, String)> {
-    let Some(existing) = super::hyprland::request(b"j/binds").and_then(|data| serde_json::from_slice::<Vec<Bind>>(&data).ok()) else {
-        return shortcuts.iter().filter(|s| !s.passive).map(|s| (s.id.clone(), "Hyprland's socket did not answer".into())).collect();
+    let Some(existing) =
+        super::hyprland::request(b"j/binds").and_then(|data| serde_json::from_slice::<Vec<Bind>>(&data).ok())
+    else {
+        return shortcuts
+            .iter()
+            .filter(|s| !s.passive)
+            .map(|s| (s.id.clone(), "Hyprland's socket did not answer".into()))
+            .collect();
     };
     // A crashed run's binds still dispatch to this app; take them back rather than call them taken.
     for bind in existing.iter().filter(|b| b.description.starts_with(MARK)) {
@@ -202,7 +222,11 @@ fn apply(shortcuts: &[Shortcut]) -> Vec<(String, String)> {
     let mut added = ADDED.lock().unwrap();
     for shortcut in shortcuts {
         let (id, accelerator) = (&shortcut.id, &shortcut.accelerator);
-        let mut fail = |reason: String| if !shortcut.passive { failed.push((id.clone(), reason)) };
+        let mut fail = |reason: String| {
+            if !shortcut.passive {
+                failed.push((id.clone(), reason))
+            }
+        };
         let Some(combo) = Combo::parse(accelerator) else {
             fail(format!("{accelerator} can't be bound on Hyprland"));
             continue;
@@ -232,7 +256,12 @@ fn apply(shortcuts: &[Shortcut]) -> Vec<(String, String)> {
             reply => fail(format!("Hyprland refused {}: {}", combo.label(), reply.unwrap_or_default())),
         }
     }
-    eprintln!("Hyprland shortcut binds: added {} ({:?} config), {} failed", added.len(), *PARSER.lock().unwrap(), failed.len());
+    eprintln!(
+        "Hyprland shortcut binds: added {} ({:?} config), {} failed",
+        added.len(),
+        *PARSER.lock().unwrap(),
+        failed.len()
+    );
     failed
 }
 
@@ -283,7 +312,10 @@ mod tests {
         let scan = Combo::parse("Alt+Z").unwrap();
         assert_eq!((scan.lua(), scan.legacy(), scan.modmask()), ("ALT + Z".into(), "ALT, Z".into(), 8));
         let menu = Combo::parse("CommandOrControl+Shift+Space").unwrap();
-        assert_eq!((menu.lua(), menu.modmask(), menu.label()), ("CTRL + SHIFT + space".into(), 5, "Ctrl+Shift+space".into()));
+        assert_eq!(
+            (menu.lua(), menu.modmask(), menu.label()),
+            ("CTRL + SHIFT + space".into(), 5, "Ctrl+Shift+space".into())
+        );
         assert_eq!(Combo::parse("Insert").unwrap().legacy(), ", Insert");
         assert_eq!(Combo::parse("Shift+F9").unwrap().modmask(), 1);
         // Never spelled into a command: quotes, separators, unknown modifiers.
@@ -298,7 +330,8 @@ mod tests {
         // Lua's `hl.unbind("SHIFT + CTRL + 8")` leaves a bind added as `CTRL + SHIFT + 8`.
         for accelerator in ["Shift+Control+8", "Control+Shift+8", "Shift+Alt+Super+Z"] {
             let added = Combo::parse(accelerator).unwrap();
-            let bind: Bind = serde_json::from_value(serde_json::json!({"modmask":added.modmask(),"key":added.key})).unwrap();
+            let bind: Bind =
+                serde_json::from_value(serde_json::json!({"modmask":added.modmask(),"key":added.key})).unwrap();
             assert_eq!(Combo::of(&bind).lua(), added.lua(), "{accelerator}");
         }
         assert_eq!(Combo::parse("Shift+Control+8").unwrap().lua(), "CTRL + SHIFT + 8");
@@ -310,16 +343,24 @@ mod tests {
         let global = "Kimochi:dev.kimochi.app.triggerScan";
         assert!(bind(serde_json::json!({"modmask":5,"key":"8","dispatcher":"global","arg":global})).fires(global));
         assert!(!bind(serde_json::json!({"modmask":5,"key":"8","dispatcher":"exec","arg":"foot"})).fires(global));
-        assert!(bind(serde_json::json!({"modmask":5,"key":"8","dispatcher":"__lua","arg":"265","description":"Kimochi scan"})).fires(global));
-        assert!(!bind(serde_json::json!({"modmask":5,"key":"8","dispatcher":"__lua","arg":"12","description":"Screenshot"})).fires(global));
+        assert!(bind(
+            serde_json::json!({"modmask":5,"key":"8","dispatcher":"__lua","arg":"265","description":"Kimochi scan"})
+        )
+        .fires(global));
+        assert!(!bind(
+            serde_json::json!({"modmask":5,"key":"8","dispatcher":"__lua","arg":"12","description":"Screenshot"})
+        )
+        .fires(global));
     }
 
     #[test]
     fn a_taken_combination_is_matched_by_mask_and_key() {
-        let bind: Bind = serde_json::from_value(serde_json::json!({"modmask":8,"key":"z","description":"","submap":""})).unwrap();
+        let bind: Bind =
+            serde_json::from_value(serde_json::json!({"modmask":8,"key":"z","description":"","submap":""})).unwrap();
         assert!(Combo::parse("Alt+Z").unwrap().matches(&bind));
         assert!(!Combo::parse("Alt+Shift+Z").unwrap().matches(&bind));
-        let submap: Bind = serde_json::from_value(serde_json::json!({"modmask":8,"key":"Z","submap":"resize"})).unwrap();
+        let submap: Bind =
+            serde_json::from_value(serde_json::json!({"modmask":8,"key":"Z","submap":"resize"})).unwrap();
         assert!(!Combo::parse("Alt+Z").unwrap().matches(&submap));
     }
 }

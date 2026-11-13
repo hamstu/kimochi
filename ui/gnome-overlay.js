@@ -8,7 +8,8 @@ import { languageOf } from './languages.js'
 /** GNOME places the original annotation WebView; the shared renderer owns its UI. */
 export async function installGnomeOverlay(native, state, enabled, log, { renderer, setting, settleMs = 250 }) {
   if (window.__KIMOCHI_PLATFORM__?.os !== 'linux') return null
-  const gnomeRequest = (operation, payload = null) => window.__TAURI__.core.invoke('gnome_overlay', { operation, payload })
+  const gnomeRequest = (operation, payload = null) =>
+    window.__TAURI__.core.invoke('gnome_overlay', { operation, payload })
   let busy = false
   let lastError = null
   let shared = false
@@ -25,18 +26,31 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
     clearTimeout(moving)
     moving = setTimeout(() => {
       // A button that never reports going up (the Shell went quiet) holds the text for 3 s at most.
-      if (held && performance.now() - movedAt < 3000) { settle(); return }
+      if (held && performance.now() - movedAt < 3000) {
+        settle()
+        return
+      }
       moving = null
       render()
       void update()
     }, settleMs)
   }
   const render = () => {
-    if (!shared || !placement?.visible || !enabled() || !state.geometry) { renderer.clear(); return }
+    if (!shared || !placement?.visible || !enabled() || !state.geometry) {
+      renderer.clear()
+      return
+    }
     if (moving) return
     state.origin = placement.origin
-    renderer.render({annotations:state.annotations,info:state.info,origin:placement.origin,bounds:placement.bounds,
-      grouping:setting('textOverlayGrouping'),opacity:setting('overlayOpacity'),scanning:state.scanning})
+    renderer.render({
+      annotations: state.annotations,
+      info: state.info,
+      origin: placement.origin,
+      bounds: placement.bounds,
+      grouping: setting('textOverlayGrouping'),
+      opacity: setting('overlayOpacity'),
+      scanning: state.scanning
+    })
   }
   const closeSurface = async () => {
     clearTimeout(moving)
@@ -46,22 +60,25 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
     placementSignature = null
     if (shared) {
       shared = false
-      await gnomeRequest('surface', {operation:'close'})
+      await gnomeRequest('surface', { operation: 'close' })
     }
   }
-  const pointer = payload => {
+  const pointer = (payload) => {
     if (!shared || payload.sourceId !== state.info?.source_id || !payload.origin || !payload.bounds) return
     const wasHeld = held
     held = Boolean(payload.down)
-    const next = {origin:payload.origin,bounds:payload.bounds,visible:payload.visible}
+    const next = { origin: payload.origin, bounds: payload.bounds, visible: payload.visible }
     const signature = JSON.stringify(next)
     if (signature !== placementSignature) {
-      const moved = placement?.visible && next.visible && placement.bounds &&
-        ['x','y','width','height'].some(k => placement.bounds[k] !== next.bounds[k])
+      const moved =
+        placement?.visible &&
+        next.visible &&
+        placement.bounds &&
+        ['x', 'y', 'width', 'height'].some((k) => placement.bounds[k] !== next.bounds[k])
       placement = next
       placementSignature = signature
       if (moved) {
-        if (!moving) renderer.clear({fade:true})
+        if (!moving) renderer.clear({ fade: true })
         movedAt = performance.now()
         settle()
         return
@@ -76,12 +93,25 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
     busy = true
     try {
       const status = await gnomeRequest('status')
-      if (!status.available) { renderer.clear(); shared = false; return }
+      if (!status.available) {
+        renderer.clear()
+        shared = false
+        return
+      }
       const info = state.info
       const screen = /^(portal|wayland):display:/.test(info?.source_id ?? '')
       const tracked = !screen && status.tracked?.sourceId === info?.source_id ? status.tracked : null
       const monitor = screen ? (status.monitors?.length === 1 ? status.monitors[0] : null) : tracked?.bounds
-      if (!enabled() || !state.geometry || !monitor || (!screen && (!tracked?.visible && !tracked?.covered || !info.source_bounds || Math.abs(info.source_bounds.width-monitor.width)>=2 || Math.abs(info.source_bounds.height-monitor.height)>=2))) {
+      if (
+        !enabled() ||
+        !state.geometry ||
+        !monitor ||
+        (!screen &&
+          ((!tracked?.visible && !tracked?.covered) ||
+            !info.source_bounds ||
+            Math.abs(info.source_bounds.width - monitor.width) >= 2 ||
+            Math.abs(info.source_bounds.height - monitor.height) >= 2))
+      ) {
         await closeSurface()
         await gnomeRequest('clear')
         return
@@ -93,22 +123,55 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
       const spaced = languageOf(setting('language')).spaces
       // Measured in the language's own fonts and way (render.js `measureFor`).
       const measure = measureFor('default', setting('language'))
-      const words = state.annotations.filter(a => a.granularity !== 'aggregate' && a.description && a.boundingPoly?.vertices?.length).slice(0, 500).flatMap(a => {
-        const xs = a.boundingPoly.vertices.map(p => p.x)
-        const ys = a.boundingPoly.vertices.map(p => p.y)
-        const x = monitor.x + (cx + Math.min(...xs)) * sx
-        const y = monitor.y + (cy + Math.min(...ys)) * sy
-        const width = (Math.max(...xs) - Math.min(...xs)) * sx
-        const height = (Math.max(...ys) - Math.min(...ys)) * sy
-        return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measure, spaced) : []
-      }).slice(0, 500)
-      const textRects=mapAnnotations(info,visibleAnnotations(state.annotations,setting('textOverlayGrouping')),{x:0,y:0},monitor)
-        .slice(0,2000).map(({x,y,width,height})=>Object.fromEntries(Object.entries({x,y,width,height}).map(([k,v])=>[k,Math.round(v*1000)/1000])))
-      await gnomeRequest('present', { sourceKind: screen ? 'screen' : 'window', sourceId:info.source_id, referenceBounds:screen ? undefined : monitor, frameId: state.appliedScanId, textRects, ...(status.sharedOverlay ? packGnomeWords(words,Math.max(64,220000-JSON.stringify(textRects).length)) : {words}) })
+      const words = state.annotations
+        .filter((a) => a.granularity !== 'aggregate' && a.description && a.boundingPoly?.vertices?.length)
+        .slice(0, 500)
+        .flatMap((a) => {
+          const xs = a.boundingPoly.vertices.map((p) => p.x)
+          const ys = a.boundingPoly.vertices.map((p) => p.y)
+          const x = monitor.x + (cx + Math.min(...xs)) * sx
+          const y = monitor.y + (cy + Math.min(...ys)) * sy
+          const width = (Math.max(...xs) - Math.min(...xs)) * sx
+          const height = (Math.max(...ys) - Math.min(...ys)) * sy
+          return width > 0 && height > 0
+            ? gnomeWordCells(
+                a.description,
+                { x, y, width, height },
+                a.orientation === 'vertical' || a.isVertical === true,
+                measure,
+                spaced
+              )
+            : []
+        })
+        .slice(0, 500)
+      const textRects = mapAnnotations(
+        info,
+        visibleAnnotations(state.annotations, setting('textOverlayGrouping')),
+        { x: 0, y: 0 },
+        monitor
+      )
+        .slice(0, 2000)
+        .map(({ x, y, width, height }) =>
+          Object.fromEntries(Object.entries({ x, y, width, height }).map(([k, v]) => [k, Math.round(v * 1000) / 1000]))
+        )
+      await gnomeRequest('present', {
+        sourceKind: screen ? 'screen' : 'window',
+        sourceId: info.source_id,
+        referenceBounds: screen ? undefined : monitor,
+        frameId: state.appliedScanId,
+        textRects,
+        ...(status.sharedOverlay
+          ? packGnomeWords(words, Math.max(64, 220000 - JSON.stringify(textRects).length))
+          : { words })
+      })
       if (status.sharedOverlay) {
-        const result = await gnomeRequest('surface', {operation:'open',sourceKind:screen?'screen':'window',sourceId:info.source_id})
+        const result = await gnomeRequest('surface', {
+          operation: 'open',
+          sourceKind: screen ? 'screen' : 'window',
+          sourceId: info.source_id
+        })
         shared = true
-        placement = {origin:result.rect,bounds:monitor,visible:result.visible!==false}
+        placement = { origin: result.rect, bounds: monitor, visible: result.visible !== false }
         placementSignature = null
         render()
       }
@@ -122,20 +185,35 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
       await closeSurface().catch(() => {})
       if (message !== lastError) log({ check: 'gnome-overlay-error', error: message })
       lastError = message
-    } finally { busy = false }
+    } finally {
+      busy = false
+    }
   }
   // The full vendor Popup/Display runs in the dedicated native popup host. This
   // bridge publishes annotations only; it never flattens dictionary entries.
   setInterval(() => void update(), 1000)
   const pause = async () => {
     // Finish any in-flight publication before clearing its reactive word targets.
-    while (busy) await new Promise(resolve => setTimeout(resolve, 20))
+    while (busy) await new Promise((resolve) => setTimeout(resolve, 20))
     busy = true
     try {
       await closeSurface()
       if ((await gnomeRequest('status')).available) await gnomeRequest('clear')
-    } finally { busy = false }
+    } finally {
+      busy = false
+    }
   }
-  const flush=async()=>{while(busy)await new Promise(resolve=>setTimeout(resolve,20));await update()}
-  return { update, pause, flush, pointer, get shared() { return shared } }
+  const flush = async () => {
+    while (busy) await new Promise((resolve) => setTimeout(resolve, 20))
+    await update()
+  }
+  return {
+    update,
+    pause,
+    flush,
+    pointer,
+    get shared() {
+      return shared
+    }
+  }
 }

@@ -55,13 +55,7 @@ impl AudioRing {
     pub fn new(sample_rate: u32, seconds: f64) -> Self {
         let sample_rate = sample_rate.max(1);
         let capacity = ((seconds.max(0.1) * sample_rate as f64) as usize).max(1);
-        Self {
-            sample_rate,
-            capacity,
-            samples: VecDeque::with_capacity(capacity),
-            first: 0,
-            marks: VecDeque::new(),
-        }
+        Self { sample_rate, capacity, samples: VecDeque::with_capacity(capacity), first: 0, marks: VecDeque::new() }
     }
 
     pub fn sample_rate(&self) -> u32 {

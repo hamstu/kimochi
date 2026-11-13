@@ -20,7 +20,7 @@
 //! capture source) renders a toplevel at scale 1, its logical size, whatever the output's scale;
 //! output captures are physical pixels. A window on another workspace is still captured (its
 //! last contents).
-use super::{encode_handle, decode_handle, Driver, Feed, Inventory, NativeWindow, Target};
+use super::{decode_handle, encode_handle, Driver, Feed, Inventory, NativeWindow, Target};
 use crate::{CaptureError, Result};
 
 mod ipc;
@@ -37,10 +37,7 @@ pub fn probe() -> std::result::Result<Box<dyn Driver>, String> {
     let ipc = match ipc {
         // Without the mapping protocol nothing ties a toplevel to a Hyprland window exactly.
         Some(Ipc::Hyprland(_)) if !lister.mapping => {
-            eprintln!(
-                "Wayland capture: ext: Hyprland without {}; no window geometry",
-                lister::HYPRLAND_MAPPING
-            );
+            eprintln!("Wayland capture: ext: Hyprland without {}; no window geometry", lister::HYPRLAND_MAPPING);
             None
         }
         other => other,
@@ -163,7 +160,8 @@ impl Driver for Ext {
     fn open(&self, target: Target<'_>) -> Result<Feed> {
         let source = match target {
             Target::Window(w) => stream::Source::Toplevel(
-                decode_handle(&w.handle).ok_or_else(|| CaptureError::new("stale_source", "Not a window of this desktop"))?,
+                decode_handle(&w.handle)
+                    .ok_or_else(|| CaptureError::new("stale_source", "Not a window of this desktop"))?,
             ),
             Target::Output(o) => {
                 if !self.lister.output_capture {
@@ -182,7 +180,8 @@ impl Driver for Ext {
         let unsupported = || CaptureError::new("unsupported", "This compositor cannot bring that window forward");
         match &self.ipc {
             Some(ipc) => {
-                let facts = ipc.snapshot().ok_or_else(|| CaptureError::new("native", "The compositor's IPC did not answer"))?;
+                let facts =
+                    ipc.snapshot().ok_or_else(|| CaptureError::new("native", "The compositor's IPC did not answer"))?;
                 let id = self.facts_for(&facts, top).ok_or_else(unsupported)?.id;
                 ipc.activate(id).map_err(|e| CaptureError::new("native", e))
             }

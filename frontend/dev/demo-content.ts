@@ -102,8 +102,7 @@ export const DEMO_CONTENT: DemoContent = {
     { text: '「……あなた、さっき私に何か言おうとしてたわよね？」' },
     {
       text: '「牧瀬紅莉栖。十八歳にして論文がサイエンス誌に載った天才少女だ」',
-      translation:
-        '"Makise Kurisu. A genius girl whose paper was published in Science at just eighteen."',
+      translation: '"Makise Kurisu. A genius girl whose paper was published in Science at just eighteen."',
       showTranslation: true
     },
     {
@@ -130,8 +129,19 @@ export const DEMO_CONTENT: DemoContent = {
       text: 'ダルはモニターから目を離さずに、キーボードを叩き続けている。',
       play: true,
       tokens: [
-        'ダル', 'は', 'モニター', 'から', '目', 'を', { text: '離さずに', word: '離す' }, '、',
-        'キーボード', 'を', { text: '叩き', word: '叩く' }, '続けている', '。'
+        'ダル',
+        'は',
+        'モニター',
+        'から',
+        '目',
+        'を',
+        { text: '離さずに', word: '離す' },
+        '、',
+        'キーボード',
+        'を',
+        { text: '叩き', word: '叩く' },
+        '続けている',
+        '。'
       ],
       focus: '叩く'
     },
@@ -140,15 +150,25 @@ export const DEMO_CONTENT: DemoContent = {
       text: '世界線が、ほんのわずかに揺らいだ気がした。',
       play: true,
       tokens: [
-        '世界線', 'が', '、', 'ほんの', { text: 'わずかに', word: 'わずか' }, { text: '揺らいだ', word: '揺らぐ' },
-        { text: '気がした', word: '気がする' }, '。'
+        '世界線',
+        'が',
+        '、',
+        'ほんの',
+        { text: 'わずかに', word: 'わずか' },
+        { text: '揺らいだ', word: '揺らぐ' },
+        { text: '気がした', word: '気がする' },
+        '。'
       ],
       focus: '世界線'
     },
     { text: '「エル・プサイ・コングルゥ」' }
   ],
   vocab: {
-    秋葉原: { reading: 'あきはばら', meanings: ['Akihabara, Tokyo’s electronics and anime district'], pos: 'Place name' },
+    秋葉原: {
+      reading: 'あきはばら',
+      meanings: ['Akihabara, Tokyo’s electronics and anime district'],
+      pos: 'Place name'
+    },
     容赦なく: { reading: 'ようしゃなく', meanings: ['mercilessly', 'without letting up'], pos: 'Adverb' },
     暑い: { reading: 'あつい', meanings: ['hot (weather, air)', 'sweltering'], pos: 'い-adjective' },
     助手: { reading: 'じょしゅ', meanings: ['assistant', 'helper', 'lab assistant'], pos: 'Noun' },
@@ -156,10 +176,18 @@ export const DEMO_CONTENT: DemoContent = {
     淹れる: { reading: 'いれる', meanings: ['to make, to brew (tea, coffee)', 'to pour'], pos: 'Ichidan verb' },
     誰: { reading: 'だれ', meanings: ['who', 'somebody (with か)'], pos: 'Pronoun' },
     モニター: { reading: 'もにたー', meanings: ['monitor, display'], pos: 'Noun' },
-    離す: { reading: 'はなす', meanings: ['to take (one’s eyes) off', 'to let go of', 'to separate'], pos: 'Godan verb' },
+    離す: {
+      reading: 'はなす',
+      meanings: ['to take (one’s eyes) off', 'to let go of', 'to separate'],
+      pos: 'Godan verb'
+    },
     キーボード: { reading: 'きーぼーど', meanings: ['keyboard'], pos: 'Noun' },
     叩く: { reading: 'たたく', meanings: ['to hit, to tap', 'to type away (at keys)'], pos: 'Godan verb' },
-    世界線: { reading: 'せかいせん', meanings: ['world line', 'timeline, alternate reality (colloquial)'], pos: 'Noun' },
+    世界線: {
+      reading: 'せかいせん',
+      meanings: ['world line', 'timeline, alternate reality (colloquial)'],
+      pos: 'Noun'
+    },
     わずか: { reading: 'わずか', meanings: ['slight, tiny', 'only a little'], pos: 'な-adjective' },
     揺らぐ: { reading: 'ゆらぐ', meanings: ['to sway, to waver', 'to flicker'], pos: 'Godan verb' },
     気がする: { reading: 'きがする', meanings: ['to have a feeling that', 'to sense'], pos: 'Expression' }

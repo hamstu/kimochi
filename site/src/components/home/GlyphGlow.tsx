@@ -40,7 +40,7 @@ const GLYPHS = Array.from(
     // Thai
     'กขคงจนบมรสอ' +
     // Devanagari
-    'कखगघचजतनमरस',
+    'कखगघचजतनमरस'
 )
 
 const ATLAS_COLS = 12
@@ -251,7 +251,8 @@ export function GlyphGlow({ className = '', style }: { className?: string; style
       gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT))
       gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FRAG))
       gl.linkProgram(prog)
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`GlyphGlow link: ${gl.getProgramInfoLog(prog)}`)
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+        throw new Error(`GlyphGlow link: ${gl.getProgramInfoLog(prog)}`)
     } catch (err) {
       console.warn(err)
       return
@@ -264,9 +265,18 @@ export function GlyphGlow({ className = '', style }: { className?: string; style
     gl.enableVertexAttribArray(aPos)
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
     const u = (n: string) => gl.getUniformLocation(prog, n)
-    const uRes = u('uRes'), uTime = u('uTime'), uScale = u('uScale'), uCell = u('uCell'), uFade = u('uFade')
-    const uGain = u('uGain'), uCeil = u('uCeil')
-    const uOrb = u('uOrb'), uRadius = u('uRadius'), uEdge = u('uEdge'), uInk = u('uInk'), uCore = u('uCore')
+    const uRes = u('uRes'),
+      uTime = u('uTime'),
+      uScale = u('uScale'),
+      uCell = u('uCell'),
+      uFade = u('uFade')
+    const uGain = u('uGain'),
+      uCeil = u('uCeil')
+    const uOrb = u('uOrb'),
+      uRadius = u('uRadius'),
+      uEdge = u('uEdge'),
+      uInk = u('uInk'),
+      uCore = u('uCore')
 
     const tex = gl.createTexture()
     let ready = false

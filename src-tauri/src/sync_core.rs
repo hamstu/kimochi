@@ -179,9 +179,7 @@ pub fn state_path(dir: &Path) -> PathBuf {
 }
 
 pub fn load_state(dir: &Path) -> State {
-    profile::read_json(&state_path(dir))
-        .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_default()
+    profile::read_json(&state_path(dir)).and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default()
 }
 
 pub fn save_state(dir: &Path, state: &State) -> Result<(), String> {
@@ -431,7 +429,8 @@ pub struct Local {
     pub images: HashMap<String, PathBuf>,
 }
 
-const LINE_FIELDS: &[&str] = &["text", "originalText", "source", "ts", "ocr", "translation", "showTranslation", "explanation"];
+const LINE_FIELDS: &[&str] =
+    &["text", "originalText", "source", "ts", "ocr", "translation", "showTranslation", "explanation"];
 /// Line fields that describe its text, so a line whose text was edited keeps only its own.
 const TEXT_BOUND_FIELDS: &[&str] = &["originalText", "translation", "showTranslation", "explanation"];
 
@@ -694,10 +693,7 @@ fn new_session(name: &str, now: u64) -> (String, Value) {
 pub fn random_id(prefix: &str) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let seed = format!("{nanos}:{}:{}:{:p}", std::process::id(), COUNTER.fetch_add(1, Ordering::SeqCst), &COUNTER);
     format!("{prefix}{}", &sha256_hex(seed.as_bytes())[..24])
 }
@@ -709,7 +705,10 @@ fn ensure_session_files(dir: &Path, sid: &str) -> Result<(), String> {
         profile::write_json(&session.join("lines.json"), &json!({ "version": 1, "lines": [] }))?;
     }
     if !session.join("notebook.json").exists() {
-        profile::write_json(&session.join("notebook.json"), &json!({ "version": 2, "cacheVersion": 0, "entries": [] }))?;
+        profile::write_json(
+            &session.join("notebook.json"),
+            &json!({ "version": 2, "cacheVersion": 0, "entries": [] }),
+        )?;
     }
     Ok(())
 }
@@ -760,8 +759,10 @@ pub fn apply_writes(
 
     // Sessions: the manifest, with placeholders for sessions known only through their lines.
     let manifest_path = dir.join("sessions.json");
-    let touches_sessions =
-        !writes.sessions.is_empty() || !writes.lines.is_empty() || !writes.notebook.is_empty() || !writes.anki.is_empty();
+    let touches_sessions = !writes.sessions.is_empty()
+        || !writes.lines.is_empty()
+        || !writes.notebook.is_empty()
+        || !writes.anki.is_empty();
     let mut manifest = read_or(&manifest_path, json!({ "version": 1, "activeId": "", "sessions": [] }));
     if touches_sessions {
         if !manifest.get("sessions").is_some_and(Value::is_array) {
@@ -785,9 +786,9 @@ pub fn apply_writes(
             if live && !writes.sessions.contains_key(sid) && safe_segment(sid) {
                 let present = manifest["sessions"].as_array().is_some_and(|s| s.iter().any(|x| x["id"] == json!(sid)));
                 if !present {
-                    let meta = known_sessions.get(sid).cloned().unwrap_or_else(|| {
-                        json!({ "name": "Synced session", "description": "", "createdAt": now, "updatedAt": now })
-                    });
+                    let meta = known_sessions.get(sid).cloned().unwrap_or_else(
+                        || json!({ "name": "Synced session", "description": "", "createdAt": now, "updatedAt": now }),
+                    );
                     wanted.push((sid.clone(), Some(meta)));
                 }
             }
@@ -1110,7 +1111,16 @@ fn local_stamp(ctx: &mut Ctx, k: &str) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn conflict_copy(ctx: &mut Ctx, writes: &mut Writes, local: &mut Local, k: &str, loser: &Value, loser_stamp: &str, loser_device: &str, winner_stamp: &str) {
+fn conflict_copy(
+    ctx: &mut Ctx,
+    writes: &mut Writes,
+    local: &mut Local,
+    k: &str,
+    loser: &Value,
+    loser_stamp: &str,
+    loser_device: &str,
+    winner_stamp: &str,
+) {
     let (collection, id) = split_key(k);
     if collection == "conflicts" || collection == "stats" {
         return;
@@ -1270,7 +1280,13 @@ fn merge_remote(ctx: &mut Ctx, local: &mut Local, remote: &[RemoteRecord], repor
                         let winner_stamp = if remote_wins { r.hlc.clone() } else { my_stamp.clone() };
                         conflict_copy(ctx, &mut writes, local, k, loser, &loser_stamp, &loser_device, &winner_stamp);
                         report.conflicts += 1;
-                        (ctx.log)("conflict", format!("{} was edited on two computers; kept the newer text, the other is in Conflicts", describe(k)));
+                        (ctx.log)(
+                            "conflict",
+                            format!(
+                                "{} was edited on two computers; kept the newer text, the other is in Conflicts",
+                                describe(k)
+                            ),
+                        );
                     } else {
                         (ctx.log)("merge", format!("Merged {} field by field", describe(k)));
                     }
@@ -1387,7 +1403,9 @@ pub fn outgoing(ctx: &mut Ctx, local: &Local) -> Vec<PushRecord> {
                 }
             }
             Side::Deleted => match shadow {
-                Some(s) if s.1 != TOMB => PushRecord { collection, id, base_rev: s.0, deleted: true, data: None, hlc: String::new() },
+                Some(s) if s.1 != TOMB => {
+                    PushRecord { collection, id, base_rev: s.0, deleted: true, data: None, hlc: String::new() }
+                }
                 _ => continue,
             },
             Side::Absent => continue,
@@ -1472,8 +1490,12 @@ pub fn sync_once(ctx: &mut Ctx) -> Result<Report, String> {
             let result = ctx.remote.push(ctx.device_id, batch)?;
             for accepted in &result.accepted {
                 let k = key(&accepted.collection, &accepted.id);
-                let Some(sent) = batch.iter().find(|r| r.collection == accepted.collection && r.id == accepted.id) else { continue };
-                let sent_hash = if sent.deleted { TOMB.to_string() } else { sent.data.as_ref().map(hash).unwrap_or_default() };
+                let Some(sent) = batch.iter().find(|r| r.collection == accepted.collection && r.id == accepted.id)
+                else {
+                    continue;
+                };
+                let sent_hash =
+                    if sent.deleted { TOMB.to_string() } else { sent.data.as_ref().map(hash).unwrap_or_default() };
                 ctx.state.shadow.insert(k.clone(), (accepted.rev, sent_hash));
                 if ctx.state.pending.get(&k).is_some_and(|p| p.1 == sent.hlc) {
                     ctx.state.pending.remove(&k);
@@ -1506,7 +1528,14 @@ pub fn sync_once(ctx: &mut Ctx) -> Result<Report, String> {
 }
 
 /// Put a conflict's kept version back (it then syncs as a new change) and drop the conflict.
-pub fn restore_conflict(dir: &Path, prefs: &mut dyn Prefs, host: &dyn Host, state: &State, id: &str, now: u64) -> Result<String, String> {
+pub fn restore_conflict(
+    dir: &Path,
+    prefs: &mut dyn Prefs,
+    host: &dyn Host,
+    state: &State,
+    id: &str,
+    now: u64,
+) -> Result<String, String> {
     let conflicts = load_conflicts(dir).ok_or("native: the conflicts file is unreadable")?;
     let conflict = conflicts.get(id).cloned().ok_or("invalid: that conflict is already resolved")?;
     let collection = conflict["collection"].as_str().unwrap_or("").to_string();
@@ -1521,7 +1550,14 @@ pub fn restore_conflict(dir: &Path, prefs: &mut dyn Prefs, host: &dyn Host, stat
     if needs_host {
         host.hold()?;
     }
-    let result = apply_writes(dir, &writes, prefs, &state.sessions, &|_| Err("native: the image is no longer available".into()), now);
+    let result = apply_writes(
+        dir,
+        &writes,
+        prefs,
+        &state.sessions,
+        &|_| Err("native: the image is no longer available".into()),
+        now,
+    );
     if needs_host {
         host.release(result.as_ref().unwrap_or(&Changed::default()));
     }
@@ -1545,13 +1581,18 @@ pub mod tests {
 
     impl Remote for MemServer {
         fn status(&self) -> Result<Status, String> {
-            Ok(Status { seq: self.seq.get(), records: self.records.borrow().values().filter(|r| !r.deleted).count() as u64, ..Default::default() })
+            Ok(Status {
+                seq: self.seq.get(),
+                records: self.records.borrow().values().filter(|r| !r.deleted).count() as u64,
+                ..Default::default()
+            })
         }
         fn changes(&self, since: u64, limit: u32) -> Result<ChangesPage, String> {
             if self.offline.get() {
                 return Err("offline".into());
             }
-            let mut all: Vec<RemoteRecord> = self.records.borrow().values().filter(|r| r.rev > since).cloned().collect();
+            let mut all: Vec<RemoteRecord> =
+                self.records.borrow().values().filter(|r| r.rev > since).cloned().collect();
             all.sort_by_key(|r| r.rev);
             let more = all.len() > limit as usize;
             all.truncate(limit as usize);
@@ -1568,7 +1609,11 @@ pub mod tests {
                 let id = (r.collection.clone(), r.id.clone());
                 let current = store.get(&id).map(|c| c.rev).unwrap_or(0);
                 if current != r.base_rev {
-                    result.conflicts.push(PushConflict { collection: r.collection.clone(), id: r.id.clone(), current: store.get(&id).map(|c| json!({ "rev": c.rev })) });
+                    result.conflicts.push(PushConflict {
+                        collection: r.collection.clone(),
+                        id: r.id.clone(),
+                        current: store.get(&id).map(|c| json!({ "rev": c.rev })),
+                    });
                     continue;
                 }
                 self.seq.set(self.seq.get() + 1);
@@ -1619,7 +1664,15 @@ pub mod tests {
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             let prefs = FilePrefs { path: dir.join("prefs.json"), doc: json!({ "appearance": "light" }) };
-            Self { id: id.into(), dir, prefs, state: State::default(), cache: ScanCache::default(), clock: Cell::new(1_000_000), log: RefCell::new(Vec::new()) }
+            Self {
+                id: id.into(),
+                dir,
+                prefs,
+                state: State::default(),
+                cache: ScanCache::default(),
+                clock: Cell::new(1_000_000),
+                log: RefCell::new(Vec::new()),
+            }
         }
 
         pub fn sync(&mut self, server: &dyn Remote) -> Report {
@@ -1800,7 +1853,11 @@ pub mod tests {
         let server = MemServer::default();
         let mut a = Device::new("A", "tomb");
         let mut b = Device::new("B", "tomb");
-        a.session("s1", "Novel", json!([line(1, "u1", "消す", 10), line(2, "u2", "残す", 20), line(3, "u3", "訳す", 30)]));
+        a.session(
+            "s1",
+            "Novel",
+            json!([line(1, "u1", "消す", 10), line(2, "u2", "残す", 20), line(3, "u3", "訳す", 30)]),
+        );
         a.sync(&server);
         b.sync(&server);
         // A deletes u1 (recorded) and u3 (recorded); B translates u3 meanwhile.
@@ -1854,12 +1911,20 @@ pub mod tests {
         a.sync(&server);
         b.touch();
         b.sync(&server);
-        let ids: Vec<String> = b.read("sessions.json")["sessions"].as_array().unwrap().iter().map(|s| s["id"].as_str().unwrap().to_string()).collect();
+        let ids: Vec<String> = b.read("sessions.json")["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["id"].as_str().unwrap().to_string())
+            .collect();
         assert_eq!(ids, ["s1"]);
         assert!(!b.dir.join("sessions/s2").exists());
         let trash: Vec<_> = std::fs::read_dir(b.dir.join("sync/trash")).unwrap().collect();
         assert_eq!(trash.len(), 1, "kept in the trash");
-        assert!(server.records.borrow().get(&("lines".into(), "s2/u1".into())).unwrap().deleted, "its lines are tombstoned too");
+        assert!(
+            server.records.borrow().get(&("lines".into(), "s2/u1".into())).unwrap().deleted,
+            "its lines are tombstoned too"
+        );
     }
 
     #[test]
@@ -1875,7 +1940,11 @@ pub mod tests {
         assert_eq!(b.prefs.doc["superTexthooker"]["fontSizePx"], 20);
         assert_eq!(b.prefs.doc["superTexthooker"]["deeplApiKey"], "mine", "secrets never travel");
         assert!(b.prefs.doc.get("windowPositions").is_none());
-        assert!(!server.records.borrow().keys().any(|(_, id)| id.contains("deeplApiKey") || id.contains("windowPositions")));
+        assert!(!server
+            .records
+            .borrow()
+            .keys()
+            .any(|(_, id)| id.contains("deeplApiKey") || id.contains("windowPositions")));
         // Different settings changed on each computer both survive.
         a.prefs.doc["appearance"] = json!("system");
         b.prefs.doc["superTexthooker"]["fontSizePx"] = json!(24);
@@ -1918,7 +1987,14 @@ pub mod tests {
         let mut a = Device::new("A", "anki");
         let mut b = Device::new("B", "anki");
         a.session("s1", "Novel", json!([]));
-        let card = NewCard { note_id: 42, term: "猫".into(), reading: Some("ねこ".into()), deck: None, via: "extension", engine: "yomitan".into() };
+        let card = NewCard {
+            note_id: 42,
+            term: "猫".into(),
+            reading: Some("ねこ".into()),
+            deck: None,
+            via: "extension",
+            engine: "yomitan".into(),
+        };
         anki_cards::add(&a.dir, "s1", &card, 10).unwrap();
         a.sync(&server);
         b.sync(&server);
@@ -1961,7 +2037,18 @@ pub mod tests {
             let clock = &a.clock;
             let now = move || clock.get();
             let log = |_: &str, _: String| {};
-            let mut ctx = Ctx { dir: &a.dir, device_id: "A", device_name: "A", remote: &server, host: &NoHost, prefs: &mut a.prefs, cache: &mut a.cache, state: &mut a.state, log: &log, now: &now };
+            let mut ctx = Ctx {
+                dir: &a.dir,
+                device_id: "A",
+                device_name: "A",
+                remote: &server,
+                host: &NoHost,
+                prefs: &mut a.prefs,
+                cache: &mut a.cache,
+                state: &mut a.state,
+                log: &log,
+                now: &now,
+            };
             assert!(sync_once(&mut ctx).is_err());
         }
         let stamped = a.state.pending.get(&key("lines", "s1/u1")).unwrap().1.clone();

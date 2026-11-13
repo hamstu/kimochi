@@ -8,11 +8,7 @@
  */
 import { useEffect, useState } from 'react'
 import { getSetting, onSettingsChange } from '../bridge/settings'
-import {
-  INTERFACE_SCALES,
-  type Appearance,
-  type InterfaceScale
-} from '@ui/settings'
+import { INTERFACE_SCALES, type Appearance, type InterfaceScale } from '@ui/settings'
 
 export type ResolvedAppearance = 'light' | 'dark'
 
@@ -27,8 +23,7 @@ interface Prefs {
 function readCache(): Prefs {
   // What native put in the page from the store as the window was built (`appearance_prelude` in
   // panels.rs), ahead of this window's cache, which a change made elsewhere can leave stale.
-  const stored = (window as { __kimochiAppearance?: Partial<Record<keyof Prefs, string | null>> })
-    .__kimochiAppearance
+  const stored = (window as { __kimochiAppearance?: Partial<Record<keyof Prefs, string | null>> }).__kimochiAppearance
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw || stored) {
@@ -126,4 +121,3 @@ export function usePrefs(): Prefs & { resolved: ResolvedAppearance } {
     prefs.appearance === 'system' ? (systemDark ? 'dark' : 'light') : prefs.appearance
   return { ...prefs, resolved }
 }
-

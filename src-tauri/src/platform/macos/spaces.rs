@@ -5,9 +5,9 @@
 //! same three. They are looked up at run time rather than linked, so a macOS that drops one
 //! costs the picker its windows on other Spaces and nothing else: `Spaces::current()` is
 //! `None` and callers keep to the windows on screen.
+use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::msg_send;
 use objc2_foundation::{ns_string, NSArray, NSDictionary, NSNumber, NSString};
 use std::collections::HashMap;
 use std::ffi::{c_char, c_void};

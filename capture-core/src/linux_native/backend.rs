@@ -1,13 +1,12 @@
 //! The driver registry and the [`NativeCapture`] backend. See the module docs in `mod.rs`.
 use super::{
-    output_handle, sources, window_handle, Inventory, NativeOutput, NativeWindow, KEEP_CAPTURE,
-    KEEP_THUMBNAIL,
+    output_handle, sources, window_handle, Inventory, NativeOutput, NativeWindow, KEEP_CAPTURE, KEEP_THUMBNAIL,
 };
 use crate::linux_portal::backend::{LatestFrame, Slot, COLOR_SPACE, MAX_PIXELS, PIXEL_FORMAT};
 use crate::pixels::{box_downscale, crop_pixels, fit_within, unpremultiply};
 use crate::{
-    crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame,
-    FrameInfo, Rect, Result, Source,
+    crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, FrameInfo, Rect,
+    Result, Source,
 };
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -40,11 +39,7 @@ pub struct Feed {
 
 impl Feed {
     /// `gone` says whether the driver's side has ended (checked on each use; keep it cheap).
-    pub(crate) fn new(
-        slot: Arc<Slot>,
-        gone: impl Fn() -> bool + Send + Sync + 'static,
-        guard: Box<dyn Send>,
-    ) -> Self {
+    pub(crate) fn new(slot: Arc<Slot>, gone: impl Fn() -> bool + Send + Sync + 'static, guard: Box<dyn Send>) -> Self {
         Self { slot, gone: Box::new(gone), _guard: guard }
     }
     pub fn alive(&self) -> bool {
@@ -367,10 +362,7 @@ impl NativeCapture {
         let fresh = !feeds.contains_key(source_id);
         if fresh {
             let feed = driver.open(resolved.target())?;
-            feeds.insert(
-                source_id.to_string(),
-                Open { feed, used: Instant::now(), keep: KEEP_THUMBNAIL },
-            );
+            feeds.insert(source_id.to_string(), Open { feed, used: Instant::now(), keep: KEEP_THUMBNAIL });
         }
         let open = feeds.get_mut(source_id).unwrap();
         open.used = Instant::now();

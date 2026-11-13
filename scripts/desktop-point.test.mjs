@@ -6,7 +6,9 @@ const { code } = await transform(await readFile(new URL('../ui/desktop-point.ts'
   loader: 'ts',
   format: 'esm'
 })
-const { desktopPointOf, screenScale } = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))
+const { desktopPointOf, screenScale } = await import(
+  'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
+)
 
 const withPlatform = (platform, run) => {
   const fake = { __KIMOCHI_PLATFORM__: platform }

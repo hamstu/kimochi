@@ -38,12 +38,9 @@ function shownProvider(provider: TranslationProvider | undefined, cloud: boolean
 /** Which provider translates, and whether it can: DeepL takes only some languages. */
 function providerDescription(settings: Settings, cloud: boolean, language: Language): string {
   if (shownProvider(settings.translationProvider, cloud) === 'kimochi') {
-    return cloud
-      ? 'Uses your Kimochi Cloud monthly translations.'
-      : 'Needs Kimochi Cloud: see Settings → Account.'
+    return cloud ? 'Uses your Kimochi Cloud monthly translations.' : 'Needs Kimochi Cloud: see Settings → Account.'
   }
-  if (!deeplTranslates(language.code))
-    return `DeepL can't translate from ${language.name}. Choose Kimochi cloud.`
+  if (!deeplTranslates(language.code)) return `DeepL can't translate from ${language.name}. Choose Kimochi cloud.`
   return translationRoute('deepl', settings.deeplApiKey, cloud)
     ? 'Lines are translated with your DeepL key.'
     : 'Add your DeepL API key below.'
@@ -74,9 +71,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
           <Select
             aria-label="Translate with"
             value={provider}
-            onValueChange={(value) =>
-              void updateSettings({ translationProvider: value as TranslationProvider })
-            }
+            onValueChange={(value) => void updateSettings({ translationProvider: value as TranslationProvider })}
             // Kimochi cloud is offered with Kimochi Cloud; still listed while it is the choice.
             options={PROVIDERS.filter((p) => p.value !== 'kimochi' || cloud || provider === 'kimochi')}
           />
@@ -90,11 +85,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
           <SettingsRow
             label="DeepL API key"
             controlId="assist-deepl"
-            description={
-              settings.deeplApiKey.trim()
-                ? 'Enter your DeepL key'
-                : 'Stored in settings.json.'
-            }
+            description={settings.deeplApiKey.trim() ? 'Enter your DeepL key' : 'Stored in settings.json.'}
           >
             <Input
               id="assist-deepl"
@@ -115,10 +106,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
       </SettingsSection>
 
       <SettingsSection title="Explain with AI">
-        <SettingsRow
-          label="Provider, model and prompt"
-          description={`${explainSummary}. Also on the E key.`}
-        >
+        <SettingsRow label="Provider, model and prompt" description={`${explainSummary}. Also on the E key.`}>
           <Button size="sm" onClick={() => setExplainOpen(true)}>
             Configure…
           </Button>

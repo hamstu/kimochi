@@ -60,8 +60,7 @@ export function AccountBar({
   if (!active) return null
   const name = accountBarName(active.user)
   const email = active.user?.email?.trim() || null
-  const attention =
-    sync.state === 'error' || sync.state === 'offline' || sync.conflicts.length > 0 || !active.signedIn
+  const attention = sync.state === 'error' || sync.state === 'offline' || sync.conflicts.length > 0 || !active.signedIn
   const label = `Account: ${email && email !== name ? `${name}, ${email}` : name}. Language: ${language.name}`
 
   const run = (work: () => Promise<unknown>): void => {
@@ -115,7 +114,11 @@ export function AccountBar({
               </MenuRadioItem>
             )
           })}
-          <MenuRadioItem value={LOCAL} icon={<AccountAvatar local className="sb-account-menu-avatar" />} detail="Not signed in">
+          <MenuRadioItem
+            value={LOCAL}
+            icon={<AccountAvatar local className="sb-account-menu-avatar" />}
+            detail="Not signed in"
+          >
             Local
           </MenuRadioItem>
         </MenuRadioGroup>

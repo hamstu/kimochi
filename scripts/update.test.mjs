@@ -85,10 +85,18 @@ test('the sidebar notice shows for an update in play, and goes away on Not now',
   assert.equal(noticeShown(null), false)
   assert.equal(noticeShown(base), false)
   assert.equal(noticeShown({ ...base, state: 'checking' }), false)
-  assert.equal(noticeShown({ ...base, state: 'failed', stage: 'check', message: 'offline' }), false, 'a failed check only concerns the Check button')
+  assert.equal(
+    noticeShown({ ...base, state: 'failed', stage: 'check', message: 'offline' }),
+    false,
+    'a failed check only concerns the Check button'
+  )
   assert.equal(noticeShown(offered({ state: 'available' })), true)
   assert.equal(noticeShown(offered({ state: 'available', dismissed: true })), false)
-  assert.equal(noticeShown(offered({ state: 'downloading', dismissed: true })), true, 'a download the user started is never hidden')
+  assert.equal(
+    noticeShown(offered({ state: 'downloading', dismissed: true })),
+    true,
+    'a download the user started is never hidden'
+  )
   assert.equal(noticeShown(offered({ state: 'ready', dismissed: true })), true)
   assert.equal(noticeShown(offered({ state: 'installing' })), true)
   assert.equal(noticeShown(offered({ state: 'failed', stage: 'download' })), true)
@@ -100,35 +108,72 @@ test('the notice says what is happening and what comes next', () => {
   assert.equal(noticeTitle(offered({ state: 'available' })), 'Kimochi 0.2.0 is available')
   assert.equal(noticeDetail(offered({ state: 'available' })), '91 MB download')
   assert.equal(noticeDetail(offered({ state: 'available', size: null })), null)
-  assert.equal(noticeTitle(offered({ state: 'downloading', receivedBytes: 12_000_000, totalBytes: 91_300_000 })), 'Downloading Kimochi 0.2.0')
-  assert.equal(noticeDetail(offered({ state: 'downloading', receivedBytes: 12_000_000, totalBytes: 91_300_000 })), '12 MB of 91 MB')
+  assert.equal(
+    noticeTitle(offered({ state: 'downloading', receivedBytes: 12_000_000, totalBytes: 91_300_000 })),
+    'Downloading Kimochi 0.2.0'
+  )
+  assert.equal(
+    noticeDetail(offered({ state: 'downloading', receivedBytes: 12_000_000, totalBytes: 91_300_000 })),
+    '12 MB of 91 MB'
+  )
   assert.equal(noticeTitle(offered({ state: 'ready' })), 'Kimochi 0.2.0 is ready')
   assert.equal(noticeDetail(offered({ state: 'ready' })), 'Restart Kimochi to finish updating.')
   assert.equal(noticeTitle(offered({ state: 'installing' })), 'Installing Kimochi 0.2.0…')
-  assert.equal(noticeTitle(offered({ state: 'failed', stage: 'download', message: 'Network error' })), 'Download failed')
+  assert.equal(
+    noticeTitle(offered({ state: 'failed', stage: 'download', message: 'Network error' })),
+    'Download failed'
+  )
   assert.equal(noticeDetail(offered({ state: 'failed', stage: 'download', message: 'Network error' })), 'Network error')
   assert.equal(noticeTitle(offered({ state: 'failed', stage: 'install' })), 'Could not install the update')
   assert.equal(noticeTitle(offered({ state: 'available', version: null })), 'A new version is available')
 })
 
 test('download progress copes with an unknown total', () => {
-  assert.equal(downloadProgress(offered({ state: 'downloading', receivedBytes: 5_000_000, totalBytes: null, size: null })), '5.0 MB')
-  assert.equal(downloadProgress(offered({ state: 'downloading', receivedBytes: 5_000_000, totalBytes: null })), '5.0 MB of 91 MB', 'the manifest size stands in')
+  assert.equal(
+    downloadProgress(offered({ state: 'downloading', receivedBytes: 5_000_000, totalBytes: null, size: null })),
+    '5.0 MB'
+  )
+  assert.equal(
+    downloadProgress(offered({ state: 'downloading', receivedBytes: 5_000_000, totalBytes: null })),
+    '5.0 MB of 91 MB',
+    'the manifest size stands in'
+  )
 })
 
 test('the settings line reads the last check or the step under way', () => {
   assert.equal(checkedLine(base, NOW), "You're up to date · checked 4 minutes ago")
   assert.equal(checkedLine({ ...base, checkedAt: null }, NOW), "You're up to date")
   assert.equal(checkedLine({ ...base, state: 'checking' }, NOW), 'Checking for updates…')
-  assert.equal(checkedLine({ ...base, state: 'idle', checkedAt: null }, NOW), 'Kimochi checks for updates and asks before installing one.')
-  assert.equal(checkedLine({ ...base, state: 'idle', checkedAt: null, automatic: false }, NOW), "Development builds don't check for updates.")
+  assert.equal(
+    checkedLine({ ...base, state: 'idle', checkedAt: null }, NOW),
+    'Kimochi checks for updates and asks before installing one.'
+  )
+  assert.equal(
+    checkedLine({ ...base, state: 'idle', checkedAt: null, automatic: false }, NOW),
+    "Development builds don't check for updates."
+  )
   assert.equal(checkedLine(offered({ state: 'available' }), NOW), 'Kimochi 0.2.0 is available.')
-  assert.equal(checkedLine(offered({ state: 'downloading', receivedBytes: 45_650_000, totalBytes: 91_300_000 }), NOW), 'Downloading Kimochi 0.2.0 · 46 MB of 91 MB')
-  assert.equal(checkedLine(offered({ state: 'ready' }), NOW), 'Kimochi 0.2.0 is downloaded. Restart Kimochi to finish updating.')
-  assert.equal(checkedLine(offered({ state: 'installing' }), NOW), 'Installing Kimochi 0.2.0… Kimochi restarts when this is done.')
-  assert.equal(checkedLine({ ...base, state: 'failed', stage: 'check', message: 'Could not reach GitHub.' }, NOW), 'Could not check for updates: Could not reach GitHub.')
+  assert.equal(
+    checkedLine(offered({ state: 'downloading', receivedBytes: 45_650_000, totalBytes: 91_300_000 }), NOW),
+    'Downloading Kimochi 0.2.0 · 46 MB of 91 MB'
+  )
+  assert.equal(
+    checkedLine(offered({ state: 'ready' }), NOW),
+    'Kimochi 0.2.0 is downloaded. Restart Kimochi to finish updating.'
+  )
+  assert.equal(
+    checkedLine(offered({ state: 'installing' }), NOW),
+    'Installing Kimochi 0.2.0… Kimochi restarts when this is done.'
+  )
+  assert.equal(
+    checkedLine({ ...base, state: 'failed', stage: 'check', message: 'Could not reach GitHub.' }, NOW),
+    'Could not check for updates: Could not reach GitHub.'
+  )
   assert.equal(checkedLine(offered({ state: 'failed', stage: 'download' }), NOW), 'Download failed.')
-  assert.equal(checkedLine(offered({ state: 'failed', stage: 'install', message: 'denied' }), NOW), 'Could not install the update: denied')
+  assert.equal(
+    checkedLine(offered({ state: 'failed', stage: 'install', message: 'denied' }), NOW),
+    'Could not install the update: denied'
+  )
 })
 
 test('one button per state: the next step, or a way out', () => {
@@ -157,17 +202,28 @@ test('the bar only speaks while something happens', () => {
   assert.equal(showsBar(offered({ state: 'downloading' })), true)
   assert.equal(showsBar(offered({ state: 'installing' })), true)
   assert.equal(barPercent(offered({ state: 'downloading', receivedBytes: 45_650_000, totalBytes: 91_300_000 })), 50)
-  assert.equal(barPercent(offered({ state: 'downloading', receivedBytes: 91_299_999, totalBytes: 91_300_000 })), 99, '100% only ever means done')
+  assert.equal(
+    barPercent(offered({ state: 'downloading', receivedBytes: 91_299_999, totalBytes: 91_300_000 })),
+    99,
+    '100% only ever means done'
+  )
   assert.equal(barPercent(offered({ state: 'downloading', receivedBytes: 1, totalBytes: null, size: null })), 0)
   assert.equal(barPercent(offered({ state: 'ready' })), 100)
   assert.equal(barPercent(offered({ state: 'installing' })), 100)
   assert.equal(isIndeterminate(offered({ state: 'installing' })), true)
   assert.equal(isIndeterminate(offered({ state: 'downloading', totalBytes: null, size: null })), true)
-  assert.equal(isIndeterminate(offered({ state: 'downloading', totalBytes: null })), false, 'the manifest size makes the bar measurable')
+  assert.equal(
+    isIndeterminate(offered({ state: 'downloading', totalBytes: null })),
+    false,
+    'the manifest size makes the bar measurable'
+  )
 })
 
-test('What\'s new points at the tagged release', () => {
-  assert.equal(releaseUrl('hamstu/kimochi', offered({ state: 'available' })), 'https://github.com/hamstu/kimochi/releases/tag/v0.2.0')
+test("What's new points at the tagged release", () => {
+  assert.equal(
+    releaseUrl('hamstu/kimochi', offered({ state: 'available' })),
+    'https://github.com/hamstu/kimochi/releases/tag/v0.2.0'
+  )
   assert.equal(releaseUrl('hamstu/kimochi', base), null)
 })
 

@@ -11,10 +11,8 @@ const VN_URL: &str = "https://api.vndb.org/kana/vn";
 const CHARACTER_URL: &str = "https://api.vndb.org/kana/character";
 const USER_AGENT: &str = "Kimochi (https://github.com/hamstu/kimochi)";
 
-const VN_FIELDS: &str =
-    "title,alttitle,titles.title,titles.lang,titles.official,image.url,image.sexual,released";
-const CHAR_FIELDS: &str =
-    "name,original,aliases,description,image.url,image.sexual,vns.id,vns.role,vns.title";
+const VN_FIELDS: &str = "title,alttitle,titles.title,titles.lang,titles.official,image.url,image.sexual,released";
+const CHAR_FIELDS: &str = "name,original,aliases,description,image.url,image.sexual,vns.id,vns.role,vns.title";
 
 const VN_PAGE_SIZE: u16 = 15;
 const CHAR_PAGE_SIZE: u16 = 100;
@@ -29,17 +27,9 @@ fn client() -> Result<reqwest::Client, String> {
 }
 
 async fn post_json(client: &reqwest::Client, url: &str, body: &Value) -> Result<Value, String> {
-    let resp = client
-        .post(url)
-        .json(body)
-        .send()
-        .await
-        .map_err(|e| format!("vndb request failed: {e}"))?;
+    let resp = client.post(url).json(body).send().await.map_err(|e| format!("vndb request failed: {e}"))?;
     let status = resp.status();
-    let text = resp
-        .text()
-        .await
-        .map_err(|e| format!("vndb read failed: {e}"))?;
+    let text = resp.text().await.map_err(|e| format!("vndb read failed: {e}"))?;
     if !status.is_success() {
         return Err(format!("vndb HTTP {}: {}", status.as_u16(), text));
     }
@@ -121,11 +111,7 @@ pub async fn vndb_fetch_image(url: String) -> Result<FetchedImage, String> {
         .build()
         .map_err(|e| format!("client build failed: {e}"))?;
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("vndb image request failed: {e}"))?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("vndb image request failed: {e}"))?;
 
     let status = resp.status();
     if !status.is_success() {
@@ -146,13 +132,7 @@ pub async fn vndb_fetch_image(url: String) -> Result<FetchedImage, String> {
         .unwrap_or("jpg")
         .to_string();
 
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("vndb image read failed: {e}"))?;
+    let bytes = resp.bytes().await.map_err(|e| format!("vndb image read failed: {e}"))?;
 
-    Ok(FetchedImage {
-        base64: STANDARD.encode(&bytes),
-        ext,
-    })
+    Ok(FetchedImage { base64: STANDARD.encode(&bytes), ext })
 }

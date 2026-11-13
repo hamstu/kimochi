@@ -75,17 +75,10 @@ export function AccountTab(): ReactNode {
   const active = activeAccount(account)
   const accounts = account.accounts ?? []
   return (
-    <SettingsPage
-      title="Account"
-      description="Optional."
-    >
+    <SettingsPage title="Account" description="Optional.">
       {DEV_BUILD && <ServerSection account={account} />}
       {account.linking && <Linking code={account.linking.code} />}
-      {accounts.length > 0 ? (
-        <AccountsSection account={account} />
-      ) : (
-        !account.linking && <SignedOut />
-      )}
+      {accounts.length > 0 ? <AccountsSection account={account} /> : !account.linking && <SignedOut />}
       {active && account.signedIn && <SignedIn account={account} />}
       {active && !active.signedIn && <NeedsSignIn summary={active} />}
       <DictionaryProfileSection />
@@ -203,10 +196,7 @@ function Linking({ code }: { code: string }): ReactNode {
         }
         description="If the browser didn't open, or you closed it, open it again."
       >
-        <Button
-          size="sm"
-          onClick={() => void accountLinkOpen().catch((caught: unknown) => setError(message(caught)))}
-        >
+        <Button size="sm" onClick={() => void accountLinkOpen().catch((caught: unknown) => setError(message(caught)))}>
           Open browser again
         </Button>
         <Button size="sm" variant="ghost" onClick={() => void accountLinkCancel()}>
@@ -238,7 +228,12 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
       title="Accounts on this computer"
       description="Each account keeps its own sessions, notebook, presets and preferences."
       actions={
-        <Button size="sm" variant="ghost" disabled={disabled || Boolean(account.linking)} onClick={() => run(accountLinkStart)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={disabled || Boolean(account.linking)}
+          onClick={() => run(accountLinkStart)}
+        >
           <UserPlus />
           Add account
         </Button>
@@ -262,7 +257,9 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
                 <Badge tone="neutral">Signed out</Badge>
               ) : undefined
             }
-            description={[secondary, a.server?.mode === 'local' ? 'Local server' : null].filter(Boolean).join(' · ') || undefined}
+            description={
+              [secondary, a.server?.mode === 'local' ? 'Local server' : null].filter(Boolean).join(' · ') || undefined
+            }
           >
             {!a.active && (
               <Button size="sm" disabled={disabled || !a.available} onClick={() => run(() => accountSwitch(a.key))}>
@@ -389,7 +386,9 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
       <SettingsSection title="Kimochi account">
         <SettingsRow
           label={accountName(user)}
-          badge={plan ? <Badge tone={account.cloud ? 'accent' : 'neutral'}>{PLAN_LABELS[plan] ?? plan}</Badge> : undefined}
+          badge={
+            plan ? <Badge tone={account.cloud ? 'accent' : 'neutral'}>{PLAN_LABELS[plan] ?? plan}</Badge> : undefined
+          }
           description={[user?.displayName && user.email ? user.email : 'Signed in on this computer.', note]
             .filter(Boolean)
             .join(' ')}
@@ -401,8 +400,7 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
         </SettingsRow>
         {user?.status === 'suspended' && (
           <Callout tone="warn">
-            This account is suspended, so Kimochi cloud services are unavailable. See
-            Manage account for details.
+            This account is suspended, so Kimochi cloud services are unavailable. See Manage account for details.
           </Callout>
         )}
         {error && <Callout tone="danger">{error}</Callout>}
@@ -447,7 +445,11 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
             label="Not on this account"
             description="Kimochi Cloud adds cloud OCR, read aloud, translation, AI explanations and Sync. Start a 14-day free trial on the website; Kimochi picks it up within a few minutes, or press Refresh."
           >
-            <Button size="sm" variant="primary" onClick={() => void accountOpenWeb().catch((caught: unknown) => setError(message(caught)))}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => void accountOpenWeb().catch((caught: unknown) => setError(message(caught)))}
+            >
               <ExternalLink />
               See plans
             </Button>
@@ -485,11 +487,10 @@ function ConflictRow({ conflict }: { conflict: SyncConflict }): ReactNode {
   const act = (action: 'restore' | 'dismiss'): void => {
     setBusy(true)
     setError('')
-    resolveConflict(conflict.id, action)
-      .catch((caught: unknown) => {
-        setError(message(caught))
-        setBusy(false)
-      })
+    resolveConflict(conflict.id, action).catch((caught: unknown) => {
+      setError(message(caught))
+      setBusy(false)
+    })
   }
   const when = conflict.detectedAt ? new Date(conflict.detectedAt).toLocaleString() : ''
   return (
@@ -556,7 +557,11 @@ function SyncSection(): ReactNode {
     >
       <SettingsRow label="Sync now" description={<span className="k-num">{syncStateLine(sync, now)}</span>}>
         {syncing && <Spinner label="Syncing" />}
-        <Button size="sm" disabled={syncing} onClick={() => void syncNow().catch((caught: unknown) => setError(message(caught)))}>
+        <Button
+          size="sm"
+          disabled={syncing}
+          onClick={() => void syncNow().catch((caught: unknown) => setError(message(caught)))}
+        >
           <RefreshCw />
           Sync now
         </Button>
@@ -598,7 +603,10 @@ function SyncSection(): ReactNode {
         <ConflictRow key={conflict.id} conflict={conflict} />
       ))}
       <SettingsRow label="Sync log" description="A timestamped record of what Sync sent, received, merged and kept.">
-        <Button size="sm" onClick={() => void panel('sync-log', 'show').catch((caught: unknown) => setError(message(caught)))}>
+        <Button
+          size="sm"
+          onClick={() => void panel('sync-log', 'show').catch((caught: unknown) => setError(message(caught)))}
+        >
           <ScrollText />
           View sync log
         </Button>

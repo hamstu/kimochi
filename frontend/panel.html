@@ -11,31 +11,92 @@
       without a blank frame or a jump. Colours are the slate tokens of kit/tokens.css.
     -->
     <style>
-      html, body { margin: 0; height: 100%; background: #fff; }
-      html.dark, html.dark body { background: #111113; }
-      #kimochi-boot {
-        position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column;
-        background: #fff; pointer-events: none; transition: opacity 140ms ease-out;
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #fff;
       }
-      #kimochi-boot.done { opacity: 0; }
-      #kimochi-boot > i { flex: none; height: 2rem; box-sizing: border-box; background: #f9f9fb; border-bottom: 1px solid #e8e8ec; }
-      #kimochi-boot > b { flex: 1; display: flex; }
-      #kimochi-boot > b > i { flex: none; width: var(--kimochi-boot-side, 0); background: #f9f9fb; border-right: 1px solid #e8e8ec; }
+      html.dark,
+      html.dark body {
+        background: #111113;
+      }
+      #kimochi-boot {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        pointer-events: none;
+        transition: opacity 140ms ease-out;
+      }
+      #kimochi-boot.done {
+        opacity: 0;
+      }
+      #kimochi-boot > i {
+        flex: none;
+        height: 2rem;
+        box-sizing: border-box;
+        background: #f9f9fb;
+        border-bottom: 1px solid #e8e8ec;
+      }
+      #kimochi-boot > b {
+        flex: 1;
+        display: flex;
+      }
+      #kimochi-boot > b > i {
+        flex: none;
+        width: var(--kimochi-boot-side, 0);
+        background: #f9f9fb;
+        border-right: 1px solid #e8e8ec;
+      }
       /* Only if the window is slow to be ready (a long log, a slow disk): a quiet spinner. */
       #kimochi-boot > b > u {
-        flex: 1; display: flex; align-items: center; justify-content: center;
-        opacity: 0; animation: kimochi-boot-in 240ms ease-out 1200ms forwards;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        animation: kimochi-boot-in 240ms ease-out 1200ms forwards;
       }
       #kimochi-boot > b > u::before {
-        content: ""; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
-        border: 2px solid #e0e1e6; border-top-color: #8b8d98; animation: kimochi-boot-spin 800ms linear infinite;
+        content: '';
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        box-sizing: border-box;
+        border: 2px solid #e0e1e6;
+        border-top-color: #8b8d98;
+        animation: kimochi-boot-spin 800ms linear infinite;
       }
-      html.dark #kimochi-boot > b > u::before { border-color: #2e3135; border-top-color: #696e77; }
-      @keyframes kimochi-boot-in { to { opacity: 1; } }
-      @keyframes kimochi-boot-spin { to { transform: rotate(360deg); } }
-      @media (prefers-reduced-motion: reduce) { #kimochi-boot > b > u::before { animation-duration: 2400ms; } }
-      html.dark #kimochi-boot { background: #111113; }
-      html.dark #kimochi-boot > i, html.dark #kimochi-boot > b > i { background: #18191b; border-color: #272a2d; }
+      html.dark #kimochi-boot > b > u::before {
+        border-color: #2e3135;
+        border-top-color: #696e77;
+      }
+      @keyframes kimochi-boot-in {
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes kimochi-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #kimochi-boot > b > u::before {
+          animation-duration: 2400ms;
+        }
+      }
+      html.dark #kimochi-boot {
+        background: #111113;
+      }
+      html.dark #kimochi-boot > i,
+      html.dark #kimochi-boot > b > i {
+        background: #18191b;
+        border-color: #272a2d;
+      }
     </style>
     <script>
       ;(function () {
@@ -60,8 +121,12 @@
           // The whole settings store in one round trip, running while the modules load
           // (`preloadSettings` in entries/panel.tsx).
           if (internals && internals.invoke) window.__kimochiSettings = internals.invoke('settings_all')
-          var label = window.__kimochiPanelLabel ||
-            (internals && internals.metadata && internals.metadata.currentWindow && internals.metadata.currentWindow.label)
+          var label =
+            window.__kimochiPanelLabel ||
+            (internals &&
+              internals.metadata &&
+              internals.metadata.currentWindow &&
+              internals.metadata.currentWindow.label)
           var shape = JSON.parse(localStorage.getItem('kimochi.boot.v1') || '{}')
           if (label === 'log' && shape.sidebar !== false && !shape.mini) {
             root.style.setProperty('--kimochi-boot-side', (shape.sidebarWidth || 272) + 'px')
@@ -73,7 +138,9 @@
     </script>
   </head>
   <body>
-    <div id="kimochi-boot" aria-hidden="true"><i></i><b><i></i><u></u></b></div>
+    <div id="kimochi-boot" aria-hidden="true">
+      <i></i><b><i></i><u></u></b>
+    </div>
     <div id="root"></div>
     <script type="module" src="./entries/panel.tsx"></script>
   </body>

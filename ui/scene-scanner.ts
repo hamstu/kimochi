@@ -61,9 +61,7 @@ export interface SceneUpdate<Frame> {
   generation: number
 }
 
-export type SceneScanEvent =
-  | AutoScanEvent
-  | ({ type: 'scene'; reason: string } & SceneStats)
+export type SceneScanEvent = AutoScanEvent | ({ type: 'scene'; reason: string } & SceneStats)
 
 export interface SceneScanDeps<Frame> extends Omit<AutoScanDeps<Frame>, 'onResult' | 'onEvent' | 'onDiagnostic'> {
   onScene(update: SceneUpdate<Frame>): void | Promise<void>
@@ -291,19 +289,15 @@ export class SceneScanner<Frame = unknown> {
     this.settings = migrateAutoScanSettings(settings)
     this.configureScene()
     this.interval = this.settings.pollInterval
-    this.keeper = new FrameKeeper(
-      deps.retainFrame?.bind(deps),
-      deps.releaseFrame?.bind(deps),
-      (operation, error) => {
-        this.counters.pinFailures++
-        this.emit({
-          type: 'error',
-          stage: `pin-${operation}`,
-          message: typeof error === 'string' ? error : String((error as Error)?.message ?? error),
-          backoffMs: 0
-        })
-      }
-    )
+    this.keeper = new FrameKeeper(deps.retainFrame?.bind(deps), deps.releaseFrame?.bind(deps), (operation, error) => {
+      this.counters.pinFailures++
+      this.emit({
+        type: 'error',
+        stage: `pin-${operation}`,
+        message: typeof error === 'string' ? error : String((error as Error)?.message ?? error),
+        backoffMs: 0
+      })
+    })
   }
 
   // --- inspection ----------------------------------------------------------------------
@@ -357,13 +351,18 @@ export class SceneScanner<Frame = unknown> {
   private emit(event: SceneScanEvent, frame?: Frame): void {
     this.deps.onEvent?.(event)
     try {
-      this.deps.onDiagnostic?.(event, frame, { ...this.counters }, {
-        intervalMs: this.interval,
-        holdMs: Math.max(0, this.requestHold - this.now()),
-        generation: this.deps.generation?.() ?? 0,
-        tick: this.counters.ticks,
-        confirming: this.confirming
-      })
+      this.deps.onDiagnostic?.(
+        event,
+        frame,
+        { ...this.counters },
+        {
+          intervalMs: this.interval,
+          holdMs: Math.max(0, this.requestHold - this.now()),
+          generation: this.deps.generation?.() ?? 0,
+          tick: this.counters.ticks,
+          confirming: this.confirming
+        }
+      )
     } catch {
       /* Diagnostics cannot change recognition behaviour. */
     }
@@ -650,9 +649,7 @@ export class SceneScanner<Frame = unknown> {
 
     if (sample.observerUnsupported) {
       this.unavailable = true
-      this.unavailableReason =
-        sample.observerError ??
-        "Automatic scanning isn't available on this platform yet."
+      this.unavailableReason = sample.observerError ?? "Automatic scanning isn't available on this platform yet."
       this.stopTimer()
       this.emit({ type: 'status', state: 'unavailable', message: this.unavailableReason })
       return 'unavailable'

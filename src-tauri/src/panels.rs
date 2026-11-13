@@ -44,13 +44,7 @@ pub struct PanelSpec {
 /// extension host for Hachidori and 10ten.
 const EXTENSION_HOST_ASSETS: &[&str] = &["/spike/panel-shim.js", extensions::EXT_HOST];
 
-const fn panel(
-    label: &'static str,
-    title: &'static str,
-    url: &'static str,
-    width: f64,
-    height: f64,
-) -> PanelSpec {
+const fn panel(label: &'static str, title: &'static str, url: &'static str, width: f64, height: f64) -> PanelSpec {
     PanelSpec {
         label,
         title,
@@ -71,12 +65,18 @@ const fn panel(
 /// Sizes come from Electron's `panels` table so a first launch looks the same.
 pub static PANELS: &[PanelSpec] = &[
     #[cfg(target_os = "linux")]
-    PanelSpec {pinned:true,min_width:1.,min_height:1.,resizable:false,
-        ..panel("controller-host", "Kimochi · controller-host", "ui/gnome-controller-host.html", 520., 520.)},
+    PanelSpec {
+        pinned: true,
+        min_width: 1.,
+        min_height: 1.,
+        resizable: false,
+        ..panel("controller-host", "Kimochi · controller-host", "ui/gnome-controller-host.html", 520., 520.)
+    },
     #[cfg(target_os = "linux")]
     PanelSpec {
         pinned: true,
-        min_width: 1., min_height: 1.,
+        min_width: 1.,
+        min_height: 1.,
         ..panel("crop-host", "Kimochi · crop-host", "ui/gnome-crop-host.html", 640., 480.)
     },
     // The main window: the Log, with the Controller's rows as a collapsible sidebar and the
@@ -96,17 +96,9 @@ pub static PANELS: &[PanelSpec] = &[
         init_assets: EXTENSION_HOST_ASSETS,
         ..panel("log", "Kimochi", PANEL_PAGE, 1040., 680.)
     },
-    PanelSpec {
-        min_width: 820.,
-        min_height: 560.,
-        ..panel("settings", "Settings", PANEL_PAGE, 1000., 760.)
-    },
+    PanelSpec { min_width: 820., min_height: 560., ..panel("settings", "Settings", PANEL_PAGE, 1000., 760.) },
     // Capture preview, debug info and the capture debugger, one tab each.
-    PanelSpec {
-        min_width: 480.,
-        min_height: 420.,
-        ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
-    },
+    PanelSpec { min_width: 480., min_height: 420., ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.) },
     // Sync's activity as a copyable, timestamped log (Settings → Account → Sync → View sync log).
     PanelSpec {
         centred: true,
@@ -122,13 +114,7 @@ pub static PANELS: &[PanelSpec] = &[
         min_width: 600.,
         min_height: 520.,
         init_assets: EXTENSION_HOST_ASSETS,
-        ..panel(
-            "welcome",
-            "Welcome to Kimochi",
-            "app/welcome.html",
-            720.,
-            620.,
-        )
+        ..panel("welcome", "Welcome to Kimochi", "app/welcome.html", 720., 620.)
     },
     PanelSpec {
         // The active dictionary engine's own distributed options page (Yomitan's
@@ -151,23 +137,11 @@ pub static PANELS: &[PanelSpec] = &[
     // A diagnostic window, built only when it is asked for: kept ready it cost every launch a
     // web process (about 50 MB on Linux), and a hidden WebView2 fixture can leave an opaque
     // composition surface on Windows.
-    panel(
-        "fixture",
-        "Kimochi Japanese Fixture",
-        "ui/fixture.html",
-        640.,
-        400.,
-    ),
+    panel("fixture", "Kimochi Japanese Fixture", "ui/fixture.html", 640., 400.),
     // Japanese with a small gap between each stem and its ending, so cloud OCR returns
     // the halves of a word as separate chunks: the source for checking that a lookup
     // in ungrouped words mode still runs on into the next chunk. Opened from the menu.
-    panel(
-        "fixture-chunks",
-        "Kimochi Split-Word Fixture",
-        "ui/fixture-chunks.html",
-        760.,
-        560.,
-    ),
+    panel("fixture-chunks", "Kimochi Split-Word Fixture", "ui/fixture-chunks.html", 760., 560.),
 ];
 
 /// Panels that are destroyed rather than hidden when they close or are hidden: windows used
@@ -185,11 +159,7 @@ pub fn spec(label: &str) -> Option<&'static PanelSpec> {
 
 fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
     let key = format!("nativeWindowBounds.{}", spec.label);
-    let saved: Option<Rect> = settings
-        .get(&key)
-        .ok()
-        .flatten()
-        .and_then(|v| serde_json::from_value(v).ok());
+    let saved: Option<Rect> = settings.get(&key).ok().flatten().and_then(|v| serde_json::from_value(v).ok());
     let mut rect = match saved {
         Some(rect) => rect,
         None => {
@@ -197,22 +167,12 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
             let area = platform::desktop_cursor()
                 .and_then(|p| work_area_at(&displays, p.x, p.y))
                 .or_else(|| displays.first().map(|d| d.work_area))
-                .unwrap_or(Rect {
-                    x: 0.,
-                    y: 0.,
-                    width: spec.width,
-                    height: spec.height,
-                });
+                .unwrap_or(Rect { x: 0., y: 0., width: spec.width, height: spec.height });
             // The main window's first frame, shown as the welcome guide ends: centred.
             if spec.label == MAIN {
                 return platform::clamp_to_visible(centred(spec.width, spec.height, area));
             }
-            Rect {
-                x: area.x + 260.,
-                y: area.y + 40.,
-                width: spec.width,
-                height: spec.height,
-            }
+            Rect { x: area.x + 260., y: area.y + 40., width: spec.width, height: spec.height }
         }
     };
     // Tauri's minimum constrains later user resizes, but does not repair a smaller
@@ -274,12 +234,8 @@ window.__kimochiPopupHost={};\
 }}catch(e){{}}}})();\n",
         serde_json::to_string(label).unwrap_or_else(|_| "\"panel\"".into()),
         frame_base(label),
-        serde_json::to_string(
-            &bands
-                .into_iter()
-                .collect::<std::collections::BTreeMap<_, _>>()
-        )
-        .unwrap_or_else(|_| "{}".into()),
+        serde_json::to_string(&bands.into_iter().collect::<std::collections::BTreeMap<_, _>>())
+            .unwrap_or_else(|_| "{}".into()),
         FRAME_BAND_SIZE,
         serde_json::to_string(&popup_host_for(label)).unwrap_or_else(|_| "null".into()),
     );
@@ -289,10 +245,7 @@ window.__kimochiPopupHost={};\
 
 /// The first frame id this window may use. Zero for windows outside the bridge.
 pub fn frame_base(label: &str) -> u32 {
-    FRAME_BANDS
-        .iter()
-        .find(|(l, _)| *l == label)
-        .map_or(0, |(_, base)| *base)
+    FRAME_BANDS.iter().find(|(l, _)| *l == label).map_or(0, |(_, base)| *base)
 }
 
 /// Proof that the holder runs in a main-thread event-loop turn of its own (or in `setup`),
@@ -377,10 +330,7 @@ pub async fn set_content_height_async(
     height: f64,
 ) -> Result<(), String> {
     let store = settings.clone();
-    on_main_turn(app, move |app, turn| {
-        set_content_height(turn, app, &store, &label, height)
-    })
-    .await
+    on_main_turn(app, move |app, turn| set_content_height(turn, app, &store, &label, height)).await
 }
 
 /// Runs `job` in a later main-thread turn, from a synchronous command or callback that may
@@ -420,11 +370,7 @@ pub struct ExtensionWindowSpec {
 
 pub fn extension_window_spec(engine: &str) -> ExtensionWindowSpec {
     let label = extensions::window_label(engine);
-    ExtensionWindowSpec {
-        prelude: label_prelude(&label, engine),
-        url: extensions::background_url(engine),
-        label,
-    }
+    ExtensionWindowSpec { prelude: label_prelude(&label, engine), url: extensions::background_url(engine), label }
 }
 
 /// What [`extension_window`] did.
@@ -476,23 +422,14 @@ pub fn extension_window(
         if !reload {
             return Ok(ExtensionWindowAction::Kept);
         }
-        window
-            .eval("location.reload()")
-            .map_err(|e| format!("native: {e}"))?;
+        window.eval("location.reload()").map_err(|e| format!("native: {e}"))?;
         return Ok(ExtensionWindowAction::Reloaded);
     }
-    let url: tauri::Url = spec
-        .url
-        .parse()
-        .map_err(|e| format!("native: {} is not a URL: {e}", spec.url))?;
+    let url: tauri::Url = spec.url.parse().map_err(|e| format!("native: {} is not a URL: {e}", spec.url))?;
     let allowed = engine.to_string();
     // On the loopback origin (Hachidori, macOS and Linux) the page is an ordinary HTTP page.
     let loopback = crate::loopback::origin(engine).is_some();
-    let webview_url = if loopback {
-        tauri::WebviewUrl::External(url)
-    } else {
-        tauri::WebviewUrl::CustomProtocol(url)
-    };
+    let webview_url = if loopback { tauri::WebviewUrl::External(url) } else { tauri::WebviewUrl::CustomProtocol(url) };
     let mut builder = tauri::WebviewWindowBuilder::new(app, &spec.label, webview_url)
         .title(format!("Kimochi {engine} background"))
         .visible(false)
@@ -595,23 +532,22 @@ fn ensure(
     // WKWebsiteDataStore so `tauri://localhost` resolves to the same IndexedDB in
     // every window. A per-window store would silently split the Yomitan dictionary
     // database between the overlay's backend and the settings window.
-    let mut builder =
-        tauri::WebviewWindowBuilder::new(app, spec.label, tauri::WebviewUrl::App(spec.url.into()))
-            .title(spec.title)
-            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
-            .inner_size(spec.width, spec.height)
-            .min_inner_size(spec.min_width, spec.min_height)
-            .decorations(spec.decorated)
-            .background_color(theme_background(None))
-            // Deliver the activating click to the WKWebView too, including the header
-            // mousedown that starts a native window drag.
-            .accept_first_mouse(true)
-            .resizable(spec.resizable)
-            .maximizable(spec.resizable)
-            .always_on_top(pinned)
-            .visible(false)
-            .initialization_script_for_all_frames(platform::platform_prelude())
-            .initialization_script(appearance_prelude(settings));
+    let mut builder = tauri::WebviewWindowBuilder::new(app, spec.label, tauri::WebviewUrl::App(spec.url.into()))
+        .title(spec.title)
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+        .inner_size(spec.width, spec.height)
+        .min_inner_size(spec.min_width, spec.min_height)
+        .decorations(spec.decorated)
+        .background_color(theme_background(None))
+        // Deliver the activating click to the WKWebView too, including the header
+        // mousedown that starts a native window drag.
+        .accept_first_mouse(true)
+        .resizable(spec.resizable)
+        .maximizable(spec.resizable)
+        .always_on_top(pinned)
+        .visible(false)
+        .initialization_script_for_all_frames(platform::platform_prelude())
+        .initialization_script(appearance_prelude(settings));
     #[cfg(target_os = "linux")]
     if matches!(spec.label, "crop-host" | "controller-host") {
         if !crate::platform::gnome::eligible_popup_session() {
@@ -652,8 +588,8 @@ fn ensure(
     // overlay, the pop-ups and the hidden engine windows where they are built. Kimochi's
     // ordinary windows can be screenshotted and recorded, so a reader can show what they see
     // when reporting a problem; text one of them covers is hidden by `cover` instead.
-    let protected = matches!(spec.label, "controller-host" | "crop-host")
-        && crate::settings::exclude_from_capture(settings);
+    let protected =
+        matches!(spec.label, "controller-host" | "crop-host") && crate::settings::exclude_from_capture(settings);
     let _ = window.set_content_protected(protected);
     #[cfg(target_os = "windows")]
     let _ = platform::ignore_key_menu(&window);
@@ -662,12 +598,7 @@ fn ensure(
     Ok(window)
 }
 
-fn attach_events(
-    app: &tauri::AppHandle,
-    settings: &Arc<Settings>,
-    window: &WebviewWindow,
-    spec: &'static PanelSpec,
-) {
+fn attach_events(app: &tauri::AppHandle, settings: &Arc<Settings>, window: &WebviewWindow, spec: &'static PanelSpec) {
     let handle = app.clone();
     let store = settings.clone();
     let owned = window.clone();
@@ -690,16 +621,18 @@ fn attach_events(
             );
             #[cfg(target_os = "linux")]
             platform::gamescope::control_focus(&owned, *focused);
-        },
+        }
         tauri::WindowEvent::Destroyed => {
             crate::gamepad::panel_focus(spec.label, false);
             crate::cover::note_gone(spec.label);
             #[cfg(target_os = "linux")]
             platform::gamescope::control_focus(&owned, false);
-        },
+        }
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
             save_bounds(&store, &owned, spec);
-            if owned.is_minimized().unwrap_or(false) { crate::gamepad::panel_focus(spec.label, false); }
+            if owned.is_minimized().unwrap_or(false) {
+                crate::gamepad::panel_focus(spec.label, false);
+            }
             crate::cover::note(&owned);
         }
         tauri::WindowEvent::CloseRequested { api, .. } if spec.label == MAIN => {
@@ -732,7 +665,9 @@ fn attach_events(
 }
 
 fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpec) {
-    if window.label() == MAIN && crate::compact::active() { return; }
+    if window.label() == MAIN && crate::compact::active() {
+        return;
+    }
     // A maximized window keeps the bounds it had before: they are what restoring brings back.
     if window.is_minimized().unwrap_or(false) || window.is_maximized().unwrap_or(false) {
         return;
@@ -786,9 +721,7 @@ pub fn act_existing(
     action: &str,
     rect: Option<Rect>,
 ) -> Result<Value, String> {
-    let window = app
-        .get_webview_window(label)
-        .ok_or_else(|| format!("native: {label} window is not open yet"))?;
+    let window = app.get_webview_window(label).ok_or_else(|| format!("native: {label} window is not open yet"))?;
     apply(app, settings, &window, true, label, action, rect)
 }
 
@@ -817,7 +750,7 @@ fn apply(
             crate::compact::set(window, action == "mini")?;
             crate::tray::sync_mini(app);
         }
-        "pin" | "unpin" if label == MAIN && crate::compact::active() => {},
+        "pin" | "unpin" if label == MAIN && crate::compact::active() => {}
         #[cfg(target_os = "linux")]
         "hide" if platform::gamescope::handles(window) => platform::gamescope::hide(window)?,
         #[cfg(target_os = "linux")]
@@ -833,7 +766,7 @@ fn apply(
         "show_inactive" => window.show().map_err(native_err)?,
         "hide" => window.hide().map_err(native_err)?,
         #[cfg(target_os = "linux")]
-        "drag" if platform::gamescope::handles(window) => {},
+        "drag" if platform::gamescope::handles(window) => {}
         "drag" => window.start_dragging().map_err(native_err)?,
         "place" => {
             let rect = rect.ok_or("invalid: place requires bounds")?;
@@ -850,9 +783,9 @@ fn apply(
         // The title bar's maximize button: maximized, or back to the size it had. Not in Gaming
         // Mode (its windows fill the screen) nor for Mini mode or the fixed-size panels.
         #[cfg(target_os = "linux")]
-        "maximize" if platform::gamescope::handles(window) => {},
-        "maximize" if label == MAIN && crate::compact::active() => {},
-        "maximize" if !window.is_resizable().unwrap_or(false) => {},
+        "maximize" if platform::gamescope::handles(window) => {}
+        "maximize" if label == MAIN && crate::compact::active() => {}
+        "maximize" if !window.is_resizable().unwrap_or(false) => {}
         "maximize" => {
             let was = window.is_maximized().map_err(native_err)?;
             if was {
@@ -876,17 +809,26 @@ fn apply(
             #[cfg(not(target_os = "linux"))]
             let gnome = false;
             #[cfg(target_os = "linux")]
-            if gnome { platform::gnome::pin(window, pinned)?; }
-            if !gnome { window.set_always_on_top(pinned).map_err(native_err)?; }
+            if gnome {
+                platform::gnome::pin(window, pinned)?;
+            }
+            if !gnome {
+                window.set_always_on_top(pinned).map_err(native_err)?;
+            }
             settings.set(&format!("nativeWindowPinned.{label}"), json!(pinned))?;
         }
         "inspect" => {}
         _ => return Err(format!("invalid: unknown window action {action:?}")),
     }
     #[cfg(target_os = "linux")]
-    if platform::gnome::panel_pins() && matches!(action, "show" | "show_inactive" | "restore")
-        && platform::gnome::pin_supported(label) {
-        platform::gnome::pin(window, label == MAIN && crate::compact::active() || pinned_default(settings, spec(label).unwrap()))?;
+    if platform::gnome::panel_pins()
+        && matches!(action, "show" | "show_inactive" | "restore")
+        && platform::gnome::pin_supported(label)
+    {
+        platform::gnome::pin(
+            window,
+            label == MAIN && crate::compact::active() || pinned_default(settings, spec(label).unwrap()),
+        )?;
     }
     if matches!(action, "hide" | "minimize") {
         crate::gamepad::panel_focus(label, false);
@@ -895,7 +837,9 @@ fn apply(
         crate::cover::note(window);
     }
     let mut state = info(window)?;
-    if label == MAIN { state["mini"] = json!(crate::compact::active()); }
+    if label == MAIN {
+        state["mini"] = json!(crate::compact::active());
+    }
     #[cfg(target_os = "linux")]
     if platform::gamescope::handles(window) {
         state["visible"] = json!(platform::gamescope::is_visible(window));
@@ -976,11 +920,7 @@ fn work_area_at(displays: &[platform::DisplayInfo], x: f64, y: f64) -> Option<Re
     };
     displays
         .iter()
-        .min_by(|a, b| {
-            distance(&a.bounds)
-                .partial_cmp(&distance(&b.bounds))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
+        .min_by(|a, b| distance(&a.bounds).partial_cmp(&distance(&b.bounds)).unwrap_or(std::cmp::Ordering::Equal))
         .map(|d| d.work_area)
 }
 
@@ -1009,11 +949,8 @@ fn set_content_height(
     }
     let window = ensure(turn, app, settings, label)?;
     let current = platform::desktop_bounds(&window)?;
-    let next = platform::clamp_to_visible(Rect {
-        width: spec.width,
-        height: height.max(spec.min_height).ceil(),
-        ..current
-    });
+    let next =
+        platform::clamp_to_visible(Rect { width: spec.width, height: height.max(spec.min_height).ceil(), ..current });
     if (next.width - current.width).abs() > 0.5
         || (next.height - current.height).abs() > 0.5
         || (next.y - current.y).abs() > 0.5
@@ -1073,21 +1010,12 @@ mod tests {
         spec(label).is_none() && !FRAME_BANDS.iter().any(|(l, _)| *l == label)
     }
 
-    const AREA: Rect = Rect {
-        x: 0.,
-        y: 25.,
-        width: 1440.,
-        height: 875.,
-    };
+    const AREA: Rect = Rect { x: 0., y: 25., width: 1440., height: 875. };
     #[test]
     fn a_large_panel_centres_on_its_display_and_fits_small_displays() {
         let r = centred(520., 560., AREA);
         assert_eq!((r.x, r.y), (460., 183.));
-        let tiny = Rect {
-            width: 400.,
-            height: 300.,
-            ..AREA
-        };
+        let tiny = Rect { width: 400., height: 300., ..AREA };
         let r = centred(520., 560., tiny);
         assert_eq!((r.x, r.y, r.width, r.height), (0., 25., 400., 300.));
     }
@@ -1143,19 +1071,13 @@ mod tests {
 
         let main = spec(MAIN).unwrap();
         assert!(main.eager, "the main window opens at launch");
-        assert!(
-            !spec("diagnostics").unwrap().eager,
-            "Diagnostics opens only on demand"
-        );
+        assert!(!spec("diagnostics").unwrap().eager, "Diagnostics opens only on demand");
     }
 
     #[test]
     fn retired_windows_are_gone() {
         for label in ["controller", "notebook", "capture", "debug", "stream", "tray-popover"] {
-            assert!(
-                spec(label).is_none(),
-                "{label} should be part of another window"
-            );
+            assert!(spec(label).is_none(), "{label} should be part of another window");
         }
     }
 
@@ -1185,19 +1107,11 @@ mod tests {
     #[test]
     fn panels_draw_their_own_frame_and_only_extension_hosts_get_a_shim() {
         for spec in PANELS {
-            assert!(
-                !spec.decorated,
-                "{} should use Kimochi's own chrome",
-                spec.label
-            );
+            assert!(!spec.decorated, "{} should use Kimochi's own chrome", spec.label);
             // Extension settings and app-owned dictionary clients share the one backend,
             // through the Yomitan relay shim or the generic host, whichever engine is on.
             let hosts = matches!(spec.label, "dictionary" | "log" | "welcome");
-            let expected: &[&str] = if hosts {
-                &["/spike/panel-shim.js", "/spike/ext-host.js"]
-            } else {
-                &[]
-            };
+            let expected: &[&str] = if hosts { &["/spike/panel-shim.js", "/spike/ext-host.js"] } else { &[] };
             assert_eq!(spec.init_assets, expected, "{}", spec.label);
         }
         assert!(spec("yomitan").is_none(), "the yomitan panel is now `dictionary`");
@@ -1221,9 +1135,7 @@ mod tests {
         assert!(log.contains("window.__kimochiPanelLabel=\"log\";"));
         assert!(log.contains("window.__kimochiFrameBase=1000;"));
         assert!(log.contains("window.__kimochiPopupHost=\"popup-host\";"));
-        assert!(log.contains(
-            "window.__kimochiFrameBands={\"dictionary\":2000,\"log\":1000,\"popup-host\":3000};"
-        ));
+        assert!(log.contains("window.__kimochiFrameBands={\"dictionary\":2000,\"log\":1000,\"popup-host\":3000};"));
         assert!(log.contains("var e=\"hachidori\";"));
         assert!(log.contains("window.__kimochiExtensionOrigins=o;"));
         let overlay = label_prelude("overlay", "yomitan");

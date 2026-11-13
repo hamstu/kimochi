@@ -84,7 +84,9 @@ export function cropToOutput(crop, screen, output) {
   if (!region || !area) return null
   const local = { x: region.x - output.x, y: region.y - output.y, width: region.width, height: region.height }
   const cut = intersect(local, area)
-  return cut && { x: Math.round(cut.x), y: Math.round(cut.y), width: Math.round(cut.width), height: Math.round(cut.height) }
+  return (
+    cut && { x: Math.round(cut.x), y: Math.round(cut.y), width: Math.round(cut.width), height: Math.round(cut.height) }
+  )
 }
 
 /** A box drawn on `output` (its points) as a crop of the screen's frame (`frame` pixels). */

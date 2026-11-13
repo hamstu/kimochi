@@ -4,16 +4,14 @@ use super::{process_image_path, rules, window_pid};
 use windows::core::HSTRING;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HGDIOBJ,
+    CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
+    DIB_RGB_COLORS, HBITMAP, HGDIOBJ,
 };
 use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
-use windows::Win32::UI::Shell::{
-    SHDefExtractIconW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
-};
+use windows::Win32::UI::Shell::{SHDefExtractIconW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DestroyIcon, GetClassLongPtrW, GetIconInfo, SendMessageTimeoutW, GCLP_HICON, HICON, ICONINFO,
-    ICON_BIG, SMTO_ABORTIFHUNG, SMTO_BLOCK, WM_GETICON,
+    DestroyIcon, GetClassLongPtrW, GetIconInfo, SendMessageTimeoutW, GCLP_HICON, HICON, ICONINFO, ICON_BIG,
+    SMTO_ABORTIFHUNG, SMTO_BLOCK, WM_GETICON,
 };
 
 /// PNG for an application's icon, as close to `target` pixels as the sources allow.
@@ -39,16 +37,8 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
     let path = process_image_path(pid);
     // Icons from WM_GETICON / the class are shared with their owner: never destroyed.
     let sources: [&dyn Fn() -> Option<Rgba>; 4] = [
-        &|| {
-            window
-                .and_then(window_icon)
-                .and_then(|i| unsafe { icon_rgba(i) })
-        },
-        &|| {
-            window
-                .and_then(class_icon)
-                .and_then(|i| unsafe { icon_rgba(i) })
-        },
+        &|| window.and_then(window_icon).and_then(|i| unsafe { icon_rgba(i) }),
+        &|| window.and_then(class_icon).and_then(|i| unsafe { icon_rgba(i) }),
         &|| path.as_deref().and_then(|p| extracted_icon(p, target)),
         &|| path.as_deref().and_then(shell_icon),
     ];
@@ -77,10 +67,7 @@ fn pid_for_name(name: &str) -> Option<u32> {
         .into_iter()
         .map(window_pid)
         .filter(|pid| *pid != 0 && seen.insert(*pid))
-        .find(|pid| {
-            process_image_path(*pid)
-                .is_some_and(|path| rules::image_stem(&path).eq_ignore_ascii_case(wanted))
-        })
+        .find(|pid| process_image_path(*pid).is_some_and(|path| rules::image_stem(&path).eq_ignore_ascii_case(wanted)))
 }
 
 fn window_icon(hwnd: HWND) -> Option<HICON> {
@@ -106,16 +93,7 @@ fn class_icon(hwnd: HWND) -> Option<HICON> {
 
 fn extracted_icon(path: &str, size: u32) -> Option<Rgba> {
     let mut icon = HICON::default();
-    let hr = unsafe {
-        SHDefExtractIconW(
-            &HSTRING::from(path),
-            0,
-            0,
-            Some(&mut icon),
-            None,
-            size & 0xFFFF,
-        )
-    };
+    let hr = unsafe { SHDefExtractIconW(&HSTRING::from(path), 0, 0, Some(&mut icon), None, size & 0xFFFF) };
     if hr.is_err() || icon.is_invalid() {
         return None;
     }
@@ -216,9 +194,7 @@ unsafe fn icon_rgba(icon: HICON) -> Option<Rgba> {
         let mut pixels = unsafe { dib_bgra(dc, color, width, height) };
         if let Some(px) = pixels.as_mut() {
             if px.chunks_exact(4).all(|p| p[3] == 0) {
-                let alpha = (!mask.is_invalid())
-                    .then(|| unsafe { dib_bgra(dc, mask, width, height) })
-                    .flatten();
+                let alpha = (!mask.is_invalid()).then(|| unsafe { dib_bgra(dc, mask, width, height) }).flatten();
                 for (i, p) in px.chunks_exact_mut(4).enumerate() {
                     p[3] = match &alpha {
                         Some(m) if m[i * 4] != 0 => 0, // AND mask white: transparent
@@ -231,11 +207,7 @@ unsafe fn icon_rgba(icon: HICON) -> Option<Rgba> {
             }
         }
         let _ = unsafe { DeleteDC(dc) };
-        pixels.map(|pixels| Rgba {
-            width: width as u32,
-            height: height as u32,
-            pixels,
-        })
+        pixels.map(|pixels| Rgba { width: width as u32, height: height as u32, pixels })
     })();
     unsafe {
         if !color.is_invalid() {

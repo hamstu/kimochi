@@ -102,9 +102,7 @@ extern "C" fn file_content(requested: *const c_char, size: u32, buffer: *mut c_c
         return;
     }
     let out = unsafe { std::slice::from_raw_parts_mut(buffer.cast::<u8>(), size as usize) };
-    let read = model_path(requested)
-        .and_then(|path| File::open(path).ok())
-        .map(|mut file| file.read_exact(out));
+    let read = model_path(requested).and_then(|path| File::open(path).ok()).map(|mut file| file.read_exact(out));
     if !matches!(read, Some(Ok(()))) {
         out.fill(0);
     }
@@ -131,9 +129,7 @@ fn protocol_output() -> io::Result<File> {
     #[cfg(windows)]
     unsafe {
         use std::os::windows::io::FromRawHandle;
-        use windows_sys::Win32::System::Console::{
-            GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
-        };
+        use windows_sys::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
         let out = GetStdHandle(STD_OUTPUT_HANDLE);
         if out.is_null() || SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_ERROR_HANDLE)) == 0 {
             return Err(io::Error::last_os_error());
@@ -161,8 +157,7 @@ impl Engine {
     fn load(dir: &Path) -> Result<Self, String> {
         let name = kimochi_screenai::locate::library_name(std::env::consts::OS);
         let path = dir.join(name);
-        let library = unsafe { Library::new(&path) }
-            .map_err(|e| format!("could not load {}: {e}", path.display()))?;
+        let library = unsafe { Library::new(&path) }.map_err(|e| format!("could not load {}: {e}", path.display()))?;
         let version: GetVersion = symbol(&library, "GetLibraryVersion")?;
         let set_files: SetFileContentFunctions = symbol(&library, "SetFileContentFunctions")?;
         let init: InitOcr = symbol(&library, "InitOCRUsingCallback")?;
@@ -180,10 +175,7 @@ impl Engine {
             }
             set_files(file_size, file_content);
             if !init() {
-                return Err(format!(
-                    "Screen AI {major}.{minor} could not load its models from {}",
-                    dir.display()
-                ));
+                return Err(format!("Screen AI {major}.{minor} could not load its models from {}", dir.display()));
             }
             light(false);
         }
@@ -249,10 +241,8 @@ impl Engine {
 }
 
 fn run() -> Result<(), String> {
-    let dir = std::env::args_os()
-        .nth(1)
-        .map(PathBuf::from)
-        .ok_or("usage: kimochi-screenai-worker <component directory>")?;
+    let dir =
+        std::env::args_os().nth(1).map(PathBuf::from).ok_or("usage: kimochi-screenai-worker <component directory>")?;
     let mut out = protocol_output().map_err(|e| format!("could not set up the pipe: {e}"))?;
     let _ = ROOT.set(dir.clone());
     let mut engine = match Engine::load(&dir) {
@@ -262,8 +252,7 @@ fn run() -> Result<(), String> {
             return Err(message);
         }
     };
-    wire::write_reply(&mut out, wire::READY, &wire::ready_payload(&engine.ready))
-        .map_err(|e| e.to_string())?;
+    wire::write_reply(&mut out, wire::READY, &wire::ready_payload(&engine.ready)).map_err(|e| e.to_string())?;
     let mut input = BufReader::with_capacity(1 << 20, io::stdin().lock());
     let mut pixels = Vec::new();
     while let Some(request) = Request::read(&mut input).map_err(|e| e.to_string())? {

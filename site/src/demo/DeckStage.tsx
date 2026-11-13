@@ -16,7 +16,14 @@ function Controls({ side, frame }: { side: 'left' | 'right'; frame: Frame }) {
           {/* D-pad */}
           <g transform="translate(50 62)">
             <rect className={`kd-pad-part ${body} ${down(frame, 'up')}`} x="-9" y="-30" width="18" height="24" rx="3" />
-            <rect className={`kd-pad-part ${body} ${down(frame, 'right')}`} x="6" y="-9" width="24" height="18" rx="3" />
+            <rect
+              className={`kd-pad-part ${body} ${down(frame, 'right')}`}
+              x="6"
+              y="-9"
+              width="24"
+              height="18"
+              rx="3"
+            />
             <rect className={`kd-pad-part ${body}`} x="-9" y="6" width="18" height="24" rx="3" />
             <rect className={`kd-pad-part ${body}`} x="-30" y="-9" width="24" height="18" rx="3" />
           </g>
@@ -37,7 +44,10 @@ function Controls({ side, frame }: { side: 'left' | 'right'; frame: Frame }) {
               ] as const
             ).map(([label, x, y]) => (
               <g key={label} transform={`translate(${x} ${y})`}>
-                <circle r="11" className={`kd-pad-part ${body} ${label === 'A' || label === 'B' ? down(frame, label) : ''}`} />
+                <circle
+                  r="11"
+                  className={`kd-pad-part ${body} ${label === 'A' || label === 'B' ? down(frame, label) : ''}`}
+                />
                 <text className="fill-[var(--kd-deck-ink)]">{label}</text>
               </g>
             ))}
@@ -72,7 +82,9 @@ export function DeckHud({ frame }: { frame: Frame }) {
         {keys.map((b, i) => (
           <span key={b} className="kd-echo-key">
             {i > 0 && <span className="kd-echo-plus">+</span>}
-            <kbd className={`cm-glyph ${b === 'A' ? 'cm-confirm' : ''} ${frame.pressed.includes(b) ? 'kd-down' : ''}`}>{GLYPH[b]}</kbd>
+            <kbd className={`cm-glyph ${b === 'A' ? 'cm-confirm' : ''} ${frame.pressed.includes(b) ? 'kd-down' : ''}`}>
+              {GLYPH[b]}
+            </kbd>
           </span>
         ))}
         {frame.hint && <span>{frame.hint}</span>}

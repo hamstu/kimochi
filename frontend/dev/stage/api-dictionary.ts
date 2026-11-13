@@ -79,7 +79,10 @@ const ENTRIES: Record<string, Fields[]> = {
     {
       expression: '良い',
       reading: 'よい',
-      glossary: gloss('<i>(adj-i)</i> good; excellent; fine; nice; pleasant; agreeable', '<i>(adj-i)</i> sufficient; enough; ready'),
+      glossary: gloss(
+        '<i>(adj-i)</i> good; excellent; fine; nice; pleasant; agreeable',
+        '<i>(adj-i)</i> sufficient; enough; ready'
+      ),
       dictionary: 'JMdict (English)',
       'part-of-speech': 'adj-i',
       tags: 'P, ichi1',
@@ -140,7 +143,11 @@ const ENTRIES: Record<string, Fields[]> = {
     {
       expression: 'する',
       reading: 'する',
-      glossary: gloss('<i>(vs-i)</i> to do; to carry out; to perform', '<i>(vs-i)</i> to cause to become; to make (into)', '<i>(vs-i)</i> to serve as; to act as'),
+      glossary: gloss(
+        '<i>(vs-i)</i> to do; to carry out; to perform',
+        '<i>(vs-i)</i> to cause to become; to make (into)',
+        '<i>(vs-i)</i> to serve as; to act as'
+      ),
       dictionary: 'JMdict (English)',
       'part-of-speech': 'vs-i',
       tags: 'P, spec1',
@@ -164,7 +171,10 @@ const ENTRIES: Record<string, Fields[]> = {
     {
       expression: 'に',
       reading: 'に',
-      glossary: gloss('<i>(prt)</i> at (place, time); in; on; during', '<i>(prt)</i> to (direction, state); toward; into'),
+      glossary: gloss(
+        '<i>(prt)</i> at (place, time); in; on; during',
+        '<i>(prt)</i> to (direction, state); toward; into'
+      ),
       dictionary: 'JMdict (English)',
       'part-of-speech': 'prt',
       tags: 'P',
@@ -205,7 +215,7 @@ export function apiTokenize(script: StageScript, text: string): unknown {
   const words = Object.keys(known(script)).sort((a, b) => b.length - a.length)
   const content: { text: string; headwords?: unknown[] }[][] = []
   let gap = ''
-  for (let at = 0; at < text.length; ) {
+  for (let at = 0; at < text.length;) {
     const word = words.find((candidate) => text.startsWith(candidate, at))
     if (!word) {
       gap += text[at++]
@@ -221,7 +231,10 @@ export function apiTokenize(script: StageScript, text: string): unknown {
 }
 
 /** `/ankiFields` for a term: its entries, longest match first. */
-export function apiEntries(script: StageScript, term: string): { entries: Fields[]; audioMedia: unknown[]; dictionaryMedia: unknown[] } {
+export function apiEntries(
+  script: StageScript,
+  term: string
+): { entries: Fields[]; audioMedia: unknown[]; dictionaryMedia: unknown[] } {
   const words = known(script)
   const match = Object.keys(words)
     .filter((word) => term.startsWith(word))

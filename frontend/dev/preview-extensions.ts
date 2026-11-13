@@ -21,9 +21,21 @@ const ENGINES: Record<
   ExtensionEngine,
   { name: string; version: string; previous: string; total: number; file: string }
 > = {
-  yomitan: { name: 'Yomitan', version: '26.10.22.0', previous: '26.8.24.0', total: 15_412_388, file: 'yomitan-chrome.zip' },
+  yomitan: {
+    name: 'Yomitan',
+    version: '26.10.22.0',
+    previous: '26.8.24.0',
+    total: 15_412_388,
+    file: 'yomitan-chrome.zip'
+  },
   hachidori: { name: 'Hachidori', version: '0.3.0', previous: '0.2.1', total: 5_238_012, file: 'hachidori-chrome.zip' },
-  tenten: { name: '10ten Japanese Reader', version: '1.28.0', previous: '1.27.2', total: 18_022_441, file: '10ten-ja-reader-chrome.zip' }
+  tenten: {
+    name: '10ten Japanese Reader',
+    version: '1.28.0',
+    previous: '1.27.2',
+    total: 18_022_441,
+    file: '10ten-ja-reader-chrome.zip'
+  }
 }
 
 function status(engine: ExtensionEngine, patch: Partial<ExtensionStatus>): ExtensionStatus {
@@ -75,7 +87,10 @@ const states = new Map<ExtensionEngine, ExtensionStatus>(
     const { total, file } = ENGINES[engine]
     const part = Math.round(total * 0.38)
     if (seeded === 'updating')
-      return [engine, updating(engine, { state: 'downloading', file, overallReceived: part, receivedBytes: part, totalBytes: total })]
+      return [
+        engine,
+        updating(engine, { state: 'downloading', file, overallReceived: part, receivedBytes: part, totalBytes: total })
+      ]
     if (seeded === 'update-failed')
       return [
         engine,
@@ -126,7 +141,15 @@ function startUpdate(engine: ExtensionEngine): ExtensionStatus {
   const { total, file } = ENGINES[engine]
   let received = current.update.overallReceived
   const tick = (): ExtensionStatus =>
-    publish(updating(engine, { state: 'downloading', file, receivedBytes: received, totalBytes: total, overallReceived: received }))
+    publish(
+      updating(engine, {
+        state: 'downloading',
+        file,
+        receivedBytes: received,
+        totalBytes: total,
+        overallReceived: received
+      })
+    )
   timers.set(
     engine,
     setInterval(() => {
@@ -151,7 +174,13 @@ function start(engine: ExtensionEngine): ExtensionStatus {
   let received = current.overallReceived
   const tick = (): ExtensionStatus =>
     publish(
-      status(engine, { state: 'downloading', file, receivedBytes: received, totalBytes: total, overallReceived: received })
+      status(engine, {
+        state: 'downloading',
+        file,
+        receivedBytes: received,
+        totalBytes: total,
+        overallReceived: received
+      })
     )
   timers.set(
     engine,

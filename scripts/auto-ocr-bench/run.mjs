@@ -101,7 +101,11 @@ function processCpu() {
   if (win) {
     const ps = spawnSync(
       'powershell',
-      ['-NoProfile', '-Command', 'Get-Process | Where-Object { $_.CPU -ne $null } | ForEach-Object { "{0}`t{1}`t{2}" -f $_.Id,$_.CPU,$_.ProcessName }'],
+      [
+        '-NoProfile',
+        '-Command',
+        'Get-Process | Where-Object { $_.CPU -ne $null } | ForEach-Object { "{0}`t{1}`t{2}" -f $_.Id,$_.CPU,$_.ProcessName }'
+      ],
       { encoding: 'utf8' }
     ).stdout
     for (const line of ps.split(/\r?\n/)) {
@@ -279,7 +283,9 @@ for (let rep = 0; rep < (plan.repeat ?? 1); rep++)
       const trace = traceSince(traceFile).filter((r) => r.at >= startedAt && r.at <= endedAt)
       const passes = trace.filter((r) => r.kind === 'first-pass')
       const looks = passes.map((r) => r.observerMs).filter((v) => typeof v === 'number' && v > 0)
-      const requests = trace.filter((r) => r.kind === 'decision' && r.event?.type === 'request' && r.event.queued === false)
+      const requests = trace.filter(
+        (r) => r.kind === 'decision' && r.event?.type === 'request' && r.event.queued === false
+      )
       const wall = (endedAt - startedAt) / 1000
       const procCpu = cpuDelta(proc0, proc1)
       const appCpuS = Object.values(procCpu).reduce((a, b) => a + b, 0)
@@ -289,13 +295,18 @@ for (let rep = 0; rep < (plan.repeat ?? 1); rep++)
         // display asleep), which no scanner can be blamed for. Flagged so a run can be discarded.
         perLine[idx].frozen = !passes.some((r) => r.at >= t.shownAt && r.at < until && r.pixelsChanged === true)
       })
-      const results_ = trace.filter((r) => r.kind === 'decision' && r.event?.type === 'result' && (r.event.chars ?? 0) > 0)
+      const results_ = trace.filter(
+        (r) => r.kind === 'decision' && r.event?.type === 'result' && (r.event.chars ?? 0) > 0
+      )
       lines.forEach((t, idx) => {
         const until = lines[idx + 1]?.shownAt ?? endedAt
         const hit = results_.find((r) => r.at >= t.shownAt && r.at < until) // may precede completeAt: read mid fade
         perLine[idx].overlayLatency = hit ? hit.at - t.completeAt : null
       })
-      writeFileSync(path.join(outDir, `trace-${run}.json`), JSON.stringify({ truth: truth.filter((r) => r.run === run), events, trace }))
+      writeFileSync(
+        path.join(outDir, `trace-${run}.json`),
+        JSON.stringify({ truth: truth.filter((r) => r.run === run), events, trace })
+      )
       const lat = perLine.map((l) => l.logLatency).filter((v) => v !== null)
       const result = {
         run,
@@ -308,12 +319,23 @@ for (let rep = 0; rep < (plan.repeat ?? 1); rep++)
         wallS: Math.round(wall * 10) / 10,
         lines: lines.length,
         published: lat.length,
-        latency: { p50: pct(lat, 0.5), p90: pct(lat, 0.9), max: lat.length ? Math.max(...lat) : null, mean: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null },
-        overlayLatency: (() => { const o = perLine.map((l) => l.overlayLatency).filter((v) => v !== null); return { p50: pct(o, 0.5), p90: pct(o, 0.9), max: o.length ? Math.max(...o) : null } })(),
+        latency: {
+          p50: pct(lat, 0.5),
+          p90: pct(lat, 0.9),
+          max: lat.length ? Math.max(...lat) : null,
+          mean: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null
+        },
+        overlayLatency: (() => {
+          const o = perLine.map((l) => l.overlayLatency).filter((v) => v !== null)
+          return { p50: pct(o, 0.5), p90: pct(o, 0.9), max: o.length ? Math.max(...o) : null }
+        })(),
         // Busy cores, whole machine (includes the game's browser), and the app + OCR helpers alone.
-        systemBusyCores: Math.round(((sys1.busy - sys0.busy) / (sys1.total - sys0.total)) * os.cpus().length * 100) / 100,
+        systemBusyCores:
+          Math.round(((sys1.busy - sys0.busy) / (sys1.total - sys0.total)) * os.cpus().length * 100) / 100,
         appCpuPct: Math.round((appCpuS / wall) * 1000) / 10,
-        appCpuByProcess: Object.fromEntries(Object.entries(procCpu).map(([k, v]) => [k, Math.round((v / wall) * 1000) / 10])),
+        appCpuByProcess: Object.fromEntries(
+          Object.entries(procCpu).map(([k, v]) => [k, Math.round((v / wall) * 1000) / 10])
+        ),
         looks: passes.length,
         looksPerS: Math.round((passes.length / wall) * 10) / 10,
         readsPerS: Math.round((looks.length / wall) * 10) / 10,
@@ -364,7 +386,17 @@ async function openGame(url) {
       : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
   const child = spawn(
     browser,
-    [`--app=${url}`, `--user-data-dir=${profile}`, `--window-size=${size}`, '--window-position=80,80', '--no-first-run', '--no-default-browser-check', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
+    [
+      `--app=${url}`,
+      `--user-data-dir=${profile}`,
+      `--window-size=${size}`,
+      '--window-position=80,80',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows'
+    ],
     { detached: true, stdio: 'ignore' }
   )
   child.unref()

@@ -43,13 +43,9 @@ export function Section({
       <div className={`container-page ${inner}`}>
         {hasHeader && (
           <header className={`mb-10 md:mb-14 ${center ? 'mx-auto text-center' : ''} max-w-3xl`}>
-            {eyebrow && (
-              <p className="mb-3 text-meta uppercase tracking-[0.08em] text-accent-ink">{eyebrow}</p>
-            )}
+            {eyebrow && <p className="mb-3 text-meta uppercase tracking-[0.08em] text-accent-ink">{eyebrow}</p>}
             {heading && <h2 className="text-title text-ink">{heading}</h2>}
-            {lede && (
-              <p className={`mt-4 max-w-[60ch] text-lede text-ink-2 ${center ? 'mx-auto' : ''}`}>{lede}</p>
-            )}
+            {lede && <p className={`mt-4 max-w-[60ch] text-lede text-ink-2 ${center ? 'mx-auto' : ''}`}>{lede}</p>}
           </header>
         )}
         {children}

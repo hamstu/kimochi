@@ -20,9 +20,7 @@
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhFM0I4MzFBMjY2NDJERjQKUldUMExXUW1Hb003am1IRUg5UG5ERWUzenNPZzJuS05rM1hTUkZQNG9GVWlIZDBKSlRFak14ek0K",
-      "endpoints": [
-        "https://github.com/hamstu/kimochi/releases/latest/download/latest.json"
-      ],
+      "endpoints": ["https://github.com/hamstu/kimochi/releases/latest/download/latest.json"],
       "windows": {
         "installMode": "passive"
       }
@@ -54,9 +52,6 @@
       "../LICENSE-OFL.txt": "licenses/LICENSE-OFL.txt",
       "../NOTICE": "licenses/NOTICE"
     },
-    "icon": [
-      "icons/icon.icns",
-      "icons/icon.png"
-    ]
+    "icon": ["icons/icon.icns", "icons/icon.png"]
   }
 }

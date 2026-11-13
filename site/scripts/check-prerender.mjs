@@ -35,10 +35,15 @@ for (const route of [...ROUTES, NOT_FOUND]) {
   if (route.path === '/' && !types.includes('SoftwareApplication')) fail('no SoftwareApplication')
   if (route.path === '/faq' && !types.includes('FAQPage')) fail('no FAQPage')
   const root = html.match(/<div id="root">([\s\S]*)<\/div>\s*<\/body>/)?.[1] ?? ''
-  const text = root.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const text = root
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (route.render === 'full' && !/<h1[\s>]/.test(root)) fail('no h1 in the prerendered content')
   if (route.render === 'full' && text.length < 30) fail('no prerendered content')
-  console.log(`${problems.length ? '' : 'ok'} ${file.padEnd(24)} ${String(text.length).padStart(6)} chars  ${types.join(', ')}`)
+  console.log(
+    `${problems.length ? '' : 'ok'} ${file.padEnd(24)} ${String(text.length).padStart(6)} chars  ${types.join(', ')}`
+  )
 }
 
 // Internal links in the prerendered pages: every path resolves to a route or a file in dist/, and
@@ -57,7 +62,10 @@ for (const route of ROUTES.filter((r) => r.render === 'full')) {
     const path = pathAndQuery.split('?')[0] || route.path
     const target = ROUTES.find((r) => r.path === (path.replace(/\/+$/, '') || '/'))
     if (!target) {
-      const ok = await access(join(dist, path)).then(() => true, () => false)
+      const ok = await access(join(dist, path)).then(
+        () => true,
+        () => false
+      )
       if (!ok) problems.push(`${file}: broken link ${href}`)
       continue
     }

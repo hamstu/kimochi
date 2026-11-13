@@ -67,11 +67,7 @@ impl SyncLog {
         *lines += 1;
         if *lines > CAPACITY + CAPACITY / 4 {
             // Compact: rewrite only what is kept.
-            let body: String = entries
-                .iter()
-                .filter_map(|e| serde_json::to_string(e).ok())
-                .map(|l| l + "\n")
-                .collect();
+            let body: String = entries.iter().filter_map(|e| serde_json::to_string(e).ok()).map(|l| l + "\n").collect();
             let tmp = self.path.with_extension("jsonl.tmp");
             if std::fs::write(&tmp, body).is_ok() && std::fs::rename(&tmp, &self.path).is_ok() {
                 *lines = entries.len();

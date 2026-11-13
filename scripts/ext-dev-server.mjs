@@ -25,7 +25,10 @@ const repo = fileURLToPath(new URL('../', import.meta.url))
  * where the app keeps its engine downloads (`<dir>/extensions/<id>/<version>/`). `npm run dev`
  * and the bundles share `dev.kimochi.app`, so the dev server sees what the app downloaded.
  */
-export function appLocalDataDir(identifier = 'dev.kimochi.app', { platform = process.platform, env = process.env, home = os.homedir() } = {}) {
+export function appLocalDataDir(
+  identifier = 'dev.kimochi.app',
+  { platform = process.platform, env = process.env, home = os.homedir() } = {}
+) {
   if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', identifier)
   if (platform === 'win32') return path.join(env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local'), identifier)
   return path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), identifier)
@@ -46,12 +49,20 @@ export function appLocalDataDir(identifier = 'dev.kimochi.app', { platform = pro
  * Rust's session stickiness (the windows keep their release until a switch reloads them) only
  * differs from this for the moment between an update's install and its switch.
  */
-export async function engineServing(id, { env = process.env, store = path.join(appLocalDataDir(), 'extensions'), extensions = path.join(repo, 'extensions') } = {}) {
+export async function engineServing(
+  id,
+  {
+    env = process.env,
+    store = path.join(appLocalDataDir(), 'extensions'),
+    extensions = path.join(repo, 'extensions')
+  } = {}
+) {
   const json = async (name) => JSON.parse(await readFile(path.join(extensions, `${id}.${name}.json`), 'utf8'))
   const isDir = async (dir) => (await stat(dir).catch(() => null))?.isDirectory() ?? false
   const source = await json('source')
   const pinned = path.join(store, id, source.version)
-  if (await isDir(pinned)) return { dir: pinned, version: source.version, files: await json('sha256'), source: 'downloaded' }
+  if (await isDir(pinned))
+    return { dir: pinned, version: source.version, files: await json('sha256'), source: 'downloaded' }
   const previous = await json('previous').catch((error) => {
     if (error.code === 'ENOENT') return []
     throw error
@@ -116,7 +127,10 @@ function firstTag(html, tag) {
  * doctype, else at the very start. Never before the doctype, which would mean quirks mode.
  */
 export function injectHostScript(html, tag = HOST_SCRIPT_TAG) {
-  const at = firstTag(html, '<head(?=[\\s>/])[^>]*>') ?? firstTag(html, '<html(?=[\\s>/])[^>]*>') ?? firstTag(html, '<!doctype[^>]*>')
+  const at =
+    firstTag(html, '<head(?=[\\s>/])[^>]*>') ??
+    firstTag(html, '<html(?=[\\s>/])[^>]*>') ??
+    firstTag(html, '<!doctype[^>]*>')
   if (!at) return tag + html
   const end = at.index + at[0].length
   return html.slice(0, end) + tag + html.slice(end)
@@ -168,7 +182,8 @@ export function scopeAllows(scope, url) {
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 /** Request headers plugin-http drops (its `is_unsafe_header`) or that make no sense to forward. */
-const UNSAFE_REQUEST = /^(accept-charset|accept-encoding|access-control-request-.*|connection|content-length|cookie|date|dnt|expect|host|origin|referer|set-cookie|te|trailer|transfer-encoding|upgrade|via|proxy-.*|sec-.*|keep-alive)$/i
+const UNSAFE_REQUEST =
+  /^(accept-charset|accept-encoding|access-control-request-.*|connection|content-length|cookie|date|dnt|expect|host|origin|referer|set-cookie|te|trailer|transfer-encoding|upgrade|via|proxy-.*|sec-.*|keep-alive)$/i
 
 /**
  * Connect middleware for `GET|HEAD|POST /__kimochi/proxy?url=<remote>` on the dev server: the
@@ -229,7 +244,13 @@ export function createProxyMiddleware({ scope, fetchImpl = globalThis.fetch, log
     })
     let upstream
     try {
-      upstream = await fetchImpl(url.href, { method: req.method, headers, body, redirect: 'follow', signal: controller.signal })
+      upstream = await fetchImpl(url.href, {
+        method: req.method,
+        headers,
+        body,
+        redirect: 'follow',
+        signal: controller.signal
+      })
     } catch (error) {
       log(`proxy ${url.href}: ${error.message}`)
       return send(502, `error sending request for url (${url.href}): ${error.cause?.message ?? error.message}`)
@@ -358,7 +379,15 @@ export function harnessTagFor(urlPath, query, scriptUrl) {
  *
  * @param {{engine?: string | null, extRoot: string, spikeRoot: string, mime: Record<string, string>, log?: (message: string) => void, middleware?: Array<(req: any, res: any, next: () => void) => unknown>, harnessScript?: string | null}} options
  */
-export function createExtensionServer({ engine = null, extRoot, spikeRoot, mime, log = () => {}, middleware = [], harnessScript = null }) {
+export function createExtensionServer({
+  engine = null,
+  extRoot,
+  spikeRoot,
+  mime,
+  log = () => {},
+  middleware = [],
+  harnessScript = null
+}) {
   const files = createExtensionFiles({ engine, extRoot, spikeRoot, mime, log, harnessScript })
   return http.createServer((req, res) => {
     let index = 0

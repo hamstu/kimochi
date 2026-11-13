@@ -146,7 +146,9 @@ pub fn decide(saved: &Entry, bound: Option<u16>, fingerprint: &str, has_dictiona
     let mut entry = saved.clone();
     if entry.switched {
         return match bound {
-            Some(port) if Some(port) == entry.port => Decision { session: Session::Loopback(port), migrate_to: None, entry, reason: "switched" },
+            Some(port) if Some(port) == entry.port => {
+                Decision { session: Session::Loopback(port), migrate_to: None, entry, reason: "switched" }
+            }
             _ => Decision {
                 session: Session::Unavailable(format!(
                     "Hachidori's local port {} is in use by another program",
@@ -175,7 +177,9 @@ pub fn decide(saved: &Entry, bound: Option<u16>, fingerprint: &str, has_dictiona
             entry.switched = true;
             Decision { session: Session::Loopback(port), migrate_to: None, entry, reason: "copied" }
         }
-        Some(m) if m.status == "unsupported" => Decision { session: Session::Legacy, migrate_to: None, entry, reason: "unsupported" },
+        Some(m) if m.status == "unsupported" => {
+            Decision { session: Session::Legacy, migrate_to: None, entry, reason: "unsupported" }
+        }
         Some(m) if m.status == "failed" && m.attempts >= MAX_ATTEMPTS => {
             Decision { session: Session::Legacy, migrate_to: None, entry, reason: "gave-up" }
         }
@@ -205,10 +209,7 @@ fn dictionary_state(app: &tauri::AppHandle) -> Option<Value> {
 }
 
 fn has_dictionaries(state: Option<&Value>) -> bool {
-    state
-        .and_then(|s| s.get("dictionaries"))
-        .and_then(Value::as_array)
-        .is_some_and(|list| !list.is_empty())
+    state.and_then(|s| s.get("dictionaries")).and_then(Value::as_array).is_some_and(|list| !list.is_empty())
 }
 
 #[derive(Default)]
@@ -361,7 +362,8 @@ pub fn install(app: &tauri::AppHandle) -> Value {
     }
     let bound = bind(&saved);
     let state = dictionary_state(app);
-    let decision = decide(&saved, bound.as_ref().map(|(_, p)| *p), &fingerprint(state.as_ref()), has_dictionaries(state.as_ref()));
+    let decision =
+        decide(&saved, bound.as_ref().map(|(_, p)| *p), &fingerprint(state.as_ref()), has_dictionaries(state.as_ref()));
     if decision.entry != saved {
         save_entry(app, &decision.entry);
     }
@@ -410,11 +412,8 @@ struct Server {
 /// goes on to the import page, and WebView2 sends it as the Referer) and, in a dev build, the dev
 /// server.
 fn allowed_origins(app: &tauri::AppHandle, port: u16) -> Vec<String> {
-    let mut allowed = vec![
-        origin_of(port),
-        crate::platform::app_origin().to_string(),
-        crate::platform::scheme_origin(ENGINE),
-    ];
+    let mut allowed =
+        vec![origin_of(port), crate::platform::app_origin().to_string(), crate::platform::scheme_origin(ENGINE)];
     if cfg!(dev) {
         if let Some(url) = &app.config().build.dev_url {
             allowed.push(url.origin().ascii_serialization());
@@ -436,7 +435,13 @@ fn origin_of_header(value: &str) -> Option<String> {
 /// Who may ask: the `Host` must be this listener (no DNS-rebound name), and a request that
 /// says where it comes from (`Origin`, `Referer`) must come from Kimochi. Returns the origin to
 /// echo in `Access-Control-Allow-Origin`, or why the request is refused.
-pub fn admit(host: Option<&str>, origin: Option<&str>, referer: Option<&str>, port: u16, allowed: &[String]) -> Result<Option<String>, &'static str> {
+pub fn admit(
+    host: Option<&str>,
+    origin: Option<&str>,
+    referer: Option<&str>,
+    port: u16,
+    allowed: &[String],
+) -> Result<Option<String>, &'static str> {
     if host != Some(format!("127.0.0.1:{port}").as_str()) {
         return Err("host");
     }
@@ -488,17 +493,29 @@ async fn handle(
     let refuse = |status: StatusCode| {
         axum::response::Response::builder().status(status).body(axum::body::Body::empty()).unwrap_or_default()
     };
-    let echo = match admit(text(header::HOST).as_deref(), text(header::ORIGIN).as_deref(), text(header::REFERER).as_deref(), server.port, &server.allowed) {
+    let echo = match admit(
+        text(header::HOST).as_deref(),
+        text(header::ORIGIN).as_deref(),
+        text(header::REFERER).as_deref(),
+        server.port,
+        &server.allowed,
+    ) {
         Ok(echo) => echo,
         Err(why) => {
-            report(&server.app, json!({ "check": "hachidori-loopback-refused", "why": why, "path": request.uri().path() }));
+            report(
+                &server.app,
+                json!({ "check": "hachidori-loopback-refused", "why": why, "path": request.uri().path() }),
+            );
             return refuse(StatusCode::FORBIDDEN);
         }
     };
     if request.uri().path() == crate::relay_link::PATH {
         // Hachidori's link to a sharing relay: only from Hachidori's own pages on this origin.
         if echo.as_deref() != Some(origin_of(server.port).as_str()) {
-            report(&server.app, json!({ "check": "hachidori-loopback-refused", "why": "relay-link-origin", "path": crate::relay_link::PATH }));
+            report(
+                &server.app,
+                json!({ "check": "hachidori-loopback-refused", "why": "relay-link-origin", "path": crate::relay_link::PATH }),
+            );
             return refuse(StatusCode::FORBIDDEN);
         }
         let app = server.app.clone();
@@ -528,7 +545,10 @@ async fn handle(
     }
     let path = request.uri().path().to_string();
     let app = server.app.clone();
-    let found = tauri::async_runtime::spawn_blocking(move || crate::extensions::lookup(&app, ENGINE, &path)).await.ok().flatten();
+    let found = tauri::async_runtime::spawn_blocking(move || crate::extensions::lookup(&app, ENGINE, &path))
+        .await
+        .ok()
+        .flatten();
     match found {
         Some((mime, bytes)) => builder
             .header(header::CONTENT_TYPE, mime)
@@ -554,7 +574,8 @@ fn add_capabilities(app: &tauri::AppHandle, port: u16) -> Result<(), String> {
 
 /// The two runtime capabilities, for exactly `http://127.0.0.1:<port>`.
 pub fn runtime_capabilities(port: u16) -> Result<[Value; 2], String> {
-    let base: Value = serde_json::from_str(include_str!("../capabilities/extension-windows.json")).map_err(|e| e.to_string())?;
+    let base: Value =
+        serde_json::from_str(include_str!("../capabilities/extension-windows.json")).map_err(|e| e.to_string())?;
     let mut permissions = base["permissions"].as_array().cloned().unwrap_or_default();
     permissions.push(json!("kimochi-ext:default"));
     let remote = json!({ "urls": [format!("{}/*", origin_of(port))] });
@@ -767,12 +788,24 @@ pub fn ext_migration_get(window: tauri::WebviewWindow, index: u64) -> Result<tau
 /// The import page verified its copy: the totals it read back, and whether its page is
 /// cross-origin isolated (the reason for the move at all).
 #[tauri::command]
-pub fn ext_migration_done(app: tauri::AppHandle, window: tauri::WebviewWindow, records: u64, bytes: u64, isolated: bool) -> Result<(), String> {
+pub fn ext_migration_done(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    records: u64,
+    bytes: u64,
+    isolated: bool,
+) -> Result<(), String> {
     require_copy_window(&window)?;
     let exported = lock().exported.ok_or("invalid: nothing was exported")?;
     let got = Totals { records, bytes };
     if got != exported {
-        finish(&app, Err(format!("the copy does not match: read back {records} records / {bytes} bytes of {} / {}", exported.records, exported.bytes)));
+        finish(
+            &app,
+            Err(format!(
+                "the copy does not match: read back {records} records / {bytes} bytes of {} / {}",
+                exported.records, exported.bytes
+            )),
+        );
         return Ok(());
     }
     finish(&app, Ok((got, isolated)));
@@ -839,7 +872,12 @@ mod tests {
         Entry {
             port: Some(port),
             switched: false,
-            migration: Some(Migration { status: "copied".into(), port, fingerprint: fingerprint.into(), ..Migration::default() }),
+            migration: Some(Migration {
+                status: "copied".into(),
+                port,
+                fingerprint: fingerprint.into(),
+                ..Migration::default()
+            }),
         }
     }
 
@@ -895,13 +933,32 @@ mod tests {
 
     #[test]
     fn only_kimochi_pages_may_load_from_the_loopback_origin() {
-        let allowed = vec!["http://127.0.0.1:27631".to_string(), "tauri://localhost".to_string(), "http://hachidori.localhost".to_string()];
+        let allowed = vec![
+            "http://127.0.0.1:27631".to_string(),
+            "tauri://localhost".to_string(),
+            "http://hachidori.localhost".to_string(),
+        ];
         let host = Some("127.0.0.1:27631");
         assert_eq!(admit(host, None, None, 27631, &allowed), Ok(None));
-        assert_eq!(admit(host, Some("tauri://localhost"), Some("tauri://localhost/ui/overlay.html"), 27631, &allowed), Ok(Some("tauri://localhost".into())));
-        assert_eq!(admit(host, Some("http://127.0.0.1:27631"), None, 27631, &allowed), Ok(Some("http://127.0.0.1:27631".into())));
+        assert_eq!(
+            admit(host, Some("tauri://localhost"), Some("tauri://localhost/ui/overlay.html"), 27631, &allowed),
+            Ok(Some("tauri://localhost".into()))
+        );
+        assert_eq!(
+            admit(host, Some("http://127.0.0.1:27631"), None, 27631, &allowed),
+            Ok(Some("http://127.0.0.1:27631".into()))
+        );
         // The copy's export page (Windows) moving on to the import page.
-        assert_eq!(admit(host, None, Some("http://hachidori.localhost/__kimochi/ext-migrate.html?step=export"), 27631, &allowed), Ok(None));
+        assert_eq!(
+            admit(
+                host,
+                None,
+                Some("http://hachidori.localhost/__kimochi/ext-migrate.html?step=export"),
+                27631,
+                &allowed
+            ),
+            Ok(None)
+        );
         assert_eq!(admit(host, Some("https://evil.example"), None, 27631, &allowed), Err("origin"));
         assert_eq!(admit(host, Some("null"), None, 27631, &allowed), Err("origin"));
         assert_eq!(admit(host, None, Some("https://evil.example/x"), 27631, &allowed), Err("referer"));

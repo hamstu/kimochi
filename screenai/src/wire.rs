@@ -60,11 +60,7 @@ impl Request {
     }
 
     /// Write the header, then each row of `rows` (each exactly `width * 4` bytes).
-    pub fn write<'a>(
-        &self,
-        out: &mut impl Write,
-        rows: impl IntoIterator<Item = &'a [u8]>,
-    ) -> io::Result<()> {
+    pub fn write<'a>(&self, out: &mut impl Write, rows: impl IntoIterator<Item = &'a [u8]>) -> io::Result<()> {
         let mut header = [0u8; 12];
         header[..4].copy_from_slice(&self.width.to_le_bytes());
         header[4..8].copy_from_slice(&self.height.to_le_bytes());
@@ -93,11 +89,7 @@ impl Request {
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(e),
         }
-        Ok(Some(Self {
-            width: u32_le(&header),
-            height: u32_le(&header[4..]),
-            flags: u32_le(&header[8..]),
-        }))
+        Ok(Some(Self { width: u32_le(&header), height: u32_le(&header[4..]), flags: u32_le(&header[8..]) }))
     }
 }
 
@@ -143,10 +135,7 @@ pub fn read_reply(input: &mut impl Read) -> io::Result<Reply> {
         })),
         RESULT => Ok(Reply::Result(payload)),
         ERROR => Ok(Reply::Error(String::from_utf8_lossy(&payload).into_owned())),
-        kind => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("unknown reply kind {kind}"),
-        )),
+        kind => Err(io::Error::new(io::ErrorKind::InvalidData, format!("unknown reply kind {kind}"))),
     }
 }
 

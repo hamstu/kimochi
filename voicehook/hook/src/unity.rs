@@ -77,7 +77,12 @@ const MAX_PCM_SECS: f64 = 30.0;
 
 /// Registers the `mono_add_internal_call` hook. Call before the first `iat::rescan`.
 pub fn register() {
-    iat::register(Hook { dll: "mono", name: "mono_add_internal_call", hook: add_icall as *const () as usize, orig: &ADD_ICALL });
+    iat::register(Hook {
+        dll: "mono",
+        name: "mono_add_internal_call",
+        hook: add_icall as *const () as usize,
+        orig: &ADD_ICALL,
+    });
 }
 
 /// The first time a Mono runtime module is seen: resolve the API we call.
@@ -133,7 +138,9 @@ pub fn on_mono(m: HMODULE, name: &str) {
             // Only when the app asks (for a Unity game, or when its text hooker could not hook
             // this one), and from then on until each setter's assembly has loaded.
             if !text && text_wanted() {
-                text = unsafe { attached(&late, || Ok::<_, String>(text_watch(API.get().unwrap(), &late))) }.unwrap_or(false) || giving_up;
+                text = unsafe { attached(&late, || Ok::<_, String>(text_watch(API.get().unwrap(), &late))) }
+                    .unwrap_or(false)
+                    || giving_up;
             }
             if !reader {
                 match unsafe { attached(&late, || reader_watch(API.get().unwrap())) } {
@@ -183,9 +190,14 @@ unsafe fn reader_watch(a: &Mono) -> Result<usize, String> {
     if m.is_null() {
         return Err("no AudioClip.InvokePCMReaderCallback_Internal".into());
     }
-    let player = windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(crate::util::wide("UnityPlayer.dll").as_ptr());
+    let player =
+        windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(crate::util::wide("UnityPlayer.dll").as_ptr());
     // Before Unity 2017 the player is the game's exe.
-    let player = if player.is_null() { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()) } else { player };
+    let player = if player.is_null() {
+        windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null())
+    } else {
+        player
+    };
     let real = a.runtime_invoke as usize;
     O_INVOKE.store(real, Ordering::SeqCst);
     PCM_METHOD.store(m as usize, Ordering::SeqCst);
@@ -223,7 +235,9 @@ unsafe fn reader_block(clip: P, data: P) {
     let bytes = std::slice::from_raw_parts((a.array_addr_with_size)(data, 4, 0), n * 4).to_vec();
     let key = reader_key(clip as usize);
     if lock(&READER_CLIPS).insert(clip as usize) {
-        let get_i32 = |name: &'static str| -> i32 { unsafe { invoke(a, clip, std::ptr::null_mut(), name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) } };
+        let get_i32 = |name: &'static str| -> i32 {
+            unsafe { invoke(a, clip, std::ptr::null_mut(), name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) }
+        };
         let (channels, freq) = (get_i32("get_channels"), get_i32("get_frequency"));
         let name = invoke(a, clip, std::ptr::null_mut(), "get_name", &mut []).and_then(|s| string(a, s));
         // Grouped by the shape of the clip's name, as CRI cues are (`sln_co_0001`, `lea_co_0002`
@@ -344,7 +358,9 @@ unsafe fn text_watch(a: &Mono, l: &Late) -> bool {
             Ok(Some(at)) => {
                 SETTER_STATE[i].store(1, Ordering::SeqCst);
                 log(&format!("unity: watching {} (breakpoint at {})", setter.label, hex(at)));
-                sink::send(Ev::Note(json!({"ev": "adapter", "adapter": "unity-text", "method": setter.label, "at": hex(at)})));
+                sink::send(Ev::Note(
+                    json!({"ev": "adapter", "adapter": "unity-text", "method": setter.label, "at": hex(at)}),
+                ));
             }
             Err(e) => {
                 SETTER_STATE[i].store(2, Ordering::SeqCst);
@@ -430,9 +446,8 @@ unsafe fn watched_at(at: usize) -> Option<&'static str> {
 /// instructions its jump overwrites, a few bytes in an x86 prologue: a fixed-length match missed
 /// it live (an x86 Unity game), and the breakpoint it copied crashed the game.
 fn copy_of(code: &[u8], base: usize, after: &[u8], entry: usize) -> Option<usize> {
-    (1..=after.len().min(code.len())).find(|&k| {
-        code[..k] == after[..k] && jump_target(&code[k..], base + k) == Some(entry + 1 + k)
-    })
+    (1..=after.len().min(code.len()))
+        .find(|&k| code[..k] == after[..k] && jump_target(&code[k..], base + k) == Some(entry + 1 + k))
 }
 
 /// Where the jump at the start of `code` (at address `at`) goes.
@@ -446,7 +461,9 @@ fn jump_target(code: &[u8], at: usize) -> Option<usize> {
     }
 }
 
-unsafe extern "system" fn on_break(info: *mut windows_sys::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS) -> i32 {
+unsafe extern "system" fn on_break(
+    info: *mut windows_sys::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS,
+) -> i32 {
     const CONTINUE_SEARCH: i32 = 0;
     const CONTINUE_EXECUTION: i32 = -1;
     const BREAKPOINT: i32 = 0x8000_0003_u32 as i32;
@@ -706,7 +723,9 @@ unsafe fn repoint(code: usize, from: usize, to: usize) -> Result<usize, String> 
 
 /// How many of the `want` bytes at `p` are committed, readable memory.
 unsafe fn readable(p: usize, want: usize) -> usize {
-    use windows_sys::Win32::System::Memory::{VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS};
+    use windows_sys::Win32::System::Memory::{
+        VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS,
+    };
     let mut info: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
     if VirtualQuery(p as *const c_void, &mut info, std::mem::size_of::<MEMORY_BASIC_INFORMATION>()) == 0
         || info.State != MEM_COMMIT
@@ -759,7 +778,11 @@ unsafe fn resolve(m: HMODULE) -> Option<Mono> {
         field_get_value: s!(c"mono_field_get_value"),
         image_loaded: s!(c"mono_image_loaded"),
         array_new: s!(c"mono_array_new"),
-        array_length: s!(c"mono_array_length", c"mono_array_length", array_length_field as unsafe extern "C" fn(P) -> usize),
+        array_length: s!(
+            c"mono_array_length",
+            c"mono_array_length",
+            array_length_field as unsafe extern "C" fn(P) -> usize
+        ),
         get_single_class: s!(c"mono_get_single_class"),
         domain_get: s!(c"mono_domain_get"),
         string_to_utf8: s!(c"mono_string_to_utf8"),
@@ -805,7 +828,8 @@ unsafe extern "C" fn t_is_playing(src: P) -> u8 {
 
 /// Our `mono_add_internal_call`: swaps in trampolines for the AudioSource calls we watch.
 unsafe extern "C" fn add_icall(name: *const c_char, method: *const c_void) {
-    let real: unsafe extern "C" fn(*const c_char, *const c_void) = std::mem::transmute(ADD_ICALL.load(Ordering::SeqCst));
+    let real: unsafe extern "C" fn(*const c_char, *const c_void) =
+        std::mem::transmute(ADD_ICALL.load(Ordering::SeqCst));
     let mut use_fn = method;
     guard(|| unsafe {
         let n = CStr::from_ptr(name).to_bytes();
@@ -875,13 +899,15 @@ unsafe fn invoke(a: &Mono, obj: P, class: P, name: &'static str, args: &mut [P])
         return None;
     }
     let mut exc: P = std::ptr::null_mut();
-    let r = (a.runtime_invoke)(m, obj, if args.is_empty() { std::ptr::null_mut() } else { args.as_mut_ptr() }, &mut exc);
+    let r =
+        (a.runtime_invoke)(m, obj, if args.is_empty() { std::ptr::null_mut() } else { args.as_mut_ptr() }, &mut exc);
     exc.is_null().then_some(r)
 }
 
 /// The value inside a boxed value type (after the MonoObject header: vtable, sync).
 unsafe fn unbox<T: Copy>(boxed: P) -> Option<T> {
-    (!boxed.is_null()).then(|| std::ptr::read_unaligned((boxed as *const u8).add(2 * std::mem::size_of::<usize>()) as *const T))
+    (!boxed.is_null())
+        .then(|| std::ptr::read_unaligned((boxed as *const u8).add(2 * std::mem::size_of::<usize>()) as *const T))
 }
 
 unsafe fn string(a: &Mono, s: P) -> Option<String> {
@@ -1001,7 +1027,10 @@ unsafe fn seen(what: &'static str, src: P, clip: P, injected: bool) {
         return;
     }
     let (src_obj, clip_obj) = if injected {
-        (managed(a, src, c"UnityEngine.AudioModule", c"AudioSource"), managed(a, clip, c"UnityEngine.AudioModule", c"AudioClip"))
+        (
+            managed(a, src, c"UnityEngine.AudioModule", c"AudioSource"),
+            managed(a, clip, c"UnityEngine.AudioModule", c"AudioClip"),
+        )
     } else {
         (src, clip)
     };
@@ -1011,7 +1040,11 @@ unsafe fn seen(what: &'static str, src: P, clip: P, injected: bool) {
         invoke(a, src_obj, std::ptr::null_mut(), "get_clip", &mut []).unwrap_or(std::ptr::null_mut())
     };
     if clip_obj.is_null() {
-        sink::send(Ev::Mark { key, what: "unity_play_unknown", info: json!({"method": what, "src_found": !src_obj.is_null()}) });
+        sink::send(Ev::Mark {
+            key,
+            what: "unity_play_unknown",
+            info: json!({"method": what, "src_found": !src_obj.is_null()}),
+        });
         return;
     }
     reader_source(src as usize, Some(clip_obj as usize));
@@ -1025,10 +1058,13 @@ unsafe fn seen(what: &'static str, src: P, clip: P, injected: bool) {
         }
         last.insert(src as usize, (clip_obj as usize, now));
     }
-    let get_i32 = |name: &'static str| -> i32 { unsafe { invoke(a, clip_obj, std::ptr::null_mut(), name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) } };
+    let get_i32 = |name: &'static str| -> i32 {
+        unsafe { invoke(a, clip_obj, std::ptr::null_mut(), name, &mut []).and_then(|b| unbox(b)).unwrap_or(0) }
+    };
     let clip_name = invoke(a, clip_obj, std::ptr::null_mut(), "get_name", &mut []).and_then(|s| string(a, s));
     let (samples, channels, freq) = (get_i32("get_samples"), get_i32("get_channels"), get_i32("get_frequency"));
-    let load_type: i32 = invoke(a, clip_obj, std::ptr::null_mut(), "get_loadType", &mut []).and_then(|b| unbox(b)).unwrap_or(-1);
+    let load_type: i32 =
+        invoke(a, clip_obj, std::ptr::null_mut(), "get_loadType", &mut []).and_then(|b| unbox(b)).unwrap_or(-1);
     let secs = if freq > 0 { samples as f64 / freq as f64 } else { 0.0 };
     let n = samples.max(0) as usize * channels.max(0) as usize;
     let mut late = false;
@@ -1103,7 +1139,17 @@ impl Pending {
                 Vec::new()
             }
         };
-        sink::send(Ev::Whole { key: self.key, api: "unity", fmt: self.fmt, bytes, ext: None, source: self.name, dur: Some(self.secs), at: Some(self.at), info });
+        sink::send(Ev::Whole {
+            key: self.key,
+            api: "unity",
+            fmt: self.fmt,
+            bytes,
+            ext: None,
+            source: self.name,
+            dur: Some(self.secs),
+            at: Some(self.at),
+            info,
+        });
     }
 }
 

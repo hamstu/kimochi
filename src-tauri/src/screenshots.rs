@@ -305,7 +305,12 @@ fn encode(picture: image::RgbImage, edge: u32, quality: u8) -> Result<Vec<u8>, S
 
 /// The scan's OCR boxes, from its frame's pixels (the OCR crop) into the picture's: offset by the
 /// crop's place in the source, scaled from the source's size to the picture's.
-fn marks(groups: &[crate::ocr_result::OcrGroup], info: Option<&Value>, width: u32, height: u32) -> (Option<[f64; 4]>, Vec<Mark>) {
+fn marks(
+    groups: &[crate::ocr_result::OcrGroup],
+    info: Option<&Value>,
+    width: u32,
+    height: u32,
+) -> (Option<[f64; 4]>, Vec<Mark>) {
     let Some(info) = info else { return (None, Vec::new()) };
     let num = |v: &Value| v.as_f64();
     let full_w = info.get("full_width").and_then(num).filter(|v| *v > 0.0).unwrap_or(width as f64);
@@ -317,7 +322,9 @@ fn marks(groups: &[crate::ocr_result::OcrGroup], info: Option<&Value>, width: u3
     });
     let (ox, oy) = crop.map_or((0.0, 0.0), |c| (c[0], c[1]));
     // A crop that is the whole source is no crop.
-    let shown = crop.filter(|c| c[2] < full_w - 1.0 || c[3] < full_h - 1.0).map(|c| [c[0] * sx, c[1] * sy, c[2] * sx, c[3] * sy]);
+    let shown = crop
+        .filter(|c| c[2] < full_w - 1.0 || c[3] < full_h - 1.0)
+        .map(|c| [c[0] * sx, c[1] * sy, c[2] * sx, c[3] * sy]);
     let marks = groups
         .iter()
         .filter_map(|g| {
@@ -377,7 +384,8 @@ fn take(app: &tauri::AppHandle, scan: Scan) -> Result<(), String> {
     let jpeg = encode(picture, KEEP_EDGE, KEEP_QUALITY)?;
     // The size it was kept at.
     let scale = (KEEP_EDGE as f64 / full.0.max(full.1) as f64).min(1.0);
-    let (width, height) = (((full.0 as f64 * scale).round() as u32).max(1), ((full.1 as f64 * scale).round() as u32).max(1));
+    let (width, height) =
+        (((full.0 as f64 * scale).round() as u32).max(1), ((full.1 as f64 * scale).round() as u32).max(1));
     let (crop, marks) = marks(&scan.groups, scan.info.as_ref(), width, height);
     let key = if scan.detached { None } else { crate::sources::current_crop_key(&state) };
     let shot = Shot {
@@ -399,7 +407,13 @@ fn take(app: &tauri::AppHandle, scan: Scan) -> Result<(), String> {
 
 /// Put `shot`'s card picture in note `note_id`'s picture field (`field`, or the configured one)
 /// when the note has that field and it is empty.
-async fn attach(app: tauri::AppHandle, anki: crate::sentence_audio::Anki, note_id: u64, shot: Shot, field: String) -> Result<String, String> {
+async fn attach(
+    app: tauri::AppHandle,
+    anki: crate::sentence_audio::Anki,
+    note_id: u64,
+    shot: Shot,
+    field: String,
+) -> Result<String, String> {
     if field.is_empty() {
         return Err("No picture field is set in Settings → Anki.".into());
     }
@@ -413,7 +427,9 @@ async fn attach(app: tauri::AppHandle, anki: crate::sentence_audio::Anki, note_i
     };
     let info = call("notesInfo", json!({ "notes": [note_id] })).await?;
     match empty(&info) {
-        None if info.get(0).and_then(|n| n.get("fields")).is_none() => return Err("Anki did not find the new card.".into()),
+        None if info.get(0).and_then(|n| n.get("fields")).is_none() => {
+            return Err("Anki did not find the new card.".into())
+        }
         None => return Err(format!("The card's note type has no “{field}” field, so no screenshot was added.")),
         Some(false) => return Ok(format!("The card's “{field}” field was already filled; left as it was.")),
         Some(true) => {}
@@ -440,7 +456,14 @@ async fn attach(app: tauri::AppHandle, anki: crate::sentence_audio::Anki, note_i
 
 /// Attach the picture of the scan a card was mined from (found by its fields, or named by
 /// `scan`), reporting how it went in the status.
-fn spawn_attach(app: &tauri::AppHandle, anki: crate::sentence_audio::Anki, note_id: u64, fields: Vec<(String, String)>, scan: Option<String>, field: Option<String>) {
+fn spawn_attach(
+    app: &tauri::AppHandle,
+    anki: crate::sentence_audio::Anki,
+    note_id: u64,
+    fields: Vec<(String, String)>,
+    scan: Option<String>,
+    field: Option<String>,
+) {
     let Some(service) = app.try_state::<Arc<Screenshots>>() else { return };
     let service = service.inner().clone();
     let config = service.config();
@@ -465,7 +488,8 @@ pub fn after_relay(app: &tauri::AppHandle, url: &str, request: &Value, reply_sta
     if !service.config().enabled {
         return;
     }
-    let Some((anki, note_id, fields)) = crate::sentence_audio::added_card(url, request, reply_status, reply_body) else {
+    let Some((anki, note_id, fields)) = crate::sentence_audio::added_card(url, request, reply_status, reply_body)
+    else {
         return;
     };
     spawn_attach(app, anki, note_id, fields, None, None);
@@ -592,9 +616,17 @@ mod tests {
 
     #[test]
     fn an_anki_crop_is_scaled_to_the_picture() {
-        let crop = kimochi_capture::Crop { x: 100, y: 50, width: 400, height: 200, reference_width: 1000, reference_height: 500 };
+        let crop = kimochi_capture::Crop {
+            x: 100,
+            y: 50,
+            width: 400,
+            height: 200,
+            reference_width: 1000,
+            reference_height: 500,
+        };
         assert_eq!(scaled_crop(&crop, 2000, 1000), Some([200, 100, 800, 400]));
-        let outside = kimochi_capture::Crop { x: 998, y: 0, width: 2, height: 2, reference_width: 1000, reference_height: 500 };
+        let outside =
+            kimochi_capture::Crop { x: 998, y: 0, width: 2, height: 2, reference_width: 1000, reference_height: 500 };
         assert_eq!(scaled_crop(&outside, 1000, 500), None);
     }
 

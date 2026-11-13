@@ -41,7 +41,8 @@ let popupTarget = null
 
 /** Open this realm's top-level popup over `rect` from now on; null gives Yomitan its placing back. */
 export function setPopupTarget(rect) {
-  popupTarget = rect && rect.width > 0 && rect.height > 0 ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+  popupTarget =
+    rect && rect.width > 0 && rect.height > 0 ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
 }
 
 /**
@@ -346,9 +347,7 @@ function boundingRect(rects) {
  */
 async function useRemotePopup(remote, note) {
   const { PopupFactory } = await import(chrome.runtime.getURL('js/app/popup-factory.js'))
-  const { FrameOffsetForwarder } = await import(
-    chrome.runtime.getURL('js/comm/frame-offset-forwarder.js')
-  )
+  const { FrameOffsetForwarder } = await import(chrome.runtime.getURL('js/comm/frame-offset-forwarder.js'))
 
   // Desktop points, not page coordinates. `PopupProxy` adds this to every source
   // rectangle it forwards, and refreshes it about once a second, so a window the

@@ -26,8 +26,8 @@ interface PlatformInfo {
 export function screenScale(): number {
   const read = (win: Window | null | undefined): number | null => {
     try {
-      const value = (win as (Window & { __KIMOCHI_PLATFORM__?: PlatformInfo }) | null | undefined)
-        ?.__KIMOCHI_PLATFORM__?.screenScale
+      const value = (win as (Window & { __KIMOCHI_PLATFORM__?: PlatformInfo }) | null | undefined)?.__KIMOCHI_PLATFORM__
+        ?.screenScale
       return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
     } catch {
       return null // a cross-origin top

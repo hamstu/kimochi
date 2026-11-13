@@ -33,7 +33,10 @@ async function bundle(entry, name, external = []) {
 }
 
 const { readinessView, newerReadiness, setupProgress } = await bundle('../ui/dictionary-readiness.ts', 'readiness.mjs')
-const { buildAnkiConfigForPopover, ankiMiningGap } = await bundle('../frontend/texthooker/lib/ankiConfig.ts', 'anki-config.mjs')
+const { buildAnkiConfigForPopover, ankiMiningGap } = await bundle(
+  '../frontend/texthooker/lib/ankiConfig.ts',
+  'anki-config.mjs'
+)
 const { popupAnkiConfig } = await bundle('../ui/api-lookup.js', 'api-lookup.mjs', ['/spike/*'])
 
 const starting = { phase: 'starting', settingsReady: false, message: 'Starting the dictionary…' }
@@ -52,11 +55,18 @@ test('an engine in use that is not downloaded says so, not "Starting" forever, a
   assert.match(downloading.text, /^Downloading 10ten/)
   assert.equal(downloading.badge.label, 'Downloading')
   // Even a readiness left over from earlier in the session cannot open a page that is not there.
-  assert.equal(readinessView({ ...starting, phase: 'ready', settingsReady: true }, 'absent', 'X').settingsAvailable, false)
+  assert.equal(
+    readinessView({ ...starting, phase: 'ready', settingsReady: true }, 'absent', 'X').settingsAvailable,
+    false
+  )
 })
 
 test('a downloaded engine follows its readiness', () => {
-  const ready = readinessView({ phase: 'ready', settingsReady: true, message: 'Hachidori is ready.' }, 'ready', 'Hachidori')
+  const ready = readinessView(
+    { phase: 'ready', settingsReady: true, message: 'Hachidori is ready.' },
+    'ready',
+    'Hachidori'
+  )
   assert.equal(ready.show, false)
   assert.deepEqual(ready.badge, { label: 'Active', tone: 'accent' })
   assert.equal(ready.settingsAvailable, true)
@@ -88,15 +98,29 @@ test('a late status read cannot undo a newer readiness (stuck on "Starting Yomit
 test("the note joins the engine's message as sentences, and tells the truth about lookups", () => {
   // Hachidori's progress message has no full stop of its own.
   const hachidori = readinessView(
-    { phase: 'downloading', settingsReady: true, message: 'Hachidori is downloading dictionary data: 25%', progress: 25 },
+    {
+      phase: 'downloading',
+      settingsReady: true,
+      message: 'Hachidori is downloading dictionary data: 25%',
+      progress: 25
+    },
     'ready',
     'Hachidori'
   )
-  assert.equal(hachidori.text, 'Hachidori is downloading dictionary data: 25%. Words are looked up once setup is complete.')
+  assert.equal(
+    hachidori.text,
+    'Hachidori is downloading dictionary data: 25%. Words are looked up once setup is complete.'
+  )
   assert.equal(hachidori.progress, 25)
   // 10ten looks words up from its bundled list while its full dictionaries download.
   const tenten = readinessView(
-    { phase: 'downloading', settingsReady: true, message: '10ten is downloading words data: 42%', progress: 42, lookups: true },
+    {
+      phase: 'downloading',
+      settingsReady: true,
+      message: '10ten is downloading words data: 42%',
+      progress: 42,
+      lookups: true
+    },
     'ready',
     '10ten'
   )
@@ -104,7 +128,11 @@ test("the note joins the engine's message as sentences, and tells the truth abou
   assert.doesNotMatch(tenten.text, /once setup is complete/)
   // A failure needs the user: no promise that it completes on its own.
   const failed = readinessView(
-    { phase: 'failed', settingsReady: false, message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.' },
+    {
+      phase: 'failed',
+      settingsReady: false,
+      message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.'
+    },
     'ready',
     'Built-in Yomitan'
   )
@@ -112,7 +140,18 @@ test("the note joins the engine's message as sentences, and tells the truth abou
   assert.equal(failed.busy, false)
   assert.equal(failed.badge.label, 'Needs attention')
   assert.equal(failed.text, 'Yomitan could not start. Choose another dictionary engine and switch back to retry.')
-  assert.equal(readinessView({ phase: 'setup-needed', settingsReady: true, message: 'Open Hachidori settings to install or import a dictionary.' }, 'ready', 'Hachidori').settingsAvailable, true)
+  assert.equal(
+    readinessView(
+      {
+        phase: 'setup-needed',
+        settingsReady: true,
+        message: 'Open Hachidori settings to install or import a dictionary.'
+      },
+      'ready',
+      'Hachidori'
+    ).settingsAvailable,
+    true
+  )
 })
 
 test('a setup in several steps is one bar that only reaches 100 when all of it is done', () => {
@@ -127,9 +166,15 @@ test('a setup in several steps is one bar that only reaches 100 when all of it i
     at({ phase: 'installing', settingsReady: true, message: '' }, 'ready', null, true)
   ].map((step) => step.value)
   for (let i = 1; i < steps.length; i++) assert.ok(steps[i] >= steps[i - 1], `step ${i} does not go backwards`)
-  assert.ok(steps.every((value) => value < 100), 'nothing reads as done before the engine is ready')
+  assert.ok(
+    steps.every((value) => value < 100),
+    'nothing reads as done before the engine is ready'
+  )
   // No download this time: the start and the data take the whole bar.
-  assert.equal(at({ phase: 'downloading', settingsReady: true, message: '', progress: 100 }, 'ready', null, false).value, 90)
+  assert.equal(
+    at({ phase: 'downloading', settingsReady: true, message: '', progress: 100 }, 'ready', null, false).value,
+    90
+  )
   // A step with no number of its own pulses where it starts.
   assert.deepEqual(at(starting, 'ready', null, false), { value: 0, exact: false })
   // Nothing under way, or something that needs the reader: no bar.
@@ -141,7 +186,10 @@ test('a setup in several steps is one bar that only reaches 100 when all of it i
 test('the sidebar says a busy or stuck engine in a few words', () => {
   assert.equal(readinessView(starting, 'absent', 'Hachidori').notice, 'Not downloaded yet.')
   assert.equal(readinessView(starting, 'ready', 'Hachidori').short, 'Starting…')
-  assert.equal(readinessView({ phase: 'failed', settingsReady: false, message: 'Long reason.' }, 'ready', 'X').notice, 'Setup failed.')
+  assert.equal(
+    readinessView({ phase: 'failed', settingsReady: false, message: 'Long reason.' }, 'ready', 'X').notice,
+    'Setup failed.'
+  )
 })
 
 const reader = {

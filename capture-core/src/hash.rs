@@ -60,9 +60,7 @@ pub fn dhash_rgba(pixels: &[u8], width: u32, height: u32) -> Option<String> {
     if width == 0 || height == 0 {
         return None;
     }
-    let expected = (width as usize)
-        .checked_mul(height as usize)?
-        .checked_mul(4)?;
+    let expected = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
     if pixels.len() < expected {
         return None;
     }
@@ -72,14 +70,11 @@ pub fn dhash_rgba(pixels: &[u8], width: u32, height: u32) -> Option<String> {
         // Integer edges, so every source pixel belongs to exactly one cell and no
         // cell is ever empty even for an image narrower than nine pixels.
         let y0 = (u64::from(cy) * u64::from(height) / u64::from(HASH_HEIGHT)) as u32;
-        let y1 = (((u64::from(cy) + 1) * u64::from(height)).div_ceil(u64::from(HASH_HEIGHT))
-            as u32)
-            .max(y0 + 1)
-            .min(height);
+        let y1 =
+            (((u64::from(cy) + 1) * u64::from(height)).div_ceil(u64::from(HASH_HEIGHT)) as u32).max(y0 + 1).min(height);
         for cx in 0..HASH_WIDTH {
             let x0 = (u64::from(cx) * u64::from(width) / u64::from(HASH_WIDTH)) as u32;
-            let x1 = (((u64::from(cx) + 1) * u64::from(width)).div_ceil(u64::from(HASH_WIDTH))
-                as u32)
+            let x1 = (((u64::from(cx) + 1) * u64::from(width)).div_ceil(u64::from(HASH_WIDTH)) as u32)
                 .max(x0 + 1)
                 .min(width);
             let mut total = 0.0f64;
@@ -88,19 +83,11 @@ pub fn dhash_rgba(pixels: &[u8], width: u32, height: u32) -> Option<String> {
                 let row = y as usize * width as usize * 4;
                 for x in x0..x1 {
                     let i = row + x as usize * 4;
-                    total += luma(
-                        f64::from(pixels[i]),
-                        f64::from(pixels[i + 1]),
-                        f64::from(pixels[i + 2]),
-                    );
+                    total += luma(f64::from(pixels[i]), f64::from(pixels[i + 1]), f64::from(pixels[i + 2]));
                     count += 1;
                 }
             }
-            cells[(cy * HASH_WIDTH + cx) as usize] = if count == 0 {
-                0.0
-            } else {
-                total / f64::from(count)
-            };
+            cells[(cy * HASH_WIDTH + cx) as usize] = if count == 0 { 0.0 } else { total / f64::from(count) };
         }
     }
 
@@ -178,10 +165,7 @@ mod tests {
 
     #[test]
     fn a_flat_image_has_no_set_bits() {
-        assert_eq!(
-            dhash_rgba(&solid(64, 64, 128), 64, 64).unwrap(),
-            format!("{:016x}", 0u64)
-        );
+        assert_eq!(dhash_rgba(&solid(64, 64, 128), 64, 64).unwrap(), format!("{:016x}", 0u64));
     }
 
     #[test]
@@ -194,19 +178,13 @@ mod tests {
             let flipped: Vec<u8> = row.chunks_exact(4).rev().flatten().copied().collect();
             row.copy_from_slice(&flipped);
         }
-        assert_eq!(
-            dhash_rgba(&mirrored, 64, 64).unwrap(),
-            format!("{:016x}", u64::MAX)
-        );
+        assert_eq!(dhash_rgba(&mirrored, 64, 64).unwrap(), format!("{:016x}", u64::MAX));
     }
 
     #[test]
     fn the_same_pixels_always_produce_the_same_hash() {
         let pixels = ramp(200, 120);
-        assert_eq!(
-            dhash_rgba(&pixels, 200, 120).unwrap(),
-            dhash_rgba(&pixels, 200, 120).unwrap()
-        );
+        assert_eq!(dhash_rgba(&pixels, 200, 120).unwrap(), dhash_rgba(&pixels, 200, 120).unwrap());
     }
 
     #[test]

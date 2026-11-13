@@ -68,11 +68,18 @@ export function AccountSignIn() {
       lede={<AccountPitch />}
       footer={
         <p>
-          New here? <Link to={withReturnTo('/account/sign-up', returnTo)} className="text-accent-ink">Create an account</Link>
+          New here?{' '}
+          <Link to={withReturnTo('/account/sign-up', returnTo)} className="text-accent-ink">
+            Create an account
+          </Link>
         </p>
       }
     >
-      {notice && !errorCode && <Notice tone="ok" className="mb-6">{notice}</Notice>}
+      {notice && !errorCode && (
+        <Notice tone="ok" className="mb-6">
+          {notice}
+        </Notice>
+      )}
       {errorCode && (
         <Notice tone="danger" className="mb-6">
           {messageForCode(errorCode)}
@@ -84,7 +91,11 @@ export function AccountSignIn() {
           )}
         </Notice>
       )}
-      {unreachable && !errorCode && <Notice tone="warn" className="mb-6">{messageForCode('network')}</Notice>}
+      {unreachable && !errorCode && (
+        <Notice tone="warn" className="mb-6">
+          {messageForCode('network')}
+        </Notice>
+      )}
 
       {status === 'signed-in' && user ? (
         <Button href="/account" variant="secondary">

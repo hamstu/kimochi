@@ -7,14 +7,11 @@ use kimochi_capture::{Platform, Rect, Source, SourceId};
 use std::collections::HashMap;
 use windows::core::BOOL;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT};
-use windows::Win32::Graphics::Dwm::{
-    DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
-};
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
 use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindow, GetWindowLongW,
-    GetWindowRect, IsIconic, IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE,
-    GW_OWNER, WS_CAPTION,
+    EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, IsIconic,
+    IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, WS_CAPTION,
 };
 
 /// Every top-level window, front to back (`EnumWindows` order is z-order).
@@ -147,10 +144,7 @@ pub fn picker_sources() -> Result<Vec<Source>, String> {
         if !rules::listable(&meta) {
             continue;
         }
-        let app = names
-            .entry(pid)
-            .or_insert_with(|| process_name(pid))
-            .clone();
+        let app = names.entry(pid).or_insert_with(|| process_name(pid)).clone();
         let bounds = frame.filter(|_| !iconic);
         sources.push(Source {
             id: window_source_id(hwnd, pid).to_string(),
@@ -159,10 +153,7 @@ pub fn picker_sources() -> Result<Vec<Source>, String> {
             app,
             bounds,
             on_screen: Some(
-                !elsewhere
-                    && bounds.is_some_and(|b| {
-                        rules::on_screen(visible, iconic, is_cloaked, b.width, b.height)
-                    }),
+                !elsewhere && bounds.is_some_and(|b| rules::on_screen(visible, iconic, is_cloaked, b.width, b.height)),
             ),
         });
     }
@@ -300,20 +291,16 @@ pub fn front_window() -> Option<FrontWindow> {
     if pid == 0 {
         return None;
     }
-    let readable =
-        frame_bounds(root).is_some_and(|r| {
-            rules::on_screen(
-                unsafe { IsWindowVisible(root) }.as_bool(),
-                unsafe { IsIconic(root) }.as_bool(),
-                cloaked(root),
-                r.width,
-                r.height,
-            )
-        }) && !rules::is_shell_surface(&class_name(root), !window_text(root).trim().is_empty());
-    Some(FrontWindow {
-        window: readable.then(|| window_source_id(root, pid)),
-        pid,
-    })
+    let readable = frame_bounds(root).is_some_and(|r| {
+        rules::on_screen(
+            unsafe { IsWindowVisible(root) }.as_bool(),
+            unsafe { IsIconic(root) }.as_bool(),
+            cloaked(root),
+            r.width,
+            r.height,
+        )
+    }) && !rules::is_shell_surface(&class_name(root), !window_text(root).trim().is_empty());
+    Some(FrontWindow { window: readable.then(|| window_source_id(root, pid)), pid })
 }
 
 /// The foreground process's image stem (`notepad`, `kimochi`).

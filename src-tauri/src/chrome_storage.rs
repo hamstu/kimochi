@@ -120,11 +120,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let dir = path.parent().ok_or("native: a storage file needs a directory")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let name = path.file_name().and_then(|n| n.to_str()).ok_or("native: bad storage file name")?;
-    let tmp = dir.join(format!(
-        ".{name}.{}-{}.tmp",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
+    let tmp = dir.join(format!(".{name}.{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
     let written = (|| -> std::io::Result<()> {
         let mut f = std::fs::File::create(&tmp)?;
         f.write_all(bytes)?;
@@ -237,10 +233,8 @@ mod tests {
     }
 
     fn names(dir: &Path) -> Vec<String> {
-        let mut names: Vec<String> = std::fs::read_dir(dir)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().into_string().unwrap())
-            .collect();
+        let mut names: Vec<String> =
+            std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
         names.sort();
         names
     }
@@ -327,7 +321,9 @@ mod tests {
             // Meanwhile every read sees a whole file.
             for _ in 0..50 {
                 let value = load(&dir.0, file, 1).unwrap().value;
-                assert!(value == json!({}) || value["local"]["dictionaryState"]["pad"].as_str().unwrap().len() == 200_000);
+                assert!(
+                    value == json!({}) || value["local"]["dictionaryState"]["pad"].as_str().unwrap().len() == 200_000
+                );
             }
         });
         let value = load(&dir.0, file, 1).unwrap();

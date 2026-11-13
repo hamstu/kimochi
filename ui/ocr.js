@@ -30,7 +30,13 @@ export async function recognize(frame, settings) {
     default: {
       const result = await ocrFrame(
         frame,
-        settings.ocrMode === 'local' ? 'meikiocr' : ['googlelens', 'meikiocr', 'mangaocr', 'ppocr', 'screenai', 'vocr', 'oneocr', 'livetext'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
+        settings.ocrMode === 'local'
+          ? 'meikiocr'
+          : ['googlelens', 'meikiocr', 'mangaocr', 'ppocr', 'screenai', 'vocr', 'oneocr', 'livetext'].includes(
+                settings.ocrMode
+              )
+            ? settings.ocrMode
+            : 'cloud'
       )
       const ocr = result?.ocr
       if (!ocr) return null

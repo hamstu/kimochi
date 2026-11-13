@@ -55,7 +55,10 @@ body:has(.game-windowed)::before {
   padding: 0 12px;
   background: #2b2d33;
   color: #c9cbd1;
-  font: 12px -apple-system, system-ui, sans-serif;
+  font:
+    12px -apple-system,
+    system-ui,
+    sans-serif;
 }
 .game-lights {
   width: 52px;
@@ -174,9 +177,7 @@ body:has(.game-windowed)::before {
   position: relative;
   direction: ltr;
   border: 0.5vmin solid #111;
-  background:
-    repeating-linear-gradient(115deg, transparent 0 1.4vmin, rgb(0 0 0 / 0.05) 1.4vmin 1.6vmin),
-    #fff;
+  background: repeating-linear-gradient(115deg, transparent 0 1.4vmin, rgb(0 0 0 / 0.05) 1.4vmin 1.6vmin), #fff;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -237,7 +238,10 @@ body:has(.game-windowed)::before {
   border-radius: 8px;
   background: rgb(0 0 0 / 0.75);
   color: #fff;
-  font: 13px -apple-system, system-ui, sans-serif;
+  font:
+    13px -apple-system,
+    system-ui,
+    sans-serif;
   pointer-events: none;
   transition: opacity 0.3s;
 }

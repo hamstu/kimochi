@@ -151,7 +151,13 @@ fn swaps_sides(transform: wl_output::Transform) -> bool {
 
 /// A `width`×`height` 32-bit buffer the compositor applied `transform` to, upright, tightly
 /// packed. Returns the pixels and the upright size.
-pub fn untransform(data: &[u8], stride: usize, width: u32, height: u32, transform: wl_output::Transform) -> (Vec<u8>, u32, u32) {
+pub fn untransform(
+    data: &[u8],
+    stride: usize,
+    width: u32,
+    height: u32,
+    transform: wl_output::Transform,
+) -> (Vec<u8>, u32, u32) {
     let (w, h) = if swaps_sides(transform) { (height, width) } else { (width, height) };
     let mut out = vec![0u8; w as usize * h as usize * 4];
     for (y, row) in out.chunks_exact_mut(w as usize * 4).enumerate() {
@@ -185,7 +191,8 @@ impl ShmBuffer {
         rustix::fs::ftruncate(&fd, len as u64)?;
         // SAFETY: a fresh shared mapping of the whole memfd; unmapped in Drop, never aliased
         // mutably on our side (only the compositor writes into it).
-        let map = unsafe { mmap(std::ptr::null_mut(), len, ProtFlags::READ | ProtFlags::WRITE, MapFlags::SHARED, &fd, 0)? };
+        let map =
+            unsafe { mmap(std::ptr::null_mut(), len, ProtFlags::READ | ProtFlags::WRITE, MapFlags::SHARED, &fd, 0)? };
         let pool = shm.create_pool(fd.as_fd(), len as i32, qh, ());
         let buffer = pool.create_buffer(0, c.width as i32, c.height as i32, stride as i32, c.format, qh, ());
         pool.destroy();
@@ -297,9 +304,9 @@ impl Stream {
                 made
             }
             Source::Output(name) => {
-                let sources: ExtOutputImageCaptureSourceManagerV1 = globals.bind(&qh, 1..=1, ()).map_err(|_| {
-                    CaptureError::new("unsupported", "The compositor cannot capture whole outputs")
-                })?;
+                let sources: ExtOutputImageCaptureSourceManagerV1 = globals
+                    .bind(&qh, 1..=1, ())
+                    .map_err(|_| CaptureError::new("unsupported", "The compositor cannot capture whole outputs"))?;
                 let xdg: Option<ZxdgOutputManagerV1> = globals.bind(&qh, 2..=3, ()).ok();
                 let registry = globals.registry();
                 globals.contents().with_list(|list| {
@@ -394,10 +401,8 @@ impl Stream {
                 rustix::event::Timespec { tv_sec: left.as_secs() as _, tv_nsec: left.subsec_nanos() as _ }
             });
             let (readable, woken) = {
-                let mut fds = [
-                    PollFd::from_borrowed_fd(guard.connection_fd(), PollFlags::IN),
-                    PollFd::new(&wake, PollFlags::IN),
-                ];
+                let mut fds =
+                    [PollFd::from_borrowed_fd(guard.connection_fd(), PollFlags::IN), PollFd::new(&wake, PollFlags::IN)];
                 match poll(&mut fds, timeout.as_ref()) {
                     Ok(_) | Err(rustix::io::Errno::INTR) => {}
                     Err(e) => break format!("poll: {e}"),
@@ -410,7 +415,8 @@ impl Stream {
             if readable {
                 match guard.read() {
                     Ok(_) => {}
-                    Err(wayland_client::backend::WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(wayland_client::backend::WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    }
                     Err(e) => break e.to_string(),
                 }
             }
@@ -430,7 +436,14 @@ impl Stream {
 }
 
 impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for Stream {
-    fn event(s: &mut Self, _: &ExtImageCopyCaptureSessionV1, event: ext_image_copy_capture_session_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        s: &mut Self,
+        _: &ExtImageCopyCaptureSessionV1,
+        event: ext_image_copy_capture_session_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         use ext_image_copy_capture_session_v1::Event;
         match event {
             Event::BufferSize { width, height } => s.size = Some((width, height)),
@@ -455,7 +468,14 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for Stream {
 }
 
 impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Stream {
-    fn event(s: &mut Self, frame: &ExtImageCopyCaptureFrameV1, event: ext_image_copy_capture_frame_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        s: &mut Self,
+        frame: &ExtImageCopyCaptureFrameV1,
+        event: ext_image_copy_capture_frame_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         use ext_image_copy_capture_frame_v1::Event;
         match event {
             Event::Transform { transform: WEnum::Value(t) } => s.transform = t,
@@ -487,7 +507,14 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Stream {
 }
 
 impl Dispatch<ExtForeignToplevelListV1, ()> for Stream {
-    fn event(s: &mut Self, _: &ExtForeignToplevelListV1, event: ext_foreign_toplevel_list_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        s: &mut Self,
+        _: &ExtForeignToplevelListV1,
+        event: ext_foreign_toplevel_list_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let ext_foreign_toplevel_list_v1::Event::Toplevel { toplevel } = event {
             s.toplevels.push((toplevel, None));
         }
@@ -498,7 +525,14 @@ impl Dispatch<ExtForeignToplevelListV1, ()> for Stream {
 }
 
 impl Dispatch<ExtForeignToplevelHandleV1, ()> for Stream {
-    fn event(s: &mut Self, proxy: &ExtForeignToplevelHandleV1, event: ext_foreign_toplevel_handle_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        s: &mut Self,
+        proxy: &ExtForeignToplevelHandleV1,
+        event: ext_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let ext_foreign_toplevel_handle_v1::Event::Identifier { identifier } = event {
             if let Some(t) = s.toplevels.iter_mut().find(|(p, _)| p == proxy) {
                 t.1 = Some(identifier);
@@ -508,7 +542,14 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for Stream {
 }
 
 impl Dispatch<wl_output::WlOutput, usize> for Stream {
-    fn event(s: &mut Self, _: &wl_output::WlOutput, event: wl_output::Event, i: &usize, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        s: &mut Self,
+        _: &wl_output::WlOutput,
+        event: wl_output::Event,
+        i: &usize,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let wl_output::Event::Name { name } = event {
             s.outputs[*i].1 = Some(name);
         }
@@ -516,7 +557,14 @@ impl Dispatch<wl_output::WlOutput, usize> for Stream {
 }
 
 impl Dispatch<ZxdgOutputV1, usize> for Stream {
-    fn event(s: &mut Self, _: &ZxdgOutputV1, event: zxdg_output_v1::Event, i: &usize, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        s: &mut Self,
+        _: &ZxdgOutputV1,
+        event: zxdg_output_v1::Event,
+        i: &usize,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let zxdg_output_v1::Event::Name { name } = event {
             s.outputs[*i].1.get_or_insert(name);
         }
@@ -524,7 +572,15 @@ impl Dispatch<ZxdgOutputV1, usize> for Stream {
 }
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Stream {
-    fn event(_: &mut Self, _: &wl_registry::WlRegistry, _: wl_registry::Event, _: &GlobalListContents, _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &wl_registry::WlRegistry,
+        _: wl_registry::Event,
+        _: &GlobalListContents,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 delegate_noop!(Stream: ignore wl_shm::WlShm);

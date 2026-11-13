@@ -48,8 +48,14 @@ function harness({ screen, recognise, settings = {} }) {
       captureFrame: async (options) => {
         if (state.captureError) throw state.captureError
         if (state.observerBusy) {
-          return { frame: { id: ++state.frames, lines: [] }, generation: 1, hash: '0000000000000000', observation: null,
-            observerError: 'The local MeikiOCR observer is still reading an earlier frame; retrying.', observerBusy: true }
+          return {
+            frame: { id: ++state.frames, lines: [] },
+            generation: 1,
+            hash: '0000000000000000',
+            observation: null,
+            observerError: 'The local MeikiOCR observer is still reading an earlier frame; retrying.',
+            observerBusy: true
+          }
         }
         const lines = screen(state)
         if (state.captureGate) await state.captureGate
@@ -127,11 +133,7 @@ function harness({ screen, recognise, settings = {} }) {
   return { scanner, state, step }
 }
 
-const DIALOGUE = [
-  line('今日はいい天気ですね', 396),
-  line('散歩に行きましょうか', 436),
-  line('それとも家で', 470)
-]
+const DIALOGUE = [line('今日はいい天気ですね', 396), line('散歩に行きましょうか', 436), line('それとも家で', 470)]
 const ARROW = line('▼', 470, 460, 20, 30)
 const FULL = '今日はいい天気ですね散歩に行きましょうかそれとも家で'
 
@@ -152,7 +154,10 @@ test('text mode waits through a long minimisation and resumes without suspending
   state.captureError = null
   for (let i = 0; i < 12; i++) await step(500)
   assert.ok(state.recognitions > 0, 'restored text is recognised')
-  assert.ok(state.scenes.some((text) => text.startsWith(FULL)), 'the restored scene is drawn')
+  assert.ok(
+    state.scenes.some((text) => text.startsWith(FULL)),
+    'the restored scene is drawn'
+  )
 })
 
 test('a busy observer is waited for, never counted towards suspension (#41)', async () => {
@@ -169,11 +174,18 @@ test('a busy observer is waited for, never counted towards suspension (#41)', as
   assert.ok(waits.length >= 19, 'keeps looking at the base backoff')
   state.observerBusy = false
   for (let i = 0; i < 12; i++) await step(500)
-  assert.ok(state.scenes.some((text) => text.startsWith(FULL)), 'the scene is read once the observer keeps up')
+  assert.ok(
+    state.scenes.some((text) => text.startsWith(FULL)),
+    'the scene is read once the observer keeps up'
+  )
 })
 
 test('a missing observation that is not busy still counts', async () => {
-  const { scanner, state, step } = harness({ screen: () => DIALOGUE, recognise: (frame) => reading(frame.lines), settings: { maxConsecutiveErrors: 3 } })
+  const { scanner, state, step } = harness({
+    screen: () => DIALOGUE,
+    recognise: (frame) => reading(frame.lines),
+    settings: { maxConsecutiveErrors: 3 }
+  })
   state.observerBusy = true
   // A failure without the busy flag: the observer returned nothing.
   const capture = scanner.deps.captureFrame
@@ -196,11 +208,7 @@ test('a blinking element beside the dialogue never replaces a full reading with 
     screen: (s) => (Math.floor(s.time / 500) % 2 ? [...DIALOGUE, ARROW] : DIALOGUE),
     // Every other recognition loses most of the first line, as the recorded partials did.
     recognise: (frame, s) =>
-      reading(
-        s.recognitions % 2 === 0
-          ? [line('今日は', 396), ...frame.lines.slice(1)]
-          : frame.lines
-      )
+      reading(s.recognitions % 2 === 0 ? [line('今日は', 396), ...frame.lines.slice(1)] : frame.lines)
   })
   for (let i = 0; i < 60; i++) await step()
 
@@ -332,23 +340,25 @@ test('Scan with automatic OCR on: nothing new means straight in, new text is rea
   assert.equal(state.scenes.at(-1), '明日は雨だそうです')
 })
 
-
-test('entering an overlay lookup while a capture is out freezes visible text until a fresh observation',async()=>{
- let lines=DIALOGUE
- const {scanner,state,step}=harness({screen:()=>lines,recognise:frame=>reading(frame.lines)})
- for(let n=0;n<4;n++)await step()
- const scenes=state.scenes.length
- lines=[]
- let release
- state.captureGate=new Promise(resolve=>{release=resolve})
- const pending=scanner.tick()
- scanner.pause();release()
- assert.equal(await pending,'paused')
- assert.equal(state.scenes.length,scenes,'late blank observation must not clear text under lookup')
- state.captureGate=null
- scanner.resume()
- for(let n=0;n<5;n++)await step()
- assert.equal(state.scenes.at(-1),'','real disappearance is still processed after leaving')
+test('entering an overlay lookup while a capture is out freezes visible text until a fresh observation', async () => {
+  let lines = DIALOGUE
+  const { scanner, state, step } = harness({ screen: () => lines, recognise: (frame) => reading(frame.lines) })
+  for (let n = 0; n < 4; n++) await step()
+  const scenes = state.scenes.length
+  lines = []
+  let release
+  state.captureGate = new Promise((resolve) => {
+    release = resolve
+  })
+  const pending = scanner.tick()
+  scanner.pause()
+  release()
+  assert.equal(await pending, 'paused')
+  assert.equal(state.scenes.length, scenes, 'late blank observation must not clear text under lookup')
+  state.captureGate = null
+  scanner.resume()
+  for (let n = 0; n < 5; n++) await step()
+  assert.equal(state.scenes.at(-1), '', 'real disappearance is still processed after leaving')
 })
 
 test('a slow watcher is never asked more often than three of its reads apart', async () => {
@@ -469,7 +479,10 @@ test('the still gate stays off on a screen that never holds still', async () => 
   for (let i = 0; i < 30; i++) await step(scanner.currentInterval)
   // Every look differs from the last (a sparkle animates beside the text): nothing to wait for.
   assert.equal(state.skips ?? 0, 0, 'no look waited for still pixels')
-  assert.ok(state.scenes.some((s) => s.includes('今日はいい天気ですね')), 'the dialogue is still read')
+  assert.ok(
+    state.scenes.some((s) => s.includes('今日はいい天気ですね')),
+    'the dialogue is still read'
+  )
 })
 
 test('pointing at the text does not hold back a new line, only re-reads of what is shown', async () => {

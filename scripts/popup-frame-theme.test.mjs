@@ -46,7 +46,10 @@ function popupClass() {
   }
 }
 
-const lookup = (pageTheme) => ({ historyMode: 'clear', state: { focusEntry: 0, url: 'x', ...(pageTheme ? { pageTheme } : {}) } })
+const lookup = (pageTheme) => ({
+  historyMode: 'clear',
+  state: { focusEntry: 0, url: 'x', ...(pageTheme ? { pageTheme } : {}) }
+})
 
 test('without Kimochi, a dark lookup in the popup host gets a light frame (the bug)', async () => {
   const Popup = popupClass()

@@ -20,17 +20,43 @@ import { ChromeEvent, NO_RECEIVER, describe, json, platformInfo, randomId } from
  * works would send them down a path this host cannot finish.
  */
 const ABSENT = [
-  'management', 'scripting', 'userScripts', 'downloads', 'tabCapture', 'declarativeNetRequest',
-  'webRequest', 'webNavigation', 'sidePanel', 'identity', 'debugger', 'tts', 'ttsEngine', 'menus'
+  'management',
+  'scripting',
+  'userScripts',
+  'downloads',
+  'tabCapture',
+  'declarativeNetRequest',
+  'webRequest',
+  'webNavigation',
+  'sidePanel',
+  'identity',
+  'debugger',
+  'tts',
+  'ttsEngine',
+  'menus'
 ]
 
-export function createExtensionContext({ win, engine, descriptor, origin, kind, link, report, messages = null, captureHint = null }) {
+export function createExtensionContext({
+  win,
+  engine,
+  descriptor,
+  origin,
+  kind,
+  link,
+  report,
+  messages = null,
+  captureHint = null
+}) {
   const runtimeId = `kimochi-${engine}`
   const manifest = descriptor.manifest
   let i18nState = messages
   const onError = (error) => {
     console.error(error)
-    report({ check: 'ext-host-listener-error', error: describe(error), stack: String(error?.stack ?? '').slice(0, 2000) })
+    report({
+      check: 'ext-host-listener-error',
+      error: describe(error),
+      stack: String(error?.stack ?? '').slice(0, 2000)
+    })
   }
   const event = () => new ChromeEvent(onError)
 
@@ -257,7 +283,12 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
 
   /** `sendMessage([extensionId,] message [, options])`, Chrome's overload rules. */
   function messageArgs(args) {
-    if (args.length >= 2 && (typeof args[0] === 'string' || args[0] === undefined || args[0] === null) && typeof args[1] !== 'function' && args[1] !== undefined) {
+    if (
+      args.length >= 2 &&
+      (typeof args[0] === 'string' || args[0] === undefined || args[0] === null) &&
+      typeof args[1] !== 'function' &&
+      args[1] !== undefined
+    ) {
       if (args[0] && args[0] !== runtimeId) throw Error(NO_RECEIVER)
       return args[1]
     }
@@ -288,16 +319,19 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
     const alarms = new Map()
     const arm = (alarm) => {
       clearTimeout(alarm.timer)
-      alarm.timer = setTimeout(() => {
-        if (Date.now() < alarm.scheduledTime) return arm(alarm)
-        const fired = { name: alarm.name, scheduledTime: alarm.scheduledTime }
-        if (alarm.periodInMinutes) fired.periodInMinutes = alarm.periodInMinutes
-        if (alarm.periodInMinutes) {
-          alarm.scheduledTime = Date.now() + alarm.periodInMinutes * 60000
-          arm(alarm)
-        } else alarms.delete(alarm.name)
-        events.alarm.emit(fired)
-      }, Math.min(Math.max(alarm.scheduledTime - Date.now(), 0), MAX_TIMER_MS))
+      alarm.timer = setTimeout(
+        () => {
+          if (Date.now() < alarm.scheduledTime) return arm(alarm)
+          const fired = { name: alarm.name, scheduledTime: alarm.scheduledTime }
+          if (alarm.periodInMinutes) fired.periodInMinutes = alarm.periodInMinutes
+          if (alarm.periodInMinutes) {
+            alarm.scheduledTime = Date.now() + alarm.periodInMinutes * 60000
+            arm(alarm)
+          } else alarms.delete(alarm.name)
+          events.alarm.emit(fired)
+        },
+        Math.min(Math.max(alarm.scheduledTime - Date.now(), 0), MAX_TIMER_MS)
+      )
     }
     const view = (alarm) => {
       const out = { name: alarm.name, scheduledTime: alarm.scheduledTime }
@@ -309,8 +343,7 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
         const name = typeof nameOrInfo === 'string' ? nameOrInfo : ''
         const info = (typeof nameOrInfo === 'string' ? maybeInfo : nameOrInfo) ?? {}
         clearTimeout(alarms.get(name)?.timer)
-        const scheduledTime =
-          info.when ?? Date.now() + (info.delayInMinutes ?? info.periodInMinutes ?? 0) * 60000
+        const scheduledTime = info.when ?? Date.now() + (info.delayInMinutes ?? info.periodInMinutes ?? 0) * 60000
         const alarm = { name, scheduledTime, periodInMinutes: info.periodInMinutes }
         alarms.set(name, alarm)
         arm(alarm)
@@ -355,7 +388,10 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
     onClicked: events.actionClicked
   }
 
-  const permissionsList = { permissions: [...(manifest.permissions ?? [])], origins: [...(manifest.host_permissions ?? [])] }
+  const permissionsList = {
+    permissions: [...(manifest.permissions ?? [])],
+    origins: [...(manifest.host_permissions ?? [])]
+  }
   const chromeApi = {
     runtime: {
       id: runtimeId,
@@ -368,8 +404,13 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
       // A content context says which transcript line it is reading, for `captureVisibleTab`.
       sendMessage: api((...args) => {
         const message = json(messageArgs(args))
-        if (engine === 'hachidori' && kind === 'content' && message?.target === 'hoshidicts-offscreen' &&
-          message.type === 'hd_lookup' && /^lookup-\d+$/.test(message.requestId)) {
+        if (
+          engine === 'hachidori' &&
+          kind === 'content' &&
+          message?.target === 'hoshidicts-offscreen' &&
+          message.type === 'hd_lookup' &&
+          /^lookup-\d+$/.test(message.requestId)
+        ) {
           return heard(message, lookups.submit({ message, capture: hint() }))
         }
         const send = (value) => heard(value, call('sendMessage', { message: value, capture: hint() }))
@@ -403,9 +444,29 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
       requestUpdateCheck: noop({ status: 'no_update' }),
       reload: unsupported('runtime.reload'),
       restart: unsupported('runtime.restart'),
-      OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update', SHARED_MODULE_UPDATE: 'shared_module_update' },
-      ContextType: { TAB: 'TAB', POPUP: 'POPUP', BACKGROUND: 'BACKGROUND', OFFSCREEN_DOCUMENT: 'OFFSCREEN_DOCUMENT', SIDE_PANEL: 'SIDE_PANEL', DEVELOPER_TOOLS: 'DEVELOPER_TOOLS' },
-      PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd', FUCHSIA: 'fuchsia' }
+      OnInstalledReason: {
+        INSTALL: 'install',
+        UPDATE: 'update',
+        CHROME_UPDATE: 'chrome_update',
+        SHARED_MODULE_UPDATE: 'shared_module_update'
+      },
+      ContextType: {
+        TAB: 'TAB',
+        POPUP: 'POPUP',
+        BACKGROUND: 'BACKGROUND',
+        OFFSCREEN_DOCUMENT: 'OFFSCREEN_DOCUMENT',
+        SIDE_PANEL: 'SIDE_PANEL',
+        DEVELOPER_TOOLS: 'DEVELOPER_TOOLS'
+      },
+      PlatformOs: {
+        MAC: 'mac',
+        WIN: 'win',
+        ANDROID: 'android',
+        CROS: 'cros',
+        LINUX: 'linux',
+        OPENBSD: 'openbsd',
+        FUCHSIA: 'fuchsia'
+      }
     },
     storage: {
       local: storageArea('local'),
@@ -425,7 +486,9 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
       create: api((props) => call('open', { url: props?.url ?? getURL(descriptor.optionsPage) })),
       update: api((tabIdOrProps, maybeProps) => {
         const props = typeof tabIdOrProps === 'object' ? tabIdOrProps : maybeProps
-        return props?.url ? call('open', { url: props.url }) : call('tabs', { action: 'get', args: [typeof tabIdOrProps === 'number' ? tabIdOrProps : 1] })
+        return props?.url
+          ? call('open', { url: props.url })
+          : call('tabs', { action: 'get', args: [typeof tabIdOrProps === 'number' ? tabIdOrProps : 1] })
       }),
       getZoom: noop(1),
       setZoom: noop(undefined),
@@ -491,13 +554,15 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
     },
     permissions: {
       getAll: api(() => json(permissionsList)),
-      contains: api(({ permissions = [], origins = [] } = {}) =>
-        permissions.every((p) => permissionsList.permissions.includes(p)) &&
-        origins.every((o) => permissionsList.origins.includes('<all_urls>') || permissionsList.origins.includes(o))
+      contains: api(
+        ({ permissions = [], origins = [] } = {}) =>
+          permissions.every((p) => permissionsList.permissions.includes(p)) &&
+          origins.every((o) => permissionsList.origins.includes('<all_urls>') || permissionsList.origins.includes(o))
       ),
-      request: api(({ permissions = [], origins = [] } = {}) =>
-        permissions.every((p) => permissionsList.permissions.includes(p)) &&
-        origins.every((o) => permissionsList.origins.includes('<all_urls>') || permissionsList.origins.includes(o))
+      request: api(
+        ({ permissions = [], origins = [] } = {}) =>
+          permissions.every((p) => permissionsList.permissions.includes(p)) &&
+          origins.every((o) => permissionsList.origins.includes('<all_urls>') || permissionsList.origins.includes(o))
       ),
       remove: noop(false),
       onAdded: event(),
@@ -508,10 +573,21 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
       hasDocument: api(() => call('offscreen', { action: 'has' })),
       closeDocument: api(() => call('offscreen', { action: 'close' })),
       Reason: {
-        TESTING: 'TESTING', AUDIO_PLAYBACK: 'AUDIO_PLAYBACK', IFRAME_SCRIPTING: 'IFRAME_SCRIPTING', DOM_SCRAPING: 'DOM_SCRAPING',
-        BLOBS: 'BLOBS', DOM_PARSER: 'DOM_PARSER', USER_MEDIA: 'USER_MEDIA', DISPLAY_MEDIA: 'DISPLAY_MEDIA', WEB_RTC: 'WEB_RTC',
-        CLIPBOARD: 'CLIPBOARD', LOCAL_STORAGE: 'LOCAL_STORAGE', WORKERS: 'WORKERS', BATTERY_STATUS: 'BATTERY_STATUS',
-        MATCH_MEDIA: 'MATCH_MEDIA', GEOLOCATION: 'GEOLOCATION'
+        TESTING: 'TESTING',
+        AUDIO_PLAYBACK: 'AUDIO_PLAYBACK',
+        IFRAME_SCRIPTING: 'IFRAME_SCRIPTING',
+        DOM_SCRAPING: 'DOM_SCRAPING',
+        BLOBS: 'BLOBS',
+        DOM_PARSER: 'DOM_PARSER',
+        USER_MEDIA: 'USER_MEDIA',
+        DISPLAY_MEDIA: 'DISPLAY_MEDIA',
+        WEB_RTC: 'WEB_RTC',
+        CLIPBOARD: 'CLIPBOARD',
+        LOCAL_STORAGE: 'LOCAL_STORAGE',
+        WORKERS: 'WORKERS',
+        BATTERY_STATUS: 'BATTERY_STATUS',
+        MATCH_MEDIA: 'MATCH_MEDIA',
+        GEOLOCATION: 'GEOLOCATION'
       }
     },
     extension: {

@@ -57,7 +57,11 @@ export function installFrame(win, { engine, descriptor }) {
       documentId,
       report,
       // The offscreen iframe's remote requests, performed with this document's direct `fetch`.
-      network: createNetworkServer(win, { denied: descriptor.deniedHosts, report, fetch: (url, init) => win.fetch(url, init) }),
+      network: createNetworkServer(win, {
+        denied: descriptor.deniedHosts,
+        report,
+        fetch: (url, init) => win.fetch(url, init)
+      }),
       onEvent: (event) => context?.handleEvent(event)
     })
   } else {
@@ -95,14 +99,28 @@ export function installFrame(win, { engine, descriptor }) {
   installWorkerNetwork(win, {
     origin,
     report,
-    server: createNetworkServer(win, { denied: descriptor.deniedHosts, report, fetch: (url, init) => win.fetch(url, init) })
+    server: createNetworkServer(win, {
+      denied: descriptor.deniedHosts,
+      report,
+      fetch: (url, init) => win.fetch(url, init)
+    })
   })
 
   win.addEventListener('error', (event) =>
-    report({ check: 'ext-host-frame-error', error: event.message, file: event.filename, line: event.lineno, stack: String(event.error?.stack ?? '').slice(0, 2000) })
+    report({
+      check: 'ext-host-frame-error',
+      error: event.message,
+      file: event.filename,
+      line: event.lineno,
+      stack: String(event.error?.stack ?? '').slice(0, 2000)
+    })
   )
   win.addEventListener('unhandledrejection', (event) =>
-    report({ check: 'ext-host-frame-rejection', error: describe(event.reason), stack: String(event.reason?.stack ?? '').slice(0, 2000) })
+    report({
+      check: 'ext-host-frame-rejection',
+      error: describe(event.reason),
+      stack: String(event.reason?.stack ?? '').slice(0, 2000)
+    })
   )
   win.addEventListener('pagehide', () => context.disconnectAll())
   upstream.linked.catch((error) => console.warn('[ext-host]', describe(error)))
@@ -139,7 +157,8 @@ export function installFrame(win, { engine, descriptor }) {
       }
       void startBackground(win, { origin, descriptor, context, upstream, report })
     }
-    if (win.document.readyState === 'loading') win.document.addEventListener('DOMContentLoaded', () => void start(), { once: true })
+    if (win.document.readyState === 'loading')
+      win.document.addEventListener('DOMContentLoaded', () => void start(), { once: true })
     else void start()
   }
 
@@ -174,10 +193,18 @@ export async function checkPersistence(win, { descriptor, upstream, report }) {
   if (!descriptor.persistence) return null
   const marker = storeMarker(win, () => randomId('S'))
   try {
-    const { claimed } = await within(upstream.call('persistenceClaims'), 15000, 'the hub did not answer the storage check')
+    const { claimed } = await within(
+      upstream.call('persistenceClaims'),
+      15000,
+      'the hub did not answer the storage check'
+    )
     const probe = await probeClaims(win, descriptor.persistence.probe, Array.isArray(claimed) ? claimed : [])
     if (probe.error) report({ check: 'ext-host-storage-probe-failed', error: probe.error, checked: probe.checked })
-    return await within(upstream.call('persistenceReport', { store: marker.id, fresh: marker.fresh, ...probe }), 15000, 'the hub did not answer the storage check')
+    return await within(
+      upstream.call('persistenceReport', { store: marker.id, fresh: marker.fresh, ...probe }),
+      15000,
+      'the hub did not answer the storage check'
+    )
   } catch (error) {
     report({ check: 'ext-host-storage-probe-failed', error: describe(error) })
     return null
@@ -255,7 +282,11 @@ async function startBackground(win, { origin, descriptor, context, upstream, rep
     const install = await upstream.call('install')
     if (install?.event === 'installed') context.events.onInstalled.emit(install.details)
     else if (install?.event === 'startup') context.events.onStartup.emit()
-    report({ check: 'ext-host-background-started', lifecycle: install?.event ?? 'none', reason: install?.details?.reason })
+    report({
+      check: 'ext-host-background-started',
+      lifecycle: install?.event ?? 'none',
+      reason: install?.details?.reason
+    })
   } catch (error) {
     report({ check: 'ext-host-background-failed', error: describe(error) })
   }

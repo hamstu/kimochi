@@ -14,21 +14,13 @@ import { ExternalLink } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { Button, Callout, Dialog, DialogClose, DialogContent, Spinner } from '@kit'
 import { displayHtml } from '@texthooker/lib/html'
-import {
-  WHATS_NEW_TITLE,
-  comingTitle,
-  offeredRelease,
-  releaseDate,
-  whatsNewEntries
-} from '@ui/changelog'
+import { WHATS_NEW_TITLE, comingTitle, offeredRelease, releaseDate, whatsNewEntries } from '@ui/changelog'
 import { fetchChangelog } from '../bridge/changelog'
 import { useUpdateStatus } from '../bridge/updates'
 import './whats-new.css'
 
-
 /** Markdown (the changelog's, or the manifest's notes) as sanitised HTML. */
-const notesHtml = (markdown: string): string =>
-  displayHtml(marked.parse(markdown, { async: false, gfm: true }))
+const notesHtml = (markdown: string): string => displayHtml(marked.parse(markdown, { async: false, gfm: true }))
 
 /** A link in the notes opens in the browser; following it would navigate this window away. */
 function openLinksOutside(event: MouseEvent<HTMLElement>): void {
@@ -41,13 +33,7 @@ function openLinksOutside(event: MouseEvent<HTMLElement>): void {
 
 function Notes({ markdown }: { markdown: string }): JSX.Element {
   const html = useMemo(() => notesHtml(markdown), [markdown])
-  return (
-    <div
-      className="whats-new-notes"
-      onClick={openLinksOutside}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  )
+  return <div className="whats-new-notes" onClick={openLinksOutside} dangerouslySetInnerHTML={{ __html: html }} />
 }
 
 function WhatsNewContent({ releasesUrl }: { releasesUrl?: string }): JSX.Element {
@@ -65,10 +51,7 @@ function WhatsNewContent({ releasesUrl }: { releasesUrl?: string }): JSX.Element
   }, [])
 
   const currentVersion = status?.currentVersion ?? ''
-  const entries = useMemo(
-    () => (text === null ? [] : whatsNewEntries(text, currentVersion)),
-    [text, currentVersion]
-  )
+  const entries = useMemo(() => (text === null ? [] : whatsNewEntries(text, currentVersion)), [text, currentVersion])
   const coming = offeredRelease(status)
 
   return (
@@ -107,9 +90,7 @@ function WhatsNewContent({ releasesUrl }: { releasesUrl?: string }): JSX.Element
         return (
           <section key={entry.version || 'current'} className="whats-new-release">
             <header className="whats-new-head">
-              <h3 className="whats-new-version k-num">
-                {entry.version ? `Kimochi ${entry.version}` : 'This version'}
-              </h3>
+              <h3 className="whats-new-version k-num">{entry.version ? `Kimochi ${entry.version}` : 'This version'}</h3>
               {entry.current && entry.version && <span className="whats-new-meta">this version</span>}
               {date && <span className="whats-new-meta whats-new-date k-num">{date}</span>}
             </header>

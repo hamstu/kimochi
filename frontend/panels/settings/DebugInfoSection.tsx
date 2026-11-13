@@ -61,7 +61,8 @@ export function DebugInfoSection(): ReactNode {
     setOutcome(null)
     try {
       const result = await saveDebugBundle(debugMarkdown(await debugReport()))
-      if (result.saved) setOutcome({ tone: 'ok', text: `Saved to ${result.path ?? 'the chosen folder'}. Attach it to your report.` })
+      if (result.saved)
+        setOutcome({ tone: 'ok', text: `Saved to ${result.path ?? 'the chosen folder'}. Attach it to your report.` })
     } catch (error) {
       fail(error)
     } finally {

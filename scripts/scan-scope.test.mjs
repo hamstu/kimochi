@@ -101,8 +101,11 @@ function scan(includeSelector, nodes, nodeIndex, offset, length = 10, excludeSel
 
 /** The main window's shape: a sidebar label, then two transcript lines with token spans. */
 function mainWindow() {
-  const lineA = el({ class: 'line', 'data-yomitan-scan': '' },
-    el({ class: 'token' }, text('食べ')), el({ class: 'token' }, text('ました')))
+  const lineA = el(
+    { class: 'line', 'data-yomitan-scan': '' },
+    el({ class: 'token' }, text('食べ')),
+    el({ class: 'token' }, text('ました'))
+  )
   const lineB = el({ class: 'line', 'data-yomitan-scan': '' }, text('今日は'))
   const sidebar = el({ class: 'sidebar' }, text('設定'))
   const after = el({ class: 'settings' }, text('表示'))
@@ -183,16 +186,18 @@ async function loadFrontendMode() {
     write: false,
     format: 'esm',
     platform: 'neutral',
-    plugins: [{
-      name: 'stub-frontend',
-      setup(b) {
-        b.onResolve({ filter: /^\/js\// }, (args) => ({ path: args.path, namespace: 'stub' }))
-        b.onLoad({ filter: /.*/, namespace: 'stub' }, (args) => {
-          if (args.path !== '/js/app/frontend.js') return { contents: 'export {}' }
-          return { contents: 'export const Frontend = globalThis.__scanScopeFrontend' }
-        })
+    plugins: [
+      {
+        name: 'stub-frontend',
+        setup(b) {
+          b.onResolve({ filter: /^\/js\// }, (args) => ({ path: args.path, namespace: 'stub' }))
+          b.onLoad({ filter: /.*/, namespace: 'stub' }, (args) => {
+            if (args.path !== '/js/app/frontend.js') return { contents: 'export {}' }
+            return { contents: 'export const Frontend = globalThis.__scanScopeFrontend' }
+          })
+        }
       }
-    }]
+    ]
   })
   const code = Buffer.from(outputFiles[0].contents).toString('base64')
   const mode = await import(`data:text/javascript;base64,${code}`)
@@ -212,16 +217,19 @@ test('setScanScope scopes a frontend before it prepares, and later ones too', as
   assert.equal(frontend._textScanner.excludeSelector, NO_SCAN)
 })
 
-test('the hook card\'s controls and the hint bar carry data-no-scan; the hooked line does not', () => {
+test("the hook card's controls and the hint bar carry data-no-scan; the hooked line does not", () => {
   const card = read('ui/hook-card.js')
-  assert.match(card, /for \(const element of \[bar, controls, corner, menu\]\) element\.setAttribute\('data-no-scan', ''\)/)
+  assert.match(
+    card,
+    /for \(const element of \[bar, controls, corner, menu\]\) element\.setAttribute\('data-no-scan', ''\)/
+  )
   assert.doesNotMatch(card, /text\.setAttribute\('data-no-scan'/)
   assert.match(read('ui/overlay-hints.js'), /bar\.setAttribute\('data-no-scan', ''\)/)
   // Hachidori and 10ten skip it too: their scope check refuses a point inside the marker first.
   assert.match(read('host/ext/content.js'), /if \(element\?\.closest\?\.\('\[data-no-scan\]'\)\) return false/)
 })
 
-test('a document that never sets a scope keeps Yomitan\'s default of scanning everything', async () => {
+test("a document that never sets a scope keeps Yomitan's default of scanning everything", async () => {
   const { Frontend } = await loadFrontendMode()
   const frontend = new Frontend()
   await frontend.prepare()
@@ -235,7 +243,14 @@ test('only the panel relay scopes its scanner, to the marker the Log lines carry
   assert.match(relay, /export const SCAN_SELECTOR = '\[data-yomitan-scan\]'/)
   assert.match(relay, /^setScanScope\(SCAN_SELECTOR\)$/m)
   // The windows whose scanning must stay as it was never narrow it.
-  for (const path of ['ui/overlay.js', 'ui/popup-host.js', 'ui/api-lookup.js', 'host/yomitan/overlay.js', 'host/yomitan/panel.js', 'host/yomitan/common.js']) {
+  for (const path of [
+    'ui/overlay.js',
+    'ui/popup-host.js',
+    'ui/api-lookup.js',
+    'host/yomitan/overlay.js',
+    'host/yomitan/panel.js',
+    'host/yomitan/common.js'
+  ]) {
     assert.doesNotMatch(read(path), /setScanScope|includeSelector/, path)
   }
 })

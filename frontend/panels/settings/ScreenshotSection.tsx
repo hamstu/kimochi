@@ -69,9 +69,8 @@ export function ScreenshotSection(): ReactNode {
           <div className="settings-note">
             <Callout icon={<Info />}>
               <span>
-                Cards get your whole source. To send only part of it, open the source&apos;s{' '}
-                <strong>Crop area</strong> menu in the main window and choose{' '}
-                <strong>Set Anki crop area</strong>.
+                Cards get your whole source. To send only part of it, open the source&apos;s <strong>Crop area</strong>{' '}
+                menu in the main window and choose <strong>Set Anki crop area</strong>.
               </span>
             </Callout>
           </div>

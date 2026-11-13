@@ -29,16 +29,13 @@ use kimochi_capture::{Platform, Rect, SourceId};
 use serde_json::{json, Value};
 use windows::core::BOOL;
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
-use windows::Win32::Graphics::Gdi::{
-    EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
-};
+use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LBUTTON, VK_LWIN, VK_MENU, VK_RBUTTON, VK_RWIN,
-    VK_SHIFT,
+    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LBUTTON, VK_LWIN, VK_MENU, VK_RBUTTON, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetSystemMetrics, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
@@ -58,15 +55,15 @@ mod workspace;
 pub use cli::run_cli;
 pub use icon::app_icon_png;
 pub use magpie::{report as scaler_report, watch as watch_scaler, Change as ScalerChange};
-pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use mouseguard::{set_keyboard_guard, sync_mouse_buttons};
+pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use sources::{
-    front_window, frontmost_app, frontmost_pid, picker_sources, scaled_full_screen, shown_frame_info,
-    source_spaces, window_bounds, window_fullscreen,
+    front_window, frontmost_app, frontmost_pid, picker_sources, scaled_full_screen, shown_frame_info, source_spaces,
+    window_bounds, window_fullscreen,
 };
 pub use window::{
-    activate_process, activate_self, activate_window, bounds, ignore_key_menu, inspect, make_panel, order_front, panel_cursor,
-    panel_pointer, place, promote_to_key, raise_over_fullscreen, start_fullscreen_watch,
+    activate_process, activate_self, activate_window, bounds, ignore_key_menu, inspect, make_panel, order_front,
+    panel_cursor, panel_pointer, place, promote_to_key, raise_over_fullscreen, start_fullscreen_watch,
 };
 pub use workspace::observe_workspace;
 
@@ -88,10 +85,7 @@ pub fn request_accessibility() -> Result<bool, String> {
 /// `WM_NCHITTEST` with `HTTRANSPARENT` outside the regions would be the per-region
 /// route, but WebView2 hosts its content in a child HWND of another process's
 /// composition, which takes the hit test before the top-level window is asked.
-pub fn set_input_regions(
-    _w: &tauri::WebviewWindow,
-    _regions: Option<&[Rect]>,
-) -> Result<bool, String> {
+pub fn set_input_regions(_w: &tauri::WebviewWindow, _regions: Option<&[Rect]>) -> Result<bool, String> {
     Ok(false)
 }
 
@@ -117,14 +111,10 @@ pub fn cursor() -> Option<PointerSample> {
     unsafe { GetCursorPos(&mut p) }.ok()?;
     // Over a game Magpie is scaling: where the reader sees the cursor (`magpie::shown_cursor`).
     let (x, y) = magpie::shown_cursor((f64::from(p.x), f64::from(p.y)));
-    let held =
-        |vk: VIRTUAL_KEY| mouseguard::modifier_down(vk.0)
-            || (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0;
-    let primary = if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0 {
-        VK_RBUTTON
-    } else {
-        VK_LBUTTON
+    let held = |vk: VIRTUAL_KEY| {
+        mouseguard::modifier_down(vk.0) || (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0
     };
+    let primary = if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0 { VK_RBUTTON } else { VK_LBUTTON };
     Some(PointerSample {
         x,
         y,
@@ -227,33 +217,18 @@ fn monitors() -> Vec<Monitor> {
         BOOL(1)
     }
     let mut handles: Vec<HMONITOR> = Vec::new();
-    let _ = unsafe {
-        EnumDisplayMonitors(
-            None,
-            None,
-            Some(collect),
-            LPARAM(&mut handles as *mut Vec<HMONITOR> as isize),
-        )
-    };
+    let _ =
+        unsafe { EnumDisplayMonitors(None, None, Some(collect), LPARAM(&mut handles as *mut Vec<HMONITOR> as isize)) };
     let mut list: Vec<(bool, Monitor)> = handles
         .into_iter()
         .filter_map(|handle| {
-            let mut info = MONITORINFO {
-                cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-                ..Default::default()
-            };
-            unsafe { GetMonitorInfoW(handle, &mut info) }
-                .as_bool()
-                .then(|| {
-                    (
-                        info.dwFlags & MONITORINFOF_PRIMARY != 0,
-                        Monitor {
-                            handle,
-                            bounds: rect_of(info.rcMonitor),
-                            work_area: rect_of(info.rcWork),
-                        },
-                    )
-                })
+            let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+            unsafe { GetMonitorInfoW(handle, &mut info) }.as_bool().then(|| {
+                (
+                    info.dwFlags & MONITORINFOF_PRIMARY != 0,
+                    Monitor { handle, bounds: rect_of(info.rcMonitor), work_area: rect_of(info.rcWork) },
+                )
+            })
         })
         .collect();
     list.sort_by_key(|(primary, _)| !*primary);
@@ -282,9 +257,7 @@ pub fn display_infos() -> Vec<DisplayInfo> {
         .into_iter()
         .map(|m| {
             let (mut dpi_x, mut dpi_y) = (96u32, 96u32);
-            let scale = match unsafe {
-                GetDpiForMonitor(m.handle, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y)
-            } {
+            let scale = match unsafe { GetDpiForMonitor(m.handle, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) } {
                 Ok(()) if dpi_x > 0 => f64::from(dpi_x) / 96.,
                 _ => 1.,
             };
@@ -332,13 +305,9 @@ fn process_image_path(pid: u32) -> Option<String> {
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = vec![0u16; 1024];
         let mut len = buf.len() as u32;
-        let mut ok = QueryFullProcessImageNameW(
-            process,
-            PROCESS_NAME_WIN32,
-            windows::core::PWSTR(buf.as_mut_ptr()),
-            &mut len,
-        )
-        .is_ok();
+        let mut ok =
+            QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len)
+                .is_ok();
         if !ok {
             // Long paths: one retry at the maximum Win32 length.
             buf = vec![0u16; 32_768];
@@ -360,9 +329,7 @@ fn process_image_path(pid: u32) -> Option<String> {
 /// Go helper sent the file name *with* `.exe`; nothing in this tree depended on the
 /// extension, and the stem is what `frontmost_app` and the icon lookup agree on.
 fn process_name(pid: u32) -> Option<String> {
-    process_image_path(pid)
-        .map(|path| rules::image_stem(&path))
-        .filter(|name| !name.is_empty())
+    process_image_path(pid).map(|path| rules::image_stem(&path)).filter(|name| !name.is_empty())
 }
 
 fn window_text(hwnd: HWND) -> String {
@@ -394,15 +361,10 @@ pub fn open_capture_settings() -> Result<(), String> {
 fn os_version() -> String {
     use windows::Wdk::System::SystemServices::RtlGetVersion;
     use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
-    let mut info = OSVERSIONINFOW {
-        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
-        ..Default::default()
-    };
+    let mut info =
+        OSVERSIONINFOW { dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32, ..Default::default() };
     if unsafe { RtlGetVersion(&mut info) }.is_ok() {
-        format!(
-            "{}.{}.{}",
-            info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber
-        )
+        format!("{}.{}.{}", info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber)
     } else {
         String::new()
     }

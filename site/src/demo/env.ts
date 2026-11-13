@@ -40,7 +40,11 @@ function subscribeVisibility(update: () => void): () => void {
 /** Whether the element is on screen (with a margin) and the tab is visible. */
 export function useOnScreen(ref: RefObject<Element | null>, rootMargin = '0px'): boolean {
   const [inView, setInView] = useState(false)
-  const visible = useSyncExternalStore(subscribeVisibility, () => document.visibilityState === 'visible', () => true)
+  const visible = useSyncExternalStore(
+    subscribeVisibility,
+    () => document.visibilityState === 'visible',
+    () => true
+  )
   useEffect(() => {
     const el = ref.current
     if (!el) return

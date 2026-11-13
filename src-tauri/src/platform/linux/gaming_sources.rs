@@ -89,10 +89,7 @@ fn trace_catalog(sources: &[Source]) {
 
 /// The running app `decorate` named `name`.
 fn app_named(name: &str) -> Option<u32> {
-    linux_gamescope::running()
-        .into_iter()
-        .find(|app| name_of(app.app_id, &app.title) == name)
-        .map(|app| app.app_id)
+    linux_gamescope::running().into_iter().find(|app| name_of(app.app_id, &app.title) == name).map(|app| app.app_id)
 }
 
 /// Steam's icon for the running app named `name`, as PNG no larger than `target`.
@@ -253,7 +250,9 @@ fn rebind_restarted(service: &crate::state::Shared) {
     let live: Vec<String> = sources().into_iter().map(|s| s.id).collect();
     let Some(id) = restarted(selected.as_deref(), &live) else { return };
     match crate::sources::select_keeping_crop(service, id) {
-        Ok(_) => service.log(serde_json::json!({"check": "gaming-mode-source-rebound", "sourceId": id, "from": selected})),
+        Ok(_) => {
+            service.log(serde_json::json!({"check": "gaming-mode-source-rebound", "sourceId": id, "from": selected}))
+        }
         Err(error) => eprintln!("Gaming Mode: could not follow the restarted game to {id}: {error}"),
     }
 }
@@ -280,10 +279,7 @@ mod tests {
 
     #[test]
     fn a_restarted_game_is_found_again_by_its_app_id() {
-        let live = vec![
-            "gamescope:display:0".to_string(),
-            "gamescope:window:3311684016:529547".to_string(),
-        ];
+        let live = vec!["gamescope:display:0".to_string(), "gamescope:window:3311684016:529547".to_string()];
         // The game restarted: same app, new pid.
         assert_eq!(restarted(Some("gamescope:window:3311684016:523473"), &live), Some(&live[1]));
         // Still the live window, the screen, another game that quit, or nothing selected: stay.

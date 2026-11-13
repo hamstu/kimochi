@@ -5,20 +5,47 @@ import { load } from './load.mjs'
 const { ReadingHold } = await load('reading-hold.ts')
 
 function fixture() {
-  const root = new EventTarget(), win = new EventTarget(), timers = new Map()
-  let next = 0, dismissed = 0, pointer = { x: 15, y: 25 }, popup = false
-  const hold = new ReadingHold(), rect = { x: 10, y: 20, width: 100, height: 30 }
+  const root = new EventTarget(),
+    win = new EventTarget(),
+    timers = new Map()
+  let next = 0,
+    dismissed = 0,
+    pointer = { x: 15, y: 25 },
+    popup = false
+  const hold = new ReadingHold(),
+    rect = { x: 10, y: 20, width: 100, height: 30 }
   win.document = { documentElement: root }
-  win.setTimeout = fn => { timers.set(++next, fn); return next }
-  win.clearTimeout = id => timers.delete(id)
+  win.setTimeout = (fn) => {
+    timers.set(++next, fn)
+    return next
+  }
+  win.clearTimeout = (id) => timers.delete(id)
   const held = () => hold.update(pointer, [rect], popup)
   const stop = installWaylandPointerExit(win, {
-    leave: () => { pointer = null },
-    dismiss: () => { dismissed++; popup = false }
+    leave: () => {
+      pointer = null
+    },
+    dismiss: () => {
+      dismissed++
+      popup = false
+    }
   })
-  return { root, win, held, stop, timers, popup: value => { popup = value },
+  return {
+    root,
+    win,
+    held,
+    stop,
+    timers,
+    popup: (value) => {
+      popup = value
+    },
     dismissed: () => dismissed,
-    flush: () => { const pending = [...timers.values()]; timers.clear(); pending.forEach(fn => fn()) } }
+    flush: () => {
+      const pending = [...timers.values()]
+      timers.clear()
+      pending.forEach((fn) => fn())
+    }
+  }
 }
 
 test('leaving a Wayland text input region releases stale hover and the reading hold', () => {

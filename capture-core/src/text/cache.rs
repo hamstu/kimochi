@@ -20,10 +20,7 @@ struct CachedRead {
 
 impl CachedObserver {
     pub fn new(inner: Box<dyn TextObserver>) -> Self {
-        Self {
-            inner,
-            previous: None,
-        }
+        Self { inner, previous: None }
     }
 }
 

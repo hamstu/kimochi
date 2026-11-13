@@ -24,5 +24,9 @@ export function useMediaQuery(query: string, server = false): boolean {
     },
     [query]
   )
-  return useSyncExternalStore(subscribe, () => matchMedia(query).matches, () => server)
+  return useSyncExternalStore(
+    subscribe,
+    () => matchMedia(query).matches,
+    () => server
+  )
 }

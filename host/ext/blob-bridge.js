@@ -103,7 +103,9 @@ export function installBlobBridge(win, events) {
 /** Whether a page's message carries local blob: URLs (or a backup) that need the bridge. */
 export function needsBlobBridge(message) {
   if (message?.type === 'hd_import') {
-    return isBlob(message.blobUrl) || (Array.isArray(message.resources) && message.resources.some((r) => isBlob(r?.blobUrl)))
+    return (
+      isBlob(message.blobUrl) || (Array.isArray(message.resources) && message.resources.some((r) => isBlob(r?.blobUrl)))
+    )
   }
   return ['hd_backup_prepare', 'hd_backup_export', 'hd_backup_release'].includes(message?.type)
 }
@@ -138,7 +140,7 @@ export function createBlobBridgeClient(win, { send, report }) {
   async function download(url) {
     const parts = []
     let type = ''
-    for (let offset = 0; ; ) {
+    for (let offset = 0; ;) {
       const reply = await bridge({ type: 'read', blobUrl: url, offset })
       parts.push(decode(win, reply.data))
       type = reply.type ?? type
@@ -174,14 +176,23 @@ export function createBlobBridgeClient(win, { send, report }) {
         copy.blobUrl = sent.blobUrl
       }
       if (Array.isArray(copy.resources)) {
-        copy.resources = await Promise.all(copy.resources.map(async (resource) => {
-          if (!isBlob(resource?.blobUrl)) return resource
-          const sent = await upload(resource.blobUrl)
-          uploaded.push(sent)
-          return { ...resource, blobUrl: sent.blobUrl }
-        }))
+        copy.resources = await Promise.all(
+          copy.resources.map(async (resource) => {
+            if (!isBlob(resource?.blobUrl)) return resource
+            const sent = await upload(resource.blobUrl)
+            uploaded.push(sent)
+            return { ...resource, blobUrl: sent.blobUrl }
+          })
+        )
       }
-      if (uploaded.length) report({ check: 'ext-host-blob-bridge', direction: 'import', type: message.type, files: uploaded.length, bytes: uploaded.reduce((sum, u) => sum + u.bytes, 0) })
+      if (uploaded.length)
+        report({
+          check: 'ext-host-blob-bridge',
+          direction: 'import',
+          type: message.type,
+          files: uploaded.length,
+          bytes: uploaded.reduce((sum, u) => sum + u.bytes, 0)
+        })
       return await send(copy)
     } catch (error) {
       report({ check: 'ext-host-blob-bridge-failed', type: message.type, error: String(error?.message ?? error) })

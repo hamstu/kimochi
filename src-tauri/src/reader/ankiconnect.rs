@@ -68,7 +68,9 @@ pub fn parse_url(raw: &str) -> Result<reqwest::Url, String> {
         return Err(format!("The address must not have a query or fragment. {example}"));
     }
     if url.port().is_none() && url.scheme() == "http" {
-        return Err(format!("The address needs a port: AnkiConnect listens on 8765 unless its webBindPort says otherwise. {example}"));
+        return Err(format!(
+            "The address needs a port: AnkiConnect listens on 8765 unless its webBindPort says otherwise. {example}"
+        ));
     }
     if url.path().trim_end_matches('/') == "/api/v1" {
         return Err(format!("Leave out /api/v1: Kimochi uses AnkiConnect's classic endpoint. {example}"));
@@ -239,13 +241,7 @@ pub async fn anki_store_media_file(
     filename: String,
     data_base64: String,
 ) -> Result<String, String> {
-    call(
-        &state.settings,
-        &url,
-        "storeMediaFile",
-        json!({ "filename": filename, "data": data_base64 }),
-    )
-    .await
+    call(&state.settings, &url, "storeMediaFile", json!({ "filename": filename, "data": data_base64 })).await
 }
 
 #[tauri::command]
@@ -284,9 +280,7 @@ pub async fn anki_add_note(
         }
     });
     let result: Value = call(&state.settings, &url, "addNote", params).await?;
-    let note_id = result
-        .as_u64()
-        .ok_or_else(|| "addNote returned non-numeric id".to_string())?;
+    let note_id = result.as_u64().ok_or_else(|| "addNote returned non-numeric id".to_string())?;
     // The Anki tab's record of the session's cards: the pop-up names its term.
     let (found, found_reading) = crate::anki_cards::card_term(&named);
     let term = term.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).unwrap_or(found);
@@ -364,20 +358,47 @@ pub async fn anki_connect_relay(app: tauri::AppHandle, url: String, body: String
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum Status {
     #[serde(rename_all = "camelCase")]
-    Connected { url: String, version: u64, latency_ms: u64, key_required: bool },
+    Connected {
+        url: String,
+        version: u64,
+        latency_ms: u64,
+        key_required: bool,
+    },
     /// AnkiConnect has an apiKey set and Kimochi has none.
-    KeyRequired { url: String },
+    KeyRequired {
+        url: String,
+    },
     /// Kimochi's key is not the one AnkiConnect has.
-    KeyRejected { url: String },
+    KeyRejected {
+        url: String,
+    },
     /// Nothing answers there. `suggestion`: the default address, when AnkiConnect answers there.
-    NotRunning { url: String, suggestion: Option<String> },
-    Timeout { url: String },
+    NotRunning {
+        url: String,
+        suggestion: Option<String>,
+    },
+    Timeout {
+        url: String,
+    },
     /// Something else answers there: a wrong port.
-    NotAnkiConnect { url: String, detail: String, suggestion: Option<String> },
+    NotAnkiConnect {
+        url: String,
+        detail: String,
+        suggestion: Option<String>,
+    },
     /// HTTP 403, or AnkiConnect denied permission.
-    Blocked { url: String, status: u16 },
-    InvalidUrl { url: String, error: String },
-    Error { url: String, message: String },
+    Blocked {
+        url: String,
+        status: u16,
+    },
+    InvalidUrl {
+        url: String,
+        error: String,
+    },
+    Error {
+        url: String,
+        message: String,
+    },
 }
 
 const KEY_ERROR: &str = "valid api key must be provided";
@@ -403,7 +424,9 @@ async fn check(url: &str, key: Option<&str>, fallback: Option<&str>) -> Status {
         }
         // An AnkiConnect older than requestPermission: `version` below decides.
         Err(Failure::Api(_)) => false,
-        Err(Failure::Refused) => return Status::NotRunning { url: shown, suggestion: suggest(&parsed, fallback).await },
+        Err(Failure::Refused) => {
+            return Status::NotRunning { url: shown, suggestion: suggest(&parsed, fallback).await }
+        }
         Err(Failure::Timeout) => return Status::Timeout { url: shown },
         Err(Failure::Status(403)) => return Status::Blocked { url: shown, status: 403 },
         Err(Failure::Status(status)) => {
@@ -470,10 +493,26 @@ pub(crate) mod tests {
 
     #[test]
     fn addresses_are_validated() {
-        for ok in ["http://127.0.0.1:8765", "http://localhost:8770/", " http://[::1]:9000 ", "https://anki.example", "http://192.168.1.5:8765"] {
+        for ok in [
+            "http://127.0.0.1:8765",
+            "http://localhost:8770/",
+            " http://[::1]:9000 ",
+            "https://anki.example",
+            "http://192.168.1.5:8765",
+        ] {
             assert!(parse_url(ok).is_ok(), "{ok}");
         }
-        for bad in ["", "8765", "127.0.0.1:8765", "ftp://127.0.0.1:8765", "http://127.0.0.1", "http://u:p@127.0.0.1:8765", "http://127.0.0.1:8765/?x=1", "http://127.0.0.1:8765/api/v1", "http://127.0.0.1:99999"] {
+        for bad in [
+            "",
+            "8765",
+            "127.0.0.1:8765",
+            "ftp://127.0.0.1:8765",
+            "http://127.0.0.1",
+            "http://u:p@127.0.0.1:8765",
+            "http://127.0.0.1:8765/?x=1",
+            "http://127.0.0.1:8765/api/v1",
+            "http://127.0.0.1:99999",
+        ] {
             assert!(parse_url(bad).is_err(), "{bad}");
         }
     }
@@ -522,7 +561,11 @@ pub(crate) mod tests {
                     if let Some((head, body)) = text.split_once("\r\n\r\n") {
                         let length = head
                             .lines()
-                            .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                            .find_map(|l| {
+                                l.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                            })
                             .unwrap_or(0);
                         if body.len() >= length {
                             break text;
@@ -556,11 +599,24 @@ pub(crate) mod tests {
                     buf.extend_from_slice(&chunk[..n]);
                     let text = String::from_utf8_lossy(&buf).to_string();
                     let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
-                    let length = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
-                    if body.len() >= length { break; }
+                    let length = head
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                        })
+                        .unwrap_or(0);
+                    if body.len() >= length {
+                        break;
+                    }
                 }
                 let answer = json!({ "result": 6, "error": null }).to_string();
-                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{answer}", answer.len());
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{answer}",
+                    answer.len()
+                );
                 std::thread::sleep(Duration::from_millis(100));
             }
         });
@@ -634,7 +690,10 @@ pub(crate) mod tests {
         assert!(!request.to_ascii_lowercase().contains("\r\norigin:"), "{request}");
         assert!(request.contains(r#""key":"secret""#), "{request}");
         assert!(relay(&anki, "{}").await.is_err());
-        assert!(relay("localhost:8765", r#"{"action":"version"}"#).await.is_err(), "the extension's address is validated");
+        assert!(
+            relay("localhost:8765", r#"{"action":"version"}"#).await.is_err(),
+            "the extension's address is validated"
+        );
         assert!(relay(&closed_port(), r#"{"action":"version"}"#).await.unwrap_err().contains("not answering"));
     }
 
@@ -692,7 +751,9 @@ pub(crate) mod tests {
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
         let word = format!("猫{stamp}");
         let note = json!({ "deckName": "Kimochi E2E", "modelName": "Basic", "fields": { "Front": word, "Back": "cat" }, "tags": ["kimochi-e2e"] });
-        let can = relayed(json!({ "action": "canAddNotesWithErrorDetail", "version": 2, "params": { "notes": [note] } })).await;
+        let can =
+            relayed(json!({ "action": "canAddNotesWithErrorDetail", "version": 2, "params": { "notes": [note] } }))
+                .await;
         assert_eq!(can[0]["canAdd"], true, "{can}");
         let id = relayed(json!({ "action": "addNote", "version": 2, "params": { "note": note } })).await;
         assert!(id.as_u64().is_some(), "{id}");
@@ -702,8 +763,8 @@ pub(crate) mod tests {
 
         // Kimochi's own client, through the same validation and key.
         let url_ = parse_url(&url).unwrap();
-        let names = post(&url_, &request("modelFieldNames", json!({ "modelName": "Basic" }), key), CALL_TIMEOUT).await.unwrap();
+        let names =
+            post(&url_, &request("modelFieldNames", json!({ "modelName": "Basic" }), key), CALL_TIMEOUT).await.unwrap();
         assert_eq!(names, json!(["Front", "Back"]));
     }
 }
-

@@ -25,7 +25,6 @@ import tenten from '../assets/engine-icons/tenten.svg'
 import { OCR_PICTURES, type Picture } from './enginePictures'
 import './engine-icon.css'
 
-
 const DICTIONARY_PICTURES: Record<DictionaryEngine, Picture> = {
   yomitan: { src: yomitan },
   'custom-api': { src: yomitanApi },

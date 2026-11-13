@@ -168,10 +168,8 @@ pub fn merge(plan: Plan, read: Vec<TextLine>) -> Vec<TextLine> {
     let touched = |r: Rect| plan.changed.iter().any(|c| intersects(*c, r));
     let still: Vec<&TextLine> = plan.removed.iter().filter(|l| !touched(l.bbox)).collect();
     // New readings over changed pixels, or over text nobody had read before.
-    let mut read: Vec<TextLine> = read
-        .into_iter()
-        .filter(|l| touched(l.bbox) || !still.iter().any(|s| intersects(s.bbox, l.bbox)))
-        .collect();
+    let mut read: Vec<TextLine> =
+        read.into_iter().filter(|l| touched(l.bbox) || !still.iter().any(|s| intersects(s.bbox, l.bbox))).collect();
     // Unchanged lines that no new reading took over keep what they said.
     for line in still {
         if !read.iter().any(|n| intersects(n.bbox, line.bbox)) {
@@ -299,7 +297,11 @@ fn margin(lines: &[TextLine]) -> u32 {
         .iter()
         .map(|l| {
             let (w, h) = (l.bbox[2] - l.bbox[0], l.bbox[3] - l.bbox[1]);
-            if l.is_vertical { w } else { h }
+            if l.is_vertical {
+                w
+            } else {
+                h
+            }
         })
         .collect();
     heights.sort_unstable();
@@ -404,7 +406,8 @@ mod tests {
     #[test]
     fn a_line_typing_out_is_read_whole_with_room_for_the_next_glyph() {
         let before = frame(800, 400, &[[100, 300, 300, 330]]);
-        let previous = Previous::new(&before, vec![line("title", [100, 20, 400, 60]), line("今日は", [100, 300, 300, 330])]);
+        let previous =
+            Previous::new(&before, vec![line("title", [100, 20, 400, 60]), line("今日は", [100, 300, 300, 330])]);
         // One more glyph at the end of the line.
         let after = frame(800, 400, &[[100, 300, 300, 330], [302, 300, 330, 330]]);
         let plan = plan(&previous, &after, (0, 0)).expect("incremental");

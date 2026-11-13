@@ -21,7 +21,11 @@ type Change = (&'static str, Option<String>);
 /// What the launcher scripts would change, when this process is in Gamescope without them;
 /// `None` when it already has them, is elsewhere, or Gamescope's Wayland socket is missing (the
 /// script refuses to start then, and the plain X11 path is all there is).
-fn launcher_env(get: impl Fn(&str) -> Option<String>, socket_exists: impl Fn(&Path) -> bool, uid: u32) -> Option<Vec<Change>> {
+fn launcher_env(
+    get: impl Fn(&str) -> Option<String>,
+    socket_exists: impl Fn(&Path) -> bool,
+    uid: u32,
+) -> Option<Vec<Change>> {
     let set = |key: &str| get(key).filter(|value| !value.is_empty());
     let in_gamescope = set("XDG_CURRENT_DESKTOP").is_some_and(|desktop| desktop.eq_ignore_ascii_case("gamescope"));
     if !in_gamescope || set("KIMOCHI_GAMESCOPE_OVERLAY").is_some() || set("KIMOCHI_NO_GAMING_RELAUNCH").is_some() {
@@ -34,7 +38,9 @@ fn launcher_env(get: impl Fn(&str) -> Option<String>, socket_exists: impl Fn(&Pa
         return None;
     }
     // launch-from-steam.sh
-    let scale = set("KIMOCHI_GAMESCOPE_SCALE").filter(|s| matches!(s.as_str(), "1" | "2" | "3" | "4")).unwrap_or_else(|| "1".into());
+    let scale = set("KIMOCHI_GAMESCOPE_SCALE")
+        .filter(|s| matches!(s.as_str(), "1" | "2" | "3" | "4"))
+        .unwrap_or_else(|| "1".into());
     let ui_scale = set("KIMOCHI_GAMESCOPE_UI_SCALE").unwrap_or_else(|| "1.5".into());
     let app_id = set("KIMOCHI_STEAM_APP_ID").or_else(|| set("SteamAppId")).unwrap_or_default();
     let bus = set("DBUS_SESSION_BUS_ADDRESS").unwrap_or_else(|| format!("unix:path={runtime}/bus"));

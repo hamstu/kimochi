@@ -54,13 +54,7 @@ export const HOVER_PREVIEW_REUSE_MS = 2000
  * A url that is replaced is handed to `release` (an object url to revoke).
  */
 export class HoverPreview {
-  constructor({
-    capture,
-    onChange,
-    release,
-    now = () => Date.now(),
-    reuseMs = HOVER_PREVIEW_REUSE_MS
-  }) {
+  constructor({ capture, onChange, release, now = () => Date.now(), reuseMs = HOVER_PREVIEW_REUSE_MS }) {
     this.capture = capture
     this.onChange = onChange
     this.release = release
@@ -79,9 +73,7 @@ export class HoverPreview {
     try {
       result = await this.capture({
         reusable: (key) =>
-          this.cached?.key === key && this.now() - this.cached.at < this.reuseMs
-            ? this.cached.url
-            : null,
+          this.cached?.key === key && this.now() - this.cached.at < this.reuseMs ? this.cached.url : null,
         show: (key) => {
           if (generation === this.generation && this.cached?.key === key) {
             this.setUrl(this.cached.url, false)
@@ -168,8 +160,7 @@ export class HoverOverlay {
    *          origin: object|null}} view
    */
   update(view) {
-    const { visible, showWindowOutline, showCropRegion, windowImage, windowImageStale, bounds, crop, origin } =
-      view
+    const { visible, showWindowOutline, showCropRegion, windowImage, windowImageStale, bounds, crop, origin } = view
     if (!visible || !bounds || !origin) {
       this.clear()
       return

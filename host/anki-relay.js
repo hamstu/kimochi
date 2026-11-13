@@ -64,7 +64,10 @@ export async function relayAnkiConnect(url, body, { signal = null, realm = globa
   try {
     // On Hachidori's loopback origin the extension window reaches it as a plugin command.
     const prefix = realm?.__kimochiExtCommandPrefix
-    const call = invoke(typeof prefix === 'string' ? `${prefix}anki_connect_relay` : 'anki_connect_relay', { url: String(url), body })
+    const call = invoke(typeof prefix === 'string' ? `${prefix}anki_connect_relay` : 'anki_connect_relay', {
+      url: String(url),
+      body
+    })
     reply = signal
       ? await Promise.race([
           call,

@@ -144,8 +144,16 @@ pub fn looks_japanese(text: &str, language: &Language) -> bool {
 pub fn is_generic_api_hook(hookcode: &str) -> bool {
     let lower = hookcode.to_ascii_lowercase();
     [
-        "gdi32.dll", "user32.dll", "kernel32.dll", "gdiplus.dll", "oleaut32.dll", "d3dx9", "d3d9.dll",
-        "msvcrt.dll", "ucrtbase.dll", "dwrite.dll",
+        "gdi32.dll",
+        "user32.dll",
+        "kernel32.dll",
+        "gdiplus.dll",
+        "oleaut32.dll",
+        "d3dx9",
+        "d3d9.dll",
+        "msvcrt.dll",
+        "ucrtbase.dll",
+        "dwrite.dll",
     ]
     .iter()
     .any(|module| lower.contains(module))
@@ -201,9 +209,7 @@ pub fn blocks(lines: &[OcrLine]) -> Vec<Block> {
             }),
         }
     }
-    open.into_iter()
-        .map(|b| Block { text: normalize(&b.texts.concat()), area: b.area })
-        .collect()
+    open.into_iter().map(|b| Block { text: normalize(&b.texts.concat()), area: b.area }).collect()
 }
 
 /// The fewest characters a run shared with a misread block must have: shorter runs turn up
@@ -242,11 +248,7 @@ const MIN_JAPANESE: f64 = 0.3;
 /// nothing is left out, so an empty result means "no thread is on screen yet".
 pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) -> Vec<Scored> {
     let scale = letter_scale(language);
-    let largest = blocks
-        .iter()
-        .enumerate()
-        .max_by(|a, b| a.1.area.total_cmp(&b.1.area))
-        .map(|(i, _)| i);
+    let largest = blocks.iter().enumerate().max_by(|a, b| a.1.area.total_cmp(&b.1.area)).map(|(i, _)| i);
     let mut scored: Vec<Scored> = candidates
         .iter()
         .filter_map(|candidate| {
@@ -417,7 +419,11 @@ impl Parse {
 
     fn trimmed(&self) -> Vec<String> {
         let t = self.text.trim();
-        if t.is_empty() { vec![] } else { vec![t.to_string()] }
+        if t.is_empty() {
+            vec![]
+        } else {
+            vec![t.to_string()]
+        }
     }
 
     /// The original text of norm[from..to], line breaks and all.
@@ -786,10 +792,7 @@ mod tests {
         let fixture = unity();
         assert_eq!(collapse_typewriter(fixture["setText"].as_str().unwrap()), UNITY_LINE);
         // The shadow copy wraps at other places; the same line comes out.
-        assert_eq!(
-            normalize(&collapse_typewriter(fixture["setTextShadow"].as_str().unwrap())),
-            normalize(UNITY_LINE)
-        );
+        assert_eq!(normalize(&collapse_typewriter(fixture["setTextShadow"].as_str().unwrap())), normalize(UNITY_LINE));
     }
 
     #[test]
@@ -822,8 +825,14 @@ mod tests {
         };
         let a = "「少年は春の帰り道で雨に降られたのです」";
         let b = "「そして、町は静かになりました」";
-        let skipped: String = a.chars().take(4).collect::<Vec<_>>().iter().enumerate()
-            .map(|(i, _)| a.chars().take(i + 1).collect::<String>()).collect();
+        let skipped: String = a
+            .chars()
+            .take(4)
+            .collect::<Vec<_>>()
+            .iter()
+            .enumerate()
+            .map(|(i, _)| a.chars().take(i + 1).collect::<String>())
+            .collect();
         assert_eq!(typewriter_lines(&format!("{skipped}{a}{}", typed(b))), vec![a, b]);
         assert_eq!(collapse_typewriter(&format!("{}{}", typed(a), typed(b))), b);
         assert_eq!(typewriter_lines(&format!("{}{}", typed(a), typed(b))), vec![a, b]);
@@ -911,9 +920,17 @@ mod tests {
         assert_eq!(collapse("「ん？」「ん？」「ん？」"), "「ん？」");
         // Its name and line drawn apart: name, name, line, line, then the two together.
         assert_eq!(collapse("ゆかり＠？？？ゆかり＠？？？「それは秘密にしておくよ」「それは秘密にしておくよ」ゆかり＠？？？「それは秘密にしておくよ」"), "ゆかり＠？？？「それは秘密にしておくよ」");
-        assert_eq!(collapse(&format!("まあ、そういうことだ。健一{a}健一{a}")), format!("まあ、そういうことだ。健一{a}"));
+        assert_eq!(
+            collapse(&format!("まあ、そういうことだ。健一{a}健一{a}")),
+            format!("まあ、そういうことだ。健一{a}")
+        );
         // Words and short cries said twice are the text.
-        for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
+        for text in [
+            "さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。",
+            "「うん、うん」",
+            "あはは、あはは！",
+            "今日は猫と一緒に学校へ行きます。",
+        ] {
             assert_eq!(collapse(text), text);
         }
     }
@@ -982,8 +999,24 @@ mod tests {
         let set_text = collapse_typewriter(fixture["setText"].as_str().unwrap());
         let inequality = collapse_typewriter(fixture["opInequality"].as_str().unwrap());
         let candidates = [
-            Candidate { key: "inequality", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "", text: &inequality, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "set_text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: &set_text, recent: 1, count: 1, noise: 0.0 },
+            Candidate {
+                key: "inequality",
+                hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY",
+                name: "",
+                text: &inequality,
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "set_text",
+                hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY",
+                name: "",
+                text: &set_text,
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
         ];
         let screen = [
             line("AUTO SKIP LOG", 1290.0, 820.0, 300.0, 24.0),
@@ -997,7 +1030,15 @@ mod tests {
     #[test]
     fn a_path_that_shares_the_window_title_is_never_chosen() {
         let path = "C:\\Users\\me\\Games\\Sample Game\\Sample Game_Data\\StreamingAssets";
-        let candidates = [Candidate { key: "path", hookcode: "HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", name: "", text: path, recent: 1, count: 1, noise: 0.0 }];
+        let candidates = [Candidate {
+            key: "path",
+            hookcode: "HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY",
+            name: "",
+            text: path,
+            recent: 1,
+            count: 1,
+            noise: 0.0,
+        }];
         let screen = [
             line("Sample Game", 10.0, 5.0, 200.0, 20.0),
             line("「静かな港町に流れ着いた古い手紙により", 430.0, 880.0, 700.0, 32.0),
@@ -1009,8 +1050,24 @@ mod tests {
     fn of_a_text_and_its_shadow_the_unwrapped_copy_wins() {
         let screen = [line("「最後の答えは、まだ誰も知らない」", 430.0, 880.0, 700.0, 32.0)];
         let candidates = [
-            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最\n後の答えは、\nまだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最後の答えは、まだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
+            Candidate {
+                key: "shadow",
+                hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY",
+                name: "",
+                text: "「最\n後の答えは、\nまだ誰も知らない」",
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "text",
+                hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY",
+                name: "",
+                text: "「最後の答えは、まだ誰も知らない」",
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
         ];
         assert_eq!(score(&candidates, &blocks(&screen), ja())[0].key, "text");
     }
@@ -1027,10 +1084,42 @@ mod tests {
         ];
         let dialogue = format!("{} {}", rows[0], rows[1]);
         let candidates = [
-            Candidate { key: "name", hookcode: "HS0@4A21F0:game.exe", name: "", text: name, recent: 1, count: 3, noise: 0.0 },
-            Candidate { key: "asset", hookcode: "HS0@4A3000:game.exe", name: "", text: "bg_classroom01", recent: 1, count: 3, noise: 0.0 },
-            Candidate { key: "hud", hookcode: "HS0@4A4000:game.exe", name: "", text: hud, recent: 1, count: 3, noise: 0.0 },
-            Candidate { key: "line", hookcode: "HS0@4A5000:game.exe", name: "", text: &dialogue, recent: 1, count: 3, noise: 0.0 },
+            Candidate {
+                key: "name",
+                hookcode: "HS0@4A21F0:game.exe",
+                name: "",
+                text: name,
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "asset",
+                hookcode: "HS0@4A3000:game.exe",
+                name: "",
+                text: "bg_classroom01",
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "hud",
+                hookcode: "HS0@4A4000:game.exe",
+                name: "",
+                text: hud,
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "line",
+                hookcode: "HS0@4A5000:game.exe",
+                name: "",
+                text: &dialogue,
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
         ];
         score(&candidates, &blocks(&screen), language)
     }
@@ -1038,8 +1127,18 @@ mod tests {
     #[test]
     fn a_spaced_language_game_picks_its_dialogue_not_a_name_or_a_word() {
         for (language, name, rows, hud) in [
-            ("en", "Natalie", ["Natalie, did you finish the report before", "the meeting? We have ten minutes left."], "Auto Skip Save Load"),
-            ("ru", "Наталья", ["Наталья, ты закончила отчёт до собрания?", "У нас осталось десять минут."], "Авто Пропуск Сохранить"),
+            (
+                "en",
+                "Natalie",
+                ["Natalie, did you finish the report before", "the meeting? We have ten minutes left."],
+                "Auto Skip Save Load",
+            ),
+            (
+                "ru",
+                "Наталья",
+                ["Наталья, ты закончила отчёт до собрания?", "У нас осталось десять минут."],
+                "Авто Пропуск Сохранить",
+            ),
             ("ko", "김민수", ["민수야, 회의 전에 보고서 다 끝냈어?", "우리 십 분밖에 안 남았어."], "자동 넘기기 저장"),
         ] {
             let scored = spaced_game(name, rows, hud, language);
@@ -1052,7 +1151,13 @@ mod tests {
         // Alone on screen, a name in the dialogue box does not get chosen: seven letters of a
         // spaced language are not six of Japanese.
         let en = crate::language::get("en");
-        let s = |key: &str, effective: f64, in_largest: bool| Scored { key: key.into(), score: effective, matched: effective as usize, effective, in_largest };
+        let s = |key: &str, effective: f64, in_largest: bool| Scored {
+            key: key.into(),
+            score: effective,
+            matched: effective as usize,
+            effective,
+            in_largest,
+        };
         assert!(chosen(&[s("name", 7.0, true)], 6.0, en).is_none());
         assert_eq!(chosen(&[s("name", 7.0, true)], 6.0, ja()).map(|s| s.key.as_str()), Some("name"));
         assert!(chosen(&[s("line", 20.0, false)], 6.0, en).is_none());
@@ -1064,7 +1169,10 @@ mod tests {
         let zh = crate::language::get("zh-Hans");
         assert_eq!(letter_scale(zh), 1);
         assert_eq!(letter_scale(crate::language::get("ko")), 1);
-        assert_eq!((letter_scale(ja()), letter_scale(crate::language::get("ru")), letter_scale(crate::language::get("th"))), (1, 2, 2));
+        assert_eq!(
+            (letter_scale(ja()), letter_scale(crate::language::get("ru")), letter_scale(crate::language::get("th"))),
+            (1, 2, 2)
+        );
         let screen = [
             line("自动 跳过 保存", 581.0, 20.0, 200.0, 18.0),
             line("小林", 50.0, 446.0, 72.0, 24.0),
@@ -1072,8 +1180,24 @@ mod tests {
             line("我们只剩十分钟了。」", 50.0, 576.0, 300.0, 28.0),
         ];
         let candidates = [
-            Candidate { key: "name", hookcode: "HS0@4A21F0:game.exe", name: "", text: "小林", recent: 1, count: 3, noise: 0.0 },
-            Candidate { key: "line", hookcode: "HS0@4A5000:game.exe", name: "", text: "「你在会议之前把报告写完了吗？我们只剩十分钟了。」", recent: 1, count: 3, noise: 0.0 },
+            Candidate {
+                key: "name",
+                hookcode: "HS0@4A21F0:game.exe",
+                name: "",
+                text: "小林",
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "line",
+                hookcode: "HS0@4A5000:game.exe",
+                name: "",
+                text: "「你在会议之前把报告写完了吗？我们只剩十分钟了。」",
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
         ];
         let scored = score(&candidates, &blocks(&screen), zh);
         assert_eq!(chosen(&scored, 6.0, zh).map(|s| s.key.as_str()), Some("line"));
@@ -1147,9 +1271,33 @@ mod tests {
     #[test]
     fn the_dialogue_thread_beats_the_nameplate_hud_and_menu() {
         let candidates = [
-            Candidate { key: "name", hookcode: "HQ-24@0:user32.dll:DrawTextW", name: "", text: "ミサキ", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "hud", hookcode: "HQ-24@0:user32.dll:DrawTextExW", name: "", text: "オート　スキップ　セーブ", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "menu", hookcode: "HQ-24@0:gdiplus.dll:GdipDrawString", name: "", text: "回想音楽想回日本語の本を読むにほんご", recent: 1, count: 1, noise: 0.0 },
+            Candidate {
+                key: "name",
+                hookcode: "HQ-24@0:user32.dll:DrawTextW",
+                name: "",
+                text: "ミサキ",
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "hud",
+                hookcode: "HQ-24@0:user32.dll:DrawTextExW",
+                name: "",
+                text: "オート　スキップ　セーブ",
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "menu",
+                hookcode: "HQ-24@0:gdiplus.dll:GdipDrawString",
+                name: "",
+                text: "回想音楽想回日本語の本を読むにほんご",
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
             Candidate {
                 key: "dialogue",
                 hookcode: "HQ-54@0:gdi32.dll:TextOutW",
@@ -1195,8 +1343,24 @@ mod tests {
         ];
         let line_text = "「ああ──そういえば昨日、町の外れで見かけた旅人がどこへ行ったか知ってるか？」";
         let candidates = [
-            Candidate { key: "name", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: "見張りの兵士", recent: 1, count: 3, noise: 0.0 },
-            Candidate { key: "line", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: line_text, recent: 1, count: 3, noise: 0.0 },
+            Candidate {
+                key: "name",
+                hookcode: "ENHQX-4@3B993:game.exe",
+                name: "",
+                text: "見張りの兵士",
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "line",
+                hookcode: "ENHQX-4@3B993:game.exe",
+                name: "",
+                text: line_text,
+                recent: 1,
+                count: 3,
+                noise: 0.0,
+            },
         ];
         let scored = score(&candidates, &blocks(&screen), ja());
         assert_eq!(chosen(&scored, 6.0, ja()).unwrap().key, "line");
@@ -1206,7 +1370,13 @@ mod tests {
 
     #[test]
     fn a_name_matched_outside_the_dialogue_box_is_not_chosen() {
-        let s = |key: &str, effective: f64, in_largest: bool| Scored { key: key.into(), score: effective, matched: effective as usize, effective, in_largest };
+        let s = |key: &str, effective: f64, in_largest: bool| Scored {
+            key: key.into(),
+            score: effective,
+            matched: effective as usize,
+            effective,
+            in_largest,
+        };
         // The nameplate matched exactly; the line, misread, did not match at all.
         assert!(chosen(&[s("name", 10.0, false)], 6.0, ja()).is_none());
         // The line in the dialogue box, behind a better-scored name.
@@ -1220,9 +1390,33 @@ mod tests {
         let blocks = vec![Block { text: normalize("今日は猫と一緒に学校へ行きます"), area: 100.0 }];
         let text = "今日は猫と一緒に学校へ行きます";
         let candidates = [
-            Candidate { key: "api", hookcode: "HQ-54@0:gdi32.dll:TextOutW", name: "", text, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "engine", hookcode: "HS-8@1A2B3:Game.exe", name: "", text, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "flood", hookcode: "HS-4@4C5D6:Game.exe", name: "", text, recent: 40, count: 1, noise: 0.0 },
+            Candidate {
+                key: "api",
+                hookcode: "HQ-54@0:gdi32.dll:TextOutW",
+                name: "",
+                text,
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "engine",
+                hookcode: "HS-8@1A2B3:Game.exe",
+                name: "",
+                text,
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "flood",
+                hookcode: "HS-4@4C5D6:Game.exe",
+                name: "",
+                text,
+                recent: 40,
+                count: 1,
+                noise: 0.0,
+            },
         ];
         let scored = score(&candidates, &blocks, ja());
         assert_eq!(scored.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(), ["engine", "api", "flood"]);
@@ -1232,10 +1426,29 @@ mod tests {
     fn a_script_engines_own_hook_beats_its_runtimes_strings() {
         // TyranoScript on Electron: LunaHook's tyranoscript hook sends the line; V8's string
         // functions send it too, with the speaker's name drawn above it in the same box.
-        let screen = [line("お母さん", 120.0, 560.0, 120.0, 30.0), line("おはよう。今日も雨だね。早く晴れてくれるといいんだけど。", 120.0, 600.0, 900.0, 30.0)];
+        let screen = [
+            line("お母さん", 120.0, 560.0, 120.0, 30.0),
+            line("おはよう。今日も雨だね。早く晴れてくれるといいんだけど。", 120.0, 600.0, 900.0, 30.0),
+        ];
         let candidates = [
-            Candidate { key: "v8", hookcode: "HVX0@292530:game.exe", name: "v8::String::Write", text: "お母さんおはよう。今日も雨だね。早く晴れてくれるといいんだけど。", recent: 1, count: 16, noise: 0.0 },
-            Candidate { key: "tyrano", hookcode: "EXHQXFN0@8CDC0:LunaHook64.dll", name: "tyranoscript", text: "おはよう。今日も雨だね。早く晴れてくれるといいんだけど。\n", recent: 1, count: 9, noise: 0.0 },
+            Candidate {
+                key: "v8",
+                hookcode: "HVX0@292530:game.exe",
+                name: "v8::String::Write",
+                text: "お母さんおはよう。今日も雨だね。早く晴れてくれるといいんだけど。",
+                recent: 1,
+                count: 16,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "tyrano",
+                hookcode: "EXHQXFN0@8CDC0:LunaHook64.dll",
+                name: "tyranoscript",
+                text: "おはよう。今日も雨だね。早く晴れてくれるといいんだけど。\n",
+                recent: 1,
+                count: 9,
+                noise: 0.0,
+            },
         ];
         let scored = score(&candidates, &blocks(&screen), ja());
         assert_eq!(scored[0].key, "tyrano");
@@ -1249,8 +1462,24 @@ mod tests {
         // handles it (ahead of showing it); TextMeshPro's setter, as it is shown.
         let screen = [line("まるで夢を見ているようだ。", 200.0, 600.0, 600.0, 30.0)];
         let candidates = [
-            Candidate { key: "string", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "String.op_Inequality", text: "まるで夢を見ているようだ。", recent: 1, count: 61, noise: 0.0 },
-            Candidate { key: "tmp", hookcode: "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY", name: "TMP_Text.set_text", text: "まるで夢を見ているようだ。", recent: 1, count: 61, noise: 0.0 },
+            Candidate {
+                key: "string",
+                hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY",
+                name: "String.op_Inequality",
+                text: "まるで夢を見ているようだ。",
+                recent: 1,
+                count: 61,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "tmp",
+                hookcode: "EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY",
+                name: "TMP_Text.set_text",
+                text: "まるで夢を見ているようだ。",
+                recent: 1,
+                count: 61,
+                noise: 0.0,
+            },
         ];
         assert_eq!(score(&candidates, &blocks(&screen), ja())[0].key, "tmp");
         assert!(is_generic("HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", "String.Substring"));
@@ -1263,10 +1492,34 @@ mod tests {
         let blocks = vec![Block { text: normalize("「本当ですか？　助かります」"), area: 100.0 }];
         let text = "「本当ですか？　助かります」";
         let candidates = [
-            Candidate { key: "per-line", hookcode: "HWXN0@1A2B3:Game.exe", name: "", text, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "lasting", hookcode: "HW-4@4C5D6:Game.exe", name: "", text, recent: 1, count: 12, noise: 0.0 },
+            Candidate {
+                key: "per-line",
+                hookcode: "HWXN0@1A2B3:Game.exe",
+                name: "",
+                text,
+                recent: 1,
+                count: 1,
+                noise: 0.0,
+            },
+            Candidate {
+                key: "lasting",
+                hookcode: "HW-4@4C5D6:Game.exe",
+                name: "",
+                text,
+                recent: 1,
+                count: 12,
+                noise: 0.0,
+            },
             // The same hook in another context: the dialogue, mixed in with the script's codes.
-            Candidate { key: "mixed", hookcode: "HW-4@4C5D6:Game.exe", name: "", text, recent: 1, count: 40, noise: 0.6 },
+            Candidate {
+                key: "mixed",
+                hookcode: "HW-4@4C5D6:Game.exe",
+                name: "",
+                text,
+                recent: 1,
+                count: 40,
+                noise: 0.6,
+            },
         ];
         let order: Vec<String> = score(&candidates, &blocks, ja()).into_iter().map(|s| s.key).collect();
         assert_eq!(order, ["lasting", "per-line", "mixed"]);
@@ -1280,5 +1533,3 @@ mod tests {
         assert_eq!(a.ctx, 0x503a);
     }
 }
-
-

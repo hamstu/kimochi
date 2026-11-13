@@ -31,9 +31,8 @@ pub fn run_cli(
     stdin: Option<&str>,
     cwd: Option<&Path>,
 ) -> Result<std::process::Child, String> {
-    let dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).collect())
-        .unwrap_or_default();
+    let dirs: Vec<PathBuf> =
+        std::env::var_os("PATH").map(|path| std::env::split_paths(&path).collect()).unwrap_or_default();
     let resolved = rules::resolve_program(program, &dirs, |p| p.is_file())
         .ok_or_else(|| format!("{program} was not found on PATH"))?;
     let mut command = std::process::Command::new(resolved);

@@ -1,78 +1,77 @@
-import { getActiveSession } from "./sessions";
+import { getActiveSession } from './sessions'
 /* Translation for lines: DeepL with the user's own key (src-tauri/src/reader/translate.rs, the key
    from settings at call time) or Kimochi cloud with a signed-in account (`cloud_translate`, the
    token held in Rust). `translationProvider` picks; "auto" is Kimochi cloud while signed in. */
 
-import { invoke } from "@tauri-apps/api/core";
-import { translationRoute } from "../../../ui/account";
-import { loadAccount } from "../../bridge/account";
-import { nativeError } from "../../bridge/tauri";
-import { currentLanguage } from "../core/language";
-import { getSettings } from "./settings";
-import { setLineTranslation, setLineTranslationVisible } from "./store";
-import { translationErrorMessage } from "./translateLanguage";
-import type { Line } from "./types";
+import { invoke } from '@tauri-apps/api/core'
+import { translationRoute } from '../../../ui/account'
+import { loadAccount } from '../../bridge/account'
+import { nativeError } from '../../bridge/tauri'
+import { currentLanguage } from '../core/language'
+import { getSettings } from './settings'
+import { setLineTranslation, setLineTranslationVisible } from './store'
+import { translationErrorMessage } from './translateLanguage'
+import type { Line } from './types'
 
 /* Transient per-line translate status (NOT persisted — lives only for the
    session). Drives the inline "translating…" state in LineRow so both the
    T hotkey and the context menu give immediate feedback. */
 
-export type TranslateStatus =
-  { state: "loading" } | { state: "error"; message: string };
+export type TranslateStatus = { state: 'loading' } | { state: 'error'; message: string }
 
-const statuses = new Map<number, TranslateStatus>();
-const errorTimers = new Map<number, ReturnType<typeof setTimeout>>();
-const subs = new Set<() => void>();
+const statuses = new Map<number, TranslateStatus>()
+const errorTimers = new Map<number, ReturnType<typeof setTimeout>>()
+const subs = new Set<() => void>()
 
-const ERROR_AUTOCLEAR_MS = 5000;
+const ERROR_AUTOCLEAR_MS = 5000
 
 function notify() {
   for (const fn of subs) {
     try {
-      fn();
+      fn()
     } catch (e) {
-      console.error(e);
+      console.error(e)
     }
   }
 }
 
 function setStatus(id: number, status: TranslateStatus | null) {
-  const timer = errorTimers.get(id);
+  const timer = errorTimers.get(id)
   if (timer) {
-    clearTimeout(timer);
-    errorTimers.delete(id);
+    clearTimeout(timer)
+    errorTimers.delete(id)
   }
   if (status === null) {
-    if (!statuses.delete(id)) return;
+    if (!statuses.delete(id)) return
   } else {
-    statuses.set(id, status);
-    if (status.state === "error") {
+    statuses.set(id, status)
+    if (status.state === 'error') {
       errorTimers.set(
         id,
         setTimeout(() => {
-          errorTimers.delete(id);
-          if (statuses.get(id)?.state === "error") {
-            statuses.delete(id);
-            notify();
+          errorTimers.delete(id)
+          if (statuses.get(id)?.state === 'error') {
+            statuses.delete(id)
+            notify()
           }
-        }, ERROR_AUTOCLEAR_MS),
-      );
+        }, ERROR_AUTOCLEAR_MS)
+      )
     }
   }
-  notify();
+  notify()
 }
 
 /** For useSyncExternalStore. The returned object is referentially stable
     until the status actually changes. */
 export function getTranslateStatus(id: number): TranslateStatus | null {
-  return statuses.get(id) ?? null;
+  return statuses.get(id) ?? null
 }
 
 export function subscribeTranslateStatus(fn: () => void): () => void {
-  subs.add(fn);
+  subs.add(fn)
   return () => {
-    subs.delete(fn);
-  };
+    subs.delete(fn)
+  }
 }
 
 /** Switch a line to its English translation, hitting DeepL only on the first
@@ -80,59 +79,51 @@ export function subscribeTranslateStatus(fn: () => void): () => void {
     failures surface as a transient inline error status on the line. */
 export async function showTranslation(line: Line): Promise<void> {
   if (line.translation) {
-    setLineTranslationVisible(line.id, true);
-    return;
+    setLineTranslationVisible(line.id, true)
+    return
   }
-  if (statuses.get(line.id)?.state === "loading") return; // already in flight
-  setStatus(line.id, { state: "loading" });
+  if (statuses.get(line.id)?.state === 'loading') return // already in flight
+  setStatus(line.id, { state: 'loading' })
   try {
-    const settings = getSettings();
-    const apiKey = settings.deeplApiKey.trim();
-    const { cloud } = await loadAccount();
-    const route = translationRoute(settings.translationProvider, apiKey, cloud);
+    const settings = getSettings()
+    const apiKey = settings.deeplApiKey.trim()
+    const { cloud } = await loadAccount()
+    const route = translationRoute(settings.translationProvider, apiKey, cloud)
     if (!route)
       throw new Error(
-        settings.translationProvider === "kimochi"
-          ? "Translating with Kimochi cloud needs Kimochi Cloud (Settings → Account)"
-          : "Set a DeepL API key in Settings → Translation & AI",
-      );
-    const sessionId = getActiveSession().id;
+        settings.translationProvider === 'kimochi'
+          ? 'Translating with Kimochi cloud needs Kimochi Cloud (Settings → Account)'
+          : 'Set a DeepL API key in Settings → Translation & AI'
+      )
+    const sessionId = getActiveSession().id
     const translated =
-      route === "kimochi"
-        ? await invoke<string>("cloud_translate", { text: line.text }).catch(
-            (error: unknown) => {
-              throw new Error(nativeError(error).message);
-            },
-          )
-        : await invoke<string>("deepl_translate", { text: line.text, apiKey }).catch(
-            (error: unknown) => {
-              throw new Error(nativeError(error).message);
-            },
-          );
-    setStatus(line.id, null);
-    if (getActiveSession().id === sessionId)
-      await setLineTranslation(line.id, translated, true);
+      route === 'kimochi'
+        ? await invoke<string>('cloud_translate', { text: line.text }).catch((error: unknown) => {
+            throw new Error(nativeError(error).message)
+          })
+        : await invoke<string>('deepl_translate', { text: line.text, apiKey }).catch((error: unknown) => {
+            throw new Error(nativeError(error).message)
+          })
+    setStatus(line.id, null)
+    if (getActiveSession().id === sessionId) await setLineTranslation(line.id, translated, true)
   } catch (err) {
-    console.warn("translate failed", err);
-    const message = translationErrorMessage(
-      err instanceof Error ? err.message : String(err),
-      currentLanguage(),
-    );
-    setStatus(line.id, { state: "error", message });
+    console.warn('translate failed', err)
+    const message = translationErrorMessage(err instanceof Error ? err.message : String(err), currentLanguage())
+    setStatus(line.id, { state: 'error', message })
   }
 }
 
 /** Swap a translated row back to the original Japanese rendering. */
 export function showOriginal(lineId: number): void {
-  setLineTranslationVisible(lineId, false);
+  setLineTranslationVisible(lineId, false)
 }
 
 /** Hotkey entry point: T on a hovered line. Translated → back to original;
     otherwise translate (or just re-show the cached translation). */
 export function toggleTranslation(line: Line): void {
   if (line.showTranslation && line.translation) {
-    showOriginal(line.id);
+    showOriginal(line.id)
   } else {
-    void showTranslation(line);
+    void showTranslation(line)
   }
 }

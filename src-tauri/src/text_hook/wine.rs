@@ -195,7 +195,8 @@ fn file_name(windows: &str) -> &str {
 /// name) and its engine children (a launcher's `.bin`/`.log` process), with Wine's ids.
 #[cfg(any(target_os = "linux", test))]
 pub fn pick<'a>(listed: &'a [Listed], image: &str) -> Vec<&'a Listed> {
-    let by_path: Vec<&Listed> = listed.iter().filter(|p| p.path.as_deref().is_some_and(|q| same_image(q, image))).collect();
+    let by_path: Vec<&Listed> =
+        listed.iter().filter(|p| p.path.as_deref().is_some_and(|q| same_image(q, image))).collect();
     let mut found = if by_path.is_empty() {
         let name = file_name(image);
         listed.iter().filter(|p| p.name.eq_ignore_ascii_case(name)).collect()
@@ -272,7 +273,8 @@ mod imp {
         if !image.to_ascii_lowercase().ends_with(".exe") {
             return Err("this is part of Wine, not a game".into());
         }
-        let exe = unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok()).unwrap_or_else(|| PathBuf::from(&image));
+        let exe = unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok())
+            .unwrap_or_else(|| PathBuf::from(&image));
         let lower = image.to_ascii_lowercase().replace('/', "\\");
         if lower.starts_with("c:\\windows\\") || lower.contains("\\proton") && lower.contains("\\files\\") {
             return Err("this is part of Wine, not a game".into());
@@ -375,7 +377,8 @@ mod imp {
 
     /// Every file under `dir`, by its path relative to `base`, in a stable order.
     fn collect(base: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> Result<(), String> {
-        let mut entries: Vec<_> = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?.flatten().collect();
+        let mut entries: Vec<_> =
+            std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?.flatten().collect();
         entries.sort_by_key(|e| e.file_name());
         for entry in entries {
             let path = entry.path();
@@ -539,9 +542,15 @@ mod tests {
             unix_path(prefix, "S:\\steamapps\\common\\Game\\game.exe", links),
             Some(PathBuf::from("/home/deck/.local/share/Steam/steamapps/common/Game/game.exe"))
         );
-        assert_eq!(unix_path(prefix, "C:\\Games\\vn.exe", links), Some(PathBuf::from("/pfx/dosdevices/../drive_c/Games/vn.exe")));
+        assert_eq!(
+            unix_path(prefix, "C:\\Games\\vn.exe", links),
+            Some(PathBuf::from("/pfx/dosdevices/../drive_c/Games/vn.exe"))
+        );
         assert_eq!(unix_path(prefix, "Q:\\x.exe", links), None);
-        assert_eq!(windows_path(Path::new("/home/deck/hook/kimochi-hookd-x64.exe")), "Z:\\home\\deck\\hook\\kimochi-hookd-x64.exe");
+        assert_eq!(
+            windows_path(Path::new("/home/deck/hook/kimochi-hookd-x64.exe")),
+            "Z:\\home\\deck\\hook\\kimochi-hookd-x64.exe"
+        );
     }
 
     #[test]
@@ -553,7 +562,9 @@ mod tests {
 
     #[test]
     fn a_staged_copy_is_named_by_its_content() {
-        let files = |bytes: &[u8]| vec![("kimochi-hookd-x64.exe".to_string(), bytes.to_vec()), ("x86/a.dll".to_string(), vec![1])];
+        let files = |bytes: &[u8]| {
+            vec![("kimochi-hookd-x64.exe".to_string(), bytes.to_vec()), ("x86/a.dll".to_string(), vec![1])]
+        };
         assert_eq!(content_key(&files(b"build 1")), content_key(&files(b"build 1")));
         assert_ne!(content_key(&files(b"build 1")), content_key(&files(b"build 2")));
         // A file renamed is another folder too.

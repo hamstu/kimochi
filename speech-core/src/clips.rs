@@ -46,7 +46,13 @@ pub fn render(ring: &AudioRing, voice: &Voice) -> Result<Rendered, String> {
 }
 
 /// The audio of one word, `from_ms..to_ms` (from `matching::word_span`), cut out of a line's clip.
-pub fn render_word(pcm: &[f32], sample_rate: u32, clip_start_ms: f64, from_ms: f64, to_ms: f64) -> Result<Vec<u8>, String> {
+pub fn render_word(
+    pcm: &[f32],
+    sample_rate: u32,
+    clip_start_ms: f64,
+    from_ms: f64,
+    to_ms: f64,
+) -> Result<Vec<u8>, String> {
     let at = |ms: f64| (((ms - clip_start_ms) * sample_rate as f64 / 1000.0).max(0.0) as usize).min(pcm.len());
     let (a, b) = (at(from_ms - WORD_PAD_BEFORE_MS), at(to_ms + WORD_PAD_AFTER_MS));
     if b <= a + sample_rate as usize / 20 {
@@ -129,7 +135,9 @@ impl ClipStore {
         let mut kept = VecDeque::new();
         if let Ok(text) = std::fs::read_to_string(dir.join(INDEX)) {
             if let Ok(infos) = serde_json::from_str::<Vec<ClipInfo>>(&text) {
-                kept.extend(infos.into_iter().filter(|i| dir.join(&i.file).is_file()).map(|info| Kept { info, pcm: None }));
+                kept.extend(
+                    infos.into_iter().filter(|i| dir.join(&i.file).is_file()).map(|info| Kept { info, pcm: None }),
+                );
             }
         }
         let counter = crate::now_ms() as u64;
@@ -165,8 +173,11 @@ impl ClipStore {
 
     /// Typewriter continuations change text without changing the clean clip.
     pub fn update_hooked_text(&mut self, uid: &str, text: &str) {
-        if let Some(kept) = self.kept.iter_mut().find(|k| k.info.uid == uid && k.info.how == "hooked" && k.info.text != text) {
-            kept.info.text = text.to_owned(); self.save();
+        if let Some(kept) =
+            self.kept.iter_mut().find(|k| k.info.uid == uid && k.info.how == "hooked" && k.info.text != text)
+        {
+            kept.info.text = text.to_owned();
+            self.save();
         }
     }
 
@@ -224,7 +235,8 @@ impl ClipStore {
         if let Ok(entries) = std::fs::read_dir(&self.dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("clip-") && name.ends_with(".mp3") && !self.kept.iter().any(|k| k.info.file == name) {
+                if name.starts_with("clip-") && name.ends_with(".mp3") && !self.kept.iter().any(|k| k.info.file == name)
+                {
                     let _ = std::fs::remove_file(entry.path());
                 }
             }
@@ -267,7 +279,11 @@ mod tests {
         assert_eq!(store.all().map(|c| c.uid.as_str()).collect::<Vec<_>>(), vec!["b", "c"]);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 3, "two clips and the index");
         store.put("b", "二", &voice(), &rendered(2.0)).unwrap();
-        assert_eq!(store.all().map(|c| c.uid.as_str()).collect::<Vec<_>>(), vec!["c", "b"], "a new clip for b replaces its old one");
+        assert_eq!(
+            store.all().map(|c| c.uid.as_str()).collect::<Vec<_>>(),
+            vec!["c", "b"],
+            "a new clip for b replaces its old one"
+        );
         assert!(store.pcm("b").is_some());
         let reopened = ClipStore::open(dir.clone(), 2);
         assert_eq!(reopened.get("b").unwrap().duration_ms, 2_000.0);

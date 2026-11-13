@@ -77,17 +77,10 @@ impl Platform {
                 let gdk_backend: Option<String> = None;
                 #[cfg(target_os = "linux")]
                 if crate::linux_x11::gamescope_portal_now() {
-                    return if crate::linux_gamescope::available() {
-                        Platform::Gamescope
-                    } else {
-                        Platform::Portal
-                    };
+                    return if crate::linux_gamescope::available() { Platform::Gamescope } else { Platform::Portal };
                 }
-                if crate::linux_x11::is_wayland_session(
-                    session.as_deref(),
-                    wayland.as_deref(),
-                    gdk_backend.as_deref(),
-                ) {
+                if crate::linux_x11::is_wayland_session(session.as_deref(), wayland.as_deref(), gdk_backend.as_deref())
+                {
                     Platform::Portal
                 } else {
                     Platform::X11
@@ -100,31 +93,17 @@ impl Platform {
 /// A parsed source id.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SourceId {
-    Display {
-        platform: Platform,
-        handle: String,
-    },
-    Window {
-        platform: Platform,
-        handle: String,
-        pid: Option<u32>,
-    },
+    Display { platform: Platform, handle: String },
+    Window { platform: Platform, handle: String, pid: Option<u32> },
 }
 
 impl SourceId {
     pub fn display(platform: Platform, handle: impl fmt::Display) -> Self {
-        SourceId::Display {
-            platform,
-            handle: handle.to_string(),
-        }
+        SourceId::Display { platform, handle: handle.to_string() }
     }
 
     pub fn window(platform: Platform, handle: impl fmt::Display, pid: u32) -> Self {
-        SourceId::Window {
-            platform,
-            handle: handle.to_string(),
-            pid: Some(pid),
-        }
+        SourceId::Window { platform, handle: handle.to_string(), pid: Some(pid) }
     }
 
     /// `None` for anything that is not a well-formed id. Callers must treat that as
@@ -139,10 +118,7 @@ impl SourceId {
                 if parts.next().is_some() {
                     return None;
                 }
-                Some(SourceId::Display {
-                    platform,
-                    handle: handle.to_string(),
-                })
+                Some(SourceId::Display { platform, handle: handle.to_string() })
             }
             "window" => {
                 let pid = match parts.next() {
@@ -150,11 +126,7 @@ impl SourceId {
                     Some(_) => return None,
                     None => None,
                 };
-                Some(SourceId::Window {
-                    platform,
-                    handle: handle.to_string(),
-                    pid,
-                })
+                Some(SourceId::Window { platform, handle: handle.to_string(), pid })
             }
             _ => None,
         }
@@ -209,16 +181,10 @@ impl fmt::Display for SourceId {
             SourceId::Display { platform, handle } => {
                 write!(f, "{}:display:{handle}", platform.as_str())
             }
-            SourceId::Window {
-                platform,
-                handle,
-                pid: Some(pid),
-            } => write!(f, "{}:window:{handle}:{pid}", platform.as_str()),
-            SourceId::Window {
-                platform,
-                handle,
-                pid: None,
-            } => write!(f, "{}:window:{handle}", platform.as_str()),
+            SourceId::Window { platform, handle, pid: Some(pid) } => {
+                write!(f, "{}:window:{handle}:{pid}", platform.as_str())
+            }
+            SourceId::Window { platform, handle, pid: None } => write!(f, "{}:window:{handle}", platform.as_str()),
         }
     }
 }
@@ -227,9 +193,7 @@ impl fmt::Display for SourceId {
 /// X11 backends use. This is what the old `window_id_of` did with `strip_prefix`.
 pub fn local_window_number(id: &str) -> Option<u32> {
     let parsed = SourceId::parse(id)?;
-    (parsed.is_window() && parsed.is_local())
-        .then(|| parsed.handle_u32())
-        .flatten()
+    (parsed.is_window() && parsed.is_local()).then(|| parsed.handle_u32()).flatten()
 }
 
 #[cfg(test)]
@@ -277,11 +241,7 @@ mod tests {
 
     #[test]
     fn window_number_helper_matches_old_window_id_of() {
-        let expect = if Platform::current() == Platform::MacOs {
-            Some(15970)
-        } else {
-            None
-        };
+        let expect = if Platform::current() == Platform::MacOs { Some(15970) } else { None };
         assert_eq!(local_window_number("macos:window:15970:56963"), expect);
         assert_eq!(local_window_number("macos:display:1"), None);
         assert_eq!(local_window_number("macos:window:"), None);

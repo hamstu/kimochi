@@ -103,7 +103,17 @@ export const SceneArt = memo(function SceneArt() {
       {/* a neon sign and an antenna on one roof */}
       <g transform="translate(330 470)">
         <rect x="0" y="0" width="18" height="70" rx="3" fill="#ff5fa2" opacity="0.85" className="kd-flicker" />
-        <rect x="-2" y="-2" width="22" height="74" rx="4" fill="none" stroke="#ff5fa2" strokeOpacity="0.35" strokeWidth="6" />
+        <rect
+          x="-2"
+          y="-2"
+          width="22"
+          height="74"
+          rx="4"
+          fill="none"
+          stroke="#ff5fa2"
+          strokeOpacity="0.35"
+          strokeWidth="6"
+        />
       </g>
       {/* rooftop foreground: railing and a satellite dish */}
       <g fill="#0b0916">

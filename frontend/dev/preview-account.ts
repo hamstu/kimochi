@@ -63,14 +63,23 @@ const USER: AccountUser = {
   email: 'reader@example.com',
   emailVerified: true,
   displayName:
-    params.get('name') === '0' ? null : params.get('name') === 'long' ? 'Hamish Macpherson-Featherstonehaugh' : 'Hamish',
+    params.get('name') === '0'
+      ? null
+      : params.get('name') === 'long'
+        ? 'Hamish Macpherson-Featherstonehaugh'
+        : 'Hamish',
   avatarUrl: params.get('avatar') === '1' ? PREVIEW_AVATAR : null,
   // `&plan=free` previews an account without Kimochi Cloud, `&plan=trial` one on its trial.
   plan: params.get('plan') === 'free' ? 'free' : params.get('plan') === 'trial' ? 'trial' : 'cloud',
   cloud: params.get('plan') !== 'free',
   billing:
     params.get('plan') === 'trial'
-      ? { source: 'subscription', status: 'trialing', trialEnd: new Date(Date.now() + 10 * 86_400_000).toISOString(), cancelAt: null }
+      ? {
+          source: 'subscription',
+          status: 'trialing',
+          trialEnd: new Date(Date.now() + 10 * 86_400_000).toISOString(),
+          cancelAt: null
+        }
       : null,
   status: seed === 'suspended' ? 'suspended' : 'active'
 }
@@ -124,7 +133,11 @@ function status(): AccountStatus {
     server: active?.server ?? linkServer,
     linkServer,
     accounts,
-    profile: { key: active?.key ?? null, root: active ? `profiles/${active.key}` : '', needsSignIn: Boolean(active && !active.signedIn) },
+    profile: {
+      key: active?.key ?? null,
+      root: active ? `profiles/${active.key}` : '',
+      needsSignIn: Boolean(active && !active.signedIn)
+    },
     switching: false
   }
 }
@@ -140,13 +153,29 @@ function publish(): AccountStatus {
 
 const now = Date.now()
 const LOG: SyncLogEntry[] = [
-  { t: now - 3_600_000, kind: 'profile', text: 'First sign-in to reader@example.com here and the account has nothing synced yet: copied this computer\'s Local profile (214 files) into it. The Local profile is unchanged.' },
+  {
+    t: now - 3_600_000,
+    kind: 'profile',
+    text: "First sign-in to reader@example.com here and the account has nothing synced yet: copied this computer's Local profile (214 files) into it. The Local profile is unchanged."
+  },
   { t: now - 3_599_000, kind: 'info', text: 'Synced: 0 change(s) received, 0 applied here, 1893 sent' },
-  { t: now - 1_800_000, kind: 'net', text: 'Offline: changes are kept here and sync once Kimochi cloud can be reached' },
+  {
+    t: now - 1_800_000,
+    kind: 'net',
+    text: 'Offline: changes are kept here and sync once Kimochi cloud can be reached'
+  },
   { t: now - 1_500_000, kind: 'net', text: 'Back online' },
   { t: now - 1_499_000, kind: 'pull', text: 'Deleted line s1/l4f0c2e9a17b3d5c8 (deleted on another computer)' },
-  { t: now - 1_498_000, kind: 'conflict', text: 'session 8a3c… changed on two computers; kept the other computer\'s version, the other is in Conflicts' },
-  { t: now - 1_497_000, kind: 'info', text: 'Synced: 12 change(s) received, 11 applied here, 4 sent, 1 conflict(s) kept' },
+  {
+    t: now - 1_498_000,
+    kind: 'conflict',
+    text: "session 8a3c… changed on two computers; kept the other computer's version, the other is in Conflicts"
+  },
+  {
+    t: now - 1_497_000,
+    kind: 'info',
+    text: 'Synced: 12 change(s) received, 11 applied here, 4 sent, 1 conflict(s) kept'
+  },
   { t: now - 420_000, kind: 'info', text: 'Synced: 3 change(s) received, 3 applied here, 0 sent' }
 ]
 
@@ -156,7 +185,10 @@ let syncState: SyncStatus = {
   lastSyncAt: now - 7 * 60_000,
   pending: syncSeed === 'offline' ? 6 : 0,
   origin: 'copied-local',
-  lastError: syncSeed === 'error' ? 'Your Kimochi sync storage is full (250 MB). Sync is paused until you free space under Manage account on the web; everything stays on this computer.' : null,
+  lastError:
+    syncSeed === 'error'
+      ? 'Your Kimochi sync storage is full (250 MB). Sync is paused until you free space under Manage account on the web; everything stays on this computer.'
+      : null,
   used: seed === 'full' ? 241_000_000 : 18_400_000,
   limit: 250_000_000,
   conflicts:
@@ -232,7 +264,10 @@ export const ACCOUNT_HANDLERS: Record<string, Handler> = {
       const mode = linkServer.mode
       const user = accounts.some((a) => a.user?.id === USER.id && a.server?.mode === mode) ? OTHER : USER
       const key = `${mode}-${user.id}`
-      accounts = [summary(user, mode, true), ...accounts.filter((a) => a.key !== key).map((a) => ({ ...a, active: false }))]
+      accounts = [
+        summary(user, mode, true),
+        ...accounts.filter((a) => a.key !== key).map((a) => ({ ...a, active: false }))
+      ]
       log('profile', `Switched to ${user.email}`)
       publish()
     }, 6000)
@@ -281,7 +316,10 @@ export const ACCOUNT_HANDLERS: Record<string, Handler> = {
   },
   sync_conflict_resolve: (args) => {
     syncState = { ...syncState, conflicts: syncState.conflicts.filter((c) => c.id !== args?.id) }
-    log('merge', `${args?.action === 'restore' ? 'Restored the kept version of' : 'Dismissed conflict'} ${String(args?.id)}`)
+    log(
+      'merge',
+      `${args?.action === 'restore' ? 'Restored the kept version of' : 'Dismissed conflict'} ${String(args?.id)}`
+    )
     return publishSync()
   },
   sync_export: async () => {

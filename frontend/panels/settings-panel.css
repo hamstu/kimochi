@@ -4,8 +4,14 @@
  */
 
 /* Field widths for controls on the right of a row. */
-.settings-field { width: 13rem; max-width: 100%; }
-.settings-field-num { width: 4.5rem; text-align: right; }
+.settings-field {
+  width: 13rem;
+  max-width: 100%;
+}
+.settings-field-num {
+  width: 4.5rem;
+  text-align: right;
+}
 /* Shortcut key caps; click to record a new combination. The hover fill hugs the caps with the
    same inset on every side: the inset is whatever the control height leaves around a cap, and
    there is no minimum width (it would pad only the left of a short combination). */
@@ -25,36 +31,95 @@
   cursor: default;
   transition: background-color var(--k-fast);
 }
-.shortcut-recorder:hover { background: var(--k-hover); }
-.shortcut-recorder:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 1px; }
-.shortcut-recorder[data-recording] { min-width: 5.5rem; padding: 0 var(--k-space-1-5); box-shadow: inset 0 0 0 1px var(--k-accent); background: transparent; }
-.shortcut-recorder-prompt { font-size: var(--k-text-sm); color: var(--k-accent-text); }
-.shortcut-row .k-settings-row-control { flex-shrink: 1; max-width: 72%; }
+.shortcut-recorder:hover {
+  background: var(--k-hover);
+}
+.shortcut-recorder:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.shortcut-recorder[data-recording] {
+  min-width: 5.5rem;
+  padding: 0 var(--k-space-1-5);
+  box-shadow: inset 0 0 0 1px var(--k-accent);
+  background: transparent;
+}
+.shortcut-recorder-prompt {
+  font-size: var(--k-text-sm);
+  color: var(--k-accent-text);
+}
+.shortcut-row .k-settings-row-control {
+  flex-shrink: 1;
+  max-width: 72%;
+}
 
 /* A value readout next to a slider. */
-.settings-slider { display: flex; align-items: center; gap: var(--k-space-2); width: 11rem; }
-.settings-slider-value { flex: none; min-width: 2.5rem; text-align: right; font-size: var(--k-text-sm); color: var(--k-text-2); }
+.settings-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  width: 11rem;
+}
+.settings-slider-value {
+  flex: none;
+  min-width: 2.5rem;
+  text-align: right;
+  font-size: var(--k-text-sm);
+  color: var(--k-text-2);
+}
 
 /* A notice or free content block inside a settings group, divided like a row. Callouts inside a
    group lose their filled box and read as an inline row: tone icon, text, then the action. */
-.settings-note { padding: var(--k-space-2-5) var(--k-space-3); }
+.settings-note {
+  padding: var(--k-space-2-5) var(--k-space-3);
+}
 .k-settings-row + .settings-note,
 .settings-note + .k-settings-row,
-.settings-note + .settings-note { border-top: 1px solid var(--k-line); }
+.settings-note + .settings-note {
+  border-top: 1px solid var(--k-line);
+}
 .k-settings-sub > .settings-note + .k-settings-row,
-.k-settings-sub > .k-settings-row + .settings-note { border-top-color: var(--gray-a3); }
-.settings-note > .k-callout { width: 100%; padding: 0; border-radius: 0; background: transparent; }
-.settings-note > .k-callout > .k-callout-body { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--k-space-3); }
-.settings-note > .k-callout > .k-callout-body > .k-button { flex: none; }
+.k-settings-sub > .k-settings-row + .settings-note {
+  border-top-color: var(--gray-a3);
+}
+.settings-note > .k-callout {
+  width: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.settings-note > .k-callout > .k-callout-body {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+}
+.settings-note > .k-callout > .k-callout-body > .k-button {
+  flex: none;
+}
 
 /* URL field with a connection status dot. */
-.settings-url { display: flex; align-items: center; gap: var(--k-space-2); width: 100%; }
-.settings-url > .k-field { flex: 1; min-width: 0; }
+.settings-url {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  width: 100%;
+}
+.settings-url > .k-field {
+  flex: 1;
+  min-width: 0;
+}
 
 /* Settings → Anki: the connection row's label with its dot; the Yomitan API's card builder keeps
    the page's section spacing (its wrapper only scopes the Log's styles). */
-.anki-connection-label { display: inline-flex; align-items: center; gap: var(--k-space-2); }
-.anki-kimochi-sections { display: contents; }
+.anki-connection-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.anki-kimochi-sections {
+  display: contents;
+}
 .sentence-audio-disclosure svg {
   transition: transform var(--k-fast) var(--k-ease-out);
 }
@@ -63,7 +128,9 @@
 }
 
 /* Page-level callout above the first section. */
-.settings-page-callout { margin-top: calc(var(--k-space-2) * -1); }
+.settings-page-callout {
+  margin-top: calc(var(--k-space-2) * -1);
+}
 
 /* Gamepad button test: a grid of key caps that light up while held. */
 .gamepad-test {
@@ -85,27 +152,58 @@
   transition-property: background-color, color;
   transition-duration: var(--k-fast);
 }
-.gamepad-key[data-pressed] { background: var(--k-accent); color: var(--k-accent-contrast); }
+.gamepad-key[data-pressed] {
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+}
 /* Under the button test: input by raw code, for a controller whose presses light nothing up. */
-.gamepad-raw { padding-top: 0; color: var(--k-text-2); font-size: var(--k-text-xs); overflow-wrap: anywhere; }
+.gamepad-raw {
+  padding-top: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  overflow-wrap: anywhere;
+}
 
 /* The gamepad capture control: a button with an optional clear button. */
-.gamepad-capture { display: inline-flex; align-items: center; gap: var(--k-space-0-5); }
-.gamepad-capture .k-button[data-assigned] { color: var(--k-text); }
-.gamepad-capture .k-button[data-capturing] { box-shadow: inset 0 0 0 1px var(--k-accent); color: var(--k-accent-text); }
+.gamepad-capture {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+}
+.gamepad-capture .k-button[data-assigned] {
+  color: var(--k-text);
+}
+.gamepad-capture .k-button[data-capturing] {
+  box-shadow: inset 0 0 0 1px var(--k-accent);
+  color: var(--k-accent-text);
+}
 /* The kit cap inherits the UA monospace face from <kbd>; shortcut caps use the UI face (Figtree
    has no slashed zero) with the platform symbols at a legible size. */
-.shortcut-recorder .k-kbd { justify-content: center; font-family: var(--k-font-ui); font-size: var(--k-text-sm); }
+.shortcut-recorder .k-kbd {
+  justify-content: center;
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-sm);
+}
 
 /* A choice-card group as the first thing in a settings group (Dictionary → Pop-up). */
-.settings-choice { padding: var(--k-space-3); }
-.settings-choice + .k-settings-row { border-top: 1px solid var(--k-line); }
-.settings-choice .k-choice-group { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
-.settings-choice .k-choice-head .k-badge { margin-left: var(--k-space-1); }
+.settings-choice {
+  padding: var(--k-space-3);
+}
+.settings-choice + .k-settings-row {
+  border-top: 1px solid var(--k-line);
+}
+.settings-choice .k-choice-group {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+.settings-choice .k-choice-head .k-badge {
+  margin-left: var(--k-space-1);
+}
 
 /* Pages that wrap Log settings in `.texthooker` (for its scoped resets) keep the page's section
    rhythm: the wrapper takes no part in layout. */
-.k-settings-page > .texthooker { display: contents; }
+.k-settings-page > .texthooker {
+  display: contents;
+}
 
 /* Card enhancement → Tags: the field across the row, and under it the tags a card made now gets. */
 .card-tags-control {

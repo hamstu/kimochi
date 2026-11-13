@@ -75,11 +75,7 @@ test('line breaks that match the lines are kept as they are', () => {
 
 test('with no line geometry, the line count that gives the largest glyphs wins', () => {
   // 20 characters in a 200 x 100 box: no other line count may allow a larger glyph.
-  const runs = estimate(
-    'あいうえおかきくけこさしすせそたちつてと',
-    { x: 0, y: 0, width: 200, height: 100 },
-    false
-  )
+  const runs = estimate('あいうえおかきくけこさしすせそたちつてと', { x: 0, y: 0, width: 200, height: 100 }, false)
   const size = runs[0].rect.height
   for (const lines of [1, 2, 3, 4, 5]) {
     const perLine = Math.ceil(20 / lines)
@@ -179,11 +175,7 @@ test('a line is cut where its words show a gap OCR left out of the text, separat
   const run = { text: 'ゆうしゃは スライムを', rect: { x: 0, y: 0, width: 400, height: 20 } }
   const word = (text, x, width) => ({ text, x, y: 0, width, height: 20 })
   // Two words 20 px apart, then one 70 px on: a space the text has only as ' '.
-  const pieces = splitAtGaps(
-    run,
-    [word('ゆうしゃ', 0, 80), word('は', 100, 20), word('スライムを', 190, 100)],
-    false
-  )
+  const pieces = splitAtGaps(run, [word('ゆうしゃ', 0, 80), word('は', 100, 20), word('スライムを', 190, 100)], false)
   assert.deepEqual(
     pieces.map((piece) => [piece.text, piece.rect.x, piece.rect.width]),
     [
@@ -198,10 +190,7 @@ test('a line is cut where its words show a gap OCR left out of the text, separat
   )
   // Words that do not match the text, or no gap, leave the line whole.
   assert.equal(splitAtGaps(run, [word('ちがう', 0, 60)], false)[0].text, run.text)
-  assert.equal(
-    splitAtGaps(run, [word('ゆうしゃは', 0, 100), word('スライムを', 110, 100)], false).length,
-    1
-  )
+  assert.equal(splitAtGaps(run, [word('ゆうしゃは', 0, 100), word('スライムを', 110, 100)], false).length, 1)
 })
 
 test("characters the engine boxed place the glyphs, whatever the run's ends say", () => {
@@ -216,11 +205,7 @@ test("characters the engine boxed place the glyphs, whatever the run's ends say"
     width: (1 - 2 * EDGE + 2 * PAD) * f,
     height: 20
   }))
-  const run = fit(
-    { text: 'あいうえ', rect: { x: 10, y: 0, width: 160, height: 20 }, segments },
-    false,
-    em
-  )
+  const run = fit({ text: 'あいうえ', rect: { x: 10, y: 0, width: 160, height: 20 }, segments }, false, em)
   close(run.lead, 0, 'first origin on the first character')
   close(run.fontSize + run.spacing, 30, 'pitch from the characters')
 })
@@ -272,11 +257,7 @@ test('character cells tile each run and skip line breaks, one per code unit', ()
   // Cells tile the line: each glyph's advance and the spacing around it, end to end, the first
   // centred on the first glyph, whose ink starts at the start of the line.
   close(cells[0].x + cells[0].width, cells[1].x, 'cells meet')
-  const [run] = layoutGroup(
-    [{ text: 'あい', rect: { x: 0, y: 0, width: 60, height: 20 } }],
-    false,
-    em
-  )
+  const [run] = layoutGroup([{ text: 'あい', rect: { x: 0, y: 0, width: 60, height: 20 } }], false, em)
   close(cells[0].x, run.lead - run.spacing / 2, 'first cell around the first glyph')
   close(cells[1].x + cells[1].width, run.lead + 2 * run.fontSize + 1.5 * run.spacing, 'last cell')
   assert.deepEqual([cells[0].line, cells[1].line, cells[3].line, cells[5].line], [0, 0, 1, 1])
@@ -321,8 +302,7 @@ test('two narration boxes boxed as one are set as wrapped text, never stretched 
   const [runs] = layoutParts([{ text, rect: box, lines, block: true, vertical: true }], em)
   assert.equal(runs.map((run) => run.text).join(''), text, 'every character, in reading order')
   assert.ok(runs.length > 1)
-  for (let i = 1; i < runs.length; i++)
-    assert.ok(runs[i - 1].rect.x > runs[i].rect.x, 'columns read right to left')
+  for (let i = 1; i < runs.length; i++) assert.ok(runs[i - 1].rect.x > runs[i].rect.x, 'columns read right to left')
   for (const run of runs) {
     close(run.fontSize, runs[0].fontSize, 'one size')
     const pitch = run.fontSize + run.spacing
@@ -365,18 +345,26 @@ test('joined narration boxes keep their own columns, and slanted handwriting kee
   })
   const [narration, bubble] = layoutParts(
     [
-      block('先に言っておくとこれは業界がどうとかの大きな話じゃない', [52, 75, 197, 281], [
-        [145, 75, 170, 141],
-        [173, 76, 197, 178],
-        [80, 122, 100, 223],
-        [106, 121, 129, 243],
-        [53, 123, 73, 280]
-      ]),
-      block('アンコールないからはよ帰れ', [240, 199, 320, 288], [
-        [281, 199, 320, 283],
-        [261, 206, 299, 277],
-        [240, 207, 281, 288]
-      ])
+      block(
+        '先に言っておくとこれは業界がどうとかの大きな話じゃない',
+        [52, 75, 197, 281],
+        [
+          [145, 75, 170, 141],
+          [173, 76, 197, 178],
+          [80, 122, 100, 223],
+          [106, 121, 129, 243],
+          [53, 123, 73, 280]
+        ]
+      ),
+      block(
+        'アンコールないからはよ帰れ',
+        [240, 199, 320, 288],
+        [
+          [281, 199, 320, 283],
+          [261, 206, 299, 277],
+          [240, 207, 281, 288]
+        ]
+      )
     ],
     em
   )
@@ -409,7 +397,7 @@ test('a break measured off line lengths moves to just after a nearby pause', () 
   assert.equal(runs.map((run) => run.text).join(''), 'さすが「どこでも勉強ニキ」の異名を持つだけはあるね！')
 })
 
-test('a column of ellipses keeps its bubble\'s size, centred on its tight box', () => {
+test("a column of ellipses keeps its bubble's size, centred on its tight box", () => {
   // Manga OCR on 「……／かう」: the dots boxed 29 px long for two ellipses, beside 「かう」.
   const [runs] = layoutParts(
     [
@@ -435,25 +423,59 @@ test('a column of ellipses keeps its bubble\'s size, centred on its tight box', 
   assert.equal(runs[0].spacing, 0)
 })
 
-test('a bubble\'s columns break where the source does, judged together at one pitch', () => {
+test("a bubble's columns break where the source does, judged together at one pitch", () => {
   // Manga OCR on a whole spread (キルコ). Shared out column by column, by each region's length over
   // its breadth and then snapped to a pause, the short first column lost its words to the next.
   const cases = [
     // …おい／キルコ嬢の様子／変じゃね？: the pause after … is two characters from the break.
-    ['…おいキルコ嬢の様子変じゃね？', [[1346, 701, 1386, 779], [1321, 703, 1353, 858], [1291, 703, 1324, 818]],
-      ['…おい', 'キルコ嬢の様子', '変じゃね？']],
+    [
+      '…おいキルコ嬢の様子変じゃね？',
+      [
+        [1346, 701, 1386, 779],
+        [1321, 703, 1353, 858],
+        [1291, 703, 1324, 818]
+      ],
+      ['…おい', 'キルコ嬢の様子', '変じゃね？']
+    ],
     // どうせあの／いつも買ってる／まんが本だろ: breadths of 32, 30 and 25 for one size of glyph.
-    ['どうせあのいつも買ってるまんが本だろ', [[1207, 705, 1239, 818], [1178, 706, 1208, 862], [1152, 706, 1177, 838]],
-      ['どうせあの', 'いつも買ってる', 'まんが本だろ']],
+    [
+      'どうせあのいつも買ってるまんが本だろ',
+      [
+        [1207, 705, 1239, 818],
+        [1178, 706, 1208, 862],
+        [1152, 706, 1177, 838]
+      ],
+      ['どうせあの', 'いつも買ってる', 'まんが本だろ']
+    ],
     // やっぱ／立ち読みなんて／するもんじゃないな。: the first region took in the next one's ruby.
-    ['やっぱ立ち読みなんてするもんじゃないな。', [[576, 288, 624, 373], [554, 291, 586, 450], [524, 291, 556, 498]],
-      ['やっぱ', '立ち読みなんて', 'するもんじゃないな。']],
+    [
+      'やっぱ立ち読みなんてするもんじゃないな。',
+      [
+        [576, 288, 624, 373],
+        [554, 291, 586, 450],
+        [524, 291, 556, 498]
+      ],
+      ['やっぱ', '立ち読みなんて', 'するもんじゃないな。']
+    ],
     // キルコ嬢、ソレ／買わないんで？: a pause two characters short of the break is not where it is.
-    ['キルコ嬢、ソレ買わないんで？', [[1557, 119, 1595, 274], [1532, 121, 1562, 276]],
-      ['キルコ嬢、ソレ', '買わないんで？']],
+    [
+      'キルコ嬢、ソレ買わないんで？',
+      [
+        [1557, 119, 1595, 274],
+        [1532, 121, 1562, 276]
+      ],
+      ['キルコ嬢、ソレ', '買わないんで？']
+    ],
     // あぁ…／オタク over めんどくせぇ…: one column in two pieces, the blank between not counted.
-    ['あぁ…オタクめんどくせぇ…', [[1075, 908, 1109, 988], [1069, 822, 1103, 898], [1047, 908, 1079, 1069]],
-      ['あぁ…オタク', 'めんどくせぇ…']]
+    [
+      'あぁ…オタクめんどくせぇ…',
+      [
+        [1075, 908, 1109, 988],
+        [1069, 822, 1103, 898],
+        [1047, 908, 1079, 1069]
+      ],
+      ['あぁ…オタク', 'めんどくせぇ…']
+    ]
   ]
   for (const [text, regions, expected] of cases) {
     const lines = regions.map(([x1, y1, x2, y2]) => ({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 }))
@@ -464,7 +486,10 @@ test('a bubble\'s columns break where the source does, judged together at one pi
       height: Math.max(...lines.map((l) => l.y + l.height)) - Math.min(...lines.map((l) => l.y))
     }
     const [runs] = layoutParts([{ text, rect, lines, block: true, vertical: true }], em)
-    assert.deepEqual(runs.map((run) => run.text), expected)
+    assert.deepEqual(
+      runs.map((run) => run.text),
+      expected
+    )
   }
 })
 
@@ -486,7 +511,7 @@ test('a big word is not set at the size of a caption that merely shares its colu
   assert.ok(word.spacing < 0.1 * word.fontSize, `spaced ${word.spacing} at ${word.fontSize}`)
 })
 
-test("a bubble whose lines were each read on its own keeps every character on its own line", () => {
+test('a bubble whose lines were each read on its own keeps every character on its own line', () => {
   // Three columns as lettered: the middle one is short, the left one ends in compact punctuation.
   // Shared out by length, characters drift between columns; read one by one, they cannot.
   const said = ['ご主人さま', 'トカゲは', 'おキライなのかしら！？']
@@ -526,7 +551,13 @@ test('per-line text that does not match the lines found is not used', () => {
     { x: 30, y: 0, width: 30, height: 120 },
     { x: 0, y: 0, width: 30, height: 120 }
   ]
-  const part = { text: 'あいうえおかきく', rect: { x: 0, y: 0, width: 60, height: 120 }, lines, block: true, vertical: true }
+  const part = {
+    text: 'あいうえおかきく',
+    rect: { x: 0, y: 0, width: 60, height: 120 },
+    lines,
+    block: true,
+    vertical: true
+  }
   const [runs] = layoutParts([{ ...part, lineTexts: ['あいうえおかきく'] }], em)
   assert.equal(runs.length, 2)
 })
@@ -545,7 +576,15 @@ const squeezeLine = (cells) => {
 }
 
 test('brackets the engine boxed in half a cell are drawn in half a cell, and the rest keeps its place', () => {
-  const run = squeezeLine([['猫', 30], ['は', 30], ['「', 15], ['犬', 30], ['」', 15], ['だ', 30], ['よ', 30]])
+  const run = squeezeLine([
+    ['猫', 30],
+    ['は', 30],
+    ['「', 15],
+    ['犬', 30],
+    ['」', 15],
+    ['だ', 30],
+    ['よ', 30]
+  ])
   const fitted = fit(run, false, em)
   assert.equal(fitted.squeeze, '「」')
   const cells = characterCells(run.text, [fitted], false, em)
@@ -557,7 +596,12 @@ test('brackets the engine boxed in half a cell are drawn in half a cell, and the
 test('a step at either end of a line, either way, is followed', () => {
   // Ten glyphs boxed by their ink, two at one end 0.8 of a glyph off the others' pitch: a step the
   // boxes agree on, not a misread (#92). The two must not be judged by a window that leans away.
-  for (const [where, sign] of [['end', 1], ['end', -1], ['start', 1], ['start', -1]]) {
+  for (const [where, sign] of [
+    ['end', 1],
+    ['end', -1],
+    ['start', 1],
+    ['start', -1]
+  ]) {
     const text = '猫は犬だよ猫は犬だよ'
     const segments = [...text].map((c, at) => {
       const moved = where === 'end' ? at >= 8 : at <= 1
@@ -569,7 +613,10 @@ test('a step at either end of a line, either way, is followed', () => {
     segments.forEach((segment, k) => {
       const centre = fitted.rect.x + fitted.lead + f * (k + 0.5) + fitted.spacing * k + (fitted.offsets?.[k] ?? 0)
       const off = (centre - (segment.x + segment.width / 2)) / f
-      assert.ok(Math.abs(off) < 0.25, `${where} ${sign > 0 ? '+' : '-'}: glyph ${k} drawn ${off.toFixed(2)} of a glyph off`)
+      assert.ok(
+        Math.abs(off) < 0.25,
+        `${where} ${sign > 0 ? '+' : '-'}: glyph ${k} drawn ${off.toFixed(2)} of a glyph off`
+      )
     })
   }
 })
@@ -593,7 +640,15 @@ test('a cluster of boxes far off the line is not followed', () => {
 })
 
 test('full-width brackets in the engine boxes are left full-width', () => {
-  const run = squeezeLine([['猫', 30], ['は', 30], ['「', 30], ['犬', 30], ['」', 30], ['だ', 30], ['よ', 30]])
+  const run = squeezeLine([
+    ['猫', 30],
+    ['は', 30],
+    ['「', 30],
+    ['犬', 30],
+    ['」', 30],
+    ['だ', 30],
+    ['よ', 30]
+  ])
   assert.equal(fit(run, false, em).squeeze, undefined)
 })
 
@@ -605,6 +660,13 @@ test('without the engine boxing characters, brackets are never squeezed, even in
 
 test('brackets at the ends of a full-width line are left as they are', () => {
   // Boxed around ink, as cloud engines box: 「's ink is the right half of its cell, 」's the left.
-  const run = squeezeLine([['「', 30], ['猫', 30], ['は', 30], ['犬', 30], ['だ', 30], ['」', 30]])
+  const run = squeezeLine([
+    ['「', 30],
+    ['猫', 30],
+    ['は', 30],
+    ['犬', 30],
+    ['だ', 30],
+    ['」', 30]
+  ])
   assert.equal(fit(run, false, em).squeeze, undefined)
 })

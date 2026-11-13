@@ -41,9 +41,7 @@ fn with_manager<R>(f: impl FnOnce(&IVirtualDesktopManager) -> Option<R>) -> Opti
 
 /// The desktop a window is on; `None` for one on every desktop, or none (the shell).
 fn desktop_of(manager: &IVirtualDesktopManager, hwnd: HWND) -> Option<GUID> {
-    unsafe { manager.GetWindowDesktopId(hwnd) }
-        .ok()
-        .filter(|id| *id != GUID::zeroed())
+    unsafe { manager.GetWindowDesktopId(hwnd) }.ok().filter(|id| *id != GUID::zeroed())
 }
 
 /// Where a window that is on another desktop is ("Desktop 3", or the name the user gave it);
@@ -124,9 +122,7 @@ fn registry_binary(key: &str, value: &str) -> Option<Vec<u8>> {
 fn registry_string(key: &str, value: &str) -> Option<String> {
     let (key, value) = (HSTRING::from(key), HSTRING::from(value));
     let mut size = 0u32;
-    unsafe { RegGetValueW(HKEY_CURRENT_USER, &key, &value, RRF_RT_REG_SZ, None, None, Some(&mut size)) }
-        .ok()
-        .ok()?;
+    unsafe { RegGetValueW(HKEY_CURRENT_USER, &key, &value, RRF_RT_REG_SZ, None, None, Some(&mut size)) }.ok().ok()?;
     let mut data = vec![0u16; (size as usize).div_ceil(2)];
     unsafe {
         RegGetValueW(
@@ -158,9 +154,7 @@ mod tests {
     #[test]
     fn desktop_ids_read_in_memory_order() {
         let id = GUID::from_u128(0x01234567_89ab_cdef_0011_223344556677);
-        let bytes = [
-            0x67, 0x45, 0x23, 0x01, 0xab, 0x89, 0xef, 0xcd, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-        ];
+        let bytes = [0x67, 0x45, 0x23, 0x01, 0xab, 0x89, 0xef, 0xcd, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
         assert_eq!(guid_from_bytes(&bytes), id);
         assert_eq!(format!("{{{id:?}}}"), "{01234567-89AB-CDEF-0011-223344556677}");
     }

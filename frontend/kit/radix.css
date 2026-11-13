@@ -5,22 +5,22 @@
  * window for nothing, and held each window's first frame back. A new scale used in CSS
  * (`var(--<colour>-…)`) needs its file added here.
  */
-@import "@radix-ui/themes/tokens/base.css";
-@import "@radix-ui/themes/tokens/colors/slate.css";
-@import "@radix-ui/themes/tokens/colors/indigo.css";
-@import "@radix-ui/themes/tokens/colors/amber.css";
-@import "@radix-ui/themes/tokens/colors/red.css";
-@import "@radix-ui/themes/tokens/colors/teal.css";
-@import "@radix-ui/themes/tokens/colors/green.css";
+@import '@radix-ui/themes/tokens/base.css';
+@import '@radix-ui/themes/tokens/colors/slate.css';
+@import '@radix-ui/themes/tokens/colors/indigo.css';
+@import '@radix-ui/themes/tokens/colors/amber.css';
+@import '@radix-ui/themes/tokens/colors/red.css';
+@import '@radix-ui/themes/tokens/colors/teal.css';
+@import '@radix-ui/themes/tokens/colors/green.css';
 
 /* The root theme's own layout, from Radix's components.css. */
-.radix-themes:where([data-is-root-theme="true"]) {
+.radix-themes:where([data-is-root-theme='true']) {
   position: relative;
   z-index: 0;
   min-height: 100vh;
 }
 @supports (min-height: 100dvh) {
-  .radix-themes:where([data-is-root-theme="true"]) {
+  .radix-themes:where([data-is-root-theme='true']) {
     min-height: 100dvh;
   }
 }

@@ -95,7 +95,10 @@ export function normalizeLinks(value: unknown): ProfileLinks {
 export function profileState(options: unknown): ProfileState {
   const raw = (options ?? {}) as { profiles?: unknown; profileCurrent?: unknown }
   const profiles = (Array.isArray(raw.profiles) ? raw.profiles : []).map((profile: unknown, index: number) => {
-    const p = (profile ?? {}) as { name?: unknown; options?: { general?: { language?: unknown }; dictionaries?: unknown } }
+    const p = (profile ?? {}) as {
+      name?: unknown
+      options?: { general?: { language?: unknown }; dictionaries?: unknown }
+    }
     const dictionaries = Array.isArray(p.options?.dictionaries) ? p.options.dictionaries : []
     return {
       name: typeof p.name === 'string' ? p.name : `Profile ${index + 1}`,
@@ -103,9 +106,10 @@ export function profileState(options: unknown): ProfileState {
       dictionaries: dictionaries.filter((d: unknown) => (d as { enabled?: unknown } | null)?.enabled === true).length
     }
   })
-  const current = typeof raw.profileCurrent === 'number' && raw.profileCurrent >= 0 && raw.profileCurrent < profiles.length
-    ? raw.profileCurrent
-    : 0
+  const current =
+    typeof raw.profileCurrent === 'number' && raw.profileCurrent >= 0 && raw.profileCurrent < profiles.length
+      ? raw.profileCurrent
+      : 0
   return { profiles, current }
 }
 
@@ -193,8 +197,10 @@ export function recommendedSets(table: unknown, language: string): { path: strin
   if (!Array.isArray(entries)) return []
   return (entries as Recommended[])
     .map((entry) => entry?.modification)
-    .filter((m): m is { action: string; path: string; value: unknown } =>
-      m?.action === 'set' && typeof m.path === 'string' && /^[\w.]+$/.test(m.path))
+    .filter(
+      (m): m is { action: string; path: string; value: unknown } =>
+        m?.action === 'set' && typeof m.path === 'string' && /^[\w.]+$/.test(m.path)
+    )
     .map(({ path, value }) => ({ path, value }))
 }
 
@@ -234,7 +240,12 @@ export function planModifications(
   recommended: unknown
 ): Modification[] {
   if (plan.kind === 'keep') return []
-  const current = (index: number): Modification => ({ scope: 'global', action: 'set', path: 'profileCurrent', value: index })
+  const current = (index: number): Modification => ({
+    scope: 'global',
+    action: 'set',
+    path: 'profileCurrent',
+    value: index
+  })
   if (plan.kind === 'use') return [current(plan.index)]
   const sets = [{ path: 'general.language', value: plan.language }, ...recommendedSets(recommended, plan.language)]
   if (plan.kind === 'adopt') {
@@ -253,8 +264,14 @@ export function planModifications(
   for (const { path, value } of sets) setPath(copy, path, structuredClone(value))
   const index = options.profiles.length
   return [
-    { scope: 'global', action: 'splice', path: 'profiles', start: index, deleteCount: 0,
-      items: [{ name: plan.name, conditionGroups: [], options: copy }] },
+    {
+      scope: 'global',
+      action: 'splice',
+      path: 'profiles',
+      start: index,
+      deleteCount: 0,
+      items: [{ name: plan.name, conditionGroups: [], options: copy }]
+    },
     current(index)
   ]
 }
@@ -292,9 +309,10 @@ export function followYomitanProfiles({
   }
 
   const follow = async (trigger: 'startup' | 'change'): Promise<void> => {
-    const status = (await native.invoke('account_status').catch(() => null)) as
-      | { switching?: boolean; profile?: { key?: string | null } }
-      | null
+    const status = (await native.invoke('account_status').catch(() => null)) as {
+      switching?: boolean
+      profile?: { key?: string | null }
+    } | null
     // Mid-switch the language already is the new account's while the account is not yet: the
     // switch's own `account-changed` runs this again once it is done.
     if (status?.switching) return
@@ -307,13 +325,25 @@ export function followYomitanProfiles({
     if (plan.kind !== 'keep') {
       if (plan.kind !== 'use' && recommended === null) {
         // Served with Yomitan at the app origin.
-        recommended = await fetch('/data/recommended-settings.json').then((r) => (r.ok ? r.json() : {}), () => ({}))
+        recommended = await fetch('/data/recommended-settings.json').then(
+          (r) => (r.ok ? r.json() : {}),
+          () => ({})
+        )
       }
       const targets = planModifications(plan, options, recommended)
-      const results = (await api('modifySettings', { targets, source: 'kimochi-profiles' })) as { error?: unknown }[] | null
+      const results = (await api('modifySettings', { targets, source: 'kimochi-profiles' })) as
+        | { error?: unknown }[]
+        | null
       const failed = results?.find((result) => result?.error)
       if (failed) throw Error(`Yomitan refused the profile change: ${JSON.stringify(failed.error)}`)
-      native.report({ check: 'yomitan-profile', account: slot, language, plan: plan.kind, profile: plan.kind === 'use' ? null : plan.link.profile, index: 'index' in plan ? plan.index : null })
+      native.report({
+        check: 'yomitan-profile',
+        account: slot,
+        language,
+        plan: plan.kind,
+        profile: plan.kind === 'use' ? null : plan.link.profile,
+        index: 'index' in plan ? plan.index : null
+      })
       if (plan.link) {
         const next = { ...links, [slot]: plan.link }
         await native.invoke('settings_set', { key: YOMITAN_PROFILES_KEY, value: next })
@@ -327,8 +357,10 @@ export function followYomitanProfiles({
   const run = (trigger: 'startup' | 'change'): void => {
     chain = chain
       .then(() => follow(trigger))
-      .catch((error: unknown) =>
-        void native.report({ check: 'yomitan-profile-failed', error: String((error as Error)?.message ?? error) }))
+      .catch(
+        (error: unknown) =>
+          void native.report({ check: 'yomitan-profile-failed', error: String((error as Error)?.message ?? error) })
+      )
   }
 
   run('startup')

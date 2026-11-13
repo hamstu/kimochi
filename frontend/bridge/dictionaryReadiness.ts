@@ -1,117 +1,115 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { downloadEngineFor } from "@ui/extension-download";
-import { newerReadiness, readinessView, setupProgress, type DownloadState, type ReadinessView } from "@ui/dictionary-readiness";
-import { percent } from "@ui/model-download";
-import { onEvent } from "./tauri";
-import { DICTIONARY_ENGINES, hostEngineOf, type DictionaryEngine } from "./dictionaryEngine";
-import { useExtensionStatus } from "./extensions";
+import { useEffect, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { downloadEngineFor } from '@ui/extension-download'
+import {
+  newerReadiness,
+  readinessView,
+  setupProgress,
+  type DownloadState,
+  type ReadinessView
+} from '@ui/dictionary-readiness'
+import { percent } from '@ui/model-download'
+import { onEvent } from './tauri'
+import { DICTIONARY_ENGINES, hostEngineOf, type DictionaryEngine } from './dictionaryEngine'
+import { useExtensionStatus } from './extensions'
 
 export interface DictionaryReadiness {
-  engine: string;
+  engine: string
   /** The settings host initialized; dictionary data may still be downloading. */
-  settingsReady: boolean;
-  phase:
-    | "starting"
-    | "downloading"
-    | "installing"
-    | "setup-needed"
-    | "ready"
-    | "failed";
-  message: string;
-  progress?: number | null;
+  settingsReady: boolean
+  phase: 'starting' | 'downloading' | 'installing' | 'setup-needed' | 'ready' | 'failed'
+  message: string
+  progress?: number | null
   /** Lookups work now, whatever the phase (10ten reads its bundled words while it downloads). */
-  lookups?: boolean;
+  lookups?: boolean
   /** Native's number for this report (`src-tauri/src/dictionary_runtime.rs`): higher is newer. */
-  seq?: number;
+  seq?: number
   /** The engine's download (`extension_status`), or null when there is none to report. */
-  download: DownloadState;
+  download: DownloadState
   /** What Settings, the sidebar and onboarding show for it (`ui/dictionary-readiness.ts`). */
-  view: ReadinessView;
+  view: ReadinessView
   /** The whole setup as one bar (`setupProgress`), or null when nothing is under way. */
-  setup: { value: number; exact: boolean } | null;
+  setup: { value: number; exact: boolean } | null
 }
 
 /**
  * The engine whose setup began with its download, kept for the session: a switch reloads the
  * main window between the download and the engine's start, and the one bar must not restart.
  */
-const SETUP_KEY = "kimochi.setupWithDownload";
+const SETUP_KEY = 'kimochi.setupWithDownload'
 const setupBeganWithDownload = (engine: string): boolean => {
   try {
-    return sessionStorage.getItem(SETUP_KEY) === engine;
+    return sessionStorage.getItem(SETUP_KEY) === engine
   } catch {
-    return false;
+    return false
   }
-};
+}
 const rememberSetup = (engine: string | null): void => {
   try {
-    if (engine) sessionStorage.setItem(SETUP_KEY, engine);
-    else sessionStorage.removeItem(SETUP_KEY);
+    if (engine) sessionStorage.setItem(SETUP_KEY, engine)
+    else sessionStorage.removeItem(SETUP_KEY)
   } catch {
     /* Only the bar's continuity is lost. */
   }
-};
+}
 
-type Reported = Omit<DictionaryReadiness, "download" | "view" | "setup">;
+type Reported = Omit<DictionaryReadiness, 'download' | 'view' | 'setup'>
 
 /**
  * The engine's readiness, with its extension archive's download: an engine that is not downloaded
  * runs nowhere, so no readiness is ever reported for it and the download is what to show.
  */
-export function useDictionaryReadiness(
-  engine: DictionaryEngine,
-): DictionaryReadiness {
-  const host = hostEngineOf(engine);
-  const [status, setStatus] = useState<Reported | null>(null);
-  const downloadStatus = useExtensionStatus(downloadEngineFor(engine));
+export function useDictionaryReadiness(engine: DictionaryEngine): DictionaryReadiness {
+  const host = hostEngineOf(engine)
+  const [status, setStatus] = useState<Reported | null>(null)
+  const downloadStatus = useExtensionStatus(downloadEngineFor(engine))
   useEffect(() => {
-    let live = true;
-    let stop: (() => void) | undefined;
+    let live = true
+    let stop: (() => void) | undefined
     const accept = (next: Reported): void => {
       if (live && next.engine === host) {
-        setStatus((current) => (newerReadiness(current, next) ? next : current));
+        setStatus((current) => (newerReadiness(current, next) ? next : current))
       }
-    };
+    }
     // Subscribe before reading: a fast startup cannot land between the read and listener.
-    void onEvent<Reported>("dictionary-readiness", accept)
+    void onEvent<Reported>('dictionary-readiness', accept)
       .then(async (unlisten) => {
-        if (!live) return unlisten();
-        stop = unlisten;
+        if (!live) return unlisten()
+        stop = unlisten
         accept(
-          await invoke<Reported>("dictionary_runtime_status", {
-            engine: host,
-          }),
-        );
+          await invoke<Reported>('dictionary_runtime_status', {
+            engine: host
+          })
+        )
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
     return () => {
-      live = false;
-      stop?.();
-    };
-  }, [host]);
+      live = false
+      stop?.()
+    }
+  }, [host])
   const reported: Reported =
-    engine === "custom-api"
-      ? { engine: host, phase: "ready", settingsReady: true, message: "" }
+    engine === 'custom-api'
+      ? { engine: host, phase: 'ready', settingsReady: true, message: '' }
       : status?.engine === host
         ? status
-        : { engine: host, phase: "starting", settingsReady: false, message: "Starting the dictionary…" };
+        : { engine: host, phase: 'starting', settingsReady: false, message: 'Starting the dictionary…' }
   const download: DownloadState =
-    engine !== "custom-api" && downloadStatus?.engine === engine ? downloadStatus.state : null;
-  const downloading = download === "downloading" || download === "verifying";
-  if (downloading && !setupBeganWithDownload(engine)) rememberSetup(engine);
+    engine !== 'custom-api' && downloadStatus?.engine === engine ? downloadStatus.state : null
+  const downloading = download === 'downloading' || download === 'verifying'
+  if (downloading && !setupBeganWithDownload(engine)) rememberSetup(engine)
   const downloadPercent =
-    downloadStatus && download === "downloading"
+    downloadStatus && download === 'downloading'
       ? percent(downloadStatus.overallReceived, downloadStatus.overallTotal)
-      : null;
-  const setup = setupProgress(reported, download, downloadPercent, downloading || setupBeganWithDownload(engine));
+      : null
+  const setup = setupProgress(reported, download, downloadPercent, downloading || setupBeganWithDownload(engine))
   useEffect(() => {
-    if (reported.phase === "ready" && setupBeganWithDownload(engine)) rememberSetup(null);
-  }, [reported.phase, engine]);
+    if (reported.phase === 'ready' && setupBeganWithDownload(engine)) rememberSetup(null)
+  }, [reported.phase, engine])
   return {
     ...reported,
     download,
     view: readinessView(reported, download, DICTIONARY_ENGINES[engine].name),
-    setup,
-  };
+    setup
+  }
 }

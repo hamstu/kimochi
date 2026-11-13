@@ -56,8 +56,7 @@ export function engineReadsLanguage(capability: OcrEngineCapability | undefined,
 /** The engines that read only Japanese, for a backend that does not say (they are trained on it). */
 const JAPANESE_ONLY: readonly string[] = Object.freeze(['ja'])
 
-export type CaptureAuthorization =
-  'granted' | 'denied' | 'notRequired' | 'promptOnSelect' | 'unsupported'
+export type CaptureAuthorization = 'granted' | 'denied' | 'notRequired' | 'promptOnSelect' | 'unsupported'
 
 export interface PlatformCapabilities {
   os: PlatformOs
@@ -136,11 +135,7 @@ export interface PlatformCapabilities {
 }
 
 /** The application names Kimochi's own windows have reported as frontmost on macOS. */
-export const DEFAULT_OWN_APP_NAMES: readonly string[] = [
-  'Kimochi',
-  'Kimochi Next',
-  'Kimochi Next POC'
-]
+export const DEFAULT_OWN_APP_NAMES: readonly string[] = ['Kimochi', 'Kimochi Next', 'Kimochi Next POC']
 
 /**
  * macOS as the app behaves today, for a backend without `platform_capabilities`.
@@ -204,9 +199,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
  * Windows or Linux user agent gets its own OS name and Ctrl-based keys.
  */
 export function fallbackCapabilities(
-  nav: { platform?: string; userAgent?: string } | undefined = typeof navigator === 'undefined'
-    ? undefined
-    : navigator
+  nav: { platform?: string; userAgent?: string } | undefined = typeof navigator === 'undefined' ? undefined : navigator
 ): PlatformCapabilities {
   const hint = `${nav?.platform ?? ''} ${nav?.userAgent ?? ''}`
   if (!hint.trim() || /Mac|iPhone|iPad|iPod/i.test(hint)) return DEFAULT_CAPABILITIES_MACOS
@@ -243,9 +236,7 @@ export function normalizeCapabilities(
 ): PlatformCapabilities {
   if (!isRecord(raw)) return base
   const section = <K extends keyof PlatformCapabilities>(key: K): PlatformCapabilities[K] =>
-    (isRecord(raw[key])
-      ? { ...(base[key] as object), ...(raw[key] as object) }
-      : base[key]) as PlatformCapabilities[K]
+    (isRecord(raw[key]) ? { ...(base[key] as object), ...(raw[key] as object) } : base[key]) as PlatformCapabilities[K]
   const input = section('input')
   const engines = { ...base.ocrEngines }
   if (isRecord(raw.ocrEngines)) {
@@ -270,9 +261,7 @@ export function normalizeCapabilities(
     os,
     osVersion: typeof raw.osVersion === 'string' ? raw.osVersion : base.osVersion,
     arch: typeof raw.arch === 'string' ? raw.arch : base.arch,
-    session: isRecord(raw.session)
-      ? (raw.session as PlatformCapabilities['session'])
-      : (base.session ?? null),
+    session: isRecord(raw.session) ? (raw.session as PlatformCapabilities['session']) : (base.session ?? null),
     keys: section('keys'),
     capture: section('capture'),
     sources: section('sources'),

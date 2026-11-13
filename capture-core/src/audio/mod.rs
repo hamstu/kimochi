@@ -68,7 +68,13 @@ pub(crate) struct Feed {
 impl Feed {
     /// Queue one chunk of `frames` mono samples (produced by `frame`, in order) that started
     /// playing at `wall_ms`. Returns false when it was dropped for lack of room.
-    pub(crate) fn push(&mut self, wall_ms: f64, sample_rate: u32, frames: usize, frame: impl FnMut(usize) -> f32) -> bool {
+    pub(crate) fn push(
+        &mut self,
+        wall_ms: f64,
+        sample_rate: u32,
+        frames: usize,
+        frame: impl FnMut(usize) -> f32,
+    ) -> bool {
         if frames == 0 || sample_rate == 0 {
             return true;
         }
@@ -259,10 +265,7 @@ impl SystemAudio {
 
 /// Wall-clock now, in Unix milliseconds: the time base of every stamp.
 pub fn now_ms() -> f64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64() * 1000.0)
-        .unwrap_or(0.0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0)
 }
 
 #[cfg(test)]

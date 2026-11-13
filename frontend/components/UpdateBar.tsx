@@ -37,10 +37,7 @@ export function UpdateBar({ status, label }: { status: UpdateStatus; label: stri
         aria-valuenow={indeterminate ? undefined : value}
         aria-valuetext={status.state === 'downloading' ? downloadProgress(status) : undefined}
       >
-        <span
-          className="model-progress-fill"
-          style={{ transform: `scaleX(${(indeterminate ? 100 : value) / 100})` }}
-        />
+        <span className="model-progress-fill" style={{ transform: `scaleX(${(indeterminate ? 100 : value) / 100})` }} />
       </span>
     </span>
   )

@@ -39,7 +39,14 @@ export interface Acknowledgement {
 }
 
 /** The Lucide icons the groups use (each consumer maps these names to components). */
-export type CreditGroupIcon = 'BookOpenText' | 'ScanText' | 'FishingHook' | 'AudioLines' | 'Lightbulb' | 'AppWindow' | 'Type'
+export type CreditGroupIcon =
+  | 'BookOpenText'
+  | 'ScanText'
+  | 'FishingHook'
+  | 'AudioLines'
+  | 'Lightbulb'
+  | 'AppWindow'
+  | 'Type'
 
 export interface AcknowledgementGroup {
   title: string

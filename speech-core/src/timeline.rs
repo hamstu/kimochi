@@ -61,10 +61,7 @@ impl Timeline {
         let Some(i) = self.lines.iter().position(|l| l.uid == uid) else {
             return (None, None);
         };
-        (
-            i.checked_sub(1).and_then(|p| self.lines.get(p)),
-            self.lines.get(i + 1),
-        )
+        (i.checked_sub(1).and_then(|p| self.lines.get(p)), self.lines.get(i + 1))
     }
 
     /// Forget lines (the Log deleted them, or a fuller reading replaced them).
@@ -84,22 +81,14 @@ impl Timeline {
     /// card's sentence, or every field of an extension's card). None when none matches: a card
     /// is better without audio than with another line's. With no text to go by, the newest line.
     pub fn mined(&self, texts: &[&str]) -> Option<&Line> {
-        let wanted: Vec<String> = texts
-            .iter()
-            .map(|t| normalize(t))
-            .filter(|t| !t.is_empty())
-            .collect();
+        let wanted: Vec<String> = texts.iter().map(|t| normalize(t)).filter(|t| !t.is_empty()).collect();
         let mut best: Option<(u8, &Line)> = None;
         for line in self.lines.iter().rev() {
             let text = normalize(&line.text);
             if text.is_empty() {
                 continue;
             }
-            let score = wanted
-                .iter()
-                .map(|w| similarity(&text, w))
-                .max()
-                .unwrap_or(0);
+            let score = wanted.iter().map(|w| similarity(&text, w)).max().unwrap_or(0);
             if score > best.map_or(0, |(s, _)| s) {
                 best = Some((score, line));
             }
@@ -156,8 +145,7 @@ pub fn normalize(text: &str) -> String {
 /// is sentence-sized (Yomitan cuts the sentence around the word out of a longer line), 0 no match.
 /// A single looked-up word inside a line is not a match: it would pick any line using the word.
 pub fn similarity(line: &str, card: &str) -> u8 {
-    let sentence_sized =
-        card.chars().count() >= 6 || card.chars().count() * 2 >= line.chars().count();
+    let sentence_sized = card.chars().count() >= 6 || card.chars().count() * 2 >= line.chars().count();
     if line == card {
         3
     } else if card.contains(line) && line.chars().count() >= 2 {
@@ -184,14 +172,7 @@ mod tests {
     }
 
     fn line(uid: &str, text: &str, ts: f64) -> Line {
-        Line {
-            uid: uid.into(),
-            text: text.into(),
-            ts,
-            ocr: false,
-            appeared: None,
-            scan: None,
-        }
+        Line { uid: uid.into(), text: text.into(), ts, ocr: false, appeared: None, scan: None }
     }
 
     fn timeline(lines: &[(&str, &str, f64)]) -> Timeline {
@@ -209,53 +190,25 @@ mod tests {
             ("b", "今日はいい天気ですね。散歩に行きましょう。", 2_000.0),
             ("c", "猫がいる。", 3_000.0),
         ]);
-        assert_eq!(
-            t.mined(&["今日はいい天気ですね。"]).unwrap().uid,
-            "b",
-            "a sentence cut out of a longer line"
-        );
-        assert_eq!(
-            t.mined(&["<b>猫</b>が好きです。"]).unwrap().uid,
-            "a",
-            "markup is ignored"
-        );
-        assert_eq!(
-            t.mined(&["猫", "ねこ", "cat", "猫が好きです。"])
-                .unwrap()
-                .uid,
-            "a",
-            "one of the card's fields"
-        );
-        assert!(
-            t.mined(&["猫"]).is_none(),
-            "a lone word matches no line: no audio rather than another line's"
-        );
+        assert_eq!(t.mined(&["今日はいい天気ですね。"]).unwrap().uid, "b", "a sentence cut out of a longer line");
+        assert_eq!(t.mined(&["<b>猫</b>が好きです。"]).unwrap().uid, "a", "markup is ignored");
+        assert_eq!(t.mined(&["猫", "ねこ", "cat", "猫が好きです。"]).unwrap().uid, "a", "one of the card's fields");
+        assert!(t.mined(&["猫"]).is_none(), "a lone word matches no line: no audio rather than another line's");
         assert_eq!(t.mined(&[]).unwrap().uid, "c");
         assert!(Timeline::default().mined(&["x"]).is_none());
     }
 
     #[test]
     fn the_newest_of_equal_matches_wins() {
-        let t = timeline(&[
-            ("a", "はい。", 1_000.0),
-            ("b", "いいえ。", 2_000.0),
-            ("c", "はい。", 3_000.0),
-        ]);
+        let t = timeline(&[("a", "はい。", 1_000.0), ("b", "いいえ。", 2_000.0), ("c", "はい。", 3_000.0)]);
         assert_eq!(t.mined(&["はい。"]).unwrap().uid, "c");
     }
 
     #[test]
     fn a_lines_neighbours_and_anchor() {
-        let mut t = timeline(&[
-            ("a", "一", 1_000.0),
-            ("b", "二", 5_000.0),
-            ("c", "三", 9_000.0),
-        ]);
+        let mut t = timeline(&[("a", "一", 1_000.0), ("b", "二", 5_000.0), ("c", "三", 9_000.0)]);
         let (before, after) = t.neighbours("b");
-        assert_eq!(
-            (before.unwrap().uid.as_str(), after.unwrap().uid.as_str()),
-            ("a", "c")
-        );
+        assert_eq!((before.unwrap().uid.as_str(), after.unwrap().uid.as_str()), ("a", "c"));
         assert_eq!(t.neighbours("a").0, None);
         assert!(t.record(Line {
             uid: "d".into(),
@@ -267,10 +220,7 @@ mod tests {
         }));
         assert_eq!(t.get("d").unwrap().anchor(), 10_500.0);
         assert_eq!(t.get("a").unwrap().anchor(), 1_000.0);
-        assert!(
-            !t.record(line("a", "一", 1_000.0)),
-            "the same text again is no change"
-        );
+        assert!(!t.record(line("a", "一", 1_000.0)), "the same text again is no change");
     }
 
     #[test]
@@ -285,9 +235,6 @@ mod tests {
 
     #[test]
     fn furigana_and_spaces_do_not_hide_a_match() {
-        assert_eq!(
-            normalize("<span>猫[ねこ]が 好[す]き</span>&nbsp;"),
-            "猫が好き"
-        );
+        assert_eq!(normalize("<span>猫[ねこ]が 好[す]き</span>&nbsp;"), "猫が好き");
     }
 }

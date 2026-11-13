@@ -25,7 +25,8 @@ export interface CopyChange {
 /** Elements whose own text is copy; the innermost one under the pointer is edited. */
 const BLOCKS =
   'h1,h2,h3,h4,h5,h6,p,li,dt,dd,label,a,button,span,small,strong,em,b,td,th,summary,legend,div,[role="menuitem"],[role="option"],[role="tab"]'
-const SKIP = 'svg, canvas, script, style, textarea, input, select, iframe, [contenteditable="true"]:not([data-studio-edit])'
+const SKIP =
+  'svg, canvas, script, style, textarea, input, select, iframe, [contenteditable="true"]:not([data-studio-edit])'
 const ATTR = 'data-studio-edit'
 const STYLE_ID = 'kimochi-studio-copy-style'
 
@@ -244,7 +245,13 @@ export function copySummary(changes: readonly CopyChange[]): string {
         lines.push(`${i + 1}. ${c.place}: ${c.note ?? ''}`, '')
         return
       }
-      lines.push(`${i + 1}. ${c.place}: <${c.tag}> ${c.where}`, '   Before:', quote(c.before), '   After:', quote(c.after))
+      lines.push(
+        `${i + 1}. ${c.place}: <${c.tag}> ${c.where}`,
+        '   Before:',
+        quote(c.before),
+        '   After:',
+        quote(c.after)
+      )
       if (c.note) lines.push(`   Note: ${c.note}`)
       lines.push('')
     })

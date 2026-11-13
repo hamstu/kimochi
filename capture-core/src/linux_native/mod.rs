@@ -36,17 +36,17 @@ use crate::{Platform, Rect, Source, SourceId};
 use serde::Serialize;
 
 #[cfg(target_os = "linux")]
+mod backend;
+#[cfg(target_os = "linux")]
 pub mod ext;
 #[cfg(target_os = "linux")]
 pub mod kwin;
 #[cfg(target_os = "linux")]
 pub mod mutter;
 #[cfg(target_os = "linux")]
-mod backend;
+pub(crate) use backend::pipewire_feed;
 #[cfg(target_os = "linux")]
 pub use backend::{activate, driver, driver_name, init, inventory, report, Driver, Feed, NativeCapture, Target};
-#[cfg(target_os = "linux")]
-pub(crate) use backend::pipewire_feed;
 
 /// How long the reader's source stream stays open after its last capture.
 pub const KEEP_CAPTURE: std::time::Duration = std::time::Duration::from_secs(90);
@@ -112,12 +112,7 @@ impl Inventory {
 
 /// The id of a window source.
 pub fn window_source_id(window: &NativeWindow) -> String {
-    SourceId::Window {
-        platform: Platform::Wayland,
-        handle: window.handle.clone(),
-        pid: window.pid,
-    }
-    .to_string()
+    SourceId::Window { platform: Platform::Wayland, handle: window.handle.clone(), pid: window.pid }.to_string()
 }
 
 /// The id of an output source.
@@ -167,10 +162,8 @@ pub fn decode_handle(handle: &str) -> Option<String> {
     if hex.len() % 2 != 0 {
         return None;
     }
-    let bytes: Option<Vec<u8>> = (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
-        .collect();
+    let bytes: Option<Vec<u8>> =
+        (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok()).collect();
     String::from_utf8(bytes?).ok()
 }
 

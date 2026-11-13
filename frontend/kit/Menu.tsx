@@ -61,7 +61,8 @@ function swallowTapClick(x: number, y: number): void {
   const until = performance.now() + TAP_CLICK_MS
   const onClick = (event: MouseEvent): void => {
     window.removeEventListener('click', onClick, true)
-    if (performance.now() > until || Math.abs(event.clientX - x) > TAP_PX || Math.abs(event.clientY - y) > TAP_PX) return
+    if (performance.now() > until || Math.abs(event.clientX - x) > TAP_PX || Math.abs(event.clientY - y) > TAP_PX)
+      return
     event.preventDefault()
     event.stopImmediatePropagation()
   }

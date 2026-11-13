@@ -65,9 +65,7 @@ fn main() {
     /// Drop the characters a recogniser is entitled to disagree about, so the
     /// assertions are about words rather than about punctuation.
     fn squash(text: &str) -> String {
-        text.chars()
-            .filter(|c| !c.is_whitespace() && !matches!(c, '。' | '、' | '「' | '」' | '・'))
-            .collect()
+        text.chars().filter(|c| !c.is_whitespace() && !matches!(c, '。' | '、' | '「' | '」' | '・')).collect()
     }
 
     let mut failures: Vec<String> = Vec::new();
@@ -88,12 +86,11 @@ fn main() {
         }
     };
 
-    let supported = platform_observer().status().supported
-        || {
-            let mut observer = platform_observer();
-            let _ = observer.observe(&japanese_frame(64, 32, &[]), Duration::from_millis(50));
-            observer.status().supported
-        };
+    let supported = platform_observer().status().supported || {
+        let mut observer = platform_observer();
+        let _ = observer.observe(&japanese_frame(64, 32, &[]), Duration::from_millis(50));
+        observer.status().supported
+    };
     if !supported {
         println!("ok 0 - Apple Live Text is unavailable on this host; skipping");
         return;
@@ -103,10 +100,7 @@ fn main() {
         let observation = observe(japanese_frame(
             900,
             220,
-            &[
-                ("猫が好きです", place(40.0, 40.0, 48.0)),
-                ("今日は寒いですね", place(40.0, 120.0, 48.0)),
-            ],
+            &[("猫が好きです", place(40.0, 40.0, 48.0)), ("今日は寒いですね", place(40.0, 120.0, 48.0))],
         ));
         let read = squash(&observation.text);
         assert!(read.contains("猫が好きです"), "read {read:?}");
@@ -129,7 +123,10 @@ fn main() {
             assert!(pair[1].x >= pair[0].x, "left to right: {:?}", line.segments);
         }
         for segment in &line.segments {
-            assert!(segment.x >= line.x - 1.0 && segment.x + segment.width <= line.x + line.width + 1.0, "inside the line");
+            assert!(
+                segment.x >= line.x - 1.0 && segment.x + segment.width <= line.x + line.width + 1.0,
+                "inside the line"
+            );
             assert!(segment.width > 4.0, "in frame pixels, not fractions: {segment:?}");
         }
     });
@@ -165,10 +162,7 @@ fn main() {
         let observation = observe(japanese_frame(
             800,
             600,
-            &[
-                ("上の行です", place(40.0, 30.0, 44.0)),
-                ("下の行です", place(40.0, 500.0, 44.0)),
-            ],
+            &[("上の行です", place(40.0, 30.0, 44.0)), ("下の行です", place(40.0, 500.0, 44.0))],
         ));
         let find = |needle: &str| {
             observation
@@ -187,12 +181,7 @@ fn main() {
             );
             assert!(line.width > 1.0 && line.height > 1.0, "{line:?}");
         }
-        assert!(
-            top.y < bottom.y,
-            "top-left origin: the upper line has the smaller y ({} vs {})",
-            top.y,
-            bottom.y
-        );
+        assert!(top.y < bottom.y, "top-left origin: the upper line has the smaller y ({} vs {})", top.y, bottom.y);
         assert!(top.y < 200.0, "the upper line really is near the top: {}", top.y);
         assert!(bottom.y > 400.0, "and the lower one near the bottom: {}", bottom.y);
         println!("  # top y={:.1}px bottom y={:.1}px (frame is 600px tall)", top.y, bottom.y);
@@ -204,10 +193,7 @@ fn main() {
         let observation = observe(japanese_frame(400, 120, &[("切り抜き", place(20.0, 20.0, 44.0))]));
         assert!(squash(&observation.text).contains("切り抜き"), "{:?}", observation.text);
         let line = &observation.lines[0];
-        assert!(
-            line.x < 200.0 && line.y < 60.0,
-            "near the crop's own origin, not the source's: {line:?}"
-        );
+        assert!(line.x < 200.0 && line.y < 60.0, "near the crop's own origin, not the source's: {line:?}");
         assert!(line.width > 40.0, "and a real part of its 400px width: {line:?}");
     });
 
@@ -229,11 +215,7 @@ fn main() {
                     let observation = observer
                         .observe(&frame, Duration::from_secs(10))
                         .unwrap_or_else(|e| panic!("round {round}: {}", e.message));
-                    assert!(
-                        squash(&observation.text).contains("繰り返し"),
-                        "round {round}: {:?}",
-                        observation.text
-                    );
+                    assert!(squash(&observation.text).contains("繰り返し"), "round {round}: {:?}", observation.text);
                     durations.push(observation.duration_ms);
                 }
                 (started.elapsed(), durations)
@@ -256,10 +238,7 @@ fn main() {
         // not make it true.
         let probe = AckProbe::submit();
         assert!(!probe.off_main(), "this is the main thread");
-        assert!(
-            !probe.acknowledged(),
-            "acknowledged before the submitting item finished"
-        );
+        assert!(!probe.acknowledged(), "acknowledged before the submitting item finished");
 
         let spun = Instant::now();
         while spun.elapsed() < Duration::from_millis(150) {
@@ -293,11 +272,7 @@ fn main() {
                     let observation = observer
                         .observe(&frame, Duration::from_secs(10))
                         .unwrap_or_else(|e| panic!("round {round}: {} {}", e.code, e.message));
-                    assert!(
-                        squash(&observation.text).contains("順番"),
-                        "round {round}: {:?}",
-                        observation.text
-                    );
+                    assert!(squash(&observation.text).contains("順番"), "round {round}: {:?}", observation.text);
                 }
                 started.elapsed()
             },

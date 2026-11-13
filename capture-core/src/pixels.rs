@@ -11,10 +11,7 @@ pub fn bgra_crop_to_rgba(source: &[u8], stride: usize, crop: [u32; 4]) -> Vec<u8
     let mut out = vec![0u8; row_bytes * h as usize];
     for (row, target) in (y..y + h).zip(out.chunks_exact_mut(row_bytes)) {
         let from = row as usize * stride + x as usize * 4;
-        for (p, q) in source[from..from + row_bytes]
-            .chunks_exact(4)
-            .zip(target.chunks_exact_mut(4))
-        {
+        for (p, q) in source[from..from + row_bytes].chunks_exact(4).zip(target.chunks_exact_mut(4)) {
             // One word per pixel: swap the red and blue bytes, keep green and alpha.
             let v = u32::from_le_bytes([p[0], p[1], p[2], p[3]]);
             let swapped = (v & 0xFF00_FF00) | ((v >> 16) & 0xFF) | ((v & 0xFF) << 16);
@@ -89,17 +86,8 @@ pub fn fit_within(width: u32, height: u32, edge: u32) -> (u32, u32) {
 /// Averaging is done on whatever alpha the caller holds; for premultiplied pixels,
 /// shrink first and unpremultiply after, which is the correct order. Never enlarges:
 /// a target dimension larger than the source is clamped to it.
-pub fn box_downscale(
-    source: &[u8],
-    width: u32,
-    height: u32,
-    to_width: u32,
-    to_height: u32,
-) -> Vec<u8> {
-    let (to_width, to_height) = (
-        to_width.clamp(1, width.max(1)),
-        to_height.clamp(1, height.max(1)),
-    );
+pub fn box_downscale(source: &[u8], width: u32, height: u32, to_width: u32, to_height: u32) -> Vec<u8> {
+    let (to_width, to_height) = (to_width.clamp(1, width.max(1)), to_height.clamp(1, height.max(1)));
     if width == 0 || height == 0 {
         return Vec::new();
     }
@@ -160,13 +148,7 @@ mod tests {
     fn crop_then_convert_matches_convert_then_crop() {
         let (width, height) = (64u32, 48u32);
         let source = buffer(width, height);
-        for crop in [
-            [0, 0, 64, 48],
-            [0, 0, 1, 1],
-            [10, 20, 17, 9],
-            [63, 47, 1, 1],
-            [32, 0, 32, 48],
-        ] {
+        for crop in [[0, 0, 64, 48], [0, 0, 1, 1], [10, 20, 17, 9], [63, 47, 1, 1], [32, 0, 32, 48]] {
             // Old order: convert everything, then take the rectangle.
             let mut whole = source.clone();
             unpremultiply(&mut whole);

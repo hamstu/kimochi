@@ -5,94 +5,189 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kimochi UI Preview</title>
     <style>
-      :root { color-scheme: light dark; --bg: #fafafa; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --link: #3e63dd; }
-      @media (prefers-color-scheme: dark) { :root { --bg: #151517; --fg: #f2f2f7; --muted: #98989f; --line: #2c2c30; --link: #9eb1ff; } }
-      body { margin: 0; padding: 32px 16px; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
-      main { max-width: 720px; margin: 0 auto; }
-      h1 { font-size: 20px; margin: 0 0 4px; }
-      p { color: var(--muted); margin: 0 0 24px; }
-      table { width: 100%; border-collapse: collapse; }
-      td { padding: 8px 4px; border-top: 1px solid var(--line); vertical-align: top; }
-      td:last-child { color: var(--muted); font-size: 12px; white-space: nowrap; }
-      a { color: var(--link); text-decoration: none; }
-      a:hover { text-decoration: underline; }
-      code { font-size: 12px; }
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #1d1d1f;
+        --muted: #6e6e73;
+        --line: #e5e5ea;
+        --link: #3e63dd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #151517;
+          --fg: #f2f2f7;
+          --muted: #98989f;
+          --line: #2c2c30;
+          --link: #9eb1ff;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 32px 16px;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      p {
+        color: var(--muted);
+        margin: 0 0 24px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      td {
+        padding: 8px 4px;
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+      }
+      td:last-child {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      code {
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>Kimochi UI preview</h1>
-      <p><a href="./studio.html"><strong>Open the UI studio</strong></a> (<code>npm run studio</code>): every
-        window on a movable, resizable desktop, the overlay and Gaming Mode, with their states in a side
-        panel and a copy-edit mode.</p>
-      <p>Dev-only. Every window rendered against mocked Tauri IPC with demo data. Light/dark follows
-        <code>prefers-color-scheme</code>; resize the viewport to the listed window size.</p>
+      <p>
+        <a href="./studio.html"><strong>Open the UI studio</strong></a> (<code>npm run studio</code>): every window on a
+        movable, resizable desktop, the overlay and Gaming Mode, with their states in a side panel and a copy-edit mode.
+      </p>
+      <p>
+        Dev-only. Every window rendered against mocked Tauri IPC with demo data. Light/dark follows
+        <code>prefers-color-scheme</code>; resize the viewport to the listed window size.
+      </p>
       <table>
-        <tr><td><a href="./panel.html?window=log">Main window</a> ·
-          <a href="./panel.html?window=log&amp;sidebar=0">sidebar hidden</a> ·
-          <a href="./panel.html?window=log&amp;view=notebook">Notebook view</a> ·
-          <a href="./panel.html?window=log&amp;update=available">update available</a> ·
-          <a href="./panel.html?window=log&amp;update=downloading">(downloading)</a> ·
-          <a href="./panel.html?window=log&amp;update=ready">(ready)</a> ·
-          <a href="./panel.html?window=log&amp;update=failed">(failed)</a> ·
-          <a href="./panel.html?window=log&amp;whatsnew=1">What's new</a>
-          (<a href="./panel.html?window=log&amp;whatsnew=1&amp;update=available">with an update offered</a>,
-          <a href="./panel.html?window=log&amp;whatsnew=update">after an update</a>)</td><td>900 × 560</td></tr>
-        <tr><td>Settings:
-          <a href="./panel.html?window=settings&amp;tab=general">General</a>
-          (<a href="./panel.html?window=settings&amp;tab=about&amp;update=available">update available</a>,
-          <a href="./panel.html?window=settings&amp;tab=about&amp;update=idle">dev build</a>) ·
-          <a href="./panel.html?window=settings&amp;tab=sources">Sources</a> ·
-          <a href="./panel.html?window=settings&amp;tab=ocr">OCR</a> ·
-          <a href="./panel.html?window=settings&amp;tab=log">Log</a> ·
-          <a href="./panel.html?window=settings&amp;tab=dictionary">Dictionary</a> ·
-          <a href="./panel.html?window=settings&amp;tab=assist">Translation &amp; AI</a> ·
-          <a href="./panel.html?window=settings&amp;tab=controls">Shortcuts &amp; Controls</a> ·
-          <a href="./panel.html?window=settings&amp;tab=cli">Command line</a> ·
-          <a href="./panel.html?window=settings&amp;tab=about">About</a></td><td>1000 × 760</td></tr>
-        <tr><td><a href="./panel.html?window=diagnostics">Diagnostics</a></td><td>680 × 720</td></tr>
-        <tr><td><a href="./panel.html?window=sync-log&amp;account=signedin">Sync log</a></td><td>760 × 520</td></tr>
-        <tr><td><a href="./reader-popup.html">Reader popup (dictionary)</a></td><td>480 × 360</td></tr>
-        <tr><td>Onboarding:
-          <a href="./welcome.html">from the start</a> ·
-          <a href="./welcome.html?step=intro">Intro</a> ·
-          <a href="./welcome.html?step=permission&amp;permission=denied">Screen Recording (not granted)</a> ·
-          <a href="./welcome.html?step=permission">(granted)</a> ·
-          <a href="./welcome.html?step=accessibility&amp;accessibility=denied">Accessibility (not granted)</a> ·
-          <a href="./welcome.html?step=accessibility">(granted)</a> ·
-          <a href="./welcome.html?step=ocr">OCR engine</a> ·
-          <a href="./welcome.html?step=ocr&amp;model=downloading">(model downloading)</a></td><td>720 × 620<br />min 600 × 520</td></tr>
-        <tr><td>Onboarding, dictionary engine:
-          <a href="./welcome.html?step=engine">not downloaded</a> ·
-          <a href="./welcome.html?step=engine&amp;ext=downloading">downloading</a> ·
-          <a href="./welcome.html?step=engine&amp;ext=paused">paused</a> ·
-          <a href="./welcome.html?step=engine&amp;ext=failed">failed</a> ·
-          <a href="./welcome.html?step=engine&amp;ext=verifying">verifying</a> ·
-          <a href="./welcome.html?step=engine&amp;ext=ready">ready</a></td><td>720 × 620</td></tr>
-        <tr><td>Onboarding, engine setup:
-          <a href="./welcome.html?step=dictionaries&amp;ext=ready">Yomitan (Jitendex)</a> ·
-          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;dict=fail">(import fails)</a> ·
-          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;dict=none">(backend unreachable)</a> ·
-          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;popup=hachidori">Hachidori</a> ·
-          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;popup=tenten">10ten</a> ·
-          <a href="./welcome.html?step=dictionary-settings&amp;ext=ready">Import or manage</a></td><td>720 × 620</td></tr>
-        <tr><td>Onboarding, Steam library (Steam Deck, Desktop Mode):
-          <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=deck">add</a> ·
-          <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=notrunning">(Steam not running)</a> ·
-          <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=fail">(fails)</a> ·
-          <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=pending">(pending)</a> ·
-          <a href="./welcome.html?step=done&amp;ext=ready&amp;platform=linux&amp;steam=deck">last step (skipped)</a> ·
-          <a href="./welcome.html?step=done&amp;ext=ready&amp;platform=linux&amp;steam=added">(added)</a> ·
-          Settings: <a href="./panel.html?window=settings&amp;tab=general&amp;platform=linux&amp;steam=deck">not added</a>,
-          <a href="./panel.html?window=settings&amp;tab=general&amp;platform=linux&amp;steam=added">added</a></td><td>720 × 620<br />Deck 1280 × 800</td></tr>
-        <tr><td>Onboarding, last step:
-          <a href="./welcome.html?step=done&amp;ext=ready">ready</a> ·
-          <a href="./welcome.html?step=done">no dictionary (skipped)</a> ·
-          <a href="./welcome.html?step=error&amp;ext=ready">setup could not be saved</a></td><td>720 × 620</td></tr>
+        <tr>
+          <td>
+            <a href="./panel.html?window=log">Main window</a> ·
+            <a href="./panel.html?window=log&amp;sidebar=0">sidebar hidden</a> ·
+            <a href="./panel.html?window=log&amp;view=notebook">Notebook view</a> ·
+            <a href="./panel.html?window=log&amp;update=available">update available</a> ·
+            <a href="./panel.html?window=log&amp;update=downloading">(downloading)</a> ·
+            <a href="./panel.html?window=log&amp;update=ready">(ready)</a> ·
+            <a href="./panel.html?window=log&amp;update=failed">(failed)</a> ·
+            <a href="./panel.html?window=log&amp;whatsnew=1">What's new</a>
+            (<a href="./panel.html?window=log&amp;whatsnew=1&amp;update=available">with an update offered</a>,
+            <a href="./panel.html?window=log&amp;whatsnew=update">after an update</a>)
+          </td>
+          <td>900 × 560</td>
+        </tr>
+        <tr>
+          <td>
+            Settings:
+            <a href="./panel.html?window=settings&amp;tab=general">General</a>
+            (<a href="./panel.html?window=settings&amp;tab=about&amp;update=available">update available</a>,
+            <a href="./panel.html?window=settings&amp;tab=about&amp;update=idle">dev build</a>) ·
+            <a href="./panel.html?window=settings&amp;tab=sources">Sources</a> ·
+            <a href="./panel.html?window=settings&amp;tab=ocr">OCR</a> ·
+            <a href="./panel.html?window=settings&amp;tab=log">Log</a> ·
+            <a href="./panel.html?window=settings&amp;tab=dictionary">Dictionary</a> ·
+            <a href="./panel.html?window=settings&amp;tab=assist">Translation &amp; AI</a> ·
+            <a href="./panel.html?window=settings&amp;tab=controls">Shortcuts &amp; Controls</a> ·
+            <a href="./panel.html?window=settings&amp;tab=cli">Command line</a> ·
+            <a href="./panel.html?window=settings&amp;tab=about">About</a>
+          </td>
+          <td>1000 × 760</td>
+        </tr>
+        <tr>
+          <td><a href="./panel.html?window=diagnostics">Diagnostics</a></td>
+          <td>680 × 720</td>
+        </tr>
+        <tr>
+          <td><a href="./panel.html?window=sync-log&amp;account=signedin">Sync log</a></td>
+          <td>760 × 520</td>
+        </tr>
+        <tr>
+          <td><a href="./reader-popup.html">Reader popup (dictionary)</a></td>
+          <td>480 × 360</td>
+        </tr>
+        <tr>
+          <td>
+            Onboarding: <a href="./welcome.html">from the start</a> · <a href="./welcome.html?step=intro">Intro</a> ·
+            <a href="./welcome.html?step=permission&amp;permission=denied">Screen Recording (not granted)</a> ·
+            <a href="./welcome.html?step=permission">(granted)</a> ·
+            <a href="./welcome.html?step=accessibility&amp;accessibility=denied">Accessibility (not granted)</a> ·
+            <a href="./welcome.html?step=accessibility">(granted)</a> ·
+            <a href="./welcome.html?step=ocr">OCR engine</a> ·
+            <a href="./welcome.html?step=ocr&amp;model=downloading">(model downloading)</a>
+          </td>
+          <td>720 × 620<br />min 600 × 520</td>
+        </tr>
+        <tr>
+          <td>
+            Onboarding, dictionary engine: <a href="./welcome.html?step=engine">not downloaded</a> ·
+            <a href="./welcome.html?step=engine&amp;ext=downloading">downloading</a> ·
+            <a href="./welcome.html?step=engine&amp;ext=paused">paused</a> ·
+            <a href="./welcome.html?step=engine&amp;ext=failed">failed</a> ·
+            <a href="./welcome.html?step=engine&amp;ext=verifying">verifying</a> ·
+            <a href="./welcome.html?step=engine&amp;ext=ready">ready</a>
+          </td>
+          <td>720 × 620</td>
+        </tr>
+        <tr>
+          <td>
+            Onboarding, engine setup: <a href="./welcome.html?step=dictionaries&amp;ext=ready">Yomitan (Jitendex)</a> ·
+            <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;dict=fail">(import fails)</a> ·
+            <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;dict=none">(backend unreachable)</a> ·
+            <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;popup=hachidori">Hachidori</a> ·
+            <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;popup=tenten">10ten</a> ·
+            <a href="./welcome.html?step=dictionary-settings&amp;ext=ready">Import or manage</a>
+          </td>
+          <td>720 × 620</td>
+        </tr>
+        <tr>
+          <td>
+            Onboarding, Steam library (Steam Deck, Desktop Mode):
+            <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=deck">add</a> ·
+            <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=notrunning">(Steam not running)</a> ·
+            <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=fail">(fails)</a> ·
+            <a href="./welcome.html?step=steam&amp;platform=linux&amp;steam=pending">(pending)</a> ·
+            <a href="./welcome.html?step=done&amp;ext=ready&amp;platform=linux&amp;steam=deck">last step (skipped)</a> ·
+            <a href="./welcome.html?step=done&amp;ext=ready&amp;platform=linux&amp;steam=added">(added)</a> · Settings:
+            <a href="./panel.html?window=settings&amp;tab=general&amp;platform=linux&amp;steam=deck">not added</a>,
+            <a href="./panel.html?window=settings&amp;tab=general&amp;platform=linux&amp;steam=added">added</a>
+          </td>
+          <td>720 × 620<br />Deck 1280 × 800</td>
+        </tr>
+        <tr>
+          <td>
+            Onboarding, last step: <a href="./welcome.html?step=done&amp;ext=ready">ready</a> ·
+            <a href="./welcome.html?step=done">no dictionary (skipped)</a> ·
+            <a href="./welcome.html?step=error&amp;ext=ready">setup could not be saved</a>
+          </td>
+          <td>720 × 620</td>
+        </tr>
       </table>
-      <p style="margin-top: 24px">Add <code>&amp;empty=1</code> to any panel URL for the first-run (no data) state.
-        Add <code>&amp;theme=light</code> or <code>&amp;theme=dark</code> to force an appearance. Onboarding parameters are listed in
-        <code>frontend/dev/preview-setup.ts</code>.</p>
+      <p style="margin-top: 24px">
+        Add <code>&amp;empty=1</code> to any panel URL for the first-run (no data) state. Add
+        <code>&amp;theme=light</code> or <code>&amp;theme=dark</code> to force an appearance. Onboarding parameters are
+        listed in <code>frontend/dev/preview-setup.ts</code>.
+      </p>
     </main>
   </body>
 </html>

@@ -39,8 +39,14 @@ impl Clip {
     /// The group a clip is judged with: engines often open a new buffer/voice/source per sound,
     /// so streams alone are too fine. Adapter + format + channel (or the source's folder).
     pub fn group(&self) -> String {
-        let folder = self.source.as_deref().and_then(|s| s.replace('\\', "/").rsplit_once('/').map(|(d, _)| d.to_string()));
-        format!("{} | {} | {}", self.api, self.fmt.as_deref().unwrap_or("?"), self.channel.clone().or(folder).unwrap_or_default())
+        let folder =
+            self.source.as_deref().and_then(|s| s.replace('\\', "/").rsplit_once('/').map(|(d, _)| d.to_string()));
+        format!(
+            "{} | {} | {}",
+            self.api,
+            self.fmt.as_deref().unwrap_or("?"),
+            self.channel.clone().or(folder).unwrap_or_default()
+        )
     }
 }
 
@@ -72,7 +78,11 @@ impl Line {
     /// How long before the anchor its voice may start: an OCR line with no appearance time can
     /// be read a second or more after the voice began.
     pub fn lead(&self) -> f64 {
-        if self.ocr && self.appeared.is_none() { OCR_LEAD_MS } else { LEAD_MS }
+        if self.ocr && self.appeared.is_none() {
+            OCR_LEAD_MS
+        } else {
+            LEAD_MS
+        }
     }
 }
 
@@ -120,7 +130,6 @@ pub fn parse_events(text: &str) -> Vec<Clip> {
     clips
 }
 
-
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Verdict {
     /// `Clip::group()`.
@@ -141,7 +150,8 @@ pub const LEAD_MS: f64 = 400.0;
 pub const OCR_LEAD_MS: f64 = 1600.0;
 pub const LAG_MS: f64 = 1500.0;
 
-const VOICE_WORDS: &[&str] = &["voice", "/vo/", "vo_", "_vo", "koe", "/v/", "voc_", "vox", "serif", "セリフ", "ボイス", "音声"];
+const VOICE_WORDS: &[&str] =
+    &["voice", "/vo/", "vo_", "_vo", "koe", "/v/", "voc_", "vox", "serif", "セリフ", "ボイス", "音声"];
 const NOT_VOICE_WORDS: &[&str] = &[
     "bgm", "music", "/bgs", "bgs_", "/me/", "/se/", "se_", "se0", "se1", "sfx", "sound/", "ambient", "amb_", "jingle",
     "/sys", "system", "click", "cursor", "decision", "buzzer", "cancel",
@@ -242,12 +252,24 @@ pub fn classify(cap: &Capture, lines: &[Line]) -> Vec<Verdict> {
             // A group with a single clip says little either way.
             let weight = (n / 3.0).min(1.0);
             logit += weight * (6.0 * (rate - 0.4) + 3.0 * cover);
-            reasons.push(format!("{:.0}% of clips start with a line, {:.0}% of lines have one", rate * 100.0, cover * 100.0));
+            reasons.push(format!(
+                "{:.0}% of clips start with a line, {:.0}% of lines have one",
+                rate * 100.0,
+                cover * 100.0
+            ));
         }
         let mut streams: Vec<u64> = clips.iter().map(|c| c.stream).collect();
         streams.sort_unstable();
         streams.dedup();
-        out.push(Verdict { group, streams, voice: 1.0 / (1.0 + (-logit).exp()), clips: clips.len(), median_dur: med, line_hits, reasons });
+        out.push(Verdict {
+            group,
+            streams,
+            voice: 1.0 / (1.0 + (-logit).exp()),
+            clips: clips.len(),
+            median_dur: med,
+            line_hits,
+            reasons,
+        });
     }
     out.sort_by(|a, b| b.voice.partial_cmp(&a.voice).unwrap());
     out

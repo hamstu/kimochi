@@ -18,24 +18,70 @@
         document.documentElement.dataset.engine = engine
         // The engines' hosts read everything synchronously when they install, so they are parsed
         // here, before the body, in the harness's order (see ui/dictionary-harness.html).
-        for (const src of ['/ui/dictionary-harness-native.js', '/ui/dictionary-harness.js', '/spike/ext-host.js', '/spike/shim.js']) {
+        for (const src of [
+          '/ui/dictionary-harness-native.js',
+          '/ui/dictionary-harness.js',
+          '/spike/ext-host.js',
+          '/spike/shim.js'
+        ]) {
           document.write(`<script src="${src}"><\/script>`)
         }
       })()
     </script>
     <title>Engine contract scene</title>
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f1ea; color: #1d2433; }
-      body { font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif; }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #f4f1ea;
+        color: #1d2433;
+      }
+      body {
+        font-family:
+          'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo',
+          sans-serif;
+      }
       /* Where the overlay draws a scan: lines low on the screen, the pop-up's room above them. */
-      .text { position: absolute; left: 48px; right: 48px; bottom: 40px; }
-      .line { margin: 0 0 6px; font-size: 26px; line-height: 1.5; }
+      .text {
+        position: absolute;
+        left: 48px;
+        right: 48px;
+        bottom: 40px;
+      }
+      .line {
+        margin: 0 0 6px;
+        font-size: 26px;
+        line-height: 1.5;
+      }
       /* The overlay's text while the controller reads (ui/render.js `setQuiet`): there, not shown. */
-      .quiet { opacity: 0; }
+      .quiet {
+        opacity: 0;
+      }
       /* The harness's own panels, kept for its scripts but out of the picture. */
-      .internals { position: fixed; left: -4000px; top: 0; width: 900px; height: 700px; overflow: hidden; }
-      .internals iframe { width: 900px; height: 700px; border: 0; }
-      #stray { position: fixed; left: 200px; top: 150px; width: 120px; height: 80px; border: 4px solid #999; padding: 6px; }
+      .internals {
+        position: fixed;
+        left: -4000px;
+        top: 0;
+        width: 900px;
+        height: 700px;
+        overflow: hidden;
+      }
+      .internals iframe {
+        width: 900px;
+        height: 700px;
+        border: 0;
+      }
+      #stray {
+        position: fixed;
+        left: 200px;
+        top: 150px;
+        width: 120px;
+        height: 80px;
+        border: 4px solid #999;
+        padding: 6px;
+      }
     </style>
   </head>
   <body>
@@ -113,11 +159,20 @@
             if (r.width <= 0 || r.height <= 0) continue
             texts.push(element.innerText ?? '')
             rect = rect
-              ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top), right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, r.bottom) }
+              ? {
+                  left: Math.min(rect.left, r.left),
+                  top: Math.min(rect.top, r.top),
+                  right: Math.max(rect.right, r.right),
+                  bottom: Math.max(rect.bottom, r.bottom)
+                }
               : { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
           }
           if (!rect) return { visible: false, rect: null, text: null }
-          return { visible: true, rect: { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top }, text: texts.join('\n') }
+          return {
+            visible: true,
+            rect: { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top },
+            text: texts.join('\n')
+          }
         }
 
         let stray = null
@@ -141,18 +196,30 @@
               // The controller's outline: the word's box.
               const rect = document.getElementById(id).getBoundingClientRect()
               const { lookupText } = await import(new URL('/spike/frontend-mode.js', location.origin).href)
-              result = await lookupText({ text, sentence, offset, rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height, vertical: false } })
+              result = await lookupText({
+                text,
+                sentence,
+                offset,
+                rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height, vertical: false }
+              })
             } else {
               result = await host().lookupText({ range, text })
             }
-            return { result: result ?? null, ms: Math.round(performance.now() - started), text, word: document.getElementById(id).textContent }
+            return {
+              result: result ?? null,
+              ms: Math.round(performance.now() - started),
+              text,
+              word: document.getElementById(id).textContent
+            }
           },
           wordRect: (id) => box(document.getElementById(id).getBoundingClientRect()),
           async popup() {
             if (engine !== 'yomitan') return extensionPopup()
             // Yomitan's popups, from the factory as the overlay finds them (popup-bridge.js; a
             // second caller shares the first one's set): the top-level frame's box, read now.
-            yomitanPopups ??= (await import(new URL('/spike/popup-bridge.js', location.origin).href)).observePopups({ window: 'contract' }).then((r) => r.popups)
+            yomitanPopups ??= (await import(new URL('/spike/popup-bridge.js', location.origin).href))
+              .observePopups({ window: 'contract' })
+              .then((r) => r.popups)
             const top = [...(await yomitanPopups)].find((popup) => (popup.depth ?? 0) === 0 && popup.isVisibleSync?.())
             const frame = top?.getFrameRect?.()
             if (!top || !frame?.valid) return { visible: false, rect: null, text: null }
@@ -198,8 +265,16 @@
             }
           },
           async reader() {
-            const reader = await Promise.race([window.HDReaderReady, new Promise((resolve) => setTimeout(resolve, 3000))])
-            return { ready: Boolean(reader), kimochiLookupAt: typeof reader?.kimochiLookupAt === 'function', kimochiClear: typeof reader?.kimochiClear === 'function', keys: reader ? Object.keys(reader) : [] }
+            const reader = await Promise.race([
+              window.HDReaderReady,
+              new Promise((resolve) => setTimeout(resolve, 3000))
+            ])
+            return {
+              ready: Boolean(reader),
+              kimochiLookupAt: typeof reader?.kimochiLookupAt === 'function',
+              kimochiClear: typeof reader?.kimochiClear === 'function',
+              keys: reader ? Object.keys(reader) : []
+            }
           }
         }
       })()

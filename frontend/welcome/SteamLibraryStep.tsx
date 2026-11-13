@@ -88,9 +88,7 @@ function SteamLibraryScreen(): JSX.Element {
           ) : outcome ? (
             <Outcome result={outcome} />
           ) : (
-            <p className={style.text}>
-              Kimochi adds itself as a non-Steam game.
-            </p>
+            <p className={style.text}>Kimochi adds itself as a non-Steam game.</p>
           )}
         </div>
       </div>

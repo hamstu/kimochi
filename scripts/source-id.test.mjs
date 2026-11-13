@@ -67,8 +67,18 @@ test('kind predicates', () => {
 })
 
 test('Wayland window and screen sources: portal streams and native (compositor-named) ones', async () => {
-  const { isWaylandWindowSourceId, isWaylandScreenSourceId, isNativeWaylandSourceId, parseSourceId: parse } = await load('source-id.ts')
-  assert.deepEqual(parse('wayland:window:2470594572:4242'), { platform: 'wayland', kind: 'window', handle: '2470594572', pid: 4242 })
+  const {
+    isWaylandWindowSourceId,
+    isWaylandScreenSourceId,
+    isNativeWaylandSourceId,
+    parseSourceId: parse
+  } = await load('source-id.ts')
+  assert.deepEqual(parse('wayland:window:2470594572:4242'), {
+    platform: 'wayland',
+    kind: 'window',
+    handle: '2470594572',
+    pid: 4242
+  })
   assert.equal(isWaylandWindowSourceId('portal:window:7'), true)
   assert.equal(isWaylandWindowSourceId('wayland:window:{a1-b2}:9'), true)
   assert.equal(isWaylandWindowSourceId('x11:window:12:3'), false)

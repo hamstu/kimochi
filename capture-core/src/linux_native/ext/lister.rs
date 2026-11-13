@@ -97,8 +97,7 @@ impl Lister {
     /// start the thread that keeps them.
     pub fn start() -> std::result::Result<Lister, String> {
         let conn = Connection::connect_to_env().map_err(|e| format!("no Wayland display ({e})"))?;
-        let (globals, mut queue) =
-            registry_queue_init::<State>(&conn).map_err(|e| format!("Wayland registry: {e}"))?;
+        let (globals, mut queue) = registry_queue_init::<State>(&conn).map_err(|e| format!("Wayland registry: {e}"))?;
         let qh = queue.handle();
         let offered = |name: &str| globals.contents().with_list(|l| l.iter().any(|g| g.interface == name));
         let missing: Vec<&str> =
@@ -125,7 +124,8 @@ impl Lister {
         for _ in 0..3 {
             queue.roundtrip(&mut state).map_err(|e| format!("Wayland: {e}"))?;
         }
-        let shared = Arc::new(Shared { snap: Mutex::new(state.snap()), changed: Condvar::new(), token: AtomicU64::new(0) });
+        let shared =
+            Arc::new(Shared { snap: Mutex::new(state.snap()), changed: Condvar::new(), token: AtomicU64::new(0) });
         let lister = Lister {
             conn: conn.clone(),
             qh,
@@ -171,7 +171,11 @@ impl Lister {
     }
 
     /// Unminimize and activate a wlr toplevel.
-    pub fn activate_wlr(&self, toplevel: &ZwlrForeignToplevelHandleV1, minimized: bool) -> std::result::Result<(), String> {
+    pub fn activate_wlr(
+        &self,
+        toplevel: &ZwlrForeignToplevelHandleV1,
+        minimized: bool,
+    ) -> std::result::Result<(), String> {
         let seat = self.seat.as_ref().ok_or("the compositor has no seat")?;
         if minimized {
             toplevel.unset_minimized();
@@ -236,7 +240,12 @@ impl Out {
         let (mw, mh) = self.mode?;
         let rotated = matches!(
             self.transform,
-            Some(wl_output::Transform::_90 | wl_output::Transform::_270 | wl_output::Transform::Flipped90 | wl_output::Transform::Flipped270)
+            Some(
+                wl_output::Transform::_90
+                    | wl_output::Transform::_270
+                    | wl_output::Transform::Flipped90
+                    | wl_output::Transform::Flipped270
+            )
         );
         let (pw, ph) = if rotated { (mh, mw) } else { (mw, mh) };
         let int_scale = self.scale.max(1);
@@ -253,7 +262,11 @@ impl Out {
             // known (a VM's virtual output) that is only padding around the connector.
             let described = self.description.as_deref().map(str::trim).unwrap_or("");
             let described = described.strip_suffix(&format!("({handle})")).unwrap_or(described).trim();
-            if described.is_empty() { handle.clone() } else { described.to_string() }
+            if described.is_empty() {
+                handle.clone()
+            } else {
+                described.to_string()
+            }
         };
         Some(NativeOutput {
             handle,
@@ -344,7 +357,14 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for State {
 }
 
 impl Dispatch<wl_callback::WlCallback, u64> for State {
-    fn event(state: &mut Self, _: &wl_callback::WlCallback, event: wl_callback::Event, token: &u64, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &wl_callback::WlCallback,
+        event: wl_callback::Event,
+        token: &u64,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let wl_callback::Event::Done { .. } = event {
             state.synced = state.synced.max(*token);
         }
@@ -352,7 +372,14 @@ impl Dispatch<wl_callback::WlCallback, u64> for State {
 }
 
 impl Dispatch<ExtForeignToplevelListV1, ()> for State {
-    fn event(state: &mut Self, _: &ExtForeignToplevelListV1, event: ext_foreign_toplevel_list_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &ExtForeignToplevelListV1,
+        event: ext_foreign_toplevel_list_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let ext_foreign_toplevel_list_v1::Event::Toplevel { toplevel } = event {
             state.toplevels.push(Top {
                 proxy: toplevel,
@@ -371,7 +398,14 @@ impl Dispatch<ExtForeignToplevelListV1, ()> for State {
 }
 
 impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
-    fn event(state: &mut Self, proxy: &ExtForeignToplevelHandleV1, event: ext_foreign_toplevel_handle_v1::Event, _: &(), _: &Connection, qh: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        proxy: &ExtForeignToplevelHandleV1,
+        event: ext_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
         use ext_foreign_toplevel_handle_v1::Event;
         let Some(i) = state.toplevels.iter().position(|t| &t.proxy == proxy) else { return };
         let top = &mut state.toplevels[i];
@@ -416,7 +450,14 @@ impl Dispatch<HyprlandToplevelWindowMappingHandleV1, ExtForeignToplevelHandleV1>
 }
 
 impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for State {
-    fn event(state: &mut Self, _: &ZwlrForeignToplevelManagerV1, event: zwlr_foreign_toplevel_manager_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &ZwlrForeignToplevelManagerV1,
+        event: zwlr_foreign_toplevel_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         if let zwlr_foreign_toplevel_manager_v1::Event::Toplevel { toplevel } = event {
             state.wlr.push(Wlr {
                 proxy: toplevel,
@@ -435,7 +476,14 @@ impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for State {
 }
 
 impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for State {
-    fn event(state: &mut Self, proxy: &ZwlrForeignToplevelHandleV1, event: zwlr_foreign_toplevel_handle_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        proxy: &ZwlrForeignToplevelHandleV1,
+        event: zwlr_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         use zwlr_foreign_toplevel_handle_v1::Event;
         let Some(i) = state.wlr.iter().position(|t| &t.proxy == proxy) else { return };
         let top = &mut state.wlr[i];
@@ -458,7 +506,14 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for State {
 }
 
 impl Dispatch<wl_output::WlOutput, u32> for State {
-    fn event(state: &mut Self, _: &wl_output::WlOutput, event: wl_output::Event, global: &u32, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &wl_output::WlOutput,
+        event: wl_output::Event,
+        global: &u32,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let Some(out) = state.outputs.iter_mut().find(|o| o.global == *global) else { return };
         match event {
             wl_output::Event::Geometry { x, y, make, model, transform, .. } => {
@@ -484,7 +539,14 @@ impl Dispatch<wl_output::WlOutput, u32> for State {
 }
 
 impl Dispatch<ZxdgOutputV1, u32> for State {
-    fn event(state: &mut Self, _: &ZxdgOutputV1, event: zxdg_output_v1::Event, global: &u32, _: &Connection, _: &QueueHandle<Self>) {
+    fn event(
+        state: &mut Self,
+        _: &ZxdgOutputV1,
+        event: zxdg_output_v1::Event,
+        global: &u32,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
         let Some(out) = state.outputs.iter_mut().find(|o| o.global == *global) else { return };
         match event {
             zxdg_output_v1::Event::LogicalPosition { x, y } => out.logical_position = Some((x, y)),

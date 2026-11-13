@@ -53,8 +53,8 @@ export function AccountForgot() {
     >
       {sentTo ? (
         <Notice tone="ok">
-          If an account uses <strong className="font-medium break-all">{sentTo}</strong>, a reset link is on its way.
-          It works for one hour. Check your spam folder if it doesn&rsquo;t arrive in a few minutes.
+          If an account uses <strong className="font-medium break-all">{sentTo}</strong>, a reset link is on its way. It
+          works for one hour. Check your spam folder if it doesn&rsquo;t arrive in a few minutes.
         </Notice>
       ) : (
         <form onSubmit={onSubmit} noValidate className="grid gap-4">

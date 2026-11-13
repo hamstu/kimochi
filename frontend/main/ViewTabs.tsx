@@ -32,13 +32,7 @@ export function ViewTabs({
   const counts = useCounts()
   const anki = useAnkiCards()
   const tab = (value: TabView, icon: ReactNode, label: string, count: number | null): JSX.Element => (
-    <button
-      type="button"
-      role="tab"
-      className="main-tab"
-      aria-selected={view === value}
-      onClick={() => onView(value)}
-    >
+    <button type="button" role="tab" className="main-tab" aria-selected={view === value} onClick={() => onView(value)}>
       {icon}
       <span>{label}</span>
       {count !== null && <span className="main-tab-count">{count.toLocaleString()}</span>}

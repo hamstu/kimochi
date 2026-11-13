@@ -14,7 +14,8 @@ pub fn main(args: &[String]) -> Result<(), String> {
     let positional = crate::positional(args);
     let dir = Path::new(positional.first().ok_or(crate::USAGE)?);
     let limit: Option<f64> = crate::flag(args, "--seconds").and_then(|s| s.parse().ok());
-    let mut capture = kimochi_capture::audio::SystemAudio::start().map_err(|e| format!("{} ({})", e.message, e.code))?;
+    let mut capture =
+        kimochi_capture::audio::SystemAudio::start().map_err(|e| format!("{} ({})", e.message, e.code))?;
     eprintln!("recording {} (own audio left out: {})", capture.source(), capture.excludes_own_audio());
     let seconds = limit.unwrap_or(600.0);
     let mut ring = AudioRing::new(48_000, seconds + 5.0);
@@ -55,7 +56,11 @@ pub fn main(args: &[String]) -> Result<(), String> {
     let clip = ring.snapshot(start, end).ok_or("No audio arrived.")?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     kimochi_speech::wav::write(&dir.join("audio.wav"), &clip.samples, clip.sample_rate)?;
-    let meta = Meta { audio: "audio.wav".into(), audio_start_ms: clip.start_ms, notes: Some(format!("recorded from {}", capture.source())) };
+    let meta = Meta {
+        audio: "audio.wav".into(),
+        audio_start_ms: clip.start_ms,
+        notes: Some(format!("recorded from {}", capture.source())),
+    };
     session::write(dir, &meta, &lines, &[])?;
     println!("{} lines, {:.0}s of audio, in {}", lines.len(), clip.duration_ms() / 1000.0, dir.display());
     Ok(())

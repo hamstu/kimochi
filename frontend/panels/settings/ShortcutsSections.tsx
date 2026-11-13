@@ -35,8 +35,12 @@ function LookupKeyRow(): ReactNode {
   const [clickThrough] = useSetting<boolean>('overlayClickThrough', true)
   const [hover] = useSetting<boolean>('overlayHoverLookup', false)
   // Wayland: only where the pointer poll reads every modifier (KDE Plasma, through XWayland).
-  if (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' &&
-    capabilities.overlay.shiftSource !== 'xwayland') return null
+  if (
+    capabilities.os === 'linux' &&
+    capabilities.session?.backend === 'wayland' &&
+    capabilities.overlay.shiftSource !== 'xwayland'
+  )
+    return null
   const options = lookupKeyOptions(mac)
   const chosen = options.find((option) => option.value === key) ?? options[0]
   return (
@@ -46,7 +50,11 @@ function LookupKeyRow(): ReactNode {
         disabled={!clickThrough}
         description={
           clickThrough ? (
-            hover ? 'Hold to click text on the overlay, or to look a word up at once.' : 'Hold to look up words on the overlay.'
+            hover ? (
+              'Hold to click text on the overlay, or to look a word up at once.'
+            ) : (
+              'Hold to look up words on the overlay.'
+            )
           ) : (
             <>
               Not needed while{' '}
@@ -111,11 +119,7 @@ export function ShortcutsSections(): ReactNode {
   const keyPlatform = keyPlatformOf(capabilities)
 
   const updateHotkeyField = useCallback(
-    (
-      name: string,
-      field: 'accelerator' | 'enabled' | 'gamepadButtons',
-      value: string | boolean | number[]
-    ): void => {
+    (name: string, field: 'accelerator' | 'enabled' | 'gamepadButtons', value: string | boolean | number[]): void => {
       const binding = { ...hotkeys[name], [field]: value as never }
       // A chord supersedes the legacy single button, so never store both.
       if (field === 'gamepadButtons') delete binding.gamepadButton
@@ -125,19 +129,19 @@ export function ShortcutsSections(): ReactNode {
     [hotkeys, setHotkeys]
   )
 
-  const entries = ORDER.filter((name) => hotkeys[name]).map(
-    (name) => [name, hotkeys[name]] as const
-  )
+  const entries = ORDER.filter((name) => hotkeys[name]).map((name) => [name, hotkeys[name]] as const)
 
   return (
     <>
       {capabilities.os === 'linux' && capabilities.input.globalShortcutRemediation && (
-        <Callout tone="warn" className="settings-page-callout">{capabilities.input.globalShortcutRemediation}</Callout>
+        <Callout tone="warn" className="settings-page-callout">
+          {capabilities.input.globalShortcutRemediation}
+        </Callout>
       )}
       {hotkeyFailures.length > 0 && (
         <Callout tone="danger" className="settings-page-callout">
-          {hotkeyFailures.length === 1 ? 'This shortcut' : 'These shortcuts'} could not be
-          registered, usually because another application already owns the combination:{' '}
+          {hotkeyFailures.length === 1 ? 'This shortcut' : 'These shortcuts'} could not be registered, usually because
+          another application already owns the combination:{' '}
           {hotkeyFailures
             .map((failure) =>
               // A mouse button fails for its own reason (no hook here, or no Accessibility).

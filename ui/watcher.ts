@@ -45,8 +45,7 @@ export const SELF_WATCHER_ENGINES: readonly SelfWatcherEngine[] = ['vocr', 'scre
 
 type Engines = Partial<Record<OcrEngineKey, OcrEngineCapability>>
 
-const isWatcherEngine = (key: string): key is WatcherEngine =>
-  (WATCHER_ENGINES as readonly string[]).includes(key)
+const isWatcherEngine = (key: string): key is WatcherEngine => (WATCHER_ENGINES as readonly string[]).includes(key)
 
 const watchesItself = (key: string): key is ObserverEngine =>
   isWatcherEngine(key) || (SELF_WATCHER_ENGINES as readonly string[]).includes(key)

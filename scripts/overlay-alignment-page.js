@@ -37,7 +37,13 @@ export async function generateSample(spec) {
     g.strokeStyle = panel.stroke ?? panel.fill
     g.lineWidth = panel.border ?? 0
     g.beginPath()
-    g.roundRect(panel.x / scale, panel.y / scale, panel.width / scale, panel.height / scale, (panel.radius ?? 0) / scale)
+    g.roundRect(
+      panel.x / scale,
+      panel.y / scale,
+      panel.width / scale,
+      panel.height / scale,
+      (panel.radius ?? 0) / scale
+    )
     g.fill()
     if (panel.border) g.stroke()
   }

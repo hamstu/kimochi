@@ -17,20 +17,18 @@
   font-size: var(--k-text-md);
   overflow: hidden;
   padding: 1em 1.23em;
-  background:
-    linear-gradient(135deg, var(--nb-tone-5), var(--nb-tone-2) 55%, transparent 100%),
-    var(--k-raised);
+  background: linear-gradient(135deg, var(--nb-tone-5), var(--nb-tone-2) 55%, transparent 100%), var(--k-raised);
   border-bottom: 1px solid var(--k-line);
   color: var(--k-text);
 }
-.nb-hero[data-kind="place"] {
+.nb-hero[data-kind='place'] {
   --nb-tone-2: var(--teal-a2);
   --nb-tone-3: var(--teal-a3);
   --nb-tone-5: var(--teal-a5);
   --nb-tone-7: var(--teal-a7);
   --nb-tone-11: var(--teal-a11);
 }
-.nb-hero[data-kind="thing"] {
+.nb-hero[data-kind='thing'] {
   --nb-tone-2: var(--amber-a2);
   --nb-tone-3: var(--amber-a3);
   --nb-tone-5: var(--amber-a5);
@@ -39,7 +37,7 @@
 }
 /* A dot grid in the kind's colour, strongest behind the portrait and fading to the right. */
 .nb-hero::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
@@ -48,7 +46,9 @@
   mask-image: linear-gradient(100deg, black 10%, transparent 75%);
   pointer-events: none;
 }
-.notebook-card .nb-hero { font-size: 1em; }
+.notebook-card .nb-hero {
+  font-size: 1em;
+}
 
 /* The portrait: a fixed box the picture is fitted into, kept toward its top so a head stays in. */
 .nb-hero-portrait {
@@ -67,7 +67,9 @@
     0 1px 2px rgb(0 0 0 / 0.14),
     0 6px 16px -6px rgb(0 0 0 / 0.35);
 }
-.nb-hero[data-size="editor"] .nb-hero-portrait { width: 6.25em; }
+.nb-hero[data-size='editor'] .nb-hero-portrait {
+  width: 6.25em;
+}
 .nb-hero-image {
   position: absolute;
   inset: 0;
@@ -88,8 +90,14 @@
   -webkit-user-select: none;
   user-select: none;
 }
-.nb-hero[data-size="editor"] .nb-hero-mark { font-size: 2.8em; }
-.nb-hero-mark svg { width: 0.75em; height: 0.75em; stroke-width: 1.6; }
+.nb-hero[data-size='editor'] .nb-hero-mark {
+  font-size: 2.8em;
+}
+.nb-hero-mark svg {
+  width: 0.75em;
+  height: 0.75em;
+  stroke-width: 1.6;
+}
 
 .nb-hero-text {
   position: relative;
@@ -101,7 +109,9 @@
   padding-bottom: 0.1em;
 }
 /* Room under the top-right controls: the name sits at the base, the controls at the top. */
-.nb-hero[data-actions] { padding-top: 2.6em; }
+.nb-hero[data-actions] {
+  padding-top: 2.6em;
+}
 .nb-hero-name {
   margin: 0;
   /* A long name wraps once beside the portrait before it is cut short. */
@@ -127,7 +137,9 @@
   line-height: 1.5;
   color: var(--k-text-2);
 }
-.nb-hero-sub [lang] { font-family: var(--k-font-text); }
+.nb-hero-sub [lang] {
+  font-family: var(--k-font-text);
+}
 
 .nb-hero-actions {
   position: absolute;

@@ -6,7 +6,11 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
-        let p = std::env::temp_dir().join(format!("hooked-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let p = std::env::temp_dir().join(format!(
+            "hooked-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(p.join("clips")).unwrap();
         Self(p)
     }
@@ -143,7 +147,12 @@ fn pcm_bit_depths_are_downmixed_and_bad_audio_returns_errors() {
     let f = Fixture::new();
     for bits in [8, 16, 24, 32] {
         let p = f.0.join(format!("{bits}.wav"));
-        let spec = hound::WavSpec { channels: 2, sample_rate: 16000, bits_per_sample: bits, sample_format: hound::SampleFormat::Int };
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 16000,
+            bits_per_sample: bits,
+            sample_format: hound::SampleFormat::Int,
+        };
         let mut w = hound::WavWriter::create(&p, spec).unwrap();
         let v = 1i32 << (bits - 2);
         w.write_sample(v).unwrap();
@@ -196,7 +205,8 @@ fn short_buffers_bound_the_wait_for_an_unfinished_stream() {
 fn split_utf8_malformed_records_and_log_truncation_recover() {
     let f = Fixture::new();
     let path = f.0.join("events.jsonl");
-    let event = json!({"ev":"clip","seq":1,"s":1,"source":"\u{30dc}\u{30a4}\u{30b9}","t":1000,"dur":1}).to_string() + "\n";
+    let event =
+        json!({"ev":"clip","seq":1,"s":1,"source":"\u{30dc}\u{30a4}\u{30b9}","t":1000,"dur":1}).to_string() + "\n";
     let split = event.as_bytes().iter().position(|b| *b >= 128).unwrap() + 1;
     std::fs::write(&path, &event.as_bytes()[..split]).unwrap();
     let mut feed = feed::Feed::new(f.0.clone());
@@ -342,7 +352,11 @@ fn a_few_effects_that_start_with_lines_do_not_unseat_the_voice() {
         }
         h.line(line(&i.to_string(), ts));
         let got = h.tick(ts + 5000.);
-        assert!(got.iter().all(|m| m.line.uid == m.clip.seq.to_string()), "{:?}", got.iter().map(|m| m.clip.seq).collect::<Vec<_>>());
+        assert!(
+            got.iter().all(|m| m.line.uid == m.clip.seq.to_string()),
+            "{:?}",
+            got.iter().map(|m| m.clip.seq).collect::<Vec<_>>()
+        );
         matched += got.len();
     }
     assert_eq!(matched, 6, "groups: {:?}", h.report.groups);
@@ -358,7 +372,21 @@ fn a_remembered_voice_stream_is_trusted_from_its_first_clip() {
     h.line(line("1", 7000.));
     assert!(h.tick(12_000.).is_empty(), "one unnamed clip is not enough on its own");
     let mut h = f.hooked();
-    h.remembered = Some(HookClip { seq: 0, stream: 0, api: "dsound".into(), start: 0., dur: 0., file: None, source: None, fmt: Some("16000Hz 1ch PCM16".into()), looping: false, channel: None }.group());
+    h.remembered = Some(
+        HookClip {
+            seq: 0,
+            stream: 0,
+            api: "dsound".into(),
+            start: 0.,
+            dur: 0.,
+            file: None,
+            source: None,
+            fmt: Some("16000Hz 1ch PCM16".into()),
+            looping: false,
+            channel: None,
+        }
+        .group(),
+    );
     h.line(line("1", 7000.));
     let matched = h.tick(12_000.);
     assert_eq!(matched.len(), 1);
@@ -414,7 +442,8 @@ fn typed_rows_get_their_voice_and_a_quotes_rows_share_it() {
     out.extend(h.tick(100_100.));
     let mut got: Vec<(String, u64)> = out.iter().map(|m| (m.line.uid.clone(), m.clip.seq)).collect();
     got.sort();
-    let mut want: Vec<(String, u64)> = (0..7u64).flat_map(|i| [(format!("q{i}"), i + 1), (format!("c{i}"), i + 1)]).collect();
+    let mut want: Vec<(String, u64)> =
+        (0..7u64).flat_map(|i| [(format!("q{i}"), i + 1), (format!("c{i}"), i + 1)]).collect();
     want.sort();
     assert_eq!(got, want, "typing {} ms/char", h.report.typing_ms);
     assert!(h.report.typing_ms >= 120. && h.report.typing_ms <= 200., "typing {}", h.report.typing_ms);
@@ -424,7 +453,8 @@ fn whole_line_engines_learn_no_typing_delay() {
     // AdvHD/SiglusEngine hand over whole lines ~330 ms after their voice starts, whatever their length.
     let f = Fixture::new();
     let mut h = f.hooked();
-    let texts = ["短い", "「これは少し長めの台詞になります」", "「さらにずっと長い台詞で、ひとつの行が二十文字を超えていく」"];
+    let texts =
+        ["短い", "「これは少し長めの台詞になります」", "「さらにずっと長い台詞で、ひとつの行が二十文字を超えていく」"];
     for i in 0..9u64 {
         let ts = 10_000. + i as f64 * 7000.;
         h.line(text_line(&i.to_string(), texts[i as usize % 3], ts));
@@ -443,7 +473,18 @@ fn a_quote_keeps_its_voice_from_the_narration_row_typed_out_after_it() {
     lines.push(text_line("n", "彼女は唇をきゅっと結ぶと、何も言わずに窓の外をじっと見つめた", 10_845. - 1240.));
     lines[0].appeared = Some(10_000. - 920.);
     lines[1].appeared = Some(10_845. - 1240.);
-    let clip = HookClip { seq: 20, stream: 6, api: "dsound".into(), start: 10_000. - 541., dur: 2.87, file: Some("x".into()), source: None, fmt: None, looping: false, channel: None };
+    let clip = HookClip {
+        seq: 20,
+        stream: 6,
+        api: "dsound".into(),
+        start: 10_000. - 541.,
+        dur: 2.87,
+        file: Some("x".into()),
+        source: None,
+        fmt: None,
+        looping: false,
+        channel: None,
+    };
     let pairs = classify::pair(&lines, &[&clip], 900., 3400.);
     assert_eq!(pairs[0].map(|(i, _)| i), Some(0), "the quote takes its voice");
     assert_eq!(pairs[1], None);

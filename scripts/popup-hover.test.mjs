@@ -35,7 +35,11 @@ globalThis.MouseEvent ??= class MouseEvent {
 
 const { trackPopupHover } = await import('../host/popup-bridge.js')
 
-const popup = (rect, depth = 0, visible = true) => ({ depth, _frame: new FakeFrame(rect), isVisibleSync: () => visible })
+const popup = (rect, depth = 0, visible = true) => ({
+  depth,
+  _frame: new FakeFrame(rect),
+  isVisibleSync: () => visible
+})
 
 test('entering, moving within and leaving a popup fire one mouseover and one mouseout', () => {
   const outer = popup({ x: 100, y: 100, width: 300, height: 200 })

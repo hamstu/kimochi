@@ -103,7 +103,7 @@ function scanLine(node: HTMLElement, area: Rect, vertical: boolean, fragments = 
   const base: Text[] = []
   const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
   for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-    if (!(text.parentElement?.closest('rt'))) base.push(text as Text)
+    if (!text.parentElement?.closest('rt')) base.push(text as Text)
   }
   const rects = base.flatMap((text) => {
     const range = document.createRange()
@@ -146,14 +146,23 @@ export function drawGame(host: HTMLElement, options: GameOptions): Game {
   const screen = element('div', 'game-screen')
   if (options.windowed) {
     const bar = element('div', 'game-titlebar')
-    bar.append(element('span', 'game-lights'), element('span', 'game-title', options.kind === 'manga' ? 'Manga reader' : 'Summer Pockets'))
+    bar.append(
+      element('span', 'game-lights'),
+      element('span', 'game-title', options.kind === 'manga' ? 'Manga reader' : 'Summer Pockets')
+    )
     host.append(bar)
   }
   host.append(screen)
 
   const lines: { node: HTMLElement; vertical: boolean }[] = []
   if (options.kind === 'dialogue') {
-    screen.append(element('div', 'game-sky'), element('div', 'game-sun'), element('div', 'game-sea'), element('div', 'game-cloud game-cloud-a'), element('div', 'game-cloud game-cloud-b'))
+    screen.append(
+      element('div', 'game-sky'),
+      element('div', 'game-sun'),
+      element('div', 'game-sea'),
+      element('div', 'game-cloud game-cloud-a'),
+      element('div', 'game-cloud game-cloud-b')
+    )
     const box = element('div', 'game-dialogue')
     box.append(element('div', 'game-speaker', options.script.speaker))
     for (const line of options.script.lines) {

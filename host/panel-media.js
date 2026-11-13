@@ -24,14 +24,7 @@
  * the canvas exactly, which `putImageData` on the other side requires.
  */
 
-import {
-  groupMediaRequests,
-  mediaTargets,
-  indexMedia,
-  mediaFromReply,
-  mediaKey,
-  base64ToBytes
-} from '/ui/media.js'
+import { groupMediaRequests, mediaTargets, indexMedia, mediaFromReply, mediaKey, base64ToBytes } from '/ui/media.js'
 
 /**
  * Answer one media drawing port.

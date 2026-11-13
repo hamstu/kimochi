@@ -5,5 +5,4 @@
  * `src-tauri/src/platform`).
  */
 export const DEV_BUILD =
-  import.meta.env.DEV ||
-  (window as { __KIMOCHI_PLATFORM__?: { debug?: boolean } }).__KIMOCHI_PLATFORM__?.debug === true
+  import.meta.env.DEV || (window as { __KIMOCHI_PLATFORM__?: { debug?: boolean } }).__KIMOCHI_PLATFORM__?.debug === true

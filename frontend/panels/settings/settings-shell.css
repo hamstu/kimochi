@@ -13,14 +13,14 @@
   background: var(--k-bar);
   border-right: 1px solid var(--k-line);
 }
-.settings-rail-row[data-state="active"] {
+.settings-rail-row[data-state='active'] {
   background: var(--k-selected);
   color: var(--k-text);
 }
-.settings-rail-row[data-state="inactive"] {
+.settings-rail-row[data-state='inactive'] {
   color: var(--k-text-2);
 }
-.settings-rail-row[data-state="inactive"]:hover {
+.settings-rail-row[data-state='inactive']:hover {
   color: var(--k-text);
 }
 .settings-page-scroll {
@@ -46,11 +46,19 @@
   animation: settings-page-in var(--k-base) var(--k-ease-out) both;
 }
 @keyframes settings-page-in {
-  from { opacity: 0; transform: translateY(0.25rem); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .settings-page-scroll > .k-settings-page { animation: none; }
+  .settings-page-scroll > .k-settings-page {
+    animation: none;
+  }
 }
 
 /* While a page's chunk loads: a spinner where the page title will be, after a short delay. */

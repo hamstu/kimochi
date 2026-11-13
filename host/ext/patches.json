@@ -38,10 +38,7 @@
       "why": "10ten ignores a pointer move with a modifier held at the same point as the last one, in Safari (isSafari(), which WebKitGTK's user agent also matches), to dodge a WebKit bug fixed in May 2023 (WebKit/WebKit#14221). Every WebKit Kimochi runs on has the fix. Kimochi's Shift scan sends exactly such a move: on Wayland the overlay has no keyboard, so pressing Shift over a stationary pointer re-sends the move at the same point with shiftKey set (host/linux-scan-input.js), and 10ten dropped it, never looking the word up.",
       "find": "isSafari()) {\n            if ((event.shiftKey",
       "replace": "false && isSafari()) {\n            if ((event.shiftKey",
-      "requires": [
-        "_lastPointerMoveScreenPoint",
-        "_ignoreNextPointerMove"
-      ]
+      "requires": ["_lastPointerMoveScreenPoint", "_ignoreNextPointerMove"]
     },
     {
       "id": "hachidori-first-view-count",
@@ -50,10 +47,7 @@
       "why": "Moving from word to word, a pop-up drawn with only its first entry, then filled a frame or two later, flashes nearly empty when that entry is short (a name, a particle): the pop-up keeps its size, so the frame between two full ones is mostly blank. The renderer takes how many entries to draw before the first paint (render/popup.js `initialResultCount`, 1 unless given); three fill what the pop-up shows in one frame, and the rest still follow as before. It adds a few milliseconds to a lookup that already shows in single digits.",
       "find": "highlightName: HIGHLIGHT_NAME,",
       "replace": "highlightName: HIGHLIGHT_NAME, initialResultCount: 3,",
-      "requires": [
-        "const HIGHLIGHT_NAME",
-        "window.HDPopup"
-      ]
+      "requires": ["const HIGHLIGHT_NAME", "window.HDPopup"]
     },
     {
       "id": "hachidori-first-view-glossaries",

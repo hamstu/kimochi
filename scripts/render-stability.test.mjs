@@ -98,10 +98,28 @@ const view = (words, extras = {}) => ({
 })
 
 test('OneOCR line renders one contiguous lookup target and font size in both overlay modes', () => {
-  const result = normalizeOcrResult({
-    groups: [{ id: 'oneocr-line-0', text: '日本語を勉強しています。', bbox: [10, 10, 280, 44], orientation: 'horizontal', linePolygons: [[[10, 10], [280, 10], [280, 44], [10, 44]]] }],
-    textAnnotations: [word('日', 10), word('本', 65), word('語', 95)]
-  }, 'oneocr')
+  const result = normalizeOcrResult(
+    {
+      groups: [
+        {
+          id: 'oneocr-line-0',
+          text: '日本語を勉強しています。',
+          bbox: [10, 10, 280, 44],
+          orientation: 'horizontal',
+          linePolygons: [
+            [
+              [10, 10],
+              [280, 10],
+              [280, 44],
+              [10, 44]
+            ]
+          ]
+        }
+      ],
+      textAnnotations: [word('日', 10), word('本', 65), word('語', 95)]
+    },
+    'oneocr'
+  )
   for (const enabled of [false, true]) {
     const host = element()
     const renderer = new TextOverlayRenderer(host)
@@ -130,9 +148,7 @@ test('unchanged text and scanning toggles do not replace nodes or allocate new w
   r.render(view([word('猫', 0), word('犬', 60)]))
   const nodes = [...host.children],
     before = created
-  r.render(
-    view([word('猫', 0), word('犬', 60)], { scanning: true, info: { ...info, total_ms: 999 } })
-  )
+  r.render(view([word('猫', 0), word('犬', 60)], { scanning: true, info: { ...info, total_ms: 999 } }))
   assert.deepEqual(host.children, nodes)
   assert.equal(created, before)
   assert.ok(host.children.every((n) => n.className === 'ocr-word'))
@@ -217,34 +233,53 @@ test('even a one-point actual source movement bypasses OCR jitter tolerance', ()
 })
 
 test('vertical words retain direction through geometry mapping and light like any other', () => {
-  const host=element(), renderer=new TextOverlayRenderer(host)
-  renderer.render(view([{...word('縦書き',20),isVertical:true,orientation:'vertical',groupId:'v'}]))
-  assert.match(host.children[0].className,/ocr-vertical/)
-  renderer.setPointer(25,10)
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  renderer.render(view([{ ...word('縦書き', 20), isVertical: true, orientation: 'vertical', groupId: 'v' }]))
+  assert.match(host.children[0].className, /ocr-vertical/)
+  renderer.setPointer(25, 10)
   renderer.updateProximity()
   // Hovered: the card (`data-lit`, overlay-text.css), and nothing inline that moves the text.
-  assert.equal(host.children[0].dataset.lit,'')
-  assert.equal(host.children[0].style.borderBottom,undefined)
-  assert.equal(host.children[0].style.borderRight,undefined)
-  renderer.setPointer(500,500)
+  assert.equal(host.children[0].dataset.lit, '')
+  assert.equal(host.children[0].style.borderBottom, undefined)
+  assert.equal(host.children[0].style.borderRight, undefined)
+  renderer.setPointer(500, 500)
   renderer.updateProximity()
-  assert.equal(host.children[0].dataset.lit,undefined)
+  assert.equal(host.children[0].dataset.lit, undefined)
   renderer.destroy()
 })
 
 test('grouped overlay never merges separately identified bubbles or extends lookup across them', () => {
-  const host=element(), renderer=new TextOverlayRenderer(host)
-  renderer.render(view([{...word('泡一',10),groupId:'a',granularity:'block',bubble:true,isVertical:true},{...word('泡二',42),groupId:'b',granularity:'block',bubble:true,isVertical:true}],{grouping:{enabled:true,filterSmallText:true,proximityThreshold:1000}}))
-  assert.equal(host.children.length,2)
-  assert.match(host.children[0].className,/ocr-vertical/)
-  assert.equal(host.children[0].querySelector('.ocr-lookahead').textContent,'')
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  renderer.render(
+    view(
+      [
+        { ...word('泡一', 10), groupId: 'a', granularity: 'block', bubble: true, isVertical: true },
+        { ...word('泡二', 42), groupId: 'b', granularity: 'block', bubble: true, isVertical: true }
+      ],
+      { grouping: { enabled: true, filterSmallText: true, proximityThreshold: 1000 } }
+    )
+  )
+  assert.equal(host.children.length, 2)
+  assert.match(host.children[0].className, /ocr-vertical/)
+  assert.equal(host.children[0].querySelector('.ocr-lookahead').textContent, '')
   renderer.destroy()
 })
 
 test('grouped overlay merges nearby blocks that are not bubbles (Live Text lines, Google Lens paragraphs)', () => {
-  const host=element(), renderer=new TextOverlayRenderer(host)
-  renderer.render(view([{...word('一行目',10),groupId:'livetext-line-0',granularity:'block'},{...word('二行目',42),groupId:'livetext-line-1',granularity:'block'}],{grouping:{enabled:true,filterSmallText:true,proximityThreshold:1000}}))
-  assert.equal(host.children.length,1)
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  renderer.render(
+    view(
+      [
+        { ...word('一行目', 10), groupId: 'livetext-line-0', granularity: 'block' },
+        { ...word('二行目', 42), groupId: 'livetext-line-1', granularity: 'block' }
+      ],
+      { grouping: { enabled: true, filterSmallText: true, proximityThreshold: 1000 } }
+    )
+  )
+  assert.equal(host.children.length, 1)
   renderer.destroy()
 })
 
@@ -291,7 +326,14 @@ test("a grouped region combines its boxes' readings for Blend: top from the top 
   const line = (text, y, surface) => ({
     description: text,
     surface,
-    boundingPoly: { vertices: [{ x: 10, y }, { x: 200, y }, { x: 200, y: y + 20 }, { x: 10, y: y + 20 }] }
+    boundingPoly: {
+      vertices: [
+        { x: 10, y },
+        { x: 200, y },
+        { x: 200, y: y + 20 },
+        { x: 10, y: y + 20 }
+      ]
+    }
   })
   renderer.render(
     view(
@@ -322,7 +364,7 @@ test("a group's lines are one inline flow, so a lookup's sentence and words run 
     })
   )
   const body = host.children[0].querySelector('.ocr-runs')
-  assert.ok(body.style.width && body.style.height, 'the flow is laid in the card\'s padding box')
+  assert.ok(body.style.width && body.style.height, "the flow is laid in the card's padding box")
   const runs = body.children.filter((child) => child.className === 'ocr-run')
   assert.ok(runs.length >= 2)
   for (const run of runs) {

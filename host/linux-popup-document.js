@@ -19,7 +19,9 @@ export async function installLinuxPopupDocument(win = window) {
   d.head.append(style)
   // Imported in the popup's own realm: from this module it would be another, failing load of a
   // second Display, which the popup never uses.
-  const { Display } = await new win.Function('url', 'return import(url)')(win.chrome.runtime.getURL('js/display/display.js'))
+  const { Display } = await new win.Function('url', 'return import(url)')(
+    win.chrome.runtime.getURL('js/display/display.js')
+  )
   const setFontOptions = Display.prototype.setFontOptions
   Display.prototype.setFontOptions = function (fontFamily, ...rest) {
     return setFontOptions.call(this, fontFamily || '"Figtree Variable", "Noto Sans JP Variable", sans-serif', ...rest)
@@ -27,10 +29,18 @@ export async function installLinuxPopupDocument(win = window) {
   if (!d.documentElement.style.fontFamily) {
     d.documentElement.style.fontFamily = '"Figtree Variable", "Noto Sans JP Variable", sans-serif'
   }
-  win.addEventListener('mousedown', e => {
-    if (e.button === 0 && e.target.closest?.('#frame-resizer-handle')) win.getSelection()?.removeAllRanges()
-  }, true)
-  win.addEventListener('mouseup', () => {
-    if (d.documentElement.dataset.isResizing === 'true') win.getSelection()?.removeAllRanges()
-  }, true)
+  win.addEventListener(
+    'mousedown',
+    (e) => {
+      if (e.button === 0 && e.target.closest?.('#frame-resizer-handle')) win.getSelection()?.removeAllRanges()
+    },
+    true
+  )
+  win.addEventListener(
+    'mouseup',
+    () => {
+      if (d.documentElement.dataset.isResizing === 'true') win.getSelection()?.removeAllRanges()
+    },
+    true
+  )
 }

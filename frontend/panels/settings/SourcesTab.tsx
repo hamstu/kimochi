@@ -5,16 +5,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Aperture, Camera, Check, Clipboard, ExternalLink, Globe, Radio } from 'lucide-react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
-import {
-  Button,
-  Input,
-  Select,
-  SettingsPage,
-  SettingsRow,
-  SettingsSection,
-  StatusDot,
-  Switch
-} from '@kit'
+import { Button, Input, Select, SettingsPage, SettingsRow, SettingsSection, StatusDot, Switch } from '@kit'
 import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
 import { useSetting } from '../../bridge/useSetting'
@@ -135,10 +126,7 @@ function MacPermissionsSection(): ReactNode {
         />
       </SettingsRow>
       <SettingsRow label="Accessibility" description="Lets Kimochi bring your source's window to the front.">
-        <PermissionStatus
-          granted={accessibility}
-          onAllow={() => void requestAccessibility().catch(() => undefined)}
-        />
+        <PermissionStatus granted={accessibility} onAllow={() => void requestAccessibility().catch(() => undefined)} />
       </SettingsRow>
     </SettingsSection>
   )
@@ -151,14 +139,12 @@ export function SourcesTab(): ReactNode {
   const hookable = os === 'windows' || os === 'linux'
   const choose = (next: Mode, current: InputSource): void => {
     // A hooked game is already a window: choosing the window keeps its Text hooking.
-    if (!(next === 'ocr' && current === 'hook')) void updateSettings({ inputSource: next === 'quickshot' ? 'ocr' : next })
+    if (!(next === 'ocr' && current === 'hook'))
+      void updateSettings({ inputSource: next === 'quickshot' ? 'ocr' : next })
     if ((next === 'quickshot') !== quickShot) void setQuickShot(next === 'quickshot')
   }
   return (
-    <SettingsPage
-      title="Sources"
-      description="Choose where Kimochi gets its text."
-    >
+    <SettingsPage title="Sources" description="Choose where Kimochi gets its text.">
       <WithReaderSettings>
         {(settings) => {
           const mode: Mode =
@@ -178,11 +164,7 @@ export function SourcesTab(): ReactNode {
                   aria-label="Input"
                 >
                   {INPUT_SOURCES.map((option) => (
-                    <ToggleGroup.Item
-                      key={option.value}
-                      value={option.value}
-                      className="input-source-row"
-                    >
+                    <ToggleGroup.Item key={option.value} value={option.value} className="input-source-row">
                       <span className="input-source-icon" aria-hidden>
                         {option.icon}
                       </span>
@@ -190,17 +172,12 @@ export function SourcesTab(): ReactNode {
                         <span className="input-source-label">{option.label}</span>
                         <span className="input-source-detail">{option.detail}</span>
                       </span>
-                      {mode === option.value ? (
-                        <Check className="input-source-check" aria-hidden />
-                      ) : null}
+                      {mode === option.value ? <Check className="input-source-check" aria-hidden /> : null}
                     </ToggleGroup.Item>
                   ))}
                 </ToggleGroup.Root>
                 {settings.inputSource === 'clipboard' ? (
-                  <SettingsRow
-                    label="Poll interval"
-                    description="How often the clipboard is checked."
-                  >
+                  <SettingsRow label="Poll interval" description="How often the clipboard is checked.">
                     <Select
                       aria-label="Poll interval"
                       value={String(settings.clipboardPollMs)}
@@ -220,29 +197,21 @@ export function SourcesTab(): ReactNode {
                   </SettingsRow>
                 ) : null}
                 {settings.inputSource === 'browser' ? (
-                  <SettingsRow
-                    label="Browser extension"
-                    description="Install it and check its connection."
-                  >
+                  <SettingsRow label="Browser extension" description="Install it and check its connection.">
                     <Button size="sm" onClick={() => showSettingsTab('browser')}>
                       Open
                     </Button>
                   </SettingsRow>
                 ) : null}
                 {settings.inputSource === 'websocket' ? (
-                  <SettingsRow
-                    label="WebSocket URL"
-                    controlId="sources-ws-url"
-                  >
+                  <SettingsRow label="WebSocket URL" controlId="sources-ws-url">
                     <Input
                       id="sources-ws-url"
                       type="url"
                       mono
                       className="settings-field"
                       value={settings.websocketUrl}
-                      onChange={(event) =>
-                        void updateSettings({ websocketUrl: event.target.value })
-                      }
+                      onChange={(event) => void updateSettings({ websocketUrl: event.target.value })}
                       placeholder="ws://localhost:6677"
                     />
                   </SettingsRow>

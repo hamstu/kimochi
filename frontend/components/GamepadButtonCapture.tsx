@@ -117,11 +117,7 @@ export function GamepadButtonCapture(props: GamepadButtonCaptureProps): JSX.Elem
 
   const hasGamepad = state.gamepads.length > 0
   const isDisabled = disabled || !settings.enabled
-  const assigned = props.chord
-    ? (props.value ?? [])
-    : props.value !== undefined
-      ? [props.value]
-      : []
+  const assigned = props.chord ? (props.value ?? []) : props.value !== undefined ? [props.value] : []
 
   const handleStartCapture = (): void => {
     if (!isDisabled && hasGamepad) {

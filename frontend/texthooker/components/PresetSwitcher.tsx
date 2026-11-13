@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Download, Plus, Save, Trash2, Upload } from "lucide-react";
+import { useEffect, useState } from 'react'
+import { Download, Plus, Save, Trash2, Upload } from 'lucide-react'
 import {
   applyPreset,
   deletePreset,
@@ -8,10 +8,10 @@ import {
   isDirty,
   saveCurrentAs,
   saveOverActive,
-  subscribePresets,
-} from "@texthooker/lib/presets";
-import { onSettingsChange } from "@texthooker/lib/settings";
-import { subscribeReplacements } from "@texthooker/lib/replacements";
+  subscribePresets
+} from '@texthooker/lib/presets'
+import { onSettingsChange } from '@texthooker/lib/settings'
+import { subscribeReplacements } from '@texthooker/lib/replacements'
 import {
   Button,
   Callout,
@@ -24,78 +24,78 @@ import {
   SelectValue,
   SettingsRow,
   SettingsSection,
-  isComposing,
-} from "@kit";
+  isComposing
+} from '@kit'
 
 /** Named snapshots of settings + replacements (not currently mounted). */
 export function PresetSwitcher() {
-  const [active, setActive] = useState("Default");
-  const [names, setNames] = useState<string[]>(["Default"]);
-  const [dirty, setDirty] = useState(false);
-  const [newNameMode, setNewNameMode] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [armed, setArmed] = useState<null | "delete" | "switch">(null);
-  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
+  const [active, setActive] = useState('Default')
+  const [names, setNames] = useState<string[]>(['Default'])
+  const [dirty, setDirty] = useState(false)
+  const [newNameMode, setNewNameMode] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [armed, setArmed] = useState<null | 'delete' | 'switch'>(null)
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null)
 
   // Subscribe to presets + anything that affects dirty state.
   useEffect(() => {
     return subscribePresets((s) => {
-      setActive(s.active);
-      setNames(Object.keys(s.presets));
-      setDirty(isDirty());
-    });
-  }, []);
-  useEffect(() => onSettingsChange(() => setDirty(isDirty())), []);
-  useEffect(() => subscribeReplacements(() => setDirty(isDirty())), []);
+      setActive(s.active)
+      setNames(Object.keys(s.presets))
+      setDirty(isDirty())
+    })
+  }, [])
+  useEffect(() => onSettingsChange(() => setDirty(isDirty())), [])
+  useEffect(() => subscribeReplacements(() => setDirty(isDirty())), [])
 
   const handleSelect = async (next: string) => {
-    if (next === active) return;
+    if (next === active) return
     if (dirty) {
-      setArmed("switch");
-      setPendingSwitch(next);
-      return;
+      setArmed('switch')
+      setPendingSwitch(next)
+      return
     }
-    await applyPreset(next);
-  };
+    await applyPreset(next)
+  }
 
   const confirmSwitch = async () => {
-    if (!pendingSwitch) return;
-    await applyPreset(pendingSwitch);
-    setArmed(null);
-    setPendingSwitch(null);
-  };
+    if (!pendingSwitch) return
+    await applyPreset(pendingSwitch)
+    setArmed(null)
+    setPendingSwitch(null)
+  }
 
   const handleSaveOver = async () => {
-    await saveOverActive();
-  };
+    await saveOverActive()
+  }
 
   const handleSaveAs = async () => {
-    const ok = await saveCurrentAs(newName);
+    const ok = await saveCurrentAs(newName)
     if (ok) {
-      setNewNameMode(false);
-      setNewName("");
+      setNewNameMode(false)
+      setNewName('')
     }
-  };
+  }
 
   const handleDelete = async () => {
-    if (armed !== "delete") {
-      setArmed("delete");
-      return;
+    if (armed !== 'delete') {
+      setArmed('delete')
+      return
     }
-    await deletePreset(active);
-    setArmed(null);
-  };
+    await deletePreset(active)
+    setArmed(null)
+  }
 
   const handleExport = async () => {
-    await exportActiveToFile();
-  };
+    await exportActiveToFile()
+  }
 
   const handleImport = async () => {
-    const imported = await importFromFile();
+    const imported = await importFromFile()
     if (imported) {
-      await applyPreset(imported);
+      await applyPreset(imported)
     }
-  };
+  }
 
   return (
     <SettingsSection
@@ -112,11 +112,11 @@ export function PresetSwitcher() {
             label={
               names.length <= 1
                 ? "Can't delete the only preset"
-                : armed === "delete"
+                : armed === 'delete'
                   ? `Confirm delete "${active}"`
-                  : "Delete this preset"
+                  : 'Delete this preset'
             }
-            variant={armed === "delete" ? "danger" : "ghost"}
+            variant={armed === 'delete' ? 'danger' : 'ghost'}
             size="sm"
             onClick={() => void handleDelete()}
             disabled={names.length <= 1}
@@ -126,10 +126,7 @@ export function PresetSwitcher() {
         </span>
       }
     >
-      <SettingsRow
-        label="Active preset"
-        description={dirty ? "Unsaved changes." : undefined}
-      >
+      <SettingsRow label="Active preset" description={dirty ? 'Unsaved changes.' : undefined}>
         <SelectRoot value={active} onValueChange={(v) => void handleSelect(v)}>
           <SelectTrigger aria-label="Preset">
             <SelectValue>{active}</SelectValue>
@@ -154,8 +151,8 @@ export function PresetSwitcher() {
           variant="ghost"
           size="sm"
           onClick={() => {
-            setNewNameMode(true);
-            setNewName(active);
+            setNewNameMode(true)
+            setNewName(active)
           }}
           title="Save as a new preset"
         >
@@ -163,7 +160,7 @@ export function PresetSwitcher() {
         </Button>
       </SettingsRow>
 
-      {armed === "switch" && pendingSwitch ? (
+      {armed === 'switch' && pendingSwitch ? (
         <div className="settings-note">
           <Callout tone="warn">
             <span>
@@ -174,8 +171,8 @@ export function PresetSwitcher() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setArmed(null);
-                  setPendingSwitch(null);
+                  setArmed(null)
+                  setPendingSwitch(null)
                 }}
               >
                 Cancel
@@ -198,11 +195,11 @@ export function PresetSwitcher() {
             autoFocus
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
-              if (isComposing(e)) return;
-              if (e.key === "Enter") void handleSaveAs();
-              if (e.key === "Escape") {
-                setNewNameMode(false);
-                setNewName("");
+              if (isComposing(e)) return
+              if (e.key === 'Enter') void handleSaveAs()
+              if (e.key === 'Escape') {
+                setNewNameMode(false)
+                setNewName('')
               }
             }}
           />
@@ -213,8 +210,8 @@ export function PresetSwitcher() {
             variant="ghost"
             size="sm"
             onClick={() => {
-              setNewNameMode(false);
-              setNewName("");
+              setNewNameMode(false)
+              setNewName('')
             }}
           >
             Cancel
@@ -222,5 +219,5 @@ export function PresetSwitcher() {
         </SettingsRow>
       ) : null}
     </SettingsSection>
-  );
+  )
 }

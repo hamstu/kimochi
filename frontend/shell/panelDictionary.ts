@@ -61,7 +61,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   let timer: ReturnType<typeof setTimeout>
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms) })
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms)
+    })
   ]).finally(() => clearTimeout(timer))
 }
 
@@ -152,7 +154,7 @@ export function usePanelDictionary(enabled = true): LookupState {
   })
 
   useEffect(() => {
-    if (relay) void relay.then(module => module.setEmbeddedEnabled(enabled)).catch(() => undefined)
+    if (relay) void relay.then((module) => module.setEmbeddedEnabled(enabled)).catch(() => undefined)
     if (!enabled) return
     let live = true
     let retry: ReturnType<typeof setTimeout> | undefined
@@ -199,9 +201,11 @@ export function usePanelDictionary(enabled = true): LookupState {
   }, [enabled])
 
   const usable = typeof runtime.lookups === 'boolean' ? runtime.lookups : runtime.phase === 'ready'
-  if (enabled && !usable) return {
-    status: runtime.phase === 'failed' ? 'unavailable' : 'starting', message: runtime.message
-  }
+  if (enabled && !usable)
+    return {
+      status: runtime.phase === 'failed' ? 'unavailable' : 'starting',
+      message: runtime.message
+    }
   return state
 }
 

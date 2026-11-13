@@ -10,7 +10,13 @@
  * resolve against the document, see `assetUrl`).
  */
 import { ChromeEvent, callbackApi, clone, platformInfo, resolveEngine, rethrow } from '../ext/primitives.js'
-import { classifyLink, installDownloads, installFileDropGuard, installPageLinks, isExtensionPage } from '../page-actions.js'
+import {
+  classifyLink,
+  installDownloads,
+  installFileDropGuard,
+  installPageLinks,
+  isExtensionPage
+} from '../page-actions.js'
 
 /** The extension id every Yomitan context reports. Yomitan only checks that it is truthy. */
 export const RUNTIME_ID = 'yomitan-spike'
@@ -151,7 +157,7 @@ export function createChrome({
         const target = select(id, frameId)[0]
         if (!target) {
           if (root.__KIMOCHI_PLATFORM__?.os === 'linux' && hub.connectRemote)
-            return hub.connectRemote({frameId, name, owner: ctx})
+            return hub.connectRemote({ frameId, name, owner: ctx })
           throw Error(`Unknown frame ${frameId}`)
         }
         const channel = new MessageChannel()
@@ -193,8 +199,7 @@ export function createChrome({
       registerContentScripts: unsupported('scripting.registerContentScripts'),
       unregisterContentScripts: api(() => {}),
       insertCSS: api(async ({ target, css, files }) => {
-        if (files)
-          css = (await Promise.all(files.map((p) => win.fetch(getURL(p)).then((r) => r.text())))).join('\n')
+        if (files) css = (await Promise.all(files.map((p) => win.fetch(getURL(p)).then((r) => r.text())))).join('\n')
         for (const c of select(target.tabId)) {
           if (!target.allFrames && target.frameIds && !target.frameIds.includes(c.id)) continue
           const style = c.win.document.createElement('style')
@@ -277,7 +282,8 @@ export function installChrome(win, chromeApi) {
     } catch {
       // Defined below.
     }
-    if (win[name] !== chromeApi) Object.defineProperty(win, name, { value: chromeApi, configurable: true, writable: true })
+    if (win[name] !== chromeApi)
+      Object.defineProperty(win, name, { value: chromeApi, configurable: true, writable: true })
   }
 }
 
@@ -329,25 +335,32 @@ export function installAudioValidity(win, root, log) {
  * document (`about:blank`) is replaced as it loads, and WebKit fails the imports it had begun.
  */
 function settled(win, task) {
-  return task().catch((error) => new Promise((resolve, reject) => {
-    if (win.closed) return reject(error)
-    setTimeout(() => task().then(resolve, reject), 250)
-  }))
+  return task().catch(
+    (error) =>
+      new Promise((resolve, reject) => {
+        if (win.closed) return reject(error)
+        setTimeout(() => task().then(resolve, reject), 250)
+      })
+  )
 }
 
 /** Linux: dictionary images WebKitGTK cannot decode natively (see /spike/linux-dictionary-images.js). */
 export function installLinuxDictionaryImages(win, root, log, extra = {}) {
   if (win.__KIMOCHI_PLATFORM__?.os !== 'linux') return
-  void settled(win, () => import(assetUrl(root, '/spike/linux-dictionary-images.js'))
-    .then(({ installLinuxDictionaryImages }) => installLinuxDictionaryImages(win)))
-    .catch((error) => log({ check: 'linux-dictionary-images-failed', error: String(error), ...extra }))
+  void settled(win, () =>
+    import(assetUrl(root, '/spike/linux-dictionary-images.js')).then(({ installLinuxDictionaryImages }) =>
+      installLinuxDictionaryImages(win)
+    )
+  ).catch((error) => log({ check: 'linux-dictionary-images-failed', error: String(error), ...extra }))
 }
 
 /** Linux: modifier-edge scan input for this document (see /spike/linux-scan-input.js). */
 export function installLinuxScanInput(win, root, log, options, extra = {}) {
-  void settled(win, () => import(assetUrl(root, '/spike/linux-scan-input.js'))
-    .then(({ installLinuxScanInput }) => installLinuxScanInput(win, options)))
-    .catch((error) => log({ check: 'linux-scan-input-failed', error: String(error), ...extra }))
+  void settled(win, () =>
+    import(assetUrl(root, '/spike/linux-scan-input.js')).then(({ installLinuxScanInput }) =>
+      installLinuxScanInput(win, options)
+    )
+  ).catch((error) => log({ check: 'linux-scan-input-failed', error: String(error), ...extra }))
 }
 
 /** A context's ports hang up, and it leaves the table, when its document goes. */

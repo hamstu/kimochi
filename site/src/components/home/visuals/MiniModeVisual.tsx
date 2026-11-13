@@ -10,7 +10,9 @@ function Label({ children }: { children: string }) {
 function Select({ icon, name }: { icon: string; name: string }) {
   return (
     <div className="flex h-7 items-center gap-2 rounded-md border border-hairline bg-field px-2 text-[11px] text-ink">
-      <span className="grid size-4 place-items-center rounded-[3px] bg-press text-[9px] font-semibold text-ink-2">{icon}</span>
+      <span className="grid size-4 place-items-center rounded-[3px] bg-press text-[9px] font-semibold text-ink-2">
+        {icon}
+      </span>
       <span className="flex-1 truncate">{name}</span>
       <ChevronsUpDown size={11} className="text-ink-3" aria-hidden />
     </div>
@@ -36,7 +38,9 @@ export function MiniModeVisual() {
           <div>
             <div className="rounded-md border border-hairline bg-bar p-1.5">
               <div className="flex items-center gap-2 px-0.5 pb-1.5">
-                <span className="grid size-4 place-items-center rounded-[3px] bg-[#d23a4b] text-[9px] font-bold text-white">S</span>
+                <span className="grid size-4 place-items-center rounded-[3px] bg-[#d23a4b] text-[9px] font-bold text-white">
+                  S
+                </span>
                 <span className="flex-1 truncate font-semibold text-ink">STEINS;GATE</span>
               </div>
               <div className="grid grid-cols-2 gap-1">

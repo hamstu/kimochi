@@ -134,8 +134,7 @@ export function readZip(buffer) {
       continue
     }
     if (buffer.readUInt32LE(localOffset) !== LOCAL) throw Error(`Corrupt local header: ${rawName}`)
-    const start =
-      localOffset + 30 + buffer.readUInt16LE(localOffset + 26) + buffer.readUInt16LE(localOffset + 28)
+    const start = localOffset + 30 + buffer.readUInt16LE(localOffset + 26) + buffer.readUInt16LE(localOffset + 28)
     const raw = buffer.subarray(start, start + compressedSize)
     let data
     if (method === 0) data = Buffer.from(raw)
@@ -184,10 +183,12 @@ export async function loadSource(id, dir = extensionsDir) {
   if (source.id !== id) throw Error(`${id}.source.json has id ${JSON.stringify(source.id)}`)
   if (!/^https:\/\//.test(source.asset?.url ?? '')) throw Error(`${id}.source.json: asset.url must be https`)
   if (!/^[0-9a-f]{64}$/.test(source.asset?.sha256 ?? '')) throw Error(`${id}.source.json: asset.sha256 is not a sha256`)
-  if (!Number.isSafeInteger(source.asset?.size) || source.asset.size <= 0) throw Error(`${id}.source.json: asset.size must be the asset's size in bytes`)
+  if (!Number.isSafeInteger(source.asset?.size) || source.asset.size <= 0)
+    throw Error(`${id}.source.json: asset.size must be the asset's size in bytes`)
   for (const [from, to] of Object.entries(source.fixtures ?? {})) {
     safeEntryPath(from)
-    if (!new RegExp(`^${id}\\.[a-z0-9.-]+\\.json$`).test(to)) throw Error(`${id}.source.json: fixture ${from} must be copied to ${id}.<name>.json`)
+    if (!new RegExp(`^${id}\\.[a-z0-9.-]+\\.json$`).test(to))
+      throw Error(`${id}.source.json: fixture ${from} must be copied to ${id}.<name>.json`)
   }
   return source
 }
@@ -243,7 +244,10 @@ export async function recordPrevious(id, version, dir = extensionsDir) {
 /** Every `extensions/*.source.json` id, sorted. */
 export async function extensionIds(dir = extensionsDir) {
   const names = await readdir(dir).catch(() => [])
-  return names.filter((name) => name.endsWith('.source.json')).map((name) => name.slice(0, -'.source.json'.length)).sort()
+  return names
+    .filter((name) => name.endsWith('.source.json'))
+    .map((name) => name.slice(0, -'.source.json'.length))
+    .sort()
 }
 
 const isEmptyDir = async (dir) => {
@@ -278,7 +282,8 @@ export async function syncExtension(id, { replace = false, dir = extensionsDir, 
     const staged = path.join(temp, 'tree')
     await unzipTo(zip, staged, source.unpack ?? {})
     const recorded = await hashTree(staged)
-    if (!('manifest.json' in recorded)) throw Error('The unpacked release has no top-level manifest.json (check unpack.stripPrefix)')
+    if (!('manifest.json' in recorded))
+      throw Error('The unpacked release has no top-level manifest.json (check unpack.stripPrefix)')
     await rm(target, { recursive: true, force: true })
     await mkdir(target, { recursive: true })
     await unzipTo(zip, target, source.unpack ?? {})
@@ -300,7 +305,9 @@ export async function verifyExtension(id, { dir = extensionsDir, tree = path.joi
   const expected = JSON.parse(await readFile(path.join(dir, `${id}.sha256.json`), 'utf8'))
   const problems = compareHashes(expected, await hashTree(tree))
   if (problems.length > 0) {
-    throw Error(`${path.relative(root, tree) || tree} does not match extensions/${id}.sha256.json:\n  ${problems.slice(0, 20).join('\n  ')}`)
+    throw Error(
+      `${path.relative(root, tree) || tree} does not match extensions/${id}.sha256.json:\n  ${problems.slice(0, 20).join('\n  ')}`
+    )
   }
   return expected
 }

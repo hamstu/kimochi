@@ -133,7 +133,10 @@ fn status_only(status: StatusCode) -> axum::response::Response {
 
 /// Answer a bridge request from the loopback origin (admitted by `loopback.rs`). `report` gets one
 /// record per connection attempt.
-pub async fn bridge(mut request: axum::extract::Request, report: impl Fn(Value) + Send + 'static) -> axum::response::Response {
+pub async fn bridge(
+    mut request: axum::extract::Request,
+    report: impl Fn(Value) + Send + 'static,
+) -> axum::response::Response {
     let started = Instant::now();
     // Hachidori retries a failed link every 10 s for as long as it is set to link: a failure is
     // recorded when it differs from the last outcome, a success always.
@@ -148,7 +151,11 @@ pub async fn bridge(mut request: axum::extract::Request, report: impl Fn(Value) 
             report(value);
         }
     };
-    let upgrade = request.headers().get(header::UPGRADE).and_then(|v| v.to_str().ok()).is_some_and(|v| v.eq_ignore_ascii_case("websocket"));
+    let upgrade = request
+        .headers()
+        .get(header::UPGRADE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("websocket"));
     if !upgrade {
         return status_only(StatusCode::BAD_REQUEST);
     }
@@ -190,7 +197,9 @@ pub async fn bridge(mut request: axum::extract::Request, report: impl Fn(Value) 
             response = response.header(name, value);
         }
     }
-    report(json!({ "check": "hachidori-relay-link", "ok": true, "to": to, "ms": started.elapsed().as_millis() as u64 }));
+    report(
+        json!({ "check": "hachidori-relay-link", "ok": true, "to": to, "ms": started.elapsed().as_millis() as u64 }),
+    );
     tokio::spawn(async move {
         let Ok(upgraded) = on_upgrade.await else { return };
         let mut client = hyper_util::rt::TokioIo::new(upgraded);
@@ -239,7 +248,8 @@ mod tests {
 
     #[test]
     fn heads_are_read_whole() {
-        let raw = b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: abc=\r\n\r\n\x81\x02hi";
+        let raw =
+            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: abc=\r\n\r\n\x81\x02hi";
         let end = head_end(raw).unwrap();
         let head = parse_head(&raw[..end]).unwrap();
         assert_eq!(head.status, 101);
@@ -281,12 +291,17 @@ mod tests {
     async fn serve_bridge() -> u16 {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let router = axum::Router::new().route(PATH, axum::routing::get(|request: axum::extract::Request| bridge(request, |_| {})));
+        let router = axum::Router::new()
+            .route(PATH, axum::routing::get(|request: axum::extract::Request| bridge(request, |_| {})));
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
         port
     }
 
-    fn connect(bridge: u16, to: &str) -> Result<tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>, tungstenite::Error> {
+    fn connect(
+        bridge: u16,
+        to: &str,
+    ) -> Result<tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>, tungstenite::Error>
+    {
         use tungstenite::client::IntoClientRequest;
         let mut request = format!("ws://127.0.0.1:{bridge}{PATH}?to={to}").into_client_request().unwrap();
         request.headers_mut().insert("origin", HeaderValue::from_static("http://127.0.0.1:27631"));

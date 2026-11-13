@@ -15,7 +15,8 @@ const SCRIPT_NAME: &str = "voicehook-web.js";
 const BACKUP: &str = "package.json.voicehook-bak";
 
 fn app_dir(target: &Path) -> Result<PathBuf, String> {
-    let dir = if target.is_dir() { target.to_path_buf() } else { target.parent().map(Path::to_path_buf).unwrap_or_default() };
+    let dir =
+        if target.is_dir() { target.to_path_buf() } else { target.parent().map(Path::to_path_buf).unwrap_or_default() };
     if !dir.join("package.json").exists() {
         return Err(format!("{}: no package.json (not an NW.js app)", dir.display()));
     }
@@ -40,7 +41,8 @@ fn install(dir: &Path, out: &Path) -> Result<(), String> {
     }
     let pkg_path = dir.join("package.json");
     let text = std::fs::read_to_string(&pkg_path).map_err(|e| format!("{}: {e}", pkg_path.display()))?;
-    let mut pkg: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("package.json: {e}"))?;
+    let mut pkg: Value =
+        serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("package.json: {e}"))?;
     if let Some(existing) = pkg.get("inject_js_end").and_then(Value::as_str) {
         return Err(format!("package.json already injects {existing}; not touching it"));
     }
@@ -70,9 +72,14 @@ pub fn run(args: &[String], default_out: impl FnOnce(&str) -> PathBuf) -> Result
             _ => break,
         }
     }
-    let target = PathBuf::from(args.get(i).ok_or("usage: voicehook web [--out DIR] [--restore] <Game.exe | app dir> [args...]")?);
-    let base = if target.is_dir() { target.clone() } else { target.parent().map(Path::to_path_buf).unwrap_or_default() };
-    if !base.join("package.json").exists() && (base.join("resources").join("app.asar").exists() || base.join("resources").join("app").is_dir()) {
+    let target = PathBuf::from(
+        args.get(i).ok_or("usage: voicehook web [--out DIR] [--restore] <Game.exe | app dir> [args...]")?,
+    );
+    let base =
+        if target.is_dir() { target.clone() } else { target.parent().map(Path::to_path_buf).unwrap_or_default() };
+    if !base.join("package.json").exists()
+        && (base.join("resources").join("app.asar").exists() || base.join("resources").join("app").is_dir())
+    {
         return electron(&target, &base, &args[i + 1..], out, default_out).map(Some);
     }
     let dir = app_dir(&target)?;
@@ -83,19 +90,32 @@ pub fn run(args: &[String], default_out: impl FnOnce(&str) -> PathBuf) -> Result
     let exe = if target.is_file() {
         target.clone()
     } else {
-        ["Game.exe", "nw.exe", "game.exe"].iter().map(|n| dir.join(n)).find(|p| p.exists()).ok_or("no Game.exe/nw.exe in the app folder; pass the exe")?
+        ["Game.exe", "nw.exe", "game.exe"]
+            .iter()
+            .map(|n| dir.join(n))
+            .find(|p| p.exists())
+            .ok_or("no Game.exe/nw.exe in the app folder; pass the exe")?
     };
     let stem = exe.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "game".into());
     let out = out.unwrap_or_else(|| default_out(&stem));
     std::fs::create_dir_all(out.join("clips")).map_err(|e| format!("{}: {e}", out.display()))?;
-    let out = std::fs::canonicalize(&out).map(|p| PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\"))).unwrap_or(out);
-    std::fs::write(out.join("voicehook.log"), format!("voicehook web: {} (script injected via package.json inject_js_end)\n", exe.display()))
-        .map_err(|e| e.to_string())?;
+    let out = std::fs::canonicalize(&out)
+        .map(|p| PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\")))
+        .unwrap_or(out);
+    std::fs::write(
+        out.join("voicehook.log"),
+        format!("voicehook web: {} (script injected via package.json inject_js_end)\n", exe.display()),
+    )
+    .map_err(|e| e.to_string())?;
     let start = serde_json::json!({"ev": "start", "exe": exe.display().to_string(), "pid": 0, "bits": 0, "adapter": "web",
         "t": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0)});
     std::fs::write(out.join("events.jsonl"), format!("{start}\n")).map_err(|e| e.to_string())?;
     install(&dir, &out)?;
-    println!("voicehook: {} patched (backup {BACKUP}); capturing to\n  {}", dir.join("package.json").display(), out.display());
+    println!(
+        "voicehook: {} patched (backup {BACKUP}); capturing to\n  {}",
+        dir.join("package.json").display(),
+        out.display()
+    );
     let status = std::process::Command::new(&exe).args(&args[i + 1..]).current_dir(&dir).status();
     // NW.js keeps helper processes for a moment; the manifest is only read at start anyway.
     let restored = restore(&dir);
@@ -109,8 +129,11 @@ pub fn run(args: &[String], default_out: impl FnOnce(&str) -> PathBuf) -> Result
 
 fn new_capture(exe: &Path, out: PathBuf, how: &str) -> Result<PathBuf, String> {
     std::fs::create_dir_all(out.join("clips")).map_err(|e| format!("{}: {e}", out.display()))?;
-    let out = std::fs::canonicalize(&out).map(|p| PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\"))).unwrap_or(out);
-    std::fs::write(out.join("voicehook.log"), format!("voicehook web: {} ({how})\n", exe.display())).map_err(|e| e.to_string())?;
+    let out = std::fs::canonicalize(&out)
+        .map(|p| PathBuf::from(p.to_string_lossy().trim_start_matches(r"\\?\")))
+        .unwrap_or(out);
+    std::fs::write(out.join("voicehook.log"), format!("voicehook web: {} ({how})\n", exe.display()))
+        .map_err(|e| e.to_string())?;
     let start = serde_json::json!({"ev": "start", "exe": exe.display().to_string(), "pid": 0, "bits": 0, "adapter": "web",
         "t": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0)});
     std::fs::write(out.join("events.jsonl"), format!("{start}\n")).map_err(|e| e.to_string())?;
@@ -120,7 +143,13 @@ fn new_capture(exe: &Path, out: PathBuf, how: &str) -> Result<PathBuf, String> {
 /// Electron games (app.asar): started with a DevTools port, `web.js` put into every page over
 /// CDP. Needs Node in the page (TyranoScript's Electron builds have it), as the script writes the
 /// capture itself.
-fn electron(target: &Path, dir: &Path, extra: &[String], out: Option<PathBuf>, default_out: impl FnOnce(&str) -> PathBuf) -> Result<PathBuf, String> {
+fn electron(
+    target: &Path,
+    dir: &Path,
+    extra: &[String],
+    out: Option<PathBuf>,
+    default_out: impl FnOnce(&str) -> PathBuf,
+) -> Result<PathBuf, String> {
     let exe = if target.is_file() {
         target.to_path_buf()
     } else {
@@ -147,7 +176,10 @@ fn electron(target: &Path, dir: &Path, extra: &[String], out: Option<PathBuf>, d
             for url in pages {
                 let r = (|| -> Result<String, String> {
                     let mut ws = crate::cdp::Ws::connect(&url)?;
-                    let node = ws.call("Runtime.evaluate", serde_json::json!({"expression": "typeof require", "returnByValue": true}))?;
+                    let node = ws.call(
+                        "Runtime.evaluate",
+                        serde_json::json!({"expression": "typeof require", "returnByValue": true}),
+                    )?;
                     ws.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": script}))?;
                     ws.call("Runtime.evaluate", serde_json::json!({"expression": script}))?;
                     Ok(node["result"]["value"].as_str().unwrap_or("?").to_string())

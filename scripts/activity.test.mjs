@@ -2,14 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const {
-  ActivityFeed,
-  ACTIVITY_TIMES_LIMIT,
-  activityText,
-  normalizeActivity,
-  relativeTime,
-  relativeTimeRefreshMs
-} = await load('activity.ts')
+const { ActivityFeed, ACTIVITY_TIMES_LIMIT, activityText, normalizeActivity, relativeTime, relativeTimeRefreshMs } =
+  await load('activity.ts')
 
 /** A feed on a clock the test moves by hand. */
 function feed(limit) {

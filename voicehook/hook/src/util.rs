@@ -55,7 +55,9 @@ pub fn guard(f: impl FnOnce()) {
 /// How many of the `len` bytes at `p` are committed, readable memory, from `p` on.
 pub unsafe fn readable_len(p: usize, len: usize) -> usize {
     use std::ffi::c_void;
-    use windows_sys::Win32::System::Memory::{VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS};
+    use windows_sys::Win32::System::Memory::{
+        VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS,
+    };
     let end = p.saturating_add(len);
     let mut at = p;
     while at < end {
@@ -98,6 +100,8 @@ pub fn from_ansi(bytes: &[u8]) -> String {
         return String::new();
     }
     let mut out = vec![0u16; bytes.len()];
-    let n = unsafe { MultiByteToWideChar(CP_ACP, 0, bytes.as_ptr(), bytes.len() as i32, out.as_mut_ptr(), out.len() as i32) };
+    let n = unsafe {
+        MultiByteToWideChar(CP_ACP, 0, bytes.as_ptr(), bytes.len() as i32, out.as_mut_ptr(), out.len() as i32)
+    };
     String::from_utf16_lossy(&out[..n.max(0) as usize])
 }

@@ -50,7 +50,15 @@ pub fn scene(name: &'static str, seed: u64) -> Scene {
     let mut speech = std::collections::HashSet::new();
     let (mut seq, mut stream) = (0u64, 0u64);
     let t0 = 1_800_000_000_000.0;
-    let mut add = |clips: &mut Vec<Clip>, stream: u64, start: f64, dur: f64, api: &str, fmt: &str, source: Option<String>, channel: Option<&str>, looping: bool| {
+    let mut add = |clips: &mut Vec<Clip>,
+                   stream: u64,
+                   start: f64,
+                   dur: f64,
+                   api: &str,
+                   fmt: &str,
+                   source: Option<String>,
+                   channel: Option<&str>,
+                   looping: bool| {
         seq += 1;
         clips.push(Clip {
             seq,
@@ -76,7 +84,17 @@ pub fn scene(name: &'static str, seed: u64) -> Scene {
     // BGM, and Siglus's ambience loop.
     stream += 1;
     let bgm_src = named.then(|| if name == "renpy" { "audio/bgm/town.ogg".to_string() } else { "Bgm04".to_string() });
-    add(&mut clips, stream, t0 + 500.0, 95.0, api, if name == "renpy" { "ogg" } else { "float32 2ch 48000Hz" }, bgm_src, (name == "renpy").then_some("music"), true);
+    add(
+        &mut clips,
+        stream,
+        t0 + 500.0,
+        95.0,
+        api,
+        if name == "renpy" { "ogg" } else { "float32 2ch 48000Hz" },
+        bgm_src,
+        (name == "renpy").then_some("music"),
+        true,
+    );
     if name == "siglus" {
         stream += 1;
         add(&mut clips, stream, t0 + 2000.0, 40.0, api, vfmt, None, None, true);
@@ -88,7 +106,13 @@ pub fn scene(name: &'static str, seed: u64) -> Scene {
         let uid = format!("L{i:03}");
         let late = if name == "ocr" { r.range(200.0, 1100.0) } else { r.range(0.0, 60.0) };
         let anchor = t;
-        lines.push(Line { uid: uid.clone(), text: format!("line {i}"), ts: anchor + late, appeared: if name == "ocr" { None } else { Some(anchor) }, ocr: name == "ocr" });
+        lines.push(Line {
+            uid: uid.clone(),
+            text: format!("line {i}"),
+            ts: anchor + late,
+            appeared: if name == "ocr" { None } else { Some(anchor) },
+            ocr: name == "ocr",
+        });
         let voiced = r.f() < 0.7;
         if voiced {
             let start = anchor + r.range(30.0, 350.0);
@@ -141,10 +165,18 @@ pub struct Score {
 impl Score {
     pub fn precision(&self) -> f64 {
         let claimed = self.right + self.wrong + self.false_claims;
-        if claimed == 0 { 1.0 } else { self.right as f64 / claimed as f64 }
+        if claimed == 0 {
+            1.0
+        } else {
+            self.right as f64 / claimed as f64
+        }
     }
     pub fn recall(&self) -> f64 {
-        if self.voiced == 0 { 1.0 } else { self.right as f64 / self.voiced as f64 }
+        if self.voiced == 0 {
+            1.0
+        } else {
+            self.right as f64 / self.voiced as f64
+        }
     }
 }
 

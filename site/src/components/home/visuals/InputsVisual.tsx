@@ -12,11 +12,18 @@ export function InputsVisual() {
   return (
     <VisualFrame>
       <MiniWindow title="Settings · Log" className="w-full max-w-[20rem]">
-        <p className="px-3 pt-2.5 pb-1 text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">Text comes from</p>
+        <p className="px-3 pt-2.5 pb-1 text-[10px] font-medium tracking-[0.06em] text-ink-3 uppercase">
+          Text comes from
+        </p>
         <ul className="px-1.5 pb-1.5">
           {INPUTS.map(({ name, detail, icon: Icon, on }) => (
-            <li key={name} className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[12px] ${on ? 'bg-hover' : ''}`}>
-              <span className={`grid size-3 place-items-center rounded-full border ${on ? 'border-accent' : 'border-line-strong'}`}>
+            <li
+              key={name}
+              className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[12px] ${on ? 'bg-hover' : ''}`}
+            >
+              <span
+                className={`grid size-3 place-items-center rounded-full border ${on ? 'border-accent' : 'border-line-strong'}`}
+              >
                 {on && <span className="size-1.5 rounded-full bg-accent" />}
               </span>
               <Icon size={13} className="text-ink-3" aria-hidden />

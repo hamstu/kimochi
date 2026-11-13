@@ -21,7 +21,11 @@ pub const MAX_LINE_CHARS: usize = 300;
 /// a paragraph an NVL screen or a translation's text box easily holds; `pick::letter_scale`),
 /// with room to spare: a backlog or a skip sent as one is thousands.
 pub fn max_line_chars(language: &Language) -> usize {
-    if super::pick::letter_scale(language) == 1 { MAX_LINE_CHARS } else { 3 * MAX_LINE_CHARS }
+    if super::pick::letter_scale(language) == 1 {
+        MAX_LINE_CHARS
+    } else {
+        3 * MAX_LINE_CHARS
+    }
 }
 const DEFAULT_FLUSH_MS: u32 = 300;
 
@@ -87,7 +91,9 @@ impl GameConfig {
         let flush_ms = pick("flushMs").as_u64().map_or(DEFAULT_FLUSH_MS, |ms| ms.clamp(20, 5000) as u32);
         let repeats = match pick("repeats") {
             Value::String(s) if s == "off" => Repeats::Off,
-            Value::Number(n) => n.as_u64().filter(|n| (2..=8).contains(n)).map_or(Repeats::Auto, |n| Repeats::Fixed(n as usize)),
+            Value::Number(n) => {
+                n.as_u64().filter(|n| (2..=8).contains(n)).map_or(Repeats::Auto, |n| Repeats::Fixed(n as usize))
+            }
             _ => Repeats::Auto,
         };
         let join_lines = pick("joinLines").as_bool().unwrap_or(true);
@@ -96,7 +102,15 @@ impl GameConfig {
         let strip_codes = pick("stripCodes").as_bool().unwrap_or(!language.spaces);
         let hook_codes = game["hookCodes"]
             .as_array()
-            .map(|codes| codes.iter().filter_map(|c| c.as_str()).map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect())
+            .map(|codes| {
+                codes
+                    .iter()
+                    .filter_map(|c| c.as_str())
+                    .map(str::trim)
+                    .filter(|c| !c.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default();
         let replacements = game["replacements"]
             .as_array()
@@ -210,7 +224,10 @@ pub fn strip_codes(text: &str) -> String {
     }
     let (run, mark) = code_rules();
     let line = mark.replace_all(text, "");
-    let line = run.replace_all(&line, |caps: &regex::Captures| if is_code(&caps[0]) { String::new() } else { caps[0].to_string() });
+    let line = run.replace_all(
+        &line,
+        |caps: &regex::Captures| if is_code(&caps[0]) { String::new() } else { caps[0].to_string() },
+    );
     // What codes leave around them (the ` | ` between two, a stray `_`) goes with them.
     line.trim_matches(|c: char| c.is_whitespace() || "|_-".contains(c)).to_string()
 }
@@ -273,7 +290,11 @@ pub fn continues_in(before: &str, after: &str, japanese: bool) -> bool {
 }
 
 fn gcd(a: usize, b: usize) -> usize {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }
 
 /// Each character's repeats undone: `ここここんんんんににににちちちちはははは` → `こんにちは`.
@@ -334,7 +355,10 @@ mod tests {
     #[test]
     fn script_codes_go_and_the_line_stays() {
         // Shaped as a SiglusEngine hook sends them.
-        assert_eq!(strip_codes("chr00chr01chr02chr03chr11chr10先生「じゃあ、始めましょうか。"), "先生「じゃあ、始めましょうか。");
+        assert_eq!(
+            strip_codes("chr00chr01chr02chr03chr11chr10先生「じゃあ、始めましょうか。"),
+            "先生「じゃあ、始めましょうか。"
+        );
         assert_eq!(strip_codes("20$fx_shake_fachr00chr01chr02chr03chr11chr10先生「いいのよ」"), "先生「いいのよ」");
         assert_eq!(strip_codes("SND_se04SE00se04se04今日はいい天気だ。"), "今日はいい天気だ。");
         assert_eq!(strip_codes("VOK_アキ「……ふぅ」"), "アキ「……ふぅ」");
@@ -347,7 +371,18 @@ mod tests {
         assert_eq!(strip_codes("＃Ａ０１　よいしょ、よいしょ……＃Ａ０４」"), "よいしょ、よいしょ……」");
         assert_eq!(strip_codes("＃Ａ０１」"), "」");
         // Words, numbers and short names are text.
-        for line in ["ＰＳ５とPS5で3Dのゲーム", "OKです", "$100の時計", "＃拡散希望", "#1位", "１７時半、18時半下校", "顔文字^_^だよ", "e-mailを送る", "ああ、ああ", "………"] {
+        for line in [
+            "ＰＳ５とPS5で3Dのゲーム",
+            "OKです",
+            "$100の時計",
+            "＃拡散希望",
+            "#1位",
+            "１７時半、18時半下校",
+            "顔文字^_^だよ",
+            "e-mailを送る",
+            "ああ、ああ",
+            "………",
+        ] {
             assert_eq!(strip_codes(line), line);
         }
         let off = GameConfig::from_settings(&json!({ "stripCodes": false }), &Value::Null, ja());
@@ -448,7 +483,14 @@ mod tests {
         assert_eq!(config.clean(paragraph).as_deref(), Some(paragraph));
         // A backlog sent as one is still dropped.
         assert_eq!(config.clean(&paragraph.repeat(4)), None);
-        assert_eq!((max_line_chars(ja()), max_line_chars(crate::language::get("zh-Hant")), max_line_chars(crate::language::get("ko"))), (300, 300, 300));
+        assert_eq!(
+            (
+                max_line_chars(ja()),
+                max_line_chars(crate::language::get("zh-Hant")),
+                max_line_chars(crate::language::get("ko"))
+            ),
+            (300, 300, 300)
+        );
         assert_eq!(max_line_chars(crate::language::get("ru")), 900);
         // Names and numbers in a line are text, not codes, in a spaced language.
         let line = "Room 12B is on level 3, Captain O'Neil. Bring the R2D2a unit and 500 credits.";

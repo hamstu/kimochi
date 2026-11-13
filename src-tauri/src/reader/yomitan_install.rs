@@ -16,8 +16,7 @@ use super::yomitan_host::{windows_keys, CHROME_ORIGIN, FIREFOX_ID, HOST_NAME};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const RELEASE_URL: &str =
-    "https://github.com/hamstu/go-yomitan-native-messaging-host/releases/latest/download";
+const RELEASE_URL: &str = "https://github.com/hamstu/go-yomitan-native-messaging-host/releases/latest/download";
 
 /// The release asset for this OS and architecture.
 fn asset_name() -> Result<String, String> {
@@ -44,18 +43,11 @@ async fn download(asset: &str) -> Result<Vec<u8>, String> {
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Download failed: {}", e))?;
+    let response = client.get(&url).send().await.map_err(|e| format!("Download failed: {}", e))?;
     if !response.status().is_success() {
         return Err(format!("Download failed with status: {}", response.status()));
     }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read download: {}", e))?;
+    let bytes = response.bytes().await.map_err(|e| format!("Failed to read download: {}", e))?;
     Ok(bytes.to_vec())
 }
 
@@ -102,7 +94,10 @@ async fn install(app: &tauri::AppHandle, bytes: Vec<u8>) -> Result<String, Strin
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
     let (exe, chromium, firefox, keys) = windows_layout(&dir);
     std::fs::write(&exe, &bytes).map_err(|e| {
-        format!("Could not write {} ({e}). If your browser is running the host, close the browser and try again.", exe.display())
+        format!(
+            "Could not write {} ({e}). If your browser is running the host, close the browser and try again.",
+            exe.display()
+        )
     })?;
     std::fs::write(&chromium, manifest_json(false, &exe)).map_err(|e| format!("Could not write the manifest: {e}"))?;
     std::fs::write(&firefox, manifest_json(true, &exe)).map_err(|e| format!("Could not write the manifest: {e}"))?;
@@ -149,10 +144,7 @@ fn run_unix_installer(temp_path: &Path, bytes: &[u8]) -> Result<String, String> 
     // Remove macOS quarantine attribute so the binary can run.
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("xattr")
-            .args(["-d", "com.apple.quarantine"])
-            .arg(temp_path)
-            .output();
+        let _ = std::process::Command::new("xattr").args(["-d", "com.apple.quarantine"]).arg(temp_path).output();
     }
 
     let output = std::process::Command::new(temp_path)
@@ -176,7 +168,7 @@ pub async fn install_yomitan_native_host(app: tauri::AppHandle) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reader::yomitan_host::{classify_host_path, inspect_manifest, browser_locations, HostMethod, Os};
+    use crate::reader::yomitan_host::{browser_locations, classify_host_path, inspect_manifest, HostMethod, Os};
 
     #[test]
     fn manifests_match_what_detection_accepts() {

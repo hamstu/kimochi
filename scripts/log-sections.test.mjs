@@ -48,7 +48,14 @@ const box = (text, x, y, width, height, extra = {}) => ({
  * leaves it (the whole text first, as OCR results lead with it).
  */
 const scan = (boxes) =>
-  normalizeOcrResult({ engine: 'test', geometry: true, textAnnotations: [box(boxes.map((b) => b.description).join(''), 0, 0, 1, 1), ...boxes] }, 'test')
+  normalizeOcrResult(
+    {
+      engine: 'test',
+      geometry: true,
+      textAnnotations: [box(boxes.map((b) => b.description).join(''), 0, 0, 1, 1), ...boxes]
+    },
+    'test'
+  )
 
 /** A horizontal line of word boxes, each 30 px a character, from x = 100. */
 function wordsOnLine(words, y, x = 100) {
@@ -72,7 +79,10 @@ test('a sentence boxed a word (a particle) at a time is one section, one run of 
   assert.deepEqual(readingSections(groups), ['今日はいい天気ですね。一緒に海まで散歩しませんか？'])
   // The Log gets the same group, as published (`logGroups` on the engine's result).
   const published = logGroups(result, GROUPING)
-  assert.deepEqual(published.map((group) => group.text), groups.map((group) => group.text))
+  assert.deepEqual(
+    published.map((group) => group.text),
+    groups.map((group) => group.text)
+  )
 })
 
 test('separately detected text is separate sections, in the order the Log lists them', () => {

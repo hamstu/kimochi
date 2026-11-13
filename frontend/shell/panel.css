@@ -48,7 +48,7 @@ body,
   padding: 0;
 }
 /* Controls in the title bar use the tool-bar sizes, and never start a window drag. */
-.native-titlebar-slot :is(button, [role="button"], input) {
+.native-titlebar-slot :is(button, [role='button'], input) {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
@@ -113,7 +113,7 @@ body,
   width: var(--k-icon-xs);
   height: var(--k-icon-xs);
 }
-.native-window-actions button[aria-pressed="true"] {
+.native-window-actions button[aria-pressed='true'] {
   color: var(--k-accent-text);
 }
 .native-window-actions button:focus-visible {

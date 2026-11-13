@@ -30,7 +30,11 @@ function useDocumentHead() {
     document.title = route.title
     setHeadTag('meta[name="description"]', 'meta', { name: 'description', content: route.description })
     setHeadTag('meta[name="robots"]', 'meta', route.index ? null : { name: 'robots', content: 'noindex' })
-    setHeadTag('link[rel="canonical"]', 'link', route.index ? { rel: 'canonical', href: canonicalUrl(route.path) } : null)
+    setHeadTag(
+      'link[rel="canonical"]',
+      'link',
+      route.index ? { rel: 'canonical', href: canonicalUrl(route.path) } : null
+    )
   }, [pathname])
 }
 

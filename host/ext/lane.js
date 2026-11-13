@@ -125,9 +125,13 @@ function createLane(win, { engine, origin, label }) {
         frame.setAttribute('data-kimochi-lane', '')
         frame.tabIndex = -1
         frame.style.cssText = 'display:none;position:fixed;width:0;height:0;border:0;'
-        frame.addEventListener('load', () => {
-          frame.contentWindow?.postMessage({ __kimochiLane: 'open', engine, label }, origin, [open()])
-        }, { once: true })
+        frame.addEventListener(
+          'load',
+          () => {
+            frame.contentWindow?.postMessage({ __kimochiLane: 'open', engine, label }, origin, [open()])
+          },
+          { once: true }
+        )
         frame.src = `${origin}${LANE_PATH}`
         doc.body.append(frame)
       } catch {

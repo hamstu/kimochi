@@ -39,8 +39,7 @@ use std::ffi::{c_char, c_int, c_void, CStr};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-const FRAMEWORK: &[u8] =
-    b"/System/Library/PrivateFrameworks/VisionKitCore.framework/VisionKitCore\0";
+const FRAMEWORK: &[u8] = b"/System/Library/PrivateFrameworks/VisionKitCore.framework/VisionKitCore\0";
 const RTLD_LAZY: c_int = 0x1;
 /// `VKAnalysisTypeText`. Text only: we do not want subject lift or barcodes.
 const ANALYSIS_TYPE_TEXT: usize = 1;
@@ -121,12 +120,7 @@ struct Slot {
 impl Slot {
     fn new() -> Arc<Self> {
         Arc::new(Self {
-            state: Mutex::new(SlotState {
-                answer: None,
-                returned: false,
-                acknowledged: false,
-                off_main: false,
-            }),
+            state: Mutex::new(SlotState { answer: None, returned: false, acknowledged: false, off_main: false }),
             ready: Condvar::new(),
         })
     }
@@ -180,10 +174,7 @@ impl Slot {
             if now >= deadline {
                 return;
             }
-            let (next, timed_out) = self
-                .ready
-                .wait_timeout(guard, deadline - now)
-                .unwrap_or_else(|e| e.into_inner());
+            let (next, timed_out) = self.ready.wait_timeout(guard, deadline - now).unwrap_or_else(|e| e.into_inner());
             guard = next;
             if timed_out.timed_out() {
                 return;
@@ -220,10 +211,7 @@ impl Slot {
             if now >= deadline {
                 return;
             }
-            let (next, timed_out) = self
-                .ready
-                .wait_timeout(guard, deadline - now)
-                .unwrap_or_else(|e| e.into_inner());
+            let (next, timed_out) = self.ready.wait_timeout(guard, deadline - now).unwrap_or_else(|e| e.into_inner());
             guard = next;
             if timed_out.timed_out() {
                 return;
@@ -312,10 +300,7 @@ impl Outstanding {
     /// `returned` alone is deliberately not enough: it is set from inside the
     /// closure, which is still executing in the block's own allocation.
     unsafe fn release(self) {
-        debug_assert!(
-            self.slot.acknowledged(),
-            "released an analysis the main queue has not acknowledged"
-        );
+        debug_assert!(self.slot.acknowledged(), "released an analysis the main queue has not acknowledged");
         drop(Retained::from_raw(self.request));
         drop(RcBlock::from_raw(self.progress));
         drop(RcBlock::from_raw(self.completion));
@@ -430,8 +415,7 @@ impl LiveTextObserver {
         if let Some(existing) = &self.analyzer {
             return Ok(existing.0);
         }
-        let class =
-            class(c"VKCImageAnalyzer").map_err(|e| CaptureError::new("unsupported", e))?;
+        let class = class(c"VKCImageAnalyzer").map_err(|e| CaptureError::new("unsupported", e))?;
         // SAFETY: `new` on a class proved to exist.
         let analyzer: Retained<AnyObject> = unsafe { msg_send![class, new] };
         let pointer = Retained::into_raw(analyzer);
@@ -541,8 +525,7 @@ impl TextObserver for LiveTextObserver {
     }
 
     fn observe(&mut self, frame: &Frame, timeout: Duration) -> Result<Observation> {
-        self.ensure_available()
-            .map_err(|why| CaptureError::new("unsupported", why))?;
+        self.ensure_available().map_err(|why| CaptureError::new("unsupported", why))?;
         self.reap()?;
 
         let started = Instant::now();
@@ -797,11 +780,7 @@ fn class(name: &CStr) -> std::result::Result<&'static AnyClass, String> {
 
 fn require(cls: &AnyClass, sel: Sel) -> std::result::Result<(), String> {
     if cls.instance_method(sel).is_none() {
-        return Err(missing(&format!(
-            "-[{} {}]",
-            cls.name().to_string_lossy(),
-            sel
-        )));
+        return Err(missing(&format!("-[{} {}]", cls.name().to_string_lossy(), sel)));
     }
     Ok(())
 }
@@ -814,10 +793,7 @@ fn probe() -> std::result::Result<(), String> {
     }
     let analyzer = class(c"VKCImageAnalyzer")?;
     let request = class(c"VKCImageAnalyzerRequest")?;
-    require(
-        analyzer,
-        sel!(processRequest:progressHandler:completionHandler:),
-    )?;
+    require(analyzer, sel!(processRequest:progressHandler:completionHandler:))?;
     require(analyzer, sel!(cancelRequestID:))?;
     require(analyzer, sel!(cancelAllRequests))?;
     require(request, sel!(initWithImage:requestType:))?;
@@ -839,10 +815,7 @@ fn image_from_frame(frame: &Frame) -> Result<Retained<NSImage>> {
         .checked_mul(frame.info.height as usize)
         .ok_or_else(|| CaptureError::new("observer", "frame dimensions overflow"))?;
     if width <= 0 || height <= 0 || frame.pixels.len() < needed {
-        return Err(CaptureError::new(
-            "observer",
-            "frame has no pixels to observe",
-        ));
+        return Err(CaptureError::new("observer", "frame has no pixels to observe"));
     }
 
     // SAFETY: a null plane pointer asks AppKit to allocate its own storage; every
@@ -864,19 +837,14 @@ fn image_from_frame(frame: &Frame) -> Result<Retained<NSImage>> {
             bitsPerPixel: 32isize,
         ]
     };
-    let rep = rep.ok_or_else(|| {
-        CaptureError::new("observer", "could not allocate a bitmap for the observer")
-    })?;
+    let rep = rep.ok_or_else(|| CaptureError::new("observer", "could not allocate a bitmap for the observer"))?;
 
     // SAFETY: `bitmapData` is the buffer just allocated, `bytesPerRow * height`
     // long, and the source slice is checked to be at least that long above.
     unsafe {
         let destination = rep.bitmapData();
         if destination.is_null() {
-            return Err(CaptureError::new(
-                "observer",
-                "the observer bitmap has no backing store",
-            ));
+            return Err(CaptureError::new("observer", "the observer bitmap has no backing store"));
         }
         std::ptr::copy_nonoverlapping(frame.pixels.as_ptr(), destination, needed);
     }
@@ -894,14 +862,8 @@ fn image_from_frame(frame: &Frame) -> Result<Retained<NSImage>> {
 ///
 /// Returns the analyzer's request identifier — needed to cancel it — along with
 /// the objects whose lifetime has to cover the asynchronous work.
-fn start_analysis(
-    analyzer: *mut AnyObject,
-    image: &NSImage,
-    locales: &[String],
-    slot: Arc<Slot>,
-) -> Result<Started> {
-    let request_class =
-        class(c"VKCImageAnalyzerRequest").map_err(|e| CaptureError::new("unsupported", e))?;
+fn start_analysis(analyzer: *mut AnyObject, image: &NSImage, locales: &[String], slot: Arc<Slot>) -> Result<Started> {
+    let request_class = class(c"VKCImageAnalyzerRequest").map_err(|e| CaptureError::new("unsupported", e))?;
 
     // SAFETY: every selector below was proved to exist in `probe`.
     unsafe {
@@ -911,8 +873,7 @@ fn start_analysis(
             initWithImage: image,
             requestType: ANALYSIS_TYPE_TEXT,
         ];
-        let request = request
-            .ok_or_else(|| CaptureError::new("observer", "Apple Live Text refused the image"))?;
+        let request = request.ok_or_else(|| CaptureError::new("observer", "Apple Live Text refused the image"))?;
 
         // The language first, English second (`set_locales`): the second locale is
         // what stops a line of Latin UI chrome inside the crop from being forced into
@@ -955,14 +916,10 @@ fn start_analysis(
 ///
 /// Nothing Objective-C escapes this function. By the time it returns, the result
 /// is owned Rust data, which is what makes a late callback harmless.
-fn extract(
-    analysis: *mut AnyObject,
-    error: *mut AnyObject,
-) -> std::result::Result<Vec<TextLine>, String> {
+fn extract(analysis: *mut AnyObject, error: *mut AnyObject) -> std::result::Result<Vec<TextLine>, String> {
     if !error.is_null() {
         // SAFETY: an NSError, if VisionKit passed one.
-        let description: Option<Retained<NSString>> =
-            unsafe { msg_send![error, localizedDescription] };
+        let description: Option<Retained<NSString>> = unsafe { msg_send![error, localizedDescription] };
         return Err(description
             .map(|s| s.to_string())
             .unwrap_or_else(|| "Apple Live Text reported an error".to_string()));
@@ -1109,7 +1066,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn the_private_api_is_probed_rather_than_assumed() {
         let mut observer = LiveTextObserver::new();
@@ -1137,10 +1093,7 @@ mod tests {
         }
         let error = observer.observe(&empty_frame(), TIMEOUT).unwrap_err();
         assert_eq!(error.code, "observer");
-        assert!(
-            observer.outstanding.is_none(),
-            "nothing was left outstanding"
-        );
+        assert!(observer.outstanding.is_none(), "nothing was left outstanding");
     }
 
     /// Automatic scanning calls this several times a second for hours.
@@ -1175,10 +1128,7 @@ mod tests {
 
         let error = observer.reap().unwrap_err();
         assert_eq!(error.code, "busy");
-        assert!(
-            observer.outstanding.is_some(),
-            "and it is still being held, not dropped"
-        );
+        assert!(observer.outstanding.is_some(), "and it is still being held, not dropped");
         discard(&mut observer);
     }
 
@@ -1188,21 +1138,11 @@ mod tests {
         let mut observer = LiveTextObserver::new();
         let slot = Slot::new();
         // Long past any plausible grace period, and past the stall threshold.
-        stalled(
-            &mut observer,
-            slot.clone(),
-            Instant::now() - STALL_REPORT_AFTER - Duration::from_secs(600),
-        );
+        stalled(&mut observer, slot.clone(), Instant::now() - STALL_REPORT_AFTER - Duration::from_secs(600));
 
         let error = observer.reap().unwrap_err();
-        assert_eq!(
-            error.code, "stalled",
-            "it reports, rather than assuming the analysis must be over"
-        );
-        assert!(
-            observer.outstanding.is_some(),
-            "and it still holds everything the analysis could touch"
-        );
+        assert_eq!(error.code, "stalled", "it reports, rather than assuming the analysis must be over");
+        assert!(observer.outstanding.is_some(), "and it still holds everything the analysis could touch");
         assert!(error.message.contains("restart"), "{}", error.message);
 
         // Terminal: it does not quietly resume on the next call either.
@@ -1235,10 +1175,7 @@ mod tests {
         let error = observer.reap().unwrap_err();
         assert_eq!(error.code, "stalled");
         assert!(error.message.contains("off the main thread"), "{}", error.message);
-        assert!(
-            observer.outstanding.is_some(),
-            "nothing was released on a path whose ordering is unknown"
-        );
+        assert!(observer.outstanding.is_some(), "nothing was released on a path whose ordering is unknown");
         discard(&mut observer);
     }
 
@@ -1288,10 +1225,7 @@ mod tests {
             let _returned = ReturnGuard(slot.clone());
             slot.fill(Ok(Vec::new()));
             assert!(slot.settled(), "the answer is available immediately");
-            assert!(
-                !slot.returned(),
-                "but not while the closure body is still running"
-            );
+            assert!(!slot.returned(), "but not while the closure body is still running");
         }
         assert!(slot.returned(), "and set once its scope ends");
     }
@@ -1331,9 +1265,7 @@ mod tests {
 
     #[test]
     fn a_null_analysis_is_no_text_and_an_error_is_reported() {
-        assert!(extract(std::ptr::null_mut(), std::ptr::null_mut())
-            .expect("no text")
-            .is_empty());
+        assert!(extract(std::ptr::null_mut(), std::ptr::null_mut()).expect("no text").is_empty());
     }
 
     impl LiveTextObserver {

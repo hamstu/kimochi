@@ -1,9 +1,5 @@
-import { useEffect } from "react";
-import {
-  UI_BASE_FONT_PX,
-  UI_SCALE_FACTORS,
-  type UiScale,
-} from "@texthooker/lib/types";
+import { useEffect } from 'react'
+import { UI_BASE_FONT_PX, UI_SCALE_FACTORS, type UiScale } from '@texthooker/lib/types'
 
 /**
  * Scales the whole UI by resizing the document root's font size, which is the
@@ -22,10 +18,10 @@ import {
  */
 export function useUiScale(pref: UiScale) {
   useEffect(() => {
-    const factor = UI_SCALE_FACTORS[pref] ?? 1;
-    const root = document.documentElement;
-    root.style.fontSize = `${UI_BASE_FONT_PX * factor}px`;
+    const factor = UI_SCALE_FACTORS[pref] ?? 1
+    const root = document.documentElement
+    root.style.fontSize = `${UI_BASE_FONT_PX * factor}px`
     // Exposed for the rare rule that needs the raw factor in CSS.
-    root.style.setProperty("--ui-scale", String(factor));
-  }, [pref]);
+    root.style.setProperty('--ui-scale', String(factor))
+  }, [pref])
 }

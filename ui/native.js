@@ -29,9 +29,7 @@ function notifyCapabilityGap(command, error) {
 
 /** Tauri reports an unregistered command by name; anything else is a real error. */
 function isMissingCommand(error) {
-  return /not (?:found|allowed)|unknown command|Command .* not/i.test(
-    String(error?.message ?? error)
-  )
+  return /not (?:found|allowed)|unknown command|Command .* not/i.test(String(error?.message ?? error))
 }
 
 /**
@@ -161,7 +159,13 @@ export async function watchCapabilities(onChange) {
  * fetch the PNG and hash it in a canvas. That second trip is where the recorded
  * `Load failed` errors came from, though not which part of it threw.
  */
-export function captureFrame(request, observe = false, observerMode = 'text', observerEngine = null, readIfStill = null) {
+export function captureFrame(
+  request,
+  observe = false,
+  observerMode = 'text',
+  observerEngine = null,
+  readIfStill = null
+) {
   return invoke('capture_frame', { request, observe, observerMode, observerEngine, readIfStill })
 }
 
@@ -226,8 +230,7 @@ export const selectedSource = () => optional('selected_source', undefined, null)
  */
 /** Bring a window source to the front (`activate_source`). */
 export const activateSource = (sourceId) => invoke('activate_source', { sourceId })
-export const sourceHoverPreview = (sourceId) =>
-  optional('source_hover_preview', { sourceId }, null)
+export const sourceHoverPreview = (sourceId) => optional('source_hover_preview', { sourceId }, null)
 export const placeOverlay = (rect) => invoke('place_overlay', { rect })
 /** The display under the pointer (`{id, bounds, scale_factor}`), where a Quick Shot is drawn. */
 export const pointerDisplay = () => invoke('pointer_display')

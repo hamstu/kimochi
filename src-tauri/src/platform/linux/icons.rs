@@ -6,7 +6,8 @@ pub fn refresh() -> Result<(), String> {
         .unwrap_or_else(|| std::path::PathBuf::from(home).join(".local/share"));
     // An explicitly authored user launcher may intentionally use custom branding.
     if std::fs::read_to_string(data.join("applications/Kimochi.desktop"))
-        .is_ok_and(|entry| !entry.contains("X-Kimochi-Generated=true")) {
+        .is_ok_and(|entry| !entry.contains("X-Kimochi-Generated=true"))
+    {
         return Ok(());
     }
     refresh_app_icon(&data)
@@ -31,19 +32,23 @@ fn refresh_app_icon(data: &std::path::Path) -> Result<(), String> {
     let mut changed = false;
     for (size, bytes) in sizes {
         let icon = theme.join(size).join("apps/kimochi.png");
-        if std::fs::read(&icon).ok().as_deref() == Some(*bytes) { continue; }
-        std::fs::create_dir_all(icon.parent().ok_or("icon directory missing")?)
-            .map_err(|e| e.to_string())?;
+        if std::fs::read(&icon).ok().as_deref() == Some(*bytes) {
+            continue;
+        }
+        std::fs::create_dir_all(icon.parent().ok_or("icon directory missing")?).map_err(|e| e.to_string())?;
         let pending = icon.with_extension("png.next");
         std::fs::write(&pending, bytes).map_err(|e| e.to_string())?;
         std::fs::rename(pending, icon).map_err(|e| e.to_string())?;
         changed = true;
     }
-    if !changed { return Ok(()); }
+    if !changed {
+        return Ok(());
+    }
     // Optional host utility: invalidate a previously cached hicolor asset. The
     // image still works on desktops without this utility or a theme cache.
     let _ = std::process::Command::new("gtk-update-icon-cache")
         .args(["--force", "--ignore-theme-index"])
-        .arg(theme).output();
+        .arg(theme)
+        .output();
     Ok(())
 }

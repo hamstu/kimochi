@@ -5,31 +5,28 @@
  * keep counting characters, so this is never asked of them.
  */
 
-const segmenters = new Map<string, Intl.Segmenter | null>();
+const segmenters = new Map<string, Intl.Segmenter | null>()
 
 function segmenterFor(code: string): Intl.Segmenter | null {
-  let segmenter = segmenters.get(code);
+  let segmenter = segmenters.get(code)
   if (segmenter === undefined) {
     try {
-      segmenter =
-        typeof Intl.Segmenter === "function"
-          ? new Intl.Segmenter(code, { granularity: "word" })
-          : null;
+      segmenter = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(code, { granularity: 'word' }) : null
     } catch {
-      segmenter = null;
+      segmenter = null
     }
-    segmenters.set(code, segmenter);
+    segmenters.set(code, segmenter)
   }
-  return segmenter;
+  return segmenter
 }
 
 /** How many words `text` has, read as the language `code`. */
 export function countWords(text: string, code: string): number {
-  const segmenter = segmenterFor(code);
+  const segmenter = segmenterFor(code)
   if (segmenter) {
-    let words = 0;
-    for (const segment of segmenter.segment(text)) if (segment.isWordLike) words += 1;
-    return words;
+    let words = 0
+    for (const segment of segmenter.segment(text)) if (segment.isWordLike) words += 1
+    return words
   }
-  return text.match(/[\p{L}\p{M}\p{N}]+(?:['’-][\p{L}\p{M}\p{N}]+)*/gu)?.length ?? 0;
+  return text.match(/[\p{L}\p{M}\p{N}]+(?:['’-][\p{L}\p{M}\p{N}]+)*/gu)?.length ?? 0
 }

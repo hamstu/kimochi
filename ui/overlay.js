@@ -2,7 +2,14 @@ import './install-pointer-dedupe.js'
 import { createDictionarySetup } from './setup-dictionaries.js'
 import { followYomitanProfiles } from './yomitan-profiles.js'
 import { aDictionaryFor } from './sample-words.js'
-import { apiTokenize, dismissApiLookup, installApiLookup, lookupKeyProperty, lookupTerm, popupAnkiConfig } from './api-lookup.js'
+import {
+  apiTokenize,
+  dismissApiLookup,
+  installApiLookup,
+  lookupKeyProperty,
+  lookupTerm,
+  popupAnkiConfig
+} from './api-lookup.js'
 import { createAnki } from './game-dictionary-anki.js'
 import { audioUrl } from './game-dictionary.js'
 import { createController } from './controller.js'
@@ -59,9 +66,22 @@ import { logSections } from './log-sections.js'
 import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
-import { isNativeWaylandSourceId, isWaylandScreenSourceId, isWaylandWindowSourceId, parseSourceId } from './source-id.js'
+import {
+  isNativeWaylandSourceId,
+  isWaylandScreenSourceId,
+  isWaylandWindowSourceId,
+  parseSourceId
+} from './source-id.js'
 import { portalWindowBounds, portalCropArea } from './portal-window-geometry.js'
-import { cropFromOutput, cropToOutput, outputArea, outputAt, sameRect as sameOutput, screenOutputs, startOutput } from './wayland-screen-crop.js'
+import {
+  cropFromOutput,
+  cropToOutput,
+  outputArea,
+  outputAt,
+  sameRect as sameOutput,
+  screenOutputs,
+  startOutput
+} from './wayland-screen-crop.js'
 import {
   DICTIONARY_ENGINE_KEY,
   NO_ENGINE,
@@ -113,7 +133,10 @@ function clickThrough() {
  * clicks through to the game, and a pop-up no longer takes the next click (`catching`).
  */
 function hoverLookup() {
-  return hoverLookupApplies({ gamescope: nativeGamescope, wayland: waylandSession }, native.getSetting('overlayHoverLookup'))
+  return hoverLookupApplies(
+    { gamescope: nativeGamescope, wayland: waylandSession },
+    native.getSetting('overlayHoverLookup')
+  )
 }
 /** Linux on Wayland (`caps.session.backend`): hover lookup does not apply there (`hoverLookupApplies`). */
 let waylandSession = false
@@ -239,7 +262,6 @@ const languageWords = () => {
     ? JAPANESE_WORDS
     : { code: language.code, spaces: language.spaces, test: (text) => hasLanguageScript(text, language.code) }
 }
-
 
 // ---------------------------------------------------------------------------
 // Text Hooker on the overlay (src-tauri/src/text_hook, ui/hook-match.ts)
@@ -486,7 +508,9 @@ async function effectiveEngine() {
   } catch {
     // Fall through to the setting.
   }
-  return hostEngineOf(effectiveDictionaryEngine(dictionaryEngineOf(setting('yomitanSettings')?.popupType), languageNow()))
+  return hostEngineOf(
+    effectiveDictionaryEngine(dictionaryEngineOf(setting('yomitanSettings')?.popupType), languageNow())
+  )
 }
 
 /**
@@ -523,9 +547,9 @@ async function mirrorDictionaryEngine({ repair = false } = {}) {
     if (!repaired) {
       // `repair`: reload into the effective engine even when the setting names one that is not
       // downloaded (native refuses that for a switch).
-      void native.invoke('dictionary_engine_apply', { repair: true }).catch((error) =>
-        log({ check: 'dictionary-engine-repair-failed', error: String(error?.message ?? error) })
-      )
+      void native
+        .invoke('dictionary_engine_apply', { repair: true })
+        .catch((error) => log({ check: 'dictionary-engine-repair-failed', error: String(error?.message ?? error) }))
     }
   }
 }
@@ -561,8 +585,7 @@ function reportOutcome(post, { auto = false } = {}) {
  * rule rather than drawing a region under a Clipboard or WebSocket source.
  */
 const isQuickShot = () =>
-  Boolean(setting('quickShotEnabled')) &&
-  (setting('superTexthooker')?.inputSource ?? 'ocr') === 'ocr'
+  Boolean(setting('quickShotEnabled')) && (setting('superTexthooker')?.inputSource ?? 'ocr') === 'ocr'
 
 // ---------------------------------------------------------------------------
 // 1. Rendering
@@ -656,10 +679,16 @@ controller = createController({
       origin,
       area,
       scanId: state.appliedScanId,
-      center: nativeGamescope ? gamescopeMenuCenter : area ? { x: area.x + area.width / 2, y: area.y + area.height / 2 } : null
+      center: nativeGamescope
+        ? gamescopeMenuCenter
+        : area
+          ? { x: area.x + area.width / 2, y: area.y + area.height / 2 }
+          : null
     }
   },
-  get panelInputHandoff() { return window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope },
+  get panelInputHandoff() {
+    return window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope
+  },
   run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
     if (id === 'controls' || id === 'ocr-settings') {
@@ -719,7 +748,8 @@ controller = createController({
     setShown: (on) => native.setSetting('textHookerShowCard', Boolean(on)),
     // Back on, as in Settings: straight back to where it last found the game's text, the size
     // measured again (a size set by hand goes), and the screen read at once (`realignHookCard`).
-    setAutoAlign: (on) => (on ? saveHookGame({ autoAlign: true }, ['text', 'leading']) : saveHookGame({ autoAlign: false })),
+    setAutoAlign: (on) =>
+      on ? saveHookGame({ autoAlign: true }, ['text', 'leading']) : saveHookGame({ autoAlign: false }),
     textSize: (step) => {
       const box = hook.card?.box()
       return box ? onHookCardTextSize(step, box) : undefined
@@ -734,7 +764,7 @@ controller = createController({
   },
   dictionary: () => extensionApi,
   // Hachidori's own split of a scan into words (null for the other engines).
-  segment: (text) => (extensionHosted ? extensionHost()?.segment?.(text) ?? null : null),
+  segment: (text) => (extensionHosted ? (extensionHost()?.segment?.(text) ?? null) : null),
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
   buttons: () => setting('controllerButtons'),
   appearance: () => setting('appearance'),
@@ -744,7 +774,7 @@ controller = createController({
   // Yomitan's frontend module is only imported for Yomitan: it loads Yomitan's own frontend.
   lookupRange: async (range) =>
     extensionHosted
-      ? (await extensionHost()?.lookupRange(range)) ?? false
+      ? ((await extensionHost()?.lookupRange(range)) ?? false)
       : (await import('/spike/frontend-mode.js')).lookupRange(range),
   // Read along's direct lookup (ui/controller.js `lookupWord`): `{shown, length}`, or null when
   // the engine has none here and `lookupRange` stands in.
@@ -769,12 +799,7 @@ controller = createController({
     const reach = 32
     for (const element of [...wordsContainer.children, ...(hook.card?.rects().length ? [hook.card.element] : [])]) {
       const rect = element.getBoundingClientRect()
-      if (
-        x >= rect.left - reach &&
-        x <= rect.right + reach &&
-        y >= rect.top - reach &&
-        y <= rect.bottom + reach
-      )
+      if (x >= rect.left - reach && x <= rect.right + reach && y >= rect.top - reach && y <= rect.bottom + reach)
         return true
     }
     return false
@@ -795,8 +820,8 @@ controller = createController({
         ? [hook.line]
         : null
       : state.geometry && state.annotations.length
-      ? logSections(scanGroups(state.annotations, setting('textOverlayGrouping') ?? {}))
-      : null,
+        ? logSections(scanGroups(state.annotations, setting('textOverlayGrouping') ?? {}))
+        : null,
   log: (record) => log(record),
   modeChanged: (mode) => holdForController(mode !== 'idle'),
   // Read along as the full-screen dictionary (Settings → Game Mode): with the Yomitan API, its
@@ -805,17 +830,19 @@ controller = createController({
     enabled: () => fullscreenDictionary(setting('gameModeSettings')),
     source: () => fullscreenDictionarySource(setting('yomitanSettings')?.popupType ?? 'builtin'),
     lookup: (term, { media = false, maxEntries } = {}) =>
-      native.invoke('yomitan_ankifields', {
-        // Empty means the helper's default address, as for the API pop-up (api-lookup.js).
-        baseUrl: setting('yomitanSettings')?.customApiUrl?.trim() || 'http://127.0.0.1:19633',
-        text: term,
-        includeMedia: media,
-        maxEntries: maxEntries ?? null
-      }).then((answer) => ({
-        entries: Array.isArray(answer?.fields) ? answer.fields : [],
-        audioMedia: answer?.audioMedia ?? [],
-        dictionaryMedia: answer?.dictionaryMedia ?? []
-      })),
+      native
+        .invoke('yomitan_ankifields', {
+          // Empty means the helper's default address, as for the API pop-up (api-lookup.js).
+          baseUrl: setting('yomitanSettings')?.customApiUrl?.trim() || 'http://127.0.0.1:19633',
+          text: term,
+          includeMedia: media,
+          maxEntries: maxEntries ?? null
+        })
+        .then((answer) => ({
+          entries: Array.isArray(answer?.fields) ? answer.fields : [],
+          audioMedia: answer?.audioMedia ?? [],
+          dictionaryMedia: answer?.dictionaryMedia ?? []
+        })),
     anki: () => {
       const config = popupAnkiConfig(setting('superTexthooker'))
       return config ? createAnki(native.invoke, config) : null
@@ -823,7 +850,9 @@ controller = createController({
     play: (item) => {
       const audio = new Audio(audioUrl(item))
       audio.volume = setting('superTexthooker')?.audioVolume ?? 0.9
-      void audio.play().catch((error) => log({ check: 'game-dictionary-audio-failed', error: String(error?.message ?? error) }))
+      void audio
+        .play()
+        .catch((error) => log({ check: 'game-dictionary-audio-failed', error: String(error?.message ?? error) }))
     }
   }
 })
@@ -833,15 +862,18 @@ let controllerScanId = null
 // controller mode. No ordinary Linux desktop or other platform sends this lease.
 setInterval(() => {
   if (window.__KIMOCHI_PLATFORM__?.os !== 'linux' || !nativeGamescope || controller.mode === 'idle') return
-  void native.controllerNav(true).then(result => {
-    if (result?.gamescopeInput === false) {
-      log({ check: 'gamescope-input-lease-failed', error: result.error })
-      return controller.close()
-    }
-  }).catch(error => {
-    log({ check: 'gamescope-input-lease-failed', error: String(error) })
-    void controller.close()
-  })
+  void native
+    .controllerNav(true)
+    .then((result) => {
+      if (result?.gamescopeInput === false) {
+        log({ check: 'gamescope-input-lease-failed', error: result.error })
+        return controller.close()
+      }
+    })
+    .catch((error) => {
+      log({ check: 'gamescope-input-lease-failed', error: String(error) })
+      void controller.close()
+    })
 }, 500)
 
 /**
@@ -908,15 +940,18 @@ function syncReadingHold() {
     window.__linuxLayerPointerInside = !layerPointerExit.outside()
     if (layerPointerExit.outside()) renderer.clearPointer()
   }
-  const popup = remoteReadingPopup || apiReadingPopup || Boolean(extensionPopupRect) ||
-    [...livePopups].some(popup => popup.isVisibleSync?.())
+  const popup =
+    remoteReadingPopup ||
+    apiReadingPopup ||
+    Boolean(extensionPopupRect) ||
+    [...livePopups].some((popup) => popup.isVisibleSync?.())
   const enabled = overlayTextOn() && !state.regionSelecting
   if (!enabled) reading.reset()
-  const next = enabled && reading.update(renderer.mouse, renderer.hitRects({x:0,y:0}), popup)
+  const next = enabled && reading.update(renderer.mouse, renderer.hitRects({ x: 0, y: 0 }), popup)
   if (next === readingHold) return
   readingHold = next
   syncScanHold()
-  log({check:'auto-scan-reading-hold',hold:next})
+  log({ check: 'auto-scan-reading-hold', hold: next })
 }
 /** The Yomitan API's pop-up for a word opened or closed (`installApiLookup`). */
 function apiPopupVisible(visible) {
@@ -980,7 +1015,11 @@ let gnomeControllerWords = false
 let lastVisibilityTrace = null
 function draw() {
   publishTextBoxes()
-  if (waylandDisabled) { if (!gnomeOverlay?.shared) renderer.clear(); void gnomeOverlay?.update(); return }
+  if (waylandDisabled) {
+    if (!gnomeOverlay?.shared) renderer.clear()
+    void gnomeOverlay?.update()
+    return
+  }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
   const portalWindow = waylandLayer && isWaylandWindowSourceId(state.info?.source_id)
@@ -995,26 +1034,27 @@ function draw() {
   syncHookCard()
   // Gaming Mode: native says whether Gamescope is drawing the source (the game, for a game's text)
   // in front; over Kimochi, Steam's menus or another game the text goes. Reading holds it.
-  const gamescopeFront = !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) || state.sourceFocus?.focused !== false
+  const gamescopeFront =
+    !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) || state.sourceFocus?.focused !== false
   const visible =
     !settling &&
     !browserMode() &&
     (controller.holdsText ||
-    (overlayTextOn() &&
-      ((waylandLayer && gamescopeFront) ||
-        shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp))))
+      (overlayTextOn() &&
+        ((waylandLayer && gamescopeFront) ||
+          shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp))))
 
   const reason = !overlayTextOn()
     ? 'disabled'
     : settling
       ? 'source-settling'
       : !visible
-      ? 'source-inactive'
-      : !state.geometry
-        ? 'no-geometry'
-        : state.annotations.length
-          ? 'visible'
-          : 'no-text'
+        ? 'source-inactive'
+        : !state.geometry
+          ? 'no-geometry'
+          : state.annotations.length
+            ? 'visible'
+            : 'no-text'
   const visibility = { reason, annotations: state.annotations.length, frameId: state.appliedScanId }
   const signature = JSON.stringify(visibility)
   if (signature !== lastVisibilityTrace) {
@@ -1029,21 +1069,19 @@ function draw() {
     return
   }
   let readerBounds = null
-  if ((waylandLayer) && state.info) {
-    const scale = Math.min(
-      innerWidth / state.info.full_width,
-      innerHeight / state.info.full_height
-    )
+  if (waylandLayer && state.info) {
+    const scale = Math.min(innerWidth / state.info.full_width, innerHeight / state.info.full_height)
     // A screen with a place on the desktop: its bounds relative to the overlay's output, which
     // native moved to the output its crop is on (src-tauri/src/platform/linux/screens.rs). Only a
     // screen with none (a virtual one) is fitted to the overlay's output.
     const screenBounds = isWaylandScreenSourceId(state.info.source_id) ? (state.info.source_bounds ?? null) : null
-    readerBounds = linkedBounds ?? screenBounds ?? {
-      x: (innerWidth - state.info.full_width * scale) / 2,
-      y: (innerHeight - state.info.full_height * scale) / 2,
-      width: state.info.full_width * scale,
-      height: state.info.full_height * scale
-    }
+    readerBounds = linkedBounds ??
+      screenBounds ?? {
+        x: (innerWidth - state.info.full_width * scale) / 2,
+        y: (innerHeight - state.info.full_height * scale) / 2,
+        width: state.info.full_width * scale,
+        height: state.info.full_height * scale
+      }
   }
   const renderChange = renderer.render({
     annotations: state.annotations,
@@ -1051,21 +1089,21 @@ function draw() {
     origin: state.origin,
     // Where the source is now, not where it was when the frame was captured, so
     // text follows a window that has since moved or been resized.
-    bounds: readerBounds ?? (state.detached
-      ? (state.info?.source_bounds ?? null)
-      : (state.sourceBounds ?? state.info?.source_bounds ?? null)),
+    bounds:
+      readerBounds ??
+      (state.detached
+        ? (state.info?.source_bounds ?? null)
+        : (state.sourceBounds ?? state.info?.source_bounds ?? null)),
     grouping: setting('textOverlayGrouping'),
     opacity: setting('overlayOpacity'),
     scanning: state.scanning
   })
-  if (renderChange && (renderChange.created || renderChange.removed))
-    trace('overlay-dom-change', renderChange)
+  if (renderChange && (renderChange.created || renderChange.removed)) trace('overlay-dom-change', renderChange)
   if (state.appliedScanId !== controllerScanId) {
     controllerScanId = state.appliedScanId
     controller.scanChanged()
   }
 }
-
 
 /**
  * What OCR read becomes what is drawn. Outside the Text Hooker, as it is. While hooked, only the
@@ -1206,7 +1244,11 @@ function hookAligned(annotations) {
     change.text = size
     if (measured.pitch) change.leading = Math.min(2.2, Math.max(1.1, measured.pitch / measured.size))
   } else if (Math.abs(size - game.text) / game.text > HOOK_RESIZE) {
-    if (hook.resize && hook.resize.line !== hook.line && Math.abs(size - hook.resize.size) / hook.resize.size < HOOK_RESIZE / 2) {
+    if (
+      hook.resize &&
+      hook.resize.line !== hook.line &&
+      Math.abs(size - hook.resize.size) / hook.resize.size < HOOK_RESIZE / 2
+    ) {
       change.text = (size + hook.resize.size) / 2
       hook.resize = null
     } else if (!hook.resize || hook.resize.line !== hook.line) hook.resize = { size, line: hook.line }
@@ -1321,7 +1363,7 @@ function hookCardView() {
     ? Math.max(8, game.text * bounds.height)
     : Math.min(HOOK_TEXT_POINTS[1], Math.max(HOOK_TEXT_POINTS[0], hookSet().textSize * bounds.height))
   const lineHeight = game.leading ?? 1.5
-  const saved = (auto ? game.ocrBox ?? game.box : game.box) ?? null
+  const saved = (auto ? (game.ocrBox ?? game.box) : game.box) ?? null
   const ox = bounds.x - state.origin.x
   const oy = bounds.y - state.origin.y
   let where
@@ -1367,8 +1409,11 @@ function hookCardView() {
   const style = setting('overlayStyle') ?? {}
   let theme = resolveOverlayCardAppearance(style, setting('appearance'), systemDark.matches)
   const inside =
-    where.x >= ox && where.y >= oy && where.x + where.width <= ox + bounds.width && where.y + where.height <= oy + bounds.height
-  const surface = theme === 'blend' && inside ? game.surface ?? null : null
+    where.x >= ox &&
+    where.y >= oy &&
+    where.x + where.width <= ox + bounds.width &&
+    where.y + where.height <= oy + bounds.height
+  const surface = theme === 'blend' && inside ? (game.surface ?? null) : null
   if (theme === 'blend' && !surface)
     theme = resolveOverlayCardAppearance({ ...style, appearance: 'app' }, setting('appearance'), systemDark.matches)
   // On the game's text (Auto align, the line placed), the card breaks the line where the game
@@ -1798,8 +1843,7 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
   setOcrAnnotations(state.geometry ? (result.textAnnotations ?? []) : [])
   state.source = job.source
   const kind = state.source?.kind ?? state.source?.type
-  state.scannedApp =
-    kind === 'window' ? (state.source.app ?? state.source.appName ?? null) : foreground.current
+  state.scannedApp = kind === 'window' ? (state.source.app ?? state.source.appName ?? null) : foreground.current
   // Whichever native scan produced this is now accounted for, so the poll loop
   // does not treat its revision as new work and publish the same text twice.
   state.appliedScanId = result.nativeScanId ?? frame?.id ?? null
@@ -1888,8 +1932,7 @@ async function performScan(explicit = null) {
       })
       // Every applied result reaches the publisher, which reports; one that did not was
       // discarded as stale, and applyResult has already said so.
-      if (publication || !generation.isStale(job))
-        reportOutcome(scanActivity.scanOutcome(publication))
+      if (publication || !generation.isStale(job)) reportOutcome(scanActivity.scanOutcome(publication))
       // Keep the auto loop from immediately republishing what we just showed —
       // but only if the result was actually accepted.
       // Tell the loop what has just been spent and shown, so it does not
@@ -2064,12 +2107,9 @@ function settleAutoRound() {
   autoRound = null
   if (!round) return
   // Lines that reached the Log are the outcome, whatever else was said on the way.
-  reportOutcome(
-    round.lines > 0 || !round.outcome
-      ? scanActivity.scanOutcome(round, { auto: true })
-      : round.outcome,
-    { auto: true }
-  )
+  reportOutcome(round.lines > 0 || !round.outcome ? scanActivity.scanOutcome(round, { auto: true }) : round.outcome, {
+    auto: true
+  })
 }
 
 /**
@@ -2214,9 +2254,7 @@ function onAutoScanEvent(event) {
           observerMode: settings.observerMode,
           watcher: autoWatcher(),
           settings: Object.fromEntries(
-            Object.entries(settings).filter(
-              ([, value]) => typeof value === 'number' || typeof value === 'boolean'
-            )
+            Object.entries(settings).filter(([, value]) => typeof value === 'number' || typeof value === 'boolean')
           )
         })
       }
@@ -2371,10 +2409,11 @@ async function reportObserver() {
 async function onAction(name) {
   switch (name) {
     case 'triggerScan':
-      if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeOverlay&&controllerHold) {
+      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay && controllerHold) {
         await window.__TAURI__.event.emit('gnome-controller-toggle')
-        for(let attempt=0;attempt<20&&controllerHold;attempt++)await new Promise(resolve=>setTimeout(resolve,25))
-        if(controllerHold)throw new Error('Close controller navigation before scanning')
+        for (let attempt = 0; attempt < 20 && controllerHold; attempt++)
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        if (controllerHold) throw new Error('Close controller navigation before scanning')
       }
       if (isQuickShot()) return quickShot()
       // The page reads its picture again and sends it (`onBrowserScan`).
@@ -2384,7 +2423,11 @@ async function onAction(name) {
       return performScan()
     case 'openControllerMenu':
       // Gaming Mode's hint is how to open this menu: whoever has opened it has learned it.
-      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && native.getSetting(HINTS_DISMISSED) !== true) {
+      if (
+        window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+        nativeGamescope &&
+        native.getSetting(HINTS_DISMISSED) !== true
+      ) {
         void native.setSetting(HINTS_DISMISSED, true)
         syncHints()
       }
@@ -2397,13 +2440,13 @@ async function onAction(name) {
           gamescopeMenuCenter = { x: panel.bounds.width / 2, y: panel.bounds.height / 2 }
         }
       }
-      if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeOverlay) {
-        if(controllerHold)return window.__TAURI__.event.emit('gnome-controller-toggle')
-        await native.panel('controller-host','show_inactive')
+      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay) {
+        if (controllerHold) return window.__TAURI__.event.emit('gnome-controller-toggle')
+        await native.panel('controller-host', 'show_inactive')
         // The lazy WebKit host acknowledges opening through the shared hold flag.
-        for(let attempt=0;attempt<20&&!controllerHold;attempt++){
+        for (let attempt = 0; attempt < 20 && !controllerHold; attempt++) {
           await window.__TAURI__.event.emit('gnome-controller-open')
-          await new Promise(resolve=>setTimeout(resolve,100))
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
         return
       }
@@ -2526,11 +2569,7 @@ async function followPointer(selector, onDisplay) {
       selector.pointerAt({ x: at.x - state.origin.x, y: at.y - state.origin.y }, { snap: true })
     } else if (at && state.origin) {
       const local = { x: at.x - state.origin.x, y: at.y - state.origin.y }
-      const inside =
-        local.x >= 0 &&
-        local.y >= 0 &&
-        local.x < state.origin.width &&
-        local.y < state.origin.height
+      const inside = local.x >= 0 && local.y >= 0 && local.x < state.origin.width && local.y < state.origin.height
       selector.pointerAt(inside ? local : null)
     }
     await new Promise((done) => setTimeout(done, POINTER_POLL_MS))
@@ -2564,7 +2603,10 @@ async function followPointer(selector, onDisplay) {
  *   picture?: object, alternateLabel?: string, onStart?: (selector: object) => void}} [options]
  * @returns {Promise<{x:number,y:number,width:number,height:number,action:string}|null>}
  */
-async function editRegion(confirmLabel, { onDisplay, follow, area, initial, picture, alternateLabel, onStart, accent, title } = {}) {
+async function editRegion(
+  confirmLabel,
+  { onDisplay, follow, area, initial, picture, alternateLabel, onStart, accent, title } = {}
+) {
   let RegionSelect
   try {
     ;({ RegionSelect } = await import('./region-select.js'))
@@ -2685,10 +2727,7 @@ function displayHolding(bounds, displays) {
   return (
     displays.find(
       (d) =>
-        cx >= d.bounds.x &&
-        cy >= d.bounds.y &&
-        cx < d.bounds.x + d.bounds.width &&
-        cy < d.bounds.y + d.bounds.height
+        cx >= d.bounds.x && cy >= d.bounds.y && cx < d.bounds.x + d.bounds.width && cy < d.bounds.y + d.bounds.height
     ) ?? displays[0]
   )
 }
@@ -2732,15 +2771,17 @@ async function editSourceRegion(target = 'ocr') {
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
     await bringSourceForward(sourceId, kind)
-    const desktopCrop = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled && await gnomeCropAvailable(sourceId)
-    const saved = desktopCrop ? await editGnomeRegion(sourceId, { region })
+    const desktopCrop =
+      window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled && (await gnomeCropAvailable(sourceId))
+    const saved = desktopCrop
+      ? await editGnomeRegion(sourceId, { region })
       : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
-      ? await editLinuxSourceImage(sourceId, region)
-      : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
-      ? await editPortalRegion(sourceId, kind, { region })
-      : kind === 'window'
-        ? await editWindowRegion(sourceId, region)
-        : await editScreenRegion(sourceId, region)
+        ? await editLinuxSourceImage(sourceId, region)
+        : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
+          ? await editPortalRegion(sourceId, kind, { region })
+          : kind === 'window'
+            ? await editWindowRegion(sourceId, region)
+            : await editScreenRegion(sourceId, region)
     if (!saved) {
       log({ check: 'region-edit-cancelled', region: region.name })
       return
@@ -2799,50 +2840,95 @@ async function bringSourceForward(sourceId, kind) {
 /** A portal screen maps to the sole GNOME monitor; never infer a window origin. */
 async function gnomeCropAvailable(sourceId = null) {
   if (!waylandDisabled || window.__KIMOCHI_PLATFORM__?.os !== 'linux') return false
-  let status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
-  if (isNativeWaylandSourceId(sourceId) && sourceId.includes(':window:') && status.available && status.nativeWindows && status.tracked?.sourceId !== sourceId) {
+  let status = await native.invoke('gnome_overlay', { operation: 'status', payload: null })
+  if (
+    isNativeWaylandSourceId(sourceId) &&
+    sourceId.includes(':window:') &&
+    status.available &&
+    status.nativeWindows &&
+    status.tracked?.sourceId !== sourceId
+  ) {
     // A native window is bound by its Mutter id: nothing to match.
-    await native.invoke('gnome_overlay', {operation:'track', payload:{operation:'bind',sourceId}}).catch(() => null)
-    status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
-  } else if (sourceId?.startsWith('portal:window:') && status.available && status.windowTracking && status.tracked?.sourceId !== sourceId) {
+    await native
+      .invoke('gnome_overlay', { operation: 'track', payload: { operation: 'bind', sourceId } })
+      .catch(() => null)
+    status = await native.invoke('gnome_overlay', { operation: 'status', payload: null })
+  } else if (
+    sourceId?.startsWith('portal:window:') &&
+    status.available &&
+    status.windowTracking &&
+    status.tracked?.sourceId !== sourceId
+  ) {
     const frame = await native.sourceHoverPreview(sourceId)
     if (frame?.width && frame?.height) {
-      await native.invoke('gnome_overlay', {operation:'track', payload:{operation:'match',sourceId,width:frame.width,height:frame.height,name:state.viewSource?.name}})
-      status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
+      await native.invoke('gnome_overlay', {
+        operation: 'track',
+        payload: {
+          operation: 'match',
+          sourceId,
+          width: frame.width,
+          height: frame.height,
+          name: state.viewSource?.name
+        }
+      })
+      status = await native.invoke('gnome_overlay', { operation: 'status', payload: null })
     }
   }
-  return status.available && status.cropEditor && status.monitors?.length === 1 &&
+  return (
+    status.available &&
+    status.cropEditor &&
+    status.monitors?.length === 1 &&
     (!isWaylandWindowSourceId(sourceId) || status.tracked?.sourceId === sourceId)
+  )
 }
 
-async function editGnomeRegion(sourceId, {quick = false, region = REGIONS.ocr, onStart} = {}) {
-  if (!isWaylandWindowSourceId(sourceId) && !isWaylandScreenSourceId(sourceId)) throw new Error('Desktop crop requires a shared screen or linked window.')
+async function editGnomeRegion(sourceId, { quick = false, region = REGIONS.ocr, onStart } = {}) {
+  if (!isWaylandWindowSourceId(sourceId) && !isWaylandScreenSourceId(sourceId))
+    throw new Error('Desktop crop requires a shared screen or linked window.')
   state.regionSelecting = true
   syncAutoScanner()
   let restoreLog = false
   let selected = false
   try {
     if (quick) {
-      restoreLog = Boolean((await native.panel('log','inspect')).visible)
-      if (restoreLog) await native.panel('log','hide')
+      restoreLog = Boolean((await native.panel('log', 'inspect')).visible)
+      if (restoreLog) await native.panel('log', 'hide')
     }
     await gnomeOverlay?.pause()
     const frame = await native.sourceHoverPreview(sourceId)
     if (!frame?.width || !frame?.height) throw new Error('No shared screen frame available. Choose a screen first.')
-    const {selectGnomeCrop} = await import('./gnome-crop.js')
-    const crop = await selectGnomeCrop(native, {sourceId, frame, initial:regionInitialCrop(region, frame), quick, onStart, theme:setting('appearance') === 'light' ? 'light' : setting('appearance') === 'dark' ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
-      ...(quick ? {} : {accent:region.accent, title:region.title})})
+    const { selectGnomeCrop } = await import('./gnome-crop.js')
+    const crop = await selectGnomeCrop(native, {
+      sourceId,
+      frame,
+      initial: regionInitialCrop(region, frame),
+      quick,
+      onStart,
+      theme:
+        setting('appearance') === 'light'
+          ? 'light'
+          : setting('appearance') === 'dark'
+            ? 'dark'
+            : matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark',
+      ...(quick ? {} : { accent: region.accent, title: region.title })
+    })
     if (!crop) return false
-    if (await native.selectedSource() !== sourceId) throw new Error('The shared screen changed while editing. Open the editor again.')
-    if (quick) { selected = true; return crop }
+    if ((await native.selectedSource()) !== sourceId)
+      throw new Error('The shared screen changed while editing. Open the editor again.')
+    if (quick) {
+      selected = true
+      return crop
+    }
     await region.commit(sourceId, crop)
-    log({check:'region-saved', region:region.name, sourceId, crop, editor:'gnome-shell'})
+    log({ check: 'region-saved', region: region.name, sourceId, crop, editor: 'gnome-shell' })
     return true
   } finally {
     state.regionSelecting = false
     syncAutoScanner()
     void gnomeOverlay?.update()
-    if (restoreLog && !selected) await native.panel('log','show').catch(() => {})
+    if (restoreLog && !selected) await native.panel('log', 'show').catch(() => {})
   }
 }
 
@@ -2868,7 +2954,13 @@ async function editLinuxSourceImage(sourceId, region = REGIONS.ocr) {
     // Register the reply listener before the main window can submit the editor.
     await native.panel('log', 'show')
     // `kind` says which region: the dialog saves an `anki` one with commit_anki_crop.
-    await window.__TAURI__.event.emit('linux:edit-source-crop', { requestId, sourceId, frame, crop: regionInitialCrop(region, frame), kind: region.name })
+    await window.__TAURI__.event.emit('linux:edit-source-crop', {
+      requestId,
+      sourceId,
+      frame,
+      crop: regionInitialCrop(region, frame),
+      kind: region.name
+    })
     const saved = await result
     if (saved) log({ check: 'region-saved', region: region.name, sourceId, editor: 'linux-source-image' })
     return saved
@@ -2904,7 +2996,8 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
     // With the outputs known, a screen on none of them (a virtual screen) is shown as its picture.
     // Without them (Gamescope's one output in Gaming Mode), the screen is the overlay's own.
     screenPicture = outputs.length > 0
-    if (screenPicture) log({ check: 'region-edit-screen-picture', sourceId, bounds: screen ?? null, outputs: outputs.length })
+    if (screenPicture)
+      log({ check: 'region-edit-screen-picture', sourceId, bounds: screen ?? null, outputs: outputs.length })
   }
   // A hidden layer has not received its output-sized configure yet (initially 1×1).
   // Map it for the editor before reading its viewport, and unwind even if setup fails.
@@ -2924,15 +3017,17 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
     const linked = kind === 'window' && frame.desktopVisible ? frame.desktopBounds : null
     // Anything not over its own place on screen is shown as its latest picture, fitted.
     const pictured = !linked && (kind === 'window' || screenPicture)
-    const fit = pictured
-      ? Math.min(origin.width / frame.width, origin.height / frame.height)
-      : null
-    const bounds = linked ?? (fit === null ? origin : {
-      x: (origin.width - frame.width * fit) / 2,
-      y: (origin.height - frame.height * fit) / 2,
-      width: frame.width * fit,
-      height: frame.height * fit
-    })
+    const fit = pictured ? Math.min(origin.width / frame.width, origin.height / frame.height) : null
+    const bounds =
+      linked ??
+      (fit === null
+        ? origin
+        : {
+            x: (origin.width - frame.width * fit) / 2,
+            y: (origin.height - frame.height * fit) / 2,
+            width: frame.width * fit,
+            height: frame.height * fit
+          })
     const area = linked ? portalCropArea(bounds, origin) : bounds
     if (!area) throw new Error('The shared window is outside this display. Bring it into view and try again.')
     if (pictured) {
@@ -2956,11 +3051,16 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
       }
     })
     if (!rect) return false
-    if (await native.selectedSource() !== sourceId) throw new Error('The shared source changed while editing. Open the editor again.')
+    if ((await native.selectedSource()) !== sourceId)
+      throw new Error('The shared source changed while editing. Open the editor again.')
     if (linked) {
       const current = await native.sourceHoverPreview(sourceId)
-      if (!current?.desktopVisible || !sameRect(current.desktopBounds, bounds)
-        || current.width !== frame.width || current.height !== frame.height) {
+      if (
+        !current?.desktopVisible ||
+        !sameRect(current.desktopBounds, bounds) ||
+        current.width !== frame.width ||
+        current.height !== frame.height
+      ) {
         throw new Error('The shared window moved or resized while editing. Open the editor again.')
       }
     }
@@ -2977,7 +3077,16 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
     if (crop.width <= 0 || crop.height <= 0) return false
     if (quick) return crop
     await region.commit(sourceId, crop)
-    log({ check: 'region-saved', region: region.name, kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : pictured ? 'source-image' : 'screen', action: rect.action })
+    log({
+      check: 'region-saved',
+      region: region.name,
+      kind,
+      sourceId,
+      crop,
+      editor: 'wayland-layer',
+      placement: linked ? 'linked-window' : pictured ? 'source-image' : 'screen',
+      action: rect.action
+    })
     return savedAction(rect)
   } finally {
     if (pictureUrl) URL.revokeObjectURL(pictureUrl)
@@ -2998,7 +3107,8 @@ const LAYER_FOLLOW_MS = 100
 async function moveLayerOverlay(output) {
   const moved = Boolean(await native.invoke('layer_outputs', { operation: 'move', rect: output }))
   const fits = () =>
-    innerWidth > 1 && innerHeight > 1 &&
+    innerWidth > 1 &&
+    innerHeight > 1 &&
     (!moved || (Math.abs(innerWidth - output.width) < 2 && Math.abs(innerHeight - output.height) < 2))
   for (let attempt = 0; !fits(); attempt++) {
     if (attempt >= 75) {
@@ -3082,12 +3192,24 @@ async function editLayerScreen(sourceId, frame, screen, layout, { quick = false,
       onStart
     })
     if (!rect) return false
-    if (await native.selectedSource() !== sourceId) throw new Error('The shared source changed while editing. Open the editor again.')
+    if ((await native.selectedSource()) !== sourceId)
+      throw new Error('The shared source changed while editing. Open the editor again.')
     const crop = cropFromOutput(rect, screen, output, frame)
     if (!crop) return false
     if (quick) return crop
     await region.commit(sourceId, crop)
-    log({ check: 'region-saved', region: region.name, kind: 'display', sourceId, crop, editor: 'wayland-layer', placement: 'screen', output, outputs: screenOutputs(screen, layout.outputs).length, action: rect.action })
+    log({
+      check: 'region-saved',
+      region: region.name,
+      kind: 'display',
+      sourceId,
+      crop,
+      editor: 'wayland-layer',
+      placement: 'screen',
+      output,
+      outputs: screenOutputs(screen, layout.outputs).length,
+      action: rect.action
+    })
     return savedAction(rect)
   } finally {
     state.regionSelecting = false
@@ -3136,7 +3258,14 @@ function regionInitialCrop(region, frame) {
   const saved = region.saved()
   if (saved) return saved
   if (!region.whole || !frame?.width || !frame?.height) return null
-  return { x: 0, y: 0, width: frame.width, height: frame.height, reference_width: frame.width, reference_height: frame.height }
+  return {
+    x: 0,
+    y: 0,
+    width: frame.width,
+    height: frame.height,
+    reference_width: frame.width,
+    reference_height: frame.height
+  }
 }
 
 async function editScreenRegion(sourceId, region = REGIONS.ocr) {
@@ -3144,7 +3273,7 @@ async function editScreenRegion(sourceId, region = REGIONS.ocr) {
   const current = displays.find((d) => displaySourceId(d) === sourceId) ?? null
   // Only the OCR crop may move the source to another display; the Anki crop stays on the chosen one.
   const follows = region === REGIONS.ocr
-  const start = follows ? (await native.pointerDisplay()) ?? current ?? displays[0] : current
+  const start = follows ? ((await native.pointerDisplay()) ?? current ?? displays[0]) : current
   if (!start?.bounds) return false
   await placeOverlayOn(start.bounds)
 
@@ -3173,7 +3302,15 @@ async function editScreenRegion(sourceId, region = REGIONS.ocr) {
   if (crop.width <= 0 || crop.height <= 0) return false
   const chosen = displaySourceId(target)
   await region.commit(chosen, crop)
-  log({ check: 'region-saved', region: region.name, kind: 'display', sourceId: chosen, switched: chosen !== sourceId, crop, action: rect.action })
+  log({
+    check: 'region-saved',
+    region: region.name,
+    kind: 'display',
+    sourceId: chosen,
+    switched: chosen !== sourceId,
+    crop,
+    action: rect.action
+  })
   return savedAction(rect)
 }
 
@@ -3302,12 +3439,14 @@ async function quickShot() {
     if (quickCaps && (quickCaps.capture.pickerRequired || quickCaps.sources.nativeWindows)) {
       const { runWaylandQuickShot } = await import('./linux-quick-shot.js')
       await runWaylandQuickShot({
-        available: waylandLayer || await gnomeCropAvailable(),
+        available: waylandLayer || (await gnomeCropAvailable()),
         catalog: () => native.invoke('enumerate'),
         pick: () => native.invoke('capture_pick_source', { fresh: true }),
-        edit: (id) => (waylandLayer
-          ? editPortalRegion(id, 'display', { quick: true, onStart: pressGoesTo })
-          : editGnomeRegion(id, { quick: true, onStart: pressGoesTo })).finally(closed),
+        edit: (id) =>
+          (waylandLayer
+            ? editPortalRegion(id, 'display', { quick: true, onStart: pressGoesTo })
+            : editGnomeRegion(id, { quick: true, onStart: pressGoesTo })
+          ).finally(closed),
         scan: async (sourceId, crop) => {
           await processView(await native.snapshot())
           for (let attempt = 0; handling || pendingView; attempt++) {
@@ -3316,9 +3455,13 @@ async function quickShot() {
           }
           log({ check: 'quick-shot', display: sourceId, crop, editor: waylandLayer ? 'wayland-layer' : 'gnome-shell' })
           try {
-            return await performScan({ generation: generation.current, sourceId,
+            return await performScan({
+              generation: generation.current,
+              sourceId,
               source: { sourceId, kind: 'display', name: 'Quick Shot' },
-              request: { source_id: sourceId, crop }, detached: true })
+              request: { source_id: sourceId, crop },
+              detached: true
+            })
           } finally {
             await native.panel('log', 'show').catch(() => undefined)
           }
@@ -3486,10 +3629,7 @@ const BACKEND_WAIT_MS = 35000
 async function whenBackendReady() {
   if (state.yomitan.ready || gnomeBackendReady) return
   if (!state.yomitan.error) {
-    await Promise.race([
-      backendSettled,
-      new Promise((resolve) => setTimeout(resolve, BACKEND_WAIT_MS))
-    ])
+    await Promise.race([backendSettled, new Promise((resolve) => setTimeout(resolve, BACKEND_WAIT_MS))])
   }
   if (!state.yomitan.ready && !gnomeBackendReady) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
 }
@@ -3514,10 +3654,9 @@ async function handleRelay(from, payload, overLane = false) {
   const answer = (message) => (overLane && appLane.send(from, message) ? undefined : native.relay(from, message))
   try {
     await whenBackendReady()
-    const result =
-      dictionarySetup?.handles(payload.message?.action)
-        ? await dictionarySetup.handle(payload.message.params)
-        : payload.message?.action === '__storage'
+    const result = dictionarySetup?.handles(payload.message?.action)
+      ? await dictionarySetup.handle(payload.message.params)
+      : payload.message?.action === '__storage'
         ? await relayStorage(payload.message.params)
         : await hub.message(
             { id: `relay:${from}`, win: window, events: { onMessage: { listeners: new Set() } } },
@@ -3552,7 +3691,11 @@ async function openDictionaryPage(url) {
   }
   if (web) {
     await native.invoke('plugin:shell|open', { path: web }).catch((error) =>
-      native.report({ check: 'dictionary-link-failed', url: web.slice(0, 300), error: String(error?.message ?? error) })
+      native.report({
+        check: 'dictionary-link-failed',
+        url: web.slice(0, 300),
+        error: String(error?.message ?? error)
+      })
     )
     return
   }
@@ -3568,7 +3711,13 @@ async function openDictionaryPage(url) {
 }
 
 async function startYomitan() {
-  void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase: 'starting', settingsReady: false, message: 'Starting Yomitan…' })
+  void native.report({
+    check: 'dictionary-readiness',
+    engine: 'yomitan',
+    phase: 'starting',
+    settingsReady: false,
+    message: 'Starting Yomitan…'
+  })
   if (!hub) throw Error('Extension host shim did not install')
 
   await import('/spike/network-bundle.js')
@@ -3598,7 +3747,11 @@ async function startYomitan() {
     chrome.runtime.onMessage.addListener(listener)
     setTimeout(() => {
       chrome.runtime.onMessage.removeListener(listener)
-      reject(Error('Dictionary backend did not signal readiness within two minutes. Open dictionary settings or choose the engine again to retry.'))
+      reject(
+        Error(
+          'Dictionary backend did not signal readiness within two minutes. Open dictionary settings or choose the engine again to retry.'
+        )
+      )
     }, 120000)
   })
   const backend = document.createElement('iframe')
@@ -3657,15 +3810,30 @@ async function startYomitan() {
       const options = await api('optionsGetFull')
       const profile = options.profiles[options.profileCurrent]
       const enabled = profile?.options?.dictionaries ?? []
-      const phase = dictionaries.some((dictionary) => enabled.some((entry) => entry.name === dictionary.title && entry.enabled)) ? 'ready' : 'setup-needed'
+      const phase = dictionaries.some((dictionary) =>
+        enabled.some((entry) => entry.name === dictionary.title && entry.enabled)
+      )
+        ? 'ready'
+        : 'setup-needed'
       if (phase === lastReadiness) return
       lastReadiness = phase
-      void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase, settingsReady: true,
-        message: phase === 'ready' ? 'Yomitan is ready.' : `Open Yomitan settings to import and enable ${aDictionaryFor(languageOf(native.getSetting('language')).name)}.` })
-    } catch { /* The backend startup error is reported separately. */ }
+      void native.report({
+        check: 'dictionary-readiness',
+        engine: 'yomitan',
+        phase,
+        settingsReady: true,
+        message:
+          phase === 'ready'
+            ? 'Yomitan is ready.'
+            : `Open Yomitan settings to import and enable ${aDictionaryFor(languageOf(native.getSetting('language')).name)}.`
+      })
+    } catch {
+      /* The backend startup error is reported separately. */
+    }
   }
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.action === 'applicationDatabaseUpdated' || message.action === 'applicationOptionsUpdated') void refreshReadiness()
+    if (message.action === 'applicationDatabaseUpdated' || message.action === 'applicationOptionsUpdated')
+      void refreshReadiness()
   })
   await refreshReadiness()
   // Each account looks words up through its own Yomitan profile (ui/yomitan-profiles.ts).
@@ -3802,9 +3970,7 @@ function dismissPopup() {
     if (host && (extensionPopupRect || host.isPopupVisible?.())) host.dismiss()
     return
   }
-  window.dispatchEvent(
-    new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
-  )
+  window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true }))
 }
 
 // ---------------------------------------------------------------------------
@@ -3846,13 +4012,18 @@ function enginePopupShowing() {
 }
 
 async function capturePopups() {
-  const { observePopups, replayIntoPopup, setPopupTarget, trackPopupHover: track } = await import('/spike/popup-bridge.js')
+  const {
+    observePopups,
+    replayIntoPopup,
+    setPopupTarget,
+    trackPopupHover: track
+  } = await import('/spike/popup-bridge.js')
   replayPopupPointer = replayIntoPopup
   trackPopupHover = track
   setYomitanPopupTarget = setPopupTarget
   let remote = null
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
-    const {installGnomePopupTransport} = await import('./gnome-popup-transport.js')
+    const { installGnomePopupTransport } = await import('./gnome-popup-transport.js')
     remote = await installGnomePopupTransport(window, hub, () => {
       // The backend is already running. Let the native popup host complete its
       // API handshake before this frontend asks for a remote PopupFactory.
@@ -3990,12 +4161,7 @@ async function stepEntry(frame, scroller, step) {
   }
   if (!handled) {
     const doc = frame.contentDocument
-    jumpDefinition(
-      scroller,
-      doc.getElementById('content-body') ?? scroller,
-      [...doc.querySelectorAll('.entry')],
-      step
-    )
+    jumpDefinition(scroller, doc.getElementById('content-body') ?? scroller, [...doc.querySelectorAll('.entry')], step)
   }
   setTimeout(() => {
     log({
@@ -4057,10 +4223,10 @@ function jumpDefinition(scroller, body, targets, step) {
   const next = Math.max(0, Math.min(targets.length - 1, current + step))
   const to = Math.min(max, next === 0 ? 0 : Math.max(0, offsets[next] - 6))
   animateScroll(scroller, to)
-  targets[next].animate?.(
-    [{ backgroundColor: 'rgba(125, 211, 252, 0.2)' }, { backgroundColor: 'transparent' }],
-    { duration: 700, easing: 'ease-out' }
-  )
+  targets[next].animate?.([{ backgroundColor: 'rgba(125, 211, 252, 0.2)' }, { backgroundColor: 'transparent' }], {
+    duration: 700,
+    easing: 'ease-out'
+  })
 }
 
 function animateScroll(scroller, to) {
@@ -4145,7 +4311,11 @@ function hitRects() {
   const shown = popupShown() || remote !== null
   if (!shown) freeClickTaken = false
   catching =
-    gated && !hoverLookup() && shown && !(freeClickTaken && gnomeOverlay?.shared) && (controller?.mode ?? 'idle') === 'idle'
+    gated &&
+    !hoverLookup() &&
+    shown &&
+    !(freeClickTaken && gnomeOverlay?.shared) &&
+    (controller?.mode ?? 'idle') === 'idle'
   if (catching) {
     const whole = { x: state.origin.x, y: state.origin.y, width: innerWidth, height: innerHeight }
     for (const rect of exceptRects(whole, remote ?? [])) rects.push({ ...rect, focus: false, shift: false })
@@ -4384,9 +4554,9 @@ let overlayTextShown = null
  */
 async function onBrowserScan({ request, frame, reason, session }) {
   const answer = (payload) =>
-    native.invoke('browser_scan_result', { request, result: null, error: null, ...payload }).catch((error) =>
-      log({ check: 'browser-scan-answer-failed', error: String(error?.message ?? error) })
-    )
+    native
+      .invoke('browser_scan_result', { request, result: null, error: null, ...payload })
+      .catch((error) => log({ check: 'browser-scan-answer-failed', error: String(error?.message ?? error) }))
   const auto = reason === 'auto'
   publish({ scanning: true, status: 'Reading the picture from your browser\u2026' })
   if (!auto) activity(scanActivity.recognising(ocrModeNow()))
@@ -4412,7 +4582,9 @@ async function onBrowserScan({ request, frame, reason, session }) {
     const lines = browserLines(result, grouping, frame.info)
     publish({
       scanning: false,
-      status: lines.length ? `Read ${lines.length} line${lines.length === 1 ? '' : 's'} from your browser` : 'No text in that picture'
+      status: lines.length
+        ? `Read ${lines.length} line${lines.length === 1 ? '' : 's'} from your browser`
+        : 'No text in that picture'
     })
     log({ check: 'browser-scan', reason, lines: lines.length, published: published.length, engine: ocrModeNow() })
     await answer({
@@ -4461,7 +4633,8 @@ function browserLines(result, grouping, info) {
     const texts = annotation.lineTexts
     if (annotation.linePolygons?.length && texts?.length === annotation.linePolygons.length) {
       annotation.linePolygons.forEach((polygon, line) => {
-        if (texts[line]?.trim()) lines.push({ text: texts[line], points: polygon.map(([x, y]) => at(x, y)), vertical, group, surface })
+        if (texts[line]?.trim())
+          lines.push({ text: texts[line], points: polygon.map(([x, y]) => at(x, y)), vertical, group, surface })
       })
       return
     }
@@ -4532,7 +4705,12 @@ async function publishRegions() {
 }
 
 function startRegionLoop() {
-  setInterval(() => { void refreshLayerPointer(); syncReadingHold(); syncHints(); void publishRegions() }, 100)
+  setInterval(() => {
+    void refreshLayerPointer()
+    syncReadingHold()
+    syncHints()
+    void publishRegions()
+  }, 100)
 }
 
 async function refreshLayerPointer() {
@@ -4544,15 +4722,22 @@ async function refreshLayerPointer() {
   layerPointerPolling = true
   try {
     const point = await native.invoke('linux_window_geometry', {
-      operation: 'pointer', sourceId: watchedSourceId ?? '', windowAddress: null
+      operation: 'pointer',
+      sourceId: watchedSourceId ?? '',
+      windowAddress: null
     })
     if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return
-    const inside = hitRects().some(r => point.x >= r.x && point.y >= r.y && point.x < r.x + r.width && point.y < r.y + r.height)
+    const inside = hitRects().some(
+      (r) => point.x >= r.x && point.y >= r.y && point.x < r.x + r.width && point.y < r.y + r.height
+    )
     layerPointerExit.sample(inside)
     if (inside) renderer.setPointer(point.x - state.origin.x, point.y - state.origin.y)
     syncReadingHold()
-  } catch { /* Optional compositor IPC: GTK surface edges remain the fallback. */ }
-  finally { layerPointerPolling = false }
+  } catch {
+    /* Optional compositor IPC: GTK surface edges remain the fallback. */
+  } finally {
+    layerPointerPolling = false
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -4651,20 +4836,27 @@ await native.watchCapabilities(async (caps) => {
     lookupOnHover = caps.overlay?.lookupOnHover === true
     waylandSession = caps.session?.backend === 'wayland'
   }
-  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
+  if (
+    window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+    (caps.session.nativeLayerShell || caps.session.nativeGamescope) &&
+    !waylandLayer
+  ) {
     waylandLayer = true
     if (caps.session.backend === 'wayland' && caps.session.nativeLayerShell) {
       // Hyprland's IPC and KWin's script bridge both report the pointer over the game.
       hyprlandPointer = ['Hyprland', 'KDE'].includes(caps.session.compositor)
       const { installWaylandPointerExit } = await import('./wayland-pointer-exit.js')
       const pointerExit = installWaylandPointerExit(window, {
-        leave: () => { renderer.clearPointer(); syncReadingHold() },
+        leave: () => {
+          renderer.clearPointer()
+          syncReadingHold()
+        },
         dismiss: () => {
           if (!controllerHold && !controller.drivesLookups && !state.regionSelecting) dismissPopup()
         }
       })
       layerPointerExit = pointerExit
-      await native.listen('wayland-layer-pointer', ({payload}) => {
+      await native.listen('wayland-layer-pointer', ({ payload }) => {
         if (payload === true) pointerExit.enter()
         else if (payload === false) pointerExit.leave()
       })
@@ -4673,23 +4865,51 @@ await native.watchCapabilities(async (caps) => {
     // Where nothing can report Shift to the overlay (KDE Plasma without Legacy X11 App Support),
     // its text looks up on hover. Asked live: the Shift feed can come up after startup.
     await installLinuxScanInput(window, { passive: true, hover: () => lookupOnHover })
-    window.addEventListener('pointerdown', () => { surfaceButtonDown = true }, true)
-    for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { surfaceButtonDown = false }, true)
+    window.addEventListener(
+      'pointerdown',
+      () => {
+        surfaceButtonDown = true
+      },
+      true
+    )
+    for (const type of ['pointerup', 'pointercancel'])
+      window.addEventListener(
+        type,
+        () => {
+          surfaceButtonDown = false
+        },
+        true
+      )
     window.addEventListener('resize', () => {
       state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
       draw()
     })
   }
-  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session.backend === 'wayland' && !caps.session.nativeLayerShell) {
+  if (
+    window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+    caps.session.backend === 'wayland' &&
+    !caps.session.nativeLayerShell
+  ) {
     waylandDisabled = true
     if (!gnomeOverlay && caps.session.compositor === 'GNOME') {
       const { installGnomeOverlay } = await import('./gnome-overlay.js')
-      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && (gnomeControllerWords || overlayTextOn() && state.flags.overlayVisible), log, {renderer,setting})
+      gnomeOverlay = await installGnomeOverlay(
+        native,
+        state,
+        () => !state.regionSelecting && (gnomeControllerWords || (overlayTextOn() && state.flags.overlayVisible)),
+        log,
+        { renderer, setting }
+      )
       const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
       await installLinuxScanInput(window, { passive: true })
     }
     renderer.clear()
-    log({ check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled', reason: caps.session.nativeGnomeShell ? 'GNOME Shell places the shared annotation WebView without keyboard focus.' : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.' })
+    log({
+      check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled',
+      reason: caps.session.nativeGnomeShell
+        ? 'GNOME Shell places the shared annotation WebView without keyboard focus.'
+        : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.'
+    })
   }
 
   if (caps.os === 'windows')
@@ -4745,7 +4965,10 @@ await native.listen('source-bounds', async ({ payload }) => {
   state.sourceBounds = bounds
   // Quick Shot text belongs to the display region it was read from, not to this window.
   if (state.detached) return
-  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled) { draw(); return }
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled) {
+    draw()
+    return
+  }
 
   try {
     const origin = sourceDisplay(bounds, await native.desktop())
@@ -4816,7 +5039,14 @@ window.__kimochiOverlayState = () => ({
   liveOverlay: setting('liveOverlayEnabled'),
   visibility: document.visibilityState,
   origin: state.origin,
-  info: state.info ? { source: state.info.source_id, crop: state.info.crop_pixels, bounds: state.info.source_bounds, full: [state.info.full_width, state.info.full_height] } : null,
+  info: state.info
+    ? {
+        source: state.info.source_id,
+        crop: state.info.crop_pixels,
+        bounds: state.info.source_bounds,
+        full: [state.info.full_width, state.info.full_height]
+      }
+    : null,
   geometry: state.geometry,
   overlayVisible: state.flags.overlayVisible,
   sourceBounds: state.sourceBounds,
@@ -4824,7 +5054,11 @@ window.__kimochiOverlayState = () => ({
   popupShown: popupShown(),
   catching,
   gateOpen,
-  regions: hitRects().map(({ x, y, width, height, shift, focus }) => [x, y, width, height, shift ? 'shift' : focus ? 'focus' : ''].map((v) => typeof v === 'number' ? Math.round(v) : v))
+  regions: hitRects().map(({ x, y, width, height, shift, focus }) =>
+    [x, y, width, height, shift ? 'shift' : focus ? 'focus' : ''].map((v) =>
+      typeof v === 'number' ? Math.round(v) : v
+    )
+  )
 })
 
 // Gaming Mode: while the controller drives Kimochi, Steam is paused, and the Deck's controller
@@ -4833,7 +5067,19 @@ window.__kimochiOverlayState = () => ({
 // itself, so none of that may reach the page: Hachidori would act on the keys and look up, or
 // cancel a lookup, wherever that mouse is. The lookups' own synthetic events are not trusted, so
 // they still pass.
-for (const type of ['keydown', 'keyup', 'keypress', 'mousemove', 'mousedown', 'mouseup', 'click', 'wheel', 'pointermove', 'pointerdown', 'pointerup']) {
+for (const type of [
+  'keydown',
+  'keyup',
+  'keypress',
+  'mousemove',
+  'mousedown',
+  'mouseup',
+  'click',
+  'wheel',
+  'pointermove',
+  'pointerdown',
+  'pointerup'
+]) {
   window.addEventListener(
     type,
     (event) => {
@@ -4927,7 +5173,13 @@ window.addEventListener(
   true
 )
 // Hachidori reads `mousemove` (its descriptor's `pointerEvents`).
-window.addEventListener('mousemove', (event) => { if (event.isTrusted) rekeyForHover(event) }, true)
+window.addEventListener(
+  'mousemove',
+  (event) => {
+    if (event.isTrusted) rekeyForHover(event)
+  },
+  true
+)
 
 /** Whether the native feed's last sample said the pointer rests (`hover`, `state::HoverIntent`). */
 let feedHover = false
@@ -4959,9 +5211,15 @@ function rekeyForHover(event) {
     metaKey: event.metaKey,
     [property]: true
   }
-  const keyed = event.type === 'mousemove'
-    ? new MouseEvent('mousemove', init)
-    : new PointerEvent('pointermove', { ...init, pointerType: event.pointerType, isPrimary: event.isPrimary, pointerId: event.pointerId })
+  const keyed =
+    event.type === 'mousemove'
+      ? new MouseEvent('mousemove', init)
+      : new PointerEvent('pointermove', {
+          ...init,
+          pointerType: event.pointerType,
+          isPrimary: event.isPrimary,
+          pointerId: event.pointerId
+        })
   ;(event.target ?? window).dispatchEvent(keyed)
 }
 
@@ -5039,12 +5297,7 @@ await native.listen('pointer', ({ payload }) => {
   if (!state.yomitan.ready || controller.drivesLookups) return
   // Hover lookup: a resting pointer looks up as if the lookup key were held (not over a pop-up).
   const scanned = withHoverKey(payload, hoverLookup(), native.getSetting('overlayLookupKey'), overPopupAt(local))
-  const init = scanPointerInit(
-    scanned,
-    local,
-    performance.now() - lastRealPointer,
-    lastRealModifiers
-  )
+  const init = scanPointerInit(scanned, local, performance.now() - lastRealPointer, lastRealModifiers)
   // Over Yomitan's own popup the sample is the popup's: its scanner opens a nested popup for the
   // word under it. The page's scanner would only ignore it.
   if (init && !extensionHosted && replayPopupPointer?.(livePopups, local.x, local.y, init)) {
@@ -5057,7 +5310,7 @@ await native.listen('pointer', ({ payload }) => {
     if (extensionHosted) renderer.flushPointer()
     // Into the engine's pop-up, too: Hachidori opens a nested lookup from a `mousemove` listener
     // on its pop-up inside its shadow root, which an event at the shadow host never reaches (#94).
-    const target = extensionHosted ? deepElementFromPoint(document, local.x, local.y) ?? window : window
+    const target = extensionHosted ? (deepElementFromPoint(document, local.x, local.y) ?? window) : window
     // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
     // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
     const types = window.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
@@ -5065,13 +5318,16 @@ await native.listen('pointer', ({ payload }) => {
     // move that only adds a modifier at the point of the last one (a Safari bug it works around).
     // A plain move a pixel off first makes this one a move. Wayland only: there the last move the
     // engine saw is often the surface's own, at this very point, as the words started taking it.
-    const prime = waylandLayer && init.shiftKey && !lastScanShift
-      ? { ...init, shiftKey: false, clientX: init.clientX + 1, screenX: init.screenX + 1, kimochiPrime: true } : null
+    const prime =
+      waylandLayer && init.shiftKey && !lastScanShift
+        ? { ...init, shiftKey: false, clientX: init.clientX + 1, screenX: init.screenX + 1, kimochiPrime: true }
+        : null
     for (const type of types) {
       // Composed, so a move dispatched inside a shadow root still reaches the document's listeners.
-      const make = (options) => type === 'mousemove'
-        ? new MouseEvent(type, { ...options, composed: true })
-        : new PointerEvent(type, { ...options, composed: true })
+      const make = (options) =>
+        type === 'mousemove'
+          ? new MouseEvent(type, { ...options, composed: true })
+          : new PointerEvent(type, { ...options, composed: true })
       if (prime) target.dispatchEvent(make(prime))
       target.dispatchEvent(make(init))
     }
@@ -5084,7 +5340,7 @@ await native.listen('pointer', ({ payload }) => {
   noteScanFeed(payload, init !== null)
 })
 
-await native.listen('overlay-reading-popup', ({payload}) => {
+await native.listen('overlay-reading-popup', ({ payload }) => {
   remoteReadingPopup = payload?.visible === true
   remoteReadingRects = remoteReadingPopup && Array.isArray(payload.rects) ? payload.rects : []
   syncReadingHold()
@@ -5146,11 +5402,22 @@ const apiEngine =
       : startYomitan()
 ).catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
-  if (hostedEngine === 'yomitan') void native.report({ check: 'dictionary-readiness', engine: 'yomitan',
-    phase: 'failed', settingsReady: false, message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.' })
+  if (hostedEngine === 'yomitan')
+    void native.report({
+      check: 'dictionary-readiness',
+      engine: 'yomitan',
+      phase: 'failed',
+      settingsReady: false,
+      message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.'
+    })
   settleBackend()
   log({
-    check: hostedEngine === NO_ENGINE ? 'dictionary-none' : extensionHosted ? 'dictionary-unavailable' : 'yomitan-unavailable',
+    check:
+      hostedEngine === NO_ENGINE
+        ? 'dictionary-none'
+        : extensionHosted
+          ? 'dictionary-unavailable'
+          : 'yomitan-unavailable',
     engine: hostedEngine,
     error: state.yomitan.error,
     note: 'Scanning and text output still work; dictionary lookup does not.'
@@ -5176,21 +5443,49 @@ window.kimochiOverlay = {
 
 // GNOME hosts the unchanged controller UI in a bounded own window. The OCR
 // coordinator still owns scanning, settings, and the one dictionary backend.
-if(window.__KIMOCHI_PLATFORM__?.os==='linux') {
-  await native.listen('gnome-controller-command',async({payload:p})=>{
-    if(!gnomeOverlay)return
-    let result,error
+if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+  await native.listen('gnome-controller-command', async ({ payload: p }) => {
+    if (!gnomeOverlay) return
+    let result, error
     try {
-      switch(p.action) {
-        case 'snapshot':result={hasText:state.annotations.length>0,autoOcr:Boolean(state.flags.autoOcrEnabled),autoAvailable:!isQuickShot(),scanId:state.appliedScanId,settings:{controllerButtons:setting('controllerButtons'),appearance:setting('appearance')}};break
-        case 'scan':await onAction('triggerScan');result=true;break
-        case 'action':if(p.name!=='toggleAutoOcr')throw new Error('Invalid controller action');await onAction(p.name);break
-        case 'dictionary':if(p.apiAction!=='parseText')throw new Error('Invalid dictionary action');if(!extensionApi)throw new Error('Word splitting needs Yomitan; using the segmenter');result=await extensionApi(p.apiAction,p.params);break
-        case 'text':await setOverlayText(Boolean(p.visible));await gnomeOverlay.update();break
-        case 'hold':gnomeControllerWords=Boolean(p.hold);holdForController(gnomeControllerWords);await gnomeOverlay.flush();break
-        default:throw new Error('Unknown controller command')
+      switch (p.action) {
+        case 'snapshot':
+          result = {
+            hasText: state.annotations.length > 0,
+            autoOcr: Boolean(state.flags.autoOcrEnabled),
+            autoAvailable: !isQuickShot(),
+            scanId: state.appliedScanId,
+            settings: { controllerButtons: setting('controllerButtons'), appearance: setting('appearance') }
+          }
+          break
+        case 'scan':
+          await onAction('triggerScan')
+          result = true
+          break
+        case 'action':
+          if (p.name !== 'toggleAutoOcr') throw new Error('Invalid controller action')
+          await onAction(p.name)
+          break
+        case 'dictionary':
+          if (p.apiAction !== 'parseText') throw new Error('Invalid dictionary action')
+          if (!extensionApi) throw new Error('Word splitting needs Yomitan; using the segmenter')
+          result = await extensionApi(p.apiAction, p.params)
+          break
+        case 'text':
+          await setOverlayText(Boolean(p.visible))
+          await gnomeOverlay.update()
+          break
+        case 'hold':
+          gnomeControllerWords = Boolean(p.hold)
+          holdForController(gnomeControllerWords)
+          await gnomeOverlay.flush()
+          break
+        default:
+          throw new Error('Unknown controller command')
       }
-    }catch(e){error=String(e)}
-    await window.__TAURI__.event.emit('gnome-controller-response',{id:p.id,result,error})
+    } catch (e) {
+      error = String(e)
+    }
+    await window.__TAURI__.event.emit('gnome-controller-response', { id: p.id, result, error })
   })
 }

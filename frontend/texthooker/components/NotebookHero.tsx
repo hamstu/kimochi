@@ -6,18 +6,18 @@
  * crop cut the heads off portraits. Presentational only: it imports no notebook store, so the
  * popover window can use it.
  */
-import type { ReactNode } from "react";
-import { Box, MapPin, UserRound } from "lucide-react";
-import "../notebook-hero.css";
-import { useTextLang } from "../../bridge/useTextLang";
+import type { ReactNode } from 'react'
+import { Box, MapPin, UserRound } from 'lucide-react'
+import '../notebook-hero.css'
+import { useTextLang } from '../../bridge/useTextLang'
 
-export type HeroKind = "person" | "place" | "thing";
+export type HeroKind = 'person' | 'place' | 'thing'
 
 const KIND_ICON: Record<HeroKind, ReactNode> = {
   person: <UserRound />,
   place: <MapPin />,
-  thing: <Box />,
-};
+  thing: <Box />
+}
 
 export function NotebookHero({
   imageUrl,
@@ -26,27 +26,26 @@ export function NotebookHero({
   reading,
   caption,
   actions,
-  size = "popover",
+  size = 'popover'
 }: {
-  imageUrl: string | null;
-  kind: HeroKind;
-  name: string;
-  reading?: string;
+  imageUrl: string | null
+  kind: HeroKind
+  name: string
+  reading?: string
   /** A short line under the name (e.g. the kind, in the editor). */
-  caption?: ReactNode;
+  caption?: ReactNode
   /** Top-right controls, drawn over the hero. */
-  actions?: ReactNode;
-  size?: "popover" | "editor";
+  actions?: ReactNode
+  size?: 'popover' | 'editor'
 }) {
-  const textLang = useTextLang();
-  const monogram =
-    kind === "person" && name.trim() ? Array.from(name.trim())[0] : null;
+  const textLang = useTextLang()
+  const monogram = kind === 'person' && name.trim() ? Array.from(name.trim())[0] : null
   return (
     <header
       className="nb-hero"
       data-size={size}
-      data-image={imageUrl ? "" : undefined}
-      data-actions={actions ? "" : undefined}
+      data-image={imageUrl ? '' : undefined}
+      data-actions={actions ? '' : undefined}
       data-kind={kind}
     >
       <span className="nb-hero-portrait">
@@ -76,5 +75,5 @@ export function NotebookHero({
         ) : null}
       </div>
     </header>
-  );
+  )
 }

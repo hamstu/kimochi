@@ -44,13 +44,8 @@ const HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(5);
 const RECENT_EVENTS: usize = 40;
 /// The logs a bundle includes, when they exist: the diagnostics record (and its rotated copy),
 /// Auto OCR's scheduling trace and sync's log.
-const LOGS: &[&str] = &[
-    "evidence.jsonl",
-    "evidence.1.jsonl",
-    "auto-ocr-trace.jsonl",
-    "auto-ocr-trace.1.jsonl",
-    crate::sync_log::FILE,
-];
+const LOGS: &[&str] =
+    &["evidence.jsonl", "evidence.1.jsonl", "auto-ocr-trace.jsonl", "auto-ocr-trace.1.jsonl", crate::sync_log::FILE];
 /// The settings a report names. Never the whole file: it holds account and service tokens.
 const SETTINGS: &[&str] = &[
     "language",
@@ -110,9 +105,7 @@ pub fn install(app: &tauri::AppHandle) {
 }
 
 fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
 fn verbose_file(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
@@ -141,9 +134,7 @@ static HEARTBEAT_STARTED: std::sync::Once = std::sync::Once::new();
 fn start_heartbeat(app: &tauri::AppHandle, restored: Option<u64>) {
     HEARTBEAT_STARTED.call_once(|| {
         let app = app.clone();
-        let _ = std::thread::Builder::new()
-            .name("kimochi-vitals".into())
-            .spawn(move || heartbeat(&app, restored));
+        let _ = std::thread::Builder::new().name("kimochi-vitals".into()).spawn(move || heartbeat(&app, restored));
     });
 }
 
@@ -241,9 +232,7 @@ pub fn debug_verbose_set(app: tauri::AppHandle, state: tauri::State<Shared>, ena
 #[tauri::command]
 pub async fn debug_report(app: tauri::AppHandle, state: tauri::State<'_, Shared>) -> Result<Value, String> {
     let service = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || collect(&app, &service))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || collect(&app, &service)).await.map_err(|e| e.to_string())
 }
 
 /// `debug_bundle_save(markdown) -> {saved, path?}`: asks where to save, then writes
@@ -289,10 +278,7 @@ pub fn bundle(app: &tauri::AppHandle, service: &Shared, markdown: &str) -> Resul
     let report = collect(app, service);
     let mut files = vec![
         ("report.md".to_string(), redact_text(markdown).into_bytes()),
-        (
-            "report.json".to_string(),
-            serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?,
-        ),
+        ("report.json".to_string(), serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?),
     ];
     let directory = crate::data_dir(app)?;
     for name in LOGS {
@@ -329,11 +315,7 @@ fn collect(app: &tauri::AppHandle, service: &Shared) -> Value {
         .collect::<Vec<_>>();
     let (session, recent) = {
         let view = service.view.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let source = service
-            .selection
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
+        let source = service.selection.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         let session = json!({
             // The kind of source only (`window:…`, `screen:…`): a window's name can be anything.
             "sourceKind": source.as_deref().map(|id| id.split(':').next().unwrap_or("")),
@@ -459,10 +441,7 @@ mod hardware {
             .and_then(|out| serde_json::from_slice::<serde_json::Value>(&out.stdout).ok())
             .and_then(|value| {
                 value["SPDisplaysDataType"].as_array().map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item["sppci_model"].as_str().map(str::to_string))
-                        .collect()
+                    items.iter().filter_map(|item| item["sppci_model"].as_str().map(str::to_string)).collect()
                 })
             })
             .unwrap_or_default();
@@ -482,8 +461,7 @@ mod hardware {
     use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 
     /// The display adapters' device class.
-    const DISPLAY_CLASS: &str =
-        r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+    const DISPLAY_CLASS: &str = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 
     fn registry_string(key: &str, value: &str) -> Option<String> {
         let (key, value) = (HSTRING::from(key), HSTRING::from(value));
@@ -510,10 +488,8 @@ mod hardware {
     }
 
     pub fn probe() -> Hardware {
-        let mut status = MEMORYSTATUSEX {
-            dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
-            ..Default::default()
-        };
+        let mut status =
+            MEMORYSTATUSEX { dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
         let memory = unsafe { GlobalMemoryStatusEx(&mut status) }.ok().map(|_| status.ullTotalPhys);
         // Adapters are numbered subkeys (0000, 0001, …); a gap ends the list in practice.
         let gpus = (0..16)
@@ -566,11 +542,7 @@ mod hardware {
                     .collect()
             })
             .unwrap_or_default();
-        Hardware {
-            cpu: field(&cpuinfo, "model name").or_else(|| field(&cpuinfo, "Model")),
-            memory,
-            gpus,
-        }
+        Hardware { cpu: field(&cpuinfo, "model name").or_else(|| field(&cpuinfo, "Model")), memory, gpus }
     }
 }
 
@@ -614,8 +586,19 @@ fn log_tail(path: &Path, limit: u64) -> Option<String> {
 fn secret_key(key: &str) -> bool {
     let key = key.to_ascii_lowercase().replace(['-', '_'], "");
     const WORDS: &[&str] = &[
-        "token", "secret", "password", "passwd", "apikey", "authorization", "cookie", "credential",
-        "privatekey", "sessionid", "jwt", "bearer", "signature",
+        "token",
+        "secret",
+        "password",
+        "passwd",
+        "apikey",
+        "authorization",
+        "cookie",
+        "credential",
+        "privatekey",
+        "sessionid",
+        "jwt",
+        "bearer",
+        "signature",
     ];
     WORDS.iter().any(|word| key.contains(word)) || key == "key" || key == "auth" || key.ends_with("key")
 }
@@ -682,7 +665,11 @@ pub fn redact_text(text: &str) -> String {
         .0
         .replace_all(&out, |caps: &regex::Captures| {
             let found = &caps[0];
-            if found.len() >= 32 { "[redacted]".to_string() } else { found.to_string() }
+            if found.len() >= 32 {
+                "[redacted]".to_string()
+            } else {
+                found.to_string()
+            }
         })
         .into_owned()
 }
@@ -751,22 +738,13 @@ fn now() -> time::OffsetDateTime {
 }
 
 fn now_rfc3339() -> String {
-    now()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_default()
+    now().format(&time::format_description::well_known::Rfc3339).unwrap_or_default()
 }
 
 /// `20261027-1742` (UTC), for the bundle's file name.
 fn stamp() -> String {
     let t = now();
-    format!(
-        "{:04}{:02}{:02}-{:02}{:02}",
-        t.year(),
-        u8::from(t.month()),
-        t.day(),
-        t.hour(),
-        t.minute()
-    )
+    format!("{:04}{:02}{:02}-{:02}{:02}", t.year(), u8::from(t.month()), t.day(), t.hour(), t.minute())
 }
 
 fn dos_time() -> (u16, u16) {

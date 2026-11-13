@@ -66,7 +66,10 @@ export function BrowserEngines(): JSX.Element {
         id: mode,
         name: ocrModeInfo(mode).name,
         // As the sidebar says it: Cloud OCR without an account is listed only while selected.
-        tagline: mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : ocrModeInfo(mode).tagline,
+        tagline:
+          mode === 'cloud' && !capabilities.cloudAccess
+            ? 'Sign in under Settings → Account'
+            : ocrModeInfo(mode).tagline,
         runs: ocrModeInfo(mode).runs,
         icon: await iconOf(mode).catch(() => ({ monogram: ocrModeInfo(mode).name.slice(0, 1) }))
       }))

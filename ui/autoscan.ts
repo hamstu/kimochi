@@ -380,8 +380,7 @@ export interface AutoScanDeps<Frame = unknown> {
   generation?(): number
 }
 
-export type TickOutcome =
-  'paused' | 'busy' | 'backoff' | 'unavailable' | 'observed' | 'requested' | 'queued' | 'error'
+export type TickOutcome = 'paused' | 'busy' | 'backoff' | 'unavailable' | 'observed' | 'requested' | 'queued' | 'error'
 
 interface Candidate<Frame> {
   /** `stabilityKey` of the observed text: what settling compares. */
@@ -732,23 +731,19 @@ export class AutoScanner<Frame = unknown> {
   ) {
     this.settings = migrateAutoScanSettings(settings)
     this.interval = this.settings.pollInterval
-    this.keeper = new FrameKeeper(
-      deps.retainFrame?.bind(deps),
-      deps.releaseFrame?.bind(deps),
-      (operation, error) => {
-        this.counters.pinFailures++
-        // Surfaced rather than swallowed: a refused retain means the frame a
-        // candidate is settling on is not protected, and the recognition that
-        // follows will fail against an evicted image. That failure is real and
-        // the backoff should see it.
-        this.emit({
-          type: 'error',
-          stage: `pin-${operation}`,
-          message: typeof error === 'string' ? error : String((error as Error)?.message ?? error),
-          backoffMs: 0
-        })
-      }
-    )
+    this.keeper = new FrameKeeper(deps.retainFrame?.bind(deps), deps.releaseFrame?.bind(deps), (operation, error) => {
+      this.counters.pinFailures++
+      // Surfaced rather than swallowed: a refused retain means the frame a
+      // candidate is settling on is not protected, and the recognition that
+      // follows will fail against an evicted image. That failure is real and
+      // the backoff should see it.
+      this.emit({
+        type: 'error',
+        stage: `pin-${operation}`,
+        message: typeof error === 'string' ? error : String((error as Error)?.message ?? error),
+        backoffMs: 0
+      })
+    })
   }
 
   // --- inspection ----------------------------------------------------------
@@ -840,10 +835,7 @@ export class AutoScanner<Frame = unknown> {
   updateSettings(settings: AutoScanSettings): void {
     this.settings = migrateAutoScanSettings(settings)
     this.interval = this.settings.adaptivePollingEnabled
-      ? Math.min(
-          Math.max(this.interval, this.settings.adaptivePollMin),
-          this.settings.adaptivePollMax
-        )
+      ? Math.min(Math.max(this.interval, this.settings.adaptivePollMin), this.settings.adaptivePollMax)
       : this.settings.pollInterval
   }
 
@@ -1162,9 +1154,7 @@ export class AutoScanner<Frame = unknown> {
    */
   private observerUnavailable(sample: CaptureSample<Frame>): TickOutcome {
     this.unavailable = true
-    this.unavailableReason =
-      sample.observerError ??
-      "Automatic scanning isn't available on this platform yet."
+    this.unavailableReason = sample.observerError ?? "Automatic scanning isn't available on this platform yet."
     this.stopTimer()
     this.emit({ type: 'status', state: 'unavailable', message: this.unavailableReason })
     return 'unavailable'
@@ -1186,11 +1176,7 @@ export class AutoScanner<Frame = unknown> {
 
   // --- text settling -------------------------------------------------------
 
-  private async observeText(
-    sample: CaptureSample<Frame>,
-    generation: number,
-    at: number
-  ): Promise<TickOutcome> {
+  private async observeText(sample: CaptureSample<Frame>, generation: number, at: number): Promise<TickOutcome> {
     const observation = sample.observation as Observation
     let text = observation.text ?? ''
     let key = stabilityKey(text)
@@ -1210,12 +1196,7 @@ export class AutoScanner<Frame = unknown> {
     // anything: two frames whose pixels differ may differ by the one glyph that
     // changes the sentence.
     const fingerprint = sample.contentFingerprint ?? null
-    if (
-      fingerprint !== null &&
-      fingerprint === this.lastFingerprint &&
-      this.lastKey !== null &&
-      key !== this.lastKey
-    ) {
+    if (fingerprint !== null && fingerprint === this.lastFingerprint && this.lastKey !== null && key !== this.lastKey) {
       this.counters.fingerprintSuppressed++
       key = this.lastKey
       text = this.lastText
@@ -1223,11 +1204,7 @@ export class AutoScanner<Frame = unknown> {
     }
     this.lastFingerprint = fingerprint
 
-    const lineReady = this.lineGate.observe(
-      lines,
-      this.settings.boxTolerancePx,
-      this.settings.stableObservations
-    )
+    const lineReady = this.lineGate.observe(lines, this.settings.boxTolerancePx, this.settings.stableObservations)
     const layout = layoutSignature(lines)
 
     const relation = classify(this.candidate?.key ?? null, key)
@@ -1250,12 +1227,7 @@ export class AutoScanner<Frame = unknown> {
     // eventually arrives.
     if (this.shownKey !== null && (key !== this.shownKey || this.lineMisses.size > 0)) {
       const previousCount = this.shownLines?.length ?? 0
-      const surviving = confirmedCurrentLines(
-        this.shownLines,
-        lines,
-        this.settings.boxTolerancePx,
-        this.lineMisses
-      )
+      const surviving = confirmedCurrentLines(this.shownLines, lines, this.settings.boxTolerancePx, this.lineMisses)
       if (surviving.length) {
         this.shownLines = surviving
         this.shownKey = key
@@ -1348,11 +1320,7 @@ export class AutoScanner<Frame = unknown> {
     this.lastKey = key
     this.lastText = text
     this.lastLines = lines
-    if (
-      previousKey !== null &&
-      previousKey !== key &&
-      sameLayout(previousLines, lines, this.settings.boxTolerancePx)
-    ) {
+    if (previousKey !== null && previousKey !== key && sameLayout(previousLines, lines, this.settings.boxTolerancePx)) {
       this.counters.sameLayoutReplacements++
     }
 
@@ -1425,11 +1393,7 @@ export class AutoScanner<Frame = unknown> {
 
   // --- image settling (explicitly chosen, never a fallback) ----------------
 
-  private async observeImage(
-    sample: CaptureSample<Frame>,
-    generation: number,
-    at: number
-  ): Promise<TickOutcome> {
+  private async observeImage(sample: CaptureSample<Frame>, generation: number, at: number): Promise<TickOutcome> {
     const hash = sample.hash ?? null
     if (!hash) {
       this.recordError('observer', 'image mode needs a native frame hash, which was not produced')
@@ -1437,8 +1401,7 @@ export class AutoScanner<Frame = unknown> {
     }
     this.counters.observations++
     const previous = this.candidate
-    const same =
-      previous !== null && hammingDistance(previous.key, hash) <= this.settings.imageHashThreshold
+    const same = previous !== null && hammingDistance(previous.key, hash) <= this.settings.imageHashThreshold
     if (same) this.counters.hashUnchanged++
     this.lastHash = hash
 
@@ -1643,12 +1606,7 @@ export class AutoScanner<Frame = unknown> {
    * on throughout: what is serialised here is recognising and publishing, not
    * looking at the screen.
    */
-  private async run(
-    job: Candidate<Frame>,
-    reason: string,
-    epoch: number,
-    token: number
-  ): Promise<void> {
+  private async run(job: Candidate<Frame>, reason: string, epoch: number, token: number): Promise<void> {
     try {
       // The frame has to be pinned before it is worth sending. `retain` is a
       // native round trip that may still be queued, or may have been refused
@@ -1660,10 +1618,7 @@ export class AutoScanner<Frame = unknown> {
         // The text was never recognised, so it is still owed a request: let the
         // candidate be settled again rather than leaving it marked as sent.
         this.allowRetry(job)
-        this.recordError(
-          'pin',
-          'the captured frame could not be pinned, so it was not sent for recognition'
-        )
+        this.recordError('pin', 'the captured frame could not be pinned, so it was not sent for recognition')
         return
       }
 
@@ -1749,27 +1704,15 @@ export class AutoScanner<Frame = unknown> {
    */
   private allowRetry(job: Candidate<Frame>): void {
     this.lineGate.cover(null)
-    if (
-      this.candidate &&
-      this.candidate.key === job.key &&
-      this.candidate.generation === job.generation
-    ) {
+    if (this.candidate && this.candidate.key === job.key && this.candidate.generation === job.generation) {
       this.candidate.submitted = false
     }
   }
 
-  private async accept(
-    result: OcrResult,
-    candidate: Candidate<Frame>,
-    reason: string,
-    epoch: number
-  ): Promise<void> {
+  private async accept(result: OcrResult, candidate: Candidate<Frame>, reason: string, epoch: number): Promise<void> {
     if (epoch !== this.epoch) {
       this.counters.staleDiscarded++
-      this.emit(
-        { type: 'skip', reason: 'stale-generation', detail: 'session ended' },
-        candidate.frame
-      )
+      this.emit({ type: 'skip', reason: 'stale-generation', detail: 'session ended' }, candidate.frame)
       return
     }
     // The live generation, not the one the tick started with: the selection can

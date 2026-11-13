@@ -44,7 +44,12 @@ export function createYomitanHarness({ log, openPage, dictionaries = [] }) {
       const r = popup.getFrameRect()
       if (!r?.valid) continue
       rect = rect
-        ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top), right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, r.bottom) }
+        ? {
+            left: Math.min(rect.left, r.left),
+            top: Math.min(rect.top, r.top),
+            right: Math.max(rect.right, r.right),
+            bottom: Math.max(rect.bottom, r.bottom)
+          }
         : { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
     }
     return rect && { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top }
@@ -52,7 +57,9 @@ export function createYomitanHarness({ log, openPage, dictionaries = [] }) {
   let last = null
   const changed = () => {
     const rect = popupRect()
-    const same = (a, b) => (a === null && b === null) || (a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
+    const same = (a, b) =>
+      (a === null && b === null) ||
+      (a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
     if (same(rect, last)) return
     last = rect
     for (const watcher of watchers) watcher({ visible: rect !== null, rect })
@@ -70,9 +77,13 @@ export function createYomitanHarness({ log, openPage, dictionaries = [] }) {
       { prefixWildcardsSupported: false },
       null
     )
-    const duplicate = imported.errors.length === 1 && /is already imported/.test(String(imported.errors[0]?.message ?? imported.errors[0]))
+    const duplicate =
+      imported.errors.length === 1 &&
+      /is already imported/.test(String(imported.errors[0]?.message ?? imported.errors[0]))
     if (imported.errors.length && !duplicate) throw Error(JSON.stringify(imported.errors))
-    const title = imported.result?.title ?? /Dictionary (.*) is already imported/.exec(String(imported.errors[0]?.message ?? imported.errors[0]))?.[1]
+    const title =
+      imported.result?.title ??
+      /Dictionary (.*) is already imported/.exec(String(imported.errors[0]?.message ?? imported.errors[0]))?.[1]
     const options = await api('optionsGetFull')
     const profile = options.profiles[options.profileCurrent].options
     if (title && !profile.dictionaries.some((d) => d.name === title)) {
@@ -196,7 +207,9 @@ export function createYomitanHarness({ log, openPage, dictionaries = [] }) {
       if (step) {
         const win = popup._frame.contentWindow
         const key = step > 0 ? 'ArrowDown' : 'ArrowUp'
-        win.document.dispatchEvent(new win.KeyboardEvent('keydown', { key, code: key, altKey: true, bubbles: true, cancelable: true }))
+        win.document.dispatchEvent(
+          new win.KeyboardEvent('keydown', { key, code: key, altKey: true, bubbles: true, cancelable: true })
+        )
       }
       return { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight }
     },

@@ -33,7 +33,10 @@ function overlay() {
   const globals = () => ({ URL, console, structuredClone, Promise, TextEncoder, setTimeout, clearTimeout })
   const top = vm.createContext(globals())
   vm.runInContext(PRELUDE('tauri://localhost/ui/overlay.html', '/ui/overlay.html'), top)
-  vm.runInContext(`top = window; saved = []; __TAURI__ = {core: {invoke: async (cmd, args) => { if (cmd === 'storage_save') saved.push(JSON.parse(JSON.stringify(args.value))) }}}`, top)
+  vm.runInContext(
+    `top = window; saved = []; __TAURI__ = {core: {invoke: async (cmd, args) => { if (cmd === 'storage_save') saved.push(JSON.parse(JSON.stringify(args.value))) }}}`,
+    top
+  )
   vm.runInContext(overlayShim, top)
   const frame = vm.createContext(globals())
   vm.runInContext(PRELUDE('tauri://localhost/spike/background.html', '/spike/background.html'), frame)
@@ -47,14 +50,23 @@ test('the overlay bundle installs once per frame and the backend frame is the ba
   assert.equal(vm.runInContext('__yomitanShim', top), true)
   assert.equal(vm.runInContext('__yomitanShim', frame), true)
   const hub = top.__extensionHost
-  assert.deepEqual([...hub.contexts.values()].map((c) => c.background), [false, true])
-  assert.equal(frame.__extensionHost, undefined, 'the frame uses the top window\'s hub')
+  assert.deepEqual(
+    [...hub.contexts.values()].map((c) => c.background),
+    [false, true]
+  )
+  assert.equal(frame.__extensionHost, undefined, "the frame uses the top window's hub")
 })
 
 test('runtime.sendMessage goes frontend → backend and back, with the first answer winning', async () => {
   const { top, frame } = overlay()
-  vm.runInContext(`chrome.runtime.onMessage.addListener((m, sender, reply) => { reply({got: m.action, frameId: sender.frameId, tab: sender.tab.id}) })`, frame)
-  vm.runInContext(`chrome.runtime.onMessage.addListener((m, s, reply) => { reply('the frontend must not answer itself') })`, top)
+  vm.runInContext(
+    `chrome.runtime.onMessage.addListener((m, sender, reply) => { reply({got: m.action, frameId: sender.frameId, tab: sender.tab.id}) })`,
+    frame
+  )
+  vm.runInContext(
+    `chrome.runtime.onMessage.addListener((m, s, reply) => { reply('the frontend must not answer itself') })`,
+    top
+  )
   const answer = await vm.runInContext(`chrome.runtime.sendMessage({action: 'termsFind'})`, top)
   assert.deepEqual({ ...answer }, { got: 'termsFind', frameId: 0, tab: 1 })
   // Nobody listening: undefined, not a hang.
@@ -64,7 +76,10 @@ test('runtime.sendMessage goes frontend → backend and back, with the first ans
 
 test('storage.local persists through storage_save and reports Chrome-shaped changes to every context', async () => {
   const { top, frame } = overlay()
-  vm.runInContext(`changes = []; chrome.storage.onChanged.addListener((c, area) => changes.push([JSON.parse(JSON.stringify(c)), area]))`, frame)
+  vm.runInContext(
+    `changes = []; chrome.storage.onChanged.addListener((c, area) => changes.push([JSON.parse(JSON.stringify(c)), area]))`,
+    frame
+  )
   await vm.runInContext(`chrome.storage.local.set({options: {v: 1}})`, top)
   await vm.runInContext(`chrome.storage.local.remove('options')`, top)
   assert.deepEqual(JSON.parse(JSON.stringify(top.saved)), [{ options: { v: 1 } }, {}])
@@ -103,7 +118,10 @@ test('the panel bundle drops a relayed payload it has already seen from the same
   await vm.runInContext('__extensionHost.ready', context)
   vm.runInContext(`seen = []; chrome.storage.onChanged.addListener((c) => seen.push(Object.keys(c)[0]))`, context)
   const send = (seq, key, to = 'log') =>
-    vm.runInContext(`relay({payload: {from: 'overlay', to: '${to}', seq: ${seq}, payload: {kind: 'storage-changed', area: 'local', changes: {${key}: {}}}}})`, context)
+    vm.runInContext(
+      `relay({payload: {from: 'overlay', to: '${to}', seq: ${seq}, payload: {kind: 'storage-changed', area: 'local', changes: {${key}: {}}}}})`,
+      context
+    )
   send(1, 'a')
   send(1, 'again')
   send(2, 'b', 'dictionary')

@@ -6,16 +6,7 @@
  */
 import { useId, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
-import {
-  IconButton,
-  Select,
-  SettingsPage,
-  SettingsRow,
-  SettingsSection,
-  SettingsSubgroup,
-  Switch,
-  cn
-} from '@kit'
+import { IconButton, Select, SettingsPage, SettingsRow, SettingsSection, SettingsSubgroup, Switch, cn } from '@kit'
 import { DEFAULT_AUTO_OCR_SETTINGS } from '../../../ui/autoscan'
 import {
   resolveWatcher,
@@ -27,10 +18,7 @@ import {
 } from '../../../ui/watcher'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../../bridge/settings'
 import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
-import type {
-  AutoOCRSettings,
-  TextOverlayGroupingSettings
-} from '../../vendor/shared-types'
+import type { AutoOCRSettings, TextOverlayGroupingSettings } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
 import { useLanguage } from '../../bridge/useLanguage'
 import { useViewState } from '../../bridge/state'
@@ -92,15 +80,12 @@ export function OcrTab(): ReactNode {
   const gaming = isGamingMode(useCapabilities())
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
-  const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>(
-    'textOverlayGrouping',
-    {
-      enabled: false,
-      proximityThreshold: 50,
-      filterSmallText: true,
-      filterSmallTextThreshold: 0.75
-    }
-  )
+  const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>('textOverlayGrouping', {
+    enabled: false,
+    proximityThreshold: 50,
+    filterSmallText: true,
+    filterSmallTextThreshold: 0.75
+  })
   const [autoOCRSettings, setAutoOCRSettings] = useSetting<AutoOCRSettings>(
     'autoOCRSettings',
     DEFAULT_AUTO_OCR_SETTINGS
@@ -210,11 +195,7 @@ export function OcrTab(): ReactNode {
       </SettingsSection>
 
       <SettingsSection title="Auto OCR">
-        <SettingsRow
-          label="Auto OCR"
-          controlId="ocr-auto"
-          description={autoOcrDescription(ocrMode, watcher)}
-        >
+        <SettingsRow label="Auto OCR" controlId="ocr-auto" description={autoOcrDescription(ocrMode, watcher)}>
           <Switch
             id="ocr-auto"
             checked={autoOcrEnabled}
@@ -311,7 +292,6 @@ export function OcrTab(): ReactNode {
           </SettingsSubgroup>
         )}
       </SettingsSection>
-
     </SettingsPage>
   )
 }

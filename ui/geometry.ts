@@ -101,12 +101,7 @@ export function mapRect(info: FrameInfo, origin: Rect, rect: Rect, bounds?: Rect
   }
 }
 /** Map already-selected annotations; the caller owns filtering and ordering. */
-export function mapAnnotations(
-  info: FrameInfo,
-  annotations: Annotation[],
-  origin: Rect,
-  bounds?: Rect
-): MappedBox[] {
+export function mapAnnotations(info: FrameInfo, annotations: Annotation[], origin: Rect, bounds?: Rect): MappedBox[] {
   const finite = (r: Rect): boolean =>
     [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0
   const segment = (s: { text: string; bbox: number[] }): MappedSegment[] => {
@@ -173,25 +168,13 @@ export function mapAnnotations(
   })
 }
 /** Convenience wrapper that drops the full-text annotation at index 0. */
-export function boxes(
-  info: FrameInfo,
-  annotations: Annotation[],
-  origin: Rect,
-  bounds?: Rect
-): MappedBox[] {
-  return mapAnnotations(
-    info,
-    annotations.length > 1 ? annotations.slice(1) : annotations,
-    origin,
-    bounds
-  )
+export function boxes(info: FrameInfo, annotations: Annotation[], origin: Rect, bounds?: Rect): MappedBox[] {
+  return mapAnnotations(info, annotations.length > 1 ? annotations.slice(1) : annotations, origin, bounds)
 }
 export function sourceDisplay(source: Rect, displays: Rect[]): Rect {
   const x = source.x + source.width / 2,
     y = source.y + source.height / 2
-  const found = displays.find(
-    (d) => x >= d.x && y >= d.y && x < d.x + d.width && y < d.y + d.height
-  )
+  const found = displays.find((d) => x >= d.x && y >= d.y && x < d.x + d.width && y < d.y + d.height)
   if (!found) throw Error('Source center is outside connected displays')
   return found
 }

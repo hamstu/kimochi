@@ -1,6 +1,5 @@
 /** DEV-ONLY stand-in for `@tauri-apps/plugin-dialog`: pickers cancel, confirmations accept. */
-const note = (what: string, options?: unknown): void =>
-  console.info(`[preview] dialog.${what}`, options ?? '')
+const note = (what: string, options?: unknown): void => console.info(`[preview] dialog.${what}`, options ?? '')
 
 export async function open(options?: unknown): Promise<null> {
   note('open', options)

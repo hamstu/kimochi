@@ -95,9 +95,7 @@ function AnkiPage({ settings }: { settings: Settings }): ReactNode {
               onCheck={connection.check}
             />
           )}
-          {tab === 'mining' && (
-            <AnkiSections settings={settings} engine={engine} connection={connection.epoch} />
-          )}
+          {tab === 'mining' && <AnkiSections settings={settings} engine={engine} connection={connection.epoch} />}
           {tab === 'enhance' && (
             <>
               <SentenceAudioSection />
@@ -189,11 +187,7 @@ function AnkiSections({
   // Only Kimochi's own pop-up adds cards with Kimochi's connection; before an engine is
   // downloaded there are no cards to add yet, so only the way to download it.
   return (
-    <CardsSection
-      settings={settings}
-      engine={engine}
-      connection={route === 'kimochi' && downloaded ? connection : 0}
-    />
+    <CardsSection settings={settings} engine={engine} connection={route === 'kimochi' && downloaded ? connection : 0} />
   )
 }
 
@@ -243,9 +237,7 @@ function ConnectionSection({
 
   const text = describeAnkiStatus(status)
   const suggestion =
-    status && (status.state === 'notRunning' || status.state === 'notAnkiConnect')
-      ? status.suggestion
-      : null
+    status && (status.state === 'notRunning' || status.state === 'notAnkiConnect') ? status.suggestion : null
   const name = DICTIONARY_ENGINES[engine].name
 
   return (
@@ -260,11 +252,7 @@ function ConnectionSection({
       <SettingsRow
         label={
           <span className="anki-connection-label">
-            {status === null || checking ? (
-              <Spinner label="Checking" />
-            ) : (
-              <StatusDot tone={text.tone} />
-            )}
+            {status === null || checking ? <Spinner label="Checking" /> : <StatusDot tone={text.tone} />}
             {text.title}
           </span>
         }

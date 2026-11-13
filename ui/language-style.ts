@@ -120,7 +120,10 @@ export const TEXT_FONT_PROPERTY = '--kimochi-text-font'
  * Points `root`'s learner-text font at the language `code` (see TEXT_FONT_PROPERTY), and marks it
  * with the language (`data-text-lang`) for styles that differ by script.
  */
-export function applyTextStyle(code: unknown, root: HTMLElement | null = globalThis.document?.documentElement ?? null): void {
+export function applyTextStyle(
+  code: unknown,
+  root: HTMLElement | null = globalThis.document?.documentElement ?? null
+): void {
   if (!root) return
   const style = textStyle(code)
   if (style.japanese) {
@@ -133,8 +136,11 @@ export function applyTextStyle(code: unknown, root: HTMLElement | null = globalT
 }
 
 type Segmenter = { segment: (text: string) => Iterable<{ segment: string }> }
-const SegmenterClass = (Intl as unknown as { Segmenter?: new (locale?: string, options?: object) => Segmenter }).Segmenter
-const graphemeSegmenter: Segmenter | null = SegmenterClass ? new SegmenterClass(undefined, { granularity: 'grapheme' }) : null
+const SegmenterClass = (Intl as unknown as { Segmenter?: new (locale?: string, options?: object) => Segmenter })
+  .Segmenter
+const graphemeSegmenter: Segmenter | null = SegmenterClass
+  ? new SegmenterClass(undefined, { granularity: 'grapheme' })
+  : null
 
 /** A grapheme cluster where there is no segmenter: a character and the marks that follow it. */
 const CLUSTER = /\P{M}[\p{M}\u200c\u200d]*|[\p{M}\u200c\u200d]+/gsu
@@ -193,7 +199,11 @@ export function estimateAdvance(text: string): number {
 function advanceOf(c: string): number {
   if (/\p{M}|[\u200b-\u200d\u2060\ufeff]/u.test(c)) return 0
   if (/\s/u.test(c)) return c === '\u3000' ? 1 : 0.28
-  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff01-\uff60\uffe0-\uffe6]/u.test(c))
+  if (
+    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff01-\uff60\uffe0-\uffe6]/u.test(
+      c
+    )
+  )
     return /[\uff61-\uff9f]/u.test(c) ? 0.5 : 1
   if (/[ijlI|!.,:;'\u2019`]/u.test(c)) return 0.27
   if (/[mwMW]/u.test(c)) return 0.82

@@ -193,8 +193,7 @@ body {
   min-height: 0;
   background:
     radial-gradient(120% 80% at 12% 0%, var(--k-accent-soft), transparent 62%),
-    radial-gradient(90% 70% at 100% 100%, var(--k-hover), transparent 60%),
-    var(--k-bar);
+    radial-gradient(90% 70% at 100% 100%, var(--k-hover), transparent 60%), var(--k-bar);
 }
 .studio-desk::before {
   /* A faint grid, so a window's position and size read against something. */
@@ -202,8 +201,7 @@ body {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(var(--k-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--k-line) 1px, transparent 1px);
+    linear-gradient(var(--k-line) 1px, transparent 1px), linear-gradient(90deg, var(--k-line) 1px, transparent 1px);
   background-size: 40px 40px;
   opacity: 0.35;
   pointer-events: none;
@@ -343,7 +341,9 @@ body {
   transform-origin: 50% 50%;
   border-radius: var(--k-radius-lg);
   overflow: hidden;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 30px 80px -20px rgb(0 0 0 / 0.8);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 30px 80px -20px rgb(0 0 0 / 0.8);
 }
 
 /* ---------------------------------------------------------------- side panel */

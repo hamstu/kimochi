@@ -43,12 +43,7 @@ export function UpdateNotice(): JSX.Element | null {
   const dismissable = status.state === 'available' || status.state === 'failed'
   const detail = error ?? noticeDetail(status)
   return (
-    <section
-      className="sb-update"
-      data-state={status.state}
-      aria-label="Update"
-      aria-live="polite"
-    >
+    <section className="sb-update" data-state={status.state} aria-label="Update" aria-live="polite">
       <div className="sb-update-head">
         <NoticeIcon status={status} />
         <span className="sb-update-title">{noticeTitle(status)}</span>

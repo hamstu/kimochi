@@ -29,7 +29,7 @@ const bridge = new Bridge({
   onRescan: () => {
     const tab = tabs.get(lastTab) ?? [...tabs.values()].at(-1)
     tab?.port.postMessage({ type: 'rescan' })
-  },
+  }
 })
 
 /** The tab whose picture Kimochi read last. */
@@ -82,14 +82,14 @@ chrome.runtime.onConnect.addListener((port) => {
     if (message.type === 'scan') {
       lastTab = tabId
       requestScan(tabId, message)
-    }
-    else if (message.type === 'connect') bridge.connectNow()
+    } else if (message.type === 'connect') bridge.connectNow()
     else if (message.type === 'stop') {
       tab.hashes.clear()
       bridge.send({ type: 'stop' })
     } else if (message.type === 'forget') tab.hashes.clear()
     // Session requests and Open Kimochi go straight to Kimochi.
-    else if (['page', 'assign', 'createSession', 'renameSession', 'show', 'setEngine'].includes(message.type)) bridge.send(message)
+    else if (['page', 'assign', 'createSession', 'renameSession', 'show', 'setEngine'].includes(message.type))
+      bridge.send(message)
     else if (message.type === 'remember-target') rememberTarget(tabId, message.signature)
     else if (message.type === 'forget-target') rememberTarget(tabId, null)
   })
@@ -150,7 +150,7 @@ async function runScan(tab, request) {
     page: request.page,
     width,
     height,
-    png: base64,
+    png: base64
   })
   tab.hashes.set(request.pic, hash)
   if (tab.hashes.size > 50) tab.hashes.delete(tab.hashes.keys().next().value)
@@ -159,7 +159,7 @@ async function runScan(tab, request) {
     id: request.id,
     region: request.region,
     result,
-    ms: Math.round(performance.now() - started),
+    ms: Math.round(performance.now() - started)
   })
 }
 

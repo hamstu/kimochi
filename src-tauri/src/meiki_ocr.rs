@@ -25,11 +25,7 @@ pub struct MeikiState(Mutex<Option<MeikiOcr>>);
 /// directory, then the development fallback. The runtime always ships with the app;
 /// only the models are downloaded (`model_store`).
 fn runtime_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let bundled = app
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?
-        .join("meikiocr");
+    let bundled = app.path().resource_dir().map_err(|e| e.to_string())?.join("meikiocr");
     let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/meikiocr");
     [bundled, development]
         .into_iter()
@@ -70,11 +66,7 @@ fn runtime_library(root: &Path) -> PathBuf {
 /// The native files `scripts/prepare-meikiocr.mjs` stages for this OS, for diagnostics.
 /// On Windows the DirectML flavour stages all three; a CPU-only staging omits DirectML.
 const RUNTIME_FILES: &[&str] = if cfg!(target_os = "windows") {
-    &[
-        "onnxruntime.dll",
-        "onnxruntime_providers_shared.dll",
-        "DirectML.dll",
-    ]
+    &["onnxruntime.dll", "onnxruntime_providers_shared.dll", "DirectML.dll"]
 } else if cfg!(target_os = "macos") {
     &["libonnxruntime.dylib"]
 } else {
@@ -86,27 +78,19 @@ fn runtime_files(runtime_dir: &Path) -> Vec<String> {
     RUNTIME_FILES
         .iter()
         .map(|name| {
-            let state = if runtime_dir.join(name).is_file() {
-                "present"
-            } else {
-                "missing"
-            };
+            let state = if runtime_dir.join(name).is_file() { "present" } else { "missing" };
             format!("{name}: {state}")
         })
         .collect()
 }
 
-const RUNTIME_MISSING: &str =
-    "MeikiOCR native runtime is missing. Rebuild Kimochi with npm run bundle.";
+const RUNTIME_MISSING: &str = "MeikiOCR native runtime is missing. Rebuild Kimochi with npm run bundle.";
 
 /// Whether the models and native runtime are present, without loading either.
 /// The models are checked first, so an engine waiting for its download says so.
 fn presence(app: &tauri::AppHandle) -> Result<Assets, String> {
     let models = model_store::models_dir(app, model_store::Engine::Meiki)?;
-    Ok(Assets {
-        runtime: runtime_root(app)?,
-        models,
-    })
+    Ok(Assets { runtime: runtime_root(app)?, models })
 }
 
 /// Whether the native runtime is bundled, whatever the state of the models.
@@ -140,28 +124,18 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
         let describe = |engine: &MeikiOcr| {
             let info = engine.backend_info();
             let mut diagnostics = RUNTIME_DIAGNOSTICS.get().cloned().unwrap_or_default();
-            diagnostics.extend(
-                info.fallback_reasons
-                    .iter()
-                    .map(|r| format!("fallback: {r}")),
-            );
-            Loaded {
-                accelerator: accelerator(info.selected),
-                diagnostics,
-            }
+            diagnostics.extend(info.fallback_reasons.iter().map(|r| format!("fallback: {r}")));
+            Loaded { accelerator: accelerator(info.selected), diagnostics }
         };
         // Verification already pays for loading the sessions. For the selected engine,
         // keep that work: the first scan must not build an identical engine again.
         // The same lock as scans/unload also prevents duplicate concurrent loads.
-        let selected = probe_app.try_state::<crate::state::Shared>()
-            .is_some_and(|service| matches!(
-                service.settings.get_or::<String>("ocrMode", String::new()).as_str(),
-                "meikiocr" | "local"
-            ));
+        let selected = probe_app.try_state::<crate::state::Shared>().is_some_and(|service| {
+            matches!(service.settings.get_or::<String>("ocrMode", String::new()).as_str(), "meikiocr" | "local")
+        });
         if selected {
             if let Some(state) = probe_app.try_state::<MeikiState>() {
-                let mut slot = state.0.lock()
-                    .map_err(|_| "MeikiOCR worker unavailable".to_string())?;
+                let mut slot = state.0.lock().map_err(|_| "MeikiOCR worker unavailable".to_string())?;
                 if slot.is_none() {
                     *slot = Some(load_engine(&assets)?);
                 }
@@ -275,9 +249,8 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
         intra_threads: cpu_threads(),
         ..Config::default()
     };
-    let engine = engine_probe::guarded(|| {
-        MeikiOcr::with_config(models, config).map_err(|e| format!("MeikiOCR models: {e}"))
-    })?;
+    let engine =
+        engine_probe::guarded(|| MeikiOcr::with_config(models, config).map_err(|e| format!("MeikiOCR models: {e}")))?;
     if refused_directml(engine.backend_info()) {
         DIRECTML_REFUSED.store(true, Ordering::Relaxed);
     }
@@ -330,17 +303,10 @@ fn refused_directml(info: &BackendInfo) -> bool {
 pub(crate) static DIRECTML_RUN: Mutex<()> = Mutex::new(());
 
 /// Detection plus recognition on one image, in image pixel coordinates.
-pub(crate) fn infer(
-    engine: &mut MeikiOcr,
-    image: &image::RgbImage,
-) -> Result<Vec<TextLine>, String> {
+pub(crate) fn infer(engine: &mut MeikiOcr, image: &image::RgbImage) -> Result<Vec<TextLine>, String> {
     let _serial = (engine.backend_info().selected == Backend::DirectMl)
         .then(|| DIRECTML_RUN.lock().unwrap_or_else(|p| p.into_inner()));
-    engine_probe::guarded(|| {
-        engine
-            .ocr(image, OcrOptions::default())
-            .map_err(|e| format!("MeikiOCR inference: {e}"))
-    })
+    engine_probe::guarded(|| engine.ocr(image, OcrOptions::default()).map_err(|e| format!("MeikiOCR inference: {e}")))
 }
 
 pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
@@ -348,10 +314,7 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     let assets = presence(app).map_err(|reason| format!("MeikiOCR is not ready: {reason}"))?;
     initialize_runtime(&assets.runtime)?;
     let state = app.state::<MeikiState>();
-    let mut engine = state
-        .0
-        .lock()
-        .map_err(|_| "MeikiOCR worker unavailable".to_string())?;
+    let mut engine = state.0.lock().map_err(|_| "MeikiOCR worker unavailable".to_string())?;
     if engine.is_none() {
         *engine = Some(load_engine(&assets)?);
     }
@@ -399,8 +362,8 @@ mod windows_dll {
     use windows::core::HSTRING;
     use windows::Win32::Foundation::{ERROR_BAD_EXE_FORMAT, ERROR_MOD_NOT_FOUND};
     use windows::Win32::System::LibraryLoader::{
-        AddDllDirectory, LoadLibraryExW, SetDefaultDllDirectories,
-        LOAD_LIBRARY_SEARCH_DEFAULT_DIRS, LOAD_LIBRARY_SEARCH_USER_DIRS,
+        AddDllDirectory, LoadLibraryExW, SetDefaultDllDirectories, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS,
+        LOAD_LIBRARY_SEARCH_USER_DIRS,
     };
 
     const VC_REDIST_URL: &str = if cfg!(target_arch = "aarch64") {
@@ -458,12 +421,8 @@ mod windows_dll {
     }
 
     pub fn prepare(runtime_dir: &Path, library: &Path) -> Result<(), String> {
-        unsafe {
-            SetDefaultDllDirectories(
-                LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS,
-            )
-        }
-        .map_err(|e| format!("MeikiOCR could not enable safe DLL search: {e}"))?;
+        unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS) }
+            .map_err(|e| format!("MeikiOCR could not enable safe DLL search: {e}"))?;
         let cookie = unsafe { AddDllDirectory(&HSTRING::from(runtime_dir)) };
         if cookie.is_null() {
             return Err(format!(
@@ -481,11 +440,8 @@ mod windows_dll {
         match load(&HSTRING::from(library)) {
             Ok(()) => Ok(()),
             Err(e) if e.code() == ERROR_MOD_NOT_FOUND.to_hresult() => {
-                let missing: Vec<_> = VC_RUNTIME
-                    .iter()
-                    .filter(|name| load(&HSTRING::from(**name)).is_err())
-                    .copied()
-                    .collect();
+                let missing: Vec<_> =
+                    VC_RUNTIME.iter().filter(|name| load(&HSTRING::from(**name)).is_err()).copied().collect();
                 if missing.is_empty() {
                     Err(format!(
                         "MeikiOCR could not load onnxruntime.dll: one of its DLL dependencies is missing ({e})."
@@ -509,11 +465,7 @@ mod windows_dll {
 /// PP-OCR's lines have the same shape and use it too (`pp_ocr`), under their own engine name.
 pub(crate) fn annotations(lines: &[TextLine], engine: &str) -> Value {
     let nonempty: Vec<_> = lines.iter().filter(|l| !l.text.is_empty()).collect();
-    let text = nonempty
-        .iter()
-        .map(|l| l.text.as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let text = nonempty.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n");
     let mut annotations: Vec<_> = nonempty
         .iter()
         .map(|line| {
@@ -570,12 +522,7 @@ mod tests {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/meikiocr");
         initialize_runtime(&root).unwrap();
         let mut engine = MeikiOcr::new(ModelPaths::from_dir(root.join("models"))).unwrap();
-        let lines = engine
-            .ocr_file(
-                std::env::var("MEIKIOCR_TEST_IMAGE").unwrap(),
-                OcrOptions::default(),
-            )
-            .unwrap();
+        let lines = engine.ocr_file(std::env::var("MEIKIOCR_TEST_IMAGE").unwrap(), OcrOptions::default()).unwrap();
         assert!(lines.iter().any(|l| l.text.contains("ナルホド")));
         let value = annotations(&lines, "meikiocr");
         assert_eq!(
@@ -595,14 +542,29 @@ mod tests {
             let mut engine = MeikiOcr::with_config(
                 ModelPaths::from_dir(std::env::var("MEIKIOCR_MODEL_DIR").unwrap()),
                 Config { backend, ..Config::default() },
-            ).unwrap();
-            for image in [source.clone(), image::imageops::resize(&source, source.width() * 2, source.height() * 2, image::imageops::FilterType::Triangle)] {
+            )
+            .unwrap();
+            for image in [
+                source.clone(),
+                image::imageops::resize(
+                    &source,
+                    source.width() * 2,
+                    source.height() * 2,
+                    image::imageops::FilterType::Triangle,
+                ),
+            ] {
                 let detections = engine.detect(&image, 0.0).unwrap();
                 let lines = infer(&mut engine, &image).unwrap();
-                println!("backend={:?} size={}x{} candidates={} above_default={} max_score={} lines={}",
-                    engine.backend_info(), image.width(), image.height(), detections.len(),
+                println!(
+                    "backend={:?} size={}x{} candidates={} above_default={} max_score={} lines={}",
+                    engine.backend_info(),
+                    image.width(),
+                    image.height(),
+                    detections.len(),
                     detections.iter().filter(|item| item.confidence > 0.5).count(),
-                    detections.iter().map(|item| item.confidence).fold(0.0_f32, f32::max), lines.len());
+                    detections.iter().map(|item| item.confidence).fold(0.0_f32, f32::max),
+                    lines.len()
+                );
             }
         }
     }
@@ -616,16 +578,10 @@ mod tests {
             characters: vec![],
             is_vertical: false,
         };
-        let empty = TextLine {
-            text: String::new(),
-            ..line.clone()
-        };
+        let empty = TextLine { text: String::new(), ..line.clone() };
         let result = annotations(&[line, empty], "meikiocr");
         assert_eq!(result["fullText"], "日本語");
         assert_eq!(result["textAnnotations"].as_array().unwrap().len(), 2);
-        assert_eq!(
-            result["textAnnotations"][1]["boundingPoly"]["vertices"][2],
-            json!({"x":90,"y":40})
-        );
+        assert_eq!(result["textAnnotations"][1]["boundingPoly"]["vertices"][2], json!({"x":90,"y":40}));
     }
 }

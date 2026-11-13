@@ -26,9 +26,7 @@ function watch(): void {
   if (watching) return
   watching = true
   try {
-    onEvent<unknown>('update-status', (payload) => set(normalizeUpdateStatus(payload))).catch(
-      () => undefined
-    )
+    onEvent<unknown>('update-status', (payload) => set(normalizeUpdateStatus(payload))).catch(() => undefined)
   } catch {
     // No event bridge (a plain browser): the fetched status stands.
   }

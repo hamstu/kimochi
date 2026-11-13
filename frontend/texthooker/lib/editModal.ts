@@ -3,23 +3,23 @@
    owns the modal state and subscribes here. The modal is independent of the
    notebook drawer — opening it never opens the drawer. */
 
-type Sub = (entryId: string) => void;
+type Sub = (entryId: string) => void
 
-const subs = new Set<Sub>();
+const subs = new Set<Sub>()
 
 export function openEditModal(entryId: string): void {
   for (const fn of subs) {
     try {
-      fn(entryId);
+      fn(entryId)
     } catch (err) {
-      console.error(err);
+      console.error(err)
     }
   }
 }
 
 export function onEditModalRequest(fn: Sub): () => void {
-  subs.add(fn);
+  subs.add(fn)
   return () => {
-    subs.delete(fn);
-  };
+    subs.delete(fn)
+  }
 }

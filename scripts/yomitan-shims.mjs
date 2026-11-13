@@ -46,7 +46,8 @@ export async function yomitanShimSource(name, { network } = {}) {
   let text = outputFiles[0].text
   if (network !== undefined) {
     const stubbed = text.replace(/import\(asset\(["']\/spike\/network-bundle\.js["']\)\)/, network)
-    if (stubbed === text && name === 'panel-shim.js') throw Error('The network import to stub is gone from panel-shim.js')
+    if (stubbed === text && name === 'panel-shim.js')
+      throw Error('The network import to stub is gone from panel-shim.js')
     text = stubbed
   }
   return text

@@ -58,7 +58,12 @@ export default function SyncLogPanel(): JSX.Element {
         <span className="sync-log-status k-num">{syncStateLine(sync, now)}</span>
         <BarSpacer />
         <span className="sync-log-count k-num">{entries.length.toLocaleString('en-US')} entries</span>
-        <Button size="sm" variant="ghost" disabled={sync.state === 'syncing' || sync.state === 'off'} onClick={() => void syncNow()}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={sync.state === 'syncing' || sync.state === 'off'}
+          onClick={() => void syncNow()}
+        >
           <RefreshCw />
           Sync now
         </Button>

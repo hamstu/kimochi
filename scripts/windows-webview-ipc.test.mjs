@@ -10,7 +10,8 @@ for (const file of ['shim.js', 'panel-shim.js']) {
     const sent = []
     const nativeWebview = { postMessage: (message) => sent.push(message) }
     const context = vm.createContext({ URL, EventTarget, Event, console, structuredClone, Promise, nativeWebview })
-    vm.runInContext(`
+    vm.runInContext(
+      `
       window = globalThis; top = window;
       location = {href:'http://tauri.localhost/app/panel.html',origin:'http://tauri.localhost',protocol:'http:',pathname:'/app/panel.html'};
       navigator = {language:'en',platform:'Win32'};
@@ -23,7 +24,9 @@ for (const file of ['shim.js', 'panel-shim.js']) {
       chrome = {webview:nativeWebview};
       ipc = {postMessage: message => window.chrome.webview.postMessage(message)};
       __TAURI__ = {core:{invoke:async () => ({})},event:{listen:async () => {}}};
-    `, context)
+    `,
+      context
+    )
     vm.runInContext(source, context)
     assert.equal(context.chrome.webview, nativeWebview)
     vm.runInContext(`ipc.postMessage('native IPC still works')`, context)

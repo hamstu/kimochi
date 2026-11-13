@@ -77,7 +77,8 @@ fn arguments(pid: i32) -> Vec<String> {
         return Vec::new();
     }
     let mut buffer = vec![0u8; size];
-    if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, buffer.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0) } != 0 {
+    if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, buffer.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0) } != 0
+    {
         return Vec::new();
     }
     buffer.truncate(size);
@@ -92,11 +93,7 @@ fn parse_procargs(buffer: &[u8]) -> Vec<String> {
     let rest = &buffer[4..];
     let Some(path_end) = rest.iter().position(|&b| b == 0) else { return Vec::new() };
     let start = rest[path_end..].iter().position(|&b| b != 0).map_or(rest.len(), |i| path_end + i);
-    rest[start..]
-        .split(|&b| b == 0)
-        .take(count)
-        .map(|arg| String::from_utf8_lossy(arg).into_owned())
-        .collect()
+    rest[start..].split(|&b| b == 0).take(count).map(|arg| String::from_utf8_lossy(arg).into_owned()).collect()
 }
 
 /// Other `kimochi` processes belonging to this user, by exact executable name. The `kimochi`
@@ -105,10 +102,7 @@ fn parse_procargs(buffer: &[u8]) -> Vec<String> {
 fn others() -> Vec<i32> {
     let own = std::process::id() as i32;
     let uid = unsafe { libc::getuid() };
-    let Ok(output) = Command::new("/usr/bin/pgrep")
-        .args(["-x", "-U", &uid.to_string(), EXECUTABLE])
-        .output()
-    else {
+    let Ok(output) = Command::new("/usr/bin/pgrep").args(["-x", "-U", &uid.to_string(), EXECUTABLE]).output() else {
         return Vec::new();
     };
     String::from_utf8_lossy(&output.stdout)
@@ -132,21 +126,13 @@ pub fn take_over() {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        if let Ok(mut file) = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
-        {
+        if let Ok(mut file) = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&path) {
             if !try_lock(&file) {
                 let mut held = String::new();
                 let _ = file.read_to_string(&mut held);
                 if let Ok(pid) = held.trim().parse::<i32>() {
                     if pid != std::process::id() as i32 && alive(pid) {
-                        stopped.push(
-                            serde_json::json!({"pid": pid, "via": "lock", "outcome": stop(pid)}),
-                        );
+                        stopped.push(serde_json::json!({"pid": pid, "via": "lock", "outcome": stop(pid)}));
                     }
                 }
             }

@@ -10,15 +10,7 @@
  * Enter chooses, Escape closes (inline: clears the search). Focus stays in the field and the list
  * follows it with `aria-activedescendant`. IME compositions keep their keys.
  */
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode
-} from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, ChevronsUpDown, Search } from 'lucide-react'
 import { cn } from './cn'
 import { isComposing } from './ime'
@@ -142,7 +134,12 @@ function ComboboxPanel<T extends string>({
       case 'Escape':
         if (inline && query) {
           setQuery('')
-          setActive(Math.max(0, options.findIndex((option) => option.value === value)))
+          setActive(
+            Math.max(
+              0,
+              options.findIndex((option) => option.value === value)
+            )
+          )
           break
         }
         if (!onEscape?.()) return

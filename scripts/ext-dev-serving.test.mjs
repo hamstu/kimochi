@@ -60,7 +60,11 @@ test('during an update the newest earlier release on disk is served, with its ow
   const serving = await s.serving()
   assert.equal(serving.version, '1.5', 'the newest earlier release, as installed_previous picks')
   assert.equal(serving.dir, path.join(s.store, 'yomitan', '1.5'))
-  assert.deepEqual(Object.keys(serving.files).sort(), ['old15.js', 'settings.html'], "that release's file map, not the pin's")
+  assert.deepEqual(
+    Object.keys(serving.files).sort(),
+    ['old15.js', 'settings.html'],
+    "that release's file map, not the pin's"
+  )
   // Also with the real download tested (no developer cache).
   assert.equal((await s.serving({ KIMOCHI_EXTENSIONS_NO_DEV_TREE: '1' })).version, '1.5')
   assert.equal(await engineTree('yomitan', { env: {}, store: s.store, extensions: s.extensions }), serving.dir)
@@ -88,5 +92,9 @@ test("the app origin's Yomitan paths are the served release's, not the pin's", a
   const config = await readFile(new URL('../vite.dev.config.ts', import.meta.url), 'utf8')
   assert.match(config, /engineServing\('yomitan'\)/)
   assert.match(config, /serving\.files/)
-  assert.doesNotMatch(config, /yomitan\.sha256\.json/, "a fixed list of the pin's files would 404 an earlier release's own")
+  assert.doesNotMatch(
+    config,
+    /yomitan\.sha256\.json/,
+    "a fixed list of the pin's files would 404 an earlier release's own"
+  )
 })

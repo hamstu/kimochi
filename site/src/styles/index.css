@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "./tokens.css";
+@import 'tailwindcss';
+@import './tokens.css';
 
 /*
  * Tailwind theme: maps the --k-* roles to utility names. `inline` keeps the var() references,
@@ -42,7 +42,7 @@
   --font-jp: var(--k-font-jp);
   --font-mono: var(--k-font-mono);
   /* Handwriting, for the maker's hello on the home page only. */
-  --font-script: "Caveat Variable", "Caveat", cursive;
+  --font-script: 'Caveat Variable', 'Caveat', cursive;
 
   --radius-sm: var(--k-radius-sm);
   --radius-md: var(--k-radius-md);
@@ -269,25 +269,33 @@
     0 0 0 1px color-mix(in oklab, var(--k-accent) 16%, transparent);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .plan-toggle {
+  :root:not([data-theme='light']) .plan-toggle {
     --toggle-ink: rgb(255 255 255 / 0.6);
     --toggle-ink-hover: #fff;
     background: #15171c;
-    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+    box-shadow:
+      inset 0 1px 2px rgb(0 0 0 / 0.5),
+      0 0 0 1px rgb(255 255 255 / 0.06);
   }
 }
-:root[data-theme="dark"] .plan-toggle {
+:root[data-theme='dark'] .plan-toggle {
   --toggle-ink: rgb(255 255 255 / 0.6);
   --toggle-ink-hover: #fff;
   background: #15171c;
-  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+  box-shadow:
+    inset 0 1px 2px rgb(0 0 0 / 0.5),
+    0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
 /* The Overlay feature card's scene: a light desktop in light mode, the dark game scene in dark. */
 .overlay-scene {
   --scene-sky:
     radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 22%, transparent), transparent 60%),
-    linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 10%, white) 0%, color-mix(in oklab, var(--k-accent) 4%, var(--k-bar)) 100%);
+    linear-gradient(
+      165deg,
+      color-mix(in oklab, var(--k-accent) 10%, white) 0%,
+      color-mix(in oklab, var(--k-accent) 4%, var(--k-bar)) 100%
+    );
   --scene-shape: color-mix(in oklab, var(--k-accent) 28%, var(--k-bar));
   --scene-box: color-mix(in oklab, white 82%, transparent);
   --scene-box-ring: color-mix(in oklab, var(--k-text) 10%, transparent);
@@ -298,10 +306,14 @@
   background: var(--scene-sky);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .overlay-scene {
+  :root:not([data-theme='light']) .overlay-scene {
     --scene-sky:
       radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 45%, transparent), transparent 60%),
-      linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 30%, black) 0%, color-mix(in oklab, var(--k-accent) 8%, black) 100%);
+      linear-gradient(
+        165deg,
+        color-mix(in oklab, var(--k-accent) 30%, black) 0%,
+        color-mix(in oklab, var(--k-accent) 8%, black) 100%
+      );
     --scene-shape: rgb(0 0 0 / 0.55);
     --scene-box: rgb(0 0 0 / 0.55);
     --scene-box-ring: rgb(255 255 255 / 0.1);
@@ -311,10 +323,14 @@
     --scene-chip-ink: rgb(255 255 255 / 0.8);
   }
 }
-:root[data-theme="dark"] .overlay-scene {
+:root[data-theme='dark'] .overlay-scene {
   --scene-sky:
     radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 45%, transparent), transparent 60%),
-    linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 30%, black) 0%, color-mix(in oklab, var(--k-accent) 8%, black) 100%);
+    linear-gradient(
+      165deg,
+      color-mix(in oklab, var(--k-accent) 30%, black) 0%,
+      color-mix(in oklab, var(--k-accent) 8%, black) 100%
+    );
   --scene-shape: rgb(0 0 0 / 0.55);
   --scene-box: rgb(0 0 0 / 0.55);
   --scene-box-ring: rgb(255 255 255 / 0.1);

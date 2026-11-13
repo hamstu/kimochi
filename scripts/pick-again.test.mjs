@@ -48,10 +48,7 @@ test('a stale system-picker source parses as pickAgain with a clean message', as
   )
   assert.equal(stale.kind, 'gone')
   assert.equal(stale.pickAgain, true)
-  assert.equal(
-    stale.message,
-    'The shared screen or window has closed. Choose it again in the system picker.'
-  )
+  assert.equal(stale.message, 'The shared screen or window has closed. Choose it again in the system picker.')
   const unpicked = nativeError('permission: pick-again: Choose a screen or window first.')
   assert.equal(unpicked.kind, 'permission')
   assert.equal(unpicked.pickAgain, true)

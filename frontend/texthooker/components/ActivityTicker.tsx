@@ -59,12 +59,7 @@ const DOT_TONE: Record<ActivityTone, Tone> = {
 }
 
 function ActivityDot({ tone }: { tone: ActivityTone }): ReactNode {
-  return (
-    <StatusDot
-      tone={DOT_TONE[tone]}
-      className={cn('activity-dot', tone === 'busy' && 'activity-dot-busy')}
-    />
-  )
+  return <StatusDot tone={DOT_TONE[tone]} className={cn('activity-dot', tone === 'busy' && 'activity-dot-busy')} />
 }
 
 const Count = ({ count }: { count: number }): ReactNode =>
@@ -116,9 +111,7 @@ function HistoryRow({ entry, now }: { entry: ActivityEntry; now: number }): Reac
             </li>
           ))}
           {entry.count > entry.times.length && (
-            <li className="activity-instances-more">
-              and {entry.count - entry.times.length} earlier
-            </li>
+            <li className="activity-instances-more">and {entry.count - entry.times.length} earlier</li>
           )}
         </ol>
       )}
@@ -196,11 +189,7 @@ export function ActivityTicker({ visible, auto }: { visible: boolean; auto: bool
   }, [open, entries.length])
 
   if (!latest && !auto) return null
-  const dot = message ? (
-    <ActivityDot tone={message.tone} />
-  ) : (
-    <span className="activity-live-dot" aria-hidden />
-  )
+  const dot = message ? <ActivityDot tone={message.tone} /> : <span className="activity-live-dot" aria-hidden />
   return (
     <div
       ref={root}

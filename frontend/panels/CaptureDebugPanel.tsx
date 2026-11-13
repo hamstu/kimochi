@@ -175,8 +175,7 @@ export default function CaptureDebugPanel(): JSX.Element {
       const expectedWidth = Math.round(crop.width * scaleX)
       const expectedHeight = Math.round(crop.height * scaleY)
       const matches =
-        Math.abs(frame.info.width - expectedWidth) <= 2 &&
-        Math.abs(frame.info.height - expectedHeight) <= 2
+        Math.abs(frame.info.width - expectedWidth) <= 2 && Math.abs(frame.info.height - expectedHeight) <= 2
       addLog(
         matches ? 'success' : 'error',
         `  expected ${expectedWidth}×${expectedHeight}, captured ${frame.info.width}×${frame.info.height}`
@@ -270,8 +269,8 @@ export default function CaptureDebugPanel(): JSX.Element {
         </Bar>
 
         <div className="diag-note" style={{ color: '#8be9fd' }}>
-          Source: {state.source ? `${state.source.name}` : 'none selected'} · capture is local;
-          only the OCR round-trip leaves this machine.
+          Source: {state.source ? `${state.source.name}` : 'none selected'} · capture is local; only the OCR round-trip
+          leaves this machine.
         </div>
 
         {previewUrl && (

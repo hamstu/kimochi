@@ -91,7 +91,8 @@ pub fn browser_locations(os: Os, home: &Path) -> Vec<BrowserLocation> {
         Os::Mac => {
             const SUPPORT: [&str; 2] = ["Library", "Application Support"];
             let mac = |id, name, rest: &[&str]| {
-                let parts: Vec<&str> = SUPPORT.iter().chain(rest).chain(["NativeMessagingHosts"].iter()).copied().collect();
+                let parts: Vec<&str> =
+                    SUPPORT.iter().chain(rest).chain(["NativeMessagingHosts"].iter()).copied().collect();
                 dir(id, name, &parts)
             };
             vec![
@@ -107,7 +108,8 @@ pub fn browser_locations(os: Os, home: &Path) -> Vec<BrowserLocation> {
         }
         Os::Linux => {
             let linux = |id, name, rest: &[&str]| {
-                let parts: Vec<&str> = [".config"].iter().chain(rest).chain(["NativeMessagingHosts"].iter()).copied().collect();
+                let parts: Vec<&str> =
+                    [".config"].iter().chain(rest).chain(["NativeMessagingHosts"].iter()).copied().collect();
                 dir(id, name, &parts)
             };
             vec![
@@ -177,7 +179,10 @@ fn is_absolute_any(path: &str) -> bool {
     let bytes = path.as_bytes();
     path.starts_with('/')
         || path.starts_with(r"\\")
-        || (bytes.len() > 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/'))
+        || (bytes.len() > 2
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/'))
 }
 
 /// One browser's registration, as found.
@@ -273,9 +278,8 @@ pub struct HostStatus {
 
 pub fn summarize(os: Os, browsers: Vec<ManifestReport>) -> HostStatus {
     let usable: Vec<HostMethod> = browsers.iter().filter(|r| r.usable()).filter_map(|r| r.method).collect();
-    let method = [HostMethod::Kimochi, HostMethod::Official, HostMethod::Unknown]
-        .into_iter()
-        .find(|m| usable.contains(m));
+    let method =
+        [HostMethod::Kimochi, HostMethod::Official, HostMethod::Unknown].into_iter().find(|m| usable.contains(m));
     HostStatus { os: os.id(), installed: method.is_some(), method, browsers }
 }
 
@@ -311,9 +315,7 @@ fn query_registry(_key: &str) -> Option<String> {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from)
 }
 
 /// Looks at every location on this computer. Reads only.
@@ -346,9 +348,7 @@ pub fn detect() -> HostStatus {
 
 #[tauri::command]
 pub async fn yomitan_host_status() -> Result<HostStatus, String> {
-    tauri::async_runtime::spawn_blocking(detect)
-        .await
-        .map_err(|e| format!("native: {e}"))
+    tauri::async_runtime::spawn_blocking(detect).await.map_err(|e| format!("native: {e}"))
 }
 
 // ---------------------------------------------------------------- reachability
@@ -441,10 +441,7 @@ mod tests {
     use super::*;
 
     fn location(os: Os, id: &str) -> BrowserLocation {
-        browser_locations(os, Path::new("/home/u"))
-            .into_iter()
-            .find(|l| l.id == id)
-            .expect("location")
+        browser_locations(os, Path::new("/home/u")).into_iter().find(|l| l.id == id).expect("location")
     }
 
     fn manifest(path: &str) -> String {
@@ -465,7 +462,9 @@ mod tests {
     fn classifies_each_installer() {
         // Upstream on macOS copies its script beside the manifest.
         assert_eq!(
-            classify_host_path("/Users/u/Library/Application Support/Google/Chrome/NativeMessagingHosts/yomitan_api.py"),
+            classify_host_path(
+                "/Users/u/Library/Application Support/Google/Chrome/NativeMessagingHosts/yomitan_api.py"
+            ),
             HostMethod::Official
         );
         // Upstream on Linux points at the clone.
@@ -475,7 +474,9 @@ mod tests {
         assert_eq!(classify_host_path(r"C:\Users\u\yomitan-api\YOMITAN_API.CMD"), HostMethod::Official);
         // The Go host, as Kimochi installs it on each OS.
         assert_eq!(
-            classify_host_path("/Users/u/Library/Application Support/Mozilla/NativeMessagingHosts/yomitan-host-darwin-arm64"),
+            classify_host_path(
+                "/Users/u/Library/Application Support/Mozilla/NativeMessagingHosts/yomitan-host-darwin-arm64"
+            ),
             HostMethod::Kimochi
         );
         assert_eq!(
@@ -661,7 +662,8 @@ mod tests {
         assert_eq!(parse_reg_default(english).as_deref(), Some(r"C:\Users\u\yomitan-api\yomitan_api.json"));
         let japanese = "\nHKEY_CURRENT_USER\\Software\\Mozilla\\NativeMessagingHosts\\yomitan_api\n    (既定)    REG_EXPAND_SZ    C:\\Program Files\\x\\yomitan_api.json\n";
         assert_eq!(parse_reg_default(japanese).as_deref(), Some(r"C:\Program Files\x\yomitan_api.json"));
-        let unset = "\nHKEY_CURRENT_USER\\Software\\Vivaldi\\NativeMessagingHosts\\yomitan_api\n    (Default)    REG_SZ    \n";
+        let unset =
+            "\nHKEY_CURRENT_USER\\Software\\Vivaldi\\NativeMessagingHosts\\yomitan_api\n    (Default)    REG_SZ    \n";
         assert_eq!(parse_reg_default(unset), None);
         assert_eq!(parse_reg_default(""), None);
     }

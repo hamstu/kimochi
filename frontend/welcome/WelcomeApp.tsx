@@ -209,8 +209,7 @@ function ScreenPermissionScreen({ next }: { next: string }): JSX.Element {
       title="Allow screen recording"
       lede={
         <>
-          Kimochi reads the text in the window you choose. Turn Kimochi on in Screen &amp; System
-          Audio Recording.
+          Kimochi reads the text in the window you choose. Turn Kimochi on in Screen &amp; System Audio Recording.
           <ScreenRecordingWhy restartAfterGrant={restartAfterGrant} />
         </>
       }
@@ -259,8 +258,8 @@ function AccessibilityScreen({ next }: { next: string }): JSX.Element {
       title="Allow Accessibility"
       lede={
         <>
-          Lets Kimochi bring your source’s exact window to the front, even in full screen. Turn
-          Kimochi on in Accessibility.
+          Lets Kimochi bring your source’s exact window to the front, even in full screen. Turn Kimochi on in
+          Accessibility.
           <AccessibilityWhy />
         </>
       }
@@ -374,8 +373,7 @@ function NoDictionaryWarning(): JSX.Element | null {
   if (ready !== false) return null
   return (
     <Callout tone="warn">
-      No dictionary is set up, so nothing will look words up yet. Choose and download one in
-      Settings → Dictionary.
+      No dictionary is set up, so nothing will look words up yet. Choose and download one in Settings → Dictionary.
     </Callout>
   )
 }
@@ -390,15 +388,14 @@ function DeckNextSteps(): JSX.Element | null {
   if (status.added)
     return (
       <p className={style.text}>
-        You can use Kimochi here in Desktop Mode now, or return to Gaming Mode: Kimochi is in your
-        Steam library.
+        You can use Kimochi here in Desktop Mode now, or return to Gaming Mode: Kimochi is in your Steam library.
       </p>
     )
   if (!offered && !offersSteamStep(status)) return null
   return (
     <p className={style.text}>
-      You can use Kimochi here in Desktop Mode now. To read in Gaming Mode, add Kimochi to your
-      Steam library from Settings → General.
+      You can use Kimochi here in Desktop Mode now. To read in Gaming Mode, add Kimochi to your Steam library from
+      Settings → General.
     </p>
   )
 }
@@ -406,8 +403,7 @@ function DeckNextSteps(): JSX.Element | null {
 function DoneScreen(): JSX.Element {
   const capabilities = useCapabilities()
   const [language] = useLanguage()
-  const gaming =
-    capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope'
+  const gaming = capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope'
   return (
     <Step
       title={
@@ -426,12 +422,11 @@ function DoneScreen(): JSX.Element {
             : 'Pick a window or screen in the sidebar, then crop the area with the text.'}
         </li>
         <li>
-          <strong>Scan.</strong> Kimochi recognises the {language.name} and adds each line to the
-          Log.
+          <strong>Scan.</strong> Kimochi recognises the {language.name} and adds each line to the Log.
         </li>
         <li>
-          <strong>Look up.</strong> Hold Shift and hover a word, or use controller reading
-          navigation, to see its meaning. Press B to go back.
+          <strong>Look up.</strong> Hold Shift and hover a word, or use controller reading navigation, to see its
+          meaning. Press B to go back.
         </li>
       </ol>
       <DeckNextSteps />
@@ -449,9 +444,7 @@ function CompleteOnboarding(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    completeOnboarding().catch((caught) =>
-      setError(caught instanceof Error ? caught.message : String(caught))
-    )
+    completeOnboarding().catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)))
   }, [attempt])
   if (!error) return <></>
   return (
@@ -477,11 +470,7 @@ function StepDots({ steps, current }: { steps: StepId[]; current: StepId | undef
   const index = current ? steps.indexOf(current) : -1
   if (index < 0) return null
   return (
-    <span
-      className={style.dots}
-      role="img"
-      aria-label={`Step ${index + 1} of ${steps.length}`}
-    >
+    <span className={style.dots} role="img" aria-label={`Step ${index + 1} of ${steps.length}`}>
       {steps.map((step, i) => (
         <span key={step} data-state={i < index ? 'done' : i === index ? 'current' : undefined} />
       ))}
@@ -530,7 +519,10 @@ export default function WelcomeApp(): JSX.Element {
           <div key={pathname} className={style.page}>
             <Routes>
               <Route index element={<IntroStep next="/language" />} />
-              <Route path="/language" element={<LanguageStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
+              <Route
+                path="/language"
+                element={<LanguageStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />}
+              />
               <Route path="/screen-recording-permission" element={<ScreenPermissionScreen next={afterCapture} />} />
               <Route path="/accessibility" element={<AccessibilityScreen next={afterAccessibility} />} />
               <Route path="/capture-border" element={<CaptureBorderScreen next={afterBorder} />} />

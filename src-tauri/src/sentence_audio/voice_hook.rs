@@ -10,7 +10,10 @@ use std::{
 /// `$XDG_DATA_HOME/kimochi-voicehook`.
 pub fn base_dir() -> PathBuf {
     if cfg!(windows) {
-        return std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("kimochi-voicehook");
+        return std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("kimochi-voicehook");
     }
     std::env::var_os("XDG_DATA_HOME")
         .filter(|d| !d.is_empty())
@@ -143,7 +146,9 @@ pub fn prune_stale(base: &std::path::Path, live: &[u32], stale: Duration) -> usi
     let mut removed = 0;
     for e in entries.flatten() {
         let name = e.file_name();
-        let Some((pid, time)) = name.to_string_lossy().split_once('-').map(|(p, t)| (p.parse::<u32>(), t.parse::<u64>())) else {
+        let Some((pid, time)) =
+            name.to_string_lossy().split_once('-').map(|(p, t)| (p.parse::<u32>(), t.parse::<u64>()))
+        else {
             continue;
         };
         let (Ok(pid), Ok(_)) = (pid, time) else {
@@ -153,7 +158,9 @@ pub fn prune_stale(base: &std::path::Path, live: &[u32], stale: Duration) -> usi
         if live.contains(&pid) || !path.is_dir() {
             continue;
         }
-        let touched = std::fs::metadata(path.join("events.jsonl")).or_else(|_| std::fs::metadata(&path)).and_then(|m| m.modified());
+        let touched = std::fs::metadata(path.join("events.jsonl"))
+            .or_else(|_| std::fs::metadata(&path))
+            .and_then(|m| m.modified());
         if touched.is_ok_and(|t| t.elapsed().is_ok_and(|age| age > stale)) && std::fs::remove_dir_all(&path).is_ok() {
             removed += 1;
         }
@@ -182,11 +189,13 @@ pub fn remembered(base: &std::path::Path, exe: &str) -> Option<Remembered> {
 }
 pub fn remember(base: &std::path::Path, exe: &str, game: &Remembered) -> Result<(), String> {
     let path = games_file(base);
-    let mut games: serde_json::Map<String, serde_json::Value> = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    let mut games: serde_json::Map<String, serde_json::Value> =
+        std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     games.insert(exe.to_lowercase(), serde_json::json!({"group": game.group, "typingMs": game.typing_ms}));
     std::fs::create_dir_all(base).map_err(|e| e.to_string())?;
     let partial = path.with_extension(format!("json.partial-{}", std::process::id()));
-    std::fs::write(&partial, serde_json::to_vec_pretty(&games).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::write(&partial, serde_json::to_vec_pretty(&games).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
     std::fs::rename(&partial, &path).map_err(|e| e.to_string())
 }
 impl Discovery {
@@ -247,7 +256,8 @@ impl Discovery {
         let (Some(group), typing) = (hooked.voice_group().map(str::to_owned), hooked.typing()) else {
             return;
         };
-        let changed = hooked.remembered.as_deref() != Some(group.as_str()) || typing.is_some_and(|t| hooked.remembered_typing != Some(t));
+        let changed = hooked.remembered.as_deref() != Some(group.as_str())
+            || typing.is_some_and(|t| hooked.remembered_typing != Some(t));
         if changed {
             let game = Remembered { group, typing_ms: typing.or(hooked.remembered_typing) };
             if let Err(e) = remember(base, &exe, &game) {
@@ -297,8 +307,12 @@ mod prune_tests {
         let _ = std::fs::remove_dir_all(&base);
         for name in ["100-1794197338", "200-1794198254", "bin", "300-1794199999"] {
             std::fs::create_dir_all(base.join(name).join("clips")).unwrap();
-            std::fs::write(base.join(name).join("events.jsonl"), b"{}
-").unwrap();
+            std::fs::write(
+                base.join(name).join("events.jsonl"),
+                b"{}
+",
+            )
+            .unwrap();
         }
         std::fs::write(base.join("games.json"), b"{}").unwrap();
         // Nothing is stale yet.
@@ -306,7 +320,8 @@ mod prune_tests {
         // Everything is: the hooked game's (200) and app data that is not a capture stay.
         std::thread::sleep(Duration::from_millis(20));
         assert_eq!(prune_stale(&base, &[200], Duration::from_millis(1)), 2);
-        let mut left: Vec<String> = std::fs::read_dir(&base).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let mut left: Vec<String> =
+            std::fs::read_dir(&base).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         left.sort();
         assert_eq!(left, ["200-1794198254", "bin", "games.json"]);
         let _ = std::fs::remove_dir_all(&base);
@@ -330,8 +345,12 @@ mod remembered_tests {
         assert_eq!(remembered(&base, r"c:gamesaadvhd.exe"), Some(advhd));
         assert_eq!(remembered(&base, r"C:GamesBSome Game_64.exe"), Some(krkr));
         // An entry from before typing delays were kept: the group alone.
-        std::fs::write(base.join("games.json"), r#"{"c:gamescsiglusengine.exe": "dsound | pcm16 1ch 44100Hz | "}"#).unwrap();
-        assert_eq!(remembered(&base, r"C:GamesCSiglusEngine.exe"), Some(Remembered { group: "dsound | pcm16 1ch 44100Hz | ".into(), typing_ms: None }));
+        std::fs::write(base.join("games.json"), r#"{"c:gamescsiglusengine.exe": "dsound | pcm16 1ch 44100Hz | "}"#)
+            .unwrap();
+        assert_eq!(
+            remembered(&base, r"C:GamesCSiglusEngine.exe"),
+            Some(Remembered { group: "dsound | pcm16 1ch 44100Hz | ".into(), typing_ms: None })
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 }
@@ -364,7 +383,12 @@ mod prefix_tests {
 
         let base = Path::new("/pfx/u/kimochi-voicehook");
         assert_eq!(
-            windows_under(&base.join("bin").join("00ff").join("kimochi-voicehook-x64.dll"), base, r"C:\users\u\kimochi-voicehook").as_deref(),
+            windows_under(
+                &base.join("bin").join("00ff").join("kimochi-voicehook-x64.dll"),
+                base,
+                r"C:\users\u\kimochi-voicehook"
+            )
+            .as_deref(),
             Some(r"C:\users\u\kimochi-voicehook\bin\00ff\kimochi-voicehook-x64.dll")
         );
         assert_eq!(windows_under(Path::new("/elsewhere/x.dll"), base, r"C:\x"), None);

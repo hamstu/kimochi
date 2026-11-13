@@ -5,10 +5,19 @@ import { BRIDGE_PATH, bridgeUrl, installRelayLink, servesBridge } from '../host/
 const loopback = { protocol: 'http:', hostname: '127.0.0.1', port: '27631', host: '127.0.0.1:27631' }
 
 test('link addresses go to the same origin bridge, everything else is left alone', () => {
-  assert.equal(bridgeUrl('ws://127.0.0.1:8771/link', loopback), `ws://127.0.0.1:27631${BRIDGE_PATH}?to=127.0.0.1%3A8771`)
-  assert.equal(bridgeUrl('ws://192.168.1.20:8771/link', loopback), `ws://127.0.0.1:27631${BRIDGE_PATH}?to=192.168.1.20%3A8771`)
+  assert.equal(
+    bridgeUrl('ws://127.0.0.1:8771/link', loopback),
+    `ws://127.0.0.1:27631${BRIDGE_PATH}?to=127.0.0.1%3A8771`
+  )
+  assert.equal(
+    bridgeUrl('ws://192.168.1.20:8771/link', loopback),
+    `ws://127.0.0.1:27631${BRIDGE_PATH}?to=192.168.1.20%3A8771`
+  )
   assert.equal(bridgeUrl('ws://desk.local/link', loopback), `ws://127.0.0.1:27631${BRIDGE_PATH}?to=desk.local%3A80`)
-  assert.equal(bridgeUrl('ws://[::1]:8771/link', loopback), `ws://127.0.0.1:27631${BRIDGE_PATH}?to=%5B%3A%3A1%5D%3A8771`)
+  assert.equal(
+    bridgeUrl('ws://[::1]:8771/link', loopback),
+    `ws://127.0.0.1:27631${BRIDGE_PATH}?to=%5B%3A%3A1%5D%3A8771`
+  )
   assert.equal(bridgeUrl('ws://127.0.0.1:8771/host', loopback), null)
   assert.equal(bridgeUrl('wss://relay.example/link', loopback), null)
   assert.equal(bridgeUrl('ws://127.0.0.1:6677/', loopback), null)

@@ -40,7 +40,8 @@ type Outcome = Result<(), Exit>;
 /// Options taking a value, wherever they appear.
 const VALUED: &[&str] = &["--timeout", "-n", "--lines", "--session"];
 /// Switches, wherever they appear.
-const SWITCHES: &[&str] = &["--json", "--no-start", "-h", "--help", "--wait", "-f", "--follow", "--all", "--list", "-V", "--version"];
+const SWITCHES: &[&str] =
+    &["--json", "--no-start", "-h", "--help", "--wait", "-f", "--follow", "--all", "--list", "-V", "--version"];
 
 #[derive(Default, Debug)]
 pub struct Args {
@@ -79,9 +80,13 @@ pub fn parse(raw: &[String]) -> Result<Args, String> {
             let value = inline.or_else(|| rest.next().cloned()).ok_or_else(|| format!("{name} needs a value"))?;
             match name {
                 "--timeout" => {
-                    args.timeout = Some(value.parse::<f64>().ok().filter(|s| *s > 0.0).ok_or("--timeout takes a number of seconds")?)
+                    args.timeout = Some(
+                        value.parse::<f64>().ok().filter(|s| *s > 0.0).ok_or("--timeout takes a number of seconds")?,
+                    )
                 }
-                "-n" | "--lines" => args.lines = Some(value.parse().map_err(|_| format!("{name} takes a number of lines"))?),
+                "-n" | "--lines" => {
+                    args.lines = Some(value.parse().map_err(|_| format!("{name} takes a number of lines"))?)
+                }
                 _ => args.session = Some(value),
             }
             continue;
@@ -294,9 +299,9 @@ pub fn run(raw: Vec<String>) -> Exit {
         ["action"] if args.list => action_list(&args),
         ["action", name] => simple(&args, "action", json!({ "name": name }), ""),
         ["watch", events @ ..] => watch(&args, events),
-        [command, ..] if help_for(command).is_some() => Err(Exit::Usage(format!(
-            "that isn't how {command} is used. See `kimochi help {command}`."
-        ))),
+        [command, ..] if help_for(command).is_some() => {
+            Err(Exit::Usage(format!("that isn't how {command} is used. See `kimochi help {command}`.")))
+        }
         [command, ..] => Err(Exit::Usage(match suggestion(command) {
             Some(near) => format!("no command called {command:?}. Did you mean `kimochi {near}`?"),
             None => format!("no command called {command:?}. See `kimochi help`."),
@@ -432,7 +437,8 @@ fn status(args: &Args) -> Outcome {
         print_json(&report);
         return Ok(());
     }
-    let yes_no = |v: &Value, on: &str, off: &str| if v.as_bool() == Some(true) { on.to_string() } else { off.to_string() };
+    let yes_no =
+        |v: &Value, on: &str, off: &str| if v.as_bool() == Some(true) { on.to_string() } else { off.to_string() };
     if report["running"] == json!(true) {
         println!("Kimochi {} is running (pid {})", report["version"].as_str().unwrap_or("?"), report["pid"]);
     } else {
@@ -449,12 +455,22 @@ fn status(args: &Args) -> Outcome {
         ("Source", source_line),
         ("Input", input_name(report["input"].as_str().unwrap_or("ocr")).to_string()),
         ("OCR engine", engine_name(report["ocrEngine"].as_str().unwrap_or("")).to_string()),
-        ("Auto OCR", if report["running"] == json!(true) { yes_no(&report["autoOcr"], "on", "off") } else { "off".into() }),
-        ("Overlay", if report["running"] == json!(true) {
-            format!("{}, text {}", yes_no(&report["overlay"], "shown", "hidden"), yes_no(&report["textOverlay"], "shown", "hidden"))
-        } else {
-            "-".into()
-        }),
+        (
+            "Auto OCR",
+            if report["running"] == json!(true) { yes_no(&report["autoOcr"], "on", "off") } else { "off".into() },
+        ),
+        (
+            "Overlay",
+            if report["running"] == json!(true) {
+                format!(
+                    "{}, text {}",
+                    yes_no(&report["overlay"], "shown", "hidden"),
+                    yes_no(&report["textOverlay"], "shown", "hidden")
+                )
+            } else {
+                "-".into()
+            },
+        ),
         ("Session", report["session"]["name"].as_str().unwrap_or("none").to_string()),
     ];
     for (label, value) in rows {
@@ -471,9 +487,10 @@ fn offline_status() -> Value {
     let settings = settings_file().map(crate::settings::Settings::load);
     let get = |key: &str| settings.as_ref().and_then(|s| s.get(key).ok().flatten()).unwrap_or(Value::Null);
     let reader = get("superTexthooker");
-    let input = reader["inputSource"].as_str().map(str::to_string).unwrap_or_else(|| {
-        if reader["clipboardEnabled"] == json!(true) { "clipboard" } else { "ocr" }.to_string()
-    });
+    let input = reader["inputSource"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| if reader["clipboardEnabled"] == json!(true) { "clipboard" } else { "ocr" }.to_string());
     let manifest = sessions_manifest();
     json!({
         "running": false,
@@ -606,7 +623,8 @@ fn ocr_list(args: &Args) -> Outcome {
 }
 
 /// Every `ocrMode` there is; which of them this computer has is the app's to say.
-const ENGINES: &[&str] = &["googlelens", "cloud", "meikiocr", "local", "mangaocr", "ppocr", "screenai", "vocr", "livetext", "oneocr"];
+const ENGINES: &[&str] =
+    &["googlelens", "cloud", "meikiocr", "local", "mangaocr", "ppocr", "screenai", "vocr", "livetext", "oneocr"];
 
 fn ocr_set(args: &Args, engine: &str) -> Outcome {
     if !ENGINES.contains(&engine) {
@@ -652,7 +670,11 @@ fn source_list(args: &Args) -> Outcome {
         println!(
             "{:<8} {:<20} {}  [{}]",
             source["kind"].as_str().unwrap_or_default(),
-            if app.chars().count() > 20 { format!("{}…", app.chars().take(19).collect::<String>()) } else { app.to_string() },
+            if app.chars().count() > 20 {
+                format!("{}…", app.chars().take(19).collect::<String>())
+            } else {
+                app.to_string()
+            },
             source["name"].as_str().unwrap_or_default(),
             source["id"].as_str().unwrap_or_default()
         );
@@ -674,9 +696,7 @@ fn source_set(args: &Args, query: &str) -> Outcome {
 // ------------------------------------------------------------------------------ the Log
 
 fn sessions_manifest() -> Value {
-    endpoint::profile_dir()
-        .and_then(|dir| crate::profile::read_json(&dir.join("sessions.json")))
-        .unwrap_or(Value::Null)
+    endpoint::profile_dir().and_then(|dir| crate::profile::read_json(&dir.join("sessions.json"))).unwrap_or(Value::Null)
 }
 
 fn active_session(manifest: &Value) -> Value {
@@ -697,9 +717,17 @@ fn log_print(args: &Args) -> Outcome {
         Some(query) => super::server::find_session(&manifest, query).map_err(|e| app_error(&e))?,
         None => active_session(&manifest),
     };
-    let sid = session["id"].as_str().filter(|id| crate::sync_core::safe_segment(id)).ok_or_else(|| Exit::Failed("no session is open".into()))?;
+    let sid = session["id"]
+        .as_str()
+        .filter(|id| crate::sync_core::safe_segment(id))
+        .ok_or_else(|| Exit::Failed("no session is open".into()))?;
     let file = crate::profile::read_json(&dir.join("sessions").join(sid).join("lines.json")).unwrap_or(Value::Null);
-    let lines: Vec<&Value> = file["lines"].as_array().into_iter().flatten().filter(|l| l["text"].as_str().is_some_and(|t| !t.trim().is_empty())).collect();
+    let lines: Vec<&Value> = file["lines"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|l| l["text"].as_str().is_some_and(|t| !t.trim().is_empty()))
+        .collect();
     let count = if args.all { lines.len() } else { args.lines.unwrap_or(20) };
     let shown = &lines[lines.len().saturating_sub(count)..];
     let mut out = std::io::stdout().lock();
@@ -839,7 +867,8 @@ fn session_switch(args: &Args, query: &str) -> Outcome {
 }
 
 fn session_new(args: &Args, name: &str) -> Outcome {
-    let result = ask(args, "session.new", json!({ "name": if name.trim().is_empty() { Value::Null } else { json!(name) } }))?;
+    let result =
+        ask(args, "session.new", json!({ "name": if name.trim().is_empty() { Value::Null } else { json!(name) } }))?;
     if args.json {
         print_json(&result);
     } else {
@@ -874,7 +903,8 @@ fn quit(args: &Args) -> Outcome {
     request(&endpoint, "quit", json!({}), Duration::from_secs(10))?;
     // Wait for it to be gone, so a script can start it again straight after.
     let deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < deadline && endpoint::call(&endpoint, "ping", json!({}), Duration::from_millis(500)).is_ok() {
+    while Instant::now() < deadline && endpoint::call(&endpoint, "ping", json!({}), Duration::from_millis(500)).is_ok()
+    {
         std::thread::sleep(Duration::from_millis(200));
     }
     Ok(())
@@ -920,7 +950,11 @@ fn settings_list(args: &Args) -> Outcome {
 /// one value each, as do arrays.
 fn flatten(prefix: &str, value: &Value, out: &mut Vec<(String, String)>) {
     match value.as_object() {
-        Some(map) if !map.is_empty() && map.keys().all(|k| !k.contains('.') && !k.contains('/')) && prefix.split('.').count() < 3 => {
+        Some(map)
+            if !map.is_empty()
+                && map.keys().all(|k| !k.contains('.') && !k.contains('/'))
+                && prefix.split('.').count() < 3 =>
+        {
             for (key, child) in map {
                 let path = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
                 flatten(&path, child, out);
@@ -948,7 +982,9 @@ pub fn setting_value(raw: &str) -> Value {
 fn settings_set(args: &Args, key: &str, raw: &str) -> Outcome {
     let value = setting_value(raw);
     let stored = match running() {
-        Some(endpoint) => request(&endpoint, "settings.set", json!({ "key": key, "value": value }), Duration::from_secs(10))?,
+        Some(endpoint) => {
+            request(&endpoint, "settings.set", json!({ "key": key, "value": value }), Duration::from_secs(10))?
+        }
         None => {
             let path = settings_file().ok_or_else(|| Exit::Failed("no data folder".into()))?;
             let settings = crate::settings::Settings::load(path);
@@ -988,7 +1024,8 @@ fn watch(args: &Args, events: &[&str]) -> Outcome {
 
 /// Read `watch` events until the app or the reader goes away.
 fn stream(endpoint: &Endpoint, params: Value, mut each: impl FnMut(&Value)) -> Outcome {
-    let mut connection = endpoint::send(endpoint, "watch", params, None).map_err(|e| Exit::Failed(format!("lost Kimochi: {e}")))?;
+    let mut connection =
+        endpoint::send(endpoint, "watch", params, None).map_err(|e| Exit::Failed(format!("lost Kimochi: {e}")))?;
     match connection.next() {
         Some(Ok(first)) if first["ok"] == json!(true) => {}
         Some(Ok(first)) => return Err(app_error(first["error"].as_str().unwrap_or("Kimochi refused"))),
@@ -1049,7 +1086,10 @@ mod tests {
 
     #[test]
     fn every_listed_command_has_help() {
-        for command in ["status", "scan", "auto-ocr", "overlay", "ocr", "source", "log", "session", "open", "quit", "settings", "action", "watch", "paths", "version"] {
+        for command in [
+            "status", "scan", "auto-ocr", "overlay", "ocr", "source", "log", "session", "open", "quit", "settings",
+            "action", "watch", "paths", "version",
+        ] {
             assert!(help_for(command).is_some(), "{command}");
             assert!(OVERVIEW.contains(&format!("  {command}")), "{command} is missing from the overview");
             assert!(super::super::COMMANDS.contains(&command), "{command} does not start the CLI");
@@ -1059,7 +1099,11 @@ mod tests {
     #[test]
     fn settings_flatten_into_dotted_lines() {
         let mut out = Vec::new();
-        flatten("", &json!({"a": 1, "b": {"c": true, "d": {"e": 1, "f": {"g": 2}}}, "crops": {"Node.js": {"x": 1}}}), &mut out);
+        flatten(
+            "",
+            &json!({"a": 1, "b": {"c": true, "d": {"e": 1, "f": {"g": 2}}}, "crops": {"Node.js": {"x": 1}}}),
+            &mut out,
+        );
         let keys: Vec<&str> = out.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(keys, ["a", "b.c", "b.d.e", "b.d.f", "crops"]);
     }

@@ -111,11 +111,7 @@ fn current_zoom(webview: &tauri::Webview) -> Option<f64> {
 /// the page's screen coordinates to desktop points; `null` elsewhere or when it cannot tell.
 /// Each change of zoom is recorded as `webview-scale`.
 #[tauri::command]
-pub async fn webview_scale_sync(
-    app: tauri::AppHandle,
-    webview: tauri::Webview,
-    ratio: f64,
-) -> Option<ScaleSync> {
+pub async fn webview_scale_sync(app: tauri::AppHandle, webview: tauri::Webview, ratio: f64) -> Option<ScaleSync> {
     #[cfg(target_os = "windows")]
     {
         // Blocking: the zoom is read on the main thread and waited for here.

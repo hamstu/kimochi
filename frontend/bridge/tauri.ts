@@ -49,12 +49,14 @@ import type {
  */
 function guardTauriUnlisten(): void {
   if (typeof window === 'undefined') return
-  const internals = (window as unknown as {
-    __TAURI_EVENT_PLUGIN_INTERNALS__?: {
-      unregisterListener?: (event: string, eventId: number) => void
-      __kimochiGuarded?: boolean
+  const internals = (
+    window as unknown as {
+      __TAURI_EVENT_PLUGIN_INTERNALS__?: {
+        unregisterListener?: (event: string, eventId: number) => void
+        __kimochiGuarded?: boolean
+      }
     }
-  }).__TAURI_EVENT_PLUGIN_INTERNALS__
+  ).__TAURI_EVENT_PLUGIN_INTERNALS__
   const original = internals?.unregisterListener
   if (!internals || typeof original !== 'function' || internals.__kimochiGuarded) return
   try {
@@ -119,11 +121,7 @@ export function nativeError(error: unknown): NativeError {
 export const isBusy = (error: unknown): boolean => nativeError(error).kind === 'busy'
 
 /** Retries a call while the backend reports `busy:`. Any other failure propagates immediately. */
-export async function retryWhileBusy<T>(
-  call: () => Promise<T>,
-  attempts = 4,
-  delayMs = 250
-): Promise<T> {
+export async function retryWhileBusy<T>(call: () => Promise<T>, attempts = 4, delayMs = 250): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
@@ -139,31 +137,20 @@ export async function retryWhileBusy<T>(
 
 // ---------------------------------------------------------------------------- settings
 
-export const settingsGet = <T>(key: string): Promise<T | null> =>
-  invoke<T | null>('settings_get', { key })
-export const settingsSet = (key: string, value: unknown): Promise<void> =>
-  invoke('settings_set', { key, value })
-export const settingsAll = (): Promise<Record<string, unknown>> =>
-  invoke<Record<string, unknown>>('settings_all')
-export const onSettingsChanged = (
-  handler: (key: string, value: unknown) => void
-): Promise<UnlistenFn> =>
+export const settingsGet = <T>(key: string): Promise<T | null> => invoke<T | null>('settings_get', { key })
+export const settingsSet = (key: string, value: unknown): Promise<void> => invoke('settings_set', { key, value })
+export const settingsAll = (): Promise<Record<string, unknown>> => invoke<Record<string, unknown>>('settings_all')
+export const onSettingsChanged = (handler: (key: string, value: unknown) => void): Promise<UnlistenFn> =>
   listen<{ key: string; value: unknown }>('settings:changed', (event) =>
     handler(event.payload.key, event.payload.value)
   )
 
 // ---------------------------------------------------------------------------- panels
 
-export const panel = (
-  label: PanelLabel | string,
-  action: PanelAction,
-  rect: Rect | null = null
-): Promise<PanelInfo> =>
+export const panel = (label: PanelLabel | string, action: PanelAction, rect: Rect | null = null): Promise<PanelInfo> =>
   // Dragging has its own synchronous command: the native drag must start inside the
   // mouse-down's IPC turn, which the deferred window-creating `panel` path cannot promise.
-  action === 'drag'
-    ? invoke<PanelInfo>('panel_drag', { label })
-    : invoke<PanelInfo>('panel', { label, action, rect })
+  action === 'drag' ? invoke<PanelInfo>('panel_drag', { label }) : invoke<PanelInfo>('panel', { label, action, rect })
 /** Settings pages, in rail order. Older builds stored other names; see `settingsTabOf`. */
 export type SettingsTabName =
   | 'general'
@@ -191,8 +178,7 @@ export async function openSettings(tab?: SettingsTabName): Promise<void> {
 
 export const panelContentHeight = (label: string, height: number): Promise<void> =>
   invoke('panel_content_height', { label, height })
-export const panelPointer = (): Promise<[number, number] | null> =>
-  invoke<[number, number] | null>('panel_pointer')
+export const panelPointer = (): Promise<[number, number] | null> => invoke<[number, number] | null>('panel_pointer')
 export const panelCursor = (kind: string): Promise<void> => invoke('panel_cursor', { kind })
 
 // ---------------------------------------------------------------------------- state
@@ -227,9 +213,7 @@ export const sourceThumbnail = (sourceId: string): Promise<{ url: string }> =>
   invoke<{ url: string }>('source_thumbnail', { sourceId })
 /** The chosen source as it looks right now, uncached; `busy:` while a scan holds the capture.
  *  No `url` while nobody can see the preview (Kimochi behind the game in Gaming Mode). */
-export const sourceLiveThumbnail = (
-  sourceId: string
-): Promise<{ url: string | null; width: number; height: number }> =>
+export const sourceLiveThumbnail = (sourceId: string): Promise<{ url: string | null; width: number; height: number }> =>
   invoke('source_live_thumbnail', { sourceId })
 /** What native tracks about the chosen window (`source-bounds`), or null for a display. */
 export interface SourceWindowState {
@@ -242,8 +226,7 @@ export interface SourceWindowState {
 export const sourceWindowState = (): Promise<SourceWindowState | null> =>
   invoke<SourceWindowState | null>('source_window_state')
 /** Accessibility on macOS: true or false; null where the platform has no such permission. */
-export const accessibilityStatus = (): Promise<boolean | null> =>
-  invoke<boolean | null>('accessibility_status')
+export const accessibilityStatus = (): Promise<boolean | null> => invoke<boolean | null>('accessibility_status')
 /** The system's Accessibility prompt and its Privacy & Security pane; whether it is granted now. */
 export const requestAccessibility = (): Promise<boolean> => invoke<boolean>('request_accessibility')
 /** An application's icon as a data URL, or null when it has none. Natively cached per app. */
@@ -259,20 +242,17 @@ export const clearSourceCrop = (sourceId: string): Promise<void> =>
 export const commitAnkiCrop = (sourceId: string, crop: NativeCrop): Promise<void> =>
   invoke('commit_anki_crop', { sourceId, crop })
 /** Forget the source's Anki crop: cards get the whole window or display. */
-export const clearAnkiCrop = (sourceId: string): Promise<void> =>
-  invoke('commit_anki_crop', { sourceId, crop: null })
+export const clearAnkiCrop = (sourceId: string): Promise<void> => invoke('commit_anki_crop', { sourceId, crop: null })
 /** Read nothing: deselect the source (each source's saved region is kept for next time). */
 export const clearSource = (): Promise<void> => invoke('clear_source')
 /** Bring a window source's application to the front. */
-export const activateSource = (sourceId: string): Promise<void> =>
-  invoke('activate_source', { sourceId })
+export const activateSource = (sourceId: string): Promise<void> => invoke('activate_source', { sourceId })
 /**
  * "Choose in system picker" (`capabilities.capture.pickerRequired`): opens the system's own picker
  * and, once the user shares a screen or window, selects it. Resolves only when the user is done
  * with the dialog, which can take as long as they like.
  */
-export const capturePickSource = (): Promise<PickSourceResult> =>
-  invoke<PickSourceResult>('capture_pick_source')
+export const capturePickSource = (): Promise<PickSourceResult> => invoke<PickSourceResult>('capture_pick_source')
 
 /** This window's system-picker progress (`startSystemPick`), shared by every view that offers it. */
 export interface SystemPick {
@@ -334,21 +314,18 @@ export const triggerAction = (name: string): Promise<void> => invoke('trigger_ac
 export const quitApp = (): Promise<void> => invoke('app_quit')
 export const openDictionary = (open: boolean): Promise<void> => invoke('dictionary', { open })
 export const texthookerSend = (text: string): Promise<void> => invoke('texthooker_send', { text })
-export const openScreenCapturePreferences = (): Promise<void> =>
-  invoke('open_screen_capture_preferences')
+export const openScreenCapturePreferences = (): Promise<void> => invoke('open_screen_capture_preferences')
 /**
  * Whether captures hide the yellow border Windows draws around a captured window: `denied` when
  * Settings → Privacy & security → Screenshot borders turns that off for Kimochi. Never prompts.
  */
 export type CaptureBorder = 'hidden' | 'denied' | 'unsupported'
-export const captureBorderStatus = (): Promise<CaptureBorder> =>
-  invoke<CaptureBorder>('capture_border_status')
+export const captureBorderStatus = (): Promise<CaptureBorder> => invoke<CaptureBorder>('capture_border_status')
 /** Opens Settings → Privacy & security → Screenshot borders (Windows). */
 export const openCaptureBorderSettings = (): Promise<void> => invoke('open_capture_border_settings')
 
 /** Session flags the owning window sets directly (see `view_flags` in the backend). */
-export const setViewFlags = (flags: Record<string, boolean>): Promise<void> =>
-  invoke('view_flags', { flags })
+export const setViewFlags = (flags: Record<string, boolean>): Promise<void> => invoke('view_flags', { flags })
 
 export const historyAdd = (text: string): Promise<unknown> => invoke('history_add', { text })
 export const historyDelete = (id: string): Promise<void> => invoke('history_delete', { id })
@@ -357,8 +334,7 @@ export const historyClear = (): Promise<void> => invoke('history_clear')
 // ---------------------------------------------------------------------------- hotkeys
 
 export const hotkeysLoad = (): Promise<HotkeysSettings> => invoke<HotkeysSettings>('hotkeys_load')
-export const hotkeysSave = (hotkeys: HotkeysSettings): Promise<void> =>
-  invoke('hotkeys_save', { hotkeys })
+export const hotkeysSave = (hotkeys: HotkeysSettings): Promise<void> => invoke('hotkeys_save', { hotkeys })
 export interface HotkeysApplyResult {
   registered: string[]
   failed: { name: string; accelerator: string; error: string }[]

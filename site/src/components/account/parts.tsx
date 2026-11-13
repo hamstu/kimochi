@@ -15,7 +15,11 @@ export function AccountSection({
   children: ReactNode
 }) {
   return (
-    <section aria-labelledby={`${id}-title`} id={id} className="grid gap-5 border-t border-hairline py-10 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10">
+    <section
+      aria-labelledby={`${id}-title`}
+      id={id}
+      className="grid gap-5 border-t border-hairline py-10 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10"
+    >
       <div>
         <h2 id={`${id}-title`} className="text-heading text-ink">
           {title}
@@ -37,7 +41,11 @@ const badgeTones: Record<BadgeTone, string> = {
 }
 
 export function Badge({ tone = 'neutral', children }: { tone?: BadgeTone; children: ReactNode }) {
-  return <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-meta ${badgeTones[tone]}`}>{children}</span>
+  return (
+    <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-meta ${badgeTones[tone]}`}>
+      {children}
+    </span>
+  )
 }
 
 /** Load something once on mount, with reload. */
@@ -123,7 +131,10 @@ export function ConfirmButton({
 /** Inline "Saved." style status line that announces itself. */
 export function StatusLine({ tone = 'ok', children }: { tone?: 'ok' | 'danger'; children: ReactNode }) {
   return (
-    <p role={tone === 'danger' ? 'alert' : 'status'} className={`text-small ${tone === 'danger' ? 'text-danger' : 'text-ok'}`}>
+    <p
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className={`text-small ${tone === 'danger' ? 'text-danger' : 'text-ok'}`}
+    >
       {children}
     </p>
   )

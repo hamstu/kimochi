@@ -11,7 +11,8 @@ export function observeFrame(win, hub) {
       if (
         win.__KIMOCHI_PLATFORM__?.os === 'linux' &&
         new URL(url, win.location.href).pathname === '/js/dictionary/dictionary-worker-main.js'
-      ) url = new URL('/spike/linux-dictionary-worker.js', win.location.href)
+      )
+        url = new URL('/spike/linux-dictionary-worker.js', win.location.href)
       super(url, options)
       this.spikeUrl = new URL(url, win.location.href).pathname
       let last = 0
@@ -35,9 +36,7 @@ export function observeFrame(win, hub) {
           hub.lastImport = data.params
         }
       })
-      this.addEventListener('error', (e) =>
-        hub.log({ check: 'worker-error', url: this.spikeUrl, message: e.message })
-      )
+      this.addEventListener('error', (e) => hub.log({ check: 'worker-error', url: this.spikeUrl, message: e.message }))
     }
     postMessage(message, transfer) {
       if (message.action === 'importDictionary') {

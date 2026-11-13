@@ -97,7 +97,9 @@ export function installPageLinks(win, { open, log = () => {} }) {
     if (kind === 'web') {
       void Promise.resolve()
         .then(() => open(url, 'web'))
-        .catch((error) => log({ check: 'page-link-failed', kind, url: url.slice(0, 300), error: String(error?.message ?? error) }))
+        .catch((error) =>
+          log({ check: 'page-link-failed', kind, url: url.slice(0, 300), error: String(error?.message ?? error) })
+        )
       return true
     }
     if (kind === 'page') {
@@ -105,7 +107,9 @@ export function installPageLinks(win, { open, log = () => {} }) {
       if (SAME_FRAME.has(String(target ?? '').toLowerCase())) return false
       void Promise.resolve()
         .then(() => open(url, 'page'))
-        .catch((error) => log({ check: 'page-link-failed', kind, url: url.slice(0, 300), error: String(error?.message ?? error) }))
+        .catch((error) =>
+          log({ check: 'page-link-failed', kind, url: url.slice(0, 300), error: String(error?.message ?? error) })
+        )
       return true
     }
     if (kind === 'ignore') {
@@ -123,7 +127,8 @@ export function installPageLinks(win, { open, log = () => {} }) {
     const anchor = anchorOf(event)
     if (!anchor || isDataDownload(anchor)) return
     // A modified or middle click asks for a new tab: never a navigation of this frame.
-    const target = event.type === 'auxclick' || event.metaKey || event.ctrlKey || event.shiftKey ? '_blank' : anchor.target
+    const target =
+      event.type === 'auxclick' || event.metaKey || event.ctrlKey || event.shiftKey ? '_blank' : anchor.target
     if (follow(anchor.getAttribute('href'), target, event.type)) event.preventDefault()
   }
   win.addEventListener('click', onClick)
@@ -153,7 +158,9 @@ export function installDownloads(win, { save, log = () => {} }) {
   const download = (anchor) => {
     const href = String(anchor.href)
     const name =
-      anchor.getAttribute('download') || (/^(blob|data):/i.test(href) ? '' : href.split(/[/?#]/).filter(Boolean).at(-1)) || 'download'
+      anchor.getAttribute('download') ||
+      (/^(blob|data):/i.test(href) ? '' : href.split(/[/?#]/).filter(Boolean).at(-1)) ||
+      'download'
     void (async () => {
       try {
         // Read at once: Yomitan revokes the URL a minute later.

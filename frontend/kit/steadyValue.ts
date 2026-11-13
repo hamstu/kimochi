@@ -23,5 +23,5 @@ export function steadyProp<V>(state: Steady<V>, value: V): Steady<V> {
 export const steadyTyped = <V>(state: Steady<V>, value: string): Steady<V | string> => ({
   ...state,
   shown: value,
-  typed: [...state.typed, value].slice(-64),
+  typed: [...state.typed, value].slice(-64)
 })

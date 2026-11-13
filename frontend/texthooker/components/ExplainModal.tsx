@@ -1,37 +1,32 @@
-import { displayHtml } from "../lib/html";
-import { useMemo, useSyncExternalStore } from "react";
-import { marked } from "marked";
-import { RefreshCw } from "lucide-react";
-import { Badge, Button, Callout, Dialog, DialogContent, Spinner } from "@kit";
-import {
-  closeExplain,
-  getExplainState,
-  regenerateExplain,
-  subscribeExplainState,
-} from "@texthooker/lib/explain";
-import { getSettings } from "@texthooker/lib/settings";
-import { useTextLang } from "../../bridge/useTextLang";
+import { displayHtml } from '../lib/html'
+import { useMemo, useSyncExternalStore } from 'react'
+import { marked } from 'marked'
+import { RefreshCw } from 'lucide-react'
+import { Badge, Button, Callout, Dialog, DialogContent, Spinner } from '@kit'
+import { closeExplain, getExplainState, regenerateExplain, subscribeExplainState } from '@texthooker/lib/explain'
+import { getSettings } from '@texthooker/lib/settings'
+import { useTextLang } from '../../bridge/useTextLang'
 
 export function ExplainModal() {
-  const textLang = useTextLang();
-  const state = useSyncExternalStore(subscribeExplainState, getExplainState);
+  const textLang = useTextLang()
+  const state = useSyncExternalStore(subscribeExplainState, getExplainState)
 
   const html = useMemo(() => {
-    if (!state || state.status === "error" || !state.text) return "";
-    return marked.parse(state.text, { breaks: true, async: false });
-  }, [state]);
+    if (!state || state.status === 'error' || !state.text) return ''
+    return marked.parse(state.text, { breaks: true, async: false })
+  }, [state])
 
-  if (!state) return null;
+  if (!state) return null
 
-  const settings = getSettings();
+  const settings = getSettings()
   const providerLabel =
-    settings.explainProvider === "kimochi"
-      ? "Kimochi cloud"
-      : settings.explainProvider === "claude"
-        ? `Claude · ${settings.explainClaudeModel || "default"}`
-        : `Codex${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ""}`;
+    settings.explainProvider === 'kimochi'
+      ? 'Kimochi cloud'
+      : settings.explainProvider === 'claude'
+        ? `Claude · ${settings.explainClaudeModel || 'default'}`
+        : `Codex${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ''}`
 
-  const busy = state.status === "loading" || state.status === "streaming";
+  const busy = state.status === 'loading' || state.status === 'streaming'
 
   return (
     <Dialog open onOpenChange={(open) => !open && closeExplain()}>
@@ -59,24 +54,24 @@ export function ExplainModal() {
             onClick={() => regenerateExplain()}
             title="Re-run with the current prompt and model settings"
           >
-            <RefreshCw className={busy ? "log-spin" : undefined} />
+            <RefreshCw className={busy ? 'log-spin' : undefined} />
             Regenerate
           </Button>
         }
       >
-        {state.status === "error" ? (
+        {state.status === 'error' ? (
           <Callout tone="danger">
             <span className="log-explain-error">{state.text}</span>
           </Callout>
-        ) : state.status === "loading" ? (
+        ) : state.status === 'loading' ? (
           <div className="log-explain-waiting">
             <Spinner label="Waiting" />
-            Waiting for{" "}
-            {settings.explainProvider === "kimochi"
-              ? "Kimochi cloud"
-              : settings.explainProvider === "claude"
-                ? "Claude"
-                : "Codex"}
+            Waiting for{' '}
+            {settings.explainProvider === 'kimochi'
+              ? 'Kimochi cloud'
+              : settings.explainProvider === 'claude'
+                ? 'Claude'
+                : 'Codex'}
             …
           </div>
         ) : (
@@ -85,12 +80,10 @@ export function ExplainModal() {
               className="explain-markdown scan-region log-explain-body"
               dangerouslySetInnerHTML={{ __html: displayHtml(html) }}
             />
-            {state.status === "streaming" ? (
-              <span className="log-explain-caret" aria-hidden />
-            ) : null}
+            {state.status === 'streaming' ? <span className="log-explain-caret" aria-hidden /> : null}
           </>
         )}
       </DialogContent>
     </Dialog>
-  );
+  )
 }

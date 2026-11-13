@@ -158,7 +158,10 @@ pub async fn tts_speak(
     let token = account::token().ok_or_else(|| format!("native: {NO_ACCOUNT_TTS}"))?;
     let url = format!("{}/api/v1/tts", settings::server_base(&state.settings));
     let model = tts_model(&state.settings.get_or("audioSettings.model", String::new()));
-    let body = crate::language::with_language(json!({ "text": text, "voiceId": voice_id, "model": model }), crate::language::current(&state.settings));
+    let body = crate::language::with_language(
+        json!({ "text": text, "voiceId": voice_id, "model": model }),
+        crate::language::current(&state.settings),
+    );
     tauri::async_runtime::spawn_blocking(move || {
         let client = blocking_client(Duration::from_secs(30))?;
         let response = client
@@ -170,9 +173,7 @@ pub async fn tts_speak(
         if !response.status().is_success() {
             return Err(failure(Feature::Tts, response));
         }
-        let bytes = response
-            .bytes()
-            .map_err(|_| "native: text-to-speech response could not be read")?;
+        let bytes = response.bytes().map_err(|_| "native: text-to-speech response could not be read")?;
         account::usage_changed();
         Ok(tauri::ipc::Response::new(bytes.to_vec()))
     })
@@ -205,9 +206,7 @@ pub async fn cloud_translate(state: State<'_, Shared>, text: String) -> Result<S
         if !response.status().is_success() {
             return Err(failure(Feature::Translate, response));
         }
-        let body: Value = response
-            .json()
-            .map_err(|_| "native: Kimochi cloud sent an unreadable translation")?;
+        let body: Value = response.json().map_err(|_| "native: Kimochi cloud sent an unreadable translation")?;
         account::usage_changed();
         body.get("text")
             .and_then(Value::as_str)
@@ -257,7 +256,8 @@ pub async fn explain(
     let (base, body) = {
         use tauri::Manager;
         let service = app.try_state::<Shared>().ok_or("Kimochi is still starting")?;
-        let body = crate::language::with_language(json!({ "prompt": prompt }), crate::language::current(&service.settings));
+        let body =
+            crate::language::with_language(json!({ "prompt": prompt }), crate::language::current(&service.settings));
         (settings::server_base(&service.settings), body)
     };
     let client = reqwest::Client::builder()
@@ -330,7 +330,9 @@ pub async fn explain(
     let (answer, error) = split_stream_error(&full);
     match error {
         Some(detail) => emit("explain:error", format!("Kimochi cloud could not finish the explanation: {detail}")),
-        None if answer.trim().is_empty() => emit("explain:error", "Kimochi cloud sent an empty explanation. Try Regenerate.".into()),
+        None if answer.trim().is_empty() => {
+            emit("explain:error", "Kimochi cloud sent an empty explanation. Try Regenerate.".into())
+        }
         None => emit("explain:done", answer.to_string()),
     }
     Ok(())
@@ -363,15 +365,21 @@ mod tests {
             describe_failure(Feature::Ocr, 402, body, true),
             "You've used this month's 500 Kimochi cloud scans. They reset on Nov 1."
         );
-        let body = r#"{"error":"quota_exceeded","metric":"explain","limit":30,"used":30,"resetsAt":"2027-01-01T00:00:00Z"}"#;
+        let body =
+            r#"{"error":"quota_exceeded","metric":"explain","limit":30,"used":30,"resetsAt":"2027-01-01T00:00:00Z"}"#;
         assert_eq!(
             describe_failure(Feature::Explain, 402, body, true),
             "You've used this month's 30 Kimochi cloud explanations. They reset on Jan 1."
         );
         let body = r#"{"error":"quota_exceeded","metric":"storage","limit":250000000,"used":1}"#;
-        assert!(describe_failure(Feature::Sync, 402, body, true).starts_with("Your Kimochi sync storage is full (250 MB)"));
+        assert!(
+            describe_failure(Feature::Sync, 402, body, true).starts_with("Your Kimochi sync storage is full (250 MB)")
+        );
         // A 402 without the fields falls back to the server's sentence.
-        assert_eq!(describe_failure(Feature::Tts, 402, r#"{"message":"Out of read-alouds."}"#, true), "Out of read-alouds.");
+        assert_eq!(
+            describe_failure(Feature::Tts, 402, r#"{"message":"Out of read-alouds."}"#, true),
+            "Out of read-alouds."
+        );
     }
 
     #[test]
@@ -380,11 +388,15 @@ mod tests {
         assert_eq!(describe_failure(Feature::Tts, 403, suspended, true), "This account is suspended.");
         assert!(describe_failure(Feature::Tts, 403, "", true).contains("suspended"));
         let unset = r#"{"error":"not_configured","message":"No key"}"#;
-        assert!(describe_failure(Feature::Translate, 503, unset, true).starts_with("Kimochi cloud translation isn't available right now"));
+        assert!(describe_failure(Feature::Translate, 503, unset, true)
+            .starts_with("Kimochi cloud translation isn't available right now"));
         assert!(describe_failure(Feature::Ocr, 401, "", true).contains("Sign in again"));
         // Without a token (linking a device), a 401 is just a failure.
         assert_eq!(describe_failure(Feature::Account, 401, "", false), "Kimochi cloud failed (HTTP 401).");
-        assert_eq!(describe_failure(Feature::Ocr, 500, r#"{"message":"Boom"}"#, true), "Kimochi cloud OCR failed (HTTP 500): Boom");
+        assert_eq!(
+            describe_failure(Feature::Ocr, 500, r#"{"message":"Boom"}"#, true),
+            "Kimochi cloud OCR failed (HTTP 500): Boom"
+        );
         assert_eq!(describe_failure(Feature::Ocr, 502, "<html>", true), "Kimochi cloud OCR failed (HTTP 502).");
     }
 

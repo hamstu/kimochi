@@ -65,9 +65,10 @@ export function getMessage(state, extensionId, name, substitutions) {
   if (key in predefined) return predefined[key]
   const entry = state?.messages?.[key]
   if (!entry || typeof entry.message !== 'string') return ''
-  const subs = substitutions === undefined || substitutions === null
-    ? []
-    : (Array.isArray(substitutions) ? substitutions : [substitutions]).map(String)
+  const subs =
+    substitutions === undefined || substitutions === null
+      ? []
+      : (Array.isArray(substitutions) ? substitutions : [substitutions]).map(String)
   const placeholders = {}
   for (const [placeholder, value] of Object.entries(entry.placeholders ?? {})) {
     placeholders[placeholder.toLowerCase()] = value?.content ?? ''

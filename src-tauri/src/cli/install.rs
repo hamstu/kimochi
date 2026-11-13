@@ -106,7 +106,10 @@ pub fn status(_launcher: Option<&Path>) -> Result<Status, String> {
     let note = if present && !installed && !ours(&link) {
         Some(format!("{} is another program's; Kimochi leaves it alone.", link.display()))
     } else if installed && !on_path && cfg!(target_os = "linux") {
-        Some(format!("{} isn't on your PATH. Add it in your shell's profile: export PATH=\"$HOME/.local/bin:$PATH\"", dir.display()))
+        Some(format!(
+            "{} isn't on your PATH. Add it in your shell's profile: export PATH=\"$HOME/.local/bin:$PATH\"",
+            dir.display()
+        ))
     } else {
         None
     };
@@ -230,12 +233,24 @@ fn user_path() -> String {
     use windows::core::w;
     use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_ANY};
     let mut size = 0u32;
-    if unsafe { RegGetValueW(HKEY_CURRENT_USER, w!("Environment"), w!("Path"), RRF_RT_ANY, None, None, Some(&mut size)) }.is_err() {
+    if unsafe {
+        RegGetValueW(HKEY_CURRENT_USER, w!("Environment"), w!("Path"), RRF_RT_ANY, None, None, Some(&mut size))
+    }
+    .is_err()
+    {
         return String::new();
     }
     let mut data = vec![0u16; (size as usize).div_ceil(2)];
     if unsafe {
-        RegGetValueW(HKEY_CURRENT_USER, w!("Environment"), w!("Path"), RRF_RT_ANY, None, Some(data.as_mut_ptr().cast()), Some(&mut size))
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Environment"),
+            w!("Path"),
+            RRF_RT_ANY,
+            None,
+            Some(data.as_mut_ptr().cast()),
+            Some(&mut size),
+        )
     }
     .is_err()
     {
@@ -302,7 +317,15 @@ pub fn status(launcher: Option<&Path>) -> Result<Status, String> {
     } else {
         None
     };
-    Ok(Status { installed, built_in: false, stale: present && !installed, path: Some(file), target: Some(target), on_path: on_user_path, note })
+    Ok(Status {
+        installed,
+        built_in: false,
+        stale: present && !installed,
+        path: Some(file),
+        target: Some(target),
+        on_path: on_user_path,
+        note,
+    })
 }
 
 #[cfg(windows)]

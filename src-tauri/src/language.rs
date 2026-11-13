@@ -37,8 +37,12 @@ impl Script {
     pub fn has(self, c: char) -> bool {
         let c = c as u32;
         match self {
-            Script::Jpan => matches!(c, 0x3040..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xFF66..=0xFF9F),
-            Script::Kore => matches!(c, 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7FF | 0xFFA0..=0xFFDC),
+            Script::Jpan => {
+                matches!(c, 0x3040..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xFF66..=0xFF9F)
+            }
+            Script::Kore => {
+                matches!(c, 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7FF | 0xFFA0..=0xFFDC)
+            }
             Script::Hans | Script::Hant => {
                 matches!(c, 0x3005..=0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3134F)
             }
@@ -112,8 +116,8 @@ const PADDLE_SCRIPTS: &[Script] = &[Script::Jpan, Script::Hans, Script::Hant, Sc
 /// Live Text may read one less well than its own languages. It also reports Arabic (right to left,
 /// which Kimochi doesn't list yet) and Malay (not one of Kimochi's languages).
 const LIVE_TEXT: &[&str] = &[
-    "ja", "ko", "zh-Hans", "zh-Hant", "yue", "en", "fr", "it", "de", "es", "pt", "ru", "uk", "th", "vi",
-    "tr", "id", "cs", "da", "nl", "no", "pl", "ro", "sv",
+    "ja", "ko", "zh-Hans", "zh-Hant", "yue", "en", "fr", "it", "de", "es", "pt", "ru", "uk", "th", "vi", "tr", "id",
+    "cs", "da", "nl", "no", "pl", "ro", "sv",
 ];
 
 /// The languages an OCR engine can read, or None for every language (an engine that detects the
@@ -144,13 +148,8 @@ pub fn engine_supports(engine: &str, language: &str) -> bool {
 
 /// The engines tried, in order, when the selected one cannot read the language: the OS's own,
 /// then Screen AI, PaddleOCR, Google Lens and Kimochi cloud.
-pub const FALLBACK_ENGINES: &[&str] = &[
-    if cfg!(target_os = "macos") { "livetext" } else { "oneocr" },
-    "screenai",
-    "ppocr",
-    "googlelens",
-    "cloud",
-];
+pub const FALLBACK_ENGINES: &[&str] =
+    &[if cfg!(target_os = "macos") { "livetext" } else { "oneocr" }, "screenai", "ppocr", "googlelens", "cloud"];
 
 /// The scan engine for `language` after the language changed to it, or None to keep `current`:
 /// the one last used for it (`remembered`) while it is still `usable`; else `current` if it can
@@ -244,11 +243,7 @@ const ANSI_CODE_PAGES: &[(&str, Option<u32>)] = &[
 /// reads alike. A hook code that names its own code page (`HS949#…`, a game's own hook codes in
 /// Settings → Text Hooker) still decodes with that one.
 pub fn hook_code_page(language: &Language) -> u32 {
-    ANSI_CODE_PAGES
-        .iter()
-        .find(|(code, _)| *code == language.code)
-        .and_then(|(_, page)| *page)
-        .unwrap_or(932)
+    ANSI_CODE_PAGES.iter().find(|(code, _)| *code == language.code).and_then(|(_, page)| *page).unwrap_or(932)
 }
 
 // ---------------------------------------------------------------- codes for other services
@@ -318,7 +313,11 @@ pub fn with_language(mut body: serde_json::Value, language: &Language) -> serde_
 /// The `sourceLang` sent to Kimochi cloud translation: `JA` as always for Japanese, else the app's
 /// own code, which the server maps to DeepL (or to its own translator where DeepL has none).
 pub fn cloud_source(language: &Language) -> &str {
-    if language.is_japanese() { "JA" } else { &language.code }
+    if language.is_japanese() {
+        "JA"
+    } else {
+        &language.code
+    }
 }
 
 /// DeepL's source language code, or None where DeepL does not translate the language: the
@@ -398,7 +397,8 @@ mod tests {
             assert!(engine_supports(engine, "ko") && engine_supports(engine, "hi"));
         }
         // Every engine reads Japanese, and an unknown code is Japanese.
-        for engine in ["meikiocr", "mangaocr", "vocr", "ppocr", "livetext", "screenai", "googlelens", "cloud", "oneocr"] {
+        for engine in ["meikiocr", "mangaocr", "vocr", "ppocr", "livetext", "screenai", "googlelens", "cloud", "oneocr"]
+        {
             assert!(engine_supports(engine, "ja") && engine_supports(engine, "tlh"), "{engine}");
         }
     }
@@ -457,10 +457,11 @@ mod tests {
         // Japanese, and an unknown code (Japanese), decode Shift-JIS as always.
         assert_eq!(hook_code_page(get("ja")), 932);
         assert_eq!(hook_code_page(get("tlh")), 932);
-        let pages: Vec<(&str, u32)> = ["ko", "zh-Hans", "zh-Hant", "yue", "ru", "th", "el", "tr", "pl", "lv", "vi", "en", "fr"]
-            .into_iter()
-            .map(|code| (code, hook_code_page(get(code))))
-            .collect();
+        let pages: Vec<(&str, u32)> =
+            ["ko", "zh-Hans", "zh-Hant", "yue", "ru", "th", "el", "tr", "pl", "lv", "vi", "en", "fr"]
+                .into_iter()
+                .map(|code| (code, hook_code_page(get(code))))
+                .collect();
         assert_eq!(
             pages,
             [

@@ -181,8 +181,16 @@
   color: #e6e9f1;
   /* The overlay's own face, so a box's text lands over the source's: the language being read's
      (--kimochi-text-font, ui/language-style.ts), Japanese's when it is unset. */
-  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif);
+  font-family: var(
+    --kimochi-text-font,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+    'Yu Gothic',
+    'Meiryo',
+    sans-serif
+  );
   font-size: 0.8125rem;
   line-height: 1.25rem;
   font-weight: 500;

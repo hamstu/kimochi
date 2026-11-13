@@ -29,8 +29,16 @@ type FnQi = unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void
 type FnRelease = unsafe extern "system" fn(*mut c_void) -> u32;
 type FnCreateSb = unsafe extern "system" fn(*mut c_void, *const DSBUFFERDESC, *mut *mut c_void, *mut c_void) -> HRESULT;
 type FnDup = unsafe extern "system" fn(*mut c_void, *mut c_void, *mut *mut c_void) -> HRESULT;
-type FnLock =
-    unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void, *mut u32, *mut *mut c_void, *mut u32, u32) -> HRESULT;
+type FnLock = unsafe extern "system" fn(
+    *mut c_void,
+    u32,
+    u32,
+    *mut *mut c_void,
+    *mut u32,
+    *mut *mut c_void,
+    *mut u32,
+    u32,
+) -> HRESULT;
 type FnUnlock = unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, u32) -> HRESULT;
 type FnPlay = unsafe extern "system" fn(*mut c_void, u32, u32, u32) -> HRESULT;
 type FnStop = unsafe extern "system" fn(*mut c_void) -> HRESULT;
@@ -94,7 +102,13 @@ unsafe fn ensure_known(buf: *mut c_void) -> bool {
     // Its size and flags, as a creation would have told: a buffer refilled past its size is a
     // stream ring, not a loop (KiriKiri streams voices through a 1 s ring), which the sink can
     // only tell knowing the size. Kimochi attaches to games already running, so this is usual.
-    let mut caps = DSBCAPS { dwSize: std::mem::size_of::<DSBCAPS>() as u32, dwFlags: 0, dwBufferBytes: 0, dwUnlockTransferRate: 0, dwPlayCpuOverhead: 0 };
+    let mut caps = DSBCAPS {
+        dwSize: std::mem::size_of::<DSBCAPS>() as u32,
+        dwFlags: 0,
+        dwBufferBytes: 0,
+        dwUnlockTransferRate: 0,
+        dwPlayCpuOverhead: 0,
+    };
     // Slot 3 is never patched: the vtable holds the original.
     let known = vcall!(buf, GET_CAPS, fn(*mut DSBCAPS) -> HRESULT, &mut caps) >= 0;
     let primary = known && caps.dwFlags & DSBCAPS_PRIMARYBUFFER != 0;
@@ -102,7 +116,11 @@ unsafe fn ensure_known(buf: *mut c_void) -> bool {
     if primary {
         return false;
     }
-    let info = if known { json!({"lazy": true, "flags": caps.dwFlags, "buffer_bytes": caps.dwBufferBytes}) } else { json!({"lazy": true}) };
+    let info = if known {
+        json!({"lazy": true, "flags": caps.dwFlags, "buffer_bytes": caps.dwBufferBytes})
+    } else {
+        json!({"lazy": true})
+    };
     sink::send(Ev::Create { key: key(buf), api: "dsound", fmt: get_format(buf), info });
     true
 }
@@ -290,7 +308,14 @@ unsafe fn snapshot(buf: *mut c_void) {
     let bytes = copy_in(p1 as *const u8, n1 as usize, "dsound snapshot");
     unlock_fn(buf, p1, n1, p2, n2);
     lock(&HAS_DATA).insert(buf as usize);
-    sink::send(Ev::Data { key: key(buf), bytes, eos: false, looping: false, region: None, info: json!({"snapshot": true}) });
+    sink::send(Ev::Data {
+        key: key(buf),
+        bytes,
+        eos: false,
+        looping: false,
+        region: None,
+        info: json!({"snapshot": true}),
+    });
 }
 
 unsafe extern "system" fn buf_stop(this: *mut c_void) -> HRESULT {
@@ -339,7 +364,11 @@ pub unsafe fn install() -> Result<usize, String> {
         let mono = WAVEFORMATEX::pcm(1, 22050, 16);
         // The kinds of secondary buffer games make; each may be its own class.
         for flags in [
-            DSBCAPS_GLOBALFOCUS | DSBCAPS_GETCURRENTPOSITION2 | DSBCAPS_CTRLVOLUME | DSBCAPS_CTRLPAN | DSBCAPS_CTRLFREQUENCY,
+            DSBCAPS_GLOBALFOCUS
+                | DSBCAPS_GETCURRENTPOSITION2
+                | DSBCAPS_CTRLVOLUME
+                | DSBCAPS_CTRLPAN
+                | DSBCAPS_CTRLFREQUENCY,
             DSBCAPS_STATIC | DSBCAPS_CTRLVOLUME,
             DSBCAPS_CTRL3D | DSBCAPS_CTRLVOLUME | DSBCAPS_CTRLFREQUENCY,
             DSBCAPS_CTRLFX | DSBCAPS_CTRLVOLUME,
@@ -367,7 +396,13 @@ pub unsafe fn install() -> Result<usize, String> {
             }
             hook_buffer(buf);
             let mut buf8 = null_mut();
-            if vcall!(buf, QUERY_INTERFACE, fn(*const GUID, *mut *mut c_void) -> HRESULT, &IID_IDIRECTSOUNDBUFFER8, &mut buf8) >= 0
+            if vcall!(
+                buf,
+                QUERY_INTERFACE,
+                fn(*const GUID, *mut *mut c_void) -> HRESULT,
+                &IID_IDIRECTSOUNDBUFFER8,
+                &mut buf8
+            ) >= 0
                 && !buf8.is_null()
             {
                 hook_buffer(buf8);

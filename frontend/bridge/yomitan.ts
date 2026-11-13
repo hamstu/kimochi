@@ -31,16 +31,14 @@ export function describeUrlRestriction(candidate: string): string | null {
   } catch {
     return 'That is not a URL.'
   }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:')
-    return 'Use an http:// or https:// URL.'
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'Use an http:// or https:// URL.'
   if (!url.hostname) return 'The URL has no host.'
   if (url.username || url.password) return 'Remove the credentials from the URL.'
   if (url.search) return 'Remove the query string from the URL.'
   return null
 }
 
-const request = <T>(url: string, body: unknown): Promise<T> =>
-  invoke<T>('yomitan_request', { url, body })
+const request = <T>(url: string, body: unknown): Promise<T> => invoke<T>('yomitan_request', { url, body })
 
 export async function tokenize(text: string, apiUrl: string): Promise<TokenizeResponse> {
   const url = `${apiUrl}/tokenize`
@@ -60,9 +58,7 @@ export async function termEntries(term: string, apiUrl: string): Promise<unknown
   }
 }
 
-export async function testApiConnection(
-  apiUrl: string
-): Promise<{ success: boolean; error?: string }> {
+export async function testApiConnection(apiUrl: string): Promise<{ success: boolean; error?: string }> {
   const restriction = describeUrlRestriction(apiUrl)
   if (restriction) return { success: false, error: restriction }
   try {

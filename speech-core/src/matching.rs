@@ -55,18 +55,8 @@ pub struct Heard {
 impl Heard {
     /// `chars`' times are from `start_ms`.
     pub fn new(start_ms: f64, end_ms: f64, chars: Vec<HeardChar>) -> Self {
-        let chars = chars
-            .into_iter()
-            .map(|c| HeardChar {
-                ch: c.ch,
-                ms: start_ms + c.ms,
-            })
-            .collect();
-        Self {
-            start_ms,
-            end_ms,
-            chars,
-        }
+        let chars = chars.into_iter().map(|c| HeardChar { ch: c.ch, ms: start_ms + c.ms }).collect();
+        Self { start_ms, end_ms, chars }
     }
 
     pub fn text(&self) -> String {
@@ -105,8 +95,7 @@ pub fn fold(text: &str) -> (Vec<char>, Vec<usize>) {
             '\u{30A1}'..='\u{30F6}' => char::from_u32(c as u32 - 0x60).unwrap_or(c),
             _ => c,
         };
-        let dropped = !c.is_alphanumeric()
-            || matches!(c, 'ー' | 'っ' | 'ぁ' | 'ぃ' | 'ぅ' | 'ぇ' | 'ぉ' | 'ゎ');
+        let dropped = !c.is_alphanumeric() || matches!(c, 'ー' | 'っ' | 'ぁ' | 'ぃ' | 'ぅ' | 'ぇ' | 'ぉ' | 'ゎ');
         if !dropped {
             chars.push(c.to_ascii_lowercase());
             from.push(i);
@@ -121,13 +110,7 @@ pub fn find(line: &str, heard: &[Heard], from_ms: f64, to_ms: f64) -> Option<Mat
     find_near(line, heard, from_ms, to_ms, from_ms)
 }
 
-pub fn find_near(
-    line: &str,
-    heard: &[Heard],
-    from_ms: f64,
-    to_ms: f64,
-    prefer_ms: f64,
-) -> Option<Match> {
+pub fn find_near(line: &str, heard: &[Heard], from_ms: f64, to_ms: f64, prefer_ms: f64) -> Option<Match> {
     let (want, want_from) = fold(line);
     if want.is_empty() {
         return None;
@@ -146,11 +129,7 @@ pub fn find_near(
         for (index, c) in segment.chars.iter().enumerate() {
             let (folded, _) = fold(&c.ch.to_string());
             if let Some(&ch) = folded.first() {
-                got.push(Got {
-                    ch,
-                    segment: s,
-                    index,
-                });
+                got.push(Got { ch, segment: s, index });
             }
         }
     }
@@ -167,7 +146,11 @@ pub fn find_near(
     let kanji_at = |chars: &dyn Fn(usize) -> char, k: usize| -> Option<&'static [Vec<char>]> {
         // 々 repeats the kanji before it.
         let c = chars(k);
-        if c == '々' && k > 0 { crate::readings::of(chars(k - 1)) } else { crate::readings::of(c) }
+        if c == '々' && k > 0 {
+            crate::readings::of(chars(k - 1))
+        } else {
+            crate::readings::of(c)
+        }
     };
     let line_char = |k: usize| want[k];
     let heard_char = |k: usize| got[k].ch;
@@ -175,7 +158,8 @@ pub fn find_near(
     // recogniser write names and loanwords (フリッツ), which no kanji's reading stands for.
     let original: Vec<char> = line.chars().collect();
     let line_hiragana: Vec<bool> = want_from.iter().map(|&k| crate::readings::is_kana(original[k])).collect();
-    let heard_hiragana: Vec<bool> = got.iter().map(|g| crate::readings::is_kana(heard[g.segment].chars[g.index].ch)).collect();
+    let heard_hiragana: Vec<bool> =
+        got.iter().map(|g| crate::readings::is_kana(heard[g.segment].chars[g.index].ch)).collect();
     for i in 1..=n {
         let line_kanji = kanji_at(&line_char, i - 1);
         for j in 1..=m {
@@ -294,10 +278,7 @@ pub fn find_near(
     } else {
         last_end
     };
-    let heard_text = got[pairs[0].1..=pairs[pairs.len() - 1].1]
-        .iter()
-        .map(|g| g.ch)
-        .collect();
+    let heard_text = got[pairs[0].1..=pairs[pairs.len() - 1].1].iter().map(|g| g.ch).collect();
 
     // A time for every folded character of the line: matched ones from what was heard, the
     // others spread evenly between their matched neighbours.
@@ -306,11 +287,7 @@ pub fn find_near(
         at[i] = Some(time(&got[j]));
     }
     let (first_i, last_i) = (pairs[0].0, pairs[pairs.len() - 1].0);
-    let pace = if last_i > first_i {
-        (time(last) - first_ms) / (last_i - first_i) as f64
-    } else {
-        120.0
-    };
+    let pace = if last_i > first_i { (time(last) - first_ms) / (last_i - first_i) as f64 } else { 120.0 };
     for i in 0..n {
         if at[i].is_some() {
             continue;
@@ -321,10 +298,7 @@ pub fn find_near(
             (time(last) + pace * (i - last_i) as f64).min(end_ms)
         } else {
             let before = (0..i).rev().find_map(|k| at[k].map(|t| (k, t))).unwrap();
-            let after = (i + 1..n)
-                .find(|&k| pairs.iter().any(|p| p.0 == k))
-                .map(|k| (k, at[k].unwrap()))
-                .unwrap();
+            let after = (i + 1..n).find(|&k| pairs.iter().any(|p| p.0 == k)).map(|k| (k, at[k].unwrap())).unwrap();
             before.1 + (after.1 - before.1) * (i - before.0) as f64 / (after.0 - before.0) as f64
         });
     }
@@ -379,27 +353,21 @@ pub fn word_span(line: &str, word: &str, char_ms: &[f64]) -> Option<(f64, f64)> 
     if target.is_empty() || char_ms.len() != chars.len() + 1 {
         return None;
     }
-    let find = |needle: &[char]| {
-        (0..=chars.len().saturating_sub(needle.len())).find(|&i| chars[i..].starts_with(needle))
-    };
+    let find =
+        |needle: &[char]| (0..=chars.len().saturating_sub(needle.len())).find(|&i| chars[i..].starts_with(needle));
     let (start, len) = if let Some(i) = find(&target) {
         (i, target.len())
     } else {
         let (folded, from) = fold(line);
         let (want, _) = fold(word);
         let found = (!want.is_empty())
-            .then(|| {
-                (0..=folded.len().saturating_sub(want.len()))
-                    .find(|&i| folded[i..].starts_with(&want))
-            })
+            .then(|| (0..=folded.len().saturating_sub(want.len())).find(|&i| folded[i..].starts_with(&want)))
             .flatten();
         if let Some(i) = found {
             (from[i], from[i + want.len() - 1] + 1 - from[i])
         } else {
             let shortest = if target.len() >= 2 { 2 } else { 1 };
-            (shortest..target.len())
-                .rev()
-                .find_map(|len| find(&target[..len]).map(|i| (i, len)))?
+            (shortest..target.len()).rev().find_map(|len| find(&target[..len]).map(|i| (i, len)))?
         }
     };
     Some((char_ms[start], char_ms[start + len]))
@@ -411,96 +379,48 @@ mod tests {
 
     /// A segment heard from `start`, a character every 120 ms from `start + 200`.
     fn heard(start: f64, text: &str) -> Heard {
-        let chars: Vec<HeardChar> = text
-            .chars()
-            .enumerate()
-            .map(|(i, ch)| HeardChar {
-                ch,
-                ms: 200.0 + i as f64 * 120.0,
-            })
-            .collect();
+        let chars: Vec<HeardChar> =
+            text.chars().enumerate().map(|(i, ch)| HeardChar { ch, ms: 200.0 + i as f64 * 120.0 }).collect();
         let end = start + 200.0 + text.chars().count() as f64 * 120.0 + 150.0;
         Heard::new(start, end, chars)
     }
 
     #[test]
     fn folding_ignores_how_the_text_is_written() {
-        assert_eq!(
-            fold("フリッツ先生、このお店ですか？")
-                .0
-                .iter()
-                .collect::<String>(),
-            "ふりつ先生このお店ですか"
-        );
-        assert_eq!(
-            fold("わあ〜っ。ＡＢｃ…！").0.iter().collect::<String>(),
-            "わあabc"
-        );
+        assert_eq!(fold("フリッツ先生、このお店ですか？").0.iter().collect::<String>(), "ふりつ先生このお店ですか");
+        assert_eq!(fold("わあ〜っ。ＡＢｃ…！").0.iter().collect::<String>(), "わあabc");
         assert_eq!(fold("「はい」").1, vec![1, 2]);
     }
 
     #[test]
     fn a_line_is_found_in_what_was_heard_despite_slips() {
-        let segments = [
-            heard(0.0, "今日はいい天気ですね"),
-            heard(3_000.0, "小サー味作りうまくいくといいね"),
-        ];
-        let m = find(
-            "コサージュ作り、上手くいくといいね",
-            &segments,
-            0.0,
-            10_000.0,
-        )
-        .unwrap();
+        let segments = [heard(0.0, "今日はいい天気ですね"), heard(3_000.0, "小サー味作りうまくいくといいね")];
+        let m = find("コサージュ作り、上手くいくといいね", &segments, 0.0, 10_000.0).unwrap();
         assert!(m.score > 0.5 && m.score < 1.0, "{m:?}");
-        assert_eq!(
-            m.start_ms, 3_000.0,
-            "the match reaches the speech's start: snapped to it"
-        );
+        assert_eq!(m.start_ms, 3_000.0, "the match reaches the speech's start: snapped to it");
         assert_eq!(m.end_ms, segments[1].end_ms);
         let exact = find("今日はいい天気ですね。", &segments, 0.0, 10_000.0).unwrap();
-        assert_eq!(
-            (exact.score, exact.start_ms, exact.end_ms),
-            (1.0, 0.0, segments[0].end_ms)
-        );
+        assert_eq!((exact.score, exact.start_ms, exact.end_ms), (1.0, 0.0, segments[0].end_ms));
     }
 
     #[test]
     fn a_line_in_the_middle_of_longer_speech_is_cut_out_of_it() {
         // Two lines read without a pause between them: one segment.
         let segment = heard(1_000.0, "おはようございます今日もよろしくお願いします");
-        let m = find(
-            "今日もよろしくお願いします",
-            std::slice::from_ref(&segment),
-            0.0,
-            20_000.0,
-        )
-        .unwrap();
+        let m = find("今日もよろしくお願いします", std::slice::from_ref(&segment), 0.0, 20_000.0).unwrap();
         let today = segment.chars.iter().position(|c| c.ch == '今').unwrap();
         assert_eq!(m.start_ms, segment.chars[today].ms - LEAD_MS);
         assert_eq!(m.end_ms, segment.end_ms);
-        let first = find(
-            "おはようございます",
-            std::slice::from_ref(&segment),
-            0.0,
-            20_000.0,
-        )
-        .unwrap();
+        let first = find("おはようございます", std::slice::from_ref(&segment), 0.0, 20_000.0).unwrap();
         assert_eq!(first.start_ms, 1_000.0);
-        assert_eq!(
-            first.end_ms, segment.chars[today].ms,
-            "ends where the next line's voice starts"
-        );
+        assert_eq!(first.end_ms, segment.chars[today].ms, "ends where the next line's voice starts");
     }
 
     #[test]
     fn speech_outside_the_window_and_unrelated_speech_do_not_match() {
         let segments = [heard(0.0, "猫が好きです"), heard(10_000.0, "全然違う話")];
         assert!(find("猫が好きです", &segments, 5_000.0, 20_000.0).is_none_or(|m| m.score < 0.3));
-        assert!(
-            find("！", &segments, 0.0, 20_000.0).is_none(),
-            "nothing to match by"
-        );
+        assert!(find("！", &segments, 0.0, 20_000.0).is_none(), "nothing to match by");
     }
 
     #[test]
@@ -522,11 +442,7 @@ mod tests {
 
     #[test]
     fn of_two_equal_places_the_one_nearest_the_line_wins() {
-        let segments = [
-            heard(0.0, "はい"),
-            heard(5_000.0, "はい"),
-            heard(9_000.0, "はい"),
-        ];
+        let segments = [heard(0.0, "はい"), heard(5_000.0, "はい"), heard(9_000.0, "はい")];
         let m = find_near("はいっ！", &segments, 0.0, 20_000.0, 5_100.0).unwrap();
         assert_eq!(m.start_ms, 5_000.0);
     }
@@ -537,19 +453,12 @@ mod tests {
         let line = "今日は、いい天気ですね。";
         let m = find(line, std::slice::from_ref(&segment), 0.0, 10_000.0).unwrap();
         assert_eq!(m.char_ms.len(), line.chars().count() + 1);
-        assert!(
-            m.char_ms.windows(2).all(|w| w[0] <= w[1]),
-            "{:?}",
-            m.char_ms
-        );
+        assert!(m.char_ms.windows(2).all(|w| w[0] <= w[1]), "{:?}", m.char_ms);
         let (from, to) = word_span(line, "天気", &m.char_ms).unwrap();
         let ten = segment.chars.iter().position(|c| c.ch == '天').unwrap();
         assert_eq!(from, segment.chars[ten].ms);
         assert_eq!(to, segment.chars[ten + 2].ms);
-        assert!(
-            word_span(line, "テンキ", &m.char_ms).is_none(),
-            "a reading the line does not have"
-        );
+        assert!(word_span(line, "テンキ", &m.char_ms).is_none(), "a reading the line does not have");
         let (a, b) = word_span(
             "ご飯を食べた",
             "食べる",

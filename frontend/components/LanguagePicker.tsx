@@ -30,10 +30,7 @@ export function LanguagePicker({
         value: language.code,
         label: language.name,
         icon: <LanguageFlag language={language} />,
-        detail:
-          language.endonym === language.name ? undefined : (
-            <span lang={language.code}>{language.endonym}</span>
-          ),
+        detail: language.endonym === language.name ? undefined : <span lang={language.code}>{language.endonym}</span>,
         keywords: [language.endonym, language.code]
       })),
     []

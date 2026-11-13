@@ -41,9 +41,10 @@
   // Native injects the Yomitan shim into every frame of the overlay; in the browser the dev server
   // does it for this origin's HTML while this cookie is set (vite.dev.config.ts). Cleared for the
   // other engines, whose frames are on their own origins and get the generic host instead.
-  document.cookie = engine === 'yomitan'
-    ? 'kimochi-harness-shim=yomitan; path=/; SameSite=Strict'
-    : 'kimochi-harness-shim=; path=/; max-age=0; SameSite=Strict'
+  document.cookie =
+    engine === 'yomitan'
+      ? 'kimochi-harness-shim=yomitan; path=/; SameSite=Strict'
+      : 'kimochi-harness-shim=; path=/; max-age=0; SameSite=Strict'
 
   const scope = params.get('scope') || null
   // `?window=dictionary` (or `log`): this page plays that Kimochi window, a relay client of the hub
@@ -70,7 +71,12 @@
       return native?.http ?? null
     },
     get extensionWindow() {
-      return native?.extensionWindow ? { url: native.extensionWindow.url, open: Boolean(native.extensionWindow.handle && !native.extensionWindow.handle.closed) } : null
+      return native?.extensionWindow
+        ? {
+            url: native.extensionWindow.url,
+            open: Boolean(native.extensionWindow.handle && !native.extensionWindow.handle.closed)
+          }
+        : null
     }
   })
   const storageKey = (extension) => `kimochi.harness.chrome-local-${extension ?? 'yomitan'}`
@@ -91,12 +97,18 @@
   // The extension window page's own diagnostics, relayed by the native stand-in.
   window.addEventListener('kimochi-harness-remote-report', (event) => {
     const { at, ...rest } = event.detail ?? {}
-    append(`${new Date(at ?? Date.now()).toISOString().slice(11, 23)} [${rest.window ?? 'ext'}] ${JSON.stringify(rest)}`)
+    append(
+      `${new Date(at ?? Date.now()).toISOString().slice(11, 23)} [${rest.window ?? 'ext'}] ${JSON.stringify(rest)}`
+    )
   })
   // The Yomitan shim's hub logs as `spike-log`.
   window.addEventListener('spike-log', appendReport)
-  window.addEventListener('error', (event) => append(`page error: ${event.message} @ ${event.filename}:${event.lineno}`))
-  window.addEventListener('unhandledrejection', (event) => append(`unhandled rejection: ${String(event.reason?.message ?? event.reason)}`))
+  window.addEventListener('error', (event) =>
+    append(`page error: ${event.message} @ ${event.filename}:${event.lineno}`)
+  )
+  window.addEventListener('unhandledrejection', (event) =>
+    append(`unhandled rejection: ${String(event.reason?.message ?? event.reason)}`)
+  )
 
   // Extension pages (options, Hachidori's first-run startup page) open here.
   window.addEventListener('kimochi-dictionary-navigate', (event) => {
@@ -130,7 +142,12 @@
 
   function showStatus() {
     const pre = document.getElementById('status')
-    if (pre) pre.textContent = JSON.stringify({ start: harness.start, popup: harness.popup, host: harness.host?.status?.() ?? null }, null, 2)
+    if (pre)
+      pre.textContent = JSON.stringify(
+        { start: harness.start, popup: harness.popup, host: harness.host?.status?.() ?? null },
+        null,
+        2
+      )
   }
 
   window.addEventListener('DOMContentLoaded', async () => {
@@ -160,9 +177,10 @@
     if (!host) {
       harness.start = {
         ready: false,
-        error: engine === 'yomitan'
-          ? 'window.__extensionHost is missing: did /spike/shim.js load and install for yomitan?'
-          : 'window.__kimochiExtensionHost is missing: did /spike/ext-host.js load and resolve the engine?'
+        error:
+          engine === 'yomitan'
+            ? 'window.__extensionHost is missing: did /spike/shim.js load and install for yomitan?'
+            : 'window.__kimochiExtensionHost is missing: did /spike/ext-host.js load and resolve the engine?'
       }
       setText('ready', 'host missing')
       showStatus()
@@ -173,7 +191,13 @@
       harness.popup = state
       append(`popup ${state.visible ? `visible ${JSON.stringify(state.rect)}` : 'hidden'}`)
       if (state.visible) {
-        Object.assign(outline.style, { display: 'block', left: `${state.rect.x}px`, top: `${state.rect.y}px`, width: `${state.rect.width}px`, height: `${state.rect.height}px` })
+        Object.assign(outline.style, {
+          display: 'block',
+          left: `${state.rect.x}px`,
+          top: `${state.rect.y}px`,
+          width: `${state.rect.width}px`,
+          height: `${state.rect.height}px`
+        })
       } else outline.style.display = 'none'
       showStatus()
     })

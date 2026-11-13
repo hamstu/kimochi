@@ -72,7 +72,8 @@ fn rows<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>, String> {
 impl Session {
     pub fn load(dir: &Path) -> Result<Self, String> {
         let meta: Meta = serde_json::from_str(
-            &std::fs::read_to_string(dir.join("session.json")).map_err(|e| format!("{}/session.json: {e}", dir.display()))?,
+            &std::fs::read_to_string(dir.join("session.json"))
+                .map_err(|e| format!("{}/session.json: {e}", dir.display()))?,
         )
         .map_err(|e| e.to_string())?;
         let mut lines: Vec<LineRow> = rows(&dir.join("lines.jsonl"))?;

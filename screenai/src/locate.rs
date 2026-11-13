@@ -93,10 +93,7 @@ pub fn browser_roots(env: &Env) -> Vec<BrowserRoot> {
             }
         }
         _ => {
-            let config = env
-                .xdg_config_home
-                .clone()
-                .or_else(|| env.home.as_ref().map(|h| h.join(".config")));
+            let config = env.xdg_config_home.clone().or_else(|| env.home.as_ref().map(|h| h.join(".config")));
             for (browser, parts) in [
                 ("Google Chrome", &["google-chrome"][..]),
                 ("Google Chrome Beta", &["google-chrome-beta"]),

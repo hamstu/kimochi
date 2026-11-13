@@ -6,8 +6,8 @@
 use crate::engine_probe::{self, Loaded, Probe, Verified};
 use crate::model_store;
 use mangaocr::{
-    Backend, ComicTextDetector, DetectedGroup, DetectionOptions, MangaOcr, ModelPaths, OcrOptions,
-    Orientation, PageDetector, PageResult, TextMask,
+    Backend, ComicTextDetector, DetectedGroup, DetectionOptions, MangaOcr, ModelPaths, OcrOptions, Orientation,
+    PageDetector, PageResult, TextMask,
 };
 use serde_json::{json, Value};
 #[cfg(not(target_os = "macos"))]
@@ -60,16 +60,14 @@ fn load_onnx(app: &tauri::AppHandle, root: &Path) -> Result<PageEngine, String> 
             }
         }
     }
-    let page = engine_probe::guarded(|| {
-        OnnxPage::new(&paths, &detector, Provider::Cpu, beams).map_err(|e| e.to_string())
-    })?;
+    let page =
+        engine_probe::guarded(|| OnnxPage::new(&paths, &detector, Provider::Cpu, beams).map_err(|e| e.to_string()))?;
     Ok(PageEngine::Onnx { page, fallback })
 }
 
 fn load_candle(root: &Path) -> Result<PageEngine, String> {
     Ok(PageEngine::Candle {
-        recognizer: MangaOcr::new(ModelPaths::from_dir(root))
-            .map_err(|e| format!("Manga OCR models: {e}"))?,
+        recognizer: MangaOcr::new(ModelPaths::from_dir(root)).map_err(|e| format!("Manga OCR models: {e}"))?,
         detector: ComicTextDetector::new(root.join("comic-text-detector.onnx"), Backend::Auto)
             .map_err(|e| format!("Comic detector model: {e}"))?,
     })
@@ -162,16 +160,13 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
             let path = root.join("comic-text-detector.onnx");
             let mut diagnostics = Vec::new();
             if cfg!(target_os = "windows") && !DIRECTML_REFUSED.load(Ordering::Relaxed) {
-                match engine_probe::guarded(|| {
-                    OnnxDetector::new(&path, Provider::DirectMl).map_err(|e| e.to_string())
-                }) {
+                match engine_probe::guarded(|| OnnxDetector::new(&path, Provider::DirectMl).map_err(|e| e.to_string()))
+                {
                     Ok(_) => return Ok(Loaded { accelerator: "directml", diagnostics }),
                     Err(e) => diagnostics.push(format!("fallback: DirectML: {e}")),
                 }
             }
-            match engine_probe::guarded(|| {
-                OnnxDetector::new(&path, Provider::Cpu).map_err(|e| e.to_string())
-            }) {
+            match engine_probe::guarded(|| OnnxDetector::new(&path, Provider::Cpu).map_err(|e| e.to_string())) {
                 Ok(_) => return Ok(Loaded { accelerator: "cpu", diagnostics }),
                 Err(e) => eprintln!("Manga OCR: ONNX Runtime detector unavailable: {e}"),
             }
@@ -187,11 +182,7 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
                 Backend::Cuda => "cuda",
                 Backend::Cpu | Backend::Auto => "cpu",
             },
-            diagnostics: info
-                .fallback_reasons
-                .iter()
-                .map(|r| format!("fallback: {r}"))
-                .collect(),
+            diagnostics: info.fallback_reasons.iter().map(|r| format!("fallback: {r}")).collect(),
         })
     };
     match PROBE.verified_or_start("mangaocr", engine_probe::PROBE_TIMEOUT, probe) {
@@ -214,10 +205,7 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     // Checked on every scan, not just the first: models deleted since are refused cleanly.
     let root = assets(app).map_err(|reason| format!("Manga OCR is not ready: {reason}"))?;
     let state = app.state::<MangaState>();
-    let mut engine = state
-        .0
-        .lock()
-        .map_err(|_| "Manga OCR worker unavailable".to_string())?;
+    let mut engine = state.0.lock().map_err(|_| "Manga OCR worker unavailable".to_string())?;
     if engine.is_none() {
         *engine = Some(load(app, &root)?);
     }
@@ -240,15 +228,11 @@ fn read(
     #[allow(clippy::let_unit_value)]
     let directml_error = match engine.as_mut().ok_or("Manga OCR initialization failed")? {
         // A whole page or a snip of one bubble: see `MangaOcr::recognize_region`.
-        PageEngine::Candle {
-            recognizer,
-            detector,
-        } => {
+        PageEngine::Candle { recognizer, detector } => {
             let page = recognizer
                 .recognize_region(image, &mut Rows(detector), &options, &detection)
                 .map_err(|e| format!("Manga page inference: {e}"))?;
-            let backend =
-                serde_json::to_value(recognizer.backend_info()).map_err(|e| e.to_string())?;
+            let backend = serde_json::to_value(recognizer.backend_info()).map_err(|e| e.to_string())?;
             return Ok((page, backend));
         }
         #[cfg(not(target_os = "macos"))]
@@ -256,11 +240,8 @@ fn read(
             use mangaocr::onnx::Provider;
             let provider = page.provider();
             let result = {
-                let _serial = (provider == Provider::DirectMl).then(|| {
-                    crate::meiki_ocr::DIRECTML_RUN
-                        .lock()
-                        .unwrap_or_else(|p| p.into_inner())
-                });
+                let _serial = (provider == Provider::DirectMl)
+                    .then(|| crate::meiki_ocr::DIRECTML_RUN.lock().unwrap_or_else(|p| p.into_inner()));
                 engine_probe::guarded(|| {
                     let mangaocr::onnx::OnnxPage { detector, reader, .. } = page;
                     mangaocr::read_region(reader, image, &mut Rows(detector), &options, &detection)
@@ -275,9 +256,7 @@ fn read(
             });
             match result {
                 Ok(result) => return Ok((result, backend)),
-                Err(e) if provider != Provider::DirectMl => {
-                    return Err(format!("Manga page inference: {e}"))
-                }
+                Err(e) if provider != Provider::DirectMl => return Err(format!("Manga page inference: {e}")),
                 // Some adapters build DirectML sessions and then fail to run them: read the
                 // page again on the CPU, below, once this engine's borrow has ended.
                 Err(e) => e,
@@ -437,7 +416,10 @@ fn response(mut page: PageResult) -> Value {
         annotations.push(json!({"description":g.recognition.text,"groupId":g.id,"granularity":"block","orientation":g.orientation,"isVertical":matches!(g.orientation,mangaocr::Orientation::Vertical),"boundingPoly":{"vertices":[{"x":x1,"y":y1},{"x":x2,"y":y1},{"x":x2,"y":y2},{"x":x1,"y":y2}]}}));
     }
     if let Some(first) = annotations.first() {
-        annotations.insert(0,json!({"description":page.full_text,"granularity":"aggregate","boundingPoly":first["boundingPoly"]}));
+        annotations.insert(
+            0,
+            json!({"description":page.full_text,"granularity":"aggregate","boundingPoly":first["boundingPoly"]}),
+        );
     }
     json!({"schemaVersion":1,"engine":"mangaocr","groups":groups,"fullText":page.full_text,"textAnnotations":annotations,"geometry":!page.groups.is_empty()})
 }
@@ -497,10 +479,7 @@ mod tests {
     }
     #[test]
     fn empty_page_has_no_invented_geometry() {
-        let result = response(PageResult {
-            groups: vec![],
-            full_text: String::new(),
-        });
+        let result = response(PageResult { groups: vec![], full_text: String::new() });
         assert_eq!(result["geometry"], false);
         assert_eq!(result["groups"], json!([]));
     }

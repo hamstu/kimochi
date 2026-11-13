@@ -18,9 +18,7 @@ import zlib from 'node:zlib'
 import { ocrCrateDir } from './ocr-crates.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const destination = path.resolve(
-  process.env.MEIKIOCR_DEST ?? path.join(root, 'src-tauri/resources/meikiocr')
-)
+const destination = path.resolve(process.env.MEIKIOCR_DEST ?? path.join(root, 'src-tauri/resources/meikiocr'))
 
 // Rust target triples this script can stage a runtime for.
 const TARGETS = {
@@ -41,18 +39,14 @@ function requestedTarget() {
   if (process.env.KIMOCHI_TARGET) return process.env.KIMOCHI_TARGET
   // MEIKIOCR_ARCH predates --target and still selects the architecture on the host OS.
   const arch = process.env.MEIKIOCR_ARCH ?? process.arch
-  const host = Object.entries(TARGETS).find(
-    ([, t]) => t.platform === process.platform && t.arch === arch
-  )
+  const host = Object.entries(TARGETS).find(([, t]) => t.platform === process.platform && t.arch === arch)
   if (!host) throw new Error(`No MeikiOCR runtime for host ${process.platform}/${arch}`)
   return host[0]
 }
 
 const target = requestedTarget()
 if (!TARGETS[target]) {
-  throw new Error(
-    `Unsupported MeikiOCR target "${target}". Supported: ${Object.keys(TARGETS).join(', ')}`
-  )
+  throw new Error(`Unsupported MeikiOCR target "${target}". Supported: ${Object.keys(TARGETS).join(', ')}`)
 }
 const { platform, arch } = TARGETS[target]
 const version = platform === 'darwin' && arch === 'arm64' ? '1.30.0' : '1.22.0'
@@ -70,32 +64,22 @@ const packagingVersion = 3
 // SHA-256 of every archive this script downloads. An archive missing from this table is
 // refused unless it is an opt-in CUDA build, which is staged with a loud warning instead.
 const checksums = {
-  'onnxruntime-osx-arm64-1.30.0.tgz':
-    '6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012',
-  'onnxruntime-osx-x86_64-1.22.0.tgz':
-    'e4ec94a7696de74fb1b12846569aa94e499958af6ffa186022cfde16c9d617f0',
-  'Microsoft.ML.OnnxRuntime.DirectML.1.22.0.nupkg':
-    'b38d92c31d202d1dc772af9416fe30b6abae8527651e742c380c2d131e5f1817',
-  'Microsoft.AI.DirectML.1.15.4.nupkg':
-    '4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9',
-  'onnxruntime-win-x64-1.22.0.zip':
-    '174c616efc0271194488642a72f1a514e01487da4dfe84c49296d66e40ebe0da',
-  'onnxruntime-win-arm64-1.22.0.zip':
-    '7008f7ff82f8e7de563a22f2b590e08e706a1289eba606b93de2b56edfb1e04b',
-  'onnxruntime-linux-x64-1.22.0.tgz':
-    '8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3',
-  'onnxruntime-linux-aarch64-1.22.0.tgz':
-    'bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702'
+  'onnxruntime-osx-arm64-1.30.0.tgz': '6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012',
+  'onnxruntime-osx-x86_64-1.22.0.tgz': 'e4ec94a7696de74fb1b12846569aa94e499958af6ffa186022cfde16c9d617f0',
+  'Microsoft.ML.OnnxRuntime.DirectML.1.22.0.nupkg': 'b38d92c31d202d1dc772af9416fe30b6abae8527651e742c380c2d131e5f1817',
+  'Microsoft.AI.DirectML.1.15.4.nupkg': '4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9',
+  'onnxruntime-win-x64-1.22.0.zip': '174c616efc0271194488642a72f1a514e01487da4dfe84c49296d66e40ebe0da',
+  'onnxruntime-win-arm64-1.22.0.zip': '7008f7ff82f8e7de563a22f2b590e08e706a1289eba606b93de2b56edfb1e04b',
+  'onnxruntime-linux-x64-1.22.0.tgz': '8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3',
+  'onnxruntime-linux-aarch64-1.22.0.tgz': 'bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702'
 }
 
 // The models are not bundled: the app downloads them on demand (src-tauri/src/model_store.rs)
 // from the pinned list in src-tauri/ocr-models.json. `--with-models` (or KIMOCHI_WITH_MODELS=1)
 // also stages them here, where a development build finds them without downloading.
-const withModels =
-  process.argv.includes('--with-models') || process.env.KIMOCHI_WITH_MODELS === '1'
-const { files: models } = JSON.parse(
-  await readFile(path.join(root, 'src-tauri/ocr-models.json'), 'utf8')
-).engines.meikiocr
+const withModels = process.argv.includes('--with-models') || process.env.KIMOCHI_WITH_MODELS === '1'
+const { files: models } = JSON.parse(await readFile(path.join(root, 'src-tauri/ocr-models.json'), 'utf8')).engines
+  .meikiocr
 
 async function get(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(300000) })
@@ -139,7 +123,10 @@ function openTarGz(bytes) {
     const header = buf.subarray(offset, offset + 512)
     if (header.every((b) => b === 0)) break
     const field = (start, end) =>
-      header.subarray(start, end).toString('utf8').replace(/\0[\s\S]*$/, '')
+      header
+        .subarray(start, end)
+        .toString('utf8')
+        .replace(/\0[\s\S]*$/, '')
     const octal = (start, end) => parseInt(field(start, end).trim() || '0', 8)
     let name = field(0, 100)
     const prefix = header.subarray(257, 262).toString() === 'ustar' ? field(345, 500) : ''
@@ -265,18 +252,14 @@ function openZip(buf) {
   }
 }
 
-const openArchive = (archive, bytes) =>
-  archive.endsWith('.tgz') ? openTarGz(bytes) : openZip(bytes)
+const openArchive = (archive, bytes) => (archive.endsWith('.tgz') ? openTarGz(bytes) : openZip(bytes))
 
 // ---- Runtime selection -----------------------------------------------------------------------
 
-const ortRelease = (archive) =>
-  `https://github.com/microsoft/onnxruntime/releases/download/v${version}/${archive}`
+const ortRelease = (archive) => `https://github.com/microsoft/onnxruntime/releases/download/v${version}/${archive}`
 // `._*` are AppleDouble resource forks that macOS-built tarballs can carry.
 const isLicense = (name) => !name.startsWith('._') && /license|notice|thirdparty/i.test(name)
-const library = { darwin: 'libonnxruntime.dylib', win32: 'onnxruntime.dll', linux: 'libonnxruntime.so' }[
-  platform
-]
+const library = { darwin: 'libonnxruntime.dylib', win32: 'onnxruntime.dll', linux: 'libonnxruntime.so' }[platform]
 const required = flavor === 'directml' ? [library, 'DirectML.dll'] : [library]
 // Linux's archive exposes both the SONAME and versioned library through links.
 // Keep those names in the bundle too; extract() resolves them to regular files.
@@ -286,9 +269,7 @@ if (platform === 'linux') required.push(`${library}.1`, `${library}.${version}`)
 async function extract(install, archive, bytes, { dir, pick, top, licensePrefix = '' }) {
   const reader = openArchive(archive, bytes)
   const names = reader.names()
-  const picked = names.filter(
-    (name) => path.posix.dirname(name) === dir && pick(path.posix.basename(name))
-  )
+  const picked = names.filter((name) => path.posix.dirname(name) === dir && pick(path.posix.basename(name)))
   if (picked.length === 0) throw new Error(`Nothing to stage from ${archive} (${dir})`)
   for (const name of picked) {
     const file = reader.read(name)
@@ -326,9 +307,7 @@ async function stageRuntime(install) {
     })
     // onnxruntime.dll imports DirectML.dll; ship the exact version the package declares.
     const reader = openZip(bytes)
-    const nuspec = reader
-      .names()
-      .find((name) => !name.includes('/') && name.endsWith('.nuspec'))
+    const nuspec = reader.names().find((name) => !name.includes('/') && name.endsWith('.nuspec'))
     const declared = /<dependency\s+id="Microsoft\.AI\.DirectML"\s+version="([^"]+)"/.exec(
       reader.read(nuspec).data.toString('utf8')
     )?.[1]
@@ -401,7 +380,13 @@ const markerFile = path.join(runtime, 'build.json')
 const current = await readFile(markerFile, 'utf8').catch(() => '')
 const present = async () => {
   for (const name of required) {
-    if (!(await access(path.join(runtime, name)).then(() => true, () => false))) return false
+    if (
+      !(await access(path.join(runtime, name)).then(
+        () => true,
+        () => false
+      ))
+    )
+      return false
   }
   return true
 }

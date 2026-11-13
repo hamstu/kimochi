@@ -160,7 +160,7 @@ test('a switch record survives the round trip through sessionStorage', () => {
   assert.deepEqual(decodeEngineSwitch(encodeEngineSwitch(record), record.at + 800), record)
 })
 
-test('a switch record is only this reload\'s: stale, future and malformed ones are dropped', () => {
+test("a switch record is only this reload's: stale, future and malformed ones are dropped", () => {
   const raw = encodeEngineSwitch(switchRecord())
   assert.equal(decodeEngineSwitch(raw, 1_000_000 + ENGINE_SWITCH_TTL_MS + 1), null)
   assert.ok(decodeEngineSwitch(raw, 1_000_000 + ENGINE_SWITCH_TTL_MS))
@@ -177,7 +177,11 @@ test('a switch record is only this reload\'s: stale, future and malformed ones a
     { at: 'now' },
     { at: Number.NaN }
   ]) {
-    assert.equal(decodeEngineSwitch(encodeEngineSwitch(switchRecord(overrides)), 1_000_000), null, JSON.stringify(overrides))
+    assert.equal(
+      decodeEngineSwitch(encodeEngineSwitch(switchRecord(overrides)), 1_000_000),
+      null,
+      JSON.stringify(overrides)
+    )
   }
 })
 

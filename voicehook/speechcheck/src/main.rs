@@ -26,8 +26,11 @@ fn main() {
         std::process::exit(2);
     };
     let local = PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_default());
-    let ort_dll = arg(&args, "--ort").map(PathBuf::from).unwrap_or_else(|| local.join(r"Kimochi\meikiocr\runtime\onnxruntime.dll"));
-    let model = arg(&args, "--model").map(PathBuf::from).unwrap_or_else(|| local.join(r"dev.kimochi.app\models\sensevoice"));
+    let ort_dll = arg(&args, "--ort")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| local.join(r"Kimochi\meikiocr\runtime\onnxruntime.dll"));
+    let model =
+        arg(&args, "--model").map(PathBuf::from).unwrap_or_else(|| local.join(r"dev.kimochi.app\models\sensevoice"));
     let max_secs: f64 = arg(&args, "--max-secs").and_then(|s| s.parse().ok()).unwrap_or(30.0);
     if let Err(e) = ort::init_from(ort_dll.display().to_string()).commit() {
         eprintln!("ONNX Runtime {}: {e}", ort_dll.display());
@@ -44,8 +47,14 @@ fn main() {
     let mut out = std::fs::File::create(dir.join("speech.jsonl")).expect("speech.jsonl");
     for line in events.lines() {
         let Ok(e) = serde_json::from_str::<Value>(line) else { continue };
-        let Some(file) = e["file"].as_str().filter(|f| e["ev"] == "clip" && (f.ends_with(".wav") || f.ends_with(".ogg"))) else { continue };
-        if e["meta"]["replay"] == true { continue }
+        let Some(file) =
+            e["file"].as_str().filter(|f| e["ev"] == "clip" && (f.ends_with(".wav") || f.ends_with(".ogg")))
+        else {
+            continue;
+        };
+        if e["meta"]["replay"] == true {
+            continue;
+        }
         let secs = e["dur"].as_f64().unwrap_or(0.0);
         if secs > max_secs {
             continue;
@@ -55,7 +64,8 @@ fn main() {
         let Ok((samples, rate)) = read else { continue };
         let audio = vad::to_16k(&samples, rate);
         let speech = speech_ratio(&audio);
-        let text = asr.as_mut().and_then(|a| a.transcribe(&audio).ok()).map(|h| h.iter().map(|c| c.ch).collect::<String>());
+        let text =
+            asr.as_mut().and_then(|a| a.transcribe(&audio).ok()).map(|h| h.iter().map(|c| c.ch).collect::<String>());
         let row = json!({"seq": e["seq"], "file": file, "secs": secs, "speech": speech, "text": text});
         println!("{row}");
         let _ = writeln!(out, "{row}");
@@ -70,7 +80,6 @@ fn speech_ratio(audio: &[f32]) -> Option<f64> {
     }
     Some(p.iter().filter(|(x, _)| *x > 0.5).count() as f64 / p.len() as f64)
 }
-
 
 /// Ogg Vorbis to mono f32 (Ren'Py, RPG Maker and TyranoScript clips are the original files).
 fn read_ogg(path: &std::path::Path) -> Result<(Vec<f32>, u32), String> {

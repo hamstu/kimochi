@@ -54,7 +54,9 @@ export const ENGINES = {
     persistence: {
       metadataKeys: ['dictionaryState'],
       claimed: (local) =>
-        (local?.dictionaryState?.dictionaries ?? []).map((d) => d?.path).filter((p) => typeof p === 'string' && p.startsWith('/dicts/')),
+        (local?.dictionaryState?.dictionaries ?? [])
+          .map((d) => d?.path)
+          .filter((p) => typeof p === 'string' && p.startsWith('/dicts/')),
       probe: { kind: 'idbfs-paths', database: '/dicts', store: 'FILE_DATA', opfs: true }
     },
     // Where its engine keeps dictionaries: always that IDBFS store (frame.js `keepEngineOnIdbfs`).

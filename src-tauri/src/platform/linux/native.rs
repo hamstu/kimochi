@@ -135,7 +135,8 @@ fn drawable(inventory: &Inventory, window: &NativeWindow) -> bool {
 fn covered_by_own_window(inventory: &Inventory, game: &NativeWindow) -> bool {
     let own = std::process::id();
     let Some(game_bounds) = game.bounds else { return false };
-    let overlaps = |a: &Rect, b: &Rect| a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    let overlaps =
+        |a: &Rect, b: &Rect| a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     inventory
         .windows
         .iter()

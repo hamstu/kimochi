@@ -39,7 +39,8 @@ if (shot.layout === 'og') {
 }
 let crop = shot.crop ?? { x: 0, y: 0, width, height }
 // `pad`: one number, or [top, right, bottom, left] to leave room for notes on one side.
-const [padTop, padRight, padBottom, padLeft] = [shot.pad ?? 48].flat().length === 4 ? shot.pad : Array(4).fill(shot.pad ?? 48)
+const [padTop, padRight, padBottom, padLeft] =
+  [shot.pad ?? 48].flat().length === 4 ? shot.pad : Array(4).fill(shot.pad ?? 48)
 stage.style.padding = `${padTop}px ${padRight}px ${padBottom}px ${padLeft}px`
 if (shot.radius != null) win.style.setProperty('--radius', `${shot.radius}px`)
 if (shot.frame === 'bare') win.classList.add('bare')
@@ -200,7 +201,12 @@ function mark() {
       const p = notePosition(b, m.side ?? 'right', note, m.offset)
       place(note, p)
       // A dashed leader from the note's near edge to the target's edge, ending in a dot.
-      const fromX = m.side === 'left' ? p.x + note.offsetWidth : m.side === 'top' || m.side === 'bottom' ? p.x + note.offsetWidth / 2 : p.x
+      const fromX =
+        m.side === 'left'
+          ? p.x + note.offsetWidth
+          : m.side === 'top' || m.side === 'bottom'
+            ? p.x + note.offsetWidth / 2
+            : p.x
       const fromY = m.side === 'top' ? p.y + note.offsetHeight : m.side === 'bottom' ? p.y : p.y + note.offsetHeight / 2
       const dx = p.ax - fromX
       const dy = p.ay - fromY
@@ -239,7 +245,14 @@ function clip() {
 function contextMenu(target) {
   const el = find(target)
   const r = el.getBoundingClientRect()
-  const init = { bubbles: true, cancelable: true, button: 2, buttons: 2, clientX: r.left + 40, clientY: r.top + r.height / 2 }
+  const init = {
+    bubbles: true,
+    cancelable: true,
+    button: 2,
+    buttons: 2,
+    clientX: r.left + 40,
+    clientY: r.top + r.height / 2
+  }
   el.dispatchEvent(new frame.contentWindow.PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }))
   el.dispatchEvent(new frame.contentWindow.MouseEvent('contextmenu', init))
 }

@@ -81,10 +81,9 @@ pub fn source() -> Option<Source> {
 /// `false`). `None` when this session has no source or it failed just now.
 pub fn read() -> Option<(Modifiers, bool)> {
     match source()? {
-        Source::Portal => Some((
-            Modifiers { shift: PORTAL_HELD.load(Ordering::SeqCst), ..Modifiers::default() },
-            false,
-        )),
+        Source::Portal => {
+            Some((Modifiers { shift: PORTAL_HELD.load(Ordering::SeqCst), ..Modifiers::default() }, false))
+        }
         Source::XWayland => {
             let mut slot = XWAYLAND.lock().ok()?;
             let (conn, root) = slot.connection.as_ref()?;
@@ -158,9 +157,7 @@ fn eavesdrops() -> bool {
 
 fn read_eavesdrops() -> bool {
     let home = std::env::var_os("HOME").map(PathBuf::from);
-    let user = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| home.map(|h| h.join(".config")));
+    let user = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| home.map(|h| h.join(".config")));
     let system = std::env::var("XDG_CONFIG_DIRS").unwrap_or_else(|_| "/etc/xdg".into());
     let files = user.into_iter().chain(system.split(':').filter(|d| !d.is_empty()).map(PathBuf::from));
     for dir in files {
@@ -230,7 +227,10 @@ mod tests {
         assert!(!mode_relays_modifiers("None"));
         assert!(mode_relays_modifiers("Modifiers"));
         assert!(mode_relays_modifiers("Combinations"));
-        assert_eq!(ini_value("[Xwayland][$i]\nXwaylandEavesdrops[$i]=All\n", "Xwayland", "XwaylandEavesdrops").as_deref(), Some("All"));
+        assert_eq!(
+            ini_value("[Xwayland][$i]\nXwaylandEavesdrops[$i]=All\n", "Xwayland", "XwaylandEavesdrops").as_deref(),
+            Some("All")
+        );
         assert_eq!(ini_value("[Other]\nXwaylandEavesdrops=None\n", "Xwayland", "XwaylandEavesdrops"), None);
     }
 

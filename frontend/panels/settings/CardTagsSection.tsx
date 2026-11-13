@@ -30,11 +30,7 @@ export function CardTagsSection(): ReactNode {
 
   return (
     <SettingsSection>
-      <SettingsRow
-        label="Add tags"
-        controlId="card-tags-enabled"
-        description="Tags every new card you make."
-      >
+      <SettingsRow label="Add tags" controlId="card-tags-enabled" description="Tags every new card you make.">
         <Switch
           id="card-tags-enabled"
           checked={config.enabled}
@@ -47,8 +43,8 @@ export function CardTagsSection(): ReactNode {
           controlId="card-tags"
           description={
             <>
-              Separate them with commas. <code>{'{{session-name}}'}</code> becomes the name of the
-              session you&apos;re reading.
+              Separate them with commas. <code>{'{{session-name}}'}</code> becomes the name of the session you&apos;re
+              reading.
             </>
           }
           stacked

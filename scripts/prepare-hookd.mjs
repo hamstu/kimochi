@@ -46,17 +46,41 @@ if (process.platform === 'win32' || process.platform === 'linux') {
     )
     if (built.error) throw built.error
     if (built.status !== 0)
-      throw new Error(`Text hook helper ${arch} build failed (${built.status}). Install the ${target} Rust target and ${tools}.`)
+      throw new Error(
+        `Text hook helper ${arch} build failed (${built.status}). Install the ${target} Rust target and ${tools}.`
+      )
     await copyFile(
       path.join(cargoTargetDir(path.join(root, 'hookd')), `${target}/release/kimochi-hookd.exe`),
       path.join(destination, `kimochi-hookd-${arch}.exe`)
     )
     // MinGW builds would carry their symbols and line tables inside the DLL (MSVC's go to a PDB).
     const env = target.endsWith('-gnu') ? { ...process.env, CARGO_PROFILE_RELEASE_STRIP: 'symbols' } : process.env
-    const voice = spawnSync('cargo', ['build', '--locked', '--release', '--manifest-path', path.join(root, 'voicehook/Cargo.toml'), '-p', 'vh-hook', '--target', target], { stdio: 'inherit', env })
+    const voice = spawnSync(
+      'cargo',
+      [
+        'build',
+        '--locked',
+        '--release',
+        '--manifest-path',
+        path.join(root, 'voicehook/Cargo.toml'),
+        '-p',
+        'vh-hook',
+        '--target',
+        target
+      ],
+      { stdio: 'inherit', env }
+    )
     if (voice.error) throw voice.error
-    if (voice.status !== 0) throw new Error(`Voice hook ${arch} build failed (${voice.status}). Install the ${target} Rust target and ${tools}.`)
-    await copyFile(path.join(cargoTargetDir(path.join(root, 'voicehook')), `${target}/release/vhhook.dll`), path.join(destination, `kimochi-voicehook-${arch}.dll`))
+    if (voice.status !== 0)
+      throw new Error(
+        `Voice hook ${arch} build failed (${voice.status}). Install the ${target} Rust target and ${tools}.`
+      )
+    await copyFile(
+      path.join(cargoTargetDir(path.join(root, 'voicehook')), `${target}/release/vhhook.dll`),
+      path.join(destination, `kimochi-voicehook-${arch}.dll`)
+    )
   }
-  console.log(builds.length ? 'Text hook helpers and voice hook DLLs (x64, x86) staged.' : 'No text hook helpers for this target.')
+  console.log(
+    builds.length ? 'Text hook helpers and voice hook DLLs (x64, x86) staged.' : 'No text hook helpers for this target.'
+  )
 }

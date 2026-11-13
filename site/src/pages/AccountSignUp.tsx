@@ -125,8 +125,15 @@ export function AccountSignUp() {
           Create account
         </SubmitButton>
         <p className="text-small text-ink-3">
-          By creating an account you agree to the <Link to="/terms" className="text-accent-ink">terms</Link>. The{' '}
-          <Link to="/privacy#accounts" className="text-accent-ink">privacy page</Link> lists what an account stores.
+          By creating an account you agree to the{' '}
+          <Link to="/terms" className="text-accent-ink">
+            terms
+          </Link>
+          . The{' '}
+          <Link to="/privacy#accounts" className="text-accent-ink">
+            privacy page
+          </Link>{' '}
+          lists what an account stores.
         </p>
       </form>
     </AuthShell>

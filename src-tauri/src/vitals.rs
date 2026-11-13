@@ -95,7 +95,8 @@ impl Sampler {
         if let Ok(entries) = std::fs::read_dir("/proc") {
             for entry in entries.flatten() {
                 let Some(pid) = entry.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else { continue };
-                let Some((name, ppid, ticks)) = read(&format!("/proc/{pid}/stat")).as_deref().and_then(parse_stat) else {
+                let Some((name, ppid, ticks)) = read(&format!("/proc/{pid}/stat")).as_deref().and_then(parse_stat)
+                else {
                     continue;
                 };
                 if pid != me && ppid != me {
@@ -162,7 +163,9 @@ mod tests {
     #[test]
     fn status_meminfo_and_pressure_are_read() {
         assert_eq!(parse_status("Name:\tk\nVmRSS:\t  204800 kB\nThreads:\t31\n"), (204800, 31));
-        let mem = parse_meminfo("MemTotal:       16000000 kB\nMemAvailable:    1024000 kB\nSwapTotal: 1048576 kB\nSwapFree: 0 kB\n");
+        let mem = parse_meminfo(
+            "MemTotal:       16000000 kB\nMemAvailable:    1024000 kB\nSwapTotal: 1048576 kB\nSwapFree: 0 kB\n",
+        );
         assert_eq!(mem["totalMb"], 15625);
         assert_eq!(mem["availableMb"], 1000);
         assert_eq!(mem["swapFreeMb"], 0);

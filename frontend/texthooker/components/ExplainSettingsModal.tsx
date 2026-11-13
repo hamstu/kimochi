@@ -1,66 +1,52 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState } from "react";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  Input,
-  Select,
-  SettingsRow,
-  Textarea,
-} from "@kit";
-import { updateSettings } from "@texthooker/lib/settings";
-import {
-  defaultExplainPrompt,
-  explainTemplate,
-  isDefaultExplainPrompt,
-} from "@texthooker/lib/explainPrompt";
-import type { ExplainProvider, Settings } from "@texthooker/lib/types";
-import { useAccount } from "../../bridge/account";
-import { useLanguage } from "../../bridge/useLanguage";
+import { useEffect, useState } from 'react'
+import { Button, Dialog, DialogContent, Input, Select, SettingsRow, Textarea } from '@kit'
+import { updateSettings } from '@texthooker/lib/settings'
+import { defaultExplainPrompt, explainTemplate, isDefaultExplainPrompt } from '@texthooker/lib/explainPrompt'
+import type { ExplainProvider, Settings } from '@texthooker/lib/types'
+import { useAccount } from '../../bridge/account'
+import { useLanguage } from '../../bridge/useLanguage'
 
 interface Props {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  settings: Settings;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  settings: Settings
 }
 
 /** Claude CLI model aliases. Opus is the default per project preference —
     deliberately not the newer Fable tier, though it stays selectable. */
 const CLAUDE_MODELS = [
-  { value: "opus", label: "Opus (default)" },
-  { value: "sonnet", label: "Sonnet" },
-  { value: "haiku", label: "Haiku" },
-  { value: "fable", label: "Fable" },
-];
+  { value: 'opus', label: 'Opus (default)' },
+  { value: 'sonnet', label: 'Sonnet' },
+  { value: 'haiku', label: 'Haiku' },
+  { value: 'fable', label: 'Fable' }
+]
 
 export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
-  const { cloud } = useAccount();
-  const [language] = useLanguage();
+  const { cloud } = useAccount()
+  const [language] = useLanguage()
   // A default prompt is shown as the language's template; the user's own as written.
-  const shown = explainTemplate(settings.explainPrompt, language.code);
-  const fallback = defaultExplainPrompt(language.code);
-  const [promptDraft, setPromptDraft] = useState(shown);
-  const [codexModelDraft, setCodexModelDraft] = useState(
-    settings.explainCodexModel,
-  );
+  const shown = explainTemplate(settings.explainPrompt, language.code)
+  const fallback = defaultExplainPrompt(language.code)
+  const [promptDraft, setPromptDraft] = useState(shown)
+  const [codexModelDraft, setCodexModelDraft] = useState(settings.explainCodexModel)
 
   useEffect(() => {
     if (open) {
-      setPromptDraft(shown);
-      setCodexModelDraft(settings.explainCodexModel);
+      setPromptDraft(shown)
+      setCodexModelDraft(settings.explainCodexModel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open])
 
   const savePrompt = () => {
-    const next = promptDraft.trim() ? promptDraft : fallback;
+    const next = promptDraft.trim() ? promptDraft : fallback
     // A default stays as stored (it follows the language either way).
-    if (isDefaultExplainPrompt(next) && isDefaultExplainPrompt(settings.explainPrompt)) return;
+    if (isDefaultExplainPrompt(next) && isDefaultExplainPrompt(settings.explainPrompt)) return
     if (next !== settings.explainPrompt) {
-      void updateSettings({ explainPrompt: next });
+      void updateSettings({ explainPrompt: next })
     }
-  };
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,27 +61,25 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
               <Select
                 aria-label="Provider"
                 value={settings.explainProvider}
-                onValueChange={(v) =>
-                  void updateSettings({ explainProvider: v as ExplainProvider })
-                }
+                onValueChange={(v) => void updateSettings({ explainProvider: v as ExplainProvider })}
                 // Kimochi cloud needs Kimochi Cloud; still listed while it is the choice.
                 options={[
-                  { value: "kimochi", label: "Kimochi cloud" },
-                  { value: "codex", label: "Codex CLI" },
-                  { value: "claude", label: "Claude CLI" },
-                ].filter((o) => o.value !== "kimochi" || cloud || settings.explainProvider === "kimochi")}
+                  { value: 'kimochi', label: 'Kimochi cloud' },
+                  { value: 'codex', label: 'Codex CLI' },
+                  { value: 'claude', label: 'Claude CLI' }
+                ].filter((o) => o.value !== 'kimochi' || cloud || settings.explainProvider === 'kimochi')}
               />
             </SettingsRow>
-            {settings.explainProvider === "kimochi" ? (
+            {settings.explainProvider === 'kimochi' ? (
               <SettingsRow
                 label="Kimochi cloud"
                 description={
                   cloud
                     ? "Runs on Kimochi's server within your Kimochi Cloud monthly explanations."
-                    : "Needs Kimochi Cloud: see Settings → Account."
+                    : 'Needs Kimochi Cloud: see Settings → Account.'
                 }
               />
-            ) : settings.explainProvider === "claude" ? (
+            ) : settings.explainProvider === 'claude' ? (
               <SettingsRow label="Claude model">
                 <Select
                   aria-label="Claude model"
@@ -113,9 +97,9 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
                   value={codexModelDraft}
                   onChange={(e) => setCodexModelDraft(e.target.value)}
                   onBlur={() => {
-                    const next = codexModelDraft.trim();
+                    const next = codexModelDraft.trim()
                     if (next !== settings.explainCodexModel) {
-                      void updateSettings({ explainCodexModel: next });
+                      void updateSettings({ explainCodexModel: next })
                     }
                   }}
                   placeholder="(CLI default)"
@@ -146,22 +130,20 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
             onBlur={savePrompt}
             spellCheck={false}
           />
-          {language.code !== "ja" && !isDefaultExplainPrompt(promptDraft) && (
+          {language.code !== 'ja' && !isDefaultExplainPrompt(promptDraft) && (
             <p className="k-description">
-              Your prompt was written for Japanese, or is your own: it is sent as written. Reset to
-              default for the prompt that follows the language you&apos;re learning ({language.name}).
+              Your prompt was written for Japanese, or is your own: it is sent as written. Reset to default for the
+              prompt that follows the language you&apos;re learning ({language.name}).
             </p>
           )}
           <p className="k-description">
-            <span className="k-mono">{"{{language}}"}</span> is replaced with the language
-            you&apos;re learning ({language.name}),{" "}
-            <span className="k-mono">{"{{context}}"}</span> with the previous lines
-            and <span className="k-mono">{"{{sentence}}"}</span> with the line being explained.
-            Cached explanations keep their old text; use
-            Regenerate in the Explain dialog after editing.
+            <span className="k-mono">{'{{language}}'}</span> is replaced with the language you&apos;re learning (
+            {language.name}), <span className="k-mono">{'{{context}}'}</span> with the previous lines and{' '}
+            <span className="k-mono">{'{{sentence}}'}</span> with the line being explained. Cached explanations keep
+            their old text; use Regenerate in the Explain dialog after editing.
           </p>
         </div>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

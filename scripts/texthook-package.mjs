@@ -43,8 +43,8 @@ export const ENGINES = {
       'msvcp140.dll': { entry: 'LunaTranslator_x64/files/runtime3.13-64/msvcp140.dll' },
       'vcruntime140.dll': { entry: 'LunaTranslator_x64/files/runtime3.13-64/vcruntime140.dll' },
       'vcruntime140_1.dll': { entry: 'LunaTranslator_x64/files/runtime3.13-64/vcruntime140_1.dll' },
-      'LICENSE.txt': { entry: 'LunaTranslator_x64/LICENSES/LICENSE.LunaTranslator' },
-    },
+      'LICENSE.txt': { entry: 'LunaTranslator_x64/LICENSES/LICENSE.LunaTranslator' }
+    }
   },
   textractor: {
     name: 'Textractor',
@@ -62,9 +62,9 @@ export const ENGINES = {
       'x86/texthook.dll': { entry: 'Textractor/x86/texthook.dll' },
       'x86/msvcp140.dll': { entry: 'Textractor/x86/msvcp140.dll' },
       'x86/vcruntime140.dll': { entry: 'Textractor/x86/vcruntime140.dll' },
-      'LICENSE.txt': { url: 'https://raw.githubusercontent.com/Artikash/Textractor/v5.2.0/LICENSE' },
-    },
-  },
+      'LICENSE.txt': { url: 'https://raw.githubusercontent.com/Artikash/Textractor/v5.2.0/LICENSE' }
+    }
+  }
 }
 
 export const manifestPath = path.join(root, 'src-tauri', 'texthook-manifest.json')
@@ -109,7 +109,7 @@ export async function build({ cache }) {
       version: engine.version,
       project: engine.project,
       license: engine.license,
-      files: listed,
+      files: listed
     }
   }
   return { manifest, files }
@@ -128,7 +128,8 @@ async function main() {
   const { manifest, files } = await build({ cache })
   if (args.includes('--check')) {
     const committed = await readFile(manifestPath, 'utf8')
-    if (committed !== serialise(manifest)) throw Error('texthook-manifest.json is out of date; run scripts/texthook-package.mjs')
+    if (committed !== serialise(manifest))
+      throw Error('texthook-manifest.json is out of date; run scripts/texthook-package.mjs')
     console.log('texthook-manifest.json matches the pins.')
     return
   }
@@ -140,10 +141,15 @@ async function main() {
   }
   await writeFile(path.join(out, 'texthook', 'texthook-manifest.json'), serialise(manifest))
   const total = files.reduce((n, f) => n + f.data.length, 0)
-  console.log(`Wrote ${path.relative(root, manifestPath)} and ${files.length} files (${(total / 1e6).toFixed(1)} MB) under ${out}/texthook/`)
+  console.log(
+    `Wrote ${path.relative(root, manifestPath)} and ${files.length} files (${(total / 1e6).toFixed(1)} MB) under ${out}/texthook/`
+  )
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+) {
   main().catch((error) => {
     console.error(error.message)
     process.exit(1)

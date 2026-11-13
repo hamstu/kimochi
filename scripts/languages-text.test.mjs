@@ -11,13 +11,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { transform } from 'esbuild'
 import { load } from './load.mjs'
-import {
-  JAPANESE_WORDS,
-  readingUnits,
-  segmentAcross,
-  segmentText,
-  tokensFromSegmenter
-} from '../ui/word-nav.js'
+import { JAPANESE_WORDS, readingUnits, segmentAcross, segmentText, tokensFromSegmenter } from '../ui/word-nav.js'
 import { gnomeWordCells } from '../ui/gnome-word-cells.js'
 
 const { dropsText, japaneseFilterOf, mostlyNonJapanese } = await load('japanese-text.ts')
@@ -52,7 +46,18 @@ const box = (description, x, y = 0, width = 100, height = 20, extra = {}) => ({
 
 // --- 1. the line filter ---------------------------------------------------------------------
 
-const SAMPLES = ['猫が好きです', 'Options', 'Options 設定', 'Save データ', '안녕하세요', 'Привет, мир', 'Hello there', '123 !!', '', '「はい」']
+const SAMPLES = [
+  '猫が好きです',
+  'Options',
+  'Options 設定',
+  'Save データ',
+  '안녕하세요',
+  'Привет, мир',
+  'Hello there',
+  '123 !!',
+  '',
+  '「はい」'
+]
 
 test('with Japanese, given or not, the filter drops exactly what it always did', () => {
   for (const mode of ['off', 'noJapanese', 'mostlyNonJapanese'])
@@ -116,8 +121,12 @@ test('the overlay drops the same lines in the language, and skips the furigana f
   // In Japanese the small word goes (furigana), and then the Latin lines with it.
   assert.deepEqual(shown('ja'), [])
   assert.deepEqual(
-    visibleAnnotations(annotations, { ...grouping, ...japaneseFilterOf({ japaneseFilter: 'off' }, 'ja') }).map((a) => a.description),
-    visibleAnnotations(annotations, { ...grouping, ...japaneseFilterOf({ japaneseFilter: 'off' }) }).map((a) => a.description)
+    visibleAnnotations(annotations, { ...grouping, ...japaneseFilterOf({ japaneseFilter: 'off' }, 'ja') }).map(
+      (a) => a.description
+    ),
+    visibleAnnotations(annotations, { ...grouping, ...japaneseFilterOf({ japaneseFilter: 'off' }) }).map(
+      (a) => a.description
+    )
   )
 })
 
@@ -136,7 +145,10 @@ test('Read along steps through boxes in the language: Korean, English and Russia
 test('a parse that matched nothing falls back to the segmenter for text in the language', async () => {
   const parse = async () => [{ source: 'scanning-parser', content: [] }]
   const english = await segmentText('the cat', parse, wordsOf('en'))
-  assert.deepEqual(english.filter((t) => t.word).map((t) => t.text), ['the', 'cat'])
+  assert.deepEqual(
+    english.filter((t) => t.word).map((t) => t.text),
+    ['the', 'cat']
+  )
   // Japanese keeps the empty parse for text with no Japanese in it.
   assert.deepEqual(await segmentText('the cat', parse), [])
 })
@@ -158,10 +170,7 @@ test('Auto OCR publishes text in the language, and judges decoration by it', () 
     normalizeOcrResult(
       {
         fullText: lines.map((l) => l.text).join('\n'),
-        textAnnotations: [
-          box('', 0),
-          ...lines.map(({ text, box: b }) => box(text, b.x, b.y, b.width, b.height))
-        ]
+        textAnnotations: [box('', 0), ...lines.map(({ text, box: b }) => box(text, b.x, b.y, b.width, b.height))]
       },
       'livetext',
       language
@@ -225,12 +234,18 @@ test("a spaced language's boxes do not run into each other when Read along split
   const split = async (text) => tokensFromSegmenter(text, Intl.Segmenter, words)
   const units = [{ text: 'can' }, { text: 'not' }]
   const segmented = await segmentAcross(units, split, words)
-  assert.deepEqual(segmented.map((u) => u.tokens.filter((t) => t.word).map((t) => t.text)), [['can'], ['not']])
+  assert.deepEqual(
+    segmented.map((u) => u.tokens.filter((t) => t.word).map((t) => t.text)),
+    [['can'], ['not']]
+  )
   // A dictionary match running across the space (an expression) covers the next box's first word.
   const expression = async (text) =>
     text.startsWith('can not') ? [{ start: 0, end: 7, text: 'can not', word: true }] : split(text)
   const covered = await segmentAcross(units, expression, words)
-  assert.deepEqual(covered[1].tokens.map((t) => t.word), [false])
+  assert.deepEqual(
+    covered[1].tokens.map((t) => t.word),
+    [false]
+  )
 })
 
 test('a hooked line broken over rows keeps a space at each break in a spaced language', () => {
@@ -241,8 +256,18 @@ test('a hooked line broken over rows keeps a space at each break in a spaced lan
       bbox: [0, 0, 300, 60],
       orientation: 'horizontal',
       linePolygons: [
-        [[0, 0], [300, 0], [300, 30], [0, 30]],
-        [[0, 30], [300, 30], [300, 60], [0, 60]]
+        [
+          [0, 0],
+          [300, 0],
+          [300, 30],
+          [0, 30]
+        ],
+        [
+          [0, 30],
+          [300, 30],
+          [300, 60],
+          [0, 60]
+        ]
       ]
     }
   ]
@@ -272,7 +297,10 @@ test('a column of short items is vertical only in a language set vertically', ()
   assert.equal(inferOrientations([box('ab', 0, 0, 20, 60)], 'ru')[0].orientation, 'horizontal')
   assert.equal(inferOrientations([box('ab', 0, 0, 20, 60)])[0].orientation, 'vertical')
   // The engine's word is final either way.
-  assert.equal(inferOrientations([box('ab', 0, 0, 20, 60, { orientation: 'vertical' })], 'en')[0].orientation, 'vertical')
+  assert.equal(
+    inferOrientations([box('ab', 0, 0, 20, 60, { orientation: 'vertical' })], 'en')[0].orientation,
+    'vertical'
+  )
   const tall = { groups: [{ id: 'b', text: 'Menu', bbox: [0, 0, 20, 100] }], textAnnotations: [] }
   assert.equal(normalizeOcrResult(tall, 'cloud', 'en').groups[0].orientation, 'horizontal')
   assert.equal(normalizeOcrResult(tall, 'cloud').groups[0].orientation, 'vertical')
@@ -297,7 +325,9 @@ test('the Yomitan API scan starts at the hovered word and reads whole words', ()
 
 test('the platform segmenter splits in the language, and merges okurigana only in Japanese', () => {
   const words = (text, language) =>
-    tokensFromSegmenter(text, Intl.Segmenter, language).filter((t) => t.word).map((t) => t.text)
+    tokensFromSegmenter(text, Intl.Segmenter, language)
+      .filter((t) => t.word)
+      .map((t) => t.text)
   assert.deepEqual(words('The quick brown fox', wordsOf('en')), ['The', 'quick', 'brown', 'fox'])
   assert.deepEqual(words('Быстрая лиса', wordsOf('ru')), ['Быстрая', 'лиса'])
   assert.deepEqual(words('책을 읽어요', wordsOf('ko')), ['책을', '읽어요'])
@@ -310,7 +340,14 @@ test('the platform segmenter splits in the language, and merges okurigana only i
 test('GNOME gives a spaced language one cell per word, and Japanese one per character', () => {
   const rect = { x: 0, y: 0, width: 220, height: 20 }
   const cells = gnomeWordCells('the reading', rect, false, (t) => [...t].length, true)
-  assert.deepEqual(cells.map((c) => [c.offset, c.text]), [[0, 'the reading'], [3, ' reading'], [4, 'reading']])
+  assert.deepEqual(
+    cells.map((c) => [c.offset, c.text]),
+    [
+      [0, 'the reading'],
+      [3, ' reading'],
+      [4, 'reading']
+    ]
+  )
   const reading = cells[2]
   const characters = gnomeWordCells('the reading', rect)
   assert.equal(characters.length, 11)

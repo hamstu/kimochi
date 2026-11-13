@@ -15,7 +15,16 @@ export interface SubmitButtonProps {
 }
 
 /** A form's submit button with a disabled, aria-busy state and a spinner while the request runs. */
-export function SubmitButton({ busy, busyLabel, variant = 'primary', disabled, className, type = 'submit', onClick, children }: SubmitButtonProps) {
+export function SubmitButton({
+  busy,
+  busyLabel,
+  variant = 'primary',
+  disabled,
+  className,
+  type = 'submit',
+  onClick,
+  children
+}: SubmitButtonProps) {
   return (
     <Button
       type={type}
