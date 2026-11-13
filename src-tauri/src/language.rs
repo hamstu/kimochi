@@ -105,14 +105,15 @@ pub fn current(settings: &Settings) -> &'static Language {
 /// The scripts the bundled PaddleOCR recogniser (PP-OCRv6 small) has in its dictionary.
 const PADDLE_SCRIPTS: &[Script] = &[Script::Jpan, Script::Hans, Script::Hant, Script::Latn, Script::Grek];
 
-/// The languages Apple Live Text reads on every macOS the app runs on (14 and later). Japanese is
-/// confirmed by use, and these 15 are what `ImageAnalyzer.supportedTextRecognitionLanguages`
-/// reports on macOS 26.6; which release added each is unverified (Korean, Russian and Ukrainian
-/// are believed to date from 13, Thai and Vietnamese from 14). macOS 26 also reports Turkish,
-/// Indonesian, Czech, Danish, Dutch, Norwegian, Polish, Romanian and Swedish, left out until
-/// they can be checked against the running OS.
+/// The languages Apple Live Text reads: those of Kimochi's that
+/// `ImageAnalyzer.supportedTextRecognitionLanguages` reports on macOS 26.6 (checked on 26.6.2,
+/// 2026-11-12). Which release added each is unverified (Korean, Russian and Ukrainian are believed
+/// to date from 13, Thai and Vietnamese from 14, and the last nine are newer), so on an older macOS
+/// Live Text may read one less well than its own languages. It also reports Arabic (right to left,
+/// which Kimochi doesn't list yet) and Malay (not one of Kimochi's languages).
 const LIVE_TEXT: &[&str] = &[
     "ja", "ko", "zh-Hans", "zh-Hant", "yue", "en", "fr", "it", "de", "es", "pt", "ru", "uk", "th", "vi",
+    "tr", "id", "cs", "da", "nl", "no", "pl", "ro", "sv",
 ];
 
 /// The languages an OCR engine can read, or None for every language (an engine that detects the
@@ -280,6 +281,15 @@ pub fn apple_locale(language: &Language) -> &str {
         "th" => "th-TH",
         // Apple's own spelling.
         "vi" => "vi-VT",
+        "tr" => "tr-TR",
+        "id" => "id-ID",
+        "cs" => "cs-CZ",
+        "da" => "da-DK",
+        "nl" => "nl-NL",
+        "no" => "no-NO",
+        "pl" => "pl-PL",
+        "ro" => "ro-RO",
+        "sv" => "sv-SE",
         code => code,
     }
 }

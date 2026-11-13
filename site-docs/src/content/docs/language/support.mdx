@@ -4,7 +4,6 @@ description: The languages Kimochi can read, which OCR engines, dictionaries and
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
 ## Languages
 
@@ -31,19 +30,19 @@ The last three columns are the engines and services that read only some language
 | Hindi | HI | Devanagari | Yes | — | — | — |
 | Thai | TH | Thai | No | — | ✓ | ✓ |
 | Vietnamese | VI | Latin | Yes | — | ✓ | ✓ |
-| Indonesian | ID | Latin | Yes | ✓ | — | ✓ |
-| Turkish | TR | Latin | Yes | ✓ | — | ✓ |
-| Polish | PL | Latin | Yes | ✓ | — | ✓ |
-| Dutch | NL | Latin | Yes | ✓ | — | ✓ |
-| Swedish | SV | Latin | Yes | ✓ | — | ✓ |
-| Norwegian | NO | Latin | Yes | ✓ | — | ✓ |
-| Danish | DA | Latin | Yes | ✓ | — | ✓ |
+| Indonesian | ID | Latin | Yes | ✓ | ✓ | ✓ |
+| Turkish | TR | Latin | Yes | ✓ | ✓ | ✓ |
+| Polish | PL | Latin | Yes | ✓ | ✓ | ✓ |
+| Dutch | NL | Latin | Yes | ✓ | ✓ | ✓ |
+| Swedish | SV | Latin | Yes | ✓ | ✓ | ✓ |
+| Norwegian | NO | Latin | Yes | ✓ | ✓ | ✓ |
+| Danish | DA | Latin | Yes | ✓ | ✓ | ✓ |
 | Finnish | FI | Latin | Yes | ✓ | — | ✓ |
 | Greek | EL | Greek | Yes | ✓ | — | ✓ |
 | Ukrainian | UK | Cyrillic | Yes | — | ✓ | ✓ |
-| Czech | CS | Latin | Yes | ✓ | — | ✓ |
+| Czech | CS | Latin | Yes | ✓ | ✓ | ✓ |
 | Hungarian | HU | Latin | Yes | ✓ | — | ✓ |
-| Romanian | RO | Latin | Yes | ✓ | — | ✓ |
+| Romanian | RO | Latin | Yes | ✓ | ✓ | ✓ |
 | Tagalog | TL | Latin | Yes | ✓ | — | — |
 | Latin | LA | Latin | Yes | ✓ | — | — |
 | Bulgarian | BG | Cyrillic | Yes | — | — | ✓ |
@@ -75,12 +74,8 @@ can't lay them out.
 | --- | --- |
 | **Google Lens**, **Cloud OCR**, **Screen AI**, **OneOCR** (Windows) | Every language in the list. These engines find the script themselves. |
 | **PaddleOCR** | Languages written in Chinese characters, kana, the Latin alphabet or the Greek alphabet, except Vietnamese, whose tone-marked letters its model lacks. See the table above. |
-| **Apple Live Text** (macOS) | Japanese, Korean, Chinese (Simplified and Traditional), Cantonese, English, French, Italian, German, Spanish, Portuguese, Russian, Ukrainian, Thai and Vietnamese. |
+| **Apple Live Text** (macOS) | Japanese, Korean, Chinese (Simplified and Traditional), Cantonese, English, French, Italian, German, Spanish, Portuguese, Russian, Ukrainian, Thai, Vietnamese and many more. |
 | **MeikiOCR**, **Manga OCR**, **VOCR6** | Japanese only. |
-
-<Todo>TODO(hamish): OneOCR is offered for every language, but its real language coverage hasn't been checked. Screen AI's coverage beyond the languages its model files name is unverified too, and so is whether Google Lens uses the language Kimochi sends as a hint.</Todo>
-
-<Todo>TODO(hamish): Live Text's list is deliberately conservative: macOS 26 also reports Turkish, Indonesian, Czech, Danish, Dutch, Norwegian, Polish, Romanian and Swedish, which Kimochi leaves out until they're checked. Which macOS release added each listed language is unverified. Mention, or keep as is?</Todo>
 
 **The engine follows the language.** Engines that can't read the language you're learning are left
 out of the sidebar's **OCR model** menu and of **Settings → OCR & Overlay**. When you change
@@ -168,7 +163,5 @@ Translations and explanations are in **English**, whatever language you're learn
 | **Translate** with **Your DeepL key** | The languages DeepL translates (the **DeepL** column above). For any other, **Settings → Translation & AI** says DeepL can't translate it; choose Kimochi cloud. |
 | **Explain** | Every language. The default prompt names the language you're learning through a `{{language}}` placeholder. A prompt you edited is sent as you wrote it; **Reset to default** gets the one that follows the language. |
 | **Read aloud** | Japanese only: its voices are Japanese. |
-
-<Todo>TODO(hamish): Cloud OCR, translation and Explain with Kimochi cloud send the language to Kimochi's server, which needs its language support (server branch feat/languages) deployed before other languages work there. Confirm it's live before publishing.</Todo>
 
 See [Translation and AI](/lookups/translation-and-ai/).
