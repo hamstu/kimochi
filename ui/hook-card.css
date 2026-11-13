@@ -85,7 +85,8 @@
     var(--hook-card-colours);
 }
 .hook-card-text,
-.hook-card-text-ghost {
+.hook-card-text-ghost,
+.hook-card-probe {
   /* Full-width glyphs a whole em across, as the game's own CJK text is: what OCR measured. Another
      language's text is set in its own fonts (language-style.ts, set on the page by overlay.js). */
   font-family: var(
@@ -100,6 +101,10 @@
   );
   font-weight: 400;
   font-kerning: none;
+  /* Every glyph a whole em, as the game sets its text and as the card's ink is measured
+     (hook-card.js `ink`): Chromium's default trim halves an opening 「 at a row's start and one
+     of two marks side by side (。」), which put the card's text a few pixels off the game's. */
+  text-spacing-trim: space-all;
   letter-spacing: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -277,6 +282,22 @@
   width: 100%;
   padding: 6px 8px;
   text-align: left;
+}
+/* A hidden copy of the text's style, where the card reads its baseline (hook-card.js `ink`): one
+   row, nowhere to be seen, taking no room and no pointer. Its empty inline-block sits on the
+   baseline. */
+.hook-card-probe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre;
+}
+.hook-card-probe-baseline {
+  display: inline-block;
+  width: 0;
+  height: 0;
 }
 /* The old text, fading out over the new as it fades in (hook-card.js `crossfade`): where the old
    text was laid out, taking no room and no pointer. */

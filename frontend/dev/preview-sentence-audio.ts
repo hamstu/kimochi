@@ -176,7 +176,8 @@ export const SENTENCE_AUDIO_HANDLERS: Record<string, (args: Record<string, unkno
             uid: line.uid,
             state: i === 3 ? 'silent' : 'voiced',
             durationMs: 1800 + line.text.length * 110,
-            how: 'matched'
+            // One hooked from the game, as a Text Hooker game's voices are (its chip's sparkle).
+            how: i === 1 ? 'hooked' : 'matched'
           }))
       : []
     return [...voiced, ...toned]

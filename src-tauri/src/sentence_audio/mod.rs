@@ -40,6 +40,9 @@ use tauri::{Emitter, Manager};
 /// How long a card waits for its line to be decided (its voice to end) before taking what has
 /// been heard.
 const MAX_WAIT_MS: f64 = 15_000.0;
+/// How far back, once the game's voice stream is established, lines voiced by timing alone are
+/// taken back (`untime`): the warm-up before it, a minute or two of play.
+const UNTIME_MS: f64 = 10.0 * 60_000.0;
 /// How long a card waits while the game's own voice for its line is still expected.
 const HOOK_WAIT_MS: f64 = 30_000.0;
 const DRAIN_EVERY: Duration = Duration::from_millis(50);
@@ -265,6 +268,8 @@ struct Ears {
     model_checked: Option<Instant>,
     /// The speech model being loaded on its own thread (seconds on a slow CPU), for `model`.
     loading: Option<std::sync::mpsc::Receiver<(PathBuf, Result<SenseVoice, String>)>>,
+    /// The game's voice stream was established at the last pass (`Hooked::established`).
+    established: bool,
 }
 
 pub struct SentenceAudio {
@@ -544,6 +549,14 @@ impl SentenceAudio {
                 }
             }
             ears.discovery.remember(&mut ears.hooked, &voice_hook::base_dir());
+            // The game's voices are being captured from now on: what the recording placed by timing
+            // alone on this session's lines before that (the music, an effect, another line, most
+            // likely) is taken back, as it would not have been given now (`keep`).
+            let established = ears.hooked.established();
+            if established && !ears.established {
+                self.untime(ears, now);
+            }
+            ears.established = established;
             let hooked_ms = began.elapsed().as_millis();
             // A line the hook gave up on is the listener's, however late: one left undecided when a slow
             // pass outlasted the hook's own horizon would otherwise wait forever.
@@ -604,6 +617,7 @@ impl SentenceAudio {
             model: None,
             model_checked: None,
             loading: None,
+            established: false,
         }
     }
 
@@ -694,6 +708,27 @@ impl SentenceAudio {
         ears.cursor = Some(start + samples.len() as u64);
     }
 
+    /// This session's recent lines that the recording voiced by timing alone, and no hooked clip
+    /// since, left unvoiced: see `listen` (the game's voice stream has just been established).
+    fn untime(&self, ears: &Ears, now: f64) {
+        for line in ears.hooked.lines() {
+            if now - line.ts > UNTIME_MS || ears.hooked.completed(&line.uid) {
+                continue;
+            }
+            if self.line_state(&line.uid).is_some_and(|l| l.state == "voiced" && l.how.as_deref() == Some("timed")) {
+                lock(&self.store).remove(&line.uid);
+                let silent =
+                    LineAudio { uid: line.uid.clone(), state: "silent", duration_ms: None, how: None, message: None };
+                {
+                    let mut lines = lock(&self.lines);
+                    lines.retain(|l| l.uid != silent.uid);
+                    lines.push_back(silent.clone());
+                }
+                (self.host.emit)(&silent);
+            }
+        }
+    }
+
     /// Keep what was decided for a line: its clip in the store, its state for the Log.
     fn keep(&self, ears: &Ears, decision: &Decision) {
         if self.line_state(&decision.uid).is_some_and(|l| l.how.as_deref() == Some("hooked")) {
@@ -768,6 +803,7 @@ impl SentenceAudio {
 
     fn keep_hooked(&self, matched: &kimochi_speech::hooked::Matched) -> Result<(), String> {
         let mut samples = matched.samples.clone();
+        samples.truncate(kimochi_speech::trim::sound_end(&samples, matched.sample_rate));
         kimochi_speech::trim::fade(&mut samples, matched.sample_rate);
         let rendered = clips::Rendered {
             mp3: kimochi_speech::encode::mp3(&samples, matched.sample_rate)?,
@@ -1487,6 +1523,7 @@ mod tests {
             model: None,
             model_checked: None,
             loading: None,
+            established: false,
         };
         let voice = || Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
         service.keep(
@@ -1538,6 +1575,7 @@ mod tests {
             model: None,
             model_checked: None,
             loading: None,
+            established: false,
         };
         let timed = Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
         service.keep(
@@ -1768,6 +1806,7 @@ mod hooked_integration_tests {
             fmt: None,
             looping: false,
             channel: None,
+            rms: None,
         };
         service
             .keep_hooked(&kimochi_speech::hooked::Matched {

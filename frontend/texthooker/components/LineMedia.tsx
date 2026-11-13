@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Image as ImageIcon, Plus, Volume2 } from 'lucide-react'
+import { Image as ImageIcon, Plus, Sparkles, Volume2 } from 'lucide-react'
 import { Tooltip } from '@kit'
 import { lineProgress, toggleLineAudio, useLineAudio, useLinePlaying } from '@texthooker/lib/sentenceAudio'
 import { scanOf, showShot, useShot } from '@texthooker/lib/screenshots'
@@ -20,9 +20,11 @@ export function LineMedia({ line }: { line: Line }) {
 }
 
 /**
- * Sentence audio's chip (src-tauri/src/sentence_audio): a speaker and the clip's length. A click
- * plays it, filling the chip from left to right as it goes; another stops it. Nothing while the
- * line is still being listened to, when no voice was found, or when sentence audio is off.
+ * Sentence audio's chip (src-tauri/src/sentence_audio): a speaker and the clip's length, and a
+ * sparkle after it when the clip is the game's own voice line, hooked from the game before it was
+ * mixed (`how: 'hooked'`) rather than cut from the recording of everything playing. A click plays
+ * it, filling the chip from left to right as it goes; another stops it. Nothing while the line is
+ * still being listened to, when no voice was found, or when sentence audio is off.
  */
 function VoiceChip({ uid }: { uid: string | undefined }) {
   const audio = useLineAudio(uid)
@@ -46,14 +48,17 @@ function VoiceChip({ uid }: { uid: string | undefined }) {
 
   if (!uid || audio?.state !== 'voiced') return null
   const seconds = ((audio.durationMs ?? 0) / 1000).toFixed(1)
+  const hooked = audio.how === 'hooked'
+  const tip = playing ? 'Stop' : hooked ? 'Play the voice, hooked from the game' : "Play the line's voice"
   return (
-    <Tooltip content={playing ? 'Stop' : "Play the line's voice"} delayDuration={400}>
+    <Tooltip content={tip} delayDuration={400}>
       <button
         ref={chip}
         type="button"
         className="line-chip line-chip-voice"
-        aria-label={playing ? 'Stop' : `Play the line's voice (${seconds} seconds)`}
+        aria-label={playing ? 'Stop' : `${tip} (${seconds} seconds)`}
         data-playing={playing || undefined}
+        data-hooked={hooked || undefined}
         // Keep the row's selection / scan handling out of the chip.
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
@@ -63,6 +68,7 @@ function VoiceChip({ uid }: { uid: string | undefined }) {
       >
         <Volume2 aria-hidden />
         <span className="line-chip-text">{seconds}s</span>
+        {hooked && <Sparkles className="line-chip-hooked" aria-hidden />}
       </button>
     </Tooltip>
   )
