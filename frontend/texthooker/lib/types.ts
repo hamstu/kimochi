@@ -10,6 +10,11 @@ export type { TranslationProvider };
 /** Where a line came from. "note" is one the person wrote in the Log (Add a note), in Markdown. */
 export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket" | "hook" | "cli" | "note";
 
+/** The most a note may hold, in characters (UTF-16 units): far past any note, and short enough
+    that rendering, matching names in it and syncing it stay cheap. The editors stop at it, and the
+    Log's store cuts anything longer. */
+export const NOTE_MAX_LENGTH = 10_000;
+
 /** A line the person wrote (Add a note), not one that was read. */
 export function isNote(line: { source: LineSource }): boolean {
   return line.source === "note";
@@ -99,6 +104,8 @@ export interface Settings {
   statsShowLines: boolean;
   statsShowChars: boolean;
   statsShowSpeed: boolean;
+  /** The activity ticker at the foot of the Log (components/ActivityTicker.tsx). */
+  showActivityTicker: boolean;
 
   // Dedupe + line management (Bucket 3)
   dedupeDepth: number;
@@ -184,6 +191,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   statsShowLines: true,
   statsShowChars: true,
   statsShowSpeed: true,
+  showActivityTicker: true,
 
   dedupeDepth: 1,
   japaneseFilter: DEFAULT_JAPANESE_FILTER,

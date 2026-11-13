@@ -245,7 +245,8 @@ body.scan-mode .log-lines .line:hover {
   transition: color var(--k-fast);
 }
 .log-lines .line:hover .line-time::before,
-.log-lines .line[data-menu-open] .line-time::before {
+.log-lines .line[data-menu-open] .line-time::before,
+.log-lines .line-editing:not(.line-editing-note) .line-time::before {
   color: var(--k-text-2);
 }
 
@@ -266,11 +267,12 @@ body.scan-mode .log-lines .line:hover {
 }
 .log-lines .line:hover > .line-rail,
 .log-lines .line[data-menu-open] > .line-rail,
+.log-lines .line-editing:not(.line-editing-note) > .line-rail,
 .log-lines .line:has(.line-actions-trigger[data-state="open"]) > .line-rail {
   opacity: 1;
   transform: none;
 }
-body.scan-mode .log-lines .line:hover > .line-rail {
+body.scan-mode .log-lines .line:not(.line-editing):hover > .line-rail {
   opacity: 0;
   transform: translateX(-100%) scaleY(0.4);
 }
@@ -659,18 +661,32 @@ body.scan-mode .line-chip {
   color: var(--k-accent-text);
   font: inherit;
   cursor: pointer;
-  transition: background-color var(--k-fast);
+  transition: opacity var(--k-fast);
 }
-.notebook-chip:hover,
+/* The name is underlined (never the avatar); hovering lightens it and firms the line up. No box. */
+.notebook-chip-name {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  transition: text-decoration-color var(--k-fast);
+}
+.notebook-chip:hover {
+  opacity: 0.78;
+}
+.notebook-chip:hover .notebook-chip-name {
+  text-decoration-color: currentColor;
+}
 .notebook-chip:focus-visible {
-  background: var(--k-accent-soft);
-  outline: none;
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
 }
 .notebook-chip-avatar {
   display: inline-block;
   width: 1em;
   height: 1em;
-  margin-right: 0.28em;
+  /* As much room before the avatar as between it and the name. */
+  margin-inline: 0.15em;
   border-radius: 50%;
   object-fit: cover;
   vertical-align: -0.12em;
@@ -685,7 +701,8 @@ body.scan-mode .line-chip {
   overflow: hidden;
   width: 1em;
   height: 1em;
-  margin-right: 0.28em;
+  /* As much room before the avatar as between it and the name. */
+  margin-inline: 0.15em;
   border-radius: 50%;
   vertical-align: -0.12em;
   text-align: center;
@@ -846,7 +863,9 @@ body.scan-mode .line-chip {
 /* A line being edited in place (LineRow.tsx, LineEditor): the transcript's own text in a field
    that grows with it, inset so the text stays where it was. Below it, what was recorded, once
    the line has been edited. */
-.log-lines .line-editing {
+/* Lit as a hovered row is for as long as it's edited, wherever the pointer goes. */
+.log-lines .line-editing,
+body.scan-mode .log-lines .line-editing:not(.line-editing-note):hover {
   background: var(--k-hover);
 }
 .log-lines .line-editing::before,
@@ -863,12 +882,28 @@ body.scan-mode .line-chip {
   background: var(--k-field);
   box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4);
   color: var(--k-text);
-  font: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
   resize: none;
   overflow: hidden;
   outline: none;
+}
+/* The editors set their text exactly as the row does (`.jp-text`, `.note-body`), so nothing moves
+   or rewraps on opening one: a text field takes none of this from its row by default. */
+.line-editor,
+.note-editor {
+  font: inherit;
+  font-feature-settings: inherit;
+  font-kerning: inherit;
+  font-variant: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-rendering: inherit;
+  -webkit-font-smoothing: inherit;
+  word-break: inherit;
+  line-break: inherit;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  tab-size: inherit;
 }
 .dark .line-editor {
   background: var(--gray-a2);
@@ -892,13 +927,37 @@ body.scan-mode .line-chip {
 }
 .note-card {
   position: relative;
-  border-radius: var(--k-radius-lg);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+  border-radius: var(--k-radius-md);
   background: var(--k-raised);
   box-shadow: inset 0 0 0 1px var(--k-line-strong), 0 1px 2px rgb(15 17 26 / 0.06);
-  padding: var(--k-space-2) var(--k-space-3);
+  padding: var(--k-space-2) var(--k-space-3) var(--k-space-2) var(--k-space-2);
+}
+/* The note's mark in its own column: the Notebook's icon, faded. Its box is a square the height of
+   the body's first line (0.8em type at 1.6 line height), and the card's left padding equals its
+   top, so the icon sits as far from the card's top edge as from its left. */
+.note-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: calc(0.8em * 1.6);
+  height: calc(0.8em * 1.6);
+  color: var(--k-text-3);
+  opacity: 0.7;
+}
+.note-icon > svg {
+  width: 0.8em;
+  height: 0.8em;
+}
+/* The text column: the body (or the editor), and Show more under it. */
+.note-main {
+  flex: 1;
+  min-width: 0;
 }
 .note-body {
-  --note-cut: 9.5em;
+  --note-cut: 9.5em; /* NOTE_CUT_EM in LineRow.tsx */
   max-height: var(--note-cut);
   overflow: hidden;
   font-family: var(--k-font-ui);
@@ -961,11 +1020,122 @@ body.scan-mode .line-chip {
     transition: none;
   }
 }
-/* A note being written is set in the UI's type, as it shows once saved. */
-.line-editing-note .line-editor {
+/* A note being written or edited: the same card, opened to its full length, its text editable in
+   place in the same type, with a focus ring; its keys on a tab that slides out from under it. */
+.log-lines .line-editing-note {
+  padding-block: var(--k-space-2);
+  background: transparent;
+}
+.note-edit {
+  position: relative;
+  container-type: inline-size;
+}
+.note-card-editing {
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4);
+}
+.note-editor {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--k-text);
+  overflow: hidden;
+  resize: none;
+  outline: none;
+}
+/* The note's text box takes its body's type (`.note-body`): it sits where the body was. */
+.note-card-editing .note-editor {
   font-family: var(--k-font-ui);
   font-size: 0.8em;
   line-height: 1.6;
+}
+.note-editor::placeholder {
+  color: var(--k-text-3);
+}
+.note-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-1-5) var(--k-space-5);
+  width: fit-content;
+  max-width: calc(100% - var(--k-space-3) * 2);
+  margin: 0 var(--k-space-3);
+  padding: var(--k-space-1-5) var(--k-space-3);
+  border-radius: 0 0 var(--k-radius-md) var(--k-radius-md);
+  background: var(--k-bar);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  color: var(--k-text-3);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  /* One line, always: an item that wraps (very narrow, or a wider font than measured) falls on a
+     second line that is clipped away, never shown. */
+  max-height: calc(var(--k-leading-xs) + var(--k-space-1-5) * 2);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  animation: note-keys-in 220ms var(--k-ease-out) 80ms backwards;
+}
+.note-keys > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  white-space: nowrap;
+}
+/* Between a key pair (⇧ ↵) only a hair, so it reads as one shortcut. */
+.note-keys .k-kbd + .k-kbd {
+  margin-left: calc(var(--k-space-1) * -0.5);
+}
+/* The hint after the keys, with its divider: one item, so it shows or goes whole. */
+.note-keys-md {
+  color: var(--k-text-3);
+}
+.note-keys-md::before {
+  content: "";
+  align-self: stretch;
+  width: 1px;
+  margin: 0.125rem var(--k-space-4) 0.125rem 0;
+  background: var(--k-line-strong);
+}
+/* Near a note's length limit: how much of it is used, red once it's reached. */
+.note-keys-count {
+  color: var(--k-warn-text, var(--k-text-2));
+}
+.note-keys-count[data-full] {
+  color: var(--k-danger-text);
+}
+.note-keys-dot {
+  margin-inline: var(--k-space-1);
+  opacity: 0.6;
+}
+/* Where the whole tab won't fit on one line (it needs about 40rem with its margins; the rest is
+   room for a font that sets it a little wider), only the keys stay. */
+@container (max-width: 44rem) {
+  .note-keys > .note-keys-md {
+    display: none;
+  }
+}
+@keyframes note-keys-in {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-keys {
+    animation: none;
+  }
+}
+/* Keycaps in the Log's own hints (the note keys, Add a note): the kit's, a size smaller. */
+.note-keys .k-kbd,
+.log-add-note-key .k-kbd {
+  min-width: 1rem;
+  height: 0.9375rem;
+  padding: 0 0.25rem 1px;
+  font-size: 0.625rem;
 }
 
 /* "Add a note" at the end of the Log: a quiet button on a hairline, a button only on hover. */
@@ -991,14 +1161,8 @@ body.scan-mode .line-chip {
   color: var(--k-text);
 }
 .log-add-note-key {
+  display: inline-flex;
   margin-left: var(--k-space-1);
-  padding: 0 0.35em;
-  border-radius: var(--k-radius-sm);
-  box-shadow: inset 0 0 0 1px var(--k-line-strong);
-  font-family: var(--k-font-ui);
-  font-size: 0.9em;
-  line-height: 1.5;
-  color: var(--k-text-3);
 }
 html[data-mini] .log-add-note {
   display: none;
@@ -1040,5 +1204,80 @@ html[data-mini] .log-add-note {
   .log-lines .line[data-flash] {
     animation: none;
     background: var(--accent-a3);
+  }
+}
+
+/* The @-mention menu (hooks/useMentions.tsx): the notebook's entries at the caret of a note being
+   written, styled as the kit's menus. Placed in fixed pixels from the caret. */
+.mention-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--k-space-1);
+  border-radius: var(--k-radius-lg);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  color: var(--k-text);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  letter-spacing: normal;
+  font-feature-settings: normal;
+  -webkit-user-select: none;
+  user-select: none;
+  animation: k-pop-in var(--k-fast) var(--k-ease-out);
+}
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-height: 2.25rem;
+  padding: var(--k-space-1) var(--k-space-2);
+  border-radius: var(--k-radius-md);
+  cursor: default;
+}
+.mention-option[aria-selected="true"] {
+  background: var(--k-press);
+}
+.mention-option .nb-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: var(--k-text-xs);
+}
+.mention-option .nb-avatar > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.mention-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.mention-name,
+.mention-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-name {
+  font-family: var(--k-font-jp);
+  font-weight: var(--k-weight-medium);
+}
+.mention-sub {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.mention-kind {
+  flex: none;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mention-menu {
+    animation: none;
   }
 }

@@ -25,6 +25,7 @@ import { AVAILABLE_VOICES } from '../../vendor/voices'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { useLanguage } from '../../bridge/useLanguage'
+import { ACTIVITY_TICKER_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { NumberField } from './fields'
@@ -47,6 +48,8 @@ export function LogTab(): ReactNode {
   // The voices are Japanese, so read aloud (and its settings) is for Japanese only for now.
   const [language] = useLanguage()
   const readAloud = cloudAccess && language.code === 'ja'
+  // The activity ticker's cog opens this page at its section.
+  useSettingsTarget()
 
   return (
     <SettingsPage
@@ -162,6 +165,24 @@ export function LogTab(): ReactNode {
             </SettingsSection>
 
             <ReplacementsEditor />
+
+            <SettingsSection
+              id={ACTIVITY_TICKER_SECTION}
+              title="Activity ticker"
+              description="A small bubble at the bottom of the Log."
+            >
+              <SettingsRow
+                label="Show activity ticker"
+                controlId="log-activity-ticker"
+                description="Small notices when images are scanned, and other status events."
+              >
+                <Switch
+                  id="log-activity-ticker"
+                  checked={settings.showActivityTicker}
+                  onCheckedChange={(v) => void updateSettings({ showActivityTicker: v })}
+                />
+              </SettingsRow>
+            </SettingsSection>
 
             <SettingsSection
               title="Reading timer"

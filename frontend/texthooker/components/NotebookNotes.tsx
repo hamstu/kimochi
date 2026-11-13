@@ -1,4 +1,10 @@
-import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Copy, MoreHorizontal, NotebookPen, ScrollText, Trash2, X } from "lucide-react";
 import {
   Bar,
@@ -12,16 +18,19 @@ import {
   MenuItem,
   MenuSeparator,
   MenuTrigger,
+  Kbd,
   Row,
+  Segmented,
   Textarea,
   isComposing,
 } from "@kit";
 import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
-import { markdownHtml } from "@texthooker/lib/html";
 import { lineDate } from "@texthooker/lib/logDays";
-import { followNoteLink, noteItemId, noteRest, noteTitle } from "@texthooker/lib/noteNav";
+import { noteItemId, noteRest, noteTitle } from "@texthooker/lib/noteNav";
 import { deleteLine, setLineText } from "@texthooker/lib/store";
-import type { Line } from "@texthooker/lib/types";
+import { NOTE_MAX_LENGTH, type Line } from "@texthooker/lib/types";
+import { useMentions } from "@texthooker/hooks/useMentions";
+import { NoteMarkdown } from "./NoteMarkdown";
 
 /**
  * The person's notes in the Notebook (written in the Log with Add a note): a group in the list,
@@ -202,6 +211,14 @@ function NoteRow({
  * The note in the Notebook's side pane: its Markdown to edit, saved as it's typed (to the Log
  * too), and how it reads below. Show in Log goes to it in the Log; Escape closes the pane.
  */
+type NoteMode = "edit" | "preview";
+const NOTE_MODES = [
+  { value: "edit" as const, label: "Edit" },
+  { value: "preview" as const, label: "Preview" },
+];
+/** The view the pane last showed a note in: it opens the next one the same way. */
+let lastMode: NoteMode = "preview";
+
 export function NotePane({
   note,
   width,
@@ -215,7 +232,40 @@ export function NotePane({
   onClose: () => void;
   onShowInLog: (note: Line) => void;
 }) {
-  const html = useMemo(() => markdownHtml(note.text), [note.text]);
+  // Preview to read a note, Edit to change it; the last one chosen holds for the next note.
+  const [mode, setModeState] = useState<NoteMode>(() =>
+    note.text.trim() ? lastMode : "edit",
+  );
+  const setMode = (next: NoteMode) => {
+    lastMode = next;
+    setModeState(next);
+    // Straight into the text, at its end.
+    if (next === "edit")
+      requestAnimationFrame(() => {
+        const el = box.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      });
+  };
+  const box = useRef<HTMLTextAreaElement>(null);
+  // Where the caret goes once a mention, saved to the Log, comes back as the note's text.
+  const caretAfter = useRef<number | null>(null);
+  const mentions = useMentions({
+    box,
+    value: note.text,
+    apply: (text, at) => {
+      caretAfter.current = at;
+      void setLineText(note.id, text);
+    },
+  });
+  useLayoutEffect(() => {
+    const el = box.current;
+    const at = caretAfter.current;
+    if (!el || at === null || el.value.length < at) return;
+    caretAfter.current = null;
+    el.setSelectionRange(at, at);
+  }, [note.text]);
   return (
     <aside
       className="nb-editor nb-note-editor"
@@ -241,32 +291,58 @@ export function NotePane({
         </IconButton>
       </header>
       <div className="nb-editor-body">
-        <div className="nb-form">
-          <div className="nb-field">
-            <label className="nb-label" htmlFor={`note-${note.id}`}>
-              <span>Text</span>
-              <span className="nb-label-hint">Markdown</span>
-            </label>
-            <Textarea
-              id={`note-${note.id}`}
+        <div className="nb-lognote">
+          <div className="nb-lognote-bar">
+            <Segmented
+              aria-label="Note view"
+              value={mode}
+              onValueChange={setMode}
+              options={NOTE_MODES}
+            />
+            {mode === "edit" ? (
+              <span className="nb-lognote-hint">
+                {note.text.length >= NOTE_MAX_LENGTH * 0.9 ? (
+                  <span className="nb-lognote-count k-num">
+                    {note.text.length.toLocaleString()} / {NOTE_MAX_LENGTH.toLocaleString()} ·
+                  </span>
+                ) : null}
+                Markdown · <Kbd>@</Kbd> to mention
+              </span>
+            ) : null}
+          </div>
+          {mode === "edit" ? (
+            <>
+              <Textarea
+                ref={box}
+                key={note.id}
+                className="nb-lognote-text"
+                aria-label="Note"
+                rows={10}
+                value={note.text}
+                placeholder="Write a note…"
+                maxLength={NOTE_MAX_LENGTH}
+                {...mentions.inputProps}
+                onChange={(e) => {
+                  void setLineText(note.id, e.target.value);
+                  mentions.sync();
+                }}
+                onSelect={mentions.sync}
+                onKeyDown={(e) => {
+                  if (mentions.onKeyDown(e)) return;
+                }}
+              />
+              {mentions.menu}
+            </>
+          ) : (
+            <NoteMarkdown
               key={note.id}
-              className="nb-note-text"
-              rows={8}
-              value={note.text}
-              onChange={(e) => void setLineText(note.id, e.target.value)}
-            />
-          </div>
-          <div className="nb-field">
-            <span className="nb-label">
-              <span>Preview</span>
-            </span>
-            <div
-              className="nb-note-preview explain-markdown"
+              text={note.text}
+              sentence={note.text}
+              className="nb-lognote-preview explain-markdown"
               lang="ja"
-              dangerouslySetInnerHTML={{ __html: html }}
-              onClick={(e) => void followNoteLink(e)}
+              onDoubleClick={() => setMode("edit")}
             />
-          </div>
+          )}
         </div>
       </div>
       <Bar position="bottom" className="nb-editor-foot">

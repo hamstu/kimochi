@@ -10,6 +10,9 @@ interface Editing {
   id: Line["id"];
   /** The caret's offset in the line's text; null puts it at the end. */
   caret: number | null;
+  /** The row's height as it showed: the editor keeps at least this, so nothing below moves (a
+      row's voice and screenshot chips, not in the editor, can take a line of their own). */
+  height: number | null;
 }
 
 let editing: Editing | null = null;
@@ -26,7 +29,8 @@ function subscribe(fn: () => void): () => void {
 }
 
 export function editLine(id: Line["id"], caret: number | null = null): void {
-  set({ id, caret });
+  const row = document.querySelector<HTMLElement>(`.log-lines [data-line-id="${id}"]`);
+  set({ id, caret, height: row ? row.getBoundingClientRect().height : null });
 }
 
 /** An edit chosen in a line's menu, opened once the menu has closed (`openEditAfterMenu`). */
@@ -60,13 +64,25 @@ export function stopEditing(id?: Line["id"]): void {
   if (id === undefined) endNote();
 }
 
-/** The caret to start with while `id` is being edited; undefined while it isn't. */
-export function useLineEditing(id: Line["id"]): number | null | undefined {
-  return useSyncExternalStore(subscribe, () => (editing?.id === id ? editing.caret : undefined));
+/** How `id` is being edited (its caret and row height); undefined while it isn't. */
+export function useLineEditing(id: Line["id"]): Editing | undefined {
+  return useSyncExternalStore(subscribe, () => (editing?.id === id ? editing : undefined));
 }
 
 /** Controls, chips and notes on a row keep their own double-click. */
 const NOT_TEXT = "button, a, input, textarea, [role='button'], .line-actions, .line-media, .line-note, .note-toggle";
+
+/**
+ * The second press of a double-click on a line's text: the browser would start selecting the word
+ * (and draw its selection across the row) before the editor opens. A double-click edits the line
+ * instead, so that selection never starts.
+ */
+export function onLogMouseDown(event: MouseEvent): void {
+  if (event.detail !== 2 || event.button !== 0) return;
+  const target = event.target as Element;
+  if (target.closest(NOT_TEXT) || !target.closest("[data-line-id]")) return;
+  event.preventDefault();
+}
 
 /**
  * A double-click on a line's text edits it, with the caret where it was clicked. Translated
@@ -138,4 +154,15 @@ function caretAt(row: HTMLElement, x: number, y: number, length: number): number
   before.setStart(row, 0);
   before.setEnd(node, offset);
   return Math.min(before.toString().length, length);
+}
+
+/** Notes opened out in the Log: one that was edited stays open once saved. */
+const openNotes = new Set<Line["id"]>();
+
+export function keepNoteOpen(id: Line["id"]): void {
+  openNotes.add(id);
+}
+
+export function noteKeptOpen(id: Line["id"]): boolean {
+  return openNotes.has(id);
 }

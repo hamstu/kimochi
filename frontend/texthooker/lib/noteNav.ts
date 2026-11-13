@@ -100,6 +100,8 @@ export function noteRest(text: string): string {
   const first = lines.findIndex((line) => line.trim());
   return lines
     .slice(first + 1)
+    // A divider (---, ***, ___) is layout, not words.
+    .filter((line) => !/^\s*([-*_])(\s*\1){2,}\s*$/.test(line))
     .join(" ")
     .replace(/[#>*_`~]+/g, "")
     .replace(/\s+/g, " ")

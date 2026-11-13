@@ -9,7 +9,7 @@ import { getSettings, onSettingsChange } from "../lib/settings";
 import { currentLinesPath, getManifest } from "./sessions";
 import { writesPaused } from "./profile";
 import { forgetLines, reportLine } from "../lib/sentenceAudio";
-import { isNote, type Line, type LineSource } from "../lib/types";
+import { NOTE_MAX_LENGTH, isNote, type Line, type LineSource } from "../lib/types";
 
 const DIR = BaseDirectory.AppLocalData;
 const DEBOUNCE_MS = 2000;
@@ -256,7 +256,7 @@ export function appendLine(opts: {
 
 /** Adds the person's note (Markdown) at the end of the Log, timed now. */
 export function addNote(text: string): Line | null {
-  const value = text.replace(/\r\n?/g, "\n").trim();
+  const value = text.replace(/\r\n?/g, "\n").trim().slice(0, NOTE_MAX_LENGTH).trimEnd();
   if (!value) return null;
   return appendLine({ text: value, source: "note" });
 }
@@ -294,8 +294,9 @@ export function recordedText(line: Line): string {
 export function setLineText(id: number, text: string) {
   const idx = lines.findIndex((l) => l.id === id);
   if (idx === -1) return;
-  const value = text.replace(/\r\n?/g, "\n").trim();
   const line = lines[idx];
+  let value = text.replace(/\r\n?/g, "\n").trim();
+  if (isNote(line)) value = value.slice(0, NOTE_MAX_LENGTH).trimEnd();
   if (!value || value === line.text) return;
   const updated: Line = { ...line, text: value };
   // A note has nothing recorded to keep: it is what was written.

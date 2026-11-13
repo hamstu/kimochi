@@ -36,6 +36,58 @@
   font-size: var(--k-text-sm);
   line-height: var(--k-leading-sm);
   margin-inline: auto;
+  transition:
+    opacity var(--k-base) var(--k-ease-out),
+    transform var(--k-base) var(--k-ease-out),
+    visibility 0s;
+}
+/* A toast that has had its time: it fades and sinks a little, then takes no clicks. */
+.activity[data-hidden] {
+  opacity: 0;
+  transform: translateY(0.375rem);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 400ms ease-in,
+    transform 400ms ease-in,
+    visibility 0s 400ms;
+}
+/* Auto OCR running: a small pill that says so, as narrow as its words. */
+.activity[data-mode="auto"] {
+  width: max-content;
+  max-width: calc(100% - var(--k-space-3) * 2);
+  border-radius: 999px;
+}
+.activity[data-mode="auto"] .activity-ticker {
+  border-radius: 999px;
+}
+.activity[data-mode="auto"] .activity-viewport {
+  flex: none;
+  width: max-content;
+  max-width: 20rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity,
+  .activity[data-hidden] {
+    transform: none;
+  }
+}
+
+/* The ticker and its cog, side by side. */
+.activity-bar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* A round button inset at the ticker's end: its setting (Settings → Log & Sessions). */
+.activity-cog.k-button {
+  flex: none;
+  margin-right: var(--k-space-1-5);
+  border-radius: 999px;
+  color: var(--k-text-3);
+}
+.activity-cog.k-button:hover {
+  color: var(--k-text);
 }
 .dark .activity {
   box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a6);
@@ -44,9 +96,10 @@
 /* ------------------------------------------------------------------ the ticker */
 .activity-ticker {
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   gap: var(--k-space-2);
-  width: 100%;
   height: var(--k-row-h);
   padding: 0 var(--k-space-3);
   border: 0;
@@ -101,6 +154,42 @@
 
 .activity-dot-busy {
   animation: activity-pulse 1.4s ease-in-out infinite;
+}
+
+/* Auto OCR's live dot, as the Source card draws it: a green dot with a halo that grows and fades
+   (transform and opacity only, in steps, so the compositor does the work; see main.css). */
+.activity-live-dot {
+  position: relative;
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 999px;
+  background: var(--green-9);
+}
+.activity-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--green-a8);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: activity-live 2s steps(12, jump-none) infinite;
+}
+@keyframes activity-live {
+  0% { transform: scale(1); opacity: 1; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+/* Nothing animates while the window is behind another or hidden: nobody is looking. */
+.activity[data-idle] *,
+.activity[data-idle] *::before,
+.activity[data-idle] *::after {
+  animation-play-state: paused !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-live-dot::after {
+    animation: none;
+  }
 }
 @keyframes activity-pulse {
   50% { opacity: 0.35; transform: scale(0.75); }

@@ -523,6 +523,11 @@ test("a note is the person's own line: never compared with what is read, and edi
   lines = h.snapshot().lines;
   assert.equal(lines[1].text, "Tokyo station");
   assert.equal(lines[1].originalText, undefined, "a note keeps no recorded text");
+  // A note holds at most NOTE_MAX_LENGTH (10,000) characters, however it is written.
+  await h.call("store", "addNote", ["あ".repeat(12_000)]);
+  assert.equal(h.snapshot().lines.at(-1).text.length, 10_000);
+  await h.call("store", "setLineText", [note.id, "い".repeat(11_000)]);
+  assert.equal(h.snapshot().lines[1].text.length, 10_000);
   await h.call("stats", "resetStats");
 });
 

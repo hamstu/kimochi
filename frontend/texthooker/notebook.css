@@ -516,15 +516,27 @@
 .nb-note-head-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .nb-note-head-title { font-size: var(--k-text-md); font-weight: var(--k-weight-medium); color: var(--k-text); }
 .nb-note-head-when { font-size: var(--k-text-xs); color: var(--k-text-3); }
-.nb-note-text.k-field { min-height: 9rem; font-family: var(--k-font-ui); line-height: 1.6; }
-.nb-note-preview {
-  padding: var(--k-space-2) var(--k-space-3);
-  border-radius: var(--k-radius-md);
-  background: var(--k-sunken);
+/* The note in the pane: Edit and Preview tabs over the same box, which keeps its size between them. */
+.nb-lognote { display: flex; flex-direction: column; gap: var(--k-space-2); }
+.nb-lognote-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--k-space-2); min-height: var(--k-control-h-sm); }
+.nb-lognote-hint { display: inline-flex; align-items: center; gap: var(--k-space-1); color: var(--k-text-3); font-size: var(--k-text-xs); white-space: nowrap; }
+.nb-lognote-count { color: var(--k-warn-text); }
+.nb-lognote-hint .k-kbd { min-width: 1rem; height: 0.9375rem; padding: 0 0.25rem 1px; font-size: 0.625rem; }
+.nb-lognote-text.k-field,
+.nb-lognote-preview {
+  min-height: 14rem;
+  padding: var(--k-space-2-5) var(--k-space-3);
+  font-family: var(--k-font-ui);
   font-size: var(--k-text-sm);
   line-height: 1.6;
+}
+.nb-lognote-text.k-field { resize: vertical; }
+.nb-lognote-preview {
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
   overflow-wrap: anywhere;
 }
-.nb-note-preview > :first-child { margin-top: 0; }
-.nb-note-preview > :last-child { margin-bottom: 0; }
-.nb-note-preview a { color: var(--k-accent-text); text-decoration: underline; }
+.nb-lognote-preview > :first-child { margin-top: 0; }
+.nb-lognote-preview > :last-child { margin-bottom: 0; }
+.nb-lognote-preview a { color: var(--k-accent-text); text-decoration: underline; }
