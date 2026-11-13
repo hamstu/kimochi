@@ -13,8 +13,16 @@ use regex::{NoExpand, Regex};
 use serde_json::Value;
 use std::sync::OnceLock;
 
-/// A line longer than this is not one the game shows at once.
+/// A line longer than this is not one the game shows at once: 300 characters of Japanese.
 pub const MAX_LINE_CHARS: usize = 300;
+
+/// The longest line a game shows at once, in the language's characters: [`MAX_LINE_CHARS`] in
+/// Japanese characters, scaled for an alphabet (300 characters of English are some fifty words,
+/// a paragraph an NVL screen or a translation's text box easily holds; `pick::letter_scale`),
+/// with room to spare: a backlog or a skip sent as one is thousands.
+pub fn max_line_chars(language: &Language) -> usize {
+    if super::pick::letter_scale(language) == 1 { MAX_LINE_CHARS } else { 3 * MAX_LINE_CHARS }
+}
 const DEFAULT_FLUSH_MS: u32 = 300;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +55,10 @@ pub struct GameConfig {
     pub ruby: bool,
     /// The language spaces its words: rows joined back up have a space between them.
     pub spaces: bool,
+    /// The longest line shown at once ([`max_line_chars`]).
+    pub max_chars: usize,
+    /// Sentences end, and speech opens and closes, as Japanese's do alone ([`continues`]).
+    pub japanese: bool,
     pub hook_codes: Vec<String>,
     pub replacements: Vec<Replacement>,
 }
@@ -60,6 +72,8 @@ impl Default for GameConfig {
             strip_codes: true,
             ruby: true,
             spaces: false,
+            max_chars: MAX_LINE_CHARS,
+            japanese: true,
             hook_codes: Vec::new(),
             replacements: Vec::new(),
         }
@@ -103,7 +117,18 @@ impl GameConfig {
                     .collect()
             })
             .unwrap_or_default();
-        GameConfig { flush_ms, repeats, join_lines, strip_codes, ruby: language.ruby, spaces: language.spaces, hook_codes, replacements }
+        GameConfig {
+            flush_ms,
+            repeats,
+            join_lines,
+            strip_codes,
+            ruby: language.ruby,
+            spaces: language.spaces,
+            max_chars: max_line_chars(language),
+            japanese: language.is_japanese(),
+            hook_codes,
+            replacements,
+        }
     }
 
     /// The line as it is shown and logged; None when it is not one to show.
@@ -121,7 +146,7 @@ impl GameConfig {
             };
         }
         let line = line.trim();
-        if line.is_empty() || line.chars().count() > MAX_LINE_CHARS {
+        if line.is_empty() || line.chars().count() > self.max_chars {
             return None;
         }
         Some(line.to_string())
@@ -222,7 +247,14 @@ fn is_code(run: &str) -> bool {
 /// (`電話で叔母さんから` then `「よろしくね」と念を押されたことも`). How soon after is the
 /// caller's to judge.
 pub fn continues(before: &str, after: &str) -> bool {
+    continues_in(before, after, true)
+}
+
+/// [`continues`] for the language being read: outside Japanese, a closing quote (`”`, `"`, `»`)
+/// also ends a sentence, and speech opened with `“` or `«` is still open until it is closed.
+pub fn continues_in(before: &str, after: &str, japanese: bool) -> bool {
     const ENDS: &str = "。．.！!？?」』）)】〉》］]｝}…‥―─—～〜♪♡☆★";
+    const MORE_ENDS: &str = "”\"»’";
     let (Some(last), Some(first)) = (before.trim_end().chars().last(), after.trim_start().chars().next()) else {
         return false;
     };
@@ -231,7 +263,12 @@ pub fn continues(before: &str, after: &str) -> bool {
     if speaking {
         return first != '「';
     }
-    !ENDS.contains(last)
+    if !japanese {
+        if let Some((opening, _)) = [('“', '”'), ('«', '»')].into_iter().find(|(o, c)| open(*o) > open(*c)) {
+            return first != opening;
+        }
+    }
+    !(ENDS.contains(last) || !japanese && MORE_ENDS.contains(last))
 }
 
 fn gcd(a: usize, b: usize) -> usize {
@@ -399,5 +436,39 @@ mod tests {
         assert_eq!(config.clean(&"あ".repeat(MAX_LINE_CHARS + 1)), None);
         assert_eq!(config.clean("<br>"), None);
         assert_eq!(config.clean(" はい "), Some("はい".into()));
+    }
+
+    #[test]
+    fn a_long_line_in_a_spaced_language_is_kept() {
+        let en = crate::language::get("en");
+        let config = GameConfig::from_settings(&Value::Null, &Value::Null, en);
+        let paragraph = "The rain had not stopped for three days, and the river behind the old mill had risen so high that the villagers began moving their animals up the hill. Nobody spoke of the bridge. Everyone remembered what had happened the last time the water came this close, and nobody wanted to be the first to say it out loud.";
+        assert!(paragraph.chars().count() > MAX_LINE_CHARS);
+        assert_eq!(config.clean(paragraph).as_deref(), Some(paragraph));
+        // A backlog sent as one is still dropped.
+        assert_eq!(config.clean(&paragraph.repeat(4)), None);
+        assert_eq!((max_line_chars(ja()), max_line_chars(crate::language::get("zh-Hant")), max_line_chars(crate::language::get("ko"))), (300, 300, 300));
+        assert_eq!(max_line_chars(crate::language::get("ru")), 900);
+        // Names and numbers in a line are text, not codes, in a spaced language.
+        let line = "Room 12B is on level 3, Captain O'Neil. Bring the R2D2a unit and 500 credits.";
+        assert_eq!(config.clean(line).as_deref(), Some(line));
+    }
+
+    #[test]
+    fn rows_of_a_spaced_language_join_where_the_sentence_goes_on() {
+        // Rows of one sentence.
+        assert!(continues_in("Natalie, did you finish the report before", "the meeting?", false));
+        assert!(continues_in("Наталья, ты закончила отчёт", "до собрания?", false));
+        assert!(continues_in("“I told you already,", "but you never listen.”", false));
+        assert!(continues_in("«Я же тебе говорила,", "но ты не слушаешь.»", false));
+        // Two sentences, or two speeches.
+        assert!(!continues_in("We have ten minutes left.", "Let's go.", false));
+        assert!(!continues_in("“Ten minutes left.”", "She looked at the clock.", false));
+        assert!(!continues_in("«Осталось десять минут.»", "Она посмотрела на часы.", false));
+        assert!(!continues_in("“Wait,", "“No, you wait.”", false));
+        assert!(!continues_in("우리 십 분밖에 안 남았어.", "가자.", false));
+        // Japanese as before: a closing ” is not an end there.
+        assert!(continues("彼は“はい”", "と言った。"));
+        assert_eq!(continues_in("彼は“はい”", "と言った。", true), continues("彼は“はい”", "と言った。"));
     }
 }

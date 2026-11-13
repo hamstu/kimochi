@@ -225,7 +225,7 @@ impl Hook {
             if let Some(before) = session.last_line.as_deref() {
                 // A language that spaces its words has a space between the rows (they come trimmed).
                 let joined = if config.spaces { format!("{before} {text}") } else { format!("{before}{text}") };
-                if clean::continues(before, &text) && !before.ends_with(&text) && joined.chars().count() <= clean::MAX_LINE_CHARS {
+                if clean::continues_in(before, &text, config.japanese) && !before.ends_with(&text) && joined.chars().count() <= config.max_chars {
                     crate::debug_report::trace(&self.app, json!({ "check": "texthook-joined", "before": before, "piece": text }));
                     text = joined;
                     carries_on = true;
@@ -624,7 +624,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let language = hook.language();
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
     // A line drawn several times over (CatSystem2) is the line once.
-    let collapsed = pick::collapse_repeated_sentences(text);
+    let collapsed = pick::collapse_repeated_sentences(text, language);
     let text = collapsed.as_str();
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One
     // that pauses while typing for longer than the hooker waits comes in pieces: a piece that
@@ -691,7 +691,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let spoken = &session.threads[index];
         let shown = pick::normalize(text);
-        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH, language) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
             session.missed = session.missed.saturating_add(1);
             session.missed_text = shown;
         }
@@ -753,7 +753,7 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
     let spoken = &session.threads[index];
     if chosen.glyphs >= GLYPHS && spoken.key != selected && spoken.count >= 3 && spoken.glyphs == 0 && !pick::is_generic(&spoken.hookcode, &spoken.name) {
         let text = pick::normalize(&spoken.text);
-        if text.chars().count() >= PICK_MIN_MATCH && pick::reads_as(&text, language) {
+        if text.chars().count() >= PICK_MIN_MATCH * pick::letter_scale(language) && pick::reads_as(&text, language) {
             return Some(spoken.key.clone());
         }
     }
@@ -777,7 +777,7 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
         .find(|t| {
             let text = pick::normalize(&t.text);
             let length = text.chars().count();
-            length >= 4
+            length >= 4 * pick::letter_scale(language)
                 && pick::reads_as(&text, language)
                 && 10 * length >= 7 * shown.chars().count()
                 && shown.contains(&text)
@@ -829,7 +829,7 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             continue;
         }
         match outcome {
-            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64) {
+            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64, hook.language()) {
                 Some(best) => {
                     let key = best.key.clone();
                     let thread = session.threads.iter().find(|t| t.key == key).cloned();
