@@ -106,7 +106,9 @@ account switch), native code puts back the engine last used for the new language
 (`ocrModeByLanguage`) if it is still available and reads it; otherwise, if `ocrMode` cannot read
 the new language (`ocrEngines.<id>.languages`, under Capture and OCR), it writes the first
 available engine that can, of Live Text (macOS) or OneOCR (Windows), Screen AI, PaddleOCR,
-Google Lens and Kimochi cloud. At launch only the second check runs. Either is an ordinary
+Google Lens and Kimochi cloud. At launch only the second check runs. The second check also runs
+when `ocrMode` itself is set to an engine that cannot read the language (`kimochi settings set`,
+Sync, a hand-edited file; the pickers never offer one). Either is an ordinary
 `ocrMode` write, so `settings:changed` reaches every window. Every engine reads Japanese, so with
 `language: 'ja'` nothing ever changes here.
 
@@ -2256,8 +2258,8 @@ executable detached elsewhere) and waits for `ping`.
 | `settings.set` | `{key, value}` | the stored value; through `apply_setting`, as `settings_set` |
 | `action` / `actions` | `{name}` / — | `actions::dispatch`; `ACTIONS` |
 | `toggle` | `{flag: autoOcr\|overlay\|textOverlay, to: on\|off\|toggle}` | `{<flag>: bool}`, after the overlay has written the new state back (`view_flags`) |
-| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}` |
-| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts) |
+| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}`. Refused at once (`invalid: the <engine> OCR engine cannot read this language (<code>)…`) while `ocrMode` cannot read the `language` and the input is not the Text Hooker |
+| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts); an engine that cannot read the `language` is refused: `invalid: <engine> cannot read the language being read (<code>); engines here that can: <available engines that read it>` |
 | `source.list` / `source.set` / `source.clear` / `source.choose` | — / `{query}` / — / — | `sources::catalog`; `select_keeping_crop` on the source matched by id, title or app; `sources::clear`; `choose_source` |
 | `open` | `{view: main\|log\|notebook\|anki\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}`; `log`, `notebook` and `anki` emit `main:show-view` `{view}`, which leaves Settings |
 | `quit` | — | replies, then quits as `app_quit` |

@@ -334,6 +334,12 @@ fn scan(app: &tauri::AppHandle, service: &Shared, params: &Value) -> Result<Valu
     if service.selection.lock().unwrap().is_none() && !texthooking(service) {
         return Err(format!("invalid: no source is selected. Choose one first: {}", choose_hint(service)));
     }
+    // An engine that cannot read the language fails the scan; say so now rather than wait for a
+    // result that never comes.
+    if !texthooking(service) {
+        let engine = service.settings.get_or::<String>("ocrMode", String::new());
+        crate::refuse_language(&engine, crate::language::current(&service.settings))?;
+    }
     let before = service.view.lock().unwrap().revision;
     crate::actions::dispatch(app, service, "triggerScan");
     if params["wait"] != json!(true) {
@@ -401,6 +407,24 @@ fn set_engine(app: &tauri::AppHandle, service: &Shared, engine: &str) -> Result<
     if known["available"] != json!(true) && known["model"].is_null() {
         let reason = known["reason"].as_str().unwrap_or("it is not available on this computer");
         return Err(format!("invalid: {engine}: {reason}"));
+    }
+    // One trained on other languages would fail every scan: the pickers leave it out too.
+    let language = crate::language::current(&service.settings);
+    if !crate::language::engine_supports(engine, &language.code) {
+        let readers: Vec<&str> = report["engines"]
+            .as_object()
+            .map(|all| {
+                all.iter()
+                    .filter(|(name, info)| info["available"] == json!(true) && crate::language::engine_supports(name, &language.code))
+                    .map(|(name, _)| name.as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
+        return Err(format!(
+            "invalid: {engine} cannot read the language being read ({}); engines here that can: {}",
+            language.code,
+            if readers.is_empty() { "none".to_string() } else { readers.join(", ") }
+        ));
     }
     crate::apply_setting(app, &service.settings, "ocrMode", json!(engine))?;
     Ok(json!({ "selected": engine, "model": known["model"] }))
