@@ -1,13 +1,14 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS test helpers. */
 /**
- * Hovering a word in text set with spaces (Spanish, French, English) looks up the whole word.
+ * Hovering a word in a language that spaces its words (Spanish, French, English) looks up the
+ * whole word.
  *
  * A dictionary in word mode scans back from the pointer to the word's start, and Yomitan's
  * `DOMTextScanner` stops at an element. The overlay moves glyphs onto the engine's boxes with margin
  * spans (render.js `appendRunText`), so a word moved letter by letter became several elements and
  * hovering its middle looked up only its tail ("ompleta"); and a line's last word ran into the next
  * line's first ("categoríade"). OCR answers are drawn here (overlay-cases.mjs) and scanned with the
- * vendored Yomitan scanner, as a hover does.
+ * vendored Yomitan scanner, as a hover does, with Spanish chosen as the language being read.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -16,7 +17,7 @@ import { installFakeDom, draw, line, paragraph, block, words } from './overlay-c
 
 installFakeDom()
 const modules = await load('render.js')
-const { selectionExtension } = modules
+const { selectionExtension, measureFor } = modules
 const { fit, characterCells, wholeWords } = await load('text-layout.js')
 const { DOMTextScanner } = await import('../extensions/yomitan/js/dom/dom-text-scanner.js')
 
@@ -94,7 +95,7 @@ for (const grouped of [false, true]) {
 
   test(`${mode} mode: a word scan from any letter finds the word's start, as in the log`, () => {
     for (const text of LINES) {
-      const { host, renderer } = draw(modules, { annotations: line(words(text)) }, grouped)
+      const { host, renderer } = draw(modules, { annotations: line(words(text)), language: 'es' }, grouped)
       // Each run's signature (render.js `runSignature`) ends in its offsets, if the layout moved glyphs.
       const runs = JSON.parse(host.children[0].renderKey)[grouped ? 3 : 8]
       assert.ok(
@@ -129,7 +130,7 @@ for (const grouped of [false, true]) {
       [block(lines), 'categoría', 'de']
     ]
     for (const [annotations, word, next] of readings) {
-      const { host, renderer } = draw(modules, { annotations }, grouped)
+      const { host, renderer } = draw(modules, { annotations, language: 'es' }, grouped)
       const map = new Map()
       for (const box of host.children) toDom(box, map)
       const holder = host.children.flatMap(textNodes).find((n) => n.textContent.includes(word))
@@ -140,29 +141,51 @@ for (const grouped of [false, true]) {
   })
 }
 
-test('whole words are the runs between spaces with a letter, in text without Japanese', () => {
-  assert.deepEqual(wholeWords("¿Qué? l'été 42 dell'acqua"), [
+test('whole words are the runs between spaces with a letter, in a language that spaces its words', () => {
+  const spanish = measureFor('default', 'es')
+  assert.deepEqual(wholeWords("¿Qué? l'été 42 dell'acqua", spanish), [
     [0, 4],
     [6, 10],
     [15, 24]
   ])
-  assert.deepEqual(wholeWords('cafe\u0301 noir'), [
-    [0, 4],
-    [6, 9]
+  // A letter and its combining accent are one character, as the layout counts them.
+  assert.deepEqual(wholeWords('cafe\u0301 noir', spanish), [
+    [0, 3],
+    [5, 8]
   ])
-  assert.deepEqual(wholeWords('HP 30 ok'), [
+  assert.deepEqual(wholeWords('HP 30 ok', spanish), [
     [0, 1],
     [6, 7]
   ])
-  // Japanese, full-width forms, or nothing at all: no whole words.
-  for (const text of ['猫は 犬だ「HP」 ねこ', '体力 ＨＰ が', 'HP！ 回復', '']) {
-    assert.deepEqual(wholeWords(text), [], text)
+  assert.deepEqual(wholeWords('', spanish), [])
+  // Japanese (no style), and languages that do not space their words: none.
+  for (const language of ['ja', 'zh', 'th']) {
+    const measure = measureFor('default', language)
+    for (const text of ['Completa encargos', '猫は 犬だ「HP」 ねこ', 'ภาษาไทย ง่าย'])
+      assert.deepEqual(wholeWords(text, measure), [], `${language}: ${text}`)
   }
+})
+
+test('Japanese, Chinese and Thai lines run on with nothing between them, as before', () => {
+  const cases = [
+    ['ja', ['食べ', 'ました。'].map(words)],
+    ['ja', ['Completa', 'encargos'].map(words)],
+    ['zh', ['我们去', '吃饭吧'].map(words)],
+    ['th', ['ภาษา', 'ไทย'].map(words)]
+  ]
+  for (const grouped of [false, true])
+    for (const [language, lines] of cases) {
+      const { host, renderer } = draw(modules, { annotations: block(lines), language }, grouped)
+      const all = (node) => (node.tag === 'text' ? [] : [node, ...node.children.flatMap(all)])
+      for (const element of host.children.flatMap(all))
+        assert.notEqual(element.className, 'ocr-joiner', `${language}: a space was added between its lines`)
+      renderer.destroy()
+    }
 })
 
 test('the controller outlines a spaced word as contiguous cells that move together', () => {
   const text = 'Completa encargos, dona objetos'
-  const em = (s) => [...s].length * 0.55
+  const em = Object.assign((s) => [...s].length * 0.55, { style: measureFor('default', 'es').style })
   let x = 0
   let at = 0
   const segments = text.split(' ').map((word, i) => {
@@ -174,7 +197,7 @@ test('the controller outlines a spaced word as contiguous cells that move togeth
   const fitted = fit({ text, segments, rect: { x: 0, y: 0, width: x - 10, height: 30 } }, false, em)
   assert.ok(fitted.offsets, 'nothing moved')
   const cells = characterCells(text, [fitted], false, em)
-  for (const [first, last] of wholeWords(text))
+  for (const [first, last] of wholeWords(text, em))
     for (let k = first; k < last; k++) {
       assert.equal(fitted.offsets[k + 1], fitted.offsets[first], `${text[k + 1]} moved apart from its word`)
       assert.ok(Math.abs(cells[k].x + cells[k].width - cells[k + 1].x) < 1e-6, `gap after ${text[k]}`)
@@ -186,8 +209,11 @@ test("a selection over the joiner extends the box with the next line's word", ()
     { text: 'alcanza la', next: 1 },
     { text: 'de acuerdo', next: -1 }
   ]
-  assert.deepEqual(selectionExtension('alcanza la de', 0, spanish), { extension: ' de', consumed: [] })
-  assert.deepEqual(selectionExtension('alcanza la de acuerdo', 0, spanish), { extension: ' de acuerdo', consumed: [1] })
+  assert.deepEqual(selectionExtension('alcanza la de', 0, spanish, true), { extension: ' de', consumed: [] })
+  assert.deepEqual(selectionExtension('alcanza la de acuerdo', 0, spanish, true), {
+    extension: ' de acuerdo',
+    consumed: [1]
+  })
   const japanese = [
     { text: '食べ', next: 1 },
     { text: 'ました', next: -1 }

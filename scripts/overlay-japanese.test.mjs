@@ -1,7 +1,8 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS test helpers. */
 /**
- * Japanese keeps its layout and its lookups while words set with spaces are drawn and joined for a
- * whole-word lookup (text-layout.js `wholeWords`, `boxJoiner`).
+ * Japanese keeps its layout and its lookups while, in a language that spaces its words, words are
+ * drawn and lines joined for a whole-word lookup (text-layout.js `wholeWords`, render.js
+ * `appendRuns`).
  *
  * Every Japanese answer in the alignment corpus (every engine: dialogue in 「」, HUD lines mixing
  * Latin and digits, full-width ＨＰ, ellipses, manga, vertical text) and hand-made lines mixing
@@ -22,7 +23,7 @@ import { installFakeDom, japaneseCases, draw } from './overlay-cases.mjs'
 
 installFakeDom()
 const modules = { ...(await load('render.js')), ...(await load('ocr-result.ts')) }
-const { boxJoiner, wholeWords } = await load('text-layout.js')
+const { wholeWords } = await load('text-layout.js')
 const cases = japaneseCases()
 const MAIN = JSON.parse(
   readFileSync(new URL('./fixtures/overlay-japanese/main-cases.json', import.meta.url), 'utf8')
@@ -81,30 +82,12 @@ for (const grouped of [false, true]) {
   })
 }
 
-test('a Japanese line has no whole words, whatever Latin, digits or spaces are in it', () => {
+test('Japanese has no whole words, whatever Latin, digits or spaces are in a line', () => {
   const lines = cases.flatMap((c) => c.annotations.flatMap((a) => (a.description ?? '').split('\n')))
   const japanese = lines.filter((line) => JAPANESE.test(line))
   assert.ok(japanese.length > 100)
-  for (const line of japanese) assert.deepEqual(wholeWords(line), [], line)
-})
-
-test('lines with any Japanese run on with nothing between them, as before', () => {
-  const pairs = [
-    // Japanese on either side: nothing, wherever the break falls, Latin text included.
-    ['食べ', 'ました。', ''],
-    ['HPが回復', 'した。', ''],
-    ['「よし、', "Let's go!」", ''],
-    ['レベル12', '→13にアップ', ''],
-    ['ＨＰが１２', '３回復', ''],
-    ['Lv.', '5のスライム', ''],
-    ['えっ…', '？', ''],
-    ['最新のRPG', 'Gameです。', ''],
-    // No Japanese: a space where a letter or digit meets one, nothing after a mark, which already
-    // ends a word for a lookup ("dona,objetos" finds dona).
-    ['la categoría', 'de aldea', ' '],
-    ['y envía', 'objetos', ' '],
-    ['dona,', 'objetos', ''],
-    ['de rubí.', 'Completa', '']
-  ]
-  for (const [before, after, joiner] of pairs) assert.equal(boxJoiner(before, after), joiner, `${before} | ${after}`)
+  const measure = modules.measureFor('default', 'ja')
+  for (const line of japanese) assert.deepEqual(wholeWords(line, measure), [], line)
+  // Latin text read with Japanese chosen is set as it always was, too.
+  assert.deepEqual(wholeWords('Completa encargos', measure), [])
 })

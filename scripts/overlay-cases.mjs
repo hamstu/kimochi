@@ -212,9 +212,14 @@ const SCREEN = {
 /**
  * Draw `annotations` as the overlay does, in word mode or grouped mode, into a fresh element.
  * `modules` are render.js's `TextOverlayRenderer` and, for an engine's answer, ocr-result.ts's
- * `withInkMargins`. Returns the element and the renderer; `destroy` it when done.
+ * `withInkMargins`. `language` is the language being read (a code from languages.ts; absent:
+ * Japanese). Returns the element and the renderer; `destroy` it when done.
  */
-export function draw(modules, { annotations, engine, info = SCREEN, bounds = SCREEN.source_bounds }, grouped = false) {
+export function draw(
+  modules,
+  { annotations, engine, info = SCREEN, bounds = SCREEN.source_bounds, language },
+  grouped = false
+) {
   const host = globalThis.document.createElement('div')
   const renderer = new modules.TextOverlayRenderer(host)
   // As engines give them: the whole text first (`aggregate`), which the renderer leaves out.
@@ -226,7 +231,7 @@ export function draw(modules, { annotations, engine, info = SCREEN, bounds = SCR
     info,
     origin: bounds,
     bounds,
-    grouping: { enabled: grouped, filterSmallText: false, proximityThreshold: 20 },
+    grouping: { enabled: grouped, filterSmallText: false, proximityThreshold: 20, language },
     opacity: 60,
     scanning: false
   })

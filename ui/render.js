@@ -27,7 +27,7 @@ import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
 import { joiner } from './script-text.js'
 import { languageOf } from './languages.js'
-import { layoutParts, characterCells, charsOf, squeezeMargins, wholeWords, boxJoiner } from './text-layout.js'
+import { layoutParts, characterCells, charsOf, squeezeMargins, wholeWords } from './text-layout.js'
 import { textStyle, textUnits, wordPieces, estimateAdvance, TEXT_FONT_PROPERTY } from './language-style.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
 import { shownForHits } from './hit-visible.js'
@@ -268,23 +268,24 @@ function runElement(run, origin, vertical, inline, measure) {
 }
 
 /**
- * A box's runs, one after another in its flow. Where a line without Japanese ends at a letter or
- * digit and the next starts with one (`boxJoiner`), a space closes the first run, so a lookup that
- * reads on from line to line reads "téseras para", not "téseraspara". A run is a zero-size inline
- * block, so the space moves nothing. It has a span of its own, so the controller's word cursor,
- * which reads each run's own text node (controller.js `readUnits`), never takes it for a line's
- * text. Vertical columns break anywhere and are joined with nothing.
+ * A box's runs, one after another in its flow. In a language that spaces its words
+ * (`measure.language`; Japanese has none), a run that does not end in a space is closed with one
+ * (`joiner`), so a lookup that reads on from line to line reads "téseras para", not
+ * "téseraspara", which a word lookup cannot find. A run is a zero-size inline block, so the space
+ * moves nothing. It has a span of its own, so the controller's word cursor, which reads each run's
+ * own text node (controller.js `readUnits`), never takes it for a line's text. Vertical columns
+ * are joined with nothing.
  */
 function appendRuns(parent, runs, origin, vertical, measure) {
   runs.forEach((run, index) => {
     const element = runElement(run, origin, vertical, true, measure)
     const following = runs[index + 1]
-    const joiner = following && !vertical ? boxJoiner(run.text, following.text) : ''
-    if (joiner) {
-      const space = document.createElement('span')
-      space.className = 'ocr-joiner'
-      space.textContent = joiner
-      element.append(space)
+    const space = following && !vertical ? joiner(run.text, following.text, measure.language) : ''
+    if (space) {
+      const span = document.createElement('span')
+      span.className = 'ocr-joiner'
+      span.textContent = space
+      element.append(span)
     }
     parent.append(element)
   })
@@ -306,7 +307,7 @@ function appendRunText(element, run, measure) {
   // Characters as the layout counted them: a letter and its combining marks are one glyph.
   const all = charsOf(run.text, measure)
   // Each whole word's first character index → its last.
-  const words = new Map(wholeWords(run.text))
+  const words = new Map(wholeWords(run.text, measure))
   let plain = ''
   let previous = 0
   // The last character a span has already drawn: the rest of a moved word is in its span.
@@ -578,7 +579,7 @@ export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = L
     let text = ''
     let before = box.text
     for (let j = next[index], n = 0; j !== -1 && n < count; j = next[j], n++) {
-      text += (joiner(before, boxes[j].text, language) || boxJoiner(before, boxes[j].text)) + boxes[j].text
+      text += joiner(before, boxes[j].text, language) + boxes[j].text
       before = boxes[j].text
     }
     return text
@@ -611,7 +612,6 @@ export function selectionExtension(selectedText, startIndex, words, spaced = fal
   let overflow = selectedText.slice(start.text.length)
   let extension = ''
   const consumed = []
-  let previous = start.text
   for (let j = start.next ?? -1; j !== -1 && overflow.length > 0; j = words[j]?.next ?? -1) {
     const space = spaced ? (/^\s+/u.exec(overflow)?.[0] ?? '') : ''
     if (space) {
@@ -619,13 +619,6 @@ export function selectionExtension(selectedText, startIndex, words, spaced = fal
       overflow = overflow.slice(space.length)
     }
     const text = words[j].text
-    // The lookahead's joiner (`lookaheadTexts`) is part of the selection, not of the next box.
-    const joiner = boxJoiner(previous, text)
-    if (joiner && overflow.startsWith(joiner)) {
-      extension += joiner
-      overflow = overflow.slice(joiner.length)
-    }
-    previous = text
     if (overflow.startsWith(text)) {
       consumed.push(j)
       extension += text
