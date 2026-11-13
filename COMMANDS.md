@@ -2251,7 +2251,7 @@ executable detached elsewhere) and waits for `ping`.
 | Method | Params | Result |
 | --- | --- | --- |
 | `ping` | — | `{version, pid}` |
-| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}` |
+| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, dictionaryChosen?, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}`. `dictionary` is the pop-up engine in use (`yomitanSettings.popupType`: `builtin`, `custom-api`, `hachidori`, `tenten`); Hachidori and 10ten read Japanese only, so in another language it is `builtin` and `dictionaryChosen` is the stored choice |
 | `settings.get` | `{key?}` | the value (defaults merged), or every setting |
 | `settings.set` | `{key, value}` | the stored value; through `apply_setting`, as `settings_set` |
 | `action` / `actions` | `{name}` / — | `actions::dispatch`; `ACTIONS` |

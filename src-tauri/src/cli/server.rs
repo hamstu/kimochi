@@ -227,7 +227,16 @@ fn status(app: &tauri::AppHandle, service: &Shared) -> Value {
     let input = reader["inputSource"].as_str().map(str::to_string).unwrap_or_else(|| {
         if reader["clipboardEnabled"] == json!(true) { "clipboard" } else { "ocr" }.to_string()
     });
-    json!({
+    // The dictionary in use: Hachidori and 10ten read Japanese only, so in another language the
+    // windows run Built-in Yomitan in their place (`extensions::selected_engine`); the stored
+    // choice is told too when it is not the one in use.
+    let chosen = settings.get("yomitanSettings").ok().flatten().map(|v| v["popupType"].clone());
+    let language = &crate::language::current(settings).code;
+    let stands_in = chosen
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .is_some_and(|engine| crate::extensions::for_language(engine, language) != engine);
+    let mut status = json!({
         "running": true,
         "pid": std::process::id(),
         "version": app.package_info().version.to_string(),
@@ -235,7 +244,7 @@ fn status(app: &tauri::AppHandle, service: &Shared) -> Value {
         "cropEnabled": snapshot["cropEnabled"],
         "ocrEngine": settings.get_or::<String>("ocrMode", String::new()),
         "input": input,
-        "dictionary": settings.get("yomitanSettings").ok().flatten().map(|v| v["popupType"].clone()),
+        "dictionary": if stands_in { Some(json!("builtin")) } else { chosen.clone() },
         "autoOcr": snapshot["autoOcrEnabled"],
         "scanning": snapshot["isScanning"],
         "overlay": snapshot["overlayVisible"],
@@ -244,7 +253,11 @@ fn status(app: &tauri::AppHandle, service: &Shared) -> Value {
         "lastScan": scan_text(&snapshot["scan"]),
         "session": active_session(&sessions_now()),
         "profileDir": crate::account::active_profile_dir(),
-    })
+    });
+    if stands_in {
+        status["dictionaryChosen"] = chosen.unwrap_or(Value::Null);
+    }
+    status
 }
 
 /// The published scan's text, or null.
