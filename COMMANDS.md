@@ -2100,9 +2100,17 @@ each burst of the chosen thread is logged as `texthook-burst` (`{text, lines, ca
 
 ### Sidecar protocol (`kimochi-hookd`)
 
-`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N]` or
+`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N] [--codepage N]` or
 `… textractor --dir <Textractor dir>` reads one JSON command per line on stdin and writes one
 JSON event per line on stdout; closing stdin detaches every process and exits.
+`--codepage` is the code page LunaHook decodes a game's multibyte (ANSI) text with when its hook
+code names none (`HS949#…` names one, and wins): the app passes the language's Windows ANSI code
+page (`language::hook_code_page`: 949 Korean, 936 Simplified Chinese, 950 Traditional Chinese and
+Cantonese, 1251 Cyrillic, 874 Thai, 1250/1252/1253/1254/1257/1258 for Latin and Greek), and 932
+(Shift-JIS) for Japanese and for languages Windows has no ANSI code page for (their games' text
+comes through Unicode hooks; ASCII reads alike in every code page). Absent, it is 932, so an app
+from before languages gets what it always did; an older sidecar ignores the argument. Textractor's
+CLI always decodes Shift-JIS.
 `kimochi-hookd-{x64,x86}.exe inject --pid N --dll <path>` injects one DLL
 (`CreateRemoteThread(LoadLibraryW)`); the x64 sidecar runs the x86 build for 32-bit games.
 `kimochi-hookd-x64.exe processes` writes one `process` event per running process
@@ -2115,11 +2123,12 @@ it in a Wine game's prefix to learn the game's id there.
 | `detach` | `pid` |
 | `insert` | `pid`, `code` (an H-code) |
 | `pchooks` | `pid` |
+| `codepage` | `codepage` (decode ANSI text with this code page from the next line; sent when the language changes, and only to a sidecar whose `ready` carried `codepage`) |
 | `quit` | |
 
 | Event | Fields |
 | --- | --- |
-| `ready` | `engine`, `version` |
+| `ready` | `engine`, `version`, `codepage?` (LunaHook: the code page in use; its presence means `codepage` is understood) |
 | `connected` / `disconnected` | `pid` |
 | `attached` | `pid`, `bits`, `reused?` |
 | `attach_error` | `pid`, `text` |

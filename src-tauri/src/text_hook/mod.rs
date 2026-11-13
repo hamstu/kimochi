@@ -135,6 +135,9 @@ struct Session {
     text_at: Option<u64>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
+    /// The code page the helper decodes ANSI text with, when it can be changed while it runs (a
+    /// LunaHook helper whose `ready` said so); None for Textractor and an older helper.
+    code_page: Option<u32>,
 }
 
 struct Hook {
@@ -398,6 +401,9 @@ fn launch(hook: &'static Hook, generation: u64, engine: &'static str, dir: &std:
     if engine == "luna" {
         let flush_ms = hook.config(&hook.lock()).flush_ms;
         command.args(["--flush-ms", &flush_ms.to_string()]);
+        // The language's ANSI code page for a game's multibyte text (932 for Japanese, as
+        // always); a helper from before languages ignores it and stays on 932.
+        command.args(["--codepage", &crate::language::hook_code_page(hook.language()).to_string()]);
     }
     #[cfg(windows)]
     {
@@ -456,6 +462,7 @@ fn read_events(
         let str_of = |k: &str| event[k].as_str().unwrap_or_default().to_string();
         match event["event"].as_str().unwrap_or_default() {
             "ready" => {
+                session.code_page = event["codepage"].as_u64().and_then(|c| u32::try_from(c).ok());
                 let _ = ready.send(Ok(()));
             }
             "error" => {
@@ -1195,6 +1202,19 @@ pub fn texthook_forget(exe: String, all: bool) -> Result<(), String> {
 pub fn shutdown() {
     if let Some(hook) = hook() {
         stop_child(&mut hook.lock());
+    }
+}
+
+/// The language changed: a running LunaHook helper decodes the game's ANSI text with the new
+/// language's code page from the next line (`language::hook_code_page`).
+pub fn language_changed() {
+    let Some(hook) = hook() else { return };
+    let page = crate::language::hook_code_page(hook.language());
+    let mut session = hook.lock();
+    if session.code_page.is_some_and(|current| current != page)
+        && send(&mut session, json!({ "cmd": "codepage", "codepage": page })).is_ok()
+    {
+        session.code_page = Some(page);
     }
 }
 

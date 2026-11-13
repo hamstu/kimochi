@@ -124,17 +124,20 @@ extern "C" fn on_emu_game(id: *const u16, title: *const u16, version: *const u16
 pub struct Luna {
     library: Library,
     dir: PathBuf,
+    flush_ms: i32,
 }
 
 impl Luna {
-    pub fn load(dir: &Path, flush_ms: i32) -> Result<Self, String> {
+    /// `codepage` decodes multibyte (ANSI) text whose hook names none: the language's ANSI code
+    /// page, 932 (Shift-JIS) for Japanese.
+    pub fn load(dir: &Path, flush_ms: i32, codepage: u32) -> Result<Self, String> {
         let host = dir.join("LunaHost64.dll");
         // LOAD_WITH_ALTERED_SEARCH_PATH: the host's own dependencies (the Visual C++ runtime the
         // download carries) are looked for beside it first, so PCs without the runtime work.
         let library: Library = unsafe { libloading::os::windows::Library::load_with_flags(&host, 0x0000_0008) }
             .map_err(|e| format!("{}: {e}", host.display()))?
             .into();
-        let luna = Luna { library, dir: dir.to_path_buf() };
+        let luna = Luna { library, dir: dir.to_path_buf(), flush_ms };
         unsafe {
             let start: Symbol<Start> = luna.symbol(b"Luna_Start\0")?;
             start(
@@ -149,12 +152,21 @@ impl Luna {
                 on_i18n,
                 on_emu_game,
             );
-            // flushDelay, default codepage (Shift-JIS), max buffer, max history, PC hooks on
-            // connect. The generic API hooks are inserted per attach instead (`PcHooks`).
-            let settings: Symbol<unsafe extern "C" fn(i32, i32, i32, i32, bool)> = luna.symbol(b"Luna_Settings\0")?;
-            settings(flush_ms, 932, 3000, 100_000, false);
         }
+        luna.settings(codepage)?;
         Ok(luna)
+    }
+
+    /// Luna's settings: flushDelay, default code page, max buffer, max history, PC hooks on
+    /// connect (off: the generic API hooks are inserted per attach instead, `PcHooks`). The host
+    /// hands the code page to every hooked process (`Host::BroadCastCodePage`), and decodes each
+    /// thread's text with it as it comes, so a change applies to the next line.
+    pub fn settings(&self, codepage: u32) -> Result<(), String> {
+        unsafe {
+            let settings: Symbol<unsafe extern "C" fn(i32, i32, i32, i32, bool)> = self.symbol(b"Luna_Settings\0")?;
+            settings(self.flush_ms, codepage as i32, 3000, 100_000, false);
+        }
+        Ok(())
     }
 
     unsafe fn symbol<T>(&self, name: &[u8]) -> Result<Symbol<'_, T>, String> {

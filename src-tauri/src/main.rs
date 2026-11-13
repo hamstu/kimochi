@@ -278,6 +278,8 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     }
     if key == "language" {
         follow_language(app, settings, false);
+        // A hooked game's ANSI text is read in the new language's code page.
+        text_hook::language_changed();
         // Hachidori and 10ten read Japanese only: the reader windows move to the engine the new
         // language has (`extensions::selected_engine`), and back.
         follow_effective_engine(app);
