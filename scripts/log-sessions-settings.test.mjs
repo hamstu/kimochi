@@ -8,7 +8,10 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 test('the Log page is "Log & Sessions" and still answers to log', async () => {
   const nav = await read('frontend/panels/settings/settingsNav.tsx')
-  assert.ok(nav.includes("{ value: 'log', label: 'Log & Sessions'"), 'the nav entry is not Log & Sessions on the log value')
+  assert.ok(
+    nav.includes("{ value: 'log', label: 'Log & Sessions'"),
+    'the nav entry is not Log & Sessions on the log value'
+  )
   assert.match(nav, /audio: 'log'/, 'older stored page names no longer land on the Log page')
   // 'texthooker' once named this page; it is the Text Hooker's own page now.
   assert.ok(nav.includes("{ value: 'texthooker', label: 'Text Hooker'"), 'Text Hooker has no page of its own')
@@ -33,11 +36,19 @@ test('the Log page and the Manage sessions dialog share one session list', async
   const modal = await read('frontend/texthooker/components/SessionManagerModal.tsx')
   assert.ok(modal.includes('<SessionList'), 'the dialog no longer uses the shared list')
   const list = await read('frontend/texthooker/components/SessionList.tsx')
-  for (const op of ['renameSession(', 'reorderSessions(', 'deleteSessions(', 'clearSessions(', 'switchSession(', 'updateSessionDescription(', 'sessionSummaries(']) {
+  for (const op of [
+    'renameSession(',
+    'reorderSessions(',
+    'deleteSessions(',
+    'clearSessions(',
+    'switchSession(',
+    'updateSessionDescription(',
+    'sessionSummaries('
+  ]) {
     assert.ok(list.includes(op), `the session list lost ${op}`)
   }
   assert.match(list, /<ConfirmDialog[\s\S]*?Delete session/, 'deleting a session is not confirmed')
   assert.match(list, /event\.shiftKey/, 'Shift-click does not tick a run of sessions')
-  assert.match(list, /openSettings\("account"\)/, 'the list does not point to the export in Settings → Account')
-  assert.ok(list.includes("import \"./session-list.css\""), 'the list does not bring its own styles to Settings')
+  assert.match(list, /openSettings\(['"]account['"]\)/, 'the list does not point to the export in Settings → Account')
+  assert.match(list, /import ['"]\.\/session-list\.css['"]/, 'the list does not bring its own styles to Settings')
 })

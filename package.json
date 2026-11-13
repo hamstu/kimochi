@@ -1,9 +1,11 @@
 {
   "name": "kimochi",
   "private": true,
+  "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "prepare": "node scripts/prepare.mjs",
+    "postinstall": "node scripts/install-hooks.mjs",
     "build:frontend": "vite build",
     "preview:ui": "vite --config vite.preview.config.ts",
     "studio": "vite --config vite.preview.config.ts --open /dev/studio.html",
@@ -28,8 +30,9 @@
     "pretest": "node scripts/sync-extension.mjs --all --if-missing",
     "test": "node --test --test-timeout=120000 scripts/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json",
-    "lint": "eslint .",
-    "format": "prettier --write frontend scripts ui",
+    "lint": "oxlint --deny-warnings",
+    "format": "oxfmt && node scripts/rustfmt.mjs",
+    "format:check": "oxfmt --check && node scripts/rustfmt.mjs --check",
     "icons": "node scripts/icons.mjs",
     "verify": "node scripts/prepare.mjs --verify",
     "check:rust": "node scripts/run.mjs check",
@@ -41,26 +44,6 @@
     "prepare:meikiocr": "node scripts/prepare-meikiocr.mjs",
     "prepare:mangaocr": "node scripts/prepare-mangaocr.mjs",
     "prepare:screenai": "node scripts/prepare-screenai.mjs"
-  },
-  "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
-    "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/cli": "^2.11.0",
-    "@types/node": "^26.6.3",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^5.2.0",
-    "esbuild": "^0.28.2",
-    "eslint": "^9.39.5",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.7",
-    "globals": "^17.12.0",
-    "prettier": "^3.9.6",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.6"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -104,5 +87,20 @@
     "tailwind-merge": "^3.7.0",
     "wanakana": "^5.3.1"
   },
-  "license": "GPL-3.0-only"
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.0",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "esbuild": "^0.28.2",
+    "oxc-parser": "^0.158.0",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  }
 }

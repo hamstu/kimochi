@@ -87,11 +87,23 @@ const manga = (patch = {}) =>
 test('each state has one status line, one bar, its buttons and its badge', () => {
   const cases = [
     [{ state: 'absent' }, 'Not downloaded · 539 MB', 0, ['download'], 'warning'],
-    [{ state: 'downloading', overallReceived: 212e6 }, 'Downloading Manga OCR · 212 MB of 539 MB', 39, ['pause', 'cancel'], 'progress'],
+    [
+      { state: 'downloading', overallReceived: 212e6 },
+      'Downloading Manga OCR · 212 MB of 539 MB',
+      39,
+      ['pause', 'cancel'],
+      'progress'
+    ],
     [{ state: 'verifying', file: 'a.onnx', overallReceived: MANGA_TOTAL }, 'Verifying…', 100, ['cancel'], 'progress'],
     [{ state: 'paused', overallReceived: MANGA_TOTAL * 0.405 }, 'Paused at 40%', 40, ['resume', 'cancel'], 'warning'],
     [{ state: 'paused' }, 'Paused', 0, ['resume', 'cancel'], 'warning'],
-    [{ state: 'failed', message: 'HTTP 503', overallReceived: 1e6 }, 'Download failed: HTTP 503', 0, ['retry', 'cancel'], 'warning'],
+    [
+      { state: 'failed', message: 'HTTP 503', overallReceived: 1e6 },
+      'Download failed: HTTP 503',
+      0,
+      ['retry', 'cancel'],
+      'warning'
+    ],
     [{ state: 'failed' }, 'Download failed', 0, ['retry', 'cancel'], 'warning'],
     [{ state: 'ready', source: 'downloaded' }, 'Ready · 539 MB', 100, ['delete'], null],
     [{ state: 'ready', source: 'bundled' }, 'Ready · included with this build', 100, [], null],
@@ -156,7 +168,7 @@ test('both engine pickers share the confirmation and list engines by name alone'
   // As Settings lists it: the picture, the name, then where it runs; the tagline is a second line.
   assert.match(
     sidebar,
-    /<EngineValue picture=\{<OcrEngineIcon mode=\{mode\} \/>\} name=\{ocrModeInfo\(mode\)\.name\} runs=\{<OcrRunsIcon mode=\{mode\} \/>\}/,
+    /<EngineValue\s+picture=\{<OcrEngineIcon mode=\{mode\} \/>\}\s+name=\{ocrModeInfo\(mode\)\.name\}\s+runs=\{<OcrRunsIcon mode=\{mode\} \/>\}/,
     'the sidebar picker labels engines with more than their name'
   )
   const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
@@ -175,9 +187,15 @@ test('both engine pickers share the confirmation and list engines by name alone'
 test('removing a downloaded model lives in the overflow menu, not beside the bar', async () => {
   const block = await read('frontend/panels/settings/ModelDownload.tsx')
   assert.ok(block.includes('primaryModelActions(status)'), 'the download block offers every action, Delete included')
-  const buttons = block.slice(block.indexOf('export function ModelDownload'), block.indexOf('export function RemoveModelDialog'))
+  const buttons = block.slice(
+    block.indexOf('export function ModelDownload'),
+    block.indexOf('export function RemoveModelDialog')
+  )
   assert.ok(buttons.includes('<Button'), 'the download block has no buttons')
-  assert.ok(!buttons.includes("'danger'") && !buttons.includes("'delete'"), 'the download block still has a Delete button')
+  assert.ok(
+    !buttons.includes("'danger'") && !buttons.includes("'delete'"),
+    'the download block still has a Delete button'
+  )
   const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
   assert.match(
     chooser,
@@ -188,7 +206,10 @@ test('removing a downloaded model lives in the overflow menu, not beside the bar
 
 test('the OCR page is "OCR & Overlay" and still answers to ocr', async () => {
   const nav = await read('frontend/panels/settings/settingsNav.tsx')
-  assert.ok(nav.includes("{ value: 'ocr', label: 'OCR & Overlay'"), 'the nav entry is not OCR & Overlay on the ocr value')
+  assert.ok(
+    nav.includes("{ value: 'ocr', label: 'OCR & Overlay'"),
+    'the nav entry is not OCR & Overlay on the ocr value'
+  )
   const ocrTab = await read('frontend/panels/settings/OcrTab.tsx')
   assert.ok(ocrTab.includes('title="OCR & Overlay"'), 'the page title is not OCR & Overlay')
 })
@@ -228,10 +249,11 @@ test('each engine in the list says where it stands in a few words', () => {
   assert.equal(engineHint(ready, null), null)
   assert.equal(engineHint(undefined, null), null)
   // Until the live status arrives, the capability's model gate speaks.
-  assert.deepEqual(
-    engineHint({ available: false, reason: 'Downloading model… 32%', model: 'downloading' }, null),
-    { text: 'Downloading', tone: 'progress', reason: 'Downloading model… 32%' }
-  )
+  assert.deepEqual(engineHint({ available: false, reason: 'Downloading model… 32%', model: 'downloading' }, null), {
+    text: 'Downloading',
+    tone: 'progress',
+    reason: 'Downloading model… 32%'
+  })
   assert.equal(
     engineHint({ available: false, reason: 'Model not downloaded', model: 'absent' }, null).text,
     'Not downloaded'
@@ -248,7 +270,9 @@ test('each engine in the list says where it stands in a few words', () => {
 test('only an engine this computer cannot run at all is held back from being chosen', () => {
   assert.equal(engineSelectable({ available: false, selectable: true }), true)
   assert.deepEqual(engineHint({ available: false, selectable: true, reason: 'Missing OneOCR files' }, null), {
-    text: 'Setup needed', tone: 'warn', reason: 'Missing OneOCR files'
+    text: 'Setup needed',
+    tone: 'warn',
+    reason: 'Missing OneOCR files'
   })
   assert.equal(engineSelectable(undefined), true)
   assert.equal(engineSelectable({ available: true }), true)
@@ -292,8 +316,13 @@ test('an engine that cannot read the language is left out, unless it is the sele
   assert.equal(engineListed('meikiocr', capabilities, 'meikiocr', 'ko'), true, 'the selected engine stays visible')
   assert.equal(engineListed('ppocr', capabilities, 'googlelens', 'en'), true)
   assert.equal(engineListed('ppocr', capabilities, 'googlelens', 'ru'), false)
-  for (const mode of ['googlelens', 'cloud', 'livetext']) assert.equal(engineListed(mode, capabilities, 'meikiocr', 'ru'), true, `${mode} reads every language`)
-  assert.equal(engineListed('livetext', { ...capabilities, os: 'windows' }, 'meikiocr', 'ja'), false, 'still OS-specific')
+  for (const mode of ['googlelens', 'cloud', 'livetext'])
+    assert.equal(engineListed(mode, capabilities, 'meikiocr', 'ru'), true, `${mode} reads every language`)
+  assert.equal(
+    engineListed('livetext', { ...capabilities, os: 'windows' }, 'meikiocr', 'ja'),
+    false,
+    'still OS-specific'
+  )
   assert.equal(engineReadsLanguage(undefined, 'ko'), true)
   assert.equal(engineReadsLanguage({ available: true }, 'ko'), true)
   assert.equal(engineReadsLanguage({ available: true, languages: ['ja'] }, 'ko'), false)
@@ -307,7 +336,8 @@ test('cloudAccess defaults to false and is read from the payload', () => {
 
 test('every engine has the copy the chooser shows', () => {
   const modes = Object.keys(OCR_MODES)
-  for (const mode of ['googlelens', 'cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr']) assert.ok(modes.includes(mode), mode)
+  for (const mode of ['googlelens', 'cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr'])
+    assert.ok(modes.includes(mode), mode)
   assert.equal(modes.includes('websocket'), false, 'OwOCR was removed')
   // Google Lens leads the list: it is the default for new installs.
   assert.equal(modes[0], 'googlelens')
@@ -340,7 +370,11 @@ test('the capabilities carry the model gate and its human reason through normali
     {
       ocrEngines: {
         meikiocr: { available: false, reason: 'Downloading model… 32%', model: 'downloading' },
-        mangaocr: { available: false, reason: 'Model download failed: huggingface.co answered HTTP 503', model: 'failed' }
+        mangaocr: {
+          available: false,
+          reason: 'Model download failed: huggingface.co answered HTTP 503',
+          model: 'failed'
+        }
       }
     },
     DEFAULT_CAPABILITIES_MACOS
@@ -432,5 +466,8 @@ test('one manifest pins every model, and the bundle no longer carries them', asy
     // A whole engine directory would carry a developer's staged models along with it.
     assert.doesNotMatch(from, /^resources\/(meikiocr|mangaocr)\/?$/, `${from} bundles a whole engine directory`)
   }
-  assert.ok(resources.some(([from]) => from === 'resources/meikiocr/runtime/'), 'the ONNX Runtime must stay bundled')
+  assert.ok(
+    resources.some(([from]) => from === 'resources/meikiocr/runtime/'),
+    'the ONNX Runtime must stay bundled'
+  )
 })

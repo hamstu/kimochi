@@ -39,20 +39,33 @@ await build({
   platform: 'node',
   logLevel: 'silent'
 })
-const { fullscreenDictionary, fullscreenDictionarySource, SETTINGS_DEFAULTS } = await import(pathToFileURL(outfile).href)
+const { fullscreenDictionary, fullscreenDictionarySource, SETTINGS_DEFAULTS } = await import(
+  pathToFileURL(outfile).href
+)
 await rm(outDir, { recursive: true, force: true })
 
 const word = (start, end, text) => ({ start, end, text, word: true })
 
 test('the boxes become one line of text, with every gap kept as a filler', () => {
   const { text, tokens } = sentenceTokens([
-    { text: '今日はいい天気ですね。', tokens: [word(0, 2, '今日'), word(2, 3, 'は'), word(3, 5, 'いい'), word(5, 7, '天気')] },
+    {
+      text: '今日はいい天気ですね。',
+      tokens: [word(0, 2, '今日'), word(2, 3, 'は'), word(3, 5, 'いい'), word(5, 7, '天気')]
+    },
     { text: '海まで', tokens: [word(0, 1, '海'), word(1, 3, 'まで')] }
   ])
   assert.equal(text, '今日はいい天気ですね。海まで')
   assert.deepEqual(
     tokens.map((t) => [t.text, t.word]),
-    [['今日', true], ['は', true], ['いい', true], ['天気', true], ['ですね。', false], ['海', true], ['まで', true]]
+    [
+      ['今日', true],
+      ['は', true],
+      ['いい', true],
+      ['天気', true],
+      ['ですね。', false],
+      ['海', true],
+      ['まで', true]
+    ]
   )
   assert.equal(tokens.map((t) => t.text).join(''), text)
   assert.deepEqual(
@@ -70,7 +83,12 @@ test("a box's lines are one box; another element starts the next", () => {
   ])
   assert.deepEqual(
     tokens.map((t) => [t.text, t.box]),
-    [['待って', 0], ['！', 0], ['まだ', 0], ['剣', 2]]
+    [
+      ['待って', 0],
+      ['！', 0],
+      ['まだ', 0],
+      ['剣', 2]
+    ]
   )
 })
 
@@ -81,7 +99,11 @@ test('a gap that crosses into the next box is split there', () => {
   ])
   assert.deepEqual(
     tokens.map((t) => [t.text, t.unit]),
-    [['待って', 0], ['！', 0], ['「まだ', 1]]
+    [
+      ['待って', 0],
+      ['！', 0],
+      ['「まだ', 1]
+    ]
   )
 })
 
@@ -120,7 +142,10 @@ test("an entry's audio is the media its audio field names", () => {
 test('tags and inflections read as the pop-up shows them', () => {
   assert.deepEqual(splitTags('P, ichi1 news1'), ['P', 'ichi1', 'news1'])
   assert.deepEqual(splitTags('Unknown'), [])
-  assert.deepEqual(inflectionChains('<ul><li>polite « negative</li><li>-te</li></ul>'), [['polite', 'negative'], ['-te']])
+  assert.deepEqual(inflectionChains('<ul><li>polite « negative</li><li>-te</li></ul>'), [
+    ['polite', 'negative'],
+    ['-te']
+  ])
   assert.deepEqual(inflectionChains(''), [])
 })
 
@@ -166,10 +191,16 @@ test('Add to Anki stores media, adds the note, and recovers a duplicate', async 
     'sentence'
   )
   assert.deepEqual(added, { noteId: 42, duplicate: false })
-  assert.deepEqual(calls[0], ['anki_store_media_file', { url: CONFIG.ankiConnectUrl, filename: 'a.mp3', dataBase64: 'QUJD' }])
+  assert.deepEqual(calls[0], [
+    'anki_store_media_file',
+    { url: CONFIG.ankiConnectUrl, filename: 'a.mp3', dataBase64: 'QUJD' }
+  ])
   assert.equal(calls[1][1].allowDuplicate, false)
   duplicate = true
-  assert.deepEqual(await anki.add({ fields: FIELDS, audioMedia: [], dictionaryMedia: [] }, ''), { noteId: 7, duplicate: true })
+  assert.deepEqual(await anki.add({ fields: FIELDS, audioMedia: [], dictionaryMedia: [] }, ''), {
+    noteId: 7,
+    duplicate: true
+  })
   calls.length = 0
   assert.equal(await anki.exists(FIELDS, ''), 7)
   assert.deepEqual(calls[0][1].query, '"deck:Mining \\"VN\\"" "Expression:天気"')
@@ -191,7 +222,7 @@ test('Read along opens the full-screen dictionary whenever it is chosen, with ev
   assert.equal(fullscreenDictionarySource(undefined), 'popup')
 })
 
-test("a pop-up lookup reads from the lit word on, through the spans after it, up to the scan length", () => {
+test('a pop-up lookup reads from the lit word on, through the spans after it, up to the scan length', () => {
   const span = (text) => ({ firstChild: text === null ? null : { nodeType: 3, length: text.length, text } })
   const spans = [span('今日'), span('は'), span('いい'), span('天気'), span(null), span('ですね。')]
   const ends = lookupSpan(spans, 1, 5)
@@ -222,30 +253,49 @@ test('the full-screen dictionary keeps the scan drawn, so it has words to read',
   // only word mode held the text, the overlay cleared it whenever it would not otherwise show
   // (the game not in front), and full screen said "No words to look up in this text".
   const source = await readFile(new URL('../ui/controller.js', import.meta.url), 'utf8')
-  const getter = source.match(/get holdsText\(\) \{\s*return ([^;]+);/)
+  const getter = source.match(/get holdsText\(\) \{\s*return ([^;\n]+)/)
   assert.ok(getter, 'holdsText is not where it was')
-  assert.match(getter[1], /mode === "words"/)
-  assert.match(getter[1], /mode === "dictionary"/)
+  assert.match(getter[1], /mode === ['"]words['"]/)
+  assert.match(getter[1], /mode === ['"]dictionary['"]/)
   assert.match(getter[1], /!historical/)
 })
 
 test('the scan is drawn as the Log shows it: a line per scanned line, the words only spans in it', () => {
   const box = {}
   const { text, lines } = sentenceLines([
-    { text: '今日はいい天', element: box, tokens: [word(0, 2, '今日'), word(2, 3, 'は'), word(3, 5, 'いい'), word(5, 7, '天気')] },
+    {
+      text: '今日はいい天',
+      element: box,
+      tokens: [word(0, 2, '今日'), word(2, 3, 'は'), word(3, 5, 'いい'), word(5, 7, '天気')]
+    },
     { text: '気ですね。', element: box, tokens: [] },
     { text: '', tokens: [] },
     { text: '海まで', tokens: [word(0, 1, '海'), word(1, 3, 'まで')] }
   ])
   // The text of each line is exactly the scanned line's: nothing added between words or boxes.
-  assert.deepEqual(lines.map((line) => line.map((piece) => piece.text).join('')), ['今日はいい天', '気ですね。', '海まで'])
-  assert.equal(lines.flat().map((piece) => piece.text).join(''), text)
+  assert.deepEqual(
+    lines.map((line) => line.map((piece) => piece.text).join('')),
+    ['今日はいい天', '気ですね。', '海まで']
+  )
+  assert.equal(
+    lines
+      .flat()
+      .map((piece) => piece.text)
+      .join(''),
+    text
+  )
   // 天気 runs on from the first line into the second: both pieces are the same word.
   const tenki = lines.flat().filter((piece) => piece.text === '天' || piece.text === '気')
   assert.equal(tenki.length, 2)
   assert.equal(tenki[0].index, tenki[1].index)
   assert.ok(tenki.every((piece) => piece.word))
-  assert.deepEqual(lines[1].map((piece) => [piece.text, piece.word]), [['気', true], ['ですね。', false]])
+  assert.deepEqual(
+    lines[1].map((piece) => [piece.text, piece.word]),
+    [
+      ['気', true],
+      ['ですね。', false]
+    ]
+  )
 })
 
 test('long scans are set smaller, in steps, and many lines step down too', () => {
@@ -284,13 +334,30 @@ test('the free cursor picks the character drawn nearest it, within reach, and no
   // Each character 20 wide and 30 high, a word's characters side by side.
   const span = (index, text, left, top) => ({
     dataset: { index: String(index) },
-    firstChild: { nodeType: 3, length: text.length, rects: [...text].map((_, at) => ({ left: left + at * 20, top, right: left + at * 20 + 20, bottom: top + 30, width: 20 })) }
+    firstChild: {
+      nodeType: 3,
+      length: text.length,
+      rects: [...text].map((_, at) => ({
+        left: left + at * 20,
+        top,
+        right: left + at * 20 + 20,
+        bottom: top + 30,
+        width: 20
+      }))
+    }
   })
   const spans = [span(0, '今日', 10, 110), span(2, 'よ過ぎ', 60, 110), span(4, '時', 10, 150), span(6, '残', 10, 230)]
   const document = globalThis.document
   globalThis.document = {
     createRange: () => {
-      const range = { setStart(node, at) { range.node = node; range.at = at }, setEnd() {}, getBoundingClientRect: () => range.node.rects[range.at] }
+      const range = {
+        setStart(node, at) {
+          range.node = node
+          range.at = at
+        },
+        setEnd() {},
+        getBoundingClientRect: () => range.node.rects[range.at]
+      }
       return range
     }
   }
@@ -305,7 +372,11 @@ test('the free cursor picks the character drawn nearest it, within reach, and no
     assert.deepEqual(view.pointAt(55, 120, 14), { index: 0, offset: 1 }, 'between two, the nearer: 日')
     assert.equal(view.pointAt(300, 120, 14), null, 'nothing within reach')
     assert.deepEqual(view.pointAt(20, 188, 14), { index: 4, offset: 0 }, 'just under the last line in the text')
-    assert.deepEqual(view.pointAt(20, 240, 60), { index: 4, offset: 0 }, 'a character scrolled under the fade is not pointed at')
+    assert.deepEqual(
+      view.pointAt(20, 240, 60),
+      { index: 4, offset: 0 },
+      'a character scrolled under the fade is not pointed at'
+    )
     // The Yomitan API's entries are by word: the same point, from the word's start.
     view.source = 'entries'
     assert.deepEqual(view.pointAt(105, 120, 14), { index: 2, offset: 0 })

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath, URL } from 'node:url'
 import path from 'node:path'
-import ts from 'typescript'
+import { parse, walk, stringValue } from './source-ast.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const commandCalls = new Set(['invoke', 'optional'])
@@ -28,39 +28,23 @@ test('frontend literal native commands have registered Rust handlers', async () 
   )
   assert.ok(handlers.length > 0, 'No native command registration found')
   const registered = new Set(handlers)
-  const files = (
-    await Promise.all(['frontend', 'ui', 'host'].map((folder) => sources(path.join(root, folder))))
-  ).flat()
+  const files = (await Promise.all(['frontend', 'ui', 'host'].map((folder) => sources(path.join(root, folder))))).flat()
   const missing = new Set()
   for (const file of files) {
-    const source = ts.createSourceFile(
-      file,
-      await readFile(file, 'utf8'),
-      ts.ScriptTarget.Latest,
-      true
-    )
-    const visit = (node) => {
-      if (ts.isCallExpression(node)) {
-        const callee = node.expression
-        // The overlay's optional() wrapper must resolve too: a swallowed missing
-        // handler would otherwise look like a working feature with no result.
-        const invokes = ts.isIdentifier(callee)
-          ? commandCalls.has(callee.text)
-          : ts.isPropertyAccessExpression(callee) && commandCalls.has(callee.name.text)
-        const command = node.arguments[0]
-        if (
-          invokes &&
-          command &&
-          ts.isStringLiteral(command) &&
-          !command.text.startsWith('plugin:') &&
-          !registered.has(command.text)
-        ) {
-          missing.add(`${path.relative(root, file)}: ${command.text}`)
-        }
+    walk(parse(file, await readFile(file, 'utf8')), (node) => {
+      if (node.type !== 'CallExpression') return
+      const callee = node.callee
+      // The overlay's optional() wrapper must resolve too: a swallowed missing
+      // handler would otherwise look like a working feature with no result.
+      const invokes =
+        callee.type === 'Identifier'
+          ? commandCalls.has(callee.name)
+          : callee.type === 'MemberExpression' && !callee.computed && commandCalls.has(callee.property.name)
+      const command = stringValue(node.arguments[0])
+      if (invokes && command !== undefined && !command.startsWith('plugin:') && !registered.has(command)) {
+        missing.add(`${path.relative(root, file)}: ${command}`)
       }
-      ts.forEachChild(node, visit)
-    }
-    visit(source)
+    })
   }
   assert.deepEqual([...missing].sort(), [], 'UI calls must resolve to registered native commands')
 })
@@ -73,35 +57,19 @@ test('controller action names are accepted by the native dispatcher', async () =
   const missing = new Set()
   const literals = (node) => {
     if (!node) return []
-    if (ts.isStringLiteral(node)) return [node.text]
-    if (ts.isConditionalExpression(node))
-      return [...literals(node.whenTrue), ...literals(node.whenFalse)]
+    const value = stringValue(node)
+    if (value !== undefined) return [value]
+    if (node.type === 'ConditionalExpression') return [...literals(node.consequent), ...literals(node.alternate)]
     return []
   }
   for (const file of await sources(path.join(root, 'frontend'))) {
-    const ast = ts.createSourceFile(
-      file,
-      await readFile(file, 'utf8'),
-      ts.ScriptTarget.Latest,
-      true
-    )
-    const visit = (node) => {
-      if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === 'triggerAction'
-      ) {
+    walk(parse(file, await readFile(file, 'utf8')), (node) => {
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'triggerAction') {
         for (const name of literals(node.arguments[0])) {
           if (!accepted.has(name)) missing.add(name)
         }
       }
-      ts.forEachChild(node, visit)
-    }
-    visit(ast)
+    })
   }
-  assert.deepEqual(
-    [...missing].sort(),
-    [],
-    'Controller switches must not be rejected as unknown actions'
-  )
+  assert.deepEqual([...missing].sort(), [], 'Controller switches must not be rejected as unknown actions')
 })

@@ -6,9 +6,9 @@ import {
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
-  type ReactNode,
-} from "react";
-import { Check, ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
+  type ReactNode
+} from 'react'
+import { Check, ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react'
 import {
   Bar,
   BarSpacer,
@@ -20,8 +20,8 @@ import {
   Input,
   isComposing,
   Switch,
-  Textarea,
-} from "@kit";
+  Textarea
+} from '@kit'
 import {
   addNote,
   attachImage,
@@ -29,105 +29,71 @@ import {
   deleteNote,
   detachImage,
   updateEntry,
-  updateNote,
-} from "@texthooker/lib/notebook";
-import { useNotebookEntry } from "@texthooker/hooks/useNotebookEntry";
-import { snapshotLines } from "@texthooker/lib/store";
-import type {
-  NotebookEntry,
-  NotebookImage,
-  NotebookNote,
-  PersonEntry,
-  PlaceOrThingEntry,
-} from "@texthooker/lib/types";
-import { EntryAvatar } from "./notebookParts";
-import { DeleteEntryDialog } from "./EntryActionsMenu";
-import { NotebookHero } from "./NotebookHero";
-import {
-  KIND_META,
-  entryReading,
-  entryTitle,
-  useImageUrl,
-} from "./notebookEntry";
-import { useLanguage } from "../../bridge/useLanguage";
-import "../notebook.css";
-import { useTextLang } from "../../bridge/useTextLang";
+  updateNote
+} from '@texthooker/lib/notebook'
+import { useNotebookEntry } from '@texthooker/hooks/useNotebookEntry'
+import { snapshotLines } from '@texthooker/lib/store'
+import type { NotebookEntry, NotebookImage, NotebookNote, PersonEntry, PlaceOrThingEntry } from '@texthooker/lib/types'
+import { EntryAvatar } from './notebookParts'
+import { DeleteEntryDialog } from './EntryActionsMenu'
+import { NotebookHero } from './NotebookHero'
+import { KIND_META, entryReading, entryTitle, useImageUrl } from './notebookEntry'
+import { useLanguage } from '../../bridge/useLanguage'
+import '../notebook.css'
+import { useTextLang } from '../../bridge/useTextLang'
 
 interface Props {
   /** Entry to edit, or null when closed. */
-  entryId: string | null;
-  onClose: () => void;
+  entryId: string | null
+  onClose: () => void
   /**
    * `dialog` (default) is a centred modal. `pane` renders inline as the Notebook window's side
    * editor, so the list stays visible and another entry can be picked while editing.
    */
-  presentation?: "dialog" | "pane";
+  presentation?: 'dialog' | 'pane'
   /** The pane's width, and the handle that resizes it. */
-  paneWidth?: number;
-  resizeHandle?: ReactNode;
+  paneWidth?: number
+  resizeHandle?: ReactNode
 }
 
-export function EditEntryModal({
-  entryId,
-  onClose,
-  presentation = "dialog",
-  paneWidth,
-  resizeHandle,
-}: Props) {
-  const textLang = useTextLang();
-  const entry = useNotebookEntry(entryId ?? "");
-  const open = entryId !== null && entry !== undefined;
-  const [confirmOpen, setConfirmOpen] = useState(false);
+export function EditEntryModal({ entryId, onClose, presentation = 'dialog', paneWidth, resizeHandle }: Props) {
+  const textLang = useTextLang()
+  const entry = useNotebookEntry(entryId ?? '')
+  const open = entryId !== null && entry !== undefined
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
-  useEffect(() => setConfirmOpen(false), [entryId]);
+  // oxlint-disable-next-line react/set-state-in-effect -- resets state when its inputs change (React's own rule accepts this)
+  useEffect(() => setConfirmOpen(false), [entryId])
 
-  const title = entry ? entryTitle(entry) : "";
-  const reading = entry ? entryReading(entry) : "";
+  const title = entry ? entryTitle(entry) : ''
+  const reading = entry ? entryReading(entry) : ''
 
   const confirm = (
-    <DeleteEntryDialog
-      entry={confirmOpen && entry ? entry : null}
-      onOpenChange={setConfirmOpen}
-      onDeleted={onClose}
-    />
-  );
+    <DeleteEntryDialog entry={confirmOpen && entry ? entry : null} onOpenChange={setConfirmOpen} onDeleted={onClose} />
+  )
 
-  if (presentation === "pane") {
-    if (!open || !entry) return null;
+  if (presentation === 'pane') {
+    if (!open || !entry) return null
     return (
       <aside
         className="nb-editor"
         aria-label={`Edit ${title}`}
         style={{ width: paneWidth }}
         onKeyDown={(event) => {
-          if (
-            event.key === "Escape" &&
-            !isComposing(event) &&
-            !confirmOpen &&
-            !event.defaultPrevented
-          ) {
-            event.preventDefault();
-            onClose();
+          if (event.key === 'Escape' && !isComposing(event) && !confirmOpen && !event.defaultPrevented) {
+            event.preventDefault()
+            onClose()
           }
         }}
       >
-        <EditorHero
-          entry={entry}
-          title={title}
-          reading={reading}
-          onClose={onClose}
-        />
+        <EditorHero entry={entry} title={title} reading={reading} onClose={onClose} />
         <div className="nb-editor-body">
           <EntryForm key={entry.id} entry={entry} />
         </div>
         <Bar position="bottom" className="nb-editor-foot">
           <Saved entry={entry} />
           <BarSpacer />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirmOpen(true)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => setConfirmOpen(true)}>
             <Trash2 />
             Delete
           </Button>
@@ -135,7 +101,7 @@ export function EditEntryModal({
         {confirm}
         {resizeHandle}
       </aside>
-    );
+    )
   }
 
   return (
@@ -171,53 +137,52 @@ export function EditEntryModal({
         </DialogContent>
       ) : null}
     </Dialog>
-  );
+  )
 }
 
 function Mentions({ entry }: { entry: NotebookEntry }) {
-  const [count, setCount] = useState<number | null>(null);
+  const [count, setCount] = useState<number | null>(null)
   useEffect(() => {
-    setCount(computeMentions(entry.id, snapshotLines()).length);
-  }, [entry.id, entry.matchEnabled, entry]);
-  if (count === null) return null;
+    // oxlint-disable-next-line react/set-state-in-effect -- resets state when its inputs change (React's own rule accepts this)
+    setCount(computeMentions(entry.id, snapshotLines()).length)
+  }, [entry.id, entry.matchEnabled, entry])
+  if (count === null) return null
   return (
     <span className="k-num">
-      {count === 0
-        ? "No mentions in this session"
-        : `${count} mention${count === 1 ? "" : "s"} in this session`}
+      {count === 0 ? 'No mentions in this session' : `${count} mention${count === 1 ? '' : 's'} in this session`}
     </span>
-  );
+  )
 }
 
 /** Edits save as they're typed; the pane's foot says when the last one did, with the mentions. */
 function Saved({ entry }: { entry: NotebookEntry }) {
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now);
-  const opened = useRef(entry.id);
-  const first = useRef(entry);
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(Date.now)
+  const opened = useRef(entry.id)
+  const first = useRef(entry)
   useEffect(() => {
     // A different entry, or the same one as it was opened: nothing saved yet.
     if (opened.current !== entry.id) {
-      opened.current = entry.id;
-      first.current = entry;
-      setSavedAt(null);
+      opened.current = entry.id
+      first.current = entry
+      setSavedAt(null)
     } else if (entry !== first.current) {
-      setSavedAt(Date.now());
-      setNow(Date.now());
+      setSavedAt(Date.now())
+      setNow(Date.now())
     }
-  }, [entry]);
+  }, [entry])
   useEffect(() => {
-    if (savedAt === null) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 5000);
-    return () => window.clearInterval(timer);
-  }, [savedAt]);
-  if (savedAt === null) return <Mentions entry={entry} />;
-  const seconds = Math.max(0, Math.round((now - savedAt) / 1000));
+    if (savedAt === null) return
+    const timer = window.setInterval(() => setNow(Date.now()), 5000)
+    return () => window.clearInterval(timer)
+  }, [savedAt])
+  if (savedAt === null) return <Mentions entry={entry} />
+  const seconds = Math.max(0, Math.round((now - savedAt) / 1000))
   return (
     <span className="nb-saved k-num" role="status">
       <Check />
       {seconds < 5
-        ? "Saved"
+        ? 'Saved'
         : seconds < 60
           ? `Saved ${Math.floor(seconds / 5) * 5}s ago`
           : `Saved ${Math.round(seconds / 60)} min ago`}
@@ -226,7 +191,7 @@ function Saved({ entry }: { entry: NotebookEntry }) {
       </span>
       <Mentions entry={entry} />
     </span>
-  );
+  )
 }
 
 /* ── Form ──────────────────────────────────────────────────────────────── */
@@ -235,12 +200,12 @@ function Field({
   label,
   hint,
   children,
-  htmlFor,
+  htmlFor
 }: {
-  label: string;
-  hint?: ReactNode;
-  children: ReactNode;
-  htmlFor?: string;
+  label: string
+  hint?: ReactNode
+  children: ReactNode
+  htmlFor?: string
 }) {
   return (
     <div className="nb-field">
@@ -250,18 +215,14 @@ function Field({
       </label>
       {children}
     </div>
-  );
+  )
 }
 
 function EntryForm({ entry }: { entry: NotebookEntry }) {
-  const id = useId();
+  const id = useId()
   return (
     <div className="nb-form">
-      {entry.kind === "person" ? (
-        <PersonFields entry={entry} />
-      ) : (
-        <PlaceThingFields entry={entry} />
-      )}
+      {entry.kind === 'person' ? <PersonFields entry={entry} /> : <PlaceThingFields entry={entry} />}
       <AliasesField
         id={`${id}-aliases`}
         value={entry.aliases}
@@ -273,9 +234,7 @@ function EntryForm({ entry }: { entry: NotebookEntry }) {
         <Textarea
           id={`${id}-desc`}
           value={entry.description}
-          onChange={(e) =>
-            void updateEntry(entry.id, { description: e.target.value })
-          }
+          onChange={(e) => void updateEntry(entry.id, { description: e.target.value })}
           spellCheck={false}
           placeholder="Who or what this is"
         />
@@ -283,78 +242,74 @@ function EntryForm({ entry }: { entry: NotebookEntry }) {
       <NotesSection entry={entry} />
       <ImageStrip entry={entry} />
     </div>
-  );
+  )
 }
 
 function PersonFields({ entry }: { entry: PersonEntry }) {
-  const textLang = useTextLang();
-  const id = useId();
+  const textLang = useTextLang()
+  const id = useId()
   // Kana readings, the 姓/名 hints and Japanese examples are for Japanese only.
-  const [language] = useLanguage();
-  const ja = language.code === "ja";
-  const commitPatch = (patch: Partial<PersonEntry>) =>
-    void updateEntry(entry.id, patch);
+  const [language] = useLanguage()
+  const ja = language.code === 'ja'
+  const commitPatch = (patch: Partial<PersonEntry>) => void updateEntry(entry.id, patch)
 
   return (
     <div className="nb-form-grid">
-      <Field label="Family name" hint={ja ? "姓" : undefined} htmlFor={`${id}-fam`}>
+      <Field label="Family name" hint={ja ? '姓' : undefined} htmlFor={`${id}-fam`}>
         <Input
           id={`${id}-fam`}
           className="nb-jp"
           lang={textLang}
           value={entry.family}
           onChange={(e) => commitPatch({ family: e.target.value })}
-          placeholder={ja ? "田中" : undefined}
+          placeholder={ja ? '田中' : undefined}
         />
       </Field>
-      <Field label="Given name" hint={ja ? "名" : undefined} htmlFor={`${id}-giv`}>
+      <Field label="Given name" hint={ja ? '名' : undefined} htmlFor={`${id}-giv`}>
         <Input
           id={`${id}-giv`}
           className="nb-jp"
           lang={textLang}
           value={entry.given}
           onChange={(e) => commitPatch({ given: e.target.value })}
-          placeholder={ja ? "太郎" : undefined}
+          placeholder={ja ? '太郎' : undefined}
         />
       </Field>
-      {ja && (<>
-      <Field label="Reading" htmlFor={`${id}-famr`}>
-        <Input
-          id={`${id}-famr`}
-          className="nb-jp"
-          lang={textLang}
-          value={entry.familyReading ?? ""}
-          onChange={(e) =>
-            commitPatch({ familyReading: e.target.value || undefined })
-          }
-          placeholder="たなか"
-        />
-      </Field>
-      <Field label="Reading" htmlFor={`${id}-givr`}>
-        <Input
-          id={`${id}-givr`}
-          className="nb-jp"
-          lang={textLang}
-          value={entry.givenReading ?? ""}
-          onChange={(e) =>
-            commitPatch({ givenReading: e.target.value || undefined })
-          }
-          placeholder="たろう"
-        />
-      </Field>
-      </>)}
+      {ja && (
+        <>
+          <Field label="Reading" htmlFor={`${id}-famr`}>
+            <Input
+              id={`${id}-famr`}
+              className="nb-jp"
+              lang={textLang}
+              value={entry.familyReading ?? ''}
+              onChange={(e) => commitPatch({ familyReading: e.target.value || undefined })}
+              placeholder="たなか"
+            />
+          </Field>
+          <Field label="Reading" htmlFor={`${id}-givr`}>
+            <Input
+              id={`${id}-givr`}
+              className="nb-jp"
+              lang={textLang}
+              value={entry.givenReading ?? ''}
+              onChange={(e) => commitPatch({ givenReading: e.target.value || undefined })}
+              placeholder="たろう"
+            />
+          </Field>
+        </>
+      )}
     </div>
-  );
+  )
 }
 
 function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
-  const textLang = useTextLang();
-  const id = useId();
+  const textLang = useTextLang()
+  const id = useId()
   // The reading and Japanese examples are for Japanese only.
-  const [language] = useLanguage();
-  const ja = language.code === "ja";
-  const commitPatch = (patch: Partial<PlaceOrThingEntry>) =>
-    void updateEntry(entry.id, patch);
+  const [language] = useLanguage()
+  const ja = language.code === 'ja'
+  const commitPatch = (patch: Partial<PlaceOrThingEntry>) => void updateEntry(entry.id, patch)
 
   return (
     <div className="nb-form-grid">
@@ -365,101 +320,82 @@ function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
           lang={textLang}
           value={entry.name}
           onChange={(e) => commitPatch({ name: e.target.value })}
-          placeholder={ja ? (entry.kind === "place" ? "東京" : "天使の指輪") : undefined}
+          placeholder={ja ? (entry.kind === 'place' ? '東京' : '天使の指輪') : undefined}
         />
       </Field>
       {ja && (
-      <Field label="Reading" htmlFor={`${id}-reading`}>
-        <Input
-          id={`${id}-reading`}
-          className="nb-jp"
-          lang={textLang}
-          value={entry.reading ?? ""}
-          onChange={(e) =>
-            commitPatch({ reading: e.target.value || undefined })
-          }
-          placeholder={entry.kind === "place" ? "とうきょう" : "てんしのゆびわ"}
-        />
-      </Field>
+        <Field label="Reading" htmlFor={`${id}-reading`}>
+          <Input
+            id={`${id}-reading`}
+            className="nb-jp"
+            lang={textLang}
+            value={entry.reading ?? ''}
+            onChange={(e) => commitPatch({ reading: e.target.value || undefined })}
+            placeholder={entry.kind === 'place' ? 'とうきょう' : 'てんしのゆびわ'}
+          />
+        </Field>
       )}
     </div>
-  );
+  )
 }
 
 function MatchToggles({ entry }: { entry: NotebookEntry }) {
-  const textLang = useTextLang();
-  const given = entry.kind === "person" ? entry.given.trim() : "";
+  const textLang = useTextLang()
+  const given = entry.kind === 'person' ? entry.given.trim() : ''
   return (
     <div className="nb-toggles">
       <label className="nb-toggle">
         <div>
           <span className="nb-toggle-label">Match this entry</span>
-          <span className="nb-toggle-desc">
-            Recognise its name and aliases in the Log
-          </span>
+          <span className="nb-toggle-desc">Recognise its name and aliases in the Log</span>
         </div>
-        <Switch
-          checked={entry.matchEnabled}
-          onCheckedChange={(v) =>
-            void updateEntry(entry.id, { matchEnabled: v })
-          }
-        />
+        <Switch checked={entry.matchEnabled} onCheckedChange={(v) => void updateEntry(entry.id, { matchEnabled: v })} />
       </label>
-      {entry.kind === "person" ? (
+      {entry.kind === 'person' ? (
         <label className="nb-toggle">
           <div>
             <span className="nb-toggle-label">Match given name alone</span>
             <span className="nb-toggle-desc">
-              Also match{" "}
+              Also match{' '}
               {given ? (
                 <span className="nb-jp" lang={textLang}>
                   {given}
                 </span>
               ) : (
-                "the given name"
-              )}{" "}
+                'the given name'
+              )}{' '}
               on its own
             </span>
           </div>
           <Switch
             checked={entry.matchGivenAlone}
-            onCheckedChange={(v) =>
-              void updateEntry(entry.id, { matchGivenAlone: v })
-            }
+            onCheckedChange={(v) => void updateEntry(entry.id, { matchGivenAlone: v })}
           />
         </label>
       ) : null}
     </div>
-  );
+  )
 }
 
 /* ── Aliases: removable chips ─────────────────────────────────────────── */
 
-const ALIAS_SPLIT = /[,、，]/;
+const ALIAS_SPLIT = /[,、，]/
 
-function AliasesField({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: string[];
-  onChange: (next: string[]) => void;
-}) {
-  const textLang = useTextLang();
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [language] = useLanguage();
+function AliasesField({ id, value, onChange }: { id: string; value: string[]; onChange: (next: string[]) => void }) {
+  const textLang = useTextLang()
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [language] = useLanguage()
 
   const commit = (text: string) => {
-    const next = [...value];
+    const next = [...value]
     for (const part of text.split(ALIAS_SPLIT)) {
-      const alias = part.trim();
-      if (alias && !next.includes(alias)) next.push(alias);
+      const alias = part.trim()
+      if (alias && !next.includes(alias)) next.push(alias)
     }
-    if (next.length !== value.length) onChange(next);
-    setDraft("");
-  };
+    if (next.length !== value.length) onChange(next)
+    setDraft('')
+  }
 
   return (
     <Field label="Aliases" hint="Enter or comma to add" htmlFor={id}>
@@ -467,8 +403,8 @@ function AliasesField({
         className="k-field nb-chips"
         onMouseDown={(e) => {
           if (e.target === e.currentTarget) {
-            e.preventDefault();
-            inputRef.current?.focus();
+            e.preventDefault()
+            inputRef.current?.focus()
           }
         }}
       >
@@ -491,59 +427,50 @@ function AliasesField({
           value={draft}
           lang={textLang}
           spellCheck={false}
-          placeholder={value.length || language.code !== "ja" ? "" : "オカリン, 助手"}
+          placeholder={value.length || language.code !== 'ja' ? '' : 'オカリン, 助手'}
           onChange={(e) => {
-            const next = e.target.value;
+            const next = e.target.value
             // A 、 typed mid-conversion splits when the IME commits it.
-            if (
-              ALIAS_SPLIT.test(next) &&
-              !(e.nativeEvent as InputEvent).isComposing
-            )
-              commit(next);
-            else setDraft(next);
+            if (ALIAS_SPLIT.test(next) && !(e.nativeEvent as InputEvent).isComposing) commit(next)
+            else setDraft(next)
           }}
           onKeyDown={(e) => {
-            if (isComposing(e)) return;
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit(draft);
-            } else if (e.key === "Backspace" && !draft && value.length > 0) {
-              e.preventDefault();
-              onChange(value.slice(0, -1));
+            if (isComposing(e)) return
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commit(draft)
+            } else if (e.key === 'Backspace' && !draft && value.length > 0) {
+              e.preventDefault()
+              onChange(value.slice(0, -1))
             }
           }}
           onCompositionEnd={(e) => {
-            if (ALIAS_SPLIT.test(e.currentTarget.value))
-              commit(e.currentTarget.value);
+            if (ALIAS_SPLIT.test(e.currentTarget.value)) commit(e.currentTarget.value)
           }}
           onBlur={() => commit(draft)}
         />
       </div>
     </Field>
-  );
+  )
 }
 
 /* ── Notes ─────────────────────────────────────────────────────────────── */
 
 function NotesSection({ entry }: { entry: NotebookEntry }) {
-  const [draft, setDraft] = useState("");
-  const id = useId();
+  const [draft, setDraft] = useState('')
+  const id = useId()
 
   const commitDraft = () => {
-    const t = draft.trim();
-    if (!t) return;
-    addNote(entry.id, t);
-    setDraft("");
-  };
+    const t = draft.trim()
+    if (!t) return
+    addNote(entry.id, t)
+    setDraft('')
+  }
 
-  const notes = entry.notes ?? [];
+  const notes = entry.notes ?? []
 
   return (
-    <Field
-      label="Notes"
-      hint={notes.length ? <span className="k-num">{notes.length}</span> : null}
-      htmlFor={id}
-    >
+    <Field label="Notes" hint={notes.length ? <span className="k-num">{notes.length}</span> : null} htmlFor={id}>
       {notes.length > 0 ? (
         <div className="nb-notes">
           {notes.map((note) => (
@@ -558,37 +485,32 @@ function NotesSection({ entry }: { entry: NotebookEntry }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (isComposing(e)) return;
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitDraft();
+            if (isComposing(e)) return
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commitDraft()
             }
           }}
           placeholder="Add a quick note…"
         />
-        <IconButton
-          label="Add note"
-          size="sm"
-          onClick={commitDraft}
-          disabled={!draft.trim()}
-        >
+        <IconButton label="Add note" size="sm" onClick={commitDraft} disabled={!draft.trim()}>
           <Plus />
         </IconButton>
       </div>
     </Field>
-  );
+  )
 }
 
 function NoteRow({ entryId, note }: { entryId: string; note: NotebookNote }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(note.text);
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(note.text)
 
   const commit = () => {
-    setEditing(false);
-    const t = draft.trim();
-    if (t && t !== note.text) updateNote(entryId, note.id, t);
-    else setDraft(note.text);
-  };
+    setEditing(false)
+    const t = draft.trim()
+    if (t && t !== note.text) updateNote(entryId, note.id, t)
+    else setDraft(note.text)
+  }
 
   if (editing) {
     return (
@@ -599,29 +521,24 @@ function NoteRow({ entryId, note }: { entryId: string; note: NotebookNote }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (isComposing(e)) return;
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              setDraft(note.text);
-              setEditing(false);
+            if (isComposing(e)) return
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commit()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              setDraft(note.text)
+              setEditing(false)
             }
           }}
           onBlur={commit}
         />
-        <IconButton
-          label="Save note"
-          size="sm"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={commit}
-        >
+        <IconButton label="Save note" size="sm" onMouseDown={(e) => e.preventDefault()} onClick={commit}>
           <Check />
         </IconButton>
       </div>
-    );
+    )
   }
 
   return (
@@ -629,8 +546,8 @@ function NoteRow({ entryId, note }: { entryId: string; note: NotebookNote }) {
       <span
         className="nb-note-text"
         onDoubleClick={() => {
-          setDraft(note.text);
-          setEditing(true);
+          setDraft(note.text)
+          setEditing(true)
         }}
       >
         {note.text}
@@ -640,89 +557,78 @@ function NoteRow({ entryId, note }: { entryId: string; note: NotebookNote }) {
           label="Edit note"
           size="sm"
           onClick={() => {
-            setDraft(note.text);
-            setEditing(true);
+            setDraft(note.text)
+            setEditing(true)
           }}
         >
           <Pencil />
         </IconButton>
-        <IconButton
-          label="Delete note"
-          size="sm"
-          onClick={() => deleteNote(entryId, note.id)}
-        >
+        <IconButton label="Delete note" size="sm" onClick={() => deleteNote(entryId, note.id)}>
           <X />
         </IconButton>
       </span>
     </div>
-  );
+  )
 }
 
 /* ── Images ────────────────────────────────────────────────────────────── */
 
 function ImageStrip({ entry }: { entry: NotebookEntry }) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = useState(false)
 
   const handleFiles = useCallback(
     async (files: FileList | File[] | null | undefined) => {
-      if (!files) return;
+      if (!files) return
       for (const f of Array.from(files)) {
-        if (!f.type.startsWith("image/")) continue;
-        const ext = f.name.split(".").pop() ?? f.type.split("/")[1] ?? "png";
-        await attachImage(entry.id, f, ext);
+        if (!f.type.startsWith('image/')) continue
+        const ext = f.name.split('.').pop() ?? f.type.split('/')[1] ?? 'png'
+        await attachImage(entry.id, f, ext)
       }
     },
-    [entry.id],
-  );
+    [entry.id]
+  )
 
   const handlePaste = useCallback(
     async (e: ReactClipboardEvent<HTMLDivElement>) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      const blobs: { blob: Blob; ext: string }[] = [];
+      const items = e.clipboardData?.items
+      if (!items) return
+      const blobs: { blob: Blob; ext: string }[] = []
       for (const it of items) {
-        if (it.kind === "file" && it.type.startsWith("image/")) {
-          const blob = it.getAsFile();
+        if (it.kind === 'file' && it.type.startsWith('image/')) {
+          const blob = it.getAsFile()
           if (blob) {
-            const ext = it.type.split("/").pop() ?? "png";
-            blobs.push({ blob, ext });
+            const ext = it.type.split('/').pop() ?? 'png'
+            blobs.push({ blob, ext })
           }
         }
       }
-      if (blobs.length === 0) return;
-      e.preventDefault();
+      if (blobs.length === 0) return
+      e.preventDefault()
       for (const { blob, ext } of blobs) {
-        await attachImage(entry.id, blob, ext);
+        await attachImage(entry.id, blob, ext)
       }
     },
-    [entry.id],
-  );
+    [entry.id]
+  )
 
   return (
-    <Field
-      label="Images"
-      hint={
-        entry.images.length ? (
-          <span className="k-num">{entry.images.length}</span>
-        ) : null
-      }
-    >
+    <Field label="Images" hint={entry.images.length ? <span className="k-num">{entry.images.length}</span> : null}>
       <div
         onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
+          e.preventDefault()
+          setDragOver(true)
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          void handleFiles(e.dataTransfer.files);
+          e.preventDefault()
+          setDragOver(false)
+          void handleFiles(e.dataTransfer.files)
         }}
         onPaste={handlePaste}
         tabIndex={0}
         aria-label="Images. Paste or drop images here."
-        data-drag-over={dragOver ? "" : undefined}
+        data-drag-over={dragOver ? '' : undefined}
         className="nb-images"
       >
         {entry.images.map((img) => (
@@ -744,27 +650,19 @@ function ImageStrip({ entry }: { entry: NotebookEntry }) {
           multiple
           hidden
           onChange={(e) => {
-            void handleFiles(e.target.files);
+            void handleFiles(e.target.files)
             // Allow re-selecting the same file later.
-            e.target.value = "";
+            e.target.value = ''
           }}
         />
       </div>
-      <span className="nb-hint">
-        Paste or drop images here. The first image is the entry’s avatar.
-      </span>
+      <span className="nb-hint">Paste or drop images here. The first image is the entry’s avatar.</span>
     </Field>
-  );
+  )
 }
 
-function ImageThumb({
-  entry,
-  image,
-}: {
-  entry: NotebookEntry;
-  image: NotebookImage;
-}) {
-  const url = useImageUrl(image);
+function ImageThumb({ entry, image }: { entry: NotebookEntry; image: NotebookImage }) {
+  const url = useImageUrl(image)
   return (
     <div className="nb-thumb">
       {url ? <img src={url} alt="" draggable={false} /> : null}
@@ -778,7 +676,7 @@ function ImageThumb({
         <X />
       </button>
     </div>
-  );
+  )
 }
 
 /** The pane's header: the entry's picture as a hero, name in its lower third, close at top right. */
@@ -786,14 +684,14 @@ function EditorHero({
   entry,
   title,
   reading,
-  onClose,
+  onClose
 }: {
-  entry: NotebookEntry;
-  title: string;
-  reading: string;
-  onClose: () => void;
+  entry: NotebookEntry
+  title: string
+  reading: string
+  onClose: () => void
 }) {
-  const imageUrl = useImageUrl(entry.images[0]);
+  const imageUrl = useImageUrl(entry.images[0])
   return (
     <NotebookHero
       size="editor"
@@ -808,5 +706,5 @@ function EditorHero({
         </IconButton>
       }
     />
-  );
+  )
 }

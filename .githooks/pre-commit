@@ -1,0 +1,3 @@
+#!/bin/sh
+# Formats and lints what is being committed (scripts/pre-commit.mjs). Skip once with --no-verify.
+exec node scripts/pre-commit.mjs

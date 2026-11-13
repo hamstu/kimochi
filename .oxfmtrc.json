@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "singleQuote": true,
+  "semi": false,
+  "trailingComma": "none",
+  "arrowParens": "always",
+  // Besides .gitignore: prose (CHANGELOG.md and COMMANDS.md are parsed by scripts and tests),
+  // TOML, files npm writes, vendored code, test fixtures and tool state.
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.mdx",
+    "**/*.toml",
+    "**/package.json",
+    "**/package-lock.json",
+    "extensions/**",
+    "src-tauri/patches/**",
+    "**/fixtures/**",
+    ".impeccable/**"
+  ],
+  // The GNOME Shell extension keeps GJS's own style; the tests that load it rely on its semicolons.
+  "overrides": [
+    {
+      "files": ["src-tauri/gnome-extension/**"],
+      "options": { "semi": true, "bracketSpacing": false, "tabWidth": 4, "arrowParens": "avoid", "printWidth": 100 }
+    }
+  ]
+}
