@@ -228,7 +228,13 @@ fn main() {
         println!("  # 12 observations in {elapsed:?}, median {median:.0}ms");
         // Fast enough to read every half second, as automatic scanning does. The median, so a cold
         // first read or a moment of load on the machine doesn't decide it: typically about 40 ms.
-        assert!(median < 500.0, "a typical read took {median:.0}ms, too slow to run every half second");
+        // Not on CI: GitHub's macOS runners are VMs without the Neural Engine, where Live Text
+        // takes over half a second however fast it is on a real Mac.
+        if std::env::var_os("CI").is_some() {
+            println!("  # CI: read speed reported, not asserted (a VM has no Neural Engine)");
+        } else {
+            assert!(median < 500.0, "a typical read took {median:.0}ms, too slow to run every half second");
+        }
     });
 
     case("an acknowledgement cannot arrive while its own main-queue item runs", &|| {
