@@ -4,7 +4,7 @@
 
 <h1 align="center">Kimochi</h1>
 
-<p align="center">Read and play in Japanese: on-screen OCR, pop-up dictionaries and a reading log, beside any game or visual novel.</p>
+<p align="center">Read and play in the language you're learning: on-screen OCR, pop-up dictionaries and a reading log, beside any game or visual novel.</p>
 
 <p align="center">
   <a href="https://github.com/hamstu/kimochi/releases/latest"><img src="https://img.shields.io/github/v/release/hamstu/kimochi?sort=semver&label=release" alt="Latest release"></a>
@@ -24,18 +24,22 @@
 
 ## What it is
 
-Kimochi is a free desktop app for reading Japanese games and visual novels. It reads the
-text on screen, draws it back over the game so you can point at any word to look it up, and keeps
-a running log of every line with audio, Anki export and a notebook for names and places. It is a
-Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux builds.
+Kimochi is a free desktop app for reading games and visual novels in the language you're
+learning. It reads the text on screen, draws it back over the game so you can point at any word to
+look it up, and keeps a running log of every line with audio, Anki export and a notebook for names
+and places. It was made for Japanese, the default; 48 other left-to-right languages can be chosen
+in Settings → Language, experimentally, with a few features still Japanese-only
+([Language in the docs](https://docs.kimochiapp.com/language/)). It is a Tauri 2 app (Rust and
+React), built for macOS first, with Windows and Linux builds.
 
 - **OCR where the text is**: Google Lens by default (captures are sent to Google), or local
-  engines (PaddleOCR, MeikiOCR, Manga OCR, VOCR6 for visual-novel dialogue, Apple Live Text on
-  macOS, OneOCR on Windows 11). Auto
-  OCR watches for new text with a local engine, waits for it to settle, then reads it once.
-- **Pop-up dictionaries**: Yomitan, Hachidori or 10ten, downloaded on demand from their
-  upstream releases, hash-checked and run unmodified, with your own dictionaries; or the Yomitan
-  API, which looks words up through the Yomitan already in your browser.
+  engines (PaddleOCR, Screen AI, Apple Live Text on macOS, OneOCR on Windows 11, and for Japanese
+  MeikiOCR, Manga OCR and VOCR6 for visual-novel dialogue). The engine list follows the language
+  you're learning. Auto OCR watches for new text with a local engine, waits for it to settle, then
+  reads it once.
+- **Pop-up dictionaries**: Yomitan, Hachidori or 10ten (the last two for Japanese), downloaded on
+  demand from their upstream releases, hash-checked and run unmodified, with your own dictionaries;
+  or the Yomitan API, which looks words up through the Yomitan already in your browser.
 - **Reading log**: a built-in texthooker with sessions, reading stats, a notebook and VNDB
   import; clipboard and WebSocket texthookers work too.
 - **Controller-friendly**: a radial menu and gamepad navigation, including Steam Deck Gaming Mode
@@ -112,8 +116,8 @@ Settings, history and downloaded engines live in the app's data folder (on macOS
 
 Open an issue with the **Bug report** template, or ask in the
 [Discord](https://discord.gg/vdMge6TBZQ). In Kimochi, **Settings → About → Debug info → Copy**
-gives you the details a report needs (version, OS, hardware, displays, OCR engine, dictionary,
-recent errors), with tokens and your user name left out. **Save debug bundle** adds the recent logs
+gives you the details a report needs (version, OS, hardware, displays, language, OCR engine,
+dictionary, recent errors), with tokens and your user name left out. **Save debug bundle** adds the recent logs
 as a zip; turn on **Verbose logging** first to record more while you make the problem happen.
 
 ## Contributing

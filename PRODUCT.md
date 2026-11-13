@@ -10,7 +10,7 @@ web
 
 ## Product Purpose
 
-Kimochi helps a Japanese learner read games and visual novels in Japanese. It captures a chosen screen or window, OCRs it (on demand or automatically), draws the recognised text over the game, and keeps a running log of lines where words can be looked up, heard, explained, saved to Anki and linked to a per-session notebook of characters, places and terms. Success: the learner stays in the game and the tool never gets in the way of reading.
+Kimochi helps a language learner read games and visual novels in the language they're learning: Japanese first (the default, and what it was made for), with 48 other left-to-right languages as an experimental choice. It captures a chosen screen or window, OCRs it (on demand or automatically), draws the recognised text over the game, and keeps a running log of lines where words can be looked up, heard, explained, saved to Anki and linked to a per-session notebook of characters, places and terms. Success: the learner stays in the game and the tool never gets in the way of reading.
 
 ## Positioning
 
@@ -20,7 +20,7 @@ A reading companion that lives beside the game rather than a separate study app:
 
 - Long reading sessions with a game or VN in the foreground; Kimochi windows (compact remote/controller, Log, Settings, Notebook, source picker, tray popover, dictionary popups) float beside or above it, often pinned on top.
 - Windows are small and dense by necessity. They are often inactive while the game has focus, so hover and click-through behaviour for inactive windows matters.
-- Japanese text (log lines, dictionary entries) is the primary content; UI chrome is secondary.
+- Text in the language being learned (log lines, dictionary entries), most often Japanese, is the primary content; UI chrome is secondary.
 - Inputs: OCR (on-device engines; Kimochi cloud with a signed-in Kimochi account), clipboard, WebSocket texthookers. Dictionaries are Yomitan's, imported through Yomitan's own settings UI.
 
 ## Capabilities and Constraints
@@ -45,7 +45,7 @@ Real product only; no marketing, testimonials or users to cite. The product is c
 ## Product Principles
 
 1. The game comes first: Kimochi windows stay compact and quiet and never compete with the text being read.
-2. Japanese text is the hero; UI chrome recedes.
+2. The learner's text is the hero; UI chrome recedes.
 3. One system: every window, menu and control comes from the same components and type scale.
 4. Works while unfocused: hover, cursor and click behaviour stay correct in inactive windows.
 5. Ready for others: a public release is planned, so clarity and onboarding matter.
