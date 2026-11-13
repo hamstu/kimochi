@@ -21,9 +21,15 @@ name: CI
 
 on:
   pull_request:
-  # A manual run on a branch runs the checks on every platform; on a `v*` tag it re-runs that
-  # release.
+  # A manual run on a branch runs the checks on every platform (and, with `bundles`, builds the
+  # optimised, signed bundles a release would, kept as workflow artifacts: nothing is published);
+  # on a `v*` tag it re-runs that release.
   workflow_dispatch:
+    inputs:
+      bundles:
+        description: Also build release bundles (a trial; kept as workflow artifacts)
+        type: boolean
+        default: false
   push:
     branches: [main]
     tags: ['v*']
@@ -94,12 +100,14 @@ jobs:
         id: plan
         env:
           SKIP: ${{ steps.tagged.outputs.skip }}
+          TRIAL: ${{ inputs.bundles }}
         with:
           script: |
             const tag = context.ref.startsWith('refs/tags/v')
             const pr = context.eventName === 'pull_request'
-            const mode = tag ? 'release' : process.env.SKIP === 'true' ? 'skip' : 'check'
-            const profile = mode === 'release' ? 'release' : 'debug'
+            // `trial`: a manual run's release build, with nothing uploaded to a release.
+            const mode = tag ? 'release' : process.env.SKIP === 'true' ? 'skip' : process.env.TRIAL === 'true' ? 'trial' : 'check'
+            const profile = mode === 'release' || mode === 'trial' ? 'release' : 'debug'
 
             // A pull request that changes only the website or Markdown leaves the app as it was
             // (the same rule as the push filter above).
@@ -135,7 +143,7 @@ jobs:
             core.setOutput('app', String(app))
             core.setOutput('profile', profile)
             // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
-            core.setOutput('script', mode === 'release' ? 'release:bundle' : 'bundle')
+            core.setOutput('script', profile === 'release' ? 'release:bundle' : 'bundle')
             core.setOutput('checks', JSON.stringify({ include: checks }))
             core.setOutput('bundles', JSON.stringify({ include: platforms }))
             await core.summary
@@ -338,8 +346,8 @@ jobs:
     needs: [plan, lint, checks]
     permissions:
       contents: write
-    # Only a tag bundles, and only once every platform's checks passed.
-    if: ${{ !cancelled() && needs.plan.outputs.mode == 'release' && needs.lint.result == 'success' && needs.checks.result == 'success' }}
+    # Only a tag (or a trial) bundles, and only once every platform's checks passed.
+    if: ${{ !cancelled() && (needs.plan.outputs.mode == 'release' || needs.plan.outputs.mode == 'trial') && needs.lint.result == 'success' && needs.checks.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.bundles) }}
@@ -554,6 +562,7 @@ jobs:
 
       # Releases keep tauri's versioned file names.
       - name: Upload to release
+        if: needs.plan.outputs.mode == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -582,6 +591,22 @@ jobs:
           if [[ -d ../updater ]]; then cp ../updater/* ../upload/; fi
           ls -l ../upload
           gh release upload "$RELEASE" ../upload/* --clobber
+
+      # A trial's bundles, to download from the run's page and try.
+      - name: Collect trial updater artifacts
+        if: needs.plan.outputs.mode == 'trial'
+        run: cp -R ../updater trial-updater
+      # A trial's bundles, to download from the run's page and try.
+      - name: Upload trial bundles
+        if: needs.plan.outputs.mode == 'trial'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kimochi-${{ matrix.target }}
+          path: |
+            ${{ matrix.artifacts }}
+            trial-updater/
+          if-no-files-found: error
+          retention-days: 7
 
   # A tag's release: `latest.json`, the document the app's updater fetches
   # (`https://github.com/<repo>/releases/latest/download/latest.json`), composed from the

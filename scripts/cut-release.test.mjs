@@ -195,7 +195,7 @@ test('CI takes release notes from the changelog, checks the tag first and publis
   assert.equal(pkg.scripts.release, 'node scripts/cut-release.mjs')
   assert.equal(pkg.scripts['release:bundle'], 'node scripts/run.mjs release')
   assert.match(ci, /run: npm run \$\{\{ needs\.plan\.outputs\.script \}\}/, 'release mode bundles with release:bundle')
-  assert.match(ci, /core\.setOutput\('script', mode === 'release' \? 'release:bundle' : 'bundle'\)/)
+  assert.match(ci, /core\.setOutput\('script', profile === 'release' \? 'release:bundle' : 'bundle'\)/)
   assert.match(ci, /\[\[ "\$tag" != "v\$version" \]\]/, 'the plan job refuses a tag that does not match the version')
   assert.match(ci, /node scripts\/changelog\.mjs section "\$version" > \.\.\/release-notes\.md/)
   assert.match(ci, /--notes-file \.\.\/release-notes\.md/)
@@ -207,7 +207,7 @@ test('CI takes release notes from the changelog, checks the tag first and publis
   const bundle = ci.slice(ci.indexOf('\n  bundle:'), ci.indexOf('\n  manifest:'))
   assert.match(
     bundle,
-    /needs\.plan\.outputs\.mode == 'release' && needs\.lint\.result == 'success' && needs\.checks\.result == 'success'/
+    /\(needs\.plan\.outputs\.mode == 'release' \|\| needs\.plan\.outputs\.mode == 'trial'\) && needs\.lint\.result == 'success' && needs\.checks\.result == 'success'/
   )
   assert.doesNotMatch(ci, /tag=nightly|--prerelease/)
   assert.match(ci, /git ls-remote --tags origin 'refs\/tags\/v\*'/)
@@ -220,6 +220,8 @@ test('CI takes release notes from the changelog, checks the tag first and publis
   // Everything runs on GitHub's runners, and one always-reported status sums the run up for the
   // `main` ruleset (a skipped job must not leave a required check pending).
   assert.doesNotMatch(ci, /self-hosted/)
+  // A trial builds release bundles but never uploads them to a release.
+  assert.match(bundle, /- name: Upload to release\n {8}if: needs\.plan\.outputs\.mode == 'release'\n/)
   const gate = ci.slice(ci.indexOf('\n  ci:'), ci.indexOf('\n  bundle:'))
   assert.match(gate, /name: CI\n/)
   assert.match(gate, /needs: \[plan, lint, checks\]\n {4}if: always\(\)\n/)

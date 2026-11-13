@@ -43,10 +43,7 @@ struct JsonPushBody {
 pub async fn spawn(app: AppHandle, port: u16) {
     let state = AppState { app: app.clone() };
 
-    let cors = CorsLayer::new()
-        .allow_methods(Any)
-        .allow_origin(Any)
-        .allow_headers(Any);
+    let cors = CorsLayer::new().allow_methods(Any).allow_origin(Any).allow_headers(Any);
 
     let router = Router::new()
         .route("/push", post(push_handler).options(options_handler))
@@ -63,14 +60,7 @@ pub async fn spawn(app: AppHandle, port: u16) {
             } else {
                 format!("{:?}", err.kind())
             };
-            let _ = app.emit(
-                "webhook:error",
-                WebhookError {
-                    code,
-                    message: err.to_string(),
-                    port,
-                },
-            );
+            let _ = app.emit("webhook:error", WebhookError { code, message: err.to_string(), port });
             return;
         }
     };
@@ -78,22 +68,11 @@ pub async fn spawn(app: AppHandle, port: u16) {
     let _ = app.emit("webhook:ready", serde_json::json!({ "port": port }));
 
     if let Err(err) = axum::serve(listener, router).await {
-        let _ = app.emit(
-            "webhook:error",
-            WebhookError {
-                code: "ServeError".into(),
-                message: err.to_string(),
-                port,
-            },
-        );
+        let _ = app.emit("webhook:error", WebhookError { code: "ServeError".into(), message: err.to_string(), port });
     }
 }
 
-async fn push_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> impl IntoResponse {
+async fn push_handler(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
     if body.len() > MAX_BODY_BYTES {
         return (StatusCode::PAYLOAD_TOO_LARGE, "payload too large").into_response();
     }
@@ -116,13 +95,7 @@ async fn push_handler(
             },
             Err(_) => return (StatusCode::BAD_REQUEST, "invalid json").into_response(),
         },
-        _ => {
-            return (
-                StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                "unsupported content-type",
-            )
-                .into_response()
-        }
+        _ => return (StatusCode::UNSUPPORTED_MEDIA_TYPE, "unsupported content-type").into_response(),
     };
 
     if text.trim().is_empty() {
@@ -132,11 +105,7 @@ async fn push_handler(
     let ts = chrono_millis();
     let _ = state.app.emit("webhook:line", WebhookLine { text, ts });
 
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        Json(serde_json::json!({ "ok": true })),
-    )
+    (StatusCode::OK, [(header::CONTENT_TYPE, "application/json")], Json(serde_json::json!({ "ok": true })))
         .into_response()
 }
 
@@ -150,8 +119,5 @@ async fn fallback_handler() -> impl IntoResponse {
 
 fn chrono_millis() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
