@@ -1,37 +1,36 @@
 name: CI
 
-# Native compile, lint and test gates on every OS, all on the self-hosted runners described in
-# ci/runners/README.md (nothing here uses GitHub-hosted minutes). A push to main runs only these
-# checks. A tag `v*` (made by `npm run release -- <x.y.z>`, scripts/cut-release.mjs) also builds
-# optimised bundles per target straight into a draft release of that tag (GitHub Releases are not
-# metered like workflow artifacts), which the `manifest` job publishes once every platform has
-# built and signed. Tags are the only thing that builds or publishes; main stays the development
-# line. There is no nightly build.
+# Everything runs on GitHub's own runners (free and unmetered for a public repository).
 #
-# OCR engines: src-tauri pins the public meikiocr and mangaocr crates to exact git revisions
-# (src-tauri/Cargo.toml and Cargo.lock), so Cargo fetches the recorded source itself and the
-# staging scripts read the licences and model manifest from that checkout (scripts/ocr-crates.mjs).
-# The repo is checked out into `kimochi-tauri/`, which the steps below use as their directory.
+# - A pull request runs `Lint` (formatting, oxlint, typecheck) and `Checks` (the tests and the
+#   Rust lints and tests) on macOS, Windows x64 and Linux x64. A pull request that changes only
+#   the website or Markdown runs `Lint` alone. `CI` sums the run up: it is the one status the
+#   `main` ruleset requires, so a pull request set to auto-merge merges once it is green.
+# - A push to `main` runs the same, and the checks on all five platforms (adding Linux and
+#   Windows ARM64). It also refreshes the caches pull requests start from.
+# - A `v*` tag (made by `npm run release -- <x.y.z>`, scripts/cut-release.mjs) runs the checks on
+#   every platform, then builds, signs and uploads an optimised bundle per platform into a draft
+#   release, which the `manifest` job publishes once every platform has succeeded. Only a tag
+#   builds bundles or publishes.
 #
-# Runners are persistent machines: the checkout keeps the Rust target directories, node_modules
-# and the staged OCR runtimes between runs instead of using the GitHub cache, so the second
-# build on a machine is incremental.
+# Caches (all saved from `main` only, so pull requests read them without crowding them out):
+# node_modules per OS and lockfile, the engine downloads (extensions/), and each platform's Rust
+# dependencies, which every check crate shares through one target directory. Release bundles
+# start their Rust build cold: a tag can read main's caches, but main never builds the optimised
+# profile.
 
 on:
-  # A manual run on a branch runs the checks; on a `v*` tag it re-runs that release.
+  pull_request:
+  # A manual run on a branch runs the checks on every platform; on a `v*` tag it re-runs that
+  # release.
   workflow_dispatch:
-    inputs:
-      arch_linux:
-        description: On a tag, also build Linux ARM64 on the Arch runner
-        type: boolean
-        default: false
   push:
     branches: [main]
     tags: ['v*']
     # A push to main that only touches the website or documentation runs nothing: the app is
-    # unchanged by it. Later patterns win, so CHANGELOG.md (compiled into the app's
-    # "What's new") and COMMANDS.md (read by the tests) still build. GitHub does not apply path
-    # filters to tag pushes, so a release always builds.
+    # unchanged by it. Later patterns win, so CHANGELOG.md (compiled into the app's "What's
+    # new") and COMMANDS.md (read by the tests) still run. GitHub does not apply path filters to
+    # tag pushes, so a release always builds.
     paths:
       - '**'
       - '!site/**'
@@ -39,8 +38,10 @@ on:
       - 'CHANGELOG.md'
       - 'COMMANDS.md'
 
+# A new push to a pull request or to main replaces its unfinished run; a release is never cut
+# short.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
@@ -50,43 +51,34 @@ env:
   CARGO_TERM_COLOR: always
   # Prevent macOS tar from adding ._* AppleDouble files to anything we archive.
   COPYFILE_DISABLE: '1'
+  NODE_VERSION: 22
 
 jobs:
-  # Which machines run, and the mode: `release` for a `v*` tag (even a manual run started on one),
-  # `check` for anything else, and `skip` for main's run of a release commit.
-  # Only this repository has the self-hosted runners and the signing secrets: in a fork the plan
-  # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
+  # What this run does: `release` for a `v*` tag (even a manual run started on one), `skip` for
+  # main's run of a release commit (its tag's run checks it), `check` otherwise; whether the app
+  # changed (a pull request touching only the website or Markdown runs Lint alone); and which
+  # platforms check.
   plan:
     name: Plan
-    if: github.repository == 'hamstu/kimochi'
-    runs-on: [self-hosted, macOS]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
-    defaults:
-      run:
-        shell: bash
-        working-directory: kimochi-tauri
+      pull-requests: read
     outputs:
       mode: ${{ steps.plan.outputs.mode }}
-      script: ${{ steps.plan.outputs.script }}
+      app: ${{ steps.plan.outputs.app }}
       profile: ${{ steps.plan.outputs.profile }}
-      matrix: ${{ steps.plan.outputs.matrix }}
+      script: ${{ steps.plan.outputs.script }}
+      checks: ${{ steps.plan.outputs.checks }}
+      bundles: ${{ steps.plan.outputs.bundles }}
       release: ${{ steps.release.outputs.tag }}
     steps:
-      # For the tag's version and its CHANGELOG.md section. Same directory and no clean as the
-      # other jobs on this machine, so their kept build caches are untouched.
+      # For the tag's version and its CHANGELOG.md section.
       - uses: actions/checkout@v4
-        with:
-          path: kimochi-tauri
-          clean: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       # The release commit ("Kimochi x.y.z") reaches main in the same atomic push as its tag, so
       # the tag is already on origin when main's run starts. The tag's run checks and builds that
-      # commit; main's run of it would only repeat the checks and hold the runners the release
-      # needs, so it skips. Asks origin for the tag rather than trusting the push payload's file
-      # lists, which an earlier guard relied on and which never skipped a run.
+      # commit; main's run of it would only repeat the checks, so it skips.
       - name: Detect a release commit on main
         id: tagged
         run: |
@@ -102,41 +94,59 @@ jobs:
         id: plan
         env:
           SKIP: ${{ steps.tagged.outputs.skip }}
-          INPUT_ARCH_LINUX: ${{ inputs.arch_linux }}
         with:
           script: |
             const tag = context.ref.startsWith('refs/tags/v')
+            const pr = context.eventName === 'pull_request'
             const mode = tag ? 'release' : process.env.SKIP === 'true' ? 'skip' : 'check'
             const profile = mode === 'release' ? 'release' : 'debug'
-            // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
-            const script = mode === 'release' ? 'release:bundle' : 'bundle'
-            const bundle = `kimochi-tauri/src-tauri/target/${profile}/bundle`
-            const include = [
-              { name: 'macOS', labels: ['self-hosted', 'macOS', 'ARM64'], target: 'aarch64-apple-darwin',
-                artifacts: `${bundle}/macos/Kimochi.app.zip` },
-              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64', 'media-pc'], target: 'x86_64-pc-windows-msvc',
+
+            // A pull request that changes only the website or Markdown leaves the app as it was
+            // (the same rule as the push filter above).
+            let app = true
+            if (pr) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                ...context.repo,
+                pull_number: context.payload.pull_request.number,
+                per_page: 100
+              })
+              const docs = (name) =>
+                name.startsWith('site/') || (name.endsWith('.md') && !['CHANGELOG.md', 'COMMANDS.md'].includes(name))
+              app = files.some((file) => !docs(file.filename) || (file.previous_filename && !docs(file.previous_filename)))
+            }
+
+            const bundle = `src-tauri/target/${profile}/bundle`
+            const platforms = [
+              { name: 'macOS', runner: 'macos-latest', target: 'aarch64-apple-darwin',
+                artifacts: `${bundle}/macos/Kimochi.app.zip`, pr: true },
+              { name: 'Windows x64', runner: 'windows-2025', target: 'x86_64-pc-windows-msvc',
+                artifacts: `${bundle}/nsis/*-setup.exe`, pr: true },
+              { name: 'Linux x64', runner: 'ubuntu-24.04', target: 'x86_64-unknown-linux-gnu',
+                artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage`, pr: true },
+              { name: 'Windows ARM64', runner: 'windows-11-arm', target: 'aarch64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Windows ARM64', labels: ['self-hosted', 'Windows', 'ARM64'], target: 'aarch64-pc-windows-msvc',
-                artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64', 'media-pc'], target: 'x86_64-unknown-linux-gnu',
-                artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
-              { name: 'Linux ARM64', labels: ['self-hosted', 'Linux', 'ARM64', 'ubuntu'], target: 'aarch64-unknown-linux-gnu',
+              { name: 'Linux ARM64', runner: 'ubuntu-24.04-arm', target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
             ]
-            if (process.env.INPUT_ARCH_LINUX === 'true') include.push(
-              { name: 'Linux ARM64 (Arch)', labels: ['self-hosted', 'Linux', 'ARM64', 'arch'], target: 'aarch64-unknown-linux-gnu',
-                artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage`, suffix: '-arch' })
+            // Pull requests check the three primary platforms; main, manual runs and releases
+            // check all five (the ARM64 builds differ little, and main catches what slips by).
+            const checks = platforms.filter((p) => !pr || p.pr)
             core.setOutput('mode', mode)
-            core.setOutput('script', script)
+            core.setOutput('app', String(app))
             core.setOutput('profile', profile)
-            core.setOutput('matrix', JSON.stringify({ include }))
-            core.summary.addHeading(`Mode: ${mode}`).addList(include.map((p) => `${p.name} → ${p.labels.join(', ')}`)).write()
+            // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
+            core.setOutput('script', mode === 'release' ? 'release:bundle' : 'bundle')
+            core.setOutput('checks', JSON.stringify({ include: checks }))
+            core.setOutput('bundles', JSON.stringify({ include: platforms }))
+            await core.summary
+              .addHeading(`Mode: ${mode}${app ? '' : ' (website and docs only: lint only)'}`, 3)
+              .addList(checks.map((p) => `${p.name} → ${p.runner}`))
+              .write()
 
       # The release the bundle jobs upload into. A tag gets a draft release of its own, with its
       # CHANGELOG.md section as the notes (which also become latest.json's notes, the app's
       # "What's new"); the `manifest` job publishes it once every platform has built and signed.
-      # The tag must be `v` plus tauri.conf.json's version, checked here before anything builds
-      # (the manifest job would refuse it after an hour of bundling otherwise).
+      # The tag must be `v` plus tauri.conf.json's version, checked here before anything builds.
       - name: Prepare release
         id: release
         if: steps.plan.outputs.mode == 'release'
@@ -160,87 +170,135 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+  # Platform-independent and fast: formatting (oxfmt, rustfmt), oxlint and the TypeScript check.
+  # Runs on every pull request, docs-only ones included.
+  lint:
+    name: Lint
+    needs: plan
+    if: needs.plan.outputs.mode != 'skip'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      # No `prepare` (it builds dist/, which none of these read).
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Formatting (run `npm run format` to fix)
+        run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      # The workflows themselves (this file included), with shellcheck on their scripts.
+      - name: Lint workflows
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+  # The tests and the native lints and tests, per platform.
   checks:
     name: Checks (${{ matrix.name }})
     needs: plan
-    if: needs.plan.outputs.mode != 'skip'
+    if: needs.plan.outputs.mode != 'skip' && needs.plan.outputs.app == 'true'
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    runs-on: ${{ matrix.labels }}
+      matrix: ${{ fromJSON(needs.plan.outputs.checks) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
-        working-directory: kimochi-tauri
+    env:
+      # Every check crate builds into one target directory, so the dependencies they share
+      # (tauri, the capture and speech crates) compile once, and one cache holds them all.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # No debug info: nothing here is debugged, and it makes the builds, links and cache smaller.
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: kimochi-tauri
-          clean: false
-      # Drop stale build output but keep the expensive, regenerable caches, wiping those weekly
-      # or when they outgrow the machine (ci/runners/prune-build-cache.sh).
-      - name: Clean workspace
-        run: |
-          git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e vocr-core/target -e oneocr-worker/target -e screenai/target -e node_modules -e src-tauri/resources -e extensions
-          bash ci/runners/prune-build-cache.sh
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        working-directory: .
         run: |
-          # Arch runners get their packages from ci/runners/setup-runner.sh --deps.
-          command -v apt-get >/dev/null || { echo "no apt-get; assuming prerequisites are installed"; exit 0; }
-          sudo apt-get update
-          # pipewire-bin: /usr/share/pipewire/client.conf, which scripts/linux-appimage.mjs
-          # copies into the AppImage with the modules it names.
-          # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
-          # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
-          # libgtk-layer-shell0: the AppImage bundles it so native Wayland overlays (Hyprland,
-          # Sway, KDE) work without the user installing it.
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libpipewire-0.3-dev \
-            pipewire-bin \
-            libspa-0.2-dev \
-            libclang-dev \
-            libudev-dev \
-            libgstreamer1.0-dev \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad \
-            gstreamer1.0-pulseaudio \
-            libavif-dev \
+          # Skip man-db's index rebuild, which apt otherwise runs after every install.
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get update -o Acquire::Retries=3
+          # pipewire-bin: /usr/share/pipewire/client.conf (scripts/linux-appimage.mjs).
+          # libavif-dev: dictionary AVIF images (Jitendex), which WebKitGTK cannot decode.
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+            libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev pipewire-bin \
+            libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio libavif-dev \
             libgtk-layer-shell0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # Faster links: mold on Linux, LLVM's linker on Windows. Checks only; bundles link with each
+      # platform's default linker.
+      - uses: rui314/setup-mold@v1
+        if: runner.os == 'Linux'
+      - name: Link with rust-lld on Windows
+        if: runner.os == 'Windows'
+        run: |
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: checks
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            src-tauri -> ../target
+            capture-core -> ../target
+            speech-core -> ../target
+            screenai -> ../target
+            vocr-core -> ../target
 
-      # The engine trees (Yomitan, Hachidori, 10ten) are gitignored; the tests and the harness read
-      # the pinned releases from the kept extensions/ cache. A no-op when they already match
-      # extensions/<id>.sha256.json. (The app downloads them on demand; bundles carry none.)
+      # The engine trees (Yomitan, Hachidori, 10ten) the tests read are gitignored downloads of
+      # the pinned releases (extensions/<id>.sha256.json); cached until a pin moves.
+      - name: Restore engine downloads
+        uses: actions/cache@v4
+        with:
+          path: extensions
+          key: extensions-${{ hashFiles('extensions/*.json') }}
       - name: Fetch vendored extensions
         run: node scripts/sync-extension.mjs --all --if-missing
-      # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
-      - run: npm ci
+
+      # node_modules whole when package-lock.json is unchanged (`npm ci` takes minutes on the
+      # Windows ARM64 image); then only `prepare` runs, building dist/.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      - if: steps.node-modules.outputs.cache-hit == 'true'
+        run: npm run prepare
+      - name: Save node_modules
+        if: steps.node-modules.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: node_modules
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+
       - run: npm test
-      - run: npm run typecheck
-      - run: npm run lint
-      # cargo clippy -D warnings for src-tauri. Creates the OCR resource paths tauri.conf.json
-      # names (an empty runtime directory, the licences) so tauri-build's resource copy succeeds
-      # without downloading anything.
+      # cargo clippy -D warnings for src-tauri and the Screen AI worker. Creates the OCR resource
+      # paths tauri.conf.json names (an empty runtime directory, the licences) so tauri-build's
+      # resource copy succeeds without downloading anything.
       - run: npm run check:rust
       - name: Test capture-core
         # Swift-backed crates link @rpath/libswift_*.dylib from the OS. The variable is set on the
@@ -258,87 +316,81 @@ jobs:
         # against the Python reference need the models and are done by hand (vocr-core/README.md).
         run: cargo clippy --manifest-path vocr-core/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path vocr-core/Cargo.toml
 
+  # The one status the `main` ruleset requires. Passes when every job this run needed passed
+  # (a docs-only pull request skips the checks; main's run of a release commit skips them all).
+  ci:
+    name: CI
+    needs: [plan, lint, checks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sum up
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # Skipped is fine (the plan decided); failed or cancelled is not.
+          ! echo "$RESULTS" | jq -e 'to_entries | any(.value.result == "failure" or .value.result == "cancelled")' >/dev/null
+
   bundle:
     name: Bundle (${{ matrix.name }})
-    needs: [plan, checks]
+    needs: [plan, lint, checks]
     permissions:
       contents: write
     # Only a tag bundles, and only once every platform's checks passed.
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.mode == 'release' && needs.checks.result == 'success' }}
+    if: ${{ !cancelled() && needs.plan.outputs.mode == 'release' && needs.lint.result == 'success' && needs.checks.result == 'success' }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    runs-on: ${{ matrix.labels }}
+      matrix: ${{ fromJSON(needs.plan.outputs.bundles) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash
-        working-directory: kimochi-tauri
     env:
       KIMOCHI_TARGET: ${{ matrix.target }}
-      # macOS: without the Apple secrets, ad-hoc sign the app and the bundled dylib rather than
-      # picking up whatever identity the runner's keychain holds.
+      # macOS: without the Apple secrets, ad-hoc sign the app and the bundled dylib.
       KIMOCHI_ADHOC: ${{ secrets.APPLE_CERTIFICATE == '' && '1' || '' }}
       # Step-level env is not visible to a step's own `if`, so expose the gates at job level.
       HAS_WINDOWS_SIGNING: ${{ secrets.AZURE_TENANT_ID != '' }}
       HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: kimochi-tauri
-          clean: false
-      - name: Clean workspace
-        run: |
-          git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e vocr-core/target -e oneocr-worker/target -e screenai/target -e node_modules -e src-tauri/resources -e extensions
-          # Only this run's bundles (and updater artifacts) may be uploaded.
-          rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle ../updater
-          bash ci/runners/prune-build-cache.sh
+
+      # The AppImage tools tauri downloads would mount themselves with FUSE, which GitHub's
+      # Ubuntu images lack; they unpack and run instead.
+      - name: AppImage tools without FUSE
+        if: runner.os == 'Linux'
+        run: echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        working-directory: .
         run: |
-          command -v apt-get >/dev/null || { echo "no apt-get; assuming prerequisites are installed"; exit 0; }
-          sudo apt-get update
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get update -o Acquire::Retries=3
           # pipewire-bin: /usr/share/pipewire/client.conf, which scripts/linux-appimage.mjs
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
           # libgtk-layer-shell0: the AppImage bundles it so native Wayland overlays (Hyprland,
           # Sway, KDE) work without the user installing it.
-          # xdg-utils: tauri's AppImage step runs xdg-mime, which a minimal Ubuntu (WSL) lacks.
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libpipewire-0.3-dev \
-            pipewire-bin \
-            libspa-0.2-dev \
-            libclang-dev \
-            libudev-dev \
-            libgstreamer1.0-dev \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad \
-            gstreamer1.0-pulseaudio \
-            libavif-dev \
-            libgtk-layer-shell0 \
-            xdg-utils
+          # xdg-utils: tauri's AppImage step runs xdg-mime, which the ARM64 image lacks.
+          sudo apt-get install -y -o Acquire::Retries=3 \
+            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev pipewire-bin \
+            libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio libavif-dev \
+            libgtk-layer-shell0 xdg-utils
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
       - uses: dtolnay/rust-toolchain@stable
 
       # Every Linux build links libavif for dictionary images (Jitendex) and bundles GTK
       # layer-shell for Wayland overlays: fail in seconds, naming the package, rather than at the
-      # end of the bundle. Arch runners install their own packages.
+      # end of the bundle.
       - name: Check bundled Linux libraries
         if: runner.os == 'Linux'
         run: node scripts/linux-appimage.mjs --check-deps
@@ -353,11 +405,7 @@ jobs:
         if: runner.os == 'Linux' && runner.arch == 'X64'
         run: |
           rustup target add x86_64-pc-windows-gnu i686-pc-windows-gnu
-          if command -v apt-get >/dev/null; then
-            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
-          elif command -v pacman >/dev/null; then
-            command -v x86_64-w64-mingw32-gcc >/dev/null || sudo pacman -S --needed --noconfirm mingw-w64-gcc
-          fi
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Retries=3 gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
 
       - name: Ensure ARM64 C++ tools for OneOCR helper
         if: runner.os == 'Windows'
@@ -373,25 +421,28 @@ jobs:
             if ($process.ExitCode -notin @(0, 3010)) { throw "ARM64 C++ tools installation failed: $($process.ExitCode)" }
           }
 
+      # scripts/sign-windows.mjs (tauri's signCommand) signs through Azure Artifact Signing with
+      # this CLI. Its published Windows build (x64, emulated on ARM64), pinned by hash, instead of
+      # compiling it for three minutes. To update: bump the version and the hash together.
       - name: Install Windows signing CLI
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
-        run: cargo install --locked artifact-signing-cli
-
-      # makensis maps the whole installer in the temp directory; the system drive of a runner can
-      # be nearly full while its work drive has plenty, so use the runner's own temp directory.
-      - name: Use the runner's work drive for temporary files
-        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: 0.12.0
+          SHA256: dd6fa95a0367cbd32ea520037c3df72d1ed8f523a5b07883b0c2a4034e918a53
         run: |
-          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
-          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          set -euo pipefail
+          bin="$RUNNER_TEMP/signing-cli"
+          mkdir -p "$bin"
+          gh release download "$VERSION" -R levminer/trusted-signing-cli -p artifact-signing-cli.exe -D "$bin"
+          echo "$SHA256  $bin/artifact-signing-cli.exe" | sha256sum -c -
+          echo "$bin" >> "$GITHUB_PATH"
 
       # macOS signing and notarisation are tauri's own: given APPLE_SIGNING_IDENTITY it signs the
       # .app with the hardened runtime, and given the App Store Connect API key (issuer, key id and
       # the .p8 file) it notarises the .app and staples the ticket, failing the build when Apple
       # rejects it. The Developer ID certificate (APPLE_CERTIFICATE, a base64 .p12) goes into a
-      # keychain of this job's own: the runner's launchd job runs in a security session of its own
-      # (SessionCreate), where the login keychain is locked, and scripts/run.mjs signs the bundled
-      # dylib before tauri runs, so tauri's own import would come too late.
+      # keychain of this job's own, imported before scripts/run.mjs signs the bundled dylib.
       - name: Apple signing keychain and notarisation key
         if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING == 'true'
         env:
@@ -416,8 +467,8 @@ jobs:
           security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           rm -f "$RUNNER_TEMP/certificate.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
-          # Searched first, for this job only; the cleanup step below restores the list.
           security list-keychains -d user > "$RUNNER_TEMP/keychains-before"
+          # shellcheck disable=SC2046 # one argument per keychain listed
           security list-keychains -d user -s "$keychain" $(sed 's/"//g' "$RUNNER_TEMP/keychains-before")
           security find-identity -v -p codesigning "$keychain"
           printf '%s\n' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
@@ -430,8 +481,17 @@ jobs:
           } >> "$GITHUB_ENV"
 
       # No engine tree is needed here: bundles carry none (the app downloads them on demand), and
-      # scripts/prepare.mjs checks that dist/ holds none.
-      - run: npm ci
+      # scripts/prepare.mjs checks that dist/ holds none. main's node_modules for this OS.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      - if: steps.node-modules.outputs.cache-hit == 'true'
+        run: npm run prepare
       - name: Bundle (${{ needs.plan.outputs.mode }})
         run: npm run ${{ needs.plan.outputs.script }}
         env:
@@ -459,6 +519,7 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/apple-api-key.p8" "$RUNNER_TEMP/certificate.p12"
           if [[ -f "$RUNNER_TEMP/keychains-before" ]]; then
+            # shellcheck disable=SC2046 # one argument per keychain listed
             security list-keychains -d user -s $(sed 's/"//g' "$RUNNER_TEMP/keychains-before")
             rm -f "$RUNNER_TEMP/keychains-before"
           fi
@@ -474,16 +535,13 @@ jobs:
             if ($sig.Status -ne 'Valid') { exit 1 }
           }
 
-      # Release mode: what the app's self-updater downloads for this platform (macOS: a tar.gz of
-      # the .app; Windows: the installer; Linux: the AppImage and the .deb), each one's minisign
-      # signature, and a sidecar for the manifest job below. Runs after every step that touches
-      # the bundles (the AppImage repack inside `npm run release:bundle`, Authenticode signing),
-      # so the signature covers the bytes users download. The key is the TAURI_SIGNING_PRIVATE_KEY
-      # secret (`tauri signer generate`); its public half is `plugins.updater.pubkey` in
-      # tauri.conf.json. A release without it cannot be updated to, so the step fails rather
-      # than skips.
+      # What the app's self-updater downloads for this platform (macOS: a tar.gz of the .app;
+      # Windows: the installer; Linux: the AppImage and the .deb), each one's minisign signature,
+      # and a sidecar for the manifest job below. Runs after every step that touches the bundles
+      # (the AppImage repack inside `npm run release:bundle`, Authenticode signing), so the
+      # signature covers the bytes users download. The key is the TAURI_SIGNING_PRIVATE_KEY secret
+      # (`tauri signer generate`); its public half is `plugins.updater.pubkey` in tauri.conf.json.
       - name: Updater artifacts
-        if: needs.plan.outputs.mode == 'release'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -500,7 +558,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE: ${{ needs.plan.outputs.release }}
-          SUFFIX: ${{ matrix.suffix }}
           PATTERNS: ${{ matrix.artifacts }}
         run: |
           set -euo pipefail
@@ -509,16 +566,13 @@ jobs:
           found=0
           while IFS= read -r pattern; do
             [[ -z "$pattern" ]] && continue
-            for file in ${pattern#kimochi-tauri/}; do
+            for file in $pattern; do
               [[ -f "$file" ]] || continue
               found=1
               name="$(basename "$file")"
               case "$name" in
                 Kimochi.app.zip) name="Kimochi_${version}_aarch64.app.zip" ;;
               esac
-              if [[ -n "$SUFFIX" ]]; then
-                name="${name%.*}${SUFFIX}.${name##*.}"
-              fi
               cp "$file" "../upload/$name"
             done
           done <<< "$PATTERNS"
@@ -532,32 +586,24 @@ jobs:
   # A tag's release: `latest.json`, the document the app's updater fetches
   # (`https://github.com/<repo>/releases/latest/download/latest.json`), composed from the
   # sidecars every bundle job uploaded, and then the release published. It needs every bundle
-  # job to succeed (and in release mode a bundle runs only when every platform's checks passed),
-  # so a release is published only when all platforms were checked, built and signed: a manifest
-  # missing a platform would tell that platform there is no update, for good. If anything
-  # fails, nothing is published and the release stays a draft: re-run the failed jobs for a
-  # flaky machine, or delete the draft and the tag and cut a new version for a code fix.
-  # GitHub resolves `latest` only once the draft is published, so publishing offers the update.
+  # job to succeed, so a release is published only when all platforms were checked, built and
+  # signed: a manifest missing a platform would tell that platform there is no update, for good.
+  # If anything fails, nothing is published and the release stays a draft: re-run the failed
+  # jobs for a flaky runner, or delete the draft and the tag and cut a new version for a code fix.
   manifest:
     name: Update manifest and publish
     needs: [plan, bundle]
     if: needs.plan.outputs.mode == 'release'
-    runs-on: [self-hosted, macOS]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
-    defaults:
-      run:
-        shell: bash
-        working-directory: kimochi-tauri
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: kimochi-tauri
-          clean: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      # The script uses node built-ins only: no `npm ci` (which would rebuild dist/ here).
+          node-version: ${{ env.NODE_VERSION }}
+      # The script uses node built-ins only: no `npm ci`.
       - name: Compose and upload latest.json
         env:
           GH_TOKEN: ${{ github.token }}

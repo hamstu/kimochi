@@ -8,7 +8,10 @@
   `.github/workflows/ci.yml`. Never bump the version or tag by hand.
 - **Changelog**: a user-visible change gets a `- ` line under `## [Unreleased]` in `CHANGELOG.md`,
   written for the app's users (it becomes the release notes and the in-app "What's new").
-- **Checks before merging**: `npm test`, `npm run typecheck`, `npm run lint`, `npm run check:rust`
+- **Checks before merging**: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`,
+  `npm run check:rust`. Changes land through pull requests: CI (GitHub-hosted runners) must pass
+  the required `CI` status, and `gh pr merge --auto --squash` merges once it does. The pre-commit
+  hook (`.githooks/`, installed by `npm install`) formats and lints what is staged.
   (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 - **Contracts**: native commands and events are documented in [COMMANDS.md](COMMANDS.md); every
   `invoke('…')` literal must be a registered command (`scripts/command-contract.test.mjs`).
