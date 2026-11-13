@@ -304,7 +304,7 @@ fn bind(
             continue;
         };
         let description = match name.as_str() {
-            "triggerScan" => "Scan Japanese text",
+            "triggerScan" => "Scan text",
             "openControllerMenu" => "Open Kimochi controls",
             _ => &name,
         };

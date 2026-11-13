@@ -148,7 +148,7 @@
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: var(--k-text-lg);
   line-height: var(--k-leading-lg);
   font-weight: var(--k-weight-medium);
@@ -164,8 +164,8 @@
   line-height: var(--k-leading-xs);
   font-weight: var(--k-weight-regular);
 }
-.nb-reading { flex: none; max-width: 40%; font-family: var(--k-font-jp); color: var(--k-text-2); }
-.nb-aliases { flex: 1; font-family: var(--k-font-jp); color: var(--k-text-3); }
+.nb-reading { flex: none; max-width: 40%; font-family: var(--k-font-text); color: var(--k-text-2); }
+.nb-aliases { flex: 1; font-family: var(--k-font-text); color: var(--k-text-3); }
 .nb-sub {
   min-width: 0;
   overflow: hidden;
@@ -193,7 +193,7 @@
   background: var(--k-accent-soft);
   box-shadow: inset 0 0 0 1px var(--gray-a3);
   color: var(--k-accent-text);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: var(--k-text-md);
   font-weight: var(--k-weight-medium);
 }
@@ -253,7 +253,7 @@
 }
 .nb-label-hint { color: var(--k-text-3); font-weight: var(--k-weight-regular); }
 .nb-field .k-field.nb-jp,
-.nb-jp { font-family: var(--k-font-jp); }
+.nb-jp { font-family: var(--k-font-text); }
 .nb-section-rule { height: 1px; margin: var(--k-space-1) 0; background: var(--k-line); }
 
 .nb-toggles { display: flex; flex-direction: column; }
@@ -283,7 +283,7 @@
   background: transparent;
   color: var(--k-text);
   font: inherit;
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: var(--k-text-md);
   outline: none;
 }
@@ -297,7 +297,7 @@
   border-radius: var(--k-radius-sm);
   background: var(--gray-a3);
   color: var(--k-text);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: var(--k-text-sm);
   line-height: 1;
   white-space: nowrap;

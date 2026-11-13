@@ -52,6 +52,7 @@ import { SessionMenu } from './SessionMenu'
 import { addScreenshot, addSentenceAudio, deleteAnkiCard, reloadAnkiCards, useAnkiCards } from './ankiCardsStore'
 import '@texthooker/notebook.css'
 import './anki-panel.css'
+import { useTextLang } from '../bridge/useTextLang'
 
 /** Settings → Anki, on its AnkiConnect tab. */
 function openAnkiConnectSettings(): void {
@@ -411,6 +412,7 @@ function CardRow({
   onAddScreenshot: () => void
   onDelete: () => void
 }): JSX.Element {
+  const textLang = useTextLang()
   const enhanced = enhancementLabel(card.enhanced)
   const term = card.term || `Note ${card.noteId}`
   const sub = [card.deck, addedLabel(card.addedAt)].filter(Boolean).join(' · ')
@@ -464,11 +466,11 @@ function CardRow({
             }
           >
             <span className="nb-row-title">
-              <span className={card.term ? 'nb-name' : 'nb-name nb-name-empty'} lang="ja" translate="no">
+              <span className={card.term ? 'nb-name' : 'nb-name nb-name-empty'} lang={textLang} translate="no">
                 {term}
               </span>
               {card.reading ? (
-                <span className="nb-reading" lang="ja" translate="no">
+                <span className="nb-reading" lang={textLang} translate="no">
                   {card.reading}
                 </span>
               ) : null}

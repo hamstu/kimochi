@@ -9,6 +9,7 @@
  */
 import { createScanner } from './scan-text.js'
 import { desktopPointOf } from './desktop-point.js'
+import { languageOf } from './languages.js'
 
 /** Opens the Yomitan API pop-up for a term at a desktop point, once installed. */
 let showTerm = null
@@ -89,6 +90,8 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
   // The overlay's lookup key (`overlayLookupKey`): the modifier the native feed and hover lookup
   // hold for a lookup (ui/scan-input.ts `withHoverKey`). Shift unless the reader chose another.
   let lookupKey = await invoke('settings_get', { key: 'overlayLookupKey' })
+  // The language being read: one that spaces its words is looked up from the word's start.
+  let language = await invoke('settings_get', { key: 'language' })
   const apiMode = () => settings?.popupType === 'custom-api'
   // Empty means the helper's default address (resolveYomitanApiUrl in yomitan-api-setup.ts).
   const baseUrl = () => settings?.customApiUrl?.trim() || 'http://127.0.0.1:19633'
@@ -130,7 +133,8 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
       invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: scanLength } }),
     prefetch: (term) => void invoke('yomitan_prefetch', { baseUrl: baseUrl(), term }).catch(() => {}),
     show: ({ term, sentence, anchor, point }) =>
-      void open({ term, cursorX: point.screenX, cursorY: point.screenY, anchor, sentence, focus: false })
+      void open({ term, cursorX: point.screenX, cursorY: point.screenY, anchor, sentence, focus: false }),
+    spaces: () => languageOf(language).spaces
   })
 
   const update = () => {
@@ -146,6 +150,7 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     }
     if (payload.key === 'superTexthooker') reader = payload.value || {}
     if (payload.key === 'overlayLookupKey') lookupKey = payload.value
+    if (payload.key === 'language') language = payload.value
   })
   // Only the first pop-up is this word's; the ones nested on it close on their own.
   await window.__TAURI__.event.listen('popover:hide', ({ payload }) => {

@@ -10,8 +10,10 @@ import {
   subscribeExplainState,
 } from "@texthooker/lib/explain";
 import { getSettings } from "@texthooker/lib/settings";
+import { useTextLang } from "../../bridge/useTextLang";
 
 export function ExplainModal() {
+  const textLang = useTextLang();
   const state = useSyncExternalStore(subscribeExplainState, getExplainState);
 
   const html = useMemo(() => {
@@ -39,7 +41,7 @@ export function ExplainModal() {
         // The sentence is the title. scan-region: shift+hover dictionary scanning works here
         // (the title renders as an h2, which bounds the scan block).
         title={
-          <span className="jp-text scan-region log-explain-sentence" lang="ja">
+          <span className="jp-text scan-region log-explain-sentence" lang={textLang}>
             {state.line.text}
           </span>
         }

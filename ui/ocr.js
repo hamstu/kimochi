@@ -7,7 +7,7 @@
  * the overlay publishes the text and renders no boxes instead of looking broken.
  */
 
-import { ocrFrame } from './native.js'
+import { getSetting, ocrFrame } from './native.js'
 import { normalizeOcrResult } from './ocr-result.js'
 
 /** @typedef {{fullText: string, textAnnotations: unknown[], geometry: boolean}} OcrOutcome */
@@ -35,7 +35,13 @@ export async function recognize(frame, settings) {
       const ocr = result?.ocr
       if (!ocr) return null
       return {
-        ...normalizeOcrResult(ocr, settings.ocrMode === 'local' ? 'meikiocr' : settings.ocrMode),
+        // The language being read (the setting, unless the caller says) decides whether text may
+        // be vertical and how words join.
+        ...normalizeOcrResult(
+          ocr,
+          settings.ocrMode === 'local' ? 'meikiocr' : settings.ocrMode,
+          settings.language ?? getSetting('language')
+        ),
         // Preserve frame identity for the caller's freshness and publication guards.
         nativeScanId: result.id ?? null
       }

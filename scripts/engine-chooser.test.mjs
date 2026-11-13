@@ -50,6 +50,11 @@ test('the dictionary panel: the download leads until the engine is ready', () =>
   for (const state of ['downloading', 'verifying', 'paused', 'failed']) assert.equal(at(state), 'resume', state)
   assert.equal(at('absent', { inUse: true }), 'active')
   assert.equal(at('downloading', { pending: true }), 'pending')
+  // An engine that cannot read the language: disabled, downloaded or not; still "Active" if in use.
+  assert.equal(at('ready', { reads: false }), 'unavailable')
+  assert.equal(at('absent', { reads: false }), 'unavailable')
+  assert.equal(at('ready', { reads: false, inUse: true }), 'active')
+  assert.equal(at('ready', { reads: true }), 'use')
 })
 
 test('a row only views: the listbox selection is the viewed engine, never a choice', async () => {

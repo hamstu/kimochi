@@ -2,7 +2,7 @@
  * The onboarding window: Kimochi's own panel chrome (the same title bar as the main window), one
  * step at a time above a persistent action bar.
  *
- *   intro → Screen Recording permission (macOS) → Accessibility (macOS)
+ *   intro → the language being learned → Screen Recording permission (macOS) → Accessibility (macOS)
  *   → capture border (Windows, when Settings keeps it on) → GNOME extension (GNOME on Wayland)
  *   → OCR engine → dictionary engine (choose + download) → that engine's setup
  *   → Steam library (a Steam Deck / SteamOS in Desktop Mode) → done
@@ -38,6 +38,8 @@ import EngineSetup from './EngineSetup'
 import GnomeExtensionStep from './GnomeExtensionStep'
 import { GNOME_ROUTE, useGnomeEligible, useGnomeExtension } from './gnomeExtension'
 import IntroStep from './IntroStep'
+import LanguageStep from './LanguageStep'
+import { useLanguage } from '../bridge/useLanguage'
 import { AccessibilityWhy, ScreenRecordingWhy } from './PermissionWhy'
 import SteamLibraryStep from './SteamLibraryStep'
 import { STEAM_ROUTE } from './steamRoute'
@@ -51,6 +53,7 @@ import style from './WelcomeApp.module.css'
 
 type StepId =
   | 'intro'
+  | 'language'
   | 'capture'
   | 'accessibility'
   | 'border'
@@ -63,6 +66,7 @@ type StepId =
 
 const STEP_OF: Record<string, StepId> = {
   '/': 'intro',
+  '/language': 'language',
   '/screen-recording-permission': 'capture',
   '/accessibility': 'accessibility',
   '/capture-border': 'border',
@@ -166,6 +170,7 @@ function useFlow(pathname: string): {
   const gnomeRoute = useGnomeEligible() && !gaming && gnome?.available !== true ? GNOME_ROUTE : null
   const steps: StepId[] = [
     'intro',
+    'language',
     ...(captureRoute || current === 'capture' ? (['capture'] as const) : []),
     ...(accessibilityRoute || current === 'accessibility' ? (['accessibility'] as const) : []),
     ...(borderRoute || current === 'border' ? (['border'] as const) : []),
@@ -177,11 +182,12 @@ function useFlow(pathname: string): {
     'done'
   ]
   const BACK: Record<string, string> = {
-    '/screen-recording-permission': '/',
-    '/accessibility': captureRoute ?? '/',
-    '/capture-border': accessibilityRoute ?? captureRoute ?? '/',
-    [GNOME_ROUTE]: borderRoute ?? accessibilityRoute ?? captureRoute ?? '/',
-    '/ocr': gnomeRoute ?? borderRoute ?? accessibilityRoute ?? captureRoute ?? '/',
+    '/language': '/',
+    '/screen-recording-permission': '/language',
+    '/accessibility': captureRoute ?? '/language',
+    '/capture-border': accessibilityRoute ?? captureRoute ?? '/language',
+    [GNOME_ROUTE]: borderRoute ?? accessibilityRoute ?? captureRoute ?? '/language',
+    '/ocr': gnomeRoute ?? borderRoute ?? accessibilityRoute ?? captureRoute ?? '/language',
     '/engine': '/ocr',
     '/dictionaries': '/engine',
     '/dictionary-settings': '/dictionaries',
@@ -399,6 +405,7 @@ function DeckNextSteps(): JSX.Element | null {
 
 function DoneScreen(): JSX.Element {
   const capabilities = useCapabilities()
+  const [language] = useLanguage()
   const gaming =
     capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope'
   return (
@@ -419,7 +426,8 @@ function DoneScreen(): JSX.Element {
             : 'Pick a window or screen in the sidebar, then crop the area with the text.'}
         </li>
         <li>
-          <strong>Scan.</strong> Kimochi recognises the Japanese and adds each line to the Log.
+          <strong>Scan.</strong> Kimochi recognises the {language.name} and adds each line to the
+          Log.
         </li>
         <li>
           <strong>Look up.</strong> Hold Shift and hover a word, or use controller reading
@@ -521,7 +529,8 @@ export default function WelcomeApp(): JSX.Element {
         <div className={style.content} data-step={STEP_OF[pathname] ?? 'other'}>
           <div key={pathname} className={style.page}>
             <Routes>
-              <Route index element={<IntroStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
+              <Route index element={<IntroStep next="/language" />} />
+              <Route path="/language" element={<LanguageStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
               <Route path="/screen-recording-permission" element={<ScreenPermissionScreen next={afterCapture} />} />
               <Route path="/accessibility" element={<AccessibilityScreen next={afterAccessibility} />} />
               <Route path="/capture-border" element={<CaptureBorderScreen next={afterBorder} />} />

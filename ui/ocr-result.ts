@@ -10,6 +10,8 @@ import {
   type GroupingSettings,
   type Surface,
 } from "./annotations.js";
+import { languageOf } from "./languages.js";
+import { joiner } from "./script-text.js";
 export type Orientation = "horizontal" | "vertical";
 /** A piece of a line (a word, or a character) with its own box, in capture pixels. */
 export interface Segment {
@@ -200,11 +202,20 @@ function explicit(a: Annotation): Orientation | null {
 }
 /** Honor model metadata first. Tall multi-character runs are strong evidence;
  * square glyphs require aligned neighbors, so one punctuation mark cannot flip a page.
+ *
+ * Only in a language that is set vertically (`language`, absent: Japanese). Elsewhere text is
+ * horizontal unless the engine says otherwise: a column of short items (menu numbers, A / B / C,
+ * a word per line) would be voted vertical and drawn on its side.
  */
-export function inferOrientations(annotations: Annotation[]): Annotation[] {
+export function inferOrientations(
+  annotations: Annotation[],
+  language?: string,
+): Annotation[] {
   const boxed = annotations.map((a) => ({ a, b: getBoundingBox(a) }));
+  const vertical = languageOf(language).vertical;
   return boxed.map(({ a, b }) => {
     let orientation = explicit(a);
+    if (!orientation && !vertical) orientation = "horizontal";
     if (!orientation && [...a.description].length > 1) {
       if (b.height > b.width * 1.5) orientation = "vertical";
       else if (b.width > b.height * 1.5) orientation = "horizontal";
@@ -240,11 +251,16 @@ export function inferOrientations(annotations: Annotation[]): Annotation[] {
 /** Paragraph grouping uses glyph-relative distances, not a page-wide fixed radius.
  * Explicit group IDs are authoritative and never merge with a different group.
  */
-export function logicalGroups(input: Annotation[]): {
+export function logicalGroups(
+  input: Annotation[],
+  language?: string,
+): {
   groups: OcrGroup[];
   annotations: Annotation[];
 } {
-  const annotations = inferOrientations(input);
+  const annotations = inferOrientations(input, language);
+  // Pieces of one line are words apart in a language that spaces its words.
+  const spaced = languageOf(language).spaces;
   const boxes = annotations.map(getBoundingBox);
   const parent = annotations.map((_, i) => i);
   const root = (i: number): number => {
@@ -319,6 +335,7 @@ export function logicalGroups(input: Annotation[]): {
           : Math.abs(previous.centerY - b.centerY) >
             Math.min(previous.height, b.height) * 0.7;
         if (newLine) text += "\n";
+        else if (spaced) text += joiner(text, annotations[i].description, language);
         else if (
           !vertical &&
           b.minX - previous.maxX > Math.min(previous.height, b.height) * 1.5
@@ -356,7 +373,10 @@ export function logGroups(
   grouping: Partial<GroupingSettings> = {},
 ): OcrGroup[] {
   if (result.geometry && !(result.textAnnotations ?? []).some((a) => a.granularity === "block"))
-    return logicalGroups(visibleAnnotations(result.textAnnotations ?? [], grouping as GroupingSettings)).groups;
+    return logicalGroups(
+      visibleAnnotations(result.textAnnotations ?? [], grouping as GroupingSettings),
+      grouping.language,
+    ).groups;
   return result.groups ?? [];
 }
 
@@ -385,10 +405,16 @@ export function scanGroups(
   );
 }
 
+/**
+ * `language` is the language being read (absent: Japanese): it decides whether a group or line
+ * the engine left unoriented may be vertical, and what goes between words grouped here.
+ */
 export function normalizeOcrResult(
   raw: Partial<OcrResult>,
   engine: string,
+  language?: string,
 ): OcrResult {
+  const vertical = languageOf(language).vertical;
   const supplied =
     Array.isArray(raw.groups) && raw.groups.some((g) => g && !g.inferred);
   const ids = new Set<string>();
@@ -409,7 +435,7 @@ export function normalizeOcrResult(
           const orientation =
             g.orientation === "vertical" || g.orientation === "horizontal"
               ? g.orientation
-              : bbox && bbox[3] - bbox[1] > (bbox[2] - bbox[0]) * 1.5
+              : vertical && bbox && bbox[3] - bbox[1] > (bbox[2] - bbox[0]) * 1.5
                 ? "vertical"
                 : "horizontal";
           return { ...g, id, bbox, orientation };
@@ -461,7 +487,7 @@ export function normalizeOcrResult(
         },
       }));
   } else if (annotations.length) {
-    const inferred = logicalGroups(annotations);
+    const inferred = logicalGroups(annotations, language);
     groups.push(
       ...inferred.groups.map((g) => ({ ...g, inferred: true as const })),
     );

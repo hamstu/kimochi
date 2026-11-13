@@ -139,10 +139,10 @@ type Scope = { kind: 'defaults' } | { kind: 'game'; exe: string; game: HookGame 
 
 /** The settings every game has, for the defaults or for one game. */
 function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<Record<'hooking' | 'text' | 'card', ReactNode>> }): ReactNode {
-  const [defaults, setDefaults, resetDefault] = useHookDefaults()
+  const [defaults, setDefaults, resetDefault, shipped] = useHookDefaults()
   const value = scope.kind === 'defaults' ? defaults : hookSettings(defaults, scope.game)
   const changed = (key: keyof HookSettings): boolean =>
-    scope.kind === 'defaults' ? defaults[key] !== HOOK_DEFAULTS[key] : overrides(scope.game, key, defaults)
+    scope.kind === 'defaults' ? defaults[key] !== shipped[key] : overrides(scope.game, key, defaults)
   const set = <K extends keyof HookSettings>(key: K, next: HookSettings[K]): void => {
     if (scope.kind === 'defaults') void setDefaults({ [key]: next })
     else

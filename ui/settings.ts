@@ -19,6 +19,7 @@ import {
   type AutoScanSettings
 } from './autoscan.js'
 import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
+import { DEFAULT_LANGUAGE, LANGUAGE_CODES, languageOf } from './languages.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
@@ -244,6 +245,8 @@ export function fullscreenDictionarySource(popupType: unknown): 'entries' | 'pop
 }
 
 export interface Settings {
+  /** The language being learned and read: a code from `ui/languages.ts`. Japanese unless chosen. */
+  language: string
   overlayOpacity: number
   liveOverlayEnabled: boolean
   /** Rest the pointer on an overlay word to look it up, no key held (native `state::HoverIntent`). */
@@ -350,6 +353,7 @@ export const SERVER_URLS: Record<ServerMode, string> = {
 export const MAX_HISTORY_ENTRIES = 50
 
 export const SETTINGS_DEFAULTS: Settings = {
+  language: DEFAULT_LANGUAGE,
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   overlayHoverLookup: false,
@@ -595,6 +599,8 @@ export interface DictionaryEngineInfo {
   runs: 'local' | 'online'
   /** The engine's own options page, relative to its origin; null when it has none. */
   optionsPage: string | null
+  /** The languages it can look up (codes from `ui/languages.ts`); absent for every language. */
+  languages?: readonly string[]
 }
 
 export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> = {
@@ -633,7 +639,9 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     upstream: 'https://github.com/bee-san/hachidori',
     version: '0.3.0',
     runs: 'local',
-    optionsPage: 'settings.html'
+    optionsPage: 'settings.html',
+    // 0.3.0 looks up Japanese text only; its language profiles arrive in 0.5.0.
+    languages: ['ja']
   },
   tenten: {
     name: '10ten',
@@ -650,7 +658,8 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     upstream: 'https://github.com/birchill/10ten-ja-reader',
     version: '1.28.0',
     runs: 'local',
-    optionsPage: 'options.html'
+    optionsPage: 'options.html',
+    languages: ['ja']
   },
   'custom-api': {
     name: 'Yomitan API',
@@ -689,6 +698,30 @@ export function dictionaryEngineOf(popupType: unknown): DictionaryEngine {
 }
 /** The contract's name for `dictionaryEngineOf` (DICTIONARY_ENGINES.md §1). */
 export const dictionaryEngine = dictionaryEngineOf
+
+/** Whether a dictionary engine can look words up in `language` (a code; unknown reads as Japanese). */
+export function dictionaryEngineReads(engine: DictionaryEngine, language: unknown): boolean {
+  const languages = DICTIONARY_ENGINES[engine].languages
+  return !languages || languages.includes(languageOf(language).code)
+}
+
+/**
+ * The engine lookups use for the stored choice and the language being learned. The choice is a
+ * per-computer setting and the language is per account, so an engine that cannot read the
+ * language (10ten, Hachidori: Japanese only) is not rewritten: it stands for Yomitan while the
+ * language is another, and comes back with Japanese. Native resolves the same way
+ * (`extensions::selected_engine`).
+ */
+export function effectiveDictionaryEngine(engine: DictionaryEngine, language: unknown): DictionaryEngine {
+  return dictionaryEngineReads(engine, language) ? engine : 'yomitan'
+}
+
+/** Why an engine cannot be chosen for `language` ("10ten reads Japanese only."), or null. */
+export function dictionaryEngineLanguageReason(engine: DictionaryEngine, language: unknown): string | null {
+  if (dictionaryEngineReads(engine, language)) return null
+  const names = (DICTIONARY_ENGINES[engine].languages ?? []).map((code) => languageOf(code).name)
+  return `${DICTIONARY_ENGINES[engine].name} reads ${names.join(' and ')} only.`
+}
 
 /** How an engine is stored in `yomitanSettings.popupType`. */
 export function popupTypeOf(engine: DictionaryEngine): PopupType {
@@ -821,6 +854,7 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
  * gray main window over `ocrMode: "screenai"`, written by 0.9.0).
  */
 const CHOICES: { [K in keyof Settings]?: readonly Settings[K][] } = {
+  language: LANGUAGE_CODES,
   ocrMode: OCR_MODE_KEYS,
   appearance: APPEARANCES,
   interfaceScale: Object.keys(INTERFACE_SCALES) as InterfaceScale[]

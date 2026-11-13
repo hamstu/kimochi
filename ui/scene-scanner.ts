@@ -67,6 +67,11 @@ export type SceneScanEvent =
 
 export interface SceneScanDeps<Frame> extends Omit<AutoScanDeps<Frame>, 'onResult' | 'onEvent' | 'onDiagnostic'> {
   onScene(update: SceneUpdate<Frame>): void | Promise<void>
+  /**
+   * The language being read (the `language` setting), asked each time the scene publishes: only
+   * text in it is written to the history. Japanese when absent.
+   */
+  language?(): string
   onEvent?(event: SceneScanEvent): void
   onDiagnostic?(
     event: SceneScanEvent,
@@ -367,7 +372,16 @@ export class SceneScanner<Frame = unknown> {
   // --- lifecycle -----------------------------------------------------------------------
 
   private configureScene(): void {
-    this.scene.configure({ stableObservations: this.settings.stableObservations })
+    this.scene.configure({
+      stableObservations: this.settings.stableObservations,
+      language: this.deps.language?.() ?? 'ja'
+    })
+  }
+
+  /** What the scene says is ready to publish, judged in the language being read now. */
+  private publishable(at: number): Passage[] {
+    this.scene.configure({ language: this.deps.language?.() ?? 'ja' })
+    return this.scene.takePublishable(at)
   }
 
   updateSettings(settings: AutoScanSettings): void {
@@ -733,7 +747,7 @@ export class SceneScanner<Frame = unknown> {
     // Passages that have finished arriving since the last recognition: the last line stopped
     // drawing in, or a doubted reading's grace ran out.
     if (!this.inFlight) {
-      const publish = this.scene.takePublishable(at)
+      const publish = this.publishable(at)
       if (publish.length) await this.redraw('settled', null, publish)
     }
 
@@ -885,7 +899,7 @@ export class SceneScanner<Frame = unknown> {
         job.mode
       )
       this.count(outcome)
-      const publish = this.scene.takePublishable(at)
+      const publish = this.publishable(at)
       this.emit(
         {
           type: 'result',

@@ -4,6 +4,7 @@ import { Button } from "@kit/Button";
 import type { SerializedNotebookEntry } from "@texthooker/lib/types";
 import { NotebookHero } from "./NotebookHero";
 import "../notebook-card.css";
+import { useTextLang } from '../../bridge/useTextLang'
 
 interface Props {
   entry: SerializedNotebookEntry;
@@ -23,6 +24,7 @@ const KIND_META: Record<
 };
 
 export function NotebookEntryCard({ entry, onOpen }: Props) {
+  const textLang = useTextLang()
   const kind = KIND_META[entry.kind];
   return (
     <article className="notebook-card">
@@ -59,7 +61,7 @@ export function NotebookEntryCard({ entry, onOpen }: Props) {
           {entry.aliases.length > 0 ? (
             <div>
               <dt>Nicknames</dt>
-              <dd translate="no" lang="ja" className="notebook-card-alias">
+              <dd translate="no" lang={textLang} className="notebook-card-alias">
                 {entry.aliases.join("、")}
               </dd>
             </div>

@@ -1043,7 +1043,7 @@ export function createController(context) {
     }
     // Text drawn outside the scan's boxes: the Text Hooker's card.
     for (const extra of context.extraUnits?.() ?? []) units.push(extra);
-    return readingUnits(units, dominantVertical(units));
+    return readingUnits(units, dominantVertical(units), words());
   }
 
   /** Lean the right stick: scroll the popup until it is back at rest. */
@@ -1082,8 +1082,11 @@ export function createController(context) {
     showHud("Reading the text…");
     const parse = parser();
     const units = readUnits();
-    const segmented = await segmentAcross(units, (text) =>
-      segmentText(text, parse),
+    const language = words();
+    const segmented = await segmentAcross(
+      units,
+      (text) => segmentText(text, parse, language),
+      language,
     );
     if (ticket !== generation || mode !== "words") return;
     hidePointer();
@@ -1107,6 +1110,14 @@ export function createController(context) {
     }
     render();
     if (driver === "controller") void lookup();
+  }
+
+  /**
+   * The language being read, as word-nav.js finds its words: the overlay's (`languageWords`), or
+   * Japanese where the context does not say (word-nav's default).
+   */
+  function words() {
+    return context.languageWords?.();
   }
 
   /**
@@ -1159,9 +1170,9 @@ export function createController(context) {
       .filter(Boolean);
     const segmented = sections.length
       ? await Promise.all(
-          sections.map(async (text) => ({ text, tokens: await segmentText(text, parse) })),
+          sections.map(async (text) => ({ text, tokens: await segmentText(text, parse, words()) })),
         )
-      : await segmentAcross(readUnits(), (text) => segmentText(text, parse));
+      : await segmentAcross(readUnits(), (text) => segmentText(text, parse, words()), words());
     if (ticket !== generation || mode !== "dictionary") return;
     context.log({
       check: "controller-dictionary",

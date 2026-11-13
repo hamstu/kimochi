@@ -65,6 +65,7 @@ import { openSettings } from "../bridge/tauri";
 import { useAccount } from "../bridge/account";
 import { translationAvailable } from "../../ui/account";
 import { isEngineRejection } from "../../ui/engine-rejection.js";
+import { useTextLang } from "../bridge/useTextLang";
 
 /** Lines the Log shows at a time ("Show earlier lines" adds as many again). */
 const PAGE_LINES = 100;
@@ -121,6 +122,7 @@ interface TranscriptProps {
 }
 
 export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
+  const textLang = useTextLang();
   const [snap, setSnap] = useState(getSnapshot);
   const [settings, setSettings] = useState(getSettings);
   // Translate is offered when the chosen provider can be used: a DeepL key, or Kimochi Cloud.
@@ -327,7 +329,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
               className="jp-text scan-region log-lines"
               onDoubleClick={(e) => onLogDoubleClick(e, snap.lines)}
               translate="no"
-              lang="ja"
+              lang={textLang}
               style={{ fontSize: settings.fontSizePx }}
             >
               {shownLines.map((line, i) => (

@@ -49,15 +49,18 @@ export function ocrUseAction(state: { inUse: boolean; pending: boolean; selectab
  * downloaded, "Use when downloaded" for one under way, paused or failed. Either starts (or
  * resumes) the download and switches once it is ready.
  */
-export type DictionaryUseAction = 'active' | 'pending' | 'use' | 'download' | 'resume'
+export type DictionaryUseAction = 'active' | 'pending' | 'use' | 'download' | 'resume' | 'unavailable'
 
 export function dictionaryUseAction(state: {
   inUse: boolean
   pending: boolean
   /** The download's state, or null when there is none to report (nothing to download). */
   download: string | null
+  /** False for an engine that cannot read the language being learned: "Use" is disabled. */
+  reads?: boolean
 }): DictionaryUseAction {
   if (state.inUse) return 'active'
+  if (state.reads === false) return 'unavailable'
   if (state.pending) return 'pending'
   if (state.download === null || state.download === 'ready') return 'use'
   return state.download === 'absent' ? 'download' : 'resume'

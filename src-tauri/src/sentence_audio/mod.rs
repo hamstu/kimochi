@@ -149,6 +149,9 @@ pub enum State {
 pub enum Recogniser {
     /// Not downloaded: lines are placed by timing.
     Absent,
+    /// The language being read is one the speech model is not used for (it hears Japanese only
+    /// for now): lines are placed by timing, nothing is downloaded, and there is no word audio.
+    OtherLanguage,
     Loading,
     Ready,
     Failed {
@@ -313,6 +316,13 @@ impl SentenceAudio {
         Config::load(&self.settings)
     }
 
+    /// Whether the speech model is used for the language being read: Japanese only for now (its
+    /// language prompt and the kanji-to-kana word matching are Japanese). Otherwise lines are
+    /// placed by timing and cards get no word audio.
+    fn recognises(&self) -> bool {
+        crate::language::current(&self.settings).is_japanese()
+    }
+
     /// Start or stop recording, and resize the buffer and the clip store, to match the settings.
     pub fn settings_changed(self: &Arc<Self>) {
         let config = self.config();
@@ -327,7 +337,7 @@ impl SentenceAudio {
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         if config.enabled {
             self.start(generation);
-            if (self.host.model_dir)().is_none() {
+            if self.recognises() && (self.host.model_dir)().is_none() {
                 let host = self.host.clone();
                 std::thread::spawn(move || (host.fetch_model)());
             }
@@ -570,7 +580,25 @@ impl SentenceAudio {
             return;
         }
         ears.model_checked = Some(Instant::now());
+        if !self.recognises() {
+            // Another language: let the model go (switched away from Japanese) and say so.
+            ears.listener.set_recogniser(None);
+            ears.model = None;
+            ears.loading = None;
+            *lock(&self.recogniser) = Recogniser::OtherLanguage;
+            return;
+        }
         let dir = (self.host.model_dir)();
+        let mut recogniser = lock(&self.recogniser);
+        if *recogniser == Recogniser::OtherLanguage {
+            // Back to Japanese: start from no model, fetching it as turning recording on does.
+            *recogniser = Recogniser::Absent;
+            if dir.is_none() {
+                let host = self.host.clone();
+                std::thread::spawn(move || (host.fetch_model)());
+            }
+        }
+        drop(recogniser);
         if dir == ears.model {
             return;
         }
@@ -762,7 +790,7 @@ impl SentenceAudio {
                 let store = lock(&self.store);
                 let info = store.get(&uid).ok_or("The line's clip is no longer kept.")?;
                 let mp3 = store.read(&uid).ok_or("The line's clip is no longer kept.")?;
-                let word = if want_word { word_candidates(fields, words, &info.text).into_iter().find_map(|w| store.word(&uid, &w).map(|mp3| (w, mp3))) } else { None };
+                let word = if want_word && self.recognises() { word_candidates(fields, words, &info.text).into_iter().find_map(|w| store.word(&uid, &w).map(|mp3| (w, mp3))) } else { None };
                 Ok(Made { filename: format!("kimochi_{}.mp3", now_ms() as u64), mp3, duration_ms: info.duration_ms, matched: info.how == "matched", word })
             }
             "silent" => Err(SILENT.into()),
@@ -836,6 +864,7 @@ impl SentenceAudio {
                     update.insert(word_field.to_string(), json!(format!("[sound:{filename}]")));
                     done.push(format!("“{w}” to “{word_field}”"));
                 }
+                None if !self.recognises() => done.push("no word audio (Japanese only for now)".into()),
                 None if made.matched => done.push("no word audio (the word was not found in the line)".into()),
                 None => done.push("no word audio (needs the speech model)".into()),
             }
@@ -1355,6 +1384,42 @@ mod tests {
         settings.set("sentenceAudio", json!({ "enabled": false })).unwrap();
         service.settings_changed();
         assert_eq!(service.status().state, State::Off);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn another_language_records_by_timing_without_the_speech_model() {
+        let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-language-{}", std::process::id()));
+        let settings = Arc::new(Settings::load(dir.join("settings.json")));
+        settings.set("language", json!("ko")).unwrap();
+        settings.set("sentenceAudio", json!({ "enabled": true })).unwrap();
+        let fetched = Arc::new(AtomicU64::new(0));
+        let counter = fetched.clone();
+        let host = Host {
+            runtime: Box::new(|| Err("no runtime in tests".into())),
+            // Downloaded already: still not loaded for Korean.
+            model_dir: Box::new(|| Some(PathBuf::from("/nonexistent/sensevoice"))),
+            fetch_model: Box::new(move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }),
+            emit: Box::new(|_| {}),
+        };
+        let service = SentenceAudio::with_host(settings.clone(), host, dir.join("clips"));
+        assert!(!service.recognises());
+        service.settings_changed();
+        for _ in 0..50 {
+            if *lock(&service.recogniser) == Recogniser::OtherLanguage {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(*lock(&service.recogniser), Recogniser::OtherLanguage);
+        assert_eq!(fetched.load(Ordering::SeqCst), 0, "no Japanese model is fetched for Korean");
+        assert!(lock(&service.ears).as_ref().is_some_and(|ears| ears.model.is_none()));
+        settings.set("language", json!("ja")).unwrap();
+        assert!(service.recognises());
+        settings.set("sentenceAudio", json!({ "enabled": false })).unwrap();
+        service.settings_changed();
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -80,7 +80,7 @@
 .nb-hero-mark {
   display: grid;
   place-items: center;
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: 2.1em;
   font-weight: var(--k-weight-semibold);
   line-height: 1;
@@ -110,7 +110,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: 1.85em;
   line-height: 1.25;
   font-weight: var(--k-weight-semibold);
@@ -127,7 +127,7 @@
   line-height: 1.5;
   color: var(--k-text-2);
 }
-.nb-hero-sub [lang="ja"] { font-family: var(--k-font-jp); }
+.nb-hero-sub [lang] { font-family: var(--k-font-text); }
 
 .nb-hero-actions {
   position: absolute;

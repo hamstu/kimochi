@@ -73,7 +73,18 @@ pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
 /// ([`NONE`]): the Yomitan API pop-up splits words and looks them up through the browser's
 /// Yomitan over its API, and the overlay installs its lookup hook without any extension
 /// (`startApiEngine` in ui/overlay.js), so nothing has to be downloaded for it.
+///
+/// The choice is this computer's while the language is the account's, so an engine that cannot
+/// read the language (Hachidori and 10ten read Japanese only) stands for Yomitan while it is
+/// another, without the setting being rewritten ([`for_language`]; `effectiveDictionaryEngine`
+/// in ui/settings.ts is the same rule).
 pub fn selected_engine(settings: &Settings) -> String {
+    for_language(&chosen_engine(settings), &crate::language::current(settings).code)
+}
+
+/// The host engine the setting names, whatever the language: what the user chose, which a launch
+/// downloads when it is missing (never an engine they did not choose).
+pub fn chosen_engine(settings: &Settings) -> String {
     engine_for(
         settings
             .get_path(&["yomitanSettings", "popupType"])
@@ -81,6 +92,19 @@ pub fn selected_engine(settings: &Settings) -> String {
             .flatten()
             .as_ref(),
     )
+}
+
+/// The languages an extension engine reads: Japanese alone for both (Hachidori 0.3.0, 10ten).
+const JAPANESE_ONLY: &[&str] = &["hachidori", "tenten"];
+
+/// `engine` (a host engine) for `language` (a code): Yomitan in place of an engine that cannot
+/// read it.
+pub fn for_language(engine: &str, language: &str) -> String {
+    if JAPANESE_ONLY.contains(&engine) && language != "ja" {
+        "yomitan".into()
+    } else {
+        engine.into()
+    }
 }
 
 /// The engine the windows run: the selected one when its files can be served
@@ -867,6 +891,18 @@ mod tests {
         assert_eq!(engine_for(Some(&json!("hachidori"))), "hachidori");
         assert_eq!(engine_for(Some(&json!("tenten"))), "tenten");
         assert_eq!(engine_for(Some(&json!("rikaikun"))), "yomitan");
+    }
+
+    #[test]
+    fn japanese_only_engines_stand_for_yomitan_in_another_language() {
+        for engine in ["yomitan", "hachidori", "tenten", NONE] {
+            assert_eq!(for_language(engine, "ja"), engine);
+        }
+        assert_eq!(for_language("hachidori", "en"), "yomitan");
+        assert_eq!(for_language("tenten", "zh-Hans"), "yomitan");
+        assert_eq!(for_language("yomitan", "ko"), "yomitan");
+        // The Yomitan API reads whatever the browser's Yomitan does.
+        assert_eq!(for_language(NONE, "en"), NONE);
     }
 
     #[test]

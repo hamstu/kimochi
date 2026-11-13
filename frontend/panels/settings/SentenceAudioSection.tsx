@@ -32,6 +32,7 @@ import { SETTINGS_DEFAULTS, type SentenceAudioSettings } from '@ui/settings'
 import { sentenceAudioStatus, type SentenceAudioStatus } from '@texthooker/lib/sentenceAudio'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
+import { useLanguage } from '../../bridge/useLanguage'
 import { requestPermission } from '../../bridge/tauri'
 import { useModelControls } from '../../bridge/models'
 import { NumberField } from './fields'
@@ -153,6 +154,9 @@ export function SentenceAudioSection(): ReactNode {
   const trouble = config.enabled ? problem(status) : null
   const model = useModelControls('sensevoice')
   const modelReady = model.status?.state === 'ready'
+  // The speech model is used for Japanese only for now: other languages are placed by timing.
+  const [language] = useLanguage()
+  const japanese = language.code === 'ja'
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const advancedPanel = useId()
   const detection = useFieldDetection(config.enabled)
@@ -186,12 +190,20 @@ export function SentenceAudioSection(): ReactNode {
               <Switch id="sentence-audio-hook" checked={config.voiceHook} onCheckedChange={(voiceHook) => update({ voiceHook })} />
             </SettingsRow>
           )}
-          {model.status && !modelReady && (
+          {!japanese && (
+            <div className="settings-note">
+              <p className="k-description">
+                For {language.name}, each line&apos;s clip is found by timing. Matching lines by their
+                words, and word audio, are for Japanese only for now.
+              </p>
+            </div>
+          )}
+          {japanese && model.status && !modelReady && (
             <div className="settings-note">
               <ModelDownload controls={model} emphasis label="Speech model" />
             </div>
           )}
-          {!modelReady && (
+          {japanese && !modelReady && (
             <div className="settings-note">
               <p className="k-description">
                 Clean hooked clips work without this model. The fallback uses it to match words in
@@ -199,7 +211,7 @@ export function SentenceAudioSection(): ReactNode {
               </p>
             </div>
           )}
-          {modelReady && recogniserNote(status) && (
+          {japanese && modelReady && recogniserNote(status) && (
             <div className="settings-note">
               <Callout tone={status?.recogniser.state === 'failed' ? 'warn' : 'neutral'}>{recogniserNote(status)}</Callout>
             </div>

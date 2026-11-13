@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 import { Box, MapPin, UserRound } from "lucide-react";
 import "../notebook-hero.css";
+import { useTextLang } from "../../bridge/useTextLang";
 
 export type HeroKind = "person" | "place" | "thing";
 
@@ -37,6 +38,7 @@ export function NotebookHero({
   actions?: ReactNode;
   size?: "popover" | "editor";
 }) {
+  const textLang = useTextLang();
   const monogram =
     kind === "person" && name.trim() ? Array.from(name.trim())[0] : null;
   return (
@@ -51,20 +53,20 @@ export function NotebookHero({
         {imageUrl ? (
           <img className="nb-hero-image" src={imageUrl} alt="" draggable={false} />
         ) : (
-          <span className="nb-hero-mark" aria-hidden lang="ja">
+          <span className="nb-hero-mark" aria-hidden lang={textLang}>
             {monogram ?? KIND_ICON[kind]}
           </span>
         )}
       </span>
       {actions ? <div className="nb-hero-actions">{actions}</div> : null}
       <div className="nb-hero-text">
-        <h2 className="nb-hero-name" lang="ja" translate="no">
+        <h2 className="nb-hero-name" lang={textLang} translate="no">
           {name}
         </h2>
         {reading || caption ? (
           <p className="nb-hero-sub">
             {reading ? (
-              <span lang="ja" translate="no">
+              <span lang={textLang} translate="no">
                 {reading}
               </span>
             ) : null}

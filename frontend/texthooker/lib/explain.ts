@@ -6,6 +6,8 @@ import { getActiveSession } from "./sessions";
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { currentLanguage } from "../core/language";
+import { explainPromptFor } from "./explainPrompt";
 import { getSettings } from "./settings";
 import { setLineExplanation, snapshotLines } from "./store";
 import type { Line } from "./types";
@@ -91,6 +93,8 @@ function ensureListeners(): Promise<void> {
   return listenersReady;
 }
 
+/** The prompt for a line: the stored template (a default follows the language) with the language,
+    the previous lines and the line filled in. */
 export function buildExplainPrompt(line: Line, template: string): string {
   const all = snapshotLines();
   const idx = all.findIndex((l) => l.id === line.id);
@@ -99,11 +103,7 @@ export function buildExplainPrompt(line: Line, template: string): string {
   const context = prev.length
     ? prev.map((l) => l.text).join("\n")
     : "(no previous lines available)";
-  return template
-    .split("{{context}}")
-    .join(context)
-    .split("{{sentence}}")
-    .join(line.text);
+  return explainPromptFor(template, currentLanguage(), context, line.text);
 }
 
 async function runExplain(line: Line): Promise<void> {

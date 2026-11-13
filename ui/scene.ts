@@ -41,6 +41,8 @@
 import { classify, identityKey, stabilityKey, type ObservedLine, type TextBox } from './observation.js'
 import { getBoundingBox, type Annotation } from './annotations.js'
 import { normalizeOcrResult, type OcrGroup, type OcrResult } from './ocr-result.js'
+import { isJapanese as isJapaneseLanguage } from './languages.js'
+import { hasLanguageScript, joiner } from './script-text.js'
 
 export interface SceneOptions {
   /** Consecutive identical sightings before a line counts as settled. */
@@ -93,6 +95,11 @@ export interface SceneOptions {
   inkNoisyMs: number
   /** Re-reads of one version of a line after its ink changed under an earlier reading. */
   maxRefreshes: number
+  /**
+   * The language being read (a code from languages.ts): only text in its scripts is published,
+   * and its words are joined as it joins them.
+   */
+  language: string
 }
 
 export const DEFAULT_SCENE_OPTIONS: SceneOptions = {
@@ -118,7 +125,8 @@ export const DEFAULT_SCENE_OPTIONS: SceneOptions = {
   orphanMisses: 2,
   inkStill: 8,
   inkNoisyMs: 2500,
-  maxRefreshes: 2
+  maxRefreshes: 2,
+  language: 'ja'
 }
 
 /** One content of one line. */
@@ -319,6 +327,14 @@ export function isJapanese(text: string): boolean {
 }
 
 /**
+ * Worth writing to the history: something a reader of `language` would look up, text in its
+ * scripts (script-text.ts). Japanese is `isJapanese`, as it always was.
+ */
+export function inLanguage(text: string, language = 'ja'): boolean {
+  return isJapaneseLanguage(language) ? isJapanese(text) : hasLanguageScript(text, language)
+}
+
+/**
  * The same line with a decoration added or lost: a key that is the other with at most two
  * characters more at either end. A blinking ▼ read onto the end of a line is this, and so is
  * a recogniser catching a closing bracket one time and not the next. A changed character in the
@@ -333,14 +349,15 @@ export function decoratedVariant(a: string, b: string): boolean {
 
 /**
  * The same text with only decoration added or lost: `decoratedVariant`, where what differs
- * has no Japanese in it — an arrow, a closing bracket, a full stop. A typewriter's last
- * kana arriving late is content, and is not this.
+ * has nothing in the language in it (`language`, Japanese unless given) — an arrow, a closing
+ * bracket, a full stop. A typewriter's last kana (or letter) arriving late is content, and is
+ * not this.
  */
-export function decorationOnly(a: string, b: string): boolean {
+export function decorationOnly(a: string, b: string, language = 'ja'): boolean {
   if (!decoratedVariant(a, b)) return false
   const [short, long] = a.length <= b.length ? [a, b] : [b, a]
   const extra = long.startsWith(short) ? long.slice(short.length) : long.slice(0, long.length - short.length)
-  return !isJapanese(extra)
+  return !inLanguage(extra, language)
 }
 
 function readingOrder(boxes: { box: TextBox }[], vertical: boolean): void {
@@ -872,7 +889,8 @@ export class SceneMemory {
       const vertical = annotations.some((a) => a.isVertical || a.orientation === 'vertical')
       const ordered = annotations.map((a) => ({ a, box: annotationBox(a) }))
       readingOrder(ordered, vertical)
-      const text = ordered.map(({ a }) => a.description).join('')
+      // Pieces of one reading, in a language that spaces its words, are words apart.
+      const text = ordered.reduce((joined, { a }) => joined + joiner(joined, a.description, this.options.language) + a.description, '')
       const key = stabilityKey(text)
       if (!key) continue
       const seen = [...lines]
@@ -1042,7 +1060,7 @@ export class SceneMemory {
 
   /** Everything shown, as one OCR result in the shape the overlay draws. */
   composite(): OcrResult {
-    return compose(this.shownUnits(), this.engine ?? '')
+    return compose(this.shownUnits(), this.engine ?? '', this.options.language)
   }
 
   /**
@@ -1078,14 +1096,14 @@ export class SceneMemory {
       const ids = new Set(cluster.map((t) => t.id))
       const units = shown.filter((u) => [...u.versions.keys()].some((id) => ids.has(id)))
       if (!units.length || units.some((u) => at < u.publishAfter)) continue
-      const result = compose(units, this.engine ?? '')
+      const result = compose(units, this.engine ?? '', o.language)
       const text = result.fullText
-      if (!isJapanese(text)) continue
+      if (!inLanguage(text, o.language)) continue
       const identity = identityKey(text)
       const previous = [
         ...new Set(cluster.map((t) => this.passageOf.get(t.id)).filter((p): p is PublishedPassage => !!p))
       ]
-      if (previous.some((p) => decorationOnly(p.identity, identity))) continue
+      if (previous.some((p) => decorationOnly(p.identity, identity, o.language))) continue
       // The same lines, still showing what they showed or more of it: a better reading.
       let corrects =
         previous.length === 1 &&
@@ -1133,9 +1151,9 @@ export class SceneMemory {
       if (unit.versions.size > 0 || unit.published || at < unit.publishAfter) continue
       unit.published = true
       const identity = identityKey(unit.text)
-      if (!isJapanese(unit.text) || this.published.some((key) => decoratedVariant(key, identity))) continue
+      if (!inLanguage(unit.text, o.language) || this.published.some((key) => decoratedVariant(key, identity))) continue
       this.published.push(identity)
-      out.push({ result: compose([unit], this.engine ?? ''), replaces: null })
+      out.push({ result: compose([unit], this.engine ?? '', o.language), replaces: null })
     }
     return out
   }
@@ -1165,12 +1183,12 @@ export class SceneMemory {
  * Block engines (Manga OCR) keep their bubbles as given. Line and word engines are grouped
  * again across all of them, so lines read in different recognitions still form one passage.
  */
-export function compose(units: Unit[], engine: string): OcrResult {
+export function compose(units: Unit[], engine: string, language?: string): OcrResult {
   const ordered = [...units]
   readingOrder(ordered, ordered.some((u) => u.vertical))
   const blocks = ordered.flatMap((u) => u.groups.map((g) => ({ ...g, id: `u${u.id}-${g.id}` })))
   if (blocks.length) {
-    return normalizeOcrResult({ groups: blocks, fullText: blocks.map((g) => g.text).join('\n') }, engine)
+    return normalizeOcrResult({ groups: blocks, fullText: blocks.map((g) => g.text).join('\n') }, engine, language)
   }
   const words = ordered.flatMap((u) =>
     u.annotations.map((a) => {
@@ -1179,7 +1197,7 @@ export function compose(units: Unit[], engine: string): OcrResult {
       return copy
     })
   )
-  if (!words.length) return normalizeOcrResult({ fullText: '', textAnnotations: [] }, engine)
+  if (!words.length) return normalizeOcrResult({ fullText: '', textAnnotations: [] }, engine, language)
   return normalizeOcrResult(
     {
       fullText: ordered.map((u) => u.text).join('\n'),
@@ -1188,6 +1206,7 @@ export function compose(units: Unit[], engine: string): OcrResult {
         ...words
       ]
     },
-    engine
+    engine,
+    language
   )
 }

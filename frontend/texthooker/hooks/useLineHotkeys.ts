@@ -9,12 +9,13 @@ import { useCapabilities } from "../../bridge/capabilities";
 import { getSetting, DEFAULT_VOICE_ID } from "../../bridge/settings";
 import type { AudioSettings } from "../../bridge/types";
 import { speak } from "../../bridge/tts";
+import { useLanguage } from "../../bridge/useLanguage";
 import { useRowHotkeys } from "./useRowHotkeys";
 
 /**
  * The line menu's letters (LineActionsMenu), for the line under the pointer:
  *
- *   r — read it aloud (with a Kimochi account)
+ *   r — read it aloud (with a Kimochi account, in Japanese: the voices are Japanese)
  *   c — copy what the row shows (English when translated)
  *   t — translate it, or back to the original
  *   x — explain it
@@ -26,6 +27,7 @@ import { useRowHotkeys } from "./useRowHotkeys";
 export function useLineHotkeys() {
   // Read aloud and Kimochi's explanations run on Kimochi cloud, as in the menu.
   const { cloudAccess } = useCapabilities();
+  const [language] = useLanguage();
   const onLine = (action: (line: Line) => void, notes = true) => (row: HTMLElement) => {
     const id = Number(row.dataset.lineId);
     const line = snapshotLines().find((l) => l.id === id);
@@ -33,7 +35,7 @@ export function useLineHotkeys() {
     if (line && (notes || !isNote(line))) action(line);
   };
   useRowHotkeys(".line[data-line-id]", {
-    r: cloudAccess
+    r: cloudAccess && language.code === "ja"
       ? onLine((line) => {
           void getSetting<AudioSettings>("audioSettings")
             .then((audio) => speak(line.text, audio?.voiceId || DEFAULT_VOICE_ID))

@@ -124,6 +124,12 @@ export function threadChoices(status) {
   ];
 }
 
+/**
+ * The `lang` of the game's text (`ja` in a status or choice): the language being read, which
+ * overlay.js marks on the page (language-style.ts `applyTextStyle`); `ja` for Japanese, as always.
+ */
+const learnerLang = () => globalThis.document?.documentElement?.dataset.textLang || "ja";
+
 const make = (tag, className, text) => {
   const element = document.createElement(tag);
   if (className) element.className = className;
@@ -249,7 +255,7 @@ export class ControllerCard {
     const mark = make("span", "cm-card-mark");
     mark.innerHTML = hook.busy ? SPINNER : hook.warn ? WARN : TEXT;
     const text = make("span", "cm-card-thread-text", hook.text);
-    if (hook.ja) text.setAttribute("lang", "ja");
+    if (hook.ja) text.setAttribute("lang", learnerLang());
     line.append(mark, text);
     return line;
   }
@@ -277,7 +283,7 @@ export class ControllerCard {
         if (choice.current) element.dataset.current = "";
         if (choice.live) element.dataset.live = "";
         const label = make("span", "cm-card-choice-text", choice.label);
-        if (choice.ja) label.setAttribute("lang", "ja");
+        if (choice.ja) label.setAttribute("lang", learnerLang());
         element.append(make("span", "cm-card-check", choice.current ? "●" : ""), label);
         if (choice.detail) element.append(make("small", "cm-card-detail", choice.detail));
         element.addEventListener("click", () => {

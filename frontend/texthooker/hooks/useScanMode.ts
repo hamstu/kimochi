@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createScanner, type ScanPoint } from "@ui/scan-text";
+import { currentLanguageInfo, loadLanguage } from "@texthooker/core/language";
 import { desktopPointOf } from "@ui/desktop-point";
 import { buildAnkiConfigForPopover } from "@texthooker/lib/ankiConfig";
 import { getSettings } from "@texthooker/lib/settings";
@@ -20,7 +21,10 @@ const SCAN_BLOCK_SELECTOR =
 export function useScanMode(enabled = true) {
   useEffect(() => {
     if (!enabled) return;
+    void loadLanguage();
     const scanner = createScanner({
+      // A language that spaces its words is looked up from the start of the hovered word.
+      spaces: () => currentLanguageInfo().spaces,
       region: SCAN_REGION_SELECTOR,
       block: SCAN_BLOCK_SELECTOR,
       // .line rows carry the canonical text in a data attribute; for other

@@ -50,6 +50,17 @@ export function normalized(text: string): { chars: string[]; at: number[] } {
   return { chars, at };
 }
 
+/**
+ * A hooked line's text with its line breaks taken out, for a row or a block of one line. In
+ * Japanese a break is nothing (the game wrapped a word in two: 自転 / 車). In a language that
+ * spaces its words (`spaces`) a break between two words is a space; one at the very start is
+ * nothing, as before. Matching never sees the difference: `normalized` drops whitespace on both
+ * sides.
+ */
+function unbroken(text: string, spaces = false): string {
+  return spaces ? text.replace(/^\s*\n\s*/, "").replace(/\s*\n\s*/g, " ") : text.replace(/\n/g, "");
+}
+
 /** LCS alignment: pairs (index in a, index in b), in order. */
 function align(a: string[], b: string[]): [number, number][] {
   const n = a.length;
@@ -177,7 +188,7 @@ function candidates(groups: OcrGroup[]): OcrGroup[][] {
  * Splits `hooked` across lines whose OCR texts are `ocrLines`, cutting where OCR's line breaks
  * fall in the alignment. Punctuation between two lines stays with the earlier one.
  */
-export function splitAcrossLines(hooked: string, ocrLines: string[]): string[] {
+export function splitAcrossLines(hooked: string, ocrLines: string[], spaces = false): string[] {
   if (ocrLines.length <= 1) return [hooked];
   // The game's own line breaks, when there are as many lines as OCR saw, are where it wrapped.
   const own = hooked.split("\n");
@@ -198,20 +209,27 @@ export function splitAcrossLines(hooked: string, ocrLines: string[]): string[] {
   const offset = (normIndex: number): number =>
     normIndex >= target.at.length ? hooked.length : target.at[normIndex];
   const out: string[] = [];
+  // In a language that spaces its words, the space where a line was cut is between two words,
+  // not an indent: the next line starts on its word.
+  const row = (piece: string): string =>
+    spaces && out.length ? unbroken(piece, spaces).replace(/^\s+/, "") : unbroken(piece, spaces);
   let from = 0;
   for (const cut of cuts) {
     let to = Math.max(from, offset(cut));
     // A line ends on its text: an indent (or a space) starts the next one.
     while (to > from && /\s/.test(hooked[to - 1])) to--;
-    out.push(hooked.slice(from, to).replace(/\n/g, ""));
+    out.push(row(hooked.slice(from, to)));
     from = to;
   }
-  out.push(hooked.slice(from).replace(/\n/g, ""));
+  out.push(row(hooked.slice(from)));
   return out;
 }
 
-/** Places `hooked` on the OCR groups: see the module comment. */
-export function placeHookedLine(groups: OcrGroup[], hooked: string): HookPlacement {
+/**
+ * Places `hooked` on the OCR groups: see the module comment. `spaces`: the language puts spaces
+ * between words, so the hooked line's breaks become spaces in the placed text (`unbroken`).
+ */
+export function placeHookedLine(groups: OcrGroup[], hooked: string, spaces = false): HookPlacement {
   const target = normalized(hooked).chars;
   const none: HookPlacement = { groups, matched: null, recall: 0, precision: 0 };
   if (target.length < 2) return none;
@@ -237,7 +255,7 @@ export function placeHookedLine(groups: OcrGroup[], hooked: string): HookPlaceme
   const placed: OcrGroup = {
     ...run[0],
     id,
-    text: hooked.replace(/\n/g, ""),
+    text: unbroken(hooked, spaces),
     bbox: [
       Math.min(...boxes.map((b) => b[0])),
       Math.min(...boxes.map((b) => b[1])),
@@ -245,7 +263,7 @@ export function placeHookedLine(groups: OcrGroup[], hooked: string): HookPlaceme
       Math.max(...boxes.map((b) => b[3])),
     ],
     linePolygons: polygons.length === lines.length ? polygons : run[0].linePolygons,
-    lines: polygons.length === lines.length ? splitAcrossLines(hooked, lines) : undefined,
+    lines: polygons.length === lines.length ? splitAcrossLines(hooked, lines, spaces) : undefined,
     // OCR's word boxes belong to OCR's text, not the hooked text.
     lineSegments: undefined,
     inferred: undefined,
@@ -572,7 +590,14 @@ export function hookAnnotations(
     nameAt = null,
     apart = false,
     speakers = true,
-  }: { nameAt?: [number, number, number, number] | null; apart?: boolean; speakers?: boolean } = {},
+    spaces = false,
+  }: {
+    nameAt?: [number, number, number, number] | null;
+    apart?: boolean;
+    speakers?: boolean;
+    /** The language puts spaces between words (`placeHookedLine`). */
+    spaces?: boolean;
+  } = {},
 ): HookedAnnotations {
   const groups = annotationGroups(annotations);
   const speech = speakers ? splitSpeaker(hooked) : null;
@@ -595,7 +620,7 @@ export function hookAnnotations(
     return { annotations: [], box: null, recall: 0, precision: 0, shown, names, nameBox: null };
   }
   if (speech) {
-    const body = placeHookedLine(groups, speech.body);
+    const body = placeHookedLine(groups, speech.body, spaces);
     const group = body.groups.find((g) => g.id === body.matched);
     if (group?.bbox && body.recall >= 0.9 && body.precision >= 0.8) {
       const name = findName(groups, speech.name, group.bbox, group.linePolygons?.length ?? 1, nameAt, speech.after);
@@ -617,7 +642,7 @@ export function hookAnnotations(
   }
   // A name sent after the quote is never part of the card, wherever the quote is.
   const line = speech?.after ? speech.body : hooked;
-  const placement = placeHookedLine(groups, line);
+  const placement = placeHookedLine(groups, line, spaces);
   const group = placement.groups.find((g) => g.id === placement.matched);
   const rest = { recall: placement.recall, precision: placement.precision, shown: line, names: [], nameBox: null };
   if (!group?.bbox) return { annotations: [], box: null, ...rest };

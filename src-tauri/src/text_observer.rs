@@ -6,7 +6,7 @@
 //! selected, that same engine watches; with an online one, the best local engine here. Each
 //! `capture_frame` names it, and [`Observers`] builds that observer on first use:
 //!
-//!  - `livetext` (macOS): Apple Live Text, `kimochi_capture::platform_observer()`.
+//!  - `livetext` (macOS): Apple Live Text, `kimochi_capture::text::LiveTextObserver`, in the language being read.
 //!  - `ppocr`: PaddleOCR, sharing the scan engine (`pp_ocr::read_lines`).
 //!  - `meikiocr`: MeikiOCR, with an engine of its own (below).
 //!  - `oneocr` (Windows): the Snipping Tool engine, through its worker process.
@@ -73,6 +73,22 @@ use std::{
 
 /// The watcher used when a caller names none: what each OS used before watchers were chosen.
 pub const DEFAULT_ENGINE: &str = if cfg!(target_os = "macos") { "livetext" } else { "meikiocr" };
+
+/// The watcher for a read in `language`: the one the caller asked for, else [`DEFAULT_ENGINE`],
+/// as long as it reads the language; otherwise the first of PaddleOCR, OneOCR (Windows) and
+/// Screen AI that does, so a Japanese-only engine never watches for another language. Japanese
+/// is read by every engine, so for it this is the request or the default, as before.
+pub fn engine_for(requested: Option<&str>, language: &str) -> &'static str {
+    let wanted = requested.and_then(known).unwrap_or(DEFAULT_ENGINE);
+    if crate::language::engine_supports(wanted, language) {
+        return wanted;
+    }
+    let os = if cfg!(target_os = "windows") { "oneocr" } else { DEFAULT_ENGINE };
+    [os, "ppocr", "screenai"]
+        .into_iter()
+        .find(|engine| crate::language::engine_supports(engine, language))
+        .unwrap_or("screenai")
+}
 
 /// The observer automatic scanning watches with, built on first use and kept until another
 /// is selected.
@@ -157,7 +173,14 @@ fn build(app: &tauri::AppHandle, engine: &'static str) -> Box<dyn TextObserver> 
     };
     let inner: Box<dyn TextObserver> = match engine {
         #[cfg(target_os = "macos")]
-        "livetext" => kimochi_capture::platform_observer(),
+        "livetext" => {
+            // In the language being read; rebuilt when it changes (`main.rs`, `language`).
+            let mut observer = kimochi_capture::text::LiveTextObserver::new();
+            if let Some(service) = tauri::Manager::try_state::<crate::state::Shared>(app) {
+                observer.set_locales(crate::language::live_text_locales(crate::language::current(&service.settings)));
+            }
+            Box::new(observer)
+        }
         "meikiocr" => match crate::meiki_ocr::runtime_available(app) {
             Ok(()) => Box::new(EngineObserver::meiki(app.clone())),
             Err(reason) => unsupported(unavailable_detail("MeikiOCR", &reason)),
@@ -1017,6 +1040,24 @@ impl<I, O> Drop for LatestWorker<I, O> {
         // finishes first and its result is discarded with the channel.
         self.channel.lock().closed = true;
         self.channel.changed.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod watcher_language_tests {
+    use super::engine_for;
+
+    #[test]
+    fn a_japanese_only_watcher_never_watches_another_language() {
+        assert_eq!(engine_for(Some("meikiocr"), "ja"), "meikiocr");
+        assert_eq!(engine_for(None, "ja"), super::DEFAULT_ENGINE);
+        assert_eq!(engine_for(Some("ppocr"), "en"), "ppocr");
+        for requested in [Some("meikiocr"), Some("vocr"), None] {
+            let engine = engine_for(requested, "ko");
+            assert!(crate::language::engine_supports(engine, "ko"), "{engine}");
+            let engine = engine_for(requested, "hi");
+            assert!(crate::language::engine_supports(engine, "hi"), "{engine}");
+        }
     }
 }
 

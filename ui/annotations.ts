@@ -15,6 +15,8 @@
  */
 
 import { dropsText, type JapaneseFilter } from './japanese-text.js'
+import { languageOf } from './languages.js'
+import { joiner } from './script-text.js'
 
 export interface Vertex {
   x?: number
@@ -76,6 +78,12 @@ export interface GroupingSettings {
   proximityThreshold: number
   filterSmallText: boolean
   filterSmallTextThreshold: number
+  /**
+   * The language being read (the top-level `language` setting, folded in by the overlay's
+   * `setting`); absent means Japanese. It decides whether the small-text filter applies (only to
+   * languages with furigana) and what goes between words (`joiner` in script-text.ts).
+   */
+  language?: string
 }
 
 export const DEFAULT_GROUPING: GroupingSettings = {
@@ -211,12 +219,13 @@ export function filterSmallTextAnnotations(
 export function buildFilteredText(
   annotations: Annotation[],
   filterEnabled: boolean,
-  threshold: number
+  threshold: number,
+  language?: string
 ): string {
   if (annotations.length === 0) return ''
 
   const words = wordAnnotations(annotations)
-  const filtered = filterEnabled ? filterSmallTextAnnotations(words, threshold) : words
+  const filtered = filterEnabled && languageOf(language).ruby ? filterSmallTextAnnotations(words, threshold) : words
   if (filtered.length === 0) return ''
 
   const boxed = filtered.map((annotation) => ({ annotation, box: getBoundingBox(annotation) }))
@@ -230,11 +239,15 @@ export function buildFilteredText(
       : a.box.minY - b.box.minY
   )
 
+  // Words on one line are apart however close: a language that spaces its words gets a space
+  // between every two (`joiner`), where in Japanese only a wide gap is one.
+  const spaced = languageOf(language).spaces
   let result = ''
   let previous: BoundingBox | null = null
   for (const { annotation, box } of sorted) {
     if (previous !== null) {
       if (Math.abs(box.minY - previous.minY) > lineTolerance) result += '\n'
+      else if (spaced) result += joiner(result, annotation.description, language)
       else if (box.minX - previous.maxX > spaceThreshold) result += ' '
     }
     result += annotation.description
@@ -294,7 +307,8 @@ function passagesOf(lines: Annotation[], vertical: boolean): Annotation[][] {
 /** Union-find proximity clustering, so a paragraph becomes one readable card. */
 export function groupTextAnnotations(
   annotations: Annotation[],
-  proximityThreshold: number
+  proximityThreshold: number,
+  language?: string
 ): TextGroup[] {
   if (annotations.length === 0) return []
 
@@ -371,6 +385,9 @@ export function groupTextAnnotations(
         if (box.centerY - lastCenterY > box.height * 0.5) {
           text += '\n'
           lastMaxX = -1
+        } else if (lastMaxX !== -1 && languageOf(language).spaces) {
+          // Two pieces of one line are two words in a language that spaces its words.
+          text += joiner(text, annotation.description, language)
         } else if (lastMaxX !== -1) {
           // A gap wider than ~1.5 characters is a word boundary, not kerning.
           const avgCharWidth = box.width / annotation.description.length
@@ -415,7 +432,8 @@ export function visibleAnnotations(
 }
 
 function sizedAnnotations(words: Annotation[], grouping: GroupingSettings): Annotation[] {
-  if (!grouping.filterSmallText || words.length <= 1) return words
+  // Small text is furigana only in a language that has it; elsewhere it is short words.
+  if (!grouping.filterSmallText || words.length <= 1 || !languageOf(grouping.language).ruby) return words
   if (words.some(a=>a.granularity==='block')) return words
   return filterSmallTextAnnotations(words, grouping.filterSmallTextThreshold)
 }

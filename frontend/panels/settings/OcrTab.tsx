@@ -20,6 +20,7 @@ import { DEFAULT_AUTO_OCR_SETTINGS } from '../../../ui/autoscan'
 import {
   resolveWatcher,
   watcherChoiceApplies,
+  watcherOffered,
   WATCHER_ENGINES,
   type Watcher,
   type WatcherChoice
@@ -31,6 +32,7 @@ import type {
   TextOverlayGroupingSettings
 } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
+import { useLanguage } from '../../bridge/useLanguage'
 import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
@@ -106,11 +108,13 @@ export function OcrTab(): ReactNode {
   const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
   const engines = useCapabilities().ocrEngines
   const watcherChoice: WatcherChoice = autoOCRSettings.watcher ?? 'auto'
-  const watcher = resolveWatcher(ocrMode, engines, watcherChoice)
-  const best = resolveWatcher(ocrMode, engines, 'auto')
+  // Watchers that cannot read the language being learned are passed over (ui/watcher.ts).
+  const [language] = useLanguage()
+  const watcher = resolveWatcher(ocrMode, engines, watcherChoice, language.code)
+  const best = resolveWatcher(ocrMode, engines, 'auto', language.code)
   const watcherOptions = [
     { value: 'auto', label: 'Automatic', detail: watcherName(best) },
-    ...WATCHER_ENGINES.filter((engine) => engines[engine]?.available).map((engine) => ({
+    ...WATCHER_ENGINES.filter((engine) => watcherOffered(engines, engine, language.code)).map((engine) => ({
       value: engine,
       label: ocrModeInfo(engine).name
     })),
@@ -235,7 +239,7 @@ export function OcrTab(): ReactNode {
         {advancedOpen && (
           <SettingsSubgroup>
             <div id={advancedPanel}>
-              {watcherChoiceApplies(ocrMode, engines) && (
+              {watcherChoiceApplies(ocrMode, engines, language.code) && (
                 <SettingsRow
                   label="Watch the screen with"
                   description="The local engine that notices new text before the selected engine reads it. Automatic picks the best one."

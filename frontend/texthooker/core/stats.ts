@@ -141,11 +141,13 @@ function armAfkTimer() {
     afkTimer.unref();
 }
 
-/** Called by useIngest for every successful append. */
-export function recordLine(textLen: number) {
+/** Called by useIngest for every successful append. `words`: its words, counted only in a
+    language that spaces them (wordCount.ts); otherwise undefined and `totalWords` is untouched. */
+export function recordLine(textLen: number, words?: number) {
   const now = Date.now();
   noteActivity(now);
   current.totalChars += textLen;
+  if (words !== undefined) current.totalWords = (current.totalWords ?? 0) + words;
   current.totalLines += 1;
   current.lastUpdateTs = now;
   armAfkTimer();
@@ -153,12 +155,15 @@ export function recordLine(textLen: number) {
   scheduleSave();
 }
 
-/** Called when a line gets start-merged (replacing the previous line). */
-export function recordCharDelta(delta: number) {
-  if (delta === 0) return;
+/** Called when a line gets start-merged (replacing the previous line). `wordDelta` as
+    recordLine's `words`. */
+export function recordCharDelta(delta: number, wordDelta?: number) {
+  if (delta === 0 && !wordDelta) return;
   const now = Date.now();
   noteActivity(now);
   current.totalChars = Math.max(0, current.totalChars + delta);
+  if (wordDelta !== undefined)
+    current.totalWords = Math.max(0, (current.totalWords ?? 0) + wordDelta);
   current.lastUpdateTs = now;
   armAfkTimer();
   emit();

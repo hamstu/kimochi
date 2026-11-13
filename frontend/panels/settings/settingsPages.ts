@@ -10,6 +10,7 @@ type PageModule = Promise<{ default: ComponentType }>
 
 const LOADERS: Record<SettingsTabName, () => PageModule> = {
   general: () => import('./GeneralTab').then((m) => ({ default: m.GeneralTab })),
+  language: () => import('./LanguageTab').then((m) => ({ default: m.LanguageTab })),
   sources: () => import('./SourcesTab').then((m) => ({ default: m.SourcesTab })),
   browser: () => import('./BrowserTab').then((m) => ({ default: m.BrowserTab })),
   texthooker: () => import('./TextHookerTab').then((m) => ({ default: m.TextHookerTab })),

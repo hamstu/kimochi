@@ -81,6 +81,8 @@ const RULE_DESCRIPTIONS: Record<string, string> = {
  */
 export function parseInflectionChains(
   raw: string | undefined,
+  /** The tooltips explain Japanese rules: other languages' steps get none. */
+  japanese = true,
 ): InflectionStep[][] {
   if (!raw) return [];
   const trimmed = raw.trim();
@@ -106,7 +108,7 @@ export function parseInflectionChains(
         .filter(Boolean)
         .map((rule) => ({
           rule,
-          description: RULE_DESCRIPTIONS[rule],
+          description: japanese ? RULE_DESCRIPTIONS[rule] : undefined,
         })),
     )
     .filter((c) => c.length > 0);

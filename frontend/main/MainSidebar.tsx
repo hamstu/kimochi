@@ -10,17 +10,18 @@
  * with a way back. Resizable from its right edge.
  */
 import { useEffect, useState, type JSX } from 'react'
-import { ArrowLeft, Settings } from 'lucide-react'
-import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
+import { ArrowLeft, Globe, Settings } from 'lucide-react'
+import { Badge, ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
+import { useLanguage } from '../bridge/useLanguage'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../bridge/settings'
 import { useHookStatus } from '../bridge/textHook'
 import { useHookPlacement } from './hookPlacement'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { useCapabilities } from '../bridge/capabilities'
 import { DictionaryEngineIcon, DictionaryRunsIcon, OcrEngineIcon, OcrRunsIcon } from '../components/EngineIcon'
-import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
+import { DICTIONARY_ENGINES, dictionaryEngineLanguageReason, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
@@ -67,6 +68,7 @@ function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgre
 export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
+  const [language] = useLanguage()
   const model = useOcrModelState(ocrMode)
   // Only the selected engine's model is followed; a pick still being confirmed shows plainly.
   const busy = useSteadyProgress(shown === ocrMode ? model.busy : null, ocrMode)
@@ -84,7 +86,7 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
-            {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode)).map((mode) => (
+            {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode, language.code)).map((mode) => (
               <SelectItem
                 key={mode}
                 value={mode}
@@ -178,11 +180,20 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
-            {DICTIONARY_LIST.map((engine) => (
-              <SelectItem key={engine} value={engine} description={DICTIONARY_ENGINES[engine].tagline}>
-                <DictionaryLabel engine={engine} />
-              </SelectItem>
-            ))}
+            {DICTIONARY_LIST.map((engine) => {
+              // 10ten and Hachidori read Japanese only: listed, disabled, with the reason.
+              const reason = dictionaryEngineLanguageReason(engine, dictionary.language.code)
+              return (
+                <SelectItem
+                  key={engine}
+                  value={engine}
+                  disabled={reason !== null}
+                  description={reason ?? DICTIONARY_ENGINES[engine].tagline}
+                >
+                  <DictionaryLabel engine={engine} />
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </SelectRoot>
         {notice && (
@@ -262,6 +273,7 @@ export function MainSidebar({
   const { os } = useCapabilities()
   // While an account is in use, its switcher takes Settings' place in the foot.
   const signedIn = activeAccount(useAccount()) !== null
+  const [language] = useLanguage()
   const handle = (
     <ResizeHandle
       width={live ?? width}
@@ -326,11 +338,27 @@ export function MainSidebar({
       <UpdateNotice />
       <div className="sb-footer">
         {!mini && signedIn ? (
-          <AccountBar onOpen={() => onSettingsTab('account')} onSettings={() => onSettingsTab(settingsTab)} />
+          <AccountBar
+            onOpen={() => onSettingsTab('account')}
+            onLanguage={() => onSettingsTab('language')}
+            onSettings={() => onSettingsTab(settingsTab)}
+          />
         ) : (
-          <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
-            Settings
-          </Row>
+          // No account in use (and mini mode): Settings, and the language tucked in at the right.
+          <div className="sb-foot-split">
+            <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
+              Settings
+            </Row>
+            <Row
+              className="sb-foot-language"
+              icon={<Globe />}
+              onClick={() => onSettingsTab('language')}
+              aria-label={`Language: ${language.name}`}
+              title={`Language: ${language.name}`}
+            >
+              <Badge>{language.code.split('-')[0].toUpperCase()}</Badge>
+            </Row>
+          </div>
         )}
       </div>
       {!mini && handle}

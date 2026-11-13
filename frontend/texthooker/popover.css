@@ -111,7 +111,7 @@ body,
   color: var(--k-text-2);
 }
 .popover-status-term {
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   color: var(--k-text);
 }
 .popover-empty {
@@ -228,7 +228,7 @@ body,
 .popover-pitch li { margin: 0; }
 
 .popover-glossary {
-  font-family: "Figtree Variable", var(--k-font-jp);
+  font-family: "Figtree Variable", var(--k-font-text);
   font-size: var(--k-text-md);
   line-height: var(--k-leading-md);
   color: var(--k-text);

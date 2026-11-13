@@ -218,6 +218,22 @@ html[data-mini] .main-help { display: none; }
 .sb-footer > .k-row {
   flex: 1;
 }
+/* Without an account in use the foot is Settings, with the language being learned tucked in at
+   its right behind a line: a globe and the language's code, which opens Settings → Language. */
+.sb-foot-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.sb-foot-split > .k-row {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.sb-foot-split > .sb-foot-language {
+  flex: none;
+  width: auto;
+  border-inline-start: 1px solid var(--k-line);
+}
 /* The Kimochi account switcher, in Settings' place in the foot while an account is in use: one
    line, avatar and name, the foot's height exactly. The avatar is a little larger than an icon
    and centred on the rows' icon column; the name keeps a little more room from it. */

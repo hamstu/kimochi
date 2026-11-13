@@ -30,7 +30,7 @@ import {
   Spinner,
 } from "@kit";
 import {
-  bestJapaneseTitle,
+  bestTitle,
   getVndbCharactersForVn,
   romanizedTitle,
   searchVndbVns,
@@ -41,6 +41,7 @@ import {
   importVndbCharacter,
   type ImportResult,
 } from "@texthooker/lib/vndbImport";
+import { useLanguage } from "../../bridge/useLanguage";
 import "../notebook.css";
 
 interface Props {
@@ -52,6 +53,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 type Stage = "pick-vn" | "confirm" | "done";
 
 export function VndbImportDialog({ open, onOpenChange }: Props) {
+  const [language] = useLanguage();
   const [stage, setStage] = useState<Stage>("pick-vn");
   const [query, setQuery] = useState("");
   const [vnResults, setVnResults] = useState<VndbVn[]>([]);
@@ -157,7 +159,7 @@ export function VndbImportDialog({ open, onOpenChange }: Props) {
     const out: ImportResult[] = [];
     for (let i = 0; i < chars.length; i++) {
       try {
-        out.push(await importVndbCharacter(chars[i]));
+        out.push(await importVndbCharacter(chars[i], { japanese: language.code === "ja" }));
       } catch (err) {
         console.warn("[vndb import] failed for", chars[i].id, err);
       }
@@ -345,6 +347,7 @@ function PickVnStage({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const trimmed = query.trim();
+  const [language] = useLanguage();
 
   return (
     <>
@@ -369,7 +372,9 @@ function PickVnStage({
               onPick(results[0]);
             }
           }}
-          placeholder="Title in English or 日本語"
+          placeholder={
+            language.code === "en" ? "Title" : `Title in English or ${language.endonym}`
+          }
           aria-label="Search VNDB"
         />
         {query ? (
@@ -424,7 +429,9 @@ function PickVnStage({
             icon={<SearchX />}
             title={`No results for “${trimmed}”`}
           >
-            Try the original Japanese title, or fewer words.
+            {language.code === "ja"
+              ? "Try the original Japanese title, or fewer words."
+              : "Try the original title, or fewer words."}
           </EmptyState>
         ) : !searchErr ? (
           <EmptyState
@@ -441,7 +448,8 @@ function PickVnStage({
 }
 
 function VnRow({ vn, onPick }: { vn: VndbVn; onPick: () => void }) {
-  const primary = bestJapaneseTitle(vn);
+  const [language] = useLanguage();
+  const primary = bestTitle(vn, language.code);
   const secondary = primary !== romanizedTitle(vn) ? romanizedTitle(vn) : null;
 
   return (
@@ -489,7 +497,8 @@ function ConfirmStage({
     return c;
   }, [chars, vn.id]);
 
-  const primaryTitle = bestJapaneseTitle(vn);
+  const [language] = useLanguage();
+  const primaryTitle = bestTitle(vn, language.code);
   const secondaryTitle =
     primaryTitle !== romanizedTitle(vn) ? romanizedTitle(vn) : null;
 

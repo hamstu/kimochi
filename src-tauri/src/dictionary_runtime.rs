@@ -35,6 +35,27 @@ pub fn update(value: &mut Value) -> bool {
     true
 }
 
+fn profiles_state() -> &'static Mutex<Value> {
+    static PROFILES: OnceLock<Mutex<Value>> = OnceLock::new();
+    PROFILES.get_or_init(|| Mutex::new(Value::Null))
+}
+
+/// Keeps a `yomitan-profiles` report (the overlay publishes Built-in Yomitan's profiles and the
+/// active account's link, ui/yomitan-profiles.ts). Returns whether it was one, so the caller
+/// announces it (`yomitan-profiles`).
+pub fn update_profiles(value: &Value) -> bool {
+    if value.get("check").and_then(Value::as_str) != Some("yomitan-profiles") {
+        return false;
+    }
+    *profiles_state().lock().unwrap_or_else(|p| p.into_inner()) = value.clone();
+    true
+}
+
+/// The last `yomitan-profiles` report, or null before Yomitan has run.
+pub fn profiles() -> Value {
+    profiles_state().lock().unwrap_or_else(|p| p.into_inner()).clone()
+}
+
 pub fn status(engine: &str) -> Value {
     states().lock().unwrap_or_else(|p| p.into_inner()).get(engine).cloned()
         .unwrap_or_else(|| json!({"engine": engine, "phase": "starting", "settingsReady": false, "message": "Starting the dictionary…", "seq": 0}))
@@ -57,5 +78,13 @@ mod tests {
         let mut other = json!({"check": "something-else", "engine": "yomitan"});
         assert!(!update(&mut other));
         assert!(other.get("seq").is_none());
+    }
+
+    #[test]
+    fn the_last_profiles_report_is_kept() {
+        assert!(!update_profiles(&json!({"check": "dictionary-readiness"})));
+        let report = json!({"check": "yomitan-profiles", "account": "local", "profiles": [{"name": "Default", "language": "ja"}], "current": 0});
+        assert!(update_profiles(&report));
+        assert_eq!(profiles(), report);
     }
 }

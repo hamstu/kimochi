@@ -43,7 +43,7 @@ export default function IntroStep({ next }: { next: string }): JSX.Element {
       <h1 id="intro-title" className={style.wordmark}>
         Kimochi
       </h1>
-      <p className={style.tagline}>Read and play in Japanese.</p>
+      <p className={style.tagline}>Read and play in the language you&apos;re learning.</p>
       <p className={style.introLede}>
         Kimochi reads the text on your screen and shows the meaning of any word you hover.
       </p>

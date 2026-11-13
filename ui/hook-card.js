@@ -150,13 +150,17 @@ export function createHookCard(parent, hooks) {
    * newline there split a word the game broke across two lines (自転 / 車 looked up as 自転), and
    * Yomitan's Layout-aware scan reads a `<br>` or a block as a newline too. Inline rows with a
    * generated break are neither, so a lookup reads on into the next row, whatever the engine.
+   * In a language that spaces its words (`spaced`) the last word of a row and the first of the
+   * next are two words, so a row but the last ends in a space (unless it, or the next, has one).
    */
-  const setText = (value) => {
+  const setText = (value, spaced = false) => {
     shown = value
+    const lines = value.split(/\r?\n/)
     text.replaceChildren(
-      ...value.split(/\r?\n/).map((line) => {
+      ...lines.map((line, index) => {
         const row = make('span', 'hook-card-row')
-        row.textContent = line
+        const next = lines[index + 1]
+        row.textContent = spaced && next && line && !/\s$/u.test(line) && !/^\s/u.test(next) ? `${line} ` : line
         return row
       })
     )
@@ -280,13 +284,15 @@ export function createHookCard(parent, hooks) {
       card.style.setProperty('--ocr-surface-bottom', next.surface.bottom)
     } else delete card.dataset.surface
     card.style.setProperty('--hook-card-opacity', String(next.opacity ?? 1))
+    // The hooked line is in the language being read (its font: `--kimochi-text-font`, hook-card.css).
+    if (next.lang && text.lang !== next.lang) text.lang = next.lang
     for (const option of opacities.children)
       option.toggleAttribute('data-current', Number(option.dataset.opacity) === (next.opacity ?? 1))
     const previous = shown
     if (previous !== next.text) {
       // Laid out as it was, before the new text replaces it: the old text's copy fades from here.
       if (wasShown && previous) crossfade(ghostOf(), sameWords(previous, next.text))
-      setText(next.text)
+      setText(next.text, Boolean(next.spaced))
     }
     text.style.lineHeight = String(next.lineHeight ?? 1.5)
     if (drag || steered) return

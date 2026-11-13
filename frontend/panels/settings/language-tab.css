@@ -1,0 +1,20 @@
+/* Settings → Language (LanguageTab.tsx). */
+.language-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  margin: 0;
+  padding-left: var(--k-space-4);
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.language-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.language-engine-hint {
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}

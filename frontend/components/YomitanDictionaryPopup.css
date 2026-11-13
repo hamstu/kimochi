@@ -17,7 +17,7 @@
   margin-bottom: var(--k-space-3);
   padding-bottom: var(--k-space-2);
   border-bottom: 1px solid var(--k-line);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
 }
 .ydp-term { font-size: 1.5rem; line-height: 1.25; font-weight: var(--k-weight-semibold); }
 .ydp-reading { font-size: var(--k-text-lg); color: var(--k-text-2); }
@@ -31,7 +31,7 @@
   margin-top: var(--k-space-2);
   padding: var(--k-space-1) var(--k-space-2);
   border-left: 2px solid var(--k-accent);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
   font-size: var(--k-text-lg);
 }
 .ydp-example-b {

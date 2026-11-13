@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@kit";
 import type { NotebookEntry } from "@texthooker/lib/types";
 import { KIND_META, useImageUrl } from "./notebookEntry";
+import { useTextLang } from "../../bridge/useTextLang";
 
 /** First image, else a monogram (characters) or the kind icon (places, things). */
 export function EntryAvatar({
@@ -11,6 +12,7 @@ export function EntryAvatar({
   entry: NotebookEntry;
   large?: boolean;
 }): ReactNode {
+  const textLang = useTextLang();
   const url = useImageUrl(entry.images[0]);
   const monogram =
     entry.kind === "person"
@@ -21,7 +23,7 @@ export function EntryAvatar({
       aria-hidden
       data-kind={url ? undefined : entry.kind}
       className={cn("nb-avatar", large && "nb-avatar-lg")}
-      lang="ja"
+      lang={textLang}
     >
       {url ? (
         <img src={url} alt="" draggable={false} />

@@ -5,6 +5,9 @@
  * border (`hidden`), it fades away and leaves the plain window.
  */
 import type { JSX } from 'react'
+import { sampleFor } from '@ui/language-samples'
+import { textLang, textStyle } from '@ui/language-style'
+import { useLanguage } from '../bridge/useLanguage'
 import style from './CaptureBorderArt.module.css'
 
 const W = 520
@@ -15,7 +18,51 @@ const TITLE = 30
 /** The game's picture, under the title bar. */
 const GAME = { x: WIN.x, y: WIN.y + TITLE, w: WIN.w, h: WIN.h - TITLE }
 const LINE = 'この先は危ないぞ。'
+const NAME = 'ゆうしゃ'
 const EM = 16
+
+/**
+ * The game's line in the language being read: Japanese's own; another language's sample words
+ * (ui/language-samples.ts); or, for one with none, null, and the line is drawn as glyph blocks.
+ */
+function gameLine(code: string): string | null {
+  if (code === 'ja') return LINE
+  const sample = sampleFor(code)
+  if (!sample) return null
+  return sample.preview.join(textStyle(code).spaces ? ' ' : '')
+}
+
+/**
+ * Blocks in place of text (GlyphBlocks.tsx, drawn in SVG): square cells for an unspaced script,
+ * word-long bars for a spaced one, starting at `x` with their baseline at `y`.
+ */
+function blocks(
+  code: string,
+  x: number,
+  y: number,
+  size: number,
+  words: readonly number[],
+  className: string,
+  middle = false
+): JSX.Element {
+  const word = textStyle(code).spaces && !textStyle(code).fullWidth
+  const shapes: JSX.Element[] = []
+  const width = word
+    ? words.reduce((sum, length) => sum + length * size * 0.5, 0) + (words.length - 1) * size * 0.35
+    : words.reduce((sum, length) => sum + length, 0) * size * 0.92 - size * 0.14
+  let at = middle ? x - width / 2 : x
+  words.forEach((length, w) => {
+    if (word) {
+      shapes.push(<rect key={w} className={className} x={at} y={y - size * 0.56} width={length * size * 0.5} height={size * 0.48} rx={size * 0.24} />)
+      at += length * size * 0.5 + size * 0.35
+    } else
+      for (let c = 0; c < length; c++) {
+        shapes.push(<rect key={`${w}-${c}`} className={className} x={at} y={y - size * 0.8} width={size * 0.78} height={size * 0.78} rx={size * 0.2} />)
+        at += size * 0.92
+      }
+  })
+  return <g aria-hidden>{shapes}</g>
+}
 
 /** Round only the bottom corners: the game sits under the title bar. */
 function bottomRounded(x: number, y: number, w: number, h: number, r: number): string {
@@ -23,6 +70,9 @@ function bottomRounded(x: number, y: number, w: number, h: number, r: number): s
 }
 
 export default function CaptureBorderArt({ hidden }: { hidden: boolean }): JSX.Element {
+  const [language] = useLanguage()
+  const line = gameLine(language.code)
+  const lang = language.code === 'ja' ? undefined : textLang(language.code)
   const right = WIN.x + WIN.w
   const titleMid = WIN.y + TITLE / 2
   const box = { x: GAME.x + 22, y: GAME.y + GAME.h - 74, w: GAME.w - 44, h: 56 }
@@ -78,12 +128,20 @@ export default function CaptureBorderArt({ hidden }: { hidden: boolean }): JSX.E
 
         <rect className={style.box} x={box.x + 0.5} y={box.y + 0.5} width={box.w} height={box.h} rx={6} />
         <rect className={style.tag} x={box.x + 12.5} y={box.y - 9.5} width={58} height={18} rx={4} />
-        <text className={style.name} x={box.x + 41.5} y={box.y + 4} fontSize={10} textAnchor="middle">
-          ゆうしゃ
-        </text>
-        <text className={style.ink} x={box.x + 18} y={box.y + 32} fontSize={EM}>
-          {LINE}
-        </text>
+        {language.code === 'ja' ? (
+          <text className={style.name} x={box.x + 41.5} y={box.y + 4} fontSize={10} textAnchor="middle">
+            {NAME}
+          </text>
+        ) : (
+          blocks(language.code, box.x + 41.5, box.y + 4, 9, [4], style.nameBlocks, true)
+        )}
+        {line ? (
+          <text className={style.ink} x={box.x + 18} y={box.y + 32} fontSize={EM} lang={lang}>
+            {line}
+          </text>
+        ) : (
+          blocks(language.code, box.x + 18, box.y + 32, EM, [3, 6, 2, 5], style.blocks)
+        )}
         <path className={style.more} d={`M${box.x + box.w - 22} ${box.y + 40}h8l-4 5Z`} />
       </g>
       <path className={style.rule} d={`M${WIN.x} ${GAME.y + 0.5}H${right}`} />

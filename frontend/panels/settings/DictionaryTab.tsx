@@ -67,6 +67,7 @@ export function DictionaryTab(): ReactNode {
     setYomitanSettings,
     apiUrl,
     active,
+    chosen,
     pending,
     asking,
     dismissAsking,
@@ -147,6 +148,7 @@ export function DictionaryTab(): ReactNode {
         <YomitanApiSetupDialog open={setupOpen} onOpenChange={setSetupOpen} url={apiUrl} />
         <DictionaryChooser
           active={active}
+          chosen={chosen}
           pending={pending}
           onChoose={(engine) => void choose(engine)}
           renderSettings={renderSettings}

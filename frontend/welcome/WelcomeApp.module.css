@@ -504,3 +504,8 @@
     animation: none !important;
   }
 }
+
+/* ------------------------------------------------------------------ language */
+.languagePicker {
+  max-width: 34rem;
+}

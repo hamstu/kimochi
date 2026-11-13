@@ -42,6 +42,7 @@ process.on('exit', () => {
 
 /** Agreed with kimochi-native (COMMANDS.md). */
 const AGREED = {
+  language: 'ja',
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   scannedTextFontSize: 14,
@@ -103,6 +104,11 @@ test('new installs default to Google Lens in the Rust store too', async () => {
   // The Rust store merges its own copy of the defaults; it must name the same engine.
   const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
   assert.match(rust, /"ocrMode": "googlelens"/)
+})
+
+test('the language is Japanese unless chosen, in the Rust store too', async () => {
+  const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
+  assert.match(rust, /"language": "ja"/)
 })
 
 test('serverSettings is an object, never a flat scalar', () => {

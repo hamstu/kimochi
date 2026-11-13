@@ -9,6 +9,8 @@ use std::{path::PathBuf, sync::Mutex};
 pub fn defaults() -> Value {
     json!({
         "hasCompletedOnboarding": false,
+        // The language being learned and read: a code from `ui/languages.ts`.
+        "language": "ja",
         "windowPositions": {},
         "nativeWindowBounds": {},
         "nativeWindowPinned": {},

@@ -24,8 +24,9 @@ import { DEFAULT_ANKI_CONNECT_URL } from "@ui/anki-connect";
 import { updateSettings } from "@texthooker/lib/settings";
 import { SETTINGS_DEFAULTS, type CardTagsSettings } from "@ui/settings";
 import { getSetting, setSetting } from "../../bridge/settings";
+import { useLanguage } from "../../bridge/useLanguage";
 import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
-import { LOCAL_MARKERS, YOMITAN_MARKERS } from "@texthooker/lib/types";
+import { LOCAL_MARKERS, YOMITAN_MARKERS, markersFor } from "@texthooker/lib/types";
 import {
   extractConfigFromCardFormat,
   findTermCardFormats,
@@ -64,6 +65,9 @@ async function addCardTags(tags: string[]): Promise<void> {
 export function AnkiSetup({ settings, connection, title, description }: Props) {
   // Empty is AnkiConnect's default address, as Settings → Anki's Address field shows it.
   const ankiUrl = settings.ankiConnectUrl.trim() || DEFAULT_ANKI_CONNECT_URL;
+  // Furigana, pitch accent and word audio are Japanese-only: not offered for other languages.
+  const [language] = useLanguage();
+  const japanese = language.code === "ja";
   const [decks, setDecks] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [modelFields, setModelFields] = useState<string[]>([]);
@@ -101,7 +105,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         fields: (model) => listModelFields(url, model),
         decks: () => listDecks(url),
         findNotes: (query) => findNotesByQuery(url, query),
-      });
+      }, { japanese });
       if (!found.ok) {
         setDetectNote(found.reason);
         return;
@@ -462,8 +466,17 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           description={
             <>
               Type a Yomitan marker, <span className="k-mono">(sentence)</span>,{" "}
-              <span className="k-mono">(sentence audio)</span> or{" "}
-              <span className="k-mono">(word audio)</span> (with Sentence Audio on, below), or
+              {japanese ? (
+                <>
+                  <span className="k-mono">(sentence audio)</span> or{" "}
+                  <span className="k-mono">(word audio)</span> (with Sentence Audio on, below), or
+                </>
+              ) : (
+                <>
+                  <span className="k-mono">(sentence audio)</span> (with Sentence Audio on,
+                  below), or
+                </>
+              )}{" "}
               literal text.
             </>
           }
@@ -471,8 +484,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           <datalist id="anki-mapping-options">
             <option value="(sentence)" />
             <option value="(sentence audio)" />
-            <option value="(word audio)" />
-            {[...YOMITAN_MARKERS, ...LOCAL_MARKERS].map((mk) => (
+            {japanese && <option value="(word audio)" />}
+            {[...markersFor(japanese), ...LOCAL_MARKERS].map((mk) => (
               <option key={mk} value={mk} />
             ))}
           </datalist>

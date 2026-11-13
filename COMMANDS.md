@@ -70,7 +70,9 @@ left half-applied.
 
 Keys and defaults mirror `src/main/settings.ts`:
 
-`hasCompletedOnboarding`, `windowPositions.<id>`, `nativeWindowBounds.<label>`,
+`hasCompletedOnboarding`, `language` (`'ja'`: the language being learned and read, a code from
+`ui/languages.ts`; a code this build does not list reads as `'ja'`; a profile preference, so per
+account and synced), `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
@@ -93,8 +95,22 @@ and off when absent, reads controllers through XInput instead of Windows.Gaming.
 `ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'screenai' | 'vocr' | 'livetext' | 'oneocr'`;
 `'local'` is the retired name for `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR
 mode — reads as the default), default `'googlelens'` for a new install only: a settings file that
-exists but never recorded `ocrMode` loads as `'cloud'`, the engine it was using. `endpoint` (unset
-by default — see below).
+exists but never recorded `ocrMode` loads as `'cloud'`, the engine it was using.
+`ocrModeByLanguage` (`{<language code>: <ocrMode>}`, unset until written; a machine key like
+`ocrMode`): the scan engine last used for each language, recorded natively whenever `ocrMode` is
+written (for the current `language`, if the engine reads it) and, for the language being left,
+when `language` changes. `endpoint` (unset by default — see below).
+
+**The scan engine follows the language.** When `language` changes (`settings_set`, Sync, an
+account switch), native code puts back the engine last used for the new language
+(`ocrModeByLanguage`) if it is still available and reads it; otherwise, if `ocrMode` cannot read
+the new language (`ocrEngines.<id>.languages`, under Capture and OCR), it writes the first
+available engine that can, of Live Text (macOS) or OneOCR (Windows), Screen AI, PaddleOCR,
+Google Lens and Kimochi cloud. At launch only the second check runs. The second check also runs
+when `ocrMode` itself is set to an engine that cannot read the language (`kimochi settings set`,
+Sync, a hand-edited file; the pickers never offer one). Either is an ordinary
+`ocrMode` write, so `settings:changed` reaches every window. Every engine reads Japanese, so with
+`language: 'ja'` nothing ever changes here.
 
 **The OCR endpoint follows `serverSettings.mode` unless genuinely overridden.** A custom
 `endpoint` wins; otherwise the URL is derived as `<base>/api/v1/ocr` from the mode
@@ -104,6 +120,10 @@ defaults (or their retired `<base>/detect-text` form) does **not** count as cust
 POC's preferences round-tripped, would permanently pin the app to cloud and make the
 Local toggle silently do nothing. `preferences()` reports the resolved endpoint, so the
 value shown is the value a scan will use.
+
+**The cloud OCR body** is `{imageBase64}`, plus `language` (the `language` setting's code) when
+it is not `ja`: absent means Japanese to Kimochi's server, and a custom endpoint may ignore it.
+A Japanese request is unchanged.
 
 **Kimochi's own server needs a signed-in Kimochi account.** Nobody is authenticated any other
 way: Rust sends the account's token (see Kimochi account below) as `Authorization: Bearer` to
@@ -316,8 +336,8 @@ choosing that source again brings its region back.
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
-| `capture_frame` | `({request, observe?, observerMode?, observerEngine?, readIfStill?}) -> {id, info, url, observation, observerSkipped, …}` — with `observe`, the watcher reads the frame (with `readIfStill`, only if the frame's `contentFingerprint` equals it; otherwise the read is skipped and `observerSkipped` is true, which Auto OCR uses to wait for text to stop moving before a slow watcher reads it): `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS, and `'vocr'` / `'screenai'` when they are the reader; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
-| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, `'ppocr'`, `'screenai'`, `'vocr'`, and `'livetext'` / `'oneocr'` on their OS) |
+| `capture_frame` | `({request, observe?, observerMode?, observerEngine?, readIfStill?}) -> {id, info, url, observation, observerSkipped, …}` — with `observe`, the watcher reads the frame (with `readIfStill`, only if the frame's `contentFingerprint` equals it; otherwise the read is skipped and `observerSkipped` is true, which Auto OCR uses to wait for text to stop moving before a slow watcher reads it): `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS, and `'vocr'` / `'screenai'` when they are the reader; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts`; one that cannot read the `language` (or the default, when it cannot) is replaced by the first of the OS's engine, PaddleOCR and Screen AI that can (`text_observer::engine_for`) |
+| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, `'ppocr'`, `'screenai'`, `'vocr'`, and `'livetext'` / `'oneocr'` on their OS); an engine that cannot read the `language` setting is refused with `invalid: the <engine> OCR engine cannot read this language (<code>)…` |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
 | `clear` | `() -> ()` |
@@ -330,6 +350,18 @@ choosing that source again brings its region back.
 | `displays` | `() -> [{id, bounds, work_area, scale_factor}]` |
 | `layer_outputs` | `({operation: 'list'}) -> {outputs: [Rect], current: Rect \| null, pointer: {x, y} \| null}`, `({operation: 'move', rect}) -> bool` — Linux layer-shell overlay only (KDE Plasma, Hyprland, wlroots): every output and the pointer in the compositor's global logical layout, and moving the overlay to the output with that geometry. The Wayland region editor uses it to edit a shared screen on whichever of its outputs the pointer is over. No outputs elsewhere |
 | `watch_source` | `({sourceId \| null}) -> ()` |
+
+**Engines and languages.** Each `platform_capabilities` `ocrEngines.<id>` entry that reads only
+some languages carries `languages: string[]` (codes from `ui/languages.ts`); an entry without it
+reads every language. `meikiocr`, `mangaocr`, `vocr`: `['ja']`. `ppocr`: the languages written
+only in Han, kana, Latin or Greek, without Vietnamese (its dictionary lacks the tone marks).
+`livetext`: `ja ko zh-Hans zh-Hant yue en fr it de es pt ru uk th vi` (a conservative list; macOS
+26 reads more). `googlelens`, `cloud`, `screenai`, `oneocr`: untagged. The table is
+`src-tauri/src/language.rs` (`engine_languages`, `engine_supports`). The engines that take a
+language are asked in it: Google Lens's locale is the language (`zh-CN`/`zh-TW`/`zh-HK` for
+Chinese and Cantonese; the request for `ja` is unchanged, `ja` with `Asia/Tokyo`), Live Text's
+locales are the language's and English (`['ja', 'en']` for Japanese), and PaddleOCR's Japanese
+glyph fixes (`值→値` and four more) apply only to Japanese.
 
 **Ownership split.** `capture_frame` performs a native capture and nothing else: no
 network, no OCR, no endpoint call, and **no mutation of `revision`, `scan` or
@@ -696,7 +728,8 @@ envelope, and forwards it through the channel. A receiver without a channel uses
 It exists so the Log panel and the dictionary settings window can reach the single
 dictionary backend in the overlay without standing up a second one.
 
-`tts_speak` POSTs `{text, voiceId}` to `<server base>/api/v1/tts` with the signed-in account's
+`tts_speak` POSTs `{text, voiceId}` (plus `language`, the `language` setting, when it is not
+`ja`) to `<server base>/api/v1/tts` with the signed-in account's
 token (ElevenLabs behind it) and returns the audio bytes; the webviews play them through an
 object URL. It refuses when signed out, before sending anything (see the account note under
 Settings), and a `401` signs the account out locally. It replaced the webview-side POST through
@@ -739,8 +772,9 @@ surface.
 | `storage_save` | `({extension?, value}) -> ()` |
 | `storage_backup` | `({extension}) -> string \| null` |
 | `dictionary_engine_apply` | `({repair?}) -> ()` |
-| `dictionary_engine_effective` | `() -> {selected, effective, ready: {yomitan, hachidori, tenten}}` |
+| `dictionary_engine_effective` | `() -> {selected, chosen, effective, ready: {yomitan, hachidori, tenten}}` |
 | `dictionary_runtime_status` | `({engine}) -> {engine, phase, settingsReady, message, progress?}` |
+| `yomitan_profiles` | `() -> {check: 'yomitan-profiles', account, profiles: [{name, language}], current, link} \| null` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
 | `ext_save_file` | raw bytes, header `x-kimochi-filename` (percent-encoded) `-> {saved, path?, bytes?}` |
 
@@ -806,7 +840,35 @@ Dictionary.", and the Log and the dictionary window say the same. Native's prelu
 effective engine, and the overlay mirrors it (`dictionary_engine_effective`), so a selected
 engine whose files are missing (a removed download, a pin bump still downloading) never leaves
 a window running a dead host. `dictionary_engine_effective` answers `selected` (the setting's
-host engine), `effective`, and `ready` per engine.
+host engine for the language being learned), `chosen` (the setting's host engine as stored),
+`effective`, and `ready` per engine.
+
+**The engine follows the language.** Hachidori (at its pinned 0.3.0) and 10ten read Japanese
+only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
+computer's while `language` is the account's, so the stored choice is never rewritten: while
+`language` is not `ja`, a stored `hachidori` or `tenten` stands for Yomitan
+(`extensions::selected_engine`, `effectiveDictionaryEngine`), and Settings → Dictionary shows
+the two disabled with the reason. A `language` write (Settings, Sync, an account switch) moves
+the reader windows when that changes the effective engine, as a finished download does
+(`dictionary-engine-follow`). A launch only ever downloads the stored choice (`chosen`).
+
+**Yomitan profiles follow the account** (Built-in Yomitan only; `ui/yomitan-profiles.ts`).
+`yomitanProfiles` (machine key, unset until written) is
+`{<account key, or "local">: {profile, language, chosen?}}`: the name of the Yomitan profile the
+account uses (Yomitan gives profiles no id; a renamed or deleted one is found again by language,
+or falls back to the default profile, and the link is repaired), and the language it was made
+for. The overlay, which hosts Yomitan's backend, resolves it when Yomitan starts, when
+`language` or `yomitanProfiles` changes, and on `account-changed` after a switch: the linked
+profile; else the current profile if its `general.language` is the language's Yomitan code
+(`zh-Hans`/`zh-Hant` → `zh`); else another profile in it; else the default profile if no other
+account uses it and it has no dictionary enabled (it takes the language); else a new profile named
+after the language, a copy of the default profile's options with `general.language` and Yomitan's
+`data/recommended-settings.json` for it (dictionaries untouched). It switches `profileCurrent`
+through `modifySettings` and records the link. Never linked and Japanese at Yomitan's start, it
+does nothing. It reports `{check: 'yomitan-profile', account, language, plan, profile, index}`
+for each change and publishes the profiles through `report`
+(`check: 'yomitan-profiles'`), which native keeps for `yomitan_profiles` and re-emits as the
+`yomitan-profiles` event. Settings → Account writes a link with `chosen: true`.
 
 `dictionary_engine_apply` refuses with `invalid: <engine> is not downloaded` when the setting
 names an engine whose files are missing, so a switch never reloads the windows into a host
@@ -1040,7 +1102,7 @@ on the other server cannot be switched to while it is set.
 | `account_open_web` | `() -> ()` — opens `<active account's server>/account` |
 | `account_set_server` | `({mode: 'cloud' \| 'local'}) -> AccountStatus` — **debug builds only** (an `invalid:` error in release, and while `KIMOCHI_SERVER` pins the server): the server new sign-ins go to (`accountLinkServer`, a machine setting); with no account active it is also `serverSettings.mode` (emitting `settings:changed`). Cancels a sign-in in progress, then emits `account-changed` and `platform-capabilities` |
 | `profile_current` | `() -> {key: string \| null, root: string}` — the profile in use; `root` is `""` for Local or `profiles/<key>` |
-| `cloud_translate` | `({text}) -> string` — `POST /api/v1/translate` (JA → EN-US), account only |
+| `cloud_translate` | `({text}) -> string` — `POST /api/v1/translate` from the `language` setting to EN-US (`sourceLang` is `JA` for Japanese, else the app's own code, which the server maps), account only |
 
 ```ts
 AccountStatus = {
@@ -1072,14 +1134,17 @@ quota_exceeded` ("You've used this month's 500 Kimochi cloud scans. They reset o
 `storage` names the sync storage limit), `403` (suspended: the server's message), `503
 not_configured`, `429`, and anything else with its status.
 
-**Explain via Kimochi cloud.** `explain_run` with `provider: 'kimochi'` POSTs `{prompt}` to
+**Explain via Kimochi cloud.** `explain_run` with `provider: 'kimochi'` POSTs `{prompt}` (plus `language` when it is not `ja`) to
 `/api/v1/explain` and emits the streamed text as `explain:chunk`, then `explain:done` (or
 `explain:error`, including for the server's trailing `[error: …]` line), with the same
 requestId and the same cancel and supersede rules as the CLI providers.
 
 **Translation.** The Log's `translationProvider` (`superTexthooker`; `'auto'` (default) |
 `'deepl'` | `'kimochi'`) picks `cloud_translate` or `deepl_translate`; `auto` is Kimochi cloud
-while signed in, otherwise the DeepL key.
+while signed in, otherwise the DeepL key. `deepl_translate` (`({text, apiKey}) -> string`) translates
+from the `language` setting (DeepL's code: `ZH` for Chinese and Cantonese, `NB` for Norwegian) to
+`EN-US`, and refuses a language DeepL does not take ("DeepL cannot translate from this language
+(<code>)…") without sending anything.
 
 **Deep link.** `tauri-plugin-deep-link` registers `kimochi://` (`plugins.deep-link` in
 `tauri.conf.json`; installed by the bundles, registered at runtime by an AppImage or a debug
@@ -1516,7 +1581,9 @@ Recording not granted), `unavailable {message}` (this computer cannot record its
 PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or
 `error {message}` (retried every 5 s), each with `platform` (`macos`, `windows`, `linux`), `held`
 (seconds of audio held), `level` (0–1, the last half second), `recogniser` (the speech model in the
-listener, tagged by `state`: `absent`, `loading`, `ready` or `failed {message}`) and `last`
+listener, tagged by `state`: `absent`, `otherLanguage` (the `language` setting is not Japanese:
+the model is neither fetched nor loaded, lines are placed by timing and cards get no word audio),
+`loading`, `ready` or `failed {message}`) and `last`
 (`{at, ok, message}`: what happened to the last card's audio, or null).
 
 Where the audio comes from (`capture-core/src/audio/`): macOS, a ScreenCaptureKit display stream with
@@ -1849,7 +1916,8 @@ HookStatus = {
   threads: [{key, name, hookcode, preview, count, japanese, generic, selected}]
 }                                 // engine hooks first, then in the order the hooker found them
                                   // (stable: not reordered by new text); `japanese` once any of a
-                                  // thread's text has read as Japanese (sticky), the menu's filter
+                                  // thread's text has read as the `language` setting (sticky; the
+                                  // name is from when that was always Japanese), the menu's filter
 ```
 
 Events: `texthook-status` (a `HookStatus`, on every change and every hooked sentence) and
@@ -1862,7 +1930,10 @@ the line does not end in `。！？`, a closing bracket, `…`, `～` or a dash)
 300 ms + 100 ms per character of the piece before it (the time that row takes to type out at ten
 characters a second; at most 5 s), where a line the reader clicked on to comes later.
 SiglusEngine sends its text box a row at a time, breaking at each line break and ruby. The joined
-line replaces the line before it.
+line replaces the line before it; for a `language` that spaces its words the rows are joined with
+a space. Choosing a thread automatically, handing over to a cleaner thread and the hook menu's
+filter all ask for text in the `language`'s scripts (`pick::japanese_ratio`), and for a spaced
+language the menu also wants a space in the text (an asset name or a path has none).
 
 **Thread choice.** A thread is selected as soon as it speaks if it matches the one remembered
 for this exe (`<app local data>/texthook/games.json`: `hookcode`, `ctx & 0xFFFF`, `ctx2 & 0xFFFF`).
@@ -1903,7 +1974,10 @@ textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
 `flushMs` is LunaHook's `--flush-ms`, read when the sidecar starts. Each hooked line is cleaned
 natively before it is sent (`text_hook/clean.rs`): markup engines leave in their text is taken
 out, keeping the text it marks up (HTML-like tags, `<rt>` readings, `{漢字/かんじ}`, Ren'Py's
-`{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`); with `stripCodes`, script codes are taken out (ASCII
+`{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`; the ruby forms `{a/b}`, `[a/b]` and `《》` only for a
+language with ruby, Japanese, so `[he/she]` is text elsewhere); with `stripCodes` (unset, it is on
+unless the `language` spaces its words, where `Level10` or `user_name` are words; a value the
+reader set wins), script codes are taken out (ASCII
 runs of letters, digits and `_ $ | -` with a `$`, a `_` beside a letter or digit, or letters and
 digits mixed over 5 characters or more: such as `chr00chr01`, `$fx_shake_fa`, `VOK_`),
 and a line that was nothing else is dropped; repeated characters are undone (`auto`: only when
@@ -2039,9 +2113,17 @@ each burst of the chosen thread is logged as `texthook-burst` (`{text, lines, ca
 
 ### Sidecar protocol (`kimochi-hookd`)
 
-`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N]` or
+`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N] [--codepage N]` or
 `… textractor --dir <Textractor dir>` reads one JSON command per line on stdin and writes one
 JSON event per line on stdout; closing stdin detaches every process and exits.
+`--codepage` is the code page LunaHook decodes a game's multibyte (ANSI) text with when its hook
+code names none (`HS949#…` names one, and wins): the app passes the language's Windows ANSI code
+page (`language::hook_code_page`: 949 Korean, 936 Simplified Chinese, 950 Traditional Chinese and
+Cantonese, 1251 Cyrillic, 874 Thai, 1250/1252/1253/1254/1257/1258 for Latin and Greek), and 932
+(Shift-JIS) for Japanese and for languages Windows has no ANSI code page for (their games' text
+comes through Unicode hooks; ASCII reads alike in every code page). Absent, it is 932, so an app
+from before languages gets what it always did; an older sidecar ignores the argument. Textractor's
+CLI always decodes Shift-JIS.
 `kimochi-hookd-{x64,x86}.exe inject --pid N --dll <path>` injects one DLL
 (`CreateRemoteThread(LoadLibraryW)`); the x64 sidecar runs the x86 build for 32-bit games.
 `kimochi-hookd-x64.exe processes` writes one `process` event per running process
@@ -2054,11 +2136,12 @@ it in a Wine game's prefix to learn the game's id there.
 | `detach` | `pid` |
 | `insert` | `pid`, `code` (an H-code) |
 | `pchooks` | `pid` |
+| `codepage` | `codepage` (decode ANSI text with this code page from the next line; sent when the language changes, and only to a sidecar whose `ready` carried `codepage`) |
 | `quit` | |
 
 | Event | Fields |
 | --- | --- |
-| `ready` | `engine`, `version` |
+| `ready` | `engine`, `version`, `codepage?` (LunaHook: the code page in use; its presence means `codepage` is understood) |
 | `connected` / `disconnected` | `pid` |
 | `attached` | `pid`, `bits`, `reused?` |
 | `attach_error` | `pid`, `text` |
@@ -2181,13 +2264,13 @@ executable detached elsewhere) and waits for `ping`.
 | Method | Params | Result |
 | --- | --- | --- |
 | `ping` | — | `{version, pid}` |
-| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}` |
+| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, dictionaryChosen?, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}`. `dictionary` is the pop-up engine in use (`yomitanSettings.popupType`: `builtin`, `custom-api`, `hachidori`, `tenten`); Hachidori and 10ten read Japanese only, so in another language it is `builtin` and `dictionaryChosen` is the stored choice |
 | `settings.get` | `{key?}` | the value (defaults merged), or every setting |
 | `settings.set` | `{key, value}` | the stored value; through `apply_setting`, as `settings_set` |
 | `action` / `actions` | `{name}` / — | `actions::dispatch`; `ACTIONS` |
 | `toggle` | `{flag: autoOcr\|overlay\|textOverlay, to: on\|off\|toggle}` | `{<flag>: bool}`, after the overlay has written the new state back (`view_flags`) |
-| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}` |
-| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts) |
+| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}`. Refused at once (`invalid: the <engine> OCR engine cannot read this language (<code>)…`) while `ocrMode` cannot read the `language` and the input is not the Text Hooker |
+| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts); an engine that cannot read the `language` is refused: `invalid: <engine> cannot read the language being read (<code>); engines here that can: <available engines that read it>` |
 | `source.list` / `source.set` / `source.clear` / `source.choose` | — / `{query}` / — / — | `sources::catalog`; `select_keeping_crop` on the source matched by id, title or app; `sources::clear`; `choose_source` |
 | `open` | `{view: main\|log\|notebook\|anki\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}`; `log`, `notebook` and `anki` emit `main:show-view` `{view}`, which leaves Settings |
 | `quit` | — | replies, then quits as `app_quit` |

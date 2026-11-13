@@ -373,6 +373,8 @@ pub struct LiveTextObserver {
     outstanding: Option<Outstanding>,
     /// Counted so the caller can see that timeouts are happening at all.
     timeouts: u32,
+    /// The recognition locales, most wanted first (`set_locales`).
+    locales: Vec<String>,
 }
 
 impl Default for LiveTextObserver {
@@ -388,7 +390,15 @@ impl LiveTextObserver {
             analyzer: None,
             outstanding: None,
             timeouts: 0,
+            locales: vec!["ja".into(), "en".into()],
         }
+    }
+
+    /// The locales the next analyses read with, the language being read first (`["ja", "en"]`
+    /// until set: Japanese, with English so that a line of Latin UI chrome inside the crop is
+    /// not forced into kana).
+    pub fn set_locales(&mut self, locales: Vec<String>) {
+        self.locales = locales;
     }
 
     /// Probe now rather than on the first observation, so a caller can report
@@ -537,10 +547,11 @@ impl TextObserver for LiveTextObserver {
 
         let started = Instant::now();
         let slot = Slot::new();
+        let locales = self.locales.clone();
         let analyzer = self.analyzer()?;
         let started_analysis = autoreleasepool(|_| -> Result<Started> {
             let image = image_from_frame(frame)?;
-            start_analysis(analyzer, &image, slot.clone())
+            start_analysis(analyzer, &image, &locales, slot.clone())
         })?;
 
         wait_for(&slot, started + timeout);
@@ -883,7 +894,12 @@ fn image_from_frame(frame: &Frame) -> Result<Retained<NSImage>> {
 ///
 /// Returns the analyzer's request identifier — needed to cancel it — along with
 /// the objects whose lifetime has to cover the asynchronous work.
-fn start_analysis(analyzer: *mut AnyObject, image: &NSImage, slot: Arc<Slot>) -> Result<Started> {
+fn start_analysis(
+    analyzer: *mut AnyObject,
+    image: &NSImage,
+    locales: &[String],
+    slot: Arc<Slot>,
+) -> Result<Started> {
     let request_class =
         class(c"VKCImageAnalyzerRequest").map_err(|e| CaptureError::new("unsupported", e))?;
 
@@ -898,10 +914,11 @@ fn start_analysis(analyzer: *mut AnyObject, image: &NSImage, slot: Arc<Slot>) ->
         let request = request
             .ok_or_else(|| CaptureError::new("observer", "Apple Live Text refused the image"))?;
 
-        // Japanese first, English second: the second locale is what stops a line
-        // of Latin UI chrome inside the crop from being forced into kana.
-        let locales =
-            NSArray::from_retained_slice(&[NSString::from_str("ja"), NSString::from_str("en")]);
+        // The language first, English second (`set_locales`): the second locale is
+        // what stops a line of Latin UI chrome inside the crop from being forced into
+        // kana.
+        let locales: Vec<_> = locales.iter().map(|locale| NSString::from_str(locale)).collect();
+        let locales = NSArray::from_retained_slice(&locales);
         let _: () = msg_send![&*request, setLocales: &*locales];
 
         let progress = RcBlock::new(|_progress: f64| {});

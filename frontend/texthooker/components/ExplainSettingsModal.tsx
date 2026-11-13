@@ -10,9 +10,14 @@ import {
   Textarea,
 } from "@kit";
 import { updateSettings } from "@texthooker/lib/settings";
-import { DEFAULT_EXPLAIN_PROMPT } from "@texthooker/lib/types";
+import {
+  defaultExplainPrompt,
+  explainTemplate,
+  isDefaultExplainPrompt,
+} from "@texthooker/lib/explainPrompt";
 import type { ExplainProvider, Settings } from "@texthooker/lib/types";
 import { useAccount } from "../../bridge/account";
+import { useLanguage } from "../../bridge/useLanguage";
 
 interface Props {
   open: boolean;
@@ -31,21 +36,27 @@ const CLAUDE_MODELS = [
 
 export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
   const { cloud } = useAccount();
-  const [promptDraft, setPromptDraft] = useState(settings.explainPrompt);
+  const [language] = useLanguage();
+  // A default prompt is shown as the language's template; the user's own as written.
+  const shown = explainTemplate(settings.explainPrompt, language.code);
+  const fallback = defaultExplainPrompt(language.code);
+  const [promptDraft, setPromptDraft] = useState(shown);
   const [codexModelDraft, setCodexModelDraft] = useState(
     settings.explainCodexModel,
   );
 
   useEffect(() => {
     if (open) {
-      setPromptDraft(settings.explainPrompt);
+      setPromptDraft(shown);
       setCodexModelDraft(settings.explainCodexModel);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const savePrompt = () => {
-    const next = promptDraft.trim() ? promptDraft : DEFAULT_EXPLAIN_PROMPT;
+    const next = promptDraft.trim() ? promptDraft : fallback;
+    // A default stays as stored (it follows the language either way).
+    if (isDefaultExplainPrompt(next) && isDefaultExplainPrompt(settings.explainPrompt)) return;
     if (next !== settings.explainPrompt) {
       void updateSettings({ explainPrompt: next });
     }
@@ -120,8 +131,8 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setPromptDraft(DEFAULT_EXPLAIN_PROMPT)}
-              disabled={promptDraft === DEFAULT_EXPLAIN_PROMPT}
+              onClick={() => setPromptDraft(fallback)}
+              disabled={promptDraft === fallback}
             >
               Reset to default
             </Button>
@@ -135,8 +146,16 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
             onBlur={savePrompt}
             spellCheck={false}
           />
+          {language.code !== "ja" && !isDefaultExplainPrompt(promptDraft) && (
+            <p className="k-description">
+              Your prompt was written for Japanese, or is your own: it is sent as written. Reset to
+              default for the prompt that follows the language you&apos;re learning ({language.name}).
+            </p>
+          )}
           <p className="k-description">
-            <span className="k-mono">{"{{context}}"}</span> is replaced with the previous lines
+            <span className="k-mono">{"{{language}}"}</span> is replaced with the language
+            you&apos;re learning ({language.name}),{" "}
+            <span className="k-mono">{"{{context}}"}</span> with the previous lines
             and <span className="k-mono">{"{{sentence}}"}</span> with the line being explained.
             Cached explanations keep their old text; use
             Regenerate in the Explain dialog after editing.

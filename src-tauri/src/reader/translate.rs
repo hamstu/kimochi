@@ -27,11 +27,19 @@ fn host_for(key: &str) -> &'static str {
 }
 
 #[tauri::command]
-pub async fn deepl_translate(text: String, api_key: String) -> Result<String, String> {
+pub async fn deepl_translate(
+    state: tauri::State<'_, crate::state::Shared>,
+    text: String,
+    api_key: String,
+) -> Result<String, String> {
     let key = api_key.trim();
     if key.is_empty() {
         return Err("DeepL API key is not set".into());
     }
+    // From the language being read; DeepL takes only the languages it has.
+    let language = crate::language::current(&state.settings);
+    let source = crate::language::deepl_source(language)
+        .ok_or_else(|| format!("DeepL cannot translate from this language ({}). Choose Kimochi cloud translation instead.", language.code))?;
     if text.trim().is_empty() {
         return Err("nothing to translate".into());
     }
@@ -47,7 +55,7 @@ pub async fn deepl_translate(text: String, api_key: String) -> Result<String, St
         .header("Authorization", format!("DeepL-Auth-Key {key}"))
         .json(&json!({
             "text": [text],
-            "source_lang": "JA",
+            "source_lang": source,
             "target_lang": "EN-US",
         }))
         .send()

@@ -7,7 +7,7 @@
 //! address has to come from a process of the game's bitness.
 //!
 //! ```text
-//! kimochi-hookd luna --dir <LunaHook dir> [--flush-ms 400]
+//! kimochi-hookd luna --dir <LunaHook dir> [--flush-ms 400] [--codepage 932]
 //! kimochi-hookd textractor --dir <Textractor dir>
 //! kimochi-hookd inject --pid <pid> --dll <path>
 //! kimochi-hookd processes
@@ -110,7 +110,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut engine = match mode {
         "luna" => {
             let flush = arg(args, "--flush-ms").and_then(|v| v.parse().ok()).unwrap_or(400);
-            Engine::Luna(luna::Luna::load(&dir, flush)?)
+            Engine::Luna(luna::Luna::load(&dir, flush, protocol::code_page_arg(args))?)
         }
         "textractor" => Engine::Textractor(textractor::Textractor::new(&dir)?),
         _ => {
@@ -119,7 +119,13 @@ fn run(args: &[String]) -> Result<(), String> {
             )
         }
     };
-    emit("ready", json!({ "engine": mode, "version": env!("CARGO_PKG_VERSION") }));
+    // `codepage` tells the app this helper takes the `codepage` command (an older one would answer
+    // it with an error); Textractor's CLI has no setting for it.
+    let mut ready = json!({ "engine": mode, "version": env!("CARGO_PKG_VERSION") });
+    if matches!(engine, Engine::Luna(_)) {
+        ready["codepage"] = json!(protocol::code_page_arg(args));
+    }
+    emit("ready", ready);
 
     let mut attached: Vec<u32> = Vec::new();
     for line in std::io::stdin().lock().lines() {
@@ -156,6 +162,14 @@ fn run(args: &[String]) -> Result<(), String> {
             (Engine::Textractor(t), Command::Insert { pid, code }) => t.insert(pid, &code).map_err(|e| (pid, e)),
             (Engine::Luna(l), Command::PcHooks { pid }) => l.pc_hooks(pid).map_err(|e| (pid, e)),
             (Engine::Textractor(_), Command::PcHooks { .. }) => Ok(()),
+            (Engine::Luna(l), Command::CodePage { codepage }) => {
+                // Not an attach failure: the text keeps coming in the code page it had.
+                if let Err(e) = l.settings(codepage) {
+                    emit("info", json!({ "level": "warning", "text": format!("code page {codepage}: {e}") }));
+                }
+                Ok(())
+            }
+            (Engine::Textractor(_), Command::CodePage { .. }) => Ok(()),
         };
         if let Err((pid, e)) = result {
             emit("attach_error", json!({ "pid": pid, "text": e }));

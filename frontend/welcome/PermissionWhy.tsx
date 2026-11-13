@@ -4,6 +4,7 @@
  */
 import type { JSX, ReactNode } from 'react'
 import { Button, Dialog, DialogClose, DialogContent, DialogTrigger } from '@kit'
+import { useLanguage } from '../bridge/useLanguage'
 import style from './WelcomeApp.module.css'
 
 export default function PermissionWhy({ title, children }: { title: string; children: ReactNode }): JSX.Element {
@@ -29,11 +30,12 @@ export default function PermissionWhy({ title, children }: { title: string; chil
 }
 
 export function ScreenRecordingWhy({ restartAfterGrant }: { restartAfterGrant: boolean }): JSX.Element {
+  const [language] = useLanguage()
   return (
     <PermissionWhy title="Why Kimochi needs screen recording">
       <p>
-        Kimochi reads Japanese by taking a picture of the window you choose and recognising the
-        text in it. macOS only lets one app capture another app’s window with your permission,
+        Kimochi reads {language.name} by taking a picture of the window you choose and recognising
+        the text in it. macOS only lets one app capture another app’s window with your permission,
         which it calls Screen &amp; System Audio Recording.
       </p>
       <p>

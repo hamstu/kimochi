@@ -49,7 +49,9 @@ import {
   entryTitle,
   useImageUrl,
 } from "./notebookEntry";
+import { useLanguage } from "../../bridge/useLanguage";
 import "../notebook.css";
+import { useTextLang } from "../../bridge/useTextLang";
 
 interface Props {
   /** Entry to edit, or null when closed. */
@@ -72,6 +74,7 @@ export function EditEntryModal({
   paneWidth,
   resizeHandle,
 }: Props) {
+  const textLang = useTextLang();
   const entry = useNotebookEntry(entryId ?? "");
   const open = entryId !== null && entry !== undefined;
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -142,7 +145,7 @@ export function EditEntryModal({
           title={
             <span className="nb-dialog-title">
               <EntryAvatar entry={entry} />
-              <span lang="ja" translate="no">
+              <span lang={textLang} translate="no">
                 {title}
               </span>
             </span>
@@ -284,37 +287,42 @@ function EntryForm({ entry }: { entry: NotebookEntry }) {
 }
 
 function PersonFields({ entry }: { entry: PersonEntry }) {
+  const textLang = useTextLang();
   const id = useId();
+  // Kana readings, the 姓/名 hints and Japanese examples are for Japanese only.
+  const [language] = useLanguage();
+  const ja = language.code === "ja";
   const commitPatch = (patch: Partial<PersonEntry>) =>
     void updateEntry(entry.id, patch);
 
   return (
     <div className="nb-form-grid">
-      <Field label="Family name" hint="姓" htmlFor={`${id}-fam`}>
+      <Field label="Family name" hint={ja ? "姓" : undefined} htmlFor={`${id}-fam`}>
         <Input
           id={`${id}-fam`}
           className="nb-jp"
-          lang="ja"
+          lang={textLang}
           value={entry.family}
           onChange={(e) => commitPatch({ family: e.target.value })}
-          placeholder="田中"
+          placeholder={ja ? "田中" : undefined}
         />
       </Field>
-      <Field label="Given name" hint="名" htmlFor={`${id}-giv`}>
+      <Field label="Given name" hint={ja ? "名" : undefined} htmlFor={`${id}-giv`}>
         <Input
           id={`${id}-giv`}
           className="nb-jp"
-          lang="ja"
+          lang={textLang}
           value={entry.given}
           onChange={(e) => commitPatch({ given: e.target.value })}
-          placeholder="太郎"
+          placeholder={ja ? "太郎" : undefined}
         />
       </Field>
+      {ja && (<>
       <Field label="Reading" htmlFor={`${id}-famr`}>
         <Input
           id={`${id}-famr`}
           className="nb-jp"
-          lang="ja"
+          lang={textLang}
           value={entry.familyReading ?? ""}
           onChange={(e) =>
             commitPatch({ familyReading: e.target.value || undefined })
@@ -326,7 +334,7 @@ function PersonFields({ entry }: { entry: PersonEntry }) {
         <Input
           id={`${id}-givr`}
           className="nb-jp"
-          lang="ja"
+          lang={textLang}
           value={entry.givenReading ?? ""}
           onChange={(e) =>
             commitPatch({ givenReading: e.target.value || undefined })
@@ -334,12 +342,17 @@ function PersonFields({ entry }: { entry: PersonEntry }) {
           placeholder="たろう"
         />
       </Field>
+      </>)}
     </div>
   );
 }
 
 function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
+  const textLang = useTextLang();
   const id = useId();
+  // The reading and Japanese examples are for Japanese only.
+  const [language] = useLanguage();
+  const ja = language.code === "ja";
   const commitPatch = (patch: Partial<PlaceOrThingEntry>) =>
     void updateEntry(entry.id, patch);
 
@@ -349,17 +362,18 @@ function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
         <Input
           id={`${id}-name`}
           className="nb-jp"
-          lang="ja"
+          lang={textLang}
           value={entry.name}
           onChange={(e) => commitPatch({ name: e.target.value })}
-          placeholder={entry.kind === "place" ? "東京" : "天使の指輪"}
+          placeholder={ja ? (entry.kind === "place" ? "東京" : "天使の指輪") : undefined}
         />
       </Field>
+      {ja && (
       <Field label="Reading" htmlFor={`${id}-reading`}>
         <Input
           id={`${id}-reading`}
           className="nb-jp"
-          lang="ja"
+          lang={textLang}
           value={entry.reading ?? ""}
           onChange={(e) =>
             commitPatch({ reading: e.target.value || undefined })
@@ -367,11 +381,13 @@ function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
           placeholder={entry.kind === "place" ? "とうきょう" : "てんしのゆびわ"}
         />
       </Field>
+      )}
     </div>
   );
 }
 
 function MatchToggles({ entry }: { entry: NotebookEntry }) {
+  const textLang = useTextLang();
   const given = entry.kind === "person" ? entry.given.trim() : "";
   return (
     <div className="nb-toggles">
@@ -396,7 +412,7 @@ function MatchToggles({ entry }: { entry: NotebookEntry }) {
             <span className="nb-toggle-desc">
               Also match{" "}
               {given ? (
-                <span className="nb-jp" lang="ja">
+                <span className="nb-jp" lang={textLang}>
                   {given}
                 </span>
               ) : (
@@ -430,8 +446,10 @@ function AliasesField({
   value: string[];
   onChange: (next: string[]) => void;
 }) {
+  const textLang = useTextLang();
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [language] = useLanguage();
 
   const commit = (text: string) => {
     const next = [...value];
@@ -455,7 +473,7 @@ function AliasesField({
         }}
       >
         {value.map((alias, i) => (
-          <span key={`${alias}-${i}`} className="nb-chip" lang="ja">
+          <span key={`${alias}-${i}`} className="nb-chip" lang={textLang}>
             {alias}
             <button
               type="button"
@@ -471,9 +489,9 @@ function AliasesField({
           ref={inputRef}
           id={id}
           value={draft}
-          lang="ja"
+          lang={textLang}
           spellCheck={false}
-          placeholder={value.length ? "" : "オカリン, 助手"}
+          placeholder={value.length || language.code !== "ja" ? "" : "オカリン, 助手"}
           onChange={(e) => {
             const next = e.target.value;
             // A 、 typed mid-conversion splits when the IME commits it.

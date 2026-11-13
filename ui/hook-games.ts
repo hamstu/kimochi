@@ -54,6 +54,15 @@ export const HOOK_DEFAULTS: HookSettings = {
   textSize: 0.034,
 };
 
+/**
+ * The defaults for the language being read, as native applies them (text_hook/clean.rs
+ * `GameConfig`): script codes are kept in a language that spaces its words (`Level10`, `user_name`
+ * and `mp3player` are words there). A value the reader stored still wins.
+ */
+export function hookDefaultsFor(language: { spaces: boolean }): HookSettings {
+  return language.spaces ? { ...HOOK_DEFAULTS, stripCodes: false } : HOOK_DEFAULTS;
+}
+
 export const HOOK_SETTING_KEYS = Object.keys(HOOK_DEFAULTS) as (keyof HookSettings)[];
 
 /** A text box for the card, as fractions of the game window (ui/overlay.js). */

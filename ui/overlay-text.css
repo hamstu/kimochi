@@ -6,6 +6,9 @@
  * The renderer sets three things on its container (`#words`): `data-ocr-theme`, light, dark or
  * blend, for the cards; `--ocr-hl-rgb`, the highlight colour as "r, g, b"; and `--ocr-hl-strength`, how
  * strong the highlight is, 1 at the default opacity (all three from Settings → Overlay look).
+ * For a language other than Japanese it also sets `lang` and `--kimochi-text-font`, the language's
+ * fonts (language-style.ts), which the text below is drawn in; Japanese leaves both unset, so its
+ * own stack below applies, exactly as before the language setting existed.
  *
  * A word box has two faces, both pseudo-elements so neither moves or resizes the text, which
  * stays exactly over the glyphs OCR read it from (text-layout.js):
@@ -83,8 +86,8 @@
   white-space: nowrap;
   text-align: left;
   color: var(--ocr-ink);
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif;
+  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif);
   font-weight: 400;
   font-kerning: none;
   text-spacing-trim: space-all;
@@ -177,8 +180,8 @@
   text-align: center;
   padding: 6px 8px;
   cursor: default;
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif;
+  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif);
   font-weight: 400;
   font-kerning: none;
   text-spacing-trim: space-all;
@@ -333,8 +336,8 @@
   white-space: nowrap;
   text-align: left;
   overflow: visible;
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-    'Yu Gothic', 'Meiryo', sans-serif;
+  font-family: var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif);
   font-kerning: none;
   text-spacing-trim: space-all;
 }
@@ -342,8 +345,8 @@
    weight is set per run, heavier for text big for its page. */
 .ocr-manga,
 .ocr-manga .ocr-run {
-  font-family: 'Zen Kaku Gothic Antique', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
-    'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif;
+  font-family: 'Zen Kaku Gothic Antique', var(--kimochi-text-font, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif);
   font-weight: 500;
 }
 .ocr-vertical .ocr-run,

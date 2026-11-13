@@ -65,6 +65,7 @@ import {
 import type { SessionMeta } from "@texthooker/lib/types";
 import { openSettings } from "../../bridge/tauri";
 import "./session-list.css";
+import { useTextLang } from "../../bridge/useTextLang";
 
 interface Props {
   activeId: string;
@@ -83,6 +84,7 @@ export function SessionList({
   className,
   onOpenSettings,
 }: Props): ReactNode {
+  const textLang = useTextLang();
   const [ordered, setOrdered] = useState(sessions);
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
   const [draftDescriptions, setDraftDescriptions] = useState<
@@ -400,7 +402,7 @@ export function SessionList({
                             </span>
                           </div>
                           {summary && summary.recent.length > 0 ? (
-                            <ol className="log-session-recent-lines" lang="ja">
+                            <ol className="log-session-recent-lines" lang={textLang}>
                               {summary.recent.map((text, i) => (
                                 <li key={i}>{text}</li>
                               ))}

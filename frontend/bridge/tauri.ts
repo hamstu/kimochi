@@ -167,6 +167,7 @@ export const panel = (
 /** Settings pages, in rail order. Older builds stored other names; see `settingsTabOf`. */
 export type SettingsTabName =
   | 'general'
+  | 'language'
   | 'sources'
   | 'browser'
   | 'texthooker'

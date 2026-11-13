@@ -18,6 +18,14 @@ const JAPANESE = /[぀-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ々〆ヵヶー]/u
 /** The longest stretch the parser compares against the dictionary at each position. */
 export const SCAN_LENGTH = 16
 
+/**
+ * The language whose words are found: its code (for the platform's segmenter), whether it puts
+ * spaces between words, and `test`, whether a box has text in it worth stopping on. Japanese
+ * unless the caller says otherwise (the overlay builds the others from languages.ts; this file is
+ * plain JS with no imports, so it is told rather than asking).
+ */
+export const JAPANESE_WORDS = Object.freeze({ code: 'ja', spaces: false, test: (text) => JAPANESE.test(text) })
+
 /** True for text worth stopping on: it holds a letter or digit, not only punctuation. */
 export function isWordText(text) {
   return /[\p{L}\p{N}]/u.test(text)
@@ -65,8 +73,11 @@ export function tokensFromSpans(text, spans) {
   return tokens
 }
 
-/** Tokens from the platform's word segmenter, when there is no dictionary to ask. */
-export function tokensFromSegmenter(text, Segmenter = globalThis.Intl?.Segmenter) {
+/**
+ * Tokens from the platform's word segmenter, when there is no dictionary to ask, by the language's
+ * own rules (`words`, Japanese unless given).
+ */
+export function tokensFromSegmenter(text, Segmenter = globalThis.Intl?.Segmenter, words = JAPANESE_WORDS) {
   if (!Segmenter) {
     // No segmenter at all: one character at a time is crude, but every character is reachable.
     return [...text].reduce((tokens, character) => {
@@ -80,7 +91,7 @@ export function tokensFromSegmenter(text, Segmenter = globalThis.Intl?.Segmenter
       return tokens
     }, [])
   }
-  const segmenter = new Segmenter('ja', { granularity: 'word' })
+  const segmenter = new Segmenter(words.code, { granularity: 'word' })
   const segments = (piece, offset) =>
     [...segmenter.segment(piece)].map(({ segment, index, isWordLike }) => ({
       start: offset + index,
@@ -88,6 +99,9 @@ export function tokensFromSegmenter(text, Segmenter = globalThis.Intl?.Segmenter
       text: segment,
       word: Boolean(isWordLike) && isWordText(segment)
     }))
+  // The kanji and okurigana rule below is Japanese: in Chinese it would make every run of Han one
+  // word, and other scripts have no kanji. They take ICU's words as they are.
+  if (words !== JAPANESE_WORDS) return segments(text, 0)
   // ICU's breaker cuts inflected words to pieces (作|っ|た, 食|べ|ま|した), and a stop on 作 alone
   // highlights and looks up the kanji instead of the verb. So kanji keep the kana that follow them
   // (okurigana and inflection: 作った, 食べました); a long run of kana after them is more than
@@ -140,7 +154,7 @@ const PARTICLE_START = /[をのがへはや]/
  * installed, or lookups served by another app — so the segmenter's answer is better than a
  * box with no stops in it.
  */
-export async function segmentText(text, parse) {
+export async function segmentText(text, parse, words = JAPANESE_WORDS) {
   if (!text) return []
   if (parse) {
     try {
@@ -148,19 +162,19 @@ export async function segmentText(text, parse) {
       const tokens = Array.isArray(results?.spans)
         ? tokensFromSpans(text, results.spans)
         : tokensFromParse(text, (results ?? []).find((result) => result?.source === 'scanning-parser')?.content)
-      if (tokens.some((token) => token.word) || !JAPANESE.test(text)) return tokens
+      if (tokens.some((token) => token.word) || !words.test(text)) return tokens
     } catch {
       // Fall through to the segmenter: a backend that is not ready yet must not leave the
       // reader with nothing to step through.
     }
   }
-  return tokensFromSegmenter(text)
+  return tokensFromSegmenter(text, undefined, words)
 }
 
 /**
  * The boxes a reader steps through, in reading order.
  *
- * Only boxes with Japanese in them: the Log is written on the same rule (`isJapanese` in
+ * Only boxes with text in the language being read (`words`, Japanese unless given): the Log is written on the same rule (`isJapanese` in
  * scene.ts), so background patterns OCR reads as symbols or digits (a carpet's squares) are
  * neither published nor stopped on. And in reading order by where each box is, not in the order
  * OCR listed them: horizontal text in rows from the top, left to right; vertical text in columns
@@ -169,10 +183,11 @@ export async function segmentText(text, parse) {
  * @template {{text: string, box?: {x: number, y: number, width: number, height: number}}} U
  * @param {U[]} units
  * @param {boolean} vertical
+ * @param {{test: (text: string) => boolean}} [words]
  * @returns {U[]}
  */
-export function readingUnits(units, vertical) {
-  const kept = units.filter((unit) => JAPANESE.test(unit.text))
+export function readingUnits(units, vertical, words = JAPANESE_WORDS) {
+  const kept = units.filter((unit) => words.test(unit.text))
   if (!kept.every((unit) => unit.box)) return kept
   return kept
     .map((unit, index) => ({ unit, index }))
@@ -218,37 +233,54 @@ export function runsOnInto(unit, next) {
 }
 
 /**
+ * What goes between two boxes' texts read on from one into the next: nothing in Japanese, where a
+ * word OCR split in two runs straight on; a space in a language that spaces its words, unless one
+ * side has it already, since two boxes there are two words (or two lines).
+ */
+function joinerOf(before, after, words) {
+  if (!words.spaces || !before || !after) return ''
+  return /\s$/u.test(before) || /^\s/u.test(after) ? '' : ' '
+}
+
+/**
  * Each unit's tokens, found with the text after it in reading order, so a word OCR split across
  * two boxes is found whole: its token starts in one unit and ends past it, and the next unit's
- * text it covers is no stop of its own.
+ * text it covers is no stop of its own. In a language that spaces its words (`words`, Japanese
+ * unless given) the boxes are read on with a space between them (`joinerOf`).
  *
  * @param {{text: string}[]} units in reading order
  * @param {(text: string) => Promise<{start: number, end: number, text: string, word: boolean}[]>} split
+ * @param {{spaces: boolean}} [words]
  */
-export async function segmentAcross(units, split) {
+export async function segmentAcross(units, split, words = JAPANESE_WORDS) {
+  // The text after a unit, and how much of its start is the joiner put after the unit's own.
   const ahead = (index) => {
     let text = ''
+    let lead = 0
     for (let next = index + 1; next < units.length && text.length < SCAN_LENGTH; next++) {
       if (!runsOnInto(units[next - 1], units[next])) break
-      text += units[next].text
+      const joiner = joinerOf(units[next - 1].text, units[next].text, words)
+      if (next === index + 1) lead = joiner.length
+      text += joiner + units[next].text
     }
-    return text.slice(0, SCAN_LENGTH)
+    return { text: text.slice(0, SCAN_LENGTH), lead }
   }
   const found = await Promise.all(
     units.map(async (unit, index) => {
       // Only the last line runs on: a block's earlier lines end where they end.
-      const runOn = unit.text.includes('\n') ? '' : ahead(index)
-      const tokens = await split(unit.text + runOn)
-      return tokens.filter((token) => token.start < unit.text.length)
+      const runOn = unit.text.includes('\n') ? { text: '', lead: 0 } : ahead(index)
+      const tokens = await split(unit.text + runOn.text)
+      return { tokens: tokens.filter((token) => token.start < unit.text.length), lead: runOn.lead }
     })
   )
   // How far into a unit the previous unit's last word already reaches.
   let covered = 0
   return units.map((unit, index) => {
-    const tokens = found[index].map((token) => (token.start < covered ? { ...token, word: false } : token))
+    const tokens = found[index].tokens.map((token) => (token.start < covered ? { ...token, word: false } : token))
     const lastWord = [...tokens].reverse().find((token) => token.word)
     covered = Math.max(0, covered - unit.text.length)
-    if (lastWord && lastWord.end > unit.text.length) covered = lastWord.end - unit.text.length
+    // The joiner between the two units is in neither of them.
+    if (lastWord && lastWord.end > unit.text.length) covered = Math.max(0, lastWord.end - unit.text.length - found[index].lead)
     return { ...unit, tokens }
   })
 }

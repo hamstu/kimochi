@@ -60,6 +60,9 @@ pub enum Command {
     Insert { pid: u32, code: String },
     /// Insert the generic Windows API hooks (GDI text calls and friends).
     PcHooks { pid: u32 },
+    /// Decode multibyte (ANSI) text whose hook names no code page with this one from now on (the
+    /// language being read changed). Only sent to a helper whose `ready` carried `codepage`.
+    CodePage { codepage: u32 },
     Quit,
 }
 
@@ -103,9 +106,31 @@ pub fn parse_command(line: &str) -> Result<Command, String> {
                 .to_string(),
         }),
         "pchooks" => Ok(Command::PcHooks { pid: pid()? }),
+        "codepage" => Ok(Command::CodePage {
+            codepage: value["codepage"]
+                .as_u64()
+                .and_then(|c| u32::try_from(c).ok())
+                .filter(|c| *c > 0)
+                .ok_or("codepage needs a code page")?,
+        }),
         "quit" => Ok(Command::Quit),
         other => Err(format!("unknown command {other:?}")),
     }
+}
+
+/// Shift-JIS: the code page LunaHook decodes multibyte text with unless told otherwise, and what
+/// an app from before languages (which passes no `--codepage`) still gets.
+pub const DEFAULT_CODE_PAGE: u32 = 932;
+
+/// The `--codepage` argument of `luna`, else [`DEFAULT_CODE_PAGE`].
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn code_page_arg(args: &[String]) -> u32 {
+    args.iter()
+        .position(|a| a == "--codepage")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|c| *c > 0)
+        .unwrap_or(DEFAULT_CODE_PAGE)
 }
 
 /// One line of TextractorCLI output: `[handle:pid:addr:ctx:ctx2:name:hookcode] text`.
@@ -156,6 +181,23 @@ mod tests {
             parse_command(r#"{"cmd":"attach","pid":42,"bits":32,"pcHooks":"on"}"#),
             Ok(Command::Attach { pid: 42, bits: 32, pc_hooks: PcHooks::On })
         );
+    }
+
+    #[test]
+    fn a_code_page_change_names_the_code_page() {
+        assert_eq!(parse_command(r#"{"cmd":"codepage","codepage":949}"#), Ok(Command::CodePage { codepage: 949 }));
+        assert!(parse_command(r#"{"cmd":"codepage"}"#).is_err());
+        assert!(parse_command(r#"{"cmd":"codepage","codepage":0}"#).is_err());
+        assert!(parse_command(r#"{"cmd":"codepage","codepage":"949"}"#).is_err());
+    }
+
+    #[test]
+    fn the_code_page_argument_defaults_to_shift_jis() {
+        let args = |s: &str| s.split(' ').map(str::to_string).collect::<Vec<_>>();
+        assert_eq!(code_page_arg(&args("luna --dir x --flush-ms 400")), 932);
+        assert_eq!(code_page_arg(&args("luna --dir x --codepage 1251")), 1251);
+        assert_eq!(code_page_arg(&args("luna --dir x --codepage 0")), 932);
+        assert_eq!(code_page_arg(&args("luna --dir x --codepage nope")), 932);
     }
 
     #[test]

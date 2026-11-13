@@ -46,6 +46,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "serverSettings",
     "endpoint",
     "ocrMode",
+    // The engine last used for each language: this computer's engines, like `ocrMode`.
+    "ocrModeByLanguage",
     "cropRegions",
     "cropScanEnabled",
     "ankiCropRegions",
@@ -53,6 +55,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "texthookerIngestedHistory",
     "accountLinkServer",
     "yomitanSettings",
+    // Which Built-in Yomitan profile each account uses: this computer's Yomitan, like the engine.
+    "yomitanProfiles",
     "accountBackup",
     "sentenceAudio",
     // Look up on hover: how this computer's pointer and windowing system can be read (not on

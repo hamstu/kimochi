@@ -78,11 +78,20 @@
 }
 .name {
   fill: var(--k-text-2);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
 }
 .ink {
   fill: var(--gray-11);
-  font-family: var(--k-font-jp);
+  font-family: var(--k-font-text);
+}
+/* Glyph blocks for a language with no sample line (see GlyphBlocks.tsx). */
+.blocks {
+  fill: var(--gray-11);
+  opacity: 0.62;
+}
+.nameBlocks {
+  fill: var(--k-text-2);
+  opacity: 0.62;
 }
 .more {
   fill: var(--gray-a9);

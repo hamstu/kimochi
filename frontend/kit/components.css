@@ -399,6 +399,70 @@
 .k-menu-label { padding: var(--k-space-1-5) var(--k-space-2) var(--k-space-1); color: var(--k-text-3); font-size: var(--k-text-xs); font-weight: var(--k-weight-medium); }
 .k-menu-separator { height: 1px; margin: var(--k-space-1) calc(var(--k-space-1) * -1); background: var(--k-line); }
 
+/* ------------------------------------------------------------------ combobox (Combobox.tsx) */
+/* Closed: a select trigger showing the option's icon and label. */
+.k-combobox-value { display: inline-flex; align-items: center; gap: var(--k-space-2); min-width: 0; }
+.k-combobox-value > img,
+.k-combobox-value > svg { flex: none; }
+.k-combobox-value-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Open: the menu surface, its search field on top and the list scrolling under it. */
+.k-combobox-content {
+  display: flex;
+  flex-direction: column;
+  width: max(16rem, var(--radix-popover-trigger-width));
+  max-height: min(22rem, var(--radix-popover-content-available-height, 22rem));
+  padding: 0;
+  overflow: hidden;
+}
+.k-combobox-panel { display: flex; flex-direction: column; min-height: 0; }
+.k-combobox-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  height: var(--k-control-h);
+  margin: 0 var(--k-space-1);
+  padding: 0 var(--k-space-1-5);
+  border-bottom: 1px solid var(--k-line);
+  color: var(--k-text-3);
+  cursor: text;
+}
+.k-combobox-content .k-combobox-search { height: calc(var(--k-control-h) + var(--k-space-1)); }
+.k-combobox-search > svg { flex: none; width: var(--k-icon-sm); height: var(--k-icon-sm); }
+.k-combobox-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--k-text);
+  font: inherit;
+  font-size: var(--k-text-md);
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.k-combobox-input::placeholder { color: var(--k-text-3); }
+.k-combobox-list { min-height: 0; overflow-y: auto; padding: var(--k-space-1); scroll-padding-block: var(--k-space-1); }
+.k-combobox-option[aria-selected="true"] { font-weight: var(--k-weight-medium); }
+.k-combobox-option[aria-disabled="true"] { opacity: 0.4; }
+.k-combobox-option > img { flex: none; }
+.k-combobox-detail { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; color: var(--k-text-3); font-size: var(--k-text-sm); }
+.k-combobox-detail + .k-menu-item-check { margin-left: 0; }
+.k-combobox-empty { padding: var(--k-space-2); color: var(--k-text-3); font-size: var(--k-text-sm); text-align: center; }
+/* Inline: the same panel in place, as one field (the welcome guide). */
+.k-combobox-inline {
+  border-radius: var(--k-radius-lg);
+  background: var(--k-field);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+  transition: box-shadow var(--k-fast);
+}
+.dark .k-combobox-inline { background: var(--gray-a2); box-shadow: inset 0 0 0 1px var(--gray-a5); }
+.k-combobox-inline:focus-within { box-shadow: inset 0 0 0 1px var(--k-focus), 0 0 0 2px var(--accent-a4); }
+.k-combobox-inline[data-disabled] { opacity: 0.5; pointer-events: none; }
+.k-combobox-inline .k-combobox-search { margin: 0 var(--k-space-1); height: calc(var(--k-control-h) + var(--k-space-1)); }
+
 /* ------------------------------------------------------------------ popover, tooltip */
 .k-popover {
   z-index: 60;

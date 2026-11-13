@@ -7,11 +7,15 @@
  * capture's median text height below which text is dropped (`filterSmallTextAnnotations` in
  * ui/annotations.ts): a higher share removes more. A value saved by the old percentage slider
  * shows on its nearest step and is only rewritten when a step is chosen.
+ *
+ * Only for a language with furigana (`ruby` in ui/languages.ts): in any other, small text is short
+ * words, the filter is not applied (`visibleAnnotations`), and the row is not shown.
  */
 import { useId, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { IconButton, SettingsRow, SettingsSubgroup, Slider, Switch, cn } from '@kit'
 import { FILTER_LEVELS, filterLevelOf } from '@ui/annotations'
+import { useLanguage } from '../../bridge/useLanguage'
 import './small-text-filter.css'
 
 export function SmallTextFilter({
@@ -25,6 +29,7 @@ export function SmallTextFilter({
   onEnabledChange: (enabled: boolean) => void
   onThresholdChange: (threshold: number) => void
 }): ReactNode {
+  const [language] = useLanguage()
   const [open, setOpen] = useState(false)
   const panel = useId()
   const level = filterLevelOf(threshold)
@@ -32,6 +37,7 @@ export function SmallTextFilter({
     if (index !== level) onThresholdChange(FILTER_LEVELS[index].threshold)
   }
   const shown = enabled && open
+  if (!language.ruby) return null
   return (
     <>
       <SettingsRow

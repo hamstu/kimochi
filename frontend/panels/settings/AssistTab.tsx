@@ -3,9 +3,12 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Input, Select, SettingsPage, SettingsRow, SettingsSection } from '@kit'
 import { ExplainSettingsModal } from '@texthooker/components/ExplainSettingsModal'
 import { updateSettings } from '@texthooker/lib/settings'
+import { deeplTranslates } from '@texthooker/lib/translateLanguage'
 import type { Settings, TranslationProvider } from '@texthooker/lib/types'
 import { translationRoute } from '@ui/account'
+import type { Language } from '@ui/languages'
 import { useAccount } from '../../bridge/account'
+import { useLanguage } from '../../bridge/useLanguage'
 import { openSettings } from '../../bridge/tauri'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 
@@ -32,19 +35,23 @@ function shownProvider(provider: TranslationProvider | undefined, cloud: boolean
   return cloud ? 'kimochi' : 'deepl'
 }
 
-function providerDescription(settings: Settings, cloud: boolean): string {
+/** Which provider translates, and whether it can: DeepL takes only some languages. */
+function providerDescription(settings: Settings, cloud: boolean, language: Language): string {
   if (shownProvider(settings.translationProvider, cloud) === 'kimochi') {
     return cloud
       ? 'Uses your Kimochi Cloud monthly translations.'
       : 'Needs Kimochi Cloud: see Settings → Account.'
   }
+  if (!deeplTranslates(language.code))
+    return `DeepL can't translate from ${language.name}. Choose Kimochi cloud.`
   return translationRoute('deepl', settings.deeplApiKey, cloud)
-    ? 'Choose the translation provider'
+    ? 'Lines are translated with your DeepL key.'
     : 'Add your DeepL API key below.'
 }
 
 function AssistSections({ settings }: { settings: Settings }): ReactNode {
   const { cloud } = useAccount()
+  const [language] = useLanguage()
   const [deeplDraft, setDeeplDraft] = useState(settings.deeplApiKey)
   const [explainOpen, setExplainOpen] = useState(false)
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the draft follows outside changes
@@ -63,7 +70,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
   return (
     <div className="texthooker">
       <SettingsSection title="Translation">
-        <SettingsRow label="Translate with" description={providerDescription(settings, cloud)}>
+        <SettingsRow label="Translate with" description={providerDescription(settings, cloud, language)}>
           <Select
             aria-label="Translate with"
             value={provider}

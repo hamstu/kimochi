@@ -15,6 +15,9 @@
  *   ?fragments=1     OCR reports a box per word (a particle a box), not a box per line
  *   ?filter=0        keep furigana and small text (the overlay's small-text filter off)
  *   ?grouping=1      Group text into regions (the grouped overlay)
+ *   ?language=<code> the language being read (ui/languages.ts; default ja): the overlay measures
+ *                    and sets the text in its fonts and way, and the game says the language's
+ *                    sample sentence (ui/language-samples.ts) unless the studio gives a script
  *   ?typeface=manga  set the text in Manga OCR's typeface
  *   ?highlight=<rrggbb>  the highlight colour over hoverable text (Settings → Overlay look;
  *                    default: the app's indigo)
@@ -92,6 +95,7 @@ import { logSections } from '@ui/log-sections.js'
 import { studioJson } from '../studio/bridge'
 import { drawGame, gamePicture, type Game, type GameKind } from './game'
 import { DEFAULT_HISTORY, DEFAULT_SCRIPT, lookupWord, plainText, type StageScript } from './script'
+import { sampleFor } from '@ui/language-samples'
 import '@ui/game-dictionary.css'
 import { apiEntries, apiTokenize } from './api-dictionary'
 
@@ -127,7 +131,13 @@ function stagePad(selector: PadEditor): () => void {
   }
 }
 const scene = params.get('scene') ?? 'overlay-words'
-const script: StageScript = { ...DEFAULT_SCRIPT, ...(studioJson<Partial<StageScript>>('script') ?? {}) }
+const language = params.get('language') ?? 'ja'
+const languageSample = language === 'ja' ? null : sampleFor(language)
+const script: StageScript = {
+  ...DEFAULT_SCRIPT,
+  ...(languageSample ? { speaker: '', lines: [languageSample.sentence], words: {} } : {}),
+  ...(studioJson<Partial<StageScript>>('script') ?? {})
+}
 const history = studioJson<unknown[]>('history') ?? DEFAULT_HISTORY
 const fullDictionary = params.get('dictionary') === 'full'
 const popupType = params.get('popup') ?? (fullDictionary ? 'custom-api' : 'yomitan')
@@ -204,7 +214,8 @@ function grouping(): Record<string, unknown> {
   return {
     ...SETTINGS_DEFAULTS.textOverlayGrouping,
     enabled: flag('grouping'),
-    filterSmallText: params.get('filter') !== '0'
+    filterSmallText: params.get('filter') !== '0',
+    ...(language === 'ja' ? {} : { language })
   }
 }
 

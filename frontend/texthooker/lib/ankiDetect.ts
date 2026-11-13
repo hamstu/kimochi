@@ -11,7 +11,7 @@
      out filtered decks; again a tie is left to the person.
    Only reads: note types, their fields, decks and note searches. */
 
-import type { AnkiFieldMapping } from "./types";
+import { JAPANESE_ONLY_MARKERS, type AnkiFieldMapping } from "./types";
 
 /** The AnkiConnect reads Detect needs (ankiconnect.ts's wrappers, or a stand-in in tests). */
 export interface AnkiReader {
@@ -133,7 +133,12 @@ function uniqueMost<T extends { count: number }>(entries: T[]): { best: T | null
 
 const CHOOSE = "Choose the deck and note type below.";
 
-export async function detectAnkiSetup(anki: AnkiReader): Promise<DetectedSetup> {
+/** `japanese`: the language being read is Japanese; otherwise the Japanese-only markers (sentence
+    furigana, pitch accent) are left unmapped. */
+export async function detectAnkiSetup(
+  anki: AnkiReader,
+  { japanese = true }: { japanese?: boolean } = {},
+): Promise<DetectedSetup> {
   const named = (await anki.models()).flatMap((model) => {
     const family = noteFamily(model);
     return family ? [{ model, family }] : [];
@@ -177,7 +182,9 @@ export async function detectAnkiSetup(anki: AnkiReader): Promise<DetectedSetup> 
     deckName: deck.best.deck,
     modelNotes: model.count,
     deckNotes: deck.best.count,
-    fieldMappings: model.fieldMappings,
+    fieldMappings: japanese
+      ? model.fieldMappings
+      : model.fieldMappings.filter((m) => !(m.marker && JAPANESE_ONLY_MARKERS.includes(m.marker))),
   };
 }
 

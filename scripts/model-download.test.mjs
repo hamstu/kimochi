@@ -26,7 +26,7 @@ const {
   progressText,
   statusLine
 } = await load('model-download.ts')
-const { normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
+const { normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS, engineReadsLanguage } = await load('capabilities.ts')
 const { acceleratorLabel, engineHint, engineListed, engineOffered, engineSelectable } = await load('ocr-engines.ts')
 const { OCR_MODES } = await load('settings.ts')
 
@@ -272,11 +272,31 @@ test('an OS-specific engine is offered only on its OS', () => {
 test('Kimochi cloud is listed only when signed in, or while it is still selected', () => {
   const signedIn = { os: 'macos', cloudAccess: true }
   const signedOut = { os: 'macos', cloudAccess: false }
-  assert.equal(engineListed('cloud', signedIn, 'meikiocr'), true)
-  assert.equal(engineListed('cloud', signedOut, 'meikiocr'), false)
-  assert.equal(engineListed('cloud', signedOut, 'cloud'), true, 'the selected engine stays visible')
-  assert.equal(engineListed('meikiocr', signedOut, 'cloud'), true)
-  assert.equal(engineListed('oneocr', signedOut, 'meikiocr'), false, 'still OS-specific')
+  assert.equal(engineListed('cloud', signedIn, 'meikiocr', 'ja'), true)
+  assert.equal(engineListed('cloud', signedOut, 'meikiocr', 'ja'), false)
+  assert.equal(engineListed('cloud', signedOut, 'cloud', 'ja'), true, 'the selected engine stays visible')
+  assert.equal(engineListed('meikiocr', signedOut, 'cloud', 'ja'), true)
+  assert.equal(engineListed('oneocr', signedOut, 'meikiocr', 'ja'), false, 'still OS-specific')
+})
+
+test('an engine that cannot read the language is left out, unless it is the selected one', () => {
+  const capabilities = normalizeCapabilities(
+    { os: 'macos', cloudAccess: true, ocrEngines: { ppocr: { languages: ['ja', 'zh-Hans', 'en'] } } },
+    DEFAULT_CAPABILITIES_MACOS
+  )
+  for (const mode of ['meikiocr', 'mangaocr', 'vocr']) {
+    assert.deepEqual([...capabilities.ocrEngines[mode].languages], ['ja'], `${mode} falls back to Japanese only`)
+    assert.equal(engineListed(mode, capabilities, 'googlelens', 'ja'), true, `${mode} for Japanese`)
+    assert.equal(engineListed(mode, capabilities, 'googlelens', 'ko'), false, `${mode} for Korean`)
+  }
+  assert.equal(engineListed('meikiocr', capabilities, 'meikiocr', 'ko'), true, 'the selected engine stays visible')
+  assert.equal(engineListed('ppocr', capabilities, 'googlelens', 'en'), true)
+  assert.equal(engineListed('ppocr', capabilities, 'googlelens', 'ru'), false)
+  for (const mode of ['googlelens', 'cloud', 'livetext']) assert.equal(engineListed(mode, capabilities, 'meikiocr', 'ru'), true, `${mode} reads every language`)
+  assert.equal(engineListed('livetext', { ...capabilities, os: 'windows' }, 'meikiocr', 'ja'), false, 'still OS-specific')
+  assert.equal(engineReadsLanguage(undefined, 'ko'), true)
+  assert.equal(engineReadsLanguage({ available: true }, 'ko'), true)
+  assert.equal(engineReadsLanguage({ available: true, languages: ['ja'] }, 'ko'), false)
 })
 
 test('cloudAccess defaults to false and is read from the payload', () => {
@@ -327,6 +347,7 @@ test('the capabilities carry the model gate and its human reason through normali
   )
   assert.deepEqual(caps.ocrEngines.meikiocr, {
     available: false,
+    languages: ['ja'],
     reason: 'Downloading model… 32%',
     model: 'downloading'
   })
