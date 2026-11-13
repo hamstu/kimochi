@@ -32,6 +32,15 @@ if (names.length) {
 const files = [...staged.keys()].filter((file) => formatted.test(file) || file.endsWith('.rs'))
 if (!files.length) process.exit(0)
 
+// A checkout that has not run `npm install` since the tools arrived still commits, with a nudge.
+const tools = path.join(root, 'node_modules', '.bin')
+if (!existsSync(path.join(tools, process.platform === 'win32' ? 'oxfmt.cmd' : 'oxfmt'))) {
+  console.warn(
+    'pre-commit: oxfmt is not installed; run `npm install` to format and lint commits. Committing as staged.'
+  )
+  process.exit(0)
+}
+
 const scratch = mkdtempSync(path.join(tmpdir(), 'kimochi-pre-commit-'))
 let failed = false
 try {
