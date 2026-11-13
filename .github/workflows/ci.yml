@@ -321,6 +321,16 @@ jobs:
       - name: Test the Screen AI worker crate
         # Its pipe protocol, result decoding and component search; Google's library is not needed.
         run: cargo test --manifest-path screenai/Cargo.toml
+      # The Windows-only crates otherwise compile only inside a release bundle: the voice hook,
+      # the text hook helper, the OneOCR worker and the `kimochi` command's launcher.
+      - name: Check the Windows-only crates
+        if: runner.os == 'Windows'
+        run: |
+          for crate in voicehook hookd oneocr-worker cli-launcher; do
+            echo "::group::cargo check $crate"
+            cargo check --manifest-path "$crate/Cargo.toml"
+            echo "::endgroup::"
+          done
       - name: Test vocr-core
         # VOCR6's pipeline (spotter decode, preprocessing, character cells, LM beam). The parity runs
         # against the Python reference need the models and are done by hand (vocr-core/README.md).

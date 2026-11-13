@@ -258,7 +258,7 @@ pub unsafe fn slot(obj: *mut c_void, idx: usize) -> usize {
 /// Call slot `idx` of `obj`'s vtable: `vcall!(obj, idx, fn(u32) -> HRESULT, 5)`.
 #[macro_export]
 macro_rules! vcall {
-    ($obj:expr, $idx:expr, fn($($t:ty),*) -> $r:ty $(, $a:expr)*) => {{
+    ($obj:expr, $idx:expr, fn($($t:ty),* $(,)?) -> $r:ty $(, $a:expr)* $(,)?) => {{
         let o: *mut ::std::ffi::c_void = $obj as *mut ::std::ffi::c_void;
         let f: unsafe extern "system" fn(*mut ::std::ffi::c_void $(, $t)*) -> $r =
             ::std::mem::transmute($crate::slot(o, $idx));
