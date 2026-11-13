@@ -21,7 +21,7 @@ impl Fixture {
     fn clip(&self, seq: u64, start: f64, source: Option<&str>, dur: f64) {
         let name = format!("clips/{seq}.wav");
         crate::wav::write(&self.0.join(&name), &vec![0.2; 16000], 16000).unwrap();
-        self.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"dsound","start":start,"t":start+dur*1000.0,"dur":dur,"file":name,"source":source,"fmt":"16000Hz 1ch PCM16"}));
+        self.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"dsound","start":start,"t":start+dur*1000.0,"dur":dur,"file":name,"source":source,"fmt":"16000Hz 1ch PCM16","rms":0.1 + seq as f64 * 0.003}));
     }
     fn hooked(&self) -> Hooked {
         let mut h = Hooked::default();
@@ -384,6 +384,7 @@ fn a_remembered_voice_stream_is_trusted_from_its_first_clip() {
             fmt: Some("16000Hz 1ch PCM16".into()),
             looping: false,
             channel: None,
+            rms: None,
         }
         .group(),
     );
@@ -484,6 +485,7 @@ fn a_quote_keeps_its_voice_from_the_narration_row_typed_out_after_it() {
         fmt: None,
         looping: false,
         channel: None,
+        rms: None,
     };
     let pairs = classify::pair(&lines, &[&clip], 900., 3400.);
     assert_eq!(pairs[0].map(|(i, _)| i), Some(0), "the quote takes its voice");
@@ -544,4 +546,181 @@ fn a_voice_and_an_effect_starting_together_go_by_the_lines_length() {
     let matched = h.tick(4500.);
     assert_eq!(matched.len(), 1);
     assert_eq!(matched[0].clip.seq, 2);
+}
+#[test]
+fn one_voice_heard_by_two_adapters_is_used_not_left_untrusted() {
+    // Live SiglusEngine: every voice is a mono DirectSound buffer and, at the same
+    // moment, Ogg reads from its `koe` archive (a partial first read, then the whole file). Both
+    // groups scored as voice, each was the other's competitor, and no line got a hooked voice.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    let mut matched = Vec::new();
+    for i in 1..=6u64 {
+        let ts = i as f64 * 9000.;
+        f.clip(i, ts - 330., None, 3.);
+        for (k, dur) in [(1u64, 0.4), (2, 3.0)] {
+            let seq = 100 + i * 10 + k;
+            let name = format!("clips/file{seq}.wav");
+            crate::wav::write(&f.0.join(&name), &vec![0.2; 16000], 16000).unwrap();
+            f.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"file","start":ts-336.,"t":ts-336.,"dur":dur,"file":name,"source":format!("z0001.ovk#{k}"),"fmt":"ogg"}));
+        }
+        h.line(line(&i.to_string(), ts));
+        matched.extend(h.tick(ts + 4000.).into_iter().map(|m| (m.line.uid, m.clip.api)));
+    }
+    assert_eq!(matched.len(), 6, "groups: {:?}", h.report.groups);
+    assert!(matched.iter().all(|(_, api)| api == "dsound"), "{matched:?}");
+    assert_eq!(h.voice_group(), Some("dsound | 16000Hz 1ch PCM16 | "));
+}
+#[test]
+fn effects_the_script_plays_with_lines_do_not_unseat_the_voice() {
+    // Live SiglusEngine: the script fires a few stereo effects with its lines,
+    // timed like a voice (330 ms before the text), and they scored as high as the mono voice: as
+    // competitors, no group was trusted. They are the same few sounds again and again.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    let mut matched = Vec::new();
+    for i in 1..=8u64 {
+        let ts = i as f64 * 9000.;
+        if i % 2 == 0 {
+            f.clip(i, ts - 330., None, 2.0 + i as f64 * 0.3);
+        }
+        if i != 2 && i != 5 && i != 8 {
+            let (dur, rms) = [(1.61, 0.142), (0.81, 0.074)][(i % 2) as usize];
+            let name = format!("clips/fx{i}.wav");
+            crate::wav::write(&f.0.join(&name), &vec![0.1; 16000], 16000).unwrap();
+            f.event(json!({"ev":"clip","seq":100+i,"s":100+i,"api":"dsound","start":ts-320.,"t":ts-320.+dur*1000.,"dur":dur,"file":name,"fmt":"pcm16 2ch 48000Hz","rms":rms}));
+        }
+        h.line(line(&i.to_string(), ts));
+        matched.extend(h.tick(ts + 4000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+    }
+    assert!(matched.iter().all(|(uid, seq)| uid == &seq.to_string()), "{matched:?} groups: {:?}", h.report.groups);
+    assert!(matched.len() >= 3, "{matched:?} groups: {:?}", h.report.groups);
+    assert_eq!(h.voice_group(), Some("dsound | 16000Hz 1ch PCM16 | "), "groups: {:?}", h.report.groups);
+}
+/// Live SiglusEngine, as a game plays: lines a few seconds apart, some unvoiced;
+/// each voice starts 350 ms before its line arrives, heard as a mono DirectSound buffer (its clip
+/// written when it ends) and as reads of the `koe` archive (three clips written as it starts: a
+/// partial first read, the whole file, an empty re-read). Returns each line given a voice, with
+/// the line its clip was played for.
+fn siglus_session(remembered: bool) -> Vec<(String, String)> {
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    if remembered {
+        h.remembered = Some("dsound | pcm16 1ch 44100Hz | ".into());
+    }
+    // (gap before the line in ms, voiced, voice length in s)
+    let script: [(f64, bool, f64); 15] = [
+        (2400., true, 1.15),
+        (2350., false, 0.),
+        (2300., true, 3.3),
+        (3000., true, 1.24),
+        (2900., false, 0.),
+        (3100., true, 5.29),
+        (2200., false, 0.),
+        (2400., true, 2.36),
+        (2800., true, 1.65),
+        (2300., true, 0.36),
+        (2600., false, 0.),
+        (2500., true, 2.9),
+        (2450., true, 1.1),
+        (3300., true, 4.2),
+        (2200., true, 0.8),
+    ];
+    let mut events: Vec<(f64, serde_json::Value)> = Vec::new();
+    let mut lines = Vec::new();
+    let mut ts = 10_000.;
+    let mut seq = 0u64;
+    for (i, (gap, voiced, dur)) in script.iter().enumerate() {
+        ts += gap;
+        let uid = format!("L{i}");
+        lines.push((
+            ts,
+            Line {
+                uid: uid.clone(), text: format!("「台詞その{i}」"), ts, appeared: None, ocr: false, scan: None
+            },
+        ));
+        if !voiced {
+            continue;
+        }
+        let start = ts - 350.;
+        for (k, d, complete) in [(1, 0.43, false), (2, *dur, true), (3, 0.0, true)] {
+            seq += 1;
+            let name = format!("clips/{uid}-file{k}.wav");
+            crate::wav::write(&f.0.join(&name), &vec![0.2; (16000. * d.max(0.01)) as usize], 16000).unwrap();
+            events.push((start - 6., json!({"ev":"clip","seq":seq,"s":2+k,"api":"file","start":start-6.,"t":start-6.,"dur":d,"file":name,"source":format!("z0001.ovk#{k}"),"fmt":"ogg","meta":{"archive":"z0001.ovk","complete":complete},"for":uid})));
+        }
+        seq += 1;
+        let name = format!("clips/{uid}-ds.wav");
+        crate::wav::write(&f.0.join(&name), &vec![0.2; (16000. * dur) as usize], 16000).unwrap();
+        events.push((start + dur * 1000., json!({"ev":"clip","seq":seq,"s":100+seq,"api":"dsound","start":start,"t":start+dur*1000.,"dur":dur,"file":name,"fmt":"pcm16 1ch 44100Hz","rms":0.02 + i as f64 * 0.003,"for":uid})));
+    }
+    events.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let owner: std::collections::HashMap<(String, u64), String> = events
+        .iter()
+        .map(|(_, e)| {
+            (
+                (e["api"].as_str().unwrap().to_string(), e["seq"].as_u64().unwrap()),
+                e["for"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    let (mut ei, mut li) = (0, 0);
+    let mut got = Vec::new();
+    let mut now = 10_000.;
+    while now < ts + 20_000. {
+        while ei < events.len() && events[ei].0 <= now {
+            f.event(events[ei].1.clone());
+            ei += 1;
+        }
+        while li < lines.len() && lines[li].0 <= now {
+            h.line(lines[li].1.clone());
+            li += 1;
+        }
+        for m in h.tick(now) {
+            got.push((m.line.uid.clone(), owner[&(m.clip.api.clone(), m.clip.seq)].clone()));
+        }
+        now += 250.;
+    }
+    got
+}
+#[test]
+fn a_voice_heard_twice_goes_to_the_line_it_leads_not_the_one_before() {
+    let got = siglus_session(true);
+    assert!(got.iter().all(|(line, owner)| line == owner), "{got:?}");
+    // Every voiced line, each once.
+    let voiced = [0, 2, 3, 5, 7, 8, 9, 11, 12, 13, 14].map(|i| format!("L{i}"));
+    let mut lines: Vec<String> = got.iter().map(|(l, _)| l.clone()).collect();
+    lines.sort();
+    let mut want = voiced.to_vec();
+    want.sort();
+    assert_eq!(lines, want, "{got:?}");
+}
+#[test]
+fn a_new_game_heard_twice_never_gives_a_line_another_lines_voice() {
+    let got = siglus_session(false);
+    assert!(got.iter().all(|(line, owner)| line == owner), "{got:?}");
+    assert!(got.len() >= 8, "{got:?}");
+}
+/// Opt-in, like the tests above: `KIMOCHI_ORT=… KIMOCHI_SOFT_WAV=<a soft voiced quote Silero
+/// hears no speech in> cargo test --lib hooked::tests::a_soft -- --ignored`. Live SiglusEngine fell
+/// back to system audio for a breathy quote (0.00 speech), its clip starting 366 ms before
+/// the quote, as all of the game's voices do.
+#[test]
+#[ignore]
+fn a_soft_quote_on_time_in_an_established_stream_keeps_its_voice() {
+    ort::init_from(std::env::var("KIMOCHI_ORT").expect("KIMOCHI_ORT")).commit().unwrap();
+    let f = Fixture::new();
+    let src = std::path::PathBuf::from(std::env::var("KIMOCHI_SOFT_WAV").expect("KIMOCHI_SOFT_WAV"));
+    std::fs::copy(&src, f.0.join("clips/1.wav")).unwrap();
+    let (samples, rate) = feed::decode(&f.0.join("clips/1.wav")).unwrap();
+    let dur = samples.len() as f64 / rate as f64;
+    assert!(dur >= 1.5, "the clip must be long enough to be judged");
+    f.event(json!({"ev":"clip","seq":1,"s":1,"api":"dsound","start":10_000. - 366.,"t":10_000. - 366. + dur * 1000.,"dur":dur,"file":"clips/1.wav","fmt":"pcm16 1ch 44100Hz"}));
+    let mut h = f.hooked();
+    h.remembered = Some("dsound | pcm16 1ch 44100Hz | ".into());
+    h.speech = Some(crate::vad::Vad::new().unwrap());
+    assert!(h.speech.as_mut().unwrap().speech_share(&samples, rate).unwrap() < MIN_SPEECH_SHARE, "Silero must miss it");
+    h.line(text_line("soft", "「そうだね」", 10_000.));
+    let matched = h.tick(60_000.);
+    assert_eq!(matched.iter().map(|m| m.line.uid.as_str()).collect::<Vec<_>>(), vec!["soft"]);
 }

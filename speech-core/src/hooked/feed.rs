@@ -147,6 +147,7 @@ impl Feed {
                     fmt: e["fmt"].as_str().map(str::to_owned),
                     looping: e["looping"].as_bool().unwrap_or(false),
                     channel: e["meta"]["channel"].as_str().map(str::to_owned).or_else(|| s.channel.clone()),
+                    rms: e["rms"].as_f64(),
                 });
             }
             _ => {}

@@ -66,6 +66,8 @@ pub struct Verdict {
     pub median_dur: f64,
     /// Its clips' names or channel say voice (no listening needed to trust it).
     pub named: bool,
+    /// How many of its clips start with a line (0..1; 0 with no lines to judge by).
+    pub with_lines: f64,
     pub reasons: Vec<String>,
 }
 
@@ -79,6 +81,19 @@ fn median(mut v: Vec<f64>) -> f64 {
 
 fn near(start: f64, windows: &[(f64, f64, f64)]) -> bool {
     windows.iter().any(|(a, lead, lag)| start >= a - lead && start <= a + lag)
+}
+
+/// Two clips are one recording played twice: as long as each other to the millisecond, and as
+/// loud where the adapter measured it (a stream cut short at its buffer's end, which many clips
+/// share, is told apart by its loudness).
+fn same_sound(a: &HookClip, b: &HookClip) -> bool {
+    a.dur > 0.0
+        && (a.dur - b.dur).abs() < 0.002
+        && match (a.rms, b.rms) {
+            (Some(x), Some(y)) => (x - y).abs() <= 0.01 * x.max(y),
+            (None, None) => true,
+            _ => false,
+        }
 }
 
 /// Scores every group of `clips`. Higher `voice` = more likely the voice.
@@ -108,6 +123,7 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
             logit -= 3.0;
             reasons.push("loops".into());
         }
+        let mut with_lines = 0.0;
         let med = median(clips.iter().map(|c| c.dur).filter(|d| *d > 0.0).collect());
         if med > 30.0 {
             logit -= 3.0;
@@ -118,12 +134,21 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
         } else if (1.2..=12.0).contains(&med) {
             logit += 0.5;
         }
+        // The same sound played again and again: effects (a game's script can fire them with its
+        // lines, timed like a voice: live SiglusEngine, a 1.61 s effect 330 ms before two lines).
+        // No two voice lines are one recording.
+        let again = clips.iter().filter(|&&c| clips.iter().any(|&o| !std::ptr::eq(c, o) && same_sound(c, o))).count();
+        if n >= 3.0 && again as f64 / n >= 0.34 {
+            logit -= 2.0 + 4.0 * again as f64 / n;
+            reasons.push(format!("{again} of its clips play the same sounds again"));
+        }
         if clips.iter().filter(|c| c.fmt.as_deref().is_some_and(|f| f.contains("1ch"))).count() as f64 / n > 0.5 {
             logit += 0.7;
             reasons.push("mono".into());
         }
         if !windows.is_empty() {
             let rate = clips.iter().filter(|c| near(c.start, &windows)).count() as f64 / n;
+            with_lines = rate;
             let covered = windows.iter().filter(|w| clips.iter().any(|c| near(c.start, &[**w]))).count();
             let cover = covered as f64 / windows.len() as f64;
             // A group of one or two clips says little either way.
@@ -137,11 +162,46 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
             clips: clips.len(),
             median_dur: med,
             named,
+            with_lines,
             reasons,
         });
     }
     out.sort_by(|a, b| b.voice.partial_cmp(&a.voice).unwrap());
     out
+}
+
+/// How close two clips' starts are for them to be one sound heard twice.
+pub const ECHO_MS: f64 = 100.0;
+
+/// Groups `a` and `b` hear the same sounds through two adapters: most clips of each start with one
+/// of the other's (from the first sound: one adapter can make three clips of it while the other
+/// makes one). Live SiglusEngine: each voice is a mono DirectSound buffer and, at the same
+/// moment, Ogg reads from its `koe` archive. Such groups are one candidate, not competitors (as
+/// competitors, each left the other untrusted and the game fell back to the system recording).
+pub fn echoes(clips: &[HookClip], a: &str, b: &str) -> bool {
+    let starts = |g: &str| clips.iter().filter(|c| c.group() == g).map(|c| c.start).collect::<Vec<_>>();
+    let (x, y) = (starts(a), starts(b));
+    let share = |p: &[f64], q: &[f64]| {
+        p.iter().filter(|s| q.iter().any(|t| (*s - t).abs() <= ECHO_MS)).count() as f64 / p.len().max(1) as f64
+    };
+    a != b && !x.is_empty() && !y.is_empty() && share(&x, &y) >= 0.6 && share(&y, &x) >= 0.6
+}
+
+/// How many clips group `g` makes of each sound: 1 for a capture that hears each sound once, more
+/// for one that hears it in pieces (the `koe` archive's reads: a partial first read, the whole file,
+/// a read again). Of two groups that echo each other, the one with fewer is the clean capture.
+pub fn per_sound(clips: &[HookClip], g: &str) -> f64 {
+    let mut starts: Vec<f64> = clips.iter().filter(|c| c.group() == g).map(|c| c.start).collect();
+    starts.sort_by(f64::total_cmp);
+    let mut sounds = 0usize;
+    let mut last = f64::NEG_INFINITY;
+    for s in &starts {
+        if s - last > ECHO_MS {
+            sounds += 1;
+        }
+        last = *s;
+    }
+    starts.len() as f64 / sounds.max(1) as f64
 }
 
 /// Groups taken as voice: above 0.55, or the best one if it clearly leads and is above 0.3.

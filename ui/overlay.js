@@ -324,6 +324,14 @@ const hook = {
    * happens to run out of room.
    */
   wrap: null,
+  /** Where a whole reading last found the line's ink (`{line, box}`): the card is centred on it. */
+  /**
+   * Where the card's text box went for the last line placed on the game's text (`{x, y}`, as
+   * fractions of the window), the box it was found in (`at`) and the game: the next line waits
+   * there for its reading.
+   */
+  textAt: null,
+  found: null,
   /** The last reading that did not find the line whole (`hook-line-chase` logs its blocks). */
   missed: null,
   /** The last reading aligned with, so the same one is not counted twice. */
@@ -1268,6 +1276,20 @@ function hookAligned(annotations) {
   // wherever OCR found it is where it is (a game that writes each line below the last one).
   const fresh = whole && hook.placed !== hook.line
   if (whole) hook.placed = hook.line
+  // Where this line's own ink is: the card's ink is centred on it (`hookCardView`). Not the kept
+  // box, which only grows (a short line after a long one keeps the long one's width) and keeps its
+  // place against one-off readings; OCR's boxes stand a few pixels off the ink, more on one engine
+  // than another, but about as far on each side, so centred the card lands on the game's text.
+  // (Another reading of the line a pixel or two off is the same place: the card does not twitch.)
+  const same = (a, b) =>
+    Math.abs(a.x - b.x) * fw < 2 &&
+    Math.abs(a.y - b.y) * fh < 2 &&
+    Math.abs(a.width - b.width) * fw < 2 &&
+    Math.abs(a.height - b.height) * fh < 2
+  if (whole && !(hook.found?.line === hook.line && same(hook.found.box, found))) {
+    hook.found = { line: hook.line, box: found }
+    queueMicrotask(syncHookCard)
+  }
   // The game's own line breaks: only from a reading of the whole line that cut it into rows
   // holding exactly the line's text (hook-match.ts `splitAcrossLines`).
   const rows = placed.annotations[0]?.lineTexts
@@ -1285,13 +1307,17 @@ function hookAligned(annotations) {
     hook.moveTo = null
     hook.glide = true
   } else if (stays) {
-    // Where the text starts stays put; its box only grows, to the furthest the text has reached.
+    // Its box only grows, to the furthest the text has reached. Where it starts stays put through
+    // readings of a line, and moves to where each new line starts (a line opening with 「 starts
+    // its ink half a glyph in): where the next line's card waits until a reading places it.
+    const x = fresh ? found.x : saved.x
+    const y = fresh ? found.y : saved.y
     if (placed.precision >= 0.8)
       box = {
-        x: saved.x,
-        y: saved.y,
-        width: Math.min(Math.max(saved.width, found.x + found.width - saved.x), 1 - saved.x),
-        height: Math.max(saved.height, found.y + found.height - saved.y)
+        x,
+        y,
+        width: Math.min(Math.max(saved.x + saved.width, found.x + found.width) - x, 1 - x),
+        height: Math.max(saved.y + saved.height, found.y + found.height) - y
       }
     hook.moveTo = null
   } else if (whole && (!saved?.height || (hook.moveTo && near(found, hook.moveTo)))) {
@@ -1311,6 +1337,8 @@ function hookAligned(annotations) {
   log({
     check: 'hook-card-aligned',
     box,
+    // Where this reading found the text, before `stays` kept the box where it was.
+    found,
     ...(placed.names.length ? { name: placed.names[0].description } : {}),
     stays,
     whole,
@@ -1370,23 +1398,76 @@ function hookCardView() {
   // How many lines the game shows the line on, as OCR found it: the card wraps onto no more.
   let lines
   let pending = false
+  // On the game's text (Auto align, the line placed), the card breaks the line where the game
+  // does; anywhere else it wraps to its own width.
+  const example = !hook.line
+  const shownText = example ? hookExample() : (hook.shown ?? hook.line)
+  const wrap = hook.wrap
+  const gameRows =
+    saved && saved === game.ocrBox && hook.placed === hook.line && wrap?.line === hook.line && wrap.shown === shownText
+      ? wrap.rows
+      : null
   if (saved && saved === game.ocrBox) {
-    // OCR's box is the ink: the text's first line box starts above its ink by half the line's
-    // leading (and a little more, above the glyphs inside their em), and its height is so many
-    // lines of the game's pitch.
-    const ink = (saved.height ?? 0) * bounds.height
-    const rows = Math.max(1, Math.round((ink - fontPx) / (fontPx * lineHeight)) + 1)
+    // OCR's box is the game's ink (give or take a few pixels, as far on each side), so the card's
+    // ink goes on it: its first row's ink centred on the box's first row, top to bottom, and across
+    // the box when it shows the line in the game's rows (else its left edge on the box's). The
+    // first row is the line's widest (the game wraps at its box's width; a quote's later rows
+    // are indented), so it spans the box. Centred, never flush with one edge: the card's font is not the game's, its
+    // glyphs a little taller or shorter, and OCR pads its boxes by an engine's own margin. Where
+    // the card's ink is in its text box is measured in its own font (hook-card.js `ink`).
+    const height = (saved.height ?? 0) * bounds.height
+    const rows = Math.max(1, Math.round((height - fontPx) / (fontPx * lineHeight)) + 1)
     // Only once a reading has found this line: until then the box is the last line's, and while
     // a reading is on its way the line stays on one line, fading out at the box's end, rather
     // than wrapping into a box made for another line.
     if (hook.placed === hook.line) lines = rows
     else pending = hook.chasing === hook.line
+    const pitch = lineHeight * fontPx
+    // This line's own ink, once a reading found it; until then the kept box (the last line's).
+    const own = hook.found?.line === hook.line ? hook.found.box : null
+    const at = own ?? saved
+    const atHeight = at.height * bounds.height
+    const atRows = Math.max(1, Math.round((atHeight - fontPx) / pitch) + 1)
+    // The rows the card shows the line on, when they are the game's: the game's own line breaks,
+    // or one row of a line the game shows on one.
+    const cardRows = gameRows ?? (own && atRows === 1 && !pending ? [shownText] : null)
+    // Without a measurement: half the leading above the em, and the glyphs a little inside it.
+    const ink = hook.card?.ink?.((cardRows ?? [shownText]).join('\n'), fontPx, lineHeight) ?? {
+      left: 0,
+      top: ((lineHeight - 1) / 2 + 0.06) * fontPx,
+      height: 0.88 * fontPx,
+      right: at.width * bounds.width
+    }
+    // The first row's ink in OCR's box (the rows below it are a pitch apart), centred on the card's
+    // first row's: right however many rows the card ends up showing (one, while `pending`).
+    const firstRow = Math.max(ink.height * 0.5, atHeight - (atRows - 1) * pitch)
+    // Until a reading finds this line, where the last line's text started: a game starts each
+    // line where it started the last (an em before a 「, which inks half an em in), and nearer
+    // than the last line's ink would put it. Kept with its box, so a move of the text box is not
+    // followed by a place found for the old one.
+    const kept = hook.textAt
+    const last =
+      !own &&
+      kept?.exe === hookKey() &&
+      Math.abs(kept.at.x - saved.x) * bounds.width < pitch &&
+      Math.abs(kept.at.y - saved.y) * bounds.height < pitch
+        ? kept
+        : null
+    const across = last
+      ? last.x * bounds.width
+      : own && cardRows
+        ? (at.x + at.width / 2) * bounds.width - (ink.left + ink.right) / 2
+        : at.x * bounds.width - ink.left
+    const down = last ? last.y * bounds.height : at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
+    if (own && cardRows)
+      hook.textAt = { x: across / bounds.width, y: down / bounds.height, at: { x: at.x, y: at.y }, exe: hookKey() }
     where = {
-      x: ox + saved.x * bounds.width,
-      y: oy + saved.y * bounds.height - ((lineHeight - 1) / 2 + 0.06) * fontPx,
-      // A little over the measured width: the card's font is not quite the game's.
-      width: saved.width * bounds.width + fontPx * 0.6,
-      height: rows * lineHeight * fontPx
+      x: ox + across,
+      y: oy + down,
+      // To the furthest the text has reached, and a little over: the card's font is not quite
+      // the game's.
+      width: Math.max(saved.x + saved.width, at.x + at.width) * bounds.width - across + fontPx * 0.6,
+      height: rows * pitch
     }
   } else if (saved) {
     where = {
@@ -1416,15 +1497,6 @@ function hookCardView() {
   const surface = theme === 'blend' && inside ? (game.surface ?? null) : null
   if (theme === 'blend' && !surface)
     theme = resolveOverlayCardAppearance({ ...style, appearance: 'app' }, setting('appearance'), systemDark.matches)
-  // On the game's text (Auto align, the line placed), the card breaks the line where the game
-  // does; anywhere else it wraps to its own width.
-  const example = !hook.line
-  const shownText = example ? hookExample() : (hook.shown ?? hook.line)
-  const wrap = hook.wrap
-  const gameRows =
-    saved && saved === game.ocrBox && hook.placed === hook.line && wrap?.line === hook.line && wrap.shown === shownText
-      ? wrap.rows
-      : null
   if (gameRows) lines = gameRows.length
   return {
     text: gameRows && !example ? gameRows.join('\n') : shownText,

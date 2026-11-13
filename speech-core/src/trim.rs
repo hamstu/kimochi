@@ -21,6 +21,27 @@ pub struct Span {
     pub end: f64,
 }
 
+/// Below this share of a clip's loudest 20 ms (-40 dB), and this level, sound is a quiet tail.
+const TAIL_SHARE: f32 = 0.01;
+const TAIL_FLOOR: f32 = 0.0015;
+
+/// Where a hooked clip's sound ends: after its last 20 ms that is not a quiet tail, and
+/// `PAD_AFTER_MS` more. An engine that plays each voice from a buffer of a fixed size (live
+/// SiglusEngine: 8 or 12 s) leaves the rest of it after the voice, too quiet to hear (40 dB and more
+/// below the voice) but not silent, so the clip ran on for seconds past a short line.
+pub fn sound_end(samples: &[f32], sample_rate: u32) -> usize {
+    let window = (sample_rate as usize / 50).max(1);
+    let rms: Vec<f32> =
+        samples.chunks(window).map(|w| (w.iter().map(|x| x * x).sum::<f32>() / w.len() as f32).sqrt()).collect();
+    let peak = rms.iter().copied().fold(0.0f32, f32::max);
+    let quiet = (peak * TAIL_SHARE).max(TAIL_FLOOR);
+    let Some(last) = rms.iter().rposition(|r| *r > quiet) else {
+        return samples.len();
+    };
+    let pad = (PAD_AFTER_MS / 1000.0 * f64::from(sample_rate)) as usize;
+    ((last + 1) * window + pad).min(samples.len())
+}
+
 /// The part of a window that is the line's voice, before padding: from the first speech that
 /// belongs to the line to the last speech in the window. `anchor` is the line's arrival (ms
 /// from the window's start). None when there is no speech to keep.
@@ -188,5 +209,18 @@ mod tests {
         let p = [0.1, 0.1, 0.9, 0.8, 0.4, 0.7, 0.2, 0.1, 0.1, 0.1, 0.1, 0.9, 0.9];
         let spans = spans_from_probabilities(&p, 10.0, 0.5, 0.35, 30.0);
         assert_eq!(spans, vec![span(20.0, 60.0), span(110.0, 130.0)]);
+    }
+
+    #[test]
+    fn a_voice_in_a_fixed_size_buffer_ends_where_its_sound_does() {
+        let rate = 16_000;
+        let mut samples: Vec<f32> = (0..rate * 2).map(|i| 0.2 * ((i as f32) * 0.05).sin()).collect();
+        // Six seconds of the buffer's quiet rest, as live SiglusEngine leaves it.
+        samples.extend((0..rate as usize * 6).map(|i| if i % 3 == 0 { 0.0008 } else { -0.0004 }));
+        let end = super::sound_end(&samples, rate);
+        assert!((end as f64 / f64::from(rate) - 2.3).abs() < 0.05, "{}", end as f64 / f64::from(rate));
+        // A voice with no quiet rest is left whole.
+        let whole: Vec<f32> = (0..rate).map(|i| 0.2 * ((i as f32) * 0.05).sin()).collect();
+        assert_eq!(super::sound_end(&whole, rate), whole.len());
     }
 }

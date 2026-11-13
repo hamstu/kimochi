@@ -18,6 +18,10 @@ pub struct HookClip {
     pub fmt: Option<String>,
     pub looping: bool,
     pub channel: Option<String>,
+    /// How loud it is (RMS, 0..1), where the adapter measured it: the same sound played again
+    /// measures the same (`classify`).
+    #[serde(default)]
+    pub rms: Option<f64>,
 }
 impl HookClip {
     pub fn group(&self) -> String {
@@ -61,6 +65,8 @@ const TYPED_QUOTE_MS: f64 = 4000.0;
 /// A quote's row handed over this long after its voice ended still shares it (typed out late).
 const SHARE_AFTER_MS: f64 = 1500.0;
 const TIGHT_LEAD_MS: f64 = 500.0;
+/// How long past a voice's start, beyond the lead, the line it leads may still arrive.
+const LEAD_GRACE_MS: f64 = 300.0;
 const TIGHT_LAG_MS: f64 = 700.0;
 /// A clip this close to a line (either side) was played while text was being read.
 const OBSERVED_MS: f64 = 20_000.0;
@@ -192,8 +198,8 @@ impl Hooked {
         // a sparsely voiced game (one line in eight) would otherwise never get there.
         // A game whose voice stream an earlier session established is established from the start
         // while its capture runs: narration before this session's first voice is narration too.
-        self.trusted && (self.named_voice() || self.report.matched >= 3)
-            || (self.remembered.is_some() && !self.feeds.is_empty())
+        // An unnamed stream is only trusted once several of its sounds started with lines.
+        self.trusted || (self.remembered.is_some() && !self.feeds.is_empty())
     }
     fn named_voice(&self) -> bool {
         self.report.groups.iter().any(|g| g.named && self.voice_groups.contains(&g.group))
@@ -273,7 +279,7 @@ impl Hooked {
                         && c.file.is_some()
                         && c.dur <= 30.0
                         && classify::name_says(&classify::clip_name(c)) >= 0
-                        && now < c.start + c.dur * 1000.0 + 150.0
+                        && now < (c.start + c.dur * 1000.0 + 150.0).max(c.start + self.report.lead_ms + LEAD_GRACE_MS)
                         && in_window(c.start)
                 })
             })
@@ -282,8 +288,13 @@ impl Hooked {
     /// A clip whose file is named as voice is never second-guessed: Silero hears next to nothing in
     /// a shouted or sobbing line (live Unity: a shouted apology, `Sound/Voice/ch01_003.ogg`, at most
     /// 14% in any frame), and the name is the better witness.
-    fn no_speech(&mut self, clip: &HookClip, samples: &[f32], sample_rate: u32) -> bool {
-        if clip.dur < SPEECH_CHECK_MIN_S || classify::name_says(&classify::clip_name(clip)) > 0 {
+    ///
+    /// Nor is a clip of the established voice stream that starts with a quote, where the game's
+    /// voices start (`on_time`): its timing and the quote are the witness, as a name is. Live
+    /// SiglusEngine: a soft quote measured 0.00 speech, two other voices 0.11 and 0.19. An
+    /// effect in the voice's format that starts with narration (live AdvHD) is still judged.
+    fn no_speech(&mut self, clip: &HookClip, samples: &[f32], sample_rate: u32, on_time: bool) -> bool {
+        if clip.dur < SPEECH_CHECK_MIN_S || classify::name_says(&classify::clip_name(clip)) > 0 || on_time {
             return false;
         }
         match self.speech.as_mut().map(|vad| vad.speech_share(samples, sample_rate)) {
@@ -389,18 +400,22 @@ impl Hooked {
                 .collect()
         };
         let all = observed;
+        // How many sounds a group has heard, the evidence it is judged on: not its clips, as an
+        // adapter can make several of one sound (the `koe` archive's reads: three of each voice).
+        let sounds = |v: &classify::Verdict| v.clips as f64 / classify::per_sound(&all, &v.group) >= 2.5;
         // A clearly leading group can teach the lag even when its files have no names.
         let wide = classify::classify(&all, &self.lines, classify::MAX_LEAD_MS, classify::MAX_LAG_MS);
         // (A group too small to judge competes with none, as below.)
         let learned = wide
             .first()
             .filter(|v| {
-                v.clips >= 3
+                sounds(v)
                     && v.voice > 0.85
-                    && !wide
-                        .iter()
-                        .skip(1)
-                        .any(|other| (other.clips >= 3 || other.named) && v.voice - other.voice <= 0.15)
+                    && !wide.iter().skip(1).any(|other| {
+                        (sounds(other) || other.named)
+                            && v.voice - other.voice <= 0.15
+                            && !classify::echoes(&all, &v.group, &other.group)
+                    })
             })
             .map(|v| v.group.clone());
         let teach: Vec<&HookClip> = all
@@ -454,23 +469,76 @@ impl Hooked {
         self.report.groups = classify::classify(&all, &lines, self.report.lead_ms, self.report.lag_ms);
         // Unnamed groups need repeated evidence, and a clear lead over competing sounds. A group too
         // small to be judged (a door and a chime that happened to come with lines) competes with none.
-        let voice: Vec<String> = self
-            .report
-            .groups
+        // A group that hears the same sounds (`classify::echoes`) is no competitor: of the two, the
+        // better is the voice and the other is set aside, so a line's voice comes from one of them.
+        let groups = &self.report.groups;
+        let echo = |a: &classify::Verdict, b: &classify::Verdict| classify::echoes(&all, &a.group, &b.group);
+        // The game's remembered voice stream first; then a named one; then the one that hears each
+        // sound once (`classify::per_sound`); then the score.
+        let remembered = |v: &classify::Verdict| self.remembered.as_ref() == Some(&v.group);
+        let better = |a: &classify::Verdict, b: &classify::Verdict| {
+            let once = |v: &classify::Verdict| -(classify::per_sound(&all, &v.group) * 4.0).round();
+            (remembered(a), a.named, once(a), a.voice, &a.group) > (remembered(b), b.named, once(b), b.voice, &b.group)
+        };
+        let first: Vec<&classify::Verdict> = groups
             .iter()
             .filter(|v| {
                 (self.remembered.as_ref() == Some(&v.group) && v.voice > 0.5)
                     || v.voice > 0.75
                         && (v.named
-                            || (v.clips >= 3
-                                && !self.report.groups.iter().any(|other| {
+                            || (sounds(v)
+                                // A voice starts with its line, near enough every time: music and
+                                // ambience cut into pieces start with a line now and then.
+                                && v.with_lines >= 0.75
+                                && !groups.iter().any(|other| {
                                     other.group != v.group
-                                        && (other.clips >= 3 || other.named)
+                                        && (sounds(other) || other.named)
                                         && other.voice >= v.voice - 0.15
+                                        && !echo(v, other)
                                 })))
             })
-            .map(|v| v.group.clone())
             .collect();
+        // Of groups that hear the same sounds, only the better is the voice: two copies of one voice
+        // both taken were a tie no line could settle (and a voice's copy written as it starts, a
+        // file read, went to the line before before the line it leads had arrived). The remembered
+        // stream counts even before it scores: right after a restart, its copy has more clips.
+        // A group taken for voice that hears the same sounds as a better capture gives way to it,
+        // taken in its place: the evidence is the sounds', whichever heard them first (a file read
+        // is written as the voice starts, the buffer that plays it only once it has played).
+        let mut voice: Vec<String> = Vec::new();
+        for v in &first {
+            let taken = groups
+                .iter()
+                .filter(|other| other.group != v.group && better(other, v) && echo(v, other))
+                .max_by(|a, b| if better(a, b) { std::cmp::Ordering::Greater } else { std::cmp::Ordering::Less })
+                .map_or(&v.group, |other| &other.group);
+            if !voice.contains(taken) {
+                voice.push(taken.clone());
+            }
+        }
+        // Two echoes both taken (each the better by some measure): only the best.
+        let kept: Vec<String> = voice
+            .iter()
+            .filter(|g| {
+                let v = groups.iter().find(|x| &x.group == *g);
+                !voice.iter().any(|o| {
+                    o != *g
+                        && groups
+                            .iter()
+                            .find(|x| &x.group == o)
+                            .is_some_and(|o| v.is_some_and(|v| better(o, v) && echo(v, o)))
+                })
+            })
+            .cloned()
+            .collect();
+        let voice = kept;
+        for v in self.report.groups.iter_mut() {
+            if !voice.contains(&v.group) {
+                if let Some(of) = voice.iter().find(|g| classify::echoes(&all, &v.group, g)) {
+                    v.reasons.push(format!("the same sounds as {of}"));
+                }
+            }
+        }
         self.trusted = !voice.is_empty();
         self.voice_groups = voice.clone();
         let available: Vec<(PathBuf, HookClip)> = self
@@ -484,6 +552,33 @@ impl Hooked {
                     && c.dur <= 30.0
                     && classify::candidate(c, &voice)
             })
+            .collect();
+        // Of the pieces an adapter makes of one sound (`classify::per_sound`: the archive's partial
+        // first read, the whole file, a re-read), only the whole one may be a line's voice: a piece
+        // left over went to the line before the one its sound leads.
+        // (A group that has shown it over several sounds: two voices that start together once are
+        // two voices.)
+        let pieces: BTreeSet<String> = voice
+            .iter()
+            .filter(|g| {
+                let per = classify::per_sound(&all, g);
+                let clips = all.iter().filter(|c| &c.group() == *g).count() as f64;
+                per > 1.5 && clips / per >= 2.5
+            })
+            .cloned()
+            .collect();
+        let available: Vec<(PathBuf, HookClip)> = available
+            .iter()
+            .filter(|(_, c)| {
+                !pieces.contains(&c.group())
+                    || !self.feeds.values().flat_map(|f| f.clips()).any(|o| {
+                        o.seq != c.seq
+                            && o.group() == c.group()
+                            && (o.start - c.start).abs() <= classify::ECHO_MS
+                            && (o.dur, o.seq) > (c.dur, c.seq)
+                    })
+            })
+            .cloned()
             .collect();
         // Rows that carry on a quote opened by an earlier row (KiriKiri hands over each typed row):
         // they start no voice of their own; they share the quote's, below.
@@ -575,8 +670,20 @@ impl Hooked {
             if now < clip.start + clip.dur * 1000.0 + 150.0 {
                 continue;
             }
+            // A voice starting after this line may lead the next one, whose text the game hands
+            // over up to the lead later (live SiglusEngine: 350 ms; a clip written as it starts,
+            // or a short one, is here before that line is): not this line's until that line has
+            // had time to come.
+            if clip.start > line.anchor() && now < clip.start + self.report.lead_ms + LEAD_GRACE_MS {
+                continue;
+            }
+            let lead = clip.start - line.anchor();
+            let on_time =
+                self.established() && opens_quote(&line.text) && (-self.report.lead_ms..=TIGHT_LAG_MS).contains(&lead);
             match self.feeds[dir].decode(clip) {
-                Ok((samples, sample_rate)) if !samples.is_empty() && !self.no_speech(clip, &samples, sample_rate) => {
+                Ok((samples, sample_rate))
+                    if !samples.is_empty() && !self.no_speech(clip, &samples, sample_rate, on_time) =>
+                {
                     self.used.insert((dir.clone(), clip.seq));
                     self.done.insert(line.uid.clone(), (dir.clone(), clip.seq));
                     self.report.matched += 1;

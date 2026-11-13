@@ -356,6 +356,8 @@ body.scan-mode .line-actions-trigger.k-button {
    Sized in em: the chips follow the text size. */
 .log-lines {
   --line-chip-voice: 3.3em;
+  /* With the sparkle of a voice hooked from the game. */
+  --line-chip-voice-hooked: 4.1em;
   --line-chip-shot: 2.7em;
   --line-chip-gap: 0.3em;
 }
@@ -366,6 +368,9 @@ body.scan-mode .line-actions-trigger.k-button {
 }
 .log-lines .line:has(.line-chip-voice) {
   --line-has-voice: calc(var(--line-chip-voice) + var(--line-chip-gap));
+}
+.log-lines .line:has(.line-chip-voice[data-hooked]) {
+  --line-has-voice: calc(var(--line-chip-voice-hooked) + var(--line-chip-gap));
 }
 .log-lines .line:has(.line-chip-shot) {
   --line-has-shot: calc(var(--line-chip-shot) + var(--line-chip-gap));
@@ -449,6 +454,9 @@ body.scan-mode .line-chip {
 .line-chip-voice {
   width: var(--line-chip-voice);
 }
+.line-chip-voice[data-hooked] {
+  width: var(--line-chip-voice-hooked);
+}
 .line-chip-voice > svg {
   position: relative;
 }
@@ -460,6 +468,10 @@ body.scan-mode .line-chip {
   transform: scaleX(var(--played, 0));
   transform-origin: left;
   opacity: 0;
+}
+/* The sparkle of a voice hooked from the game, after its length. */
+.line-chip-voice > .line-chip-hooked {
+  color: var(--k-accent-text);
 }
 .line-chip-voice[data-playing] {
   color: var(--k-accent-text);

@@ -394,11 +394,74 @@ export function createHookCard(parent, hooks) {
     else box = null
   }
 
+  /**
+   * Where the ink of the first row of `value` falls in the text box, as the card draws it at
+   * `fontPx` with `lineHeight`: its left and right edges from the box's left (`left` is its first
+   * glyph's side bearing; a 「 sits well inside its em), and its top and height from the box's top.
+   * The baseline is where layout puts it, read from a hidden copy of the text's style (`probe`:
+   * layout rounds the font's ascent, descent and leading its own way); the glyphs' ink around it
+   * is measured on a canvas in the same font, large and scaled down, as a canvas gives ink bounds
+   * in whole pixels (at a card's 19 px, a pixel is half a glyph's margin). Laid out as the card
+   * lays it out: no kerning, every glyph a whole em (hook-card.css `text-spacing-trim`). So text
+   * placed by OCR's box, which is the game's ink, lines up ink to ink whatever the font. Null
+   * where it cannot be measured.
+   */
+  const inkCache = new Map()
+  let inkCanvas = null
+  let probe = null
+  const baselineOf = (fontPx, lineHeight, row) => {
+    if (!probe) {
+      probe = make('div', 'hook-card-probe', { 'aria-hidden': 'true', 'data-no-scan': '' })
+      probe.append(make('span'), make('span', 'hook-card-probe-baseline'))
+      placeBeforeText(parent, probe)
+    }
+    probe.lang = text.lang
+    probe.style.fontSize = `${fontPx}px`
+    probe.style.lineHeight = String(lineHeight)
+    probe.firstChild.textContent = row
+    const marker = probe.lastChild.getBoundingClientRect()
+    return marker.top - probe.getBoundingClientRect().top
+  }
+  const ink = (value, fontPx, lineHeight) => {
+    const rows = String(value ?? '')
+      .split(/\r?\n/)
+      .filter((row) => row.trim())
+    if (!rows.length || !(fontPx > 0)) return null
+    const style = getComputedStyle(text)
+    const key = `${style.fontStyle} ${style.fontWeight} ${fontPx}px ${style.fontFamily}|${lineHeight}|${text.lang}|${rows[0]}`
+    if (inkCache.has(key)) return inkCache.get(key)
+    inkCanvas ??= document.createElement('canvas')
+    const context = inkCanvas.getContext('2d')
+    let found = null
+    if (context) {
+      if ('lang' in context) context.lang = text.lang || 'ja'
+      if ('fontKerning' in context) context.fontKerning = 'none'
+      if ('letterSpacing' in context) context.letterSpacing = '0px'
+      const scale = Math.max(1, 256 / fontPx)
+      context.font = `${style.fontStyle} ${style.fontWeight} ${fontPx * scale}px ${style.fontFamily}`
+      const m = context.measureText(rows[0])
+      const baseline = baselineOf(fontPx, lineHeight, rows[0])
+      const numbers = [baseline, ...['Left', 'Right', 'Ascent', 'Descent'].map((k) => m[`actualBoundingBox${k}`])]
+      if (numbers.every(Number.isFinite)) {
+        found = {
+          left: -m.actualBoundingBoxLeft / scale,
+          right: m.actualBoundingBoxRight / scale,
+          top: baseline - m.actualBoundingBoxAscent / scale,
+          height: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / scale
+        }
+      }
+    }
+    if (inkCache.size > 200) inkCache.clear()
+    inkCache.set(key, found)
+    return found
+  }
+
   return {
     show,
     pointer,
     steer,
     release,
+    ink,
     /** Just the text: no bar, no size buttons, no menu, no corner (nothing can point at them). */
     bare: (on) => card.toggleAttribute('data-bare', Boolean(on)),
     dragging: () => drag !== null,
