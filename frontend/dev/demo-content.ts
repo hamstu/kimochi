@@ -16,6 +16,7 @@
  *     an optional part of speech. Every `focus` and every word you want boxed must be here.
  *   - `scene`: colours for the synthetic background art (sky gradient, skyline, accent glow).
  *
+ * The game is in Japanese (Kimochi's first language; the site's demo says it reads others too).
  * All Japanese lines are original fan-written text, not quotations from the game's script; glosses
  * are our own. Keep this module dependency-free: the site type-checks and bundles it too.
  */
@@ -74,7 +75,7 @@ export interface DemoContent {
 
 export const DEMO_CONTENT: DemoContent = {
   title: 'My VN',
-  subtitle: 'A little visual novel to read with Kimochi.',
+  subtitle: 'A little visual novel in Japanese, to read with Kimochi.',
   app: 'My VN',
   scene: {
     sky: ['#1b1838', '#5b2f5e', '#e0875a'],
