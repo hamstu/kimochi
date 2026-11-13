@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { cargoTargetDir } from './cargo-target-dir.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const destination = path.join(root, 'src-tauri/resources/screenai')
@@ -44,7 +45,7 @@ for (const [triple, name] of builds) {
       `Screen AI worker build failed (${built.status})${triple ? ` for ${triple}; install that Rust target and its C++ tools` : ''}.`
     )
   const binary = process.platform === 'win32' ? 'kimochi-screenai-worker.exe' : 'kimochi-screenai-worker'
-  const built_path = path.join(root, 'screenai/target', ...(triple ? [triple] : []), 'release', binary)
+  const built_path = path.join(cargoTargetDir(path.join(root, 'screenai')), ...(triple ? [triple] : []), 'release', binary)
   await copyFile(built_path, path.join(destination, name))
 }
 console.log(`Screen AI worker staged in ${path.relative(root, destination)}.`)

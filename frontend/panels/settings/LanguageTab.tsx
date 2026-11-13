@@ -3,7 +3,7 @@
  * in it yet when it is not Japanese, a few notes from its traits in `ui/languages.ts`, and which
  * of this computer's OCR engines can read it (their `languages` capability).
  */
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Badge, Button, Callout, SettingsPage, SettingsRow, SettingsSection } from '@kit'
 import { engineReadsLanguage } from '@ui/capabilities'
 import { engineHint, engineOffered } from '@ui/ocr-engines'
@@ -14,12 +14,15 @@ import { useSetting } from '../../bridge/useSetting'
 import { OcrEngineIcon } from '../../components/EngineIcon'
 import { ExperimentalLanguageNote } from '../../components/ExperimentalLanguageNote'
 import { LanguagePicker } from '../../components/LanguagePicker'
-import { languageNotes } from './languageNotes'
+import { engineSwitchNote, languageNotes } from './languageNotes'
 import { DictionaryProfileSection } from './DictionaryProfileSection'
 import { showSettingsTab } from './showSettingsTab'
 import './language-tab.css'
 
 const MODES = Object.keys(OCR_MODES) as OcrMode[]
+
+/** How long after choosing a language an engine change is taken as the one it caused. */
+const SWITCH_WINDOW_MS = 5000
 
 const names = (modes: readonly OcrMode[]): string => modes.map((mode) => ocrModeInfo(mode).name).join(', ')
 
@@ -36,15 +39,42 @@ export function LanguageTab(): ReactNode {
   const others = offered.filter((mode) => !readers.includes(mode))
   const currentReads = engineReadsLanguage(engines[ocrMode], language.code)
 
+  // The engine Kimochi switched to because the language changed (native `follow_language` writes
+  // `ocrMode` just after `language`): said once, for that change, until the engine changes again
+  // or the page is left.
+  const asked = useRef<{ from: OcrMode; code: string; at: number } | null>(null)
+  const [switched, setSwitched] = useState<{ from: OcrMode; to: OcrMode; code: string } | null>(null)
+  useEffect(() => {
+    const pending = asked.current
+    if (pending && pending.from !== ocrMode && Date.now() - pending.at < SWITCH_WINDOW_MS) {
+      asked.current = null
+      setSwitched({ from: pending.from, to: ocrMode, code: pending.code })
+    } else {
+      setSwitched((shown) => (shown && shown.to !== ocrMode ? null : shown))
+    }
+  }, [ocrMode])
+  const switchNote =
+    switched && switched.to === ocrMode && switched.code === language.code
+      ? engineSwitchNote(
+          ocrModeInfo(switched.from).name,
+          ocrModeInfo(switched.to).name,
+          language.name,
+          engineReadsLanguage(engines[switched.from], language.code)
+        )
+      : null
+
   return (
     <SettingsPage title="Language" description="Choose the language you're learning and scanning with Kimochi.">
       <SettingsSection>
         <SettingsRow label="Language" description="Kimochi reads and looks up text in this language.">
           <LanguagePicker
             value={language.code}
-            onValueChange={(code) =>
+            onValueChange={(code) => {
+              if (code === language.code) return
+              asked.current = { from: ocrMode, code, at: Date.now() }
+              setSwitched(null)
               void setLanguage(code).catch((error: unknown) => console.error('Saving the language failed:', error))
-            }
+            }}
           />
         </SettingsRow>
       </SettingsSection>
@@ -70,7 +100,11 @@ export function LanguageTab(): ReactNode {
 
       <SettingsSection
         title="Supported OCR engines"
-        description={`These are the engines that work with ${language.name}.`}
+        description={
+          switchNote
+            ? `These are the engines that work with ${language.name}. ${switchNote}`
+            : `These are the engines that work with ${language.name}.`
+        }
         footnote={others.length > 0 ? `Can't read ${language.name}: ${names(others)}.` : undefined}
       >
         {readers.map((mode) => {

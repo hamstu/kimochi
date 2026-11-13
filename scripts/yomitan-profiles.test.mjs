@@ -131,6 +131,63 @@ test('a profile chosen in Settings → Account is kept, whatever its language', 
   assert.equal(plan({ links, state: { ...state, current: 1 }, language: 'en' }).kind, 'use')
 })
 
+test('switching back to a language used before reuses its profile, never "Korean (2)"', () => {
+  // Carries out each plan the way followYomitanProfiles does, then returns the profile in use.
+  const run = (world, account, language) => {
+    const result = planYomitanProfile({ account, language, links: world.links, state: world.state, trigger: 'change' })
+    const { profiles } = world.state
+    if (result.kind === 'create') {
+      world.state = { profiles: [...profiles, profile(result.name, result.language)], current: profiles.length }
+    } else if (result.kind === 'adopt') {
+      const next = profiles.map((p, i) => (i === result.index ? { ...p, language: result.language } : p))
+      world.state = { profiles: next, current: result.index }
+    } else if (result.kind === 'use') {
+      world.state = { profiles, current: result.index }
+    }
+    if (result.kind !== 'keep' && result.link) world.links = { ...world.links, [account]: result.link }
+    return world.state.profiles[world.state.current].name
+  }
+  const names = (world) => world.state.profiles.map((p) => p.name)
+
+  for (const middle of ['zh-Hans', 'ja', 'en']) {
+    const world = { links: {}, state: { profiles: [profile('Default')], current: 0 } }
+    assert.equal(run(world, 'local', 'ja'), 'Default')
+    assert.equal(run(world, 'local', 'ko'), 'Korean')
+    run(world, 'local', middle)
+    assert.equal(run(world, 'local', 'ko'), 'Korean', `ko → ${middle} → ko`)
+    run(world, 'local', middle)
+    assert.equal(run(world, 'local', 'ko'), 'Korean', `ko → ${middle} → ko, twice`)
+    assert.equal(names(world).filter((n) => n.startsWith('Korean')).length, 1)
+    assert.equal(new Set(names(world)).size, names(world).length, 'no profile made twice')
+  }
+
+  // Back to Japanese: the default profile, again and again.
+  const world = { links: {}, state: { profiles: [profile('Default')], current: 0 } }
+  for (let i = 0; i < 3; i++) {
+    assert.equal(run(world, 'local', 'ko'), 'Korean')
+    assert.equal(run(world, 'local', 'ja'), 'Default')
+  }
+  assert.deepEqual(names(world), ['Default', 'Korean'])
+
+  // Found by its language even after the profiles were reordered in Yomitan.
+  world.state = { profiles: [profile('Korean', 'ko'), profile('Default')], current: 1 }
+  assert.equal(run(world, 'local', 'ko'), 'Korean')
+  assert.equal(world.state.profiles.length, 2)
+
+  // Two accounts taking turns in different languages share nothing and make nothing twice.
+  const two = { links: {}, state: { profiles: [profile('Default')], current: 0 } }
+  let chinese = null
+  for (let i = 0; i < 3; i++) {
+    assert.equal(run(two, 'local', 'ja'), 'Default')
+    assert.equal(run(two, 'acct-2', 'ko'), 'Korean')
+    const zh = run(two, 'acct-2', 'zh-Hant')
+    chinese ??= zh
+    assert.equal(zh, chinese)
+    assert.equal(run(two, 'acct-2', 'ko'), 'Korean')
+  }
+  assert.equal(names(two).length, 3)
+})
+
 test('codes, links and options are read defensively', () => {
   assert.equal(yomitanLanguage('zh-Hans'), 'zh')
   assert.equal(yomitanLanguage('zh-Hant'), 'zh')

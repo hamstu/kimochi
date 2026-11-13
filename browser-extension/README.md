@@ -71,7 +71,10 @@ don't take the pointer, as readers that hide their pages under a cover do.
 
 **Auto** (the toolbar's switch, on by default) reads the picture again when it changes: a new
 `src`, a DOM change inside the picked element, a reader that swaps the element, or new pixels in a
-canvas or video (polled every 1.5 s and compared by a small fingerprint). After a full page load on
+canvas (`draws.js`, injected into the page's own world, says when the page draws a picture on one;
+nothing is polled) or a video stopped on a new frame (paused, or a seek). A reading that would see
+the same pixels as that picture's last one (a small fingerprint, kept per picture) doesn't reach
+Kimochi. After a full page load on
 the same site, the worker puts the page script back and it finds the picture in the same place on
 the new page (the same path in the page, or the element of the same kind nearest where it was and of
 a similar size): a gallery's next image, a reader's next page. A site that changes pages without a page load (it swaps

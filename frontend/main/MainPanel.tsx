@@ -330,6 +330,7 @@ export default function MainPanel(): JSX.Element {
                     editingId={editing}
                     onEdit={setEditing}
                     onCloseEditor={() => setEditing(null)}
+                    onShowLog={() => setView('log')}
                   />
                 </Suspense>
               )}

@@ -272,12 +272,19 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
         if let Some(mode) = value.as_str() {
             model_store::on_engine_selected(app, mode);
             remember_engine(app, settings, &language::current(settings).code, mode);
+            // Set to an engine that cannot read the language (`kimochi settings set`, Sync, a
+            // hand-edited file; the pickers never offer one): the language's engine instead.
+            if !language::engine_supports(mode, &language::current(settings).code) {
+                repick_engine(app, settings);
+            }
         }
         manga_ocr::prewarm(app);
         release_scan_engines(app);
     }
     if key == "language" {
         follow_language(app, settings, false);
+        // A hooked game's ANSI text is read in the new language's code page.
+        text_hook::language_changed();
         // Hachidori and 10ten read Japanese only: the reader windows move to the engine the new
         // language has (`extensions::selected_engine`), and back.
         follow_effective_engine(app);
@@ -342,6 +349,29 @@ fn follow_language(app: &tauri::AppHandle, settings: &Arc<Settings>, startup: bo
         if remembered.as_deref().is_none_or(|r| r == current) && language::engine_supports(&current, &code) {
             return;
         }
+        let capabilities = capabilities_value(&app, &service);
+        let usable = |engine: &str| capabilities["ocrEngines"][engine]["available"] == json!(true);
+        if let Some(engine) = language::engine_for(&code, &current, remembered.as_deref(), usable) {
+            debug_report::trace(&app, json!({ "check": "ocr-engine-language", "language": code, "from": current, "to": engine }));
+            let _ = apply_setting(&app, &settings, "ocrMode", json!(engine));
+        }
+    });
+}
+
+/// The selected engine cannot read the language: the first usable engine that can replaces it
+/// (`language::engine_for`, the language's remembered engine first), as an ordinary `ocrMode`
+/// write. Nothing usable reads it: the engine stays, and scans say why they fail.
+fn repick_engine(app: &tauri::AppHandle, settings: &Arc<Settings>) {
+    let (app, settings) = (app.clone(), settings.clone());
+    // Off the caller's thread, as in `follow_language`: the engines' availability may probe them.
+    std::thread::spawn(move || {
+        let Some(service) = app.try_state::<Shared>().map(|state| state.inner().clone()) else { return };
+        let code = language::current(&settings).code.clone();
+        let current = settings.get_or::<String>("ocrMode", "googlelens".into());
+        if language::engine_supports(&current, &code) {
+            return;
+        }
+        let remembered = settings.get_path(&[OCR_MODE_BY_LANGUAGE, code.as_str()]).ok().flatten().and_then(|v| v.as_str().map(str::to_string));
         let capabilities = capabilities_value(&app, &service);
         let usable = |engine: &str| capabilities["ocrEngines"][engine]["available"] == json!(true);
         if let Some(engine) = language::engine_for(&code, &current, remembered.as_deref(), usable) {
@@ -2159,7 +2189,7 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
 /// Why `engine` may not read `language`: an engine trained on other languages would read
 /// nothing, or nonsense. The pickers and the re-pick on a language change keep this from
 /// happening; this is the last guard.
-fn refuse_language(engine: &str, language: &language::Language) -> Reply<()> {
+pub(crate) fn refuse_language(engine: &str, language: &language::Language) -> Reply<()> {
     if language::engine_supports(engine, &language.code) {
         Ok(())
     } else {

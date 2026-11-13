@@ -106,7 +106,9 @@ account switch), native code puts back the engine last used for the new language
 (`ocrModeByLanguage`) if it is still available and reads it; otherwise, if `ocrMode` cannot read
 the new language (`ocrEngines.<id>.languages`, under Capture and OCR), it writes the first
 available engine that can, of Live Text (macOS) or OneOCR (Windows), Screen AI, PaddleOCR,
-Google Lens and Kimochi cloud. At launch only the second check runs. Either is an ordinary
+Google Lens and Kimochi cloud. At launch only the second check runs. The second check also runs
+when `ocrMode` itself is set to an engine that cannot read the language (`kimochi settings set`,
+Sync, a hand-edited file; the pickers never offer one). Either is an ordinary
 `ocrMode` write, so `settings:changed` reaches every window. Every engine reads Japanese, so with
 `language: 'ja'` nothing ever changes here.
 
@@ -1874,10 +1876,21 @@ the prefix's `Z:` drive. Process ids in the protocol are then the prefix's, foun
 Linux path (through the prefix's drive links), which keys what is remembered per game. Linux x64
 bundles ship the sidecar (cross-built with MinGW); Linux ARM64 bundles do not.
 
+A game in a Flatpak sandbox (Bottles, Lutris, Heroic or Steam from Flathub; `/.flatpak-info` in
+its root) has its own `/tmp`, where its wineserver listens, and sees little of the home folder.
+There the sidecar runs inside the sandbox (`flatpak enter <game pid> env … <wine> …`), and it and
+the hooker's folder are copied into the prefix
+(`drive_c/users/<user>/AppData/Local/kimochi-texthook/<name>-<content hash>/`), each copy made
+once per content. The game's paths (its Wine, prefix and image) are the sandbox's, read through
+`/proc/<pid>/root`. Any other game whose wineserver Kimochi cannot reach is not hookable, rather
+than a second wineserver being started on its prefix. On X11 a window's process is the one the X
+server reports for its client (XRes), else `_NET_WM_PID`, which a sandboxed client sets to its id
+inside the sandbox.
+
 | Command | Signature |
 | --- | --- |
 | `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames |
-| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher) |
+| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher). When the game cannot be hooked at all, the session becomes the window's, `failed` with the reason in `detail`, and the command rejects with it |
 | `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |
 | `texthook_status` | `() -> HookStatus` |
 | `texthook_select` | `({key}) -> HookStatus` — the thread the Log reads, remembered for the game; `key: null` forgets it and chooses automatically again |
@@ -2100,9 +2113,17 @@ each burst of the chosen thread is logged as `texthook-burst` (`{text, lines, ca
 
 ### Sidecar protocol (`kimochi-hookd`)
 
-`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N]` or
+`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N] [--codepage N]` or
 `… textractor --dir <Textractor dir>` reads one JSON command per line on stdin and writes one
 JSON event per line on stdout; closing stdin detaches every process and exits.
+`--codepage` is the code page LunaHook decodes a game's multibyte (ANSI) text with when its hook
+code names none (`HS949#…` names one, and wins): the app passes the language's Windows ANSI code
+page (`language::hook_code_page`: 949 Korean, 936 Simplified Chinese, 950 Traditional Chinese and
+Cantonese, 1251 Cyrillic, 874 Thai, 1250/1252/1253/1254/1257/1258 for Latin and Greek), and 932
+(Shift-JIS) for Japanese and for languages Windows has no ANSI code page for (their games' text
+comes through Unicode hooks; ASCII reads alike in every code page). Absent, it is 932, so an app
+from before languages gets what it always did; an older sidecar ignores the argument. Textractor's
+CLI always decodes Shift-JIS.
 `kimochi-hookd-{x64,x86}.exe inject --pid N --dll <path>` injects one DLL
 (`CreateRemoteThread(LoadLibraryW)`); the x64 sidecar runs the x86 build for 32-bit games.
 `kimochi-hookd-x64.exe processes` writes one `process` event per running process
@@ -2115,11 +2136,12 @@ it in a Wine game's prefix to learn the game's id there.
 | `detach` | `pid` |
 | `insert` | `pid`, `code` (an H-code) |
 | `pchooks` | `pid` |
+| `codepage` | `codepage` (decode ANSI text with this code page from the next line; sent when the language changes, and only to a sidecar whose `ready` carried `codepage`) |
 | `quit` | |
 
 | Event | Fields |
 | --- | --- |
-| `ready` | `engine`, `version` |
+| `ready` | `engine`, `version`, `codepage?` (LunaHook: the code page in use; its presence means `codepage` is understood) |
 | `connected` / `disconnected` | `pid` |
 | `attached` | `pid`, `bits`, `reused?` |
 | `attach_error` | `pid`, `text` |
@@ -2242,13 +2264,13 @@ executable detached elsewhere) and waits for `ping`.
 | Method | Params | Result |
 | --- | --- | --- |
 | `ping` | — | `{version, pid}` |
-| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}` |
+| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, dictionaryChosen?, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}`. `dictionary` is the pop-up engine in use (`yomitanSettings.popupType`: `builtin`, `custom-api`, `hachidori`, `tenten`); Hachidori and 10ten read Japanese only, so in another language it is `builtin` and `dictionaryChosen` is the stored choice |
 | `settings.get` | `{key?}` | the value (defaults merged), or every setting |
 | `settings.set` | `{key, value}` | the stored value; through `apply_setting`, as `settings_set` |
 | `action` / `actions` | `{name}` / — | `actions::dispatch`; `ACTIONS` |
 | `toggle` | `{flag: autoOcr\|overlay\|textOverlay, to: on\|off\|toggle}` | `{<flag>: bool}`, after the overlay has written the new state back (`view_flags`) |
-| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}` |
-| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts) |
+| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}`. Refused at once (`invalid: the <engine> OCR engine cannot read this language (<code>)…`) while `ocrMode` cannot read the `language` and the input is not the Text Hooker |
+| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts); an engine that cannot read the `language` is refused: `invalid: <engine> cannot read the language being read (<code>); engines here that can: <available engines that read it>` |
 | `source.list` / `source.set` / `source.clear` / `source.choose` | — / `{query}` / — / — | `sources::catalog`; `select_keeping_crop` on the source matched by id, title or app; `sources::clear`; `choose_source` |
 | `open` | `{view: main\|log\|notebook\|anki\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}`; `log`, `notebook` and `anki` emit `main:show-view` `{view}`, which leaves Settings |
 | `quit` | — | replies, then quits as `app_quit` |

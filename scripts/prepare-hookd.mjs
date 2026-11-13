@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { cargoTargetDir } from './cargo-target-dir.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const destination = path.join(root, 'src-tauri/resources/hookd')
@@ -47,7 +48,7 @@ if (process.platform === 'win32' || process.platform === 'linux') {
     if (built.status !== 0)
       throw new Error(`Text hook helper ${arch} build failed (${built.status}). Install the ${target} Rust target and ${tools}.`)
     await copyFile(
-      path.join(root, `hookd/target/${target}/release/kimochi-hookd.exe`),
+      path.join(cargoTargetDir(path.join(root, 'hookd')), `${target}/release/kimochi-hookd.exe`),
       path.join(destination, `kimochi-hookd-${arch}.exe`)
     )
     // MinGW builds would carry their symbols and line tables inside the DLL (MSVC's go to a PDB).
@@ -55,7 +56,7 @@ if (process.platform === 'win32' || process.platform === 'linux') {
     const voice = spawnSync('cargo', ['build', '--locked', '--release', '--manifest-path', path.join(root, 'voicehook/Cargo.toml'), '-p', 'vh-hook', '--target', target], { stdio: 'inherit', env })
     if (voice.error) throw voice.error
     if (voice.status !== 0) throw new Error(`Voice hook ${arch} build failed (${voice.status}). Install the ${target} Rust target and ${tools}.`)
-    await copyFile(path.join(root, `voicehook/target/${target}/release/vhhook.dll`), path.join(destination, `kimochi-voicehook-${arch}.dll`))
+    await copyFile(path.join(cargoTargetDir(path.join(root, 'voicehook')), `${target}/release/vhhook.dll`), path.join(destination, `kimochi-voicehook-${arch}.dll`))
   }
   console.log(builds.length ? 'Text hook helpers and voice hook DLLs (x64, x86) staged.' : 'No text hook helpers for this target.')
 }

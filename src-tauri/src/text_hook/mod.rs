@@ -135,6 +135,9 @@ struct Session {
     text_at: Option<u64>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
+    /// The code page the helper decodes ANSI text with, when it can be changed while it runs (a
+    /// LunaHook helper whose `ready` said so); None for Textractor and an older helper.
+    code_page: Option<u32>,
 }
 
 struct Hook {
@@ -222,7 +225,7 @@ impl Hook {
             if let Some(before) = session.last_line.as_deref() {
                 // A language that spaces its words has a space between the rows (they come trimmed).
                 let joined = if config.spaces { format!("{before} {text}") } else { format!("{before}{text}") };
-                if clean::continues(before, &text) && !before.ends_with(&text) && joined.chars().count() <= clean::MAX_LINE_CHARS {
+                if clean::continues_in(before, &text, config.japanese) && !before.ends_with(&text) && joined.chars().count() <= config.max_chars {
                     crate::debug_report::trace(&self.app, json!({ "check": "texthook-joined", "before": before, "piece": text }));
                     text = joined;
                     carries_on = true;
@@ -389,15 +392,19 @@ fn launch(hook: &'static Hook, generation: u64, engine: &'static str, dir: &std:
     let mut command = Command::new(&exe);
     command.arg(engine).arg("--dir").arg(dir);
     // Under Wine the helper runs in the game's prefix, so it sees the game as Windows would, and
-    // takes the hooker's folder as a Windows path.
+    // takes the hooker's folder as a Windows path; both copied where the game can reach them,
+    // for a game in a sandbox that does not see Kimochi's folders.
     #[cfg(target_os = "linux")]
     if let Some(wine) = targets.first().and_then(|t| t.wine.as_ref()) {
-        command = wine::command(wine, &exe);
-        command.arg(engine).arg("--dir").arg(wine::windows_path(dir));
+        command = wine::command(wine, &wine::reachable(wine, &exe)?);
+        command.arg(engine).arg("--dir").arg(wine::windows_path(&wine::reachable_dir(wine, dir)?));
     }
     if engine == "luna" {
         let flush_ms = hook.config(&hook.lock()).flush_ms;
         command.args(["--flush-ms", &flush_ms.to_string()]);
+        // The language's ANSI code page for a game's multibyte text (932 for Japanese, as
+        // always); a helper from before languages ignores it and stays on 932.
+        command.args(["--codepage", &crate::language::hook_code_page(hook.language()).to_string()]);
     }
     #[cfg(windows)]
     {
@@ -456,6 +463,7 @@ fn read_events(
         let str_of = |k: &str| event[k].as_str().unwrap_or_default().to_string();
         match event["event"].as_str().unwrap_or_default() {
             "ready" => {
+                session.code_page = event["codepage"].as_u64().and_then(|c| u32::try_from(c).ok());
                 let _ = ready.send(Ok(()));
             }
             "error" => {
@@ -617,7 +625,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let language = hook.language();
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
     // A line drawn several times over (CatSystem2) is the line once.
-    let collapsed = pick::collapse_repeated_sentences(text);
+    let collapsed = pick::collapse_repeated_sentences(text, language);
     let text = collapsed.as_str();
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One
     // that pauses while typing for longer than the hooker waits comes in pieces: a piece that
@@ -684,7 +692,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let spoken = &session.threads[index];
         let shown = pick::normalize(text);
-        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH, language) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
             session.missed = session.missed.saturating_add(1);
             session.missed_text = shown;
         }
@@ -746,7 +754,7 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
     let spoken = &session.threads[index];
     if chosen.glyphs >= GLYPHS && spoken.key != selected && spoken.count >= 3 && spoken.glyphs == 0 && !pick::is_generic(&spoken.hookcode, &spoken.name) {
         let text = pick::normalize(&spoken.text);
-        if text.chars().count() >= PICK_MIN_MATCH && pick::reads_as(&text, language) {
+        if text.chars().count() >= PICK_MIN_MATCH * pick::letter_scale(language) && pick::reads_as(&text, language) {
             return Some(spoken.key.clone());
         }
     }
@@ -770,7 +778,7 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
         .find(|t| {
             let text = pick::normalize(&t.text);
             let length = text.chars().count();
-            length >= 4
+            length >= 4 * pick::letter_scale(language)
                 && pick::reads_as(&text, language)
                 && 10 * length >= 7 * shown.chars().count()
                 && shown.contains(&text)
@@ -822,7 +830,7 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             continue;
         }
         match outcome {
-            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64) {
+            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64, hook.language()) {
                 Some(best) => {
                     let key = best.key.clone();
                     let thread = session.threads.iter().find(|t| t.key == key).cloned();
@@ -1010,7 +1018,7 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     let pid = window_pid(&source_id).ok_or("Choose an app window to hook.")?;
     #[cfg(target_os = "linux")]
     let helper = hookd_path(&hook.app);
-    let targets = tauri::async_runtime::spawn_blocking(move || {
+    let found = tauri::async_runtime::spawn_blocking(move || {
         let found = process::game_processes(pid);
         if found.is_empty() {
             return Err(process::target(pid).err().unwrap_or_else(|| "This app cannot be hooked.".into()));
@@ -1024,7 +1032,23 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         Ok(found)
     })
     .await
-    .map_err(|e| e.to_string())??;
+    .map_err(|e| e.to_string())
+    .and_then(|found| found);
+    let targets = match found {
+        Ok(targets) => targets,
+        Err(reason) => {
+            // The game's card waits on a session for its window: one that failed, with why, rather
+            // than none (which reads as still starting).
+            let mut session = hook.lock();
+            stop_child(&mut session);
+            let generation = session.generation + 1;
+            *session = Session { generation, source_id, phase: "failed", detail: Some(reason.clone()), ..Default::default() };
+            hook.publish(&session);
+            drop(session);
+            refresh_voice_hook();
+            return Err(reason);
+        }
+    };
     let generation = {
         let mut session = hook.lock();
         // The same game, already being hooked or hooked (the game started with Hook automatically
@@ -1198,6 +1222,19 @@ pub fn shutdown() {
     }
 }
 
+/// The language changed: a running LunaHook helper decodes the game's ANSI text with the new
+/// language's code page from the next line (`language::hook_code_page`).
+pub fn language_changed() {
+    let Some(hook) = hook() else { return };
+    let page = crate::language::hook_code_page(hook.language());
+    let mut session = hook.lock();
+    if session.code_page.is_some_and(|current| current != page)
+        && send(&mut session, json!({ "cmd": "codepage", "codepage": page })).is_ok()
+    {
+        session.code_page = Some(page);
+    }
+}
+
 /// Update sentence audio when the selected text-hook game or its settings change.
 pub fn refresh_voice_hook() {
     let Some(hook) = hook() else {
@@ -1277,7 +1314,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
         let staged = crate::sentence_audio::voice_hook::staged_dll(&dll, &base).map_err(prepare)?;
         let path = crate::sentence_audio::voice_hook::windows_under(&staged, &base, &windows_base)
             .ok_or_else(|| prepare("the staged copy is outside the prefix".into()))?;
-        let mut command = wine::command(wine, &helper);
+        let mut command = wine::command(wine, &wine::reachable(wine, &helper).map_err(prepare)?);
         command.args(["inject", "--pid", &target.pid.to_string(), "--dll", &path]);
         command
     };

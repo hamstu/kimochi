@@ -620,12 +620,25 @@ pub mod desktop {
                 .unwrap_or_default()
         }
 
-        /// `_NET_WM_PID`, when the client set it (most toolkits do; Wine does).
+        /// The client's process id as the X server knows it from its connection (XRes), else
+        /// `_NET_WM_PID`, when the client set it (most toolkits do; Wine does). A client in a
+        /// sandbox with its own process ids (Flatpak) sets `_NET_WM_PID` to its id in there.
         pub fn pid(&self, window: Window) -> Option<u32> {
-            self.property32(window, self.atoms._NET_WM_PID, AtomEnum::CARDINAL)?
-                .first()
-                .copied()
-                .filter(|&p| p != 0)
+            use x11rb::protocol::res::{ClientIdMask, ClientIdSpec, ConnectionExt as _};
+            let spec = ClientIdSpec { client: window, mask: ClientIdMask::LOCAL_CLIENT_PID };
+            let from_server = self
+                .conn
+                .res_query_client_ids(&[spec])
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+                .and_then(|reply| reply.ids.into_iter().find_map(|id| id.value.first().copied()))
+                .filter(|&p| p != 0);
+            from_server.or_else(|| {
+                self.property32(window, self.atoms._NET_WM_PID, AtomEnum::CARDINAL)?
+                    .first()
+                    .copied()
+                    .filter(|&p| p != 0)
+            })
         }
 
         fn kind(&self, window: Window) -> WindowKind {

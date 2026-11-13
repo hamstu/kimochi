@@ -15,7 +15,7 @@ const MAX_SIDE = 4096
 /** No more than this many pixels go to Kimochi, however the picture is shaped (a long strip). */
 const MAX_PIXELS = 12_000_000
 
-/** tabId -> { port, busy, queued, lastHash } */
+/** tabId -> { port, busy, queued, hashes } (hashes: picture id -> its last fingerprint) */
 const tabs = new Map()
 
 const bridge = new Bridge({
@@ -45,10 +45,16 @@ function broadcast(message) {
   }
 }
 
+/** The page script, and the hook in the page's own world that tells it when a canvas is drawn on. */
+async function inject(tabId) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['draws.js'], world: 'MAIN' })
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] })
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return
   try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] })
+    await inject(tab.id)
     await chrome.tabs.sendMessage(tab.id, { type: 'activate' })
   } catch (error) {
     // chrome:// pages, the Web Store and PDFs refuse scripts.
@@ -63,7 +69,7 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'kimochi' || !port.sender?.tab?.id) return
   const tabId = port.sender.tab.id
   const windowId = port.sender.tab.windowId
-  const tab = { port, windowId, busy: false, queued: null, lastHash: null }
+  const tab = { port, windowId, busy: false, queued: null, hashes: new Map() }
   tabs.set(tabId, tab)
   bridge.retain()
   port.postMessage({ type: 'status', status: bridge.status })
@@ -79,9 +85,9 @@ chrome.runtime.onConnect.addListener((port) => {
     }
     else if (message.type === 'connect') bridge.connectNow()
     else if (message.type === 'stop') {
-      tab.lastHash = null
+      tab.hashes.clear()
       bridge.send({ type: 'stop' })
-    } else if (message.type === 'forget') tab.lastHash = null
+    } else if (message.type === 'forget') tab.hashes.clear()
     // Session requests and Open Kimochi go straight to Kimochi.
     else if (['page', 'assign', 'createSession', 'renameSession', 'show', 'setEngine'].includes(message.type)) bridge.send(message)
     else if (message.type === 'remember-target') rememberTarget(tabId, message.signature)
@@ -130,8 +136,9 @@ async function runScan(tab, request) {
     tab.port.postMessage({ type: 'captured', id: request.id })
   }
   const hash = fingerprint(bitmap)
-  // Auto updates only reach Kimochi when the pixels changed.
-  if (request.reason === 'auto' && !request.fresh && hash === tab.lastHash) {
+  // Auto updates only reach Kimochi when the pixels changed. Kept per picture: with two pages in
+  // view, one tab-wide fingerprint would compare each page with the other and never match.
+  if (request.reason === 'auto' && !request.fresh && hash === tab.hashes.get(request.pic)) {
     bitmap.close()
     tab.port.postMessage({ type: 'unchanged', id: request.id })
     return
@@ -145,7 +152,8 @@ async function runScan(tab, request) {
     height,
     png: base64,
   })
-  tab.lastHash = hash
+  tab.hashes.set(request.pic, hash)
+  if (tab.hashes.size > 50) tab.hashes.delete(tab.hashes.keys().next().value)
   tab.port.postMessage({
     type: 'result',
     id: request.id,
@@ -261,7 +269,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, change, tab) => {
     return
   }
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] })
+    await inject(tabId)
     await chrome.tabs.sendMessage(tabId, { type: 'resume', signature })
   } catch (error) {
     console.debug('Kimochi: could not come back to this page', error)

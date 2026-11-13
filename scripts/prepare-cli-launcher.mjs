@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { cargoTargetDir } from './cargo-target-dir.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const destination = path.join(root, 'src-tauri/resources/cli')
@@ -20,7 +21,7 @@ if (process.platform === 'win32') {
   if (built.error) throw built.error
   if (built.status !== 0) throw new Error(`The command-line launcher failed to build (${built.status}).`)
   await copyFile(
-    path.join(root, 'cli-launcher/target/release/kimochi-cli.exe'),
+    path.join(cargoTargetDir(path.join(root, 'cli-launcher')), 'release/kimochi-cli.exe'),
     path.join(destination, 'kimochi-cli.exe')
   )
   console.log('Command-line launcher staged.')

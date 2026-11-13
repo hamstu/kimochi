@@ -82,13 +82,28 @@ pub struct Scored {
 }
 
 /// Characters that never decide a match: whitespace, and Japanese and ASCII punctuation, which
-/// OCR misreads or drops and games draw in separate calls. The long-vowel mark is kept: it is a
-/// letter, and OCR reads it well.
+/// OCR misreads or drops and games draw in separate calls (and the quotes and inverted marks of
+/// European languages, `«»„‹›¿¡`). The long-vowel mark is kept: it is a letter, and OCR reads it
+/// well.
 fn ignorable(c: char) -> bool {
     c.is_whitespace()
         || c.is_ascii_punctuation()
-        || "、。，．・：；？！゛゜´｀¨＾￣＿〃〆〇―‐─━—–／＼～∥｜…‥‘’“”（）〔〕［］｛｝〈〉《》「」『』【】＋－±×÷＝≠＜＞≦≧∞∴♪☆★○●◎◇◆□■△▲▽▼※→←↑↓〜｡｢｣､･"
+        || "、。，．・：；？！゛゜´｀¨＾￣＿〃〆〇―‐─━—–／＼～∥｜…‥‘’“”（）〔〕［］｛｝〈〉《》「」『』【】＋－±×÷＝≠＜＞≦≧∞∴♪☆★○●◎◇◆□■△▲▽▼※→←↑↓〜｡｢｣､･«»„‚‹›¿¡"
             .contains(c)
+}
+
+/// How many characters of the language say about as much as one of Japanese: 1 where a
+/// character is a syllable or a word (Japanese, Chinese, Korean's Hangul blocks), 2 for an
+/// alphabet or an abugida (`Natalie` is seven letters, `ナタリー` four). The thresholds below
+/// are in Japanese characters and scaled by it, so a name or a single word in a spaced language
+/// is not taken for a line of dialogue.
+pub fn letter_scale(language: &Language) -> usize {
+    use crate::language::Script;
+    if language.scripts.iter().all(|s| matches!(s, Script::Jpan | Script::Hans | Script::Hant | Script::Kore)) {
+        1
+    } else {
+        2
+    }
 }
 
 /// Full-width ASCII and the ideographic space folded to plain ASCII; half-width katakana are
@@ -226,6 +241,7 @@ const MIN_JAPANESE: f64 = 0.3;
 /// Scores every candidate against the screen's blocks; best first. A candidate that matches
 /// nothing is left out, so an empty result means "no thread is on screen yet".
 pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) -> Vec<Scored> {
+    let scale = letter_scale(language);
     let largest = blocks
         .iter()
         .enumerate()
@@ -237,8 +253,12 @@ pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) ->
             let text = normalize(candidate.text);
             let length = text.chars().count();
             // Too short to tell apart, or not the language: file paths, asset names and the window
-            // title also turn up in hooked threads and on screen.
-            if length < MIN_MATCH || japanese_ratio(&text, language) < MIN_JAPANESE {
+            // title also turn up in hooked threads and on screen. In a language that spaces its
+            // words, a text with no space in it is one word, a name or a code, not a line.
+            if length < MIN_MATCH * scale
+                || japanese_ratio(&text, language) < MIN_JAPANESE
+                || (language.spaces && !candidate.text.trim().contains(char::is_whitespace))
+            {
                 return None;
             }
             // The thread's whole sentence inside a block. Where the hook holds more than the
@@ -252,14 +272,14 @@ pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) ->
                     let shown = block.text.chars().count();
                     if block.text.contains(&text) {
                         Some((i, length, 1.0))
-                    } else if shown >= MIN_MATCH && text.contains(&block.text) {
+                    } else if shown >= MIN_MATCH * scale && text.contains(&block.text) {
                         Some((i, shown, shown as f64 / length as f64))
                     } else {
                         // OCR misread a character or two (a long dash drawn as "ー", a kanji
                         // taken for its look-alike): the longest run both share, counted the
                         // same way, for its share of the thread's text.
                         let run = longest_common_run(&text, &block.text);
-                        (run >= MIN_RUN).then(|| (i, run, run as f64 / length as f64))
+                        (run >= MIN_RUN * scale).then(|| (i, run, run as f64 / length as f64))
                     }
                 })
                 .max_by_key(|(i, matched, _)| (*matched, Some(*i) == largest))?;
@@ -299,10 +319,12 @@ pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) ->
 
 /// The thread to choose automatically from `score`'s list: the best that matched at least
 /// `min` characters, in the largest text on screen (the dialogue box) or, elsewhere, at least
-/// [`MIN_OFF_BOX`] of them. A speaker's nameplate is never the largest text, and a long name
-/// matched exactly while the line itself was misread would otherwise take the choice.
-pub fn chosen(scored: &[Scored], min: f64) -> Option<&Scored> {
-    scored.iter().find(|s| s.effective >= min && (s.in_largest || s.effective >= MIN_OFF_BOX))
+/// [`MIN_OFF_BOX`] of them, both in Japanese characters ([`letter_scale`]). A speaker's nameplate
+/// is never the largest text, and a long name matched exactly while the line itself was misread
+/// would otherwise take the choice.
+pub fn chosen<'a>(scored: &'a [Scored], min: f64, language: &Language) -> Option<&'a Scored> {
+    let scale = letter_scale(language) as f64;
+    scored.iter().find(|s| s.effective >= min * scale && (s.in_largest || s.effective >= MIN_OFF_BOX * scale))
 }
 
 /// The fewest characters a thread matched outside the largest text must have to be chosen.
@@ -588,15 +610,18 @@ impl Parse {
 /// at least `MIN_REPEAT` characters that ends a sentence counts: a word said twice
 /// (`ガタッ、ガタッ`) is the text. Collapsed until nothing repeats: a speaker shown under another
 /// name comes as `名名「…」「…」名「…」`, which is `名「…」名「…」` once each part is once.
-pub fn collapse_repeated_sentences(text: &str) -> String {
+pub fn collapse_repeated_sentences(text: &str, language: &Language) -> String {
+    let longest = super::clean::max_line_chars(language);
     // Longer than a line drawn a few times over (a script interpreter's source going through
     // String functions: thousands of characters, every one of them a place to look): as it is.
-    if text.chars().count() > REPEATS_UP_TO * super::clean::MAX_LINE_CHARS {
+    if text.chars().count() > REPEATS_UP_TO * longest {
         return text.to_string();
     }
+    // A sentence ends as a Japanese one does; elsewhere also with a full stop or a closing quote.
+    let ends = if language.is_japanese() { SENTENCE_ENDS.to_string() } else { format!("{SENTENCE_ENDS}.\"”»") };
     let mut text = text.to_string();
     loop {
-        let once = collapse_once(&text);
+        let once = collapse_once(&text, &ends, longest);
         if once.len() == text.len() {
             return text;
         }
@@ -604,14 +629,17 @@ pub fn collapse_repeated_sentences(text: &str) -> String {
     }
 }
 
-fn collapse_once(text: &str) -> String {
+/// The characters a Japanese sentence drawn more than once ends with.
+const SENTENCE_ENDS: &str = "。！？!?」』）)…―～";
+
+fn collapse_once(text: &str, ends: &str, longest: usize) -> String {
     let chars: Vec<char> = text.chars().collect();
-    let ends = |c: char| "。！？!?」』）)…―～".contains(c);
+    let ends = |c: char| ends.contains(c);
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
     while i < chars.len() {
         // Up to all that is left but a character: copies differing in line breaks differ in length.
-        let longest = (chars.len() - i).saturating_sub(1).min(super::clean::MAX_LINE_CHARS);
+        let longest = (chars.len() - i).saturating_sub(1).min(longest);
         // The shortest sentence that repeats: drawn four times, the line twice over repeats too.
         // A whole quote, however short (`「ん？」「ん？」「ん？」`), is a sentence too.
         let quote = |n: usize| chars[i] == '「' && chars[i + n - 1] == '」';
@@ -709,6 +737,10 @@ mod tests {
 
     fn ja() -> &'static Language {
         crate::language::get("ja")
+    }
+
+    fn collapse(text: &str) -> String {
+        collapse_repeated_sentences(text, ja())
     }
 
     #[test]
@@ -872,17 +904,17 @@ mod tests {
     fn sentences_drawn_three_times_come_out_once() {
         let a = "「わ、わかったよ」";
         let b = "今日はもう帰ることにした。";
-        assert_eq!(collapse_repeated_sentences(&format!("{a}{a}{a}{b}{b}{b}")), format!("{a}{b}"));
+        assert_eq!(collapse(&format!("{a}{a}{a}{b}{b}{b}")), format!("{a}{b}"));
         // Four times over (a speaker shown under another name: `name＠shown「…」`).
         let named = "ゆかり＠？？？「え、ちょっと待って……」";
-        assert_eq!(collapse_repeated_sentences(&named.repeat(4)), named);
-        assert_eq!(collapse_repeated_sentences("「ん？」「ん？」「ん？」"), "「ん？」");
+        assert_eq!(collapse(&named.repeat(4)), named);
+        assert_eq!(collapse("「ん？」「ん？」「ん？」"), "「ん？」");
         // Its name and line drawn apart: name, name, line, line, then the two together.
-        assert_eq!(collapse_repeated_sentences("ゆかり＠？？？ゆかり＠？？？「それは秘密にしておくよ」「それは秘密にしておくよ」ゆかり＠？？？「それは秘密にしておくよ」"), "ゆかり＠？？？「それは秘密にしておくよ」");
-        assert_eq!(collapse_repeated_sentences(&format!("まあ、そういうことだ。健一{a}健一{a}")), format!("まあ、そういうことだ。健一{a}"));
+        assert_eq!(collapse("ゆかり＠？？？ゆかり＠？？？「それは秘密にしておくよ」「それは秘密にしておくよ」ゆかり＠？？？「それは秘密にしておくよ」"), "ゆかり＠？？？「それは秘密にしておくよ」");
+        assert_eq!(collapse(&format!("まあ、そういうことだ。健一{a}健一{a}")), format!("まあ、そういうことだ。健一{a}"));
         // Words and short cries said twice are the text.
         for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
-            assert_eq!(collapse_repeated_sentences(text), text);
+            assert_eq!(collapse(text), text);
         }
     }
 
@@ -891,15 +923,15 @@ mod tests {
         // As drawn (wrapped onto two lines), then whole: the drawn copy is kept.
         let wrapped = "雨が上がるのを待っているうちに、\nいつの間にか日が暮れていた。";
         let whole = wrapped.replace('\n', "");
-        assert_eq!(collapse_repeated_sentences(&format!("{wrapped}{whole}")), wrapped);
+        assert_eq!(collapse(&format!("{wrapped}{whole}")), wrapped);
         // The other way round, between other lines, and sent a third time.
         let next = "「もう帰ろうか」";
-        assert_eq!(collapse_repeated_sentences(&format!("{whole}{wrapped}{next}")), format!("{whole}{next}"));
-        assert_eq!(collapse_repeated_sentences(&format!("{wrapped}{whole}{wrapped}")), wrapped);
+        assert_eq!(collapse(&format!("{whole}{wrapped}{next}")), format!("{whole}{next}"));
+        assert_eq!(collapse(&format!("{wrapped}{whole}{wrapped}")), wrapped);
         // Two different lines are both kept, wrapped or not.
         let other = "雨が上がるのを待っているうちに、\nいつの間にか眠っていた。";
         let text = format!("{wrapped}{other}");
-        assert_eq!(collapse_repeated_sentences(&text), text);
+        assert_eq!(collapse(&text), text);
     }
 
     #[test]
@@ -920,12 +952,12 @@ mod tests {
         // A script interpreter's source, tens of thousands of characters with a bracket on every line.
         let script = "if⏎(_EXITCODE_==4)⏎next⏎".repeat(2_000);
         let start = std::time::Instant::now();
-        assert_eq!(collapse_repeated_sentences(&script), script);
+        assert_eq!(collapse(&script), script);
         assert!(start.elapsed() < std::time::Duration::from_millis(100), "{:?}", start.elapsed());
         // The longest a line drawn a few times over can be.
         let line = format!("{}。", "あ".repeat(crate::text_hook::clean::MAX_LINE_CHARS - 1));
         let start = std::time::Instant::now();
-        assert_eq!(collapse_repeated_sentences(&line.repeat(3)), line);
+        assert_eq!(collapse(&line.repeat(3)), line);
         assert!(start.elapsed() < std::time::Duration::from_millis(500), "{:?}", start.elapsed());
     }
 
@@ -981,6 +1013,94 @@ mod tests {
             Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最後の答えは、まだ誰も知らない」", recent: 1, count: 1, noise: 0.0 },
         ];
         assert_eq!(score(&candidates, &blocks(&screen), ja())[0].key, "text");
+    }
+
+    /// A spaced-language game's screen and threads: a nameplate, a HUD, the dialogue box (two
+    /// rows), and the threads a hooker finds: the line, the speaker's name, an asset name.
+    fn spaced_game(name: &str, rows: [&str; 2], hud: &str, language: &str) -> Vec<Scored> {
+        let language = crate::language::get(language);
+        let screen = [
+            line(hud, 581.0, 20.0, 200.0, 18.0),
+            line(name, 50.0, 446.0, 120.0, 24.0),
+            line(rows[0], 50.0, 536.0, 700.0, 28.0),
+            line(rows[1], 50.0, 576.0, 640.0, 28.0),
+        ];
+        let dialogue = format!("{} {}", rows[0], rows[1]);
+        let candidates = [
+            Candidate { key: "name", hookcode: "HS0@4A21F0:game.exe", name: "", text: name, recent: 1, count: 3, noise: 0.0 },
+            Candidate { key: "asset", hookcode: "HS0@4A3000:game.exe", name: "", text: "bg_classroom01", recent: 1, count: 3, noise: 0.0 },
+            Candidate { key: "hud", hookcode: "HS0@4A4000:game.exe", name: "", text: hud, recent: 1, count: 3, noise: 0.0 },
+            Candidate { key: "line", hookcode: "HS0@4A5000:game.exe", name: "", text: &dialogue, recent: 1, count: 3, noise: 0.0 },
+        ];
+        score(&candidates, &blocks(&screen), language)
+    }
+
+    #[test]
+    fn a_spaced_language_game_picks_its_dialogue_not_a_name_or_a_word() {
+        for (language, name, rows, hud) in [
+            ("en", "Natalie", ["Natalie, did you finish the report before", "the meeting? We have ten minutes left."], "Auto Skip Save Load"),
+            ("ru", "Наталья", ["Наталья, ты закончила отчёт до собрания?", "У нас осталось десять минут."], "Авто Пропуск Сохранить"),
+            ("ko", "김민수", ["민수야, 회의 전에 보고서 다 끝냈어?", "우리 십 분밖에 안 남았어."], "자동 넘기기 저장"),
+        ] {
+            let scored = spaced_game(name, rows, hud, language);
+            let lang = crate::language::get(language);
+            assert_eq!(scored[0].key, "line", "{language}");
+            assert_eq!(chosen(&scored, 6.0, lang).map(|s| s.key.as_str()), Some("line"), "{language}");
+            // A one-word thread (the speaker's name, an asset name) is never a candidate.
+            assert!(!scored.iter().any(|s| s.key == "name" || s.key == "asset"), "{language}");
+        }
+        // Alone on screen, a name in the dialogue box does not get chosen: seven letters of a
+        // spaced language are not six of Japanese.
+        let en = crate::language::get("en");
+        let s = |key: &str, effective: f64, in_largest: bool| Scored { key: key.into(), score: effective, matched: effective as usize, effective, in_largest };
+        assert!(chosen(&[s("name", 7.0, true)], 6.0, en).is_none());
+        assert_eq!(chosen(&[s("name", 7.0, true)], 6.0, ja()).map(|s| s.key.as_str()), Some("name"));
+        assert!(chosen(&[s("line", 20.0, false)], 6.0, en).is_none());
+        assert!(chosen(&[s("line", 30.0, false)], 6.0, en).is_some());
+    }
+
+    #[test]
+    fn chinese_reads_like_japanese() {
+        let zh = crate::language::get("zh-Hans");
+        assert_eq!(letter_scale(zh), 1);
+        assert_eq!(letter_scale(crate::language::get("ko")), 1);
+        assert_eq!((letter_scale(ja()), letter_scale(crate::language::get("ru")), letter_scale(crate::language::get("th"))), (1, 2, 2));
+        let screen = [
+            line("自动 跳过 保存", 581.0, 20.0, 200.0, 18.0),
+            line("小林", 50.0, 446.0, 72.0, 24.0),
+            line("「你在会议之前把报告写完了吗？", 50.0, 536.0, 448.0, 28.0),
+            line("我们只剩十分钟了。」", 50.0, 576.0, 300.0, 28.0),
+        ];
+        let candidates = [
+            Candidate { key: "name", hookcode: "HS0@4A21F0:game.exe", name: "", text: "小林", recent: 1, count: 3, noise: 0.0 },
+            Candidate { key: "line", hookcode: "HS0@4A5000:game.exe", name: "", text: "「你在会议之前把报告写完了吗？我们只剩十分钟了。」", recent: 1, count: 3, noise: 0.0 },
+        ];
+        let scored = score(&candidates, &blocks(&screen), zh);
+        assert_eq!(chosen(&scored, 6.0, zh).map(|s| s.key.as_str()), Some("line"));
+    }
+
+    #[test]
+    fn a_sentence_drawn_three_times_is_once_in_other_languages_too() {
+        let en = crate::language::get("en");
+        let line = "Wait, you're telling me she left already?";
+        assert_eq!(collapse_repeated_sentences(&line.repeat(3), en), line);
+        let ru = crate::language::get("ru");
+        let quote = "«Мы должны вернуться в то место ещё раз.»";
+        assert_eq!(collapse_repeated_sentences(&quote.repeat(3), ru), quote);
+        // A word said twice is the text.
+        assert_eq!(collapse_repeated_sentences("Knock, knock. Who's there?", en), "Knock, knock. Who's there?");
+        // In Japanese a full stop does not end a sentence drawn twice, as before.
+        assert_eq!(collapse_repeated_sentences(&"Hello there.".repeat(2), ja()), "Hello there.".repeat(2));
+        // A long English paragraph, longer than 300 characters, drawn twice is once.
+        let paragraph = "The rain had not stopped for three days, and the river behind the old mill had risen so high that the villagers began moving their animals up the hill. Nobody spoke of the bridge. Everyone remembered what had happened the last time the water came this close, and nobody wanted to be the first to say it out loud.";
+        assert!(paragraph.chars().count() > 300);
+        assert_eq!(collapse_repeated_sentences(&paragraph.repeat(2), en), paragraph);
+    }
+
+    #[test]
+    fn european_quotes_never_decide_a_match() {
+        assert_eq!(normalize("«Привет», — сказал он."), "приветсказалон");
+        assert_eq!(normalize("¿Dónde estás? ¡Aquí!"), "dóndeestásaquí");
     }
 
     #[test]
@@ -1079,7 +1199,7 @@ mod tests {
             Candidate { key: "line", hookcode: "ENHQX-4@3B993:game.exe", name: "", text: line_text, recent: 1, count: 3, noise: 0.0 },
         ];
         let scored = score(&candidates, &blocks(&screen), ja());
-        assert_eq!(chosen(&scored, 6.0).unwrap().key, "line");
+        assert_eq!(chosen(&scored, 6.0, ja()).unwrap().key, "line");
         // A short run in common is no match.
         assert_eq!(longest_common_run("そういえば昨日", "昨日の話"), 2);
     }
@@ -1088,11 +1208,11 @@ mod tests {
     fn a_name_matched_outside_the_dialogue_box_is_not_chosen() {
         let s = |key: &str, effective: f64, in_largest: bool| Scored { key: key.into(), score: effective, matched: effective as usize, effective, in_largest };
         // The nameplate matched exactly; the line, misread, did not match at all.
-        assert!(chosen(&[s("name", 10.0, false)], 6.0).is_none());
+        assert!(chosen(&[s("name", 10.0, false)], 6.0, ja()).is_none());
         // The line in the dialogue box, behind a better-scored name.
-        assert_eq!(chosen(&[s("name", 10.0, false), s("line", 8.0, true)], 6.0).unwrap().key, "line");
+        assert_eq!(chosen(&[s("name", 10.0, false), s("line", 8.0, true)], 6.0, ja()).unwrap().key, "line");
         // A long line outside the largest text (a game whose largest text is a menu) still counts.
-        assert_eq!(chosen(&[s("line", 20.0, false)], 6.0).unwrap().key, "line");
+        assert_eq!(chosen(&[s("line", 20.0, false)], 6.0, ja()).unwrap().key, "line");
     }
 
     #[test]

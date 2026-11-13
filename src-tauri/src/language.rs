@@ -172,6 +172,84 @@ pub fn engine_for(
         .map(|engine| engine.to_string())
 }
 
+// ---------------------------------------------------------------- text hook
+
+/// Windows' default ANSI code page for each language (`LOCALE_IDEFAULTANSICODEPAGE` of its main
+/// locale), or None for a language Windows writes in Unicode alone. Every language in the table is
+/// listed, so a new one needs a decision here (`every_language_has_a_hook_code_page`).
+const ANSI_CODE_PAGES: &[(&str, Option<u32>)] = &[
+    ("ja", Some(932)),
+    ("ko", Some(949)),
+    ("zh-Hans", Some(936)),
+    ("zh-Hant", Some(950)),
+    ("yue", Some(950)),
+    // Western European.
+    ("en", Some(1252)),
+    ("es", Some(1252)),
+    ("fr", Some(1252)),
+    ("de", Some(1252)),
+    ("it", Some(1252)),
+    ("pt", Some(1252)),
+    ("id", Some(1252)),
+    ("nl", Some(1252)),
+    ("sv", Some(1252)),
+    ("no", Some(1252)),
+    ("da", Some(1252)),
+    ("fi", Some(1252)),
+    ("tl", Some(1252)),
+    ("la", Some(1252)),
+    ("ga", Some(1252)),
+    ("cy", Some(1252)),
+    ("eu", Some(1252)),
+    ("gd", Some(1252)),
+    // Central European.
+    ("pl", Some(1250)),
+    ("cs", Some(1250)),
+    ("hu", Some(1250)),
+    ("ro", Some(1250)),
+    ("sq", Some(1250)),
+    // Serbo-Croatian: its Latin spelling (Croatian, Bosnian, Serbian Latin).
+    ("sh", Some(1250)),
+    // Cyrillic.
+    ("ru", Some(1251)),
+    ("uk", Some(1251)),
+    ("bg", Some(1251)),
+    ("be", Some(1251)),
+    ("mn", Some(1251)),
+    ("el", Some(1253)),
+    ("grc", Some(1253)),
+    ("tr", Some(1254)),
+    ("et", Some(1257)),
+    ("lv", Some(1257)),
+    ("vi", Some(1258)),
+    ("th", Some(874)),
+    // Unicode-only on Windows: no ANSI code page holds these scripts (or Esperanto's and
+    // Maltese's letters).
+    ("hi", None),
+    ("ka", None),
+    ("hy", None),
+    ("km", None),
+    ("lo", None),
+    ("kn", None),
+    ("eo", None),
+    ("mt", None),
+];
+
+/// The code page the text hook decodes a game's multibyte (ANSI) strings with when its hook names
+/// none (LunaHook's default code page): the language's ANSI code page, so a Korean, Chinese,
+/// Russian, Thai or accented Latin game hooked through ANSI text calls reads right. Shift-JIS
+/// (932), what it always was, for Japanese, and for a language with no ANSI code page: such a
+/// game's text comes through its Unicode hooks, and any ANSI one is ASCII, which every code page
+/// reads alike. A hook code that names its own code page (`HS949#…`, a game's own hook codes in
+/// Settings → Text Hooker) still decodes with that one.
+pub fn hook_code_page(language: &Language) -> u32 {
+    ANSI_CODE_PAGES
+        .iter()
+        .find(|(code, _)| *code == language.code)
+        .and_then(|(_, page)| *page)
+        .unwrap_or(932)
+}
+
 // ---------------------------------------------------------------- codes for other services
 
 /// Google Lens's `LocaleContext.language`.
@@ -185,6 +263,8 @@ pub fn lens_code(language: &Language) -> &str {
 }
 
 /// Apple Live Text's recognition locale. Japanese stays the bare `ja` the app always sent.
+/// macOS only (Live Text); the tests run everywhere.
+#[cfg(any(target_os = "macos", test))]
 pub fn apple_locale(language: &Language) -> &str {
     match language.code.as_str() {
         "ko" => "ko-KR",
@@ -206,6 +286,7 @@ pub fn apple_locale(language: &Language) -> &str {
 
 /// The locales Live Text is asked to read: the language first, then English, which keeps a line
 /// of Latin UI text from being forced into the language's script (`["ja", "en"]` for Japanese).
+#[cfg(any(target_os = "macos", test))]
 pub fn live_text_locales(language: &Language) -> Vec<String> {
     let first = apple_locale(language);
     if first.starts_with("en") {
@@ -355,6 +436,43 @@ mod tests {
         assert_eq!(engine_for("ja", "screenai", Some("meikiocr"), |e| e != "meikiocr"), None);
         assert_eq!(engine_for("ko", "googlelens", Some("meikiocr"), |_| true), None);
         assert_eq!(engine_for("ja", "meikiocr", Some("meikiocr"), |_| true), None);
+    }
+
+    #[test]
+    fn every_language_has_a_hook_code_page() {
+        for language in all() {
+            assert!(ANSI_CODE_PAGES.iter().any(|(code, _)| *code == language.code), "{} has no row", language.code);
+        }
+        assert_eq!(ANSI_CODE_PAGES.len(), all().len());
+        // Japanese, and an unknown code (Japanese), decode Shift-JIS as always.
+        assert_eq!(hook_code_page(get("ja")), 932);
+        assert_eq!(hook_code_page(get("tlh")), 932);
+        let pages: Vec<(&str, u32)> = ["ko", "zh-Hans", "zh-Hant", "yue", "ru", "th", "el", "tr", "pl", "lv", "vi", "en", "fr"]
+            .into_iter()
+            .map(|code| (code, hook_code_page(get(code))))
+            .collect();
+        assert_eq!(
+            pages,
+            [
+                ("ko", 949),
+                ("zh-Hans", 936),
+                ("zh-Hant", 950),
+                ("yue", 950),
+                ("ru", 1251),
+                ("th", 874),
+                ("el", 1253),
+                ("tr", 1254),
+                ("pl", 1250),
+                ("lv", 1257),
+                ("vi", 1258),
+                ("en", 1252),
+                ("fr", 1252)
+            ]
+        );
+        // No ANSI code page: Shift-JIS, which reads ASCII like any other.
+        for code in ["hi", "ka", "hy", "km", "lo", "kn"] {
+            assert_eq!(hook_code_page(get(code)), 932, "{code}");
+        }
     }
 
     #[test]
