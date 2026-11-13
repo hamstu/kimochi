@@ -22,15 +22,24 @@ export const FAQ = [
     id: 'what-is-kimochi',
     q: 'What is Kimochi?',
     a: [
-      'Kimochi is a free, open-source desktop app that helps you read Japanese in games, visual novels, manga and more. It captures the Japanese text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki.'
+      'Kimochi is a free, open-source desktop app that helps you read the language you’re learning in games, visual novels, manga and more. It was built for Japanese, and can now be set to other languages too (experimental). It captures the text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki.'
     ]
   },
   {
     id: 'who-is-it-for',
     q: 'Who is Kimochi for?',
     a: [
-      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy. It started as the tool its maker, Hamish Macpherson, wanted for his own games and manga.'
+      'Kimochi is for anyone learning a language by reading the games, visual novels and manga they enjoy, especially Japanese. It started as the tool its maker, Hamish Macpherson, wanted for his own Japanese games and manga.'
     ]
+  },
+  {
+    id: 'languages',
+    q: 'Which languages does Kimochi support?',
+    a: [
+      'Japanese, fully: it is what Kimochi was built for and the default. As of November 2026 you can also set Kimochi to any of 48 other left-to-right languages, including Korean, Chinese, Spanish, French, German, Portuguese, Russian, Thai and Vietnamese. These are experimental, so expect rough edges and tell us what you find. Right-to-left languages such as Arabic and Hebrew are not supported yet.',
+      'Some features stay Japanese-only for now: the MeikiOCR and Manga OCR engines, the Hachidori and 10ten dictionaries, read aloud, word audio, and the furigana and pitch-accent card fields. Use Yomitan with dictionaries for your language. Translations and AI explanations are always in English.'
+    ],
+    links: [{ href: 'https://discord.gg/vdMge6TBZQ', label: 'Tell us how it reads your language on Discord' }]
   },
   {
     id: 'how-does-it-work',
@@ -81,8 +90,8 @@ export const FAQ = [
     id: 'engines-and-dictionaries',
     q: 'Which OCR engines and dictionaries does Kimochi support?',
     a: [
-      'OCR engines: Google Lens (the default, online), PaddleOCR (on device, fast and accurate), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), or OneOCR (Windows 11, built in).',
-      'Dictionaries: a built-in copy of Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan in your browser through the Yomitan API.'
+      'OCR engines: Google Lens (the default, online), PaddleOCR (on device, fast and accurate), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU; Japanese only), Manga OCR (on device, tuned for manga; Japanese only), or OneOCR (Windows 11, built in). Kimochi lists only the engines that read the language you chose.',
+      'Dictionaries: a built-in copy of Yomitan with your own dictionaries, or the Yomitan in your browser through the Yomitan API. For Japanese, Hachidori and 10ten are built in too.'
     ],
     links: [
       { href: docsUrl('/reading/ocr-engines/'), label: 'OCR engines' },
@@ -131,10 +140,10 @@ export const FAQ = [
     links: [{ href: 'https://github.com/hamstu/kimochi', label: 'Kimochi on GitHub' }]
   },
   {
-    id: 'mobile-and-languages',
-    q: 'Does Kimochi work on phones or tablets, or for languages other than Japanese?',
+    id: 'mobile',
+    q: 'Does Kimochi work on phones or tablets?',
     a: [
-      'Not yet. Kimochi is a desktop app for macOS, Windows and Linux, plus Gaming Mode on the Steam Deck, and it is made for reading Japanese. Phones, tablets and other languages may come later.'
+      'Not yet. Kimochi is a desktop app for macOS, Windows and Linux, plus Gaming Mode on the Steam Deck. Phones and tablets may come later.'
     ]
   },
   {

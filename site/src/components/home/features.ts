@@ -40,7 +40,7 @@ export const features: Feature[] = [
   {
     id: 'engines',
     title: 'Fast OCR',
-    body: "Pick the OCR engine that suits what you're reading: quick on-device models like MeikiOCR and PaddleOCR, Manga OCR for manga, the ones built into Windows and macOS, or Google Lens online.",
+    body: "Pick the OCR engine that suits what you're reading: quick on-device models like PaddleOCR, the ones built into Windows and macOS, or Google Lens online. Kimochi offers the ones that read your language; for Japanese there's also MeikiOCR, and Manga OCR for manga.",
     Visual: EnginesVisual,
     docs: '/reading/ocr-engines/'
   },
@@ -69,7 +69,7 @@ export const features: Feature[] = [
   {
     id: 'dictionaries',
     title: 'Dictionary extensions',
-    body: 'Use a built-in copy of Yomitan, Hachidori or 10ten, or point Kimochi at your own Yomitan and its dictionaries through the Yomitan API.',
+    body: 'Use a built-in copy of Yomitan, or point Kimochi at your own Yomitan and its dictionaries through the Yomitan API. For Japanese, Hachidori and 10ten are built in too.',
     Visual: DictionariesVisual,
     docs: '/lookups/dictionaries/'
   },

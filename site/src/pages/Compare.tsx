@@ -21,6 +21,11 @@ export function Compare() {
         First of all, Kimochi was really inspired by all of these apps. So
         credit where credit is due! 🙏
       </p>
+      <p>
+        This page compares them for reading Japanese, the language they all
+        have in common. Kimochi can now be set to 48 other languages too, as an
+        experiment.
+      </p>
       <p>It depends on what you want.</p>
       <ul>
         <li>
