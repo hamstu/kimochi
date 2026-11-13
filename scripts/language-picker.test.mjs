@@ -13,7 +13,7 @@ const read = (file) => readFile(new URL(`../${file}`, import.meta.url), 'utf8')
 const { LANGUAGES, languageOf } = await load('languages.ts')
 const { languageMatches } = await load('../frontend/components/languageSearch.ts')
 const { comboboxMatches, foldText } = await load('../frontend/kit/comboboxFilter.ts')
-const { languageNotes } = await load('../frontend/panels/settings/languageNotes.ts')
+const { engineSwitchNote, languageNotes } = await load('../frontend/panels/settings/languageNotes.ts')
 
 const search = (query) => LANGUAGES.filter((language) => languageMatches(language, query)).map((l) => l.code)
 
@@ -93,4 +93,15 @@ test('the welcome guide asks for the language straight after the intro', async (
   assert.match(app, /'intro',\s*'language',/, 'the language step is not second in the dots')
   assert.match(app, /'\/language': 'language'/)
   assert.match(await read('frontend/dev/preview-setup.ts'), /language: '\/language'/)
+})
+
+test('the Language page names the engine Kimochi switched to', () => {
+  assert.equal(
+    engineSwitchNote('MeikiOCR', 'Google Lens', 'Thai', false),
+    "Kimochi switched to Google Lens, because MeikiOCR can't read Thai."
+  )
+  assert.equal(
+    engineSwitchNote('OneOCR', 'MeikiOCR', 'Japanese', true),
+    'Kimochi switched back to MeikiOCR, the engine you last used for Japanese.'
+  )
 })

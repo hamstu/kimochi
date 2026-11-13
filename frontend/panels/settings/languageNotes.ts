@@ -32,3 +32,14 @@ export function languageNotes(language: Pick<Language, 'scripts' | 'spaces' | 'v
   if (language.ruby) notes.push('Furigana, the small readings beside kanji, can be filtered out of scans.')
   return notes
 }
+
+/**
+ * The sentence that says Kimochi changed the OCR engine when the language changed (native
+ * `follow_language`): `from` and `to` are engine names, `fromReads` whether the engine left can
+ * read the new language (it can when the one last used for the language came back).
+ */
+export function engineSwitchNote(from: string, to: string, languageName: string, fromReads: boolean): string {
+  return fromReads
+    ? `Kimochi switched back to ${to}, the engine you last used for ${languageName}.`
+    : `Kimochi switched to ${to}, because ${from} can't read ${languageName}.`
+}
