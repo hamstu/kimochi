@@ -1,13 +1,13 @@
 # Kimochi
 
-> Kimochi is a free, open-source (GPL-3.0) desktop app for macOS, Windows and Linux that reads the Japanese text on your screen with OCR (games, visual novels, manga, videos, any app), draws it back over whatever you're reading, and lets you hover any word to look it up (Yomitan, Hachidori or 10ten) and make Anki cards. With Text hooking it can also read a Windows game's text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. It also has a Gaming Mode for the Steam Deck, read with the controller. Made by Hamish Macpherson, an independent developer in Canada. Status as of November 2026: early (alpha); the latest release is 0.6.0, from 4 November 2026.
+> Kimochi is a free, open-source (GPL-3.0) desktop app for macOS, Windows and Linux for language learners that reads the text on your screen with OCR (games, visual novels, manga, videos, any app), draws it back over whatever you're reading, and lets you hover any word to look it up (Yomitan; for Japanese also Hachidori or 10ten) and make Anki cards. It was built for Japanese, which is still the best supported; you can also set it to 48 other left-to-right languages (Korean, Chinese, Spanish, French, German and more), which are experimental as of November 2026. Some features stay Japanese-only: the MeikiOCR and Manga OCR engines, the Hachidori and 10ten dictionaries, read aloud, word audio, and furigana and pitch-accent card fields. Translations and AI explanations are in English. With Text hooking it can also read a Windows game's text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. It also has a Gaming Mode for the Steam Deck, read with the controller. Made by Hamish Macpherson, an independent developer in Canada. Status as of November 2026: early (alpha); the latest release is 0.6.0, from 4 November 2026.
 
 Kimochi is not the "Kimochi" emotions journal, the "Kimochi" AI companion app or the Kimochis toys. Kimochi itself is free with no account. Kimochi Cloud is optional and paid (prices as of October 2026, in US dollars): $6 a month, $60 a year (two months free, so $5 a month) or $125 once for lifetime, with a 14-day free trial. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync. The app has no analytics, telemetry, crash reporting or ads.
 
 ## Pages
 
 - [Home](https://kimochiapp.com/): what Kimochi does, features, how it works, pricing
-- [FAQ](https://kimochiapp.com/faq): short answers about platforms, price, privacy, OCR engines, dictionaries, Anki
+- [FAQ](https://kimochiapp.com/faq): short answers about languages, platforms, price, privacy, OCR engines, dictionaries, Anki
 - [Compare](https://kimochiapp.com/compare): when to pick Kimochi, GameSentenceMiner, owocr or YomiNinja
 - [Install on Linux](https://kimochiapp.com/download/linux): Steam Deck, Ubuntu and Debian, other distributions
 - [Privacy](https://kimochiapp.com/privacy): exactly what leaves your computer, feature by feature

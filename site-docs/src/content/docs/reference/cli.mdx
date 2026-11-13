@@ -59,7 +59,7 @@ kimochi version
 | `kimochi overlay [show\|hide\|toggle]` | Shows or hides [the overlay](/reading/overlay/). |
 | `kimochi overlay text [show\|hide\|toggle]` | Only the scanned text drawn over the source. |
 | `kimochi ocr` | Lists this computer's [OCR engines](/reading/ocr-engines/), with the selected one marked. |
-| `kimochi ocr <engine>` | Switches engine: `googlelens`, `cloud`, `meikiocr`, `mangaocr`, `ppocr`, `vocr`, `livetext` (macOS) or `oneocr` (Windows). A local engine whose model isn't downloaded yet starts downloading. |
+| `kimochi ocr <engine>` | Switches engine: `googlelens`, `cloud`, `meikiocr`, `mangaocr`, `ppocr`, `screenai`, `vocr`, `livetext` (macOS) or `oneocr` (Windows). A local engine whose model isn't downloaded yet starts downloading. |
 | `kimochi source` | The source Kimochi reads. |
 | `kimochi source list` | Every window and display it could read, with their ids. Not on Linux with Wayland or in Gaming Mode, where only the system's picker can choose: use `kimochi source choose`. |
 | `kimochi source set <name>` | Reads a window or display: by id, or by its title or app name (exactly, or the only one containing the words). Its saved crop comes back with it, and with **Switch session by window name** on, the Log opens that window's [session](/log/sessions/) too. |
@@ -72,7 +72,7 @@ kimochi version
 | --- | --- |
 | `kimochi log` | The open session's newest 20 lines, oldest first. `-n <count>` for more or fewer, `--all` for every line, `--session <name>` for another session. |
 | `kimochi log --follow` | Prints each new line as the Log takes it in, until you press <kbd>Ctrl+C</kbd>. |
-| `kimochi log add <text>` | Adds a line to the Log. With `-`, or with text piped in, it reads standard input. The line goes through the Log's rules ([replacements](/log/the-log/), **Japanese only**, skipping a repeat): if they drop it, the command says so and exits 1. |
+| `kimochi log add <text>` | Adds a line to the Log. With `-`, or with text piped in, it reads standard input. The line goes through the Log's rules ([replacements](/log/the-log/), the [line filter](/log/the-log/#which-lines-are-kept) for your language, skipping a repeat): if they drop it, the command says so and exits 1. |
 | `kimochi session` | The open session's name. |
 | `kimochi session list` | Every [session](/log/sessions/), the open one marked `*`. |
 | `kimochi session switch <name>` | Opens another session. |

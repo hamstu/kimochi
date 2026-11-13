@@ -193,7 +193,7 @@ export function Privacy() {
       <h2 id="browser-extension">The browser extension</h2>
       <p>
         The Kimochi browser extension (for Chrome, Edge, Arc, Brave and other
-        Chromium browsers) lets the Kimochi app read Japanese in pictures on
+        Chromium browsers) lets the Kimochi app read the text in pictures on
         web pages. It works only together with the app on your own computer,
         and it never talks to any server itself.
       </p>

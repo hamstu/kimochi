@@ -22,7 +22,7 @@ Hover a line and press **⋯**, or right-click it:
 
 | Action | What it does |
 | --- | --- |
-| **Read aloud** | Plays the line in an ElevenLabs voice ([Kimochi Cloud](/cloud/)). |
+| **Read aloud** | Plays the line in an ElevenLabs voice ([Kimochi Cloud](/cloud/); Japanese only). |
 | **Copy text** | Copies the line (the English, when it is translated). |
 | **Copy selection** / **Add to notebook…** | With text selected in the Log: copy it, or add it to the Notebook. |
 | **Translate** / **Show original** | See [Translation and AI](/lookups/translation-and-ai/#translate). Shortcut <kbd>T</kbd>. |
@@ -37,8 +37,9 @@ The footer shows this session's reading stats, the text size buttons and the ses
 
 <Screenshot id="log-footer" alt="The Log's footer: reading time, line count, character count and reading speed, then A− and A+, the session name and the ⋯ menu." width={660} />
 
-- **Reading time**, **lines**, **chars** and **chars/h** (reading speed). The timer pauses when you
-  have been idle for a minute (**Settings → Log & Sessions → Reading timer**).
+- **Reading time**, **lines**, **chars** and **chars/h** (reading speed). In a language that
+  separates words with spaces, it counts **words** and **words/h** instead. The timer pauses when
+  you have been idle for a minute (**Settings → Log & Sessions → Reading timer**).
 - **A−** / **A+** change the Log's text size (12–48 px).
 - The session name opens the [session menu](/log/sessions/).
 - **⋯** chooses which stats the footer shows, and has **Clear lines…**, **Reset stats…** and
@@ -52,7 +53,7 @@ The footer shows this session's reading stats, the text size buttons and the ses
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| **Drop lines** | No Japanese | Skips lines that aren't Japanese, on a three-step scale. **No Japanese** drops lines without a single Japanese character; **Mostly not Japanese** also drops lines where more of the text isn't Japanese than is (spaces and punctuation aside), such as OCR junk or an English menu item; **Off** keeps everything. The overlay follows it too. |
+| **Drop lines** | No Japanese | Skips lines that aren't in [the language you're learning](/language/), on a three-step scale named for it. **No Japanese** drops lines without a single Japanese character; **Mostly not Japanese** also drops lines where more of the text isn't Japanese than is (spaces and punctuation aside), such as OCR junk or an English menu item; **Off** keeps everything. In a language written only in the Latin alphabet the steps are **No letters** and **Mostly not letters**, which drop lines of numbers and symbols. The overlay follows it too. |
 | **Skip repeats** | 1 | Drops a line that matches any of the last N lines. |
 | **Merge streamed lines** | Off | Joins lines that arrive a piece at a time, comparing the first **Characters to compare** (4). |
 | **Keep at most** | 5000 | Lines per session. |

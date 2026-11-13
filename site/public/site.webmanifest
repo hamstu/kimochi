@@ -1,7 +1,7 @@
 {
   "name": "Kimochi",
   "short_name": "Kimochi",
-  "description": "Read and play in Japanese: a Japanese OCR overlay for games.",
+  "description": "Read and play in any language: an OCR overlay for games, for language learners.",
   "start_url": "/",
   "display": "browser",
   "background_color": "#ffffff",

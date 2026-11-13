@@ -352,14 +352,14 @@ write_entries() {
 [Desktop Entry]
 Type=Application
 Name=Kimochi
-GenericName=Japanese Reading Assistant
-Comment=Read and play in Japanese with on-screen OCR, pop-up dictionaries and a reading log
+GenericName=Language Reading Assistant
+Comment=Read and play in any language with on-screen OCR, pop-up dictionaries and a reading log
 Exec=$exec_line
 Icon=kimochi
 Terminal=false
 StartupWMClass=kimochi
 Categories=Education;Languages;
-Keywords=Japanese;OCR;dictionary;Yomitan;reader;games;
+Keywords=Japanese;language;OCR;dictionary;Yomitan;reader;games;
 MimeType=x-scheme-handler/kimochi;
 $marker
 DESKTOP

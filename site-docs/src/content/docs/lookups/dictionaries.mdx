@@ -13,18 +13,20 @@ import apiDark from '../../../../../frontend/assets/dictionary-previews/custom-a
 
 Kimochi looks words up with a **pop-up dictionary engine**. Choose one in the sidebar's
 **Dictionary** menu or in **Settings → Dictionary**; Kimochi downloads it from its official release
-the first time.
+the first time. Yomitan and the Yomitan API work with any language; Hachidori and 10ten read
+Japanese only, and can't be chosen while you're learning another language (see
+[Dictionaries by language](/language/support/#dictionaries)).
 
 <Screenshot id="dictionary-picker" alt="The sidebar's Dictionary menu: Yomitan, Hachidori, 10ten and Yomitan API." width={720} />
 
 <Screenshot id="settings-dictionary" alt="Settings, Dictionary: the four engines on the left and Yomitan's details, with a preview of its pop-up." width={760} />
 
-| Engine | What it is | Download | Anki |
-| --- | --- | --- | --- |
-| **Yomitan** (recommended) | A copy of Yomitan inside Kimochi, with its own dictionaries and settings. | About 15 MB | Yomitan's mining |
-| **Hachidori** | A fast engine written in C++ and compiled to WebAssembly, with native dictionary indexes. Imports Yomitan dictionaries and MDict. | About 5 MB | Through AnkiConnect |
-| **10ten** | Lightweight, works straight away with a bundled word dictionary, then downloads JMdict, kanji and names dictionaries in the background. | About 18 MB | None |
-| **Yomitan API** | A pop-up built into Kimochi that looks words up through the Yomitan in your browser. | Small helper | Kimochi's card builder |
+| Engine | What it is | Download | Anki | Languages |
+| --- | --- | --- | --- | --- |
+| **Yomitan** (recommended) | A copy of Yomitan inside Kimochi, with its own dictionaries and settings. | About 15 MB | Yomitan's mining | Any |
+| **Hachidori** | A fast engine written in C++ and compiled to WebAssembly, with native dictionary indexes. Imports Yomitan dictionaries and MDict. | About 5 MB | Through AnkiConnect | Japanese |
+| **10ten** | Lightweight, works straight away with a bundled word dictionary, then downloads JMdict, kanji and names dictionaries in the background. | About 18 MB | None | Japanese |
+| **Yomitan API** | A pop-up built into Kimochi that looks words up through the Yomitan in your browser. | Small helper | Kimochi's card builder | Any |
 
 ## How engines are downloaded
 
@@ -38,13 +40,23 @@ background.
 An embedded copy of [Yomitan](https://github.com/yomidevs/yomitan), so there is no browser
 extension to install. It needs at least one dictionary:
 
-- **Install Jitendex** (in the welcome guide) downloads the Jitendex Japanese–English dictionary and
-  enables it in your current profile.
+- **Install Jitendex** (in the welcome guide, for Japanese) downloads the Jitendex Japanese–English
+  dictionary and enables it in your current profile.
 - **Open Yomitan settings** (in **Settings → Dictionary**) opens Yomitan's settings
   page, where you import dictionaries, restore a settings backup exported from Yomitan in your
-  browser, and set up audio, scanning and Anki.
+  browser, and set up audio, scanning and Anki. For other languages, find a dictionary in
+  [Yomitan's dictionary list](https://yomitan.wiki/dictionaries/) and import it here.
+
+Your dictionaries are shared by every account on this computer, but each account looks words up
+with its own Yomitan profile, which you can choose in **Settings → Account → Dictionary profile**.
+See [A dictionary profile for each account](/language/support/#a-dictionary-profile-for-each-account).
 
 ## Hachidori
+
+:::note[Japanese only]
+Hachidori reads Japanese only. In another language it can't be chosen, and Yomitan looks words up
+in its place.
+:::
 
 <Screenshot src={{ light: hachidoriLight, dark: hachidoriDark }} alt="Hachidori's pop-up over a line of game dialogue." width={560} />
 
@@ -54,6 +66,11 @@ Open its settings with **Open Hachidori settings**; you can drop dictionary file
 area and drag its dictionaries to reorder them.
 
 ## 10ten
+
+:::note[Japanese only]
+10ten Japanese Reader reads Japanese only. In another language it can't be chosen, and Yomitan
+looks words up in its place.
+:::
 
 <Screenshot src={{ light: tentenLight, dark: tentenDark }} alt="10ten's pop-up over a line of game dialogue." width={560} />
 

@@ -81,6 +81,7 @@ const SETTINGS_READY = {
   ocr: '.engine-chooser',
   log: '#log-font-size',
   dictionary: '.engine-chooser',
+  language: '.language-notes',
   assist: '#assist-deepl',
   controls: '#gamepad-enabled',
   gamemode: '.read-along-views',
@@ -113,7 +114,8 @@ export const SHOTS = [
       { type: 'badge', target: { selector: '#sb-dictionary-label', pad: 4 }, n: 4, nudge: [-10, 0] },
       { type: 'badge', target: { selector: '.main-tab', index: 0, pad: -4 }, n: 5 },
       { type: 'badge', target: { selector: '.line', text: 'ラジ館' }, n: 6, at: 'top-right', nudge: [-28, 22] },
-      { type: 'badge', target: { selector: '.log-stats', pad: 4 }, n: 7, nudge: [-12, 0] }
+      { type: 'badge', target: { selector: '.log-stats', pad: 4 }, n: 7, nudge: [-12, 0] },
+      { type: 'badge', target: { selector: '.sb-foot-language', pad: 2 }, n: 8, nudge: [-6, 0] }
     ]
   },
   {
@@ -146,7 +148,30 @@ export const SHOTS = [
       { type: 'note', target: switchRow('Auto OCR'), n: 4, text: 'Scan on every change' },
       { type: 'note', target: switchRow('Show overlay'), n: 5, text: 'Draw text over the game' },
       { type: 'note', target: { selector: '.sb-engine-select', index: 0 }, n: 6, text: 'The OCR engine' },
-      { type: 'note', target: { selector: '.sb-engine-select', index: 1 }, n: 7, text: 'The pop-up dictionary' }
+      { type: 'note', target: { selector: '.sb-engine-select', index: 1 }, n: 7, text: 'The pop-up dictionary' },
+      { type: 'note', target: { selector: '.sb-foot-language', pad: 2 }, n: 8, text: 'The language you’re learning' }
+    ]
+  },
+  // The sidebar's foot: Settings, and the language being learned beside it (no account in use).
+  {
+    id: 'sidebar-language',
+    page: 'panel.html?window=log',
+    size: MAIN,
+    crop: { x: 0, y: 380, width: 272, height: 180 },
+    ready: '.sb-foot-language',
+    marks: [{ type: 'glow', target: { selector: '.sb-foot-language', pad: 1 }, radius: 8 }]
+  },
+  // With an account in use: the language's code on the account row, and Language in its menu.
+  {
+    id: 'account-menu-language',
+    page: 'panel.html?window=log&account=signedin',
+    size: MAIN,
+    crop: { x: 0, y: 250, width: 272, height: 310 },
+    ready: '.sb-account-row',
+    actions: [{ click: '.sb-account-row', after: 500 }],
+    marks: [
+      { type: 'glow', target: { selector: '[role="menuitem"]', text: 'Language' }, radius: 6 },
+      { type: 'glow', target: { selector: '.sb-account-language', pad: 1 }, radius: 6 }
     ]
   },
   {
@@ -267,11 +292,27 @@ export const SHOTS = [
     actions: [{ click: 'button[aria-label="OCR model"]', after: 500 }]
   },
   {
+    // Another language: Hachidori and 10ten stay listed, but can't be chosen.
+    id: 'dictionary-picker-korean',
+    page: 'panel.html?window=log&language=ko',
+    size: MAIN,
+    ready: '.sb-engine-select',
+    // The Dictionary picker sits low in the sidebar's scroll: bring it into view first.
+    actions: [
+      { run: `document.querySelector('button[aria-label="Dictionary"]').scrollIntoView({ block: 'center' })`, after: 200 },
+      { click: 'button[aria-label="Dictionary"]', after: 500 }
+    ]
+  },
+  {
     id: 'dictionary-picker',
     page: 'panel.html?window=log',
     size: MAIN,
     ready: '.sb-engine-select',
-    actions: [{ click: 'button[aria-label="Dictionary"]', after: 500 }]
+    // The Dictionary picker sits low in the sidebar's scroll: bring it into view first.
+    actions: [
+      { run: `document.querySelector('button[aria-label="Dictionary"]').scrollIntoView({ block: 'center' })`, after: 200 },
+      { click: 'button[aria-label="Dictionary"]', after: 500 }
+    ]
   },
   {
     id: 'line-actions',
@@ -389,6 +430,7 @@ export const SHOTS = [
   // ------------------------------------------------------------------ settings
   ...[
     ['general', 'General'],
+    ['language', 'Language'],
     ['sources', 'Sources'],
     ['ocr', 'OCR & Overlay'],
     ['log', 'Log & Sessions'],
@@ -405,6 +447,26 @@ export const SHOTS = [
     ready: SETTINGS_READY[tab] ?? '.settings-page-scroll',
     actions: tab === 'account' ? [HIDE_DEV_SERVER] : []
   })),
+  {
+    // Another language: the heads-up, what Kimochi assumes about its text, and the engines that read it.
+    id: 'settings-language-korean',
+    page: settingsTab('language', '&language=ko'),
+    size: SETTINGS,
+    ready: '.language-notes'
+  },
+  {
+    // Settings → Account's Dictionary profile: the Yomitan profile this account looks words up with.
+    id: 'settings-account-profile',
+    page: settingsTab('account', '&account=signedin&language=ko'),
+    size: SETTINGS,
+    ready: '.account-meter',
+    actions: [
+      HIDE_DEV_SERVER,
+      { waitFor: 'button[aria-label="Yomitan profile"]:not([disabled])' },
+      { run: `[...document.querySelectorAll('h2, h3')].find((h) => h.textContent.trim() === 'Dictionary profile')?.scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -24)`, after: 300 }
+    ],
+    marks: [{ type: 'glow', target: { selector: '.k-settings-section', text: 'Yomitan profile', pad: 6 }, radius: 12 }]
+  },
   {
     id: 'settings-ocr-downloading',
     page: settingsTab('ocr', '&model=downloading'),
@@ -529,6 +591,7 @@ export const SHOTS = [
   // ------------------------------------------------------------------ welcome guide
   ...[
     ['intro', ''],
+    ['language', ''],
     ['permission', '&permission=denied'],
     ['accessibility', ''],
     ['ocr', ''],
@@ -593,7 +656,7 @@ export const OG = [
     out: 'site-docs/public/og.png',
     copy: {
       mark: 'Docs',
-      title: 'Read and play in Japanese.',
+      title: 'Read and play in any language.',
       lede: 'Install, set up OCR and dictionaries, and read with the overlay, the Log and the Notebook.',
       url: 'docs.kimochiapp.com'
     }
@@ -604,7 +667,7 @@ export const OG = [
     out: 'site/public/og.png',
     copy: {
       mark: '',
-      title: 'Read and play in Japanese.',
+      title: 'Read and play in any language.',
       lede: 'Free and open source for macOS, Windows and Linux. OCR, an overlay, pop-up dictionaries and Anki.',
       url: 'kimochiapp.com'
     }

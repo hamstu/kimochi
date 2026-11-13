@@ -47,13 +47,13 @@ const CLOUD_FEATURES: { icon: ReactNode; title: string; body: string; docs: stri
   {
     icon: <AudioLines size={18} aria-hidden />,
     title: 'Read aloud',
-    body: 'Hear any line in an ElevenLabs voice.',
+    body: 'Hear any Japanese line in an ElevenLabs voice.',
     docs: '/lookups/translation-and-ai/#read-aloud'
   },
   {
     icon: <ScanText size={18} aria-hidden />,
     title: 'Cloud OCR',
-    body: 'Google Cloud Vision, dependable on almost any Japanese text.',
+    body: 'Google Cloud Vision, dependable on almost any text.',
     docs: '/reading/ocr-engines/#cloud-ocr'
   },
   {

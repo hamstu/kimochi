@@ -35,7 +35,7 @@ export default defineConfig({
     starlight({
       title: 'Kimochi Docs',
       description:
-        'How to install and use Kimochi, the free desktop app that reads any Japanese on your screen (games, visual novels, manga, videos) with OCR, an overlay, pop-up dictionaries and a reading log.',
+        'How to install and use Kimochi, the free desktop app that reads the language you’re learning on your screen (games, visual novels, manga, videos) with OCR, an overlay, pop-up dictionaries and a reading log.',
       logo: { src: './src/assets/kimochi-icon.svg', alt: 'Kimochi' },
       favicon: '/favicon.svg',
       lastUpdated: false,
@@ -71,6 +71,14 @@ export default defineConfig({
             },
             { label: 'Welcome guide', slug: 'welcome-guide' },
             { label: 'Quick start', slug: 'quick-start' }
+          ]
+        },
+        {
+          label: 'Language',
+          items: [
+            { label: 'Choosing a language', slug: 'language' },
+            { label: 'What works in each language', slug: 'language/support' },
+            { label: 'Japanese-only features', slug: 'language/japanese-only' }
           ]
         },
         {

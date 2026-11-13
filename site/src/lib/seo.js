@@ -11,14 +11,14 @@ import { FAQ } from '../content/faq.js'
 export const SITE_URL = 'https://kimochiapp.com'
 
 /** The name paired with the category, so Kimochi is not confused with other "Kimochi" apps. */
-export const ENTITY_NAME = 'Kimochi: Japanese OCR overlay for games'
+export const ENTITY_NAME = 'Kimochi: OCR overlay for reading games in the language you’re learning'
 
 /** The social card (public/og.png, drawn by `npm run docs:screenshots -- --only og-site`). */
 export const OG_IMAGE = {
   url: `${SITE_URL}/og.png`,
   width: 1200,
   height: 630,
-  alt: 'Kimochi: Read and play in Japanese. The main window beside the wordmark.'
+  alt: 'Kimochi: Read and play in any language. The main window beside the wordmark.'
 }
 
 /**
@@ -40,23 +40,23 @@ export const OG_IMAGE = {
 export const ROUTES = [
   {
     path: '/',
-    title: 'Kimochi · Read Japanese games with an OCR overlay',
+    title: 'Kimochi · Read games in any language with an OCR overlay',
     description:
-      'Kimochi is a free, open-source desktop app for macOS, Windows and Linux that reads the Japanese text in your games, manga, videos and apps, draws it over them, and lets you hover any word to look it up and make Anki cards.',
+      'Kimochi is a free, open-source app for macOS, Windows and Linux that reads the text in your games, manga and videos so you can hover any word to look it up and make Anki cards. Built for Japanese; other languages are experimental.',
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-11-05'
+    updated: '2026-11-12'
   },
   {
     path: '/faq',
-    title: 'FAQ · Kimochi, the Japanese OCR overlay for games',
+    title: 'FAQ · Kimochi, the OCR overlay for language learners',
     description:
-      'Answers about Kimochi: what it is, who it is for, what it costs, which platforms, OCR engines and dictionaries it supports, and what leaves your computer.',
+      'Answers about Kimochi: what it is, who it is for, what it costs, which languages, platforms, OCR engines and dictionaries it supports, and what leaves your computer.',
     index: true,
     render: 'full',
     published: '2026-10-21',
-    updated: '2026-11-05'
+    updated: '2026-11-12'
   },
   {
     path: '/compare',
@@ -66,7 +66,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-10-31'
+    updated: '2026-11-12'
   },
   {
     path: '/download/linux',
@@ -86,7 +86,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-11-05'
+    updated: '2026-11-12'
   },
   {
     path: '/terms',
@@ -187,7 +187,7 @@ const APP = {
   alternateName: ENTITY_NAME,
   url: `${SITE_URL}/`,
   description:
-    'A desktop app that reads the Japanese text on your screen with OCR, draws it over your game, manga or video, and lets you hover any word to look it up in Yomitan, Hachidori or 10ten and make Anki cards.',
+    'A desktop app for language learners that reads the text on your screen with OCR, draws it over your game, manga or video, and lets you hover any word to look it up in Yomitan (or, for Japanese, Hachidori or 10ten) and make Anki cards. Built for Japanese; 48 other left-to-right languages are experimental.',
   applicationCategory: 'EducationalApplication',
   operatingSystem: 'macOS, Windows, Linux',
   inLanguage: 'en',

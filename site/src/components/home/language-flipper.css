@@ -1,0 +1,131 @@
+/*
+ * The hero's language flipper (LanguageFlipper.tsx). The box sits on its own line of the h1 and
+ * never changes that line's height: its own line box is the headline font's (Figtree, 1.05), its
+ * vertical padding is cancelled by negative margins, and the characters are inline-blocks at
+ * line-height 0, so a script with tall marks (Thai, Devanagari, Vietnamese) cannot push it.
+ */
+
+.lf-line {
+  display: block;
+  /* Room between the first line's descenders and the box's top edge. */
+  margin-top: 0.2em;
+}
+
+.lf-box {
+  --lf-pad-top: 0.17em;
+  --lf-pad-bottom: 0.13em;
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  vertical-align: baseline;
+  white-space: nowrap;
+  padding: var(--lf-pad-top) 0.22em var(--lf-pad-bottom);
+  margin-block: calc(var(--lf-pad-top) * -1) calc(var(--lf-pad-bottom) * -1);
+  border-radius: 0.2em;
+  background: color-mix(in oklab, var(--k-accent) 7%, var(--k-bg));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--k-accent) 16%, transparent),
+    inset 0 -0.04em 0 color-mix(in oklab, var(--k-accent) 10%, transparent);
+  /* The frame: characters slide out of it, top and bottom, and the width eases between words. */
+  clip-path: inset(0 round 0.2em);
+  transition: width 520ms var(--k-ease-out);
+}
+
+.lf-word {
+  display: block;
+}
+.lf-word.lf-out {
+  position: absolute;
+  top: var(--lf-pad-top);
+  left: 50%;
+  translate: -50% 0;
+}
+
+.lf-char {
+  display: inline-block;
+  line-height: 0;
+}
+
+/* Scripts the headline font (Figtree: Latin and Latin Extended only) doesn't cover, each in a
+   face that visitors' systems have, so a word is never stitched together from two fonts.
+   Japanese gets the site's Japanese stack through :lang(ja). Only the characters change font:
+   the word itself keeps the headline's, so its line (and the baseline) never moves. */
+.lf-word[data-script="Kore"] .lf-char {
+  font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", "Nanum Gothic", sans-serif;
+}
+.lf-word[data-script="Hans"] .lf-char {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+}
+.lf-word[data-script="Hant"] .lf-char {
+  font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
+}
+.lf-word[data-lang="yue"] .lf-char {
+  font-family: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans HK", "Noto Sans CJK HK", sans-serif;
+}
+.lf-word[data-script="Cyrl"] .lf-char,
+.lf-word[data-lang="vi"] .lf-char {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Ubuntu, Cantarell, Roboto, sans-serif;
+}
+.lf-word[data-script="Deva"] .lf-char {
+  font-family: "Kohinoor Devanagari", "Devanagari Sangam MN", "Nirmala UI", "Noto Sans Devanagari", sans-serif;
+}
+.lf-word[data-script="Thai"] .lf-char {
+  font-family: "Sukhumvit Set", Thonburi, "Leelawadee UI", "Noto Sans Thai", "Noto Sans Thai UI", sans-serif;
+}
+/* Full-width scripts fill the em square; a step smaller, they sit level with the Latin line. */
+.lf-word:is([data-script="Jpan"], [data-script="Kore"], [data-script="Hans"], [data-script="Hant"], [data-script="Deva"]) .lf-char {
+  font-size: 0.9em;
+}
+.lf-word:is([data-script="Jpan"], [data-script="Kore"], [data-script="Hans"], [data-script="Hant"], [data-script="Deva"], [data-script="Thai"]) .lf-char {
+  letter-spacing: 0;
+}
+
+/* Out: up and away, quickly, each character a beat after the one before. In: up from below. */
+.lf-out .lf-char {
+  animation: lf-out 280ms cubic-bezier(0.4, 0, 1, 1) calc(var(--i) * 24ms) both;
+}
+.lf-in .lf-char {
+  animation: lf-in 560ms var(--k-ease-out) calc(120ms + var(--i) * 28ms) both;
+}
+
+@keyframes lf-out {
+  to {
+    transform: translateY(-0.95em);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+@keyframes lf-in {
+  from {
+    transform: translateY(0.95em);
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
+
+/* Reduced motion: no sliding and no width easing; the words cross-fade whole. */
+@media (prefers-reduced-motion: reduce) {
+  .lf-box {
+    transition: none;
+  }
+  .lf-out .lf-char,
+  .lf-in .lf-char {
+    animation: none;
+  }
+  .lf-out {
+    animation: lf-fade-out 300ms ease both;
+  }
+  .lf-in {
+    animation: lf-fade-in 400ms ease both;
+  }
+}
+@keyframes lf-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes lf-fade-in {
+  from {
+    opacity: 0;
+  }
+}

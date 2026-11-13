@@ -1,25 +1,33 @@
 ---
 title: OCR engines
-description: Google Lens, Kimochi cloud OCR, PaddleOCR, MeikiOCR, Manga OCR, Apple Live Text and OneOCR, and how to choose between them.
+description: Google Lens, Kimochi cloud OCR, PaddleOCR, Screen AI, MeikiOCR, Manga OCR, VOCR6, Apple Live Text and OneOCR, the languages each reads, and how to choose between them.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 
-The OCR engine turns each capture into text. Choose it in the sidebar's **OCR model** menu.
+The OCR engine turns each capture into text. Choose it in the sidebar's **OCR model** menu. Only
+engines that can read [the language you're learning](/language/) are listed; MeikiOCR, Manga OCR
+and VOCR6 read Japanese only.
 
-<Screenshot id="ocr-picker" alt="The sidebar's OCR model menu: Google Lens, MeikiOCR, Manga OCR, PaddleOCR and Apple Live Text." width={720} />
+<Screenshot id="ocr-picker" alt="The sidebar's OCR model menu: Google Lens, MeikiOCR, Manga OCR, PaddleOCR, Screen AI, VOCR6 and Apple Live Text." width={720} />
 
 <Screenshot id="settings-ocr" alt="Settings, OCR & Overlay: the engine list on the left and Google Lens's details on the right, marked Active." width={760} />
 
-| Engine | Runs | Platforms | Download | Best for |
-| --- | --- | --- | --- | --- |
-| **Google Lens** (default) | Online, sent to Google | All | None | Accurate on game text, manga and busy backgrounds, vertical or horizontal. |
-| **Cloud OCR** | Online, on the Kimochi server (Google Cloud Vision) | All | None | Dependable on almost any Japanese text. Needs [Kimochi Cloud](/cloud/). |
-| **PaddleOCR** | Locally | All | About 30 MB, once | Fast, accurate offline reading of game dialogue, menus and vertical text. |
-| **MeikiOCR** | Locally | All | About 46 MB, once | Fast, offline reading of game text: dialogue boxes, menus, subtitles. |
-| **Manga OCR** | Locally | All | About 539 MB, once | Manga, stylised lettering and vertical text. Slower per scan. |
-| **Apple Live Text** | Locally | macOS | None | Part of macOS: fast, offline, vertical and horizontal. |
-| **OneOCR** | Locally | Windows | None | The Snipping Tool's engine: offline, with word positions. |
+| Engine | Runs | Platforms | Download | Languages | Best for |
+| --- | --- | --- | --- | --- | --- |
+| **Google Lens** (default) | Online, sent to Google | All | None | All | Accurate on game text, manga and busy backgrounds, vertical or horizontal. |
+| **Cloud OCR** | Online, on the Kimochi server (Google Cloud Vision) | All | None | All | Dependable on almost any text. Needs [Kimochi Cloud](/cloud/). |
+| **PaddleOCR** | Locally | All | About 30 MB, once | [Many](/language/support/#languages) | Fast, accurate offline reading of game dialogue, menus and vertical text. |
+| **Screen AI** | Locally | All | About 80 MB, once, or none if Chrome has it | All | Fast and very accurate on game text, horizontal or vertical. |
+| **MeikiOCR** | Locally | All | About 46 MB, once | Japanese | Fast, offline reading of game text: dialogue boxes, menus, subtitles. |
+| **Manga OCR** | Locally | All | About 539 MB, once | Japanese | Manga, stylised lettering and vertical text. Slower per scan. |
+| **VOCR6** | Locally | All | 3.6 MB, once | Japanese | Visual-novel dialogue boxes and speaker names: very fast, horizontal text only. |
+| **Apple Live Text** | Locally | macOS | None | [Many](/language/support/#languages) | Part of macOS: fast, offline, vertical and horizontal. |
+| **OneOCR** | Locally | Windows | None | All | The Snipping Tool's engine: offline, with word positions. |
+
+**Languages** says which [languages](/language/support/#ocr-engines) an engine reads. When you
+change language, Kimochi switches to an engine that reads it if yours can't, and brings back the
+engine you last used for a language when you return to it.
 
 **Online** engines need a connection and send each capture away to be read. See
 [Privacy](/help/privacy/) for exactly what is sent where.
@@ -27,7 +35,8 @@ The OCR engine turns each capture into text. Choose it in the sidebar's **OCR mo
 ## Google Lens
 
 Sends each capture to Google Lens, the image recognition behind Lens in Chrome, and returns the text
-with the position of every line. It is very accurate on Japanese, horizontal or vertical.
+with the position of every line. It is very accurate, horizontal or vertical. Kimochi tells it which
+language you're learning.
 
 Kimochi uses the service Chrome's Lens uses, which is not a published API, so Google could change or
 stop it without notice.
@@ -48,16 +57,33 @@ The first start after launching Kimochi loads the model: on Windows it's ready a
 you choose it; on a Mac the very first start takes a few seconds while macOS prepares the model, and
 later ones about two.
 
+It reads languages written in Chinese characters, kana, and the Latin or Greek alphabets, except
+Vietnamese; [the language table](/language/support/#languages) lists them.
+
 PaddleOCR is also the engine [Auto OCR](/reading/auto-ocr/#how-it-decides-when-to-scan) prefers for
 watching the screen when you read with an online engine or Manga OCR, so downloading it helps even if
 you scan with something else.
 
+## Screen AI
+
+The on-device OCR Google Chrome uses for scanned PDFs. It is fast and very accurate on game text,
+horizontal or vertical, with a box for every character, and sends nothing anywhere. Kimochi uses
+Google Chrome's copy when Chrome has one; otherwise it downloads it from Google once (about 80 MB).
+
 ## MeikiOCR
+
+:::note[Japanese only]
+MeikiOCR is listed only when you're learning Japanese.
+:::
 
 A small, fast recogniser tuned for Japanese video game text. A scan takes a fraction of a second. It uses the GPU where it can (Core ML on macOS, DirectML on
 Windows) and the CPU otherwise.
 
 ## Manga OCR
+
+:::note[Japanese only]
+Manga OCR is listed only when you're learning Japanese.
+:::
 
 Finds speech bubbles and text blocks with the comic text detector, then reads each one with Manga
 OCR, a model trained on manga. It reads each column of a bubble on its own, the way mokuro does, so
@@ -66,9 +92,21 @@ DirectML on Windows) and the CPU otherwise.
 
 The [overlay](/reading/overlay/) works with Manga OCR: each bubble's text is drawn back over the page where it was printed.
 
+## VOCR6
+
+:::note[Japanese only]
+VOCR6 is listed only when you're learning Japanese.
+:::
+
+A tiny model trained on visual-novel dialogue from PS Vita and PSP games. A scan takes about a
+hundredth of a second, on the CPU, and it is accurate on dialogue boxes and speaker names. It isn't a
+general OCR: it reads horizontal text only, and busy screens, manga and vertical text read better
+with the other engines.
+
 ## Apple Live Text
 
-Reads text with the engine behind macOS's Live Text. It uses an unpublished system interface, so a future macOS release
+Reads text with the engine behind macOS's Live Text, in [15 languages](/language/support/#ocr-engines)
+including Japanese, Chinese, Korean and English. It uses an unpublished system interface, so a future macOS release
 could need an update.
 
 ## OneOCR
@@ -79,7 +117,7 @@ Windows 11 Snipping Tool package; see [Install on Windows](/install/windows/#one
 
 ## Model downloads
 
-PaddleOCR, MeikiOCR and Manga OCR download their models the first time you choose them (from Hugging Face),
+PaddleOCR, MeikiOCR, Manga OCR and VOCR6 download their models the first time you choose them,
 once. The model row shows progress and
 lets you **Pause**, **Resume**, **Cancel** or **Retry**; **Remove downloaded model…** in the engine's
 menu frees the space again.
@@ -92,6 +130,6 @@ menu frees the space again.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| **Filter out furigana and small text** | On | Removes text much smaller than the main text, such as reading aids above kanji. |
+| **Filter out furigana and small text** | On | Japanese only. Removes text much smaller than the main text, such as reading aids above kanji. |
 | ↳ **Filter strength** | Balanced | Behind the arrow beside the switch. Five steps from Gentle (only text half the main size or smaller) to Strict (anything noticeably smaller than the main text); each step says what it removes. |
 | **Group text into regions** | Off | Marks nearby lines with one shared box to hover, instead of a box for each line. |

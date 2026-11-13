@@ -7,6 +7,7 @@
   },
   "steps": [
     { "face": "excited", "say": "Hi there! I’m Mochiko, and I’m going to show you how Kimochi works. Click here, or press Space, to go on." },
+    { "face": "happy", "say": "Our game today is in Japanese, but Kimochi reads lots of other languages too: Korean, Chinese, Spanish, French and many more." },
     {
       "face": "thinking",
       "say": "Want more room? I can make the demo fill your screen. The button in the top right corner switches it back.",

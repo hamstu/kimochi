@@ -226,8 +226,8 @@ export function Layout() {
           <div className="max-w-xs">
             <Wordmark />
             <p className="mt-3 text-ink-3">
-              Kimochi is a free, open-source app that reads the Japanese in your games and manga so you can look up any
-              word. For macOS, Windows and Linux.
+              Kimochi is a free, open-source app that reads the text in your games and manga so you can look up any
+              word, in Japanese or the language you’re learning. For macOS, Windows and Linux.
             </p>
             <div className="mt-4 flex items-center gap-1">
               <a href={DISCORD_URL} aria-label="Kimochi on Discord" title="Discord" className={footerIconClass}>

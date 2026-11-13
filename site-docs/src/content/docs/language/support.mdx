@@ -1,0 +1,174 @@
+---
+title: What works in each language
+description: The languages Kimochi can read, which OCR engines, dictionaries and translation work with each, and how Kimochi handles their text.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+import Todo from '../../../components/Todo.astro'
+
+## Languages
+
+Kimochi lists 49 languages, Japanese first. **Code** is what the sidebar's foot shows. **Spaces**
+says whether the language separates its words with spaces, which changes how lines are joined, how
+lookups find a word and how reading stats count (see [Text in your language](#text-in-your-language)).
+The last three columns are the engines and services that read only some languages; the
+[OCR engines](#ocr-engines) table has the rest.
+
+| Language | Code | Written in | Spaces | PaddleOCR | Apple Live Text | DeepL (your key) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Japanese | JA | Kanji and kana | No | ✓ | ✓ | ✓ |
+| Korean | KO | Hangul | Yes | — | ✓ | ✓ |
+| Chinese (Simplified) | ZH | Simplified Chinese | No | ✓ | ✓ | ✓ |
+| Chinese (Traditional) | ZH | Traditional Chinese | No | ✓ | ✓ | ✓ |
+| Cantonese | YUE | Traditional Chinese | No | ✓ | ✓ | — |
+| English | EN | Latin | Yes | ✓ | ✓ | ✓ |
+| Spanish | ES | Latin | Yes | ✓ | ✓ | ✓ |
+| French | FR | Latin | Yes | ✓ | ✓ | ✓ |
+| German | DE | Latin | Yes | ✓ | ✓ | ✓ |
+| Italian | IT | Latin | Yes | ✓ | ✓ | ✓ |
+| Portuguese | PT | Latin | Yes | ✓ | ✓ | ✓ |
+| Russian | RU | Cyrillic | Yes | — | ✓ | ✓ |
+| Hindi | HI | Devanagari | Yes | — | — | — |
+| Thai | TH | Thai | No | — | ✓ | ✓ |
+| Vietnamese | VI | Latin | Yes | — | ✓ | ✓ |
+| Indonesian | ID | Latin | Yes | ✓ | — | ✓ |
+| Turkish | TR | Latin | Yes | ✓ | — | ✓ |
+| Polish | PL | Latin | Yes | ✓ | — | ✓ |
+| Dutch | NL | Latin | Yes | ✓ | — | ✓ |
+| Swedish | SV | Latin | Yes | ✓ | — | ✓ |
+| Norwegian | NO | Latin | Yes | ✓ | — | ✓ |
+| Danish | DA | Latin | Yes | ✓ | — | ✓ |
+| Finnish | FI | Latin | Yes | ✓ | — | ✓ |
+| Greek | EL | Greek | Yes | ✓ | — | ✓ |
+| Ukrainian | UK | Cyrillic | Yes | — | ✓ | ✓ |
+| Czech | CS | Latin | Yes | ✓ | — | ✓ |
+| Hungarian | HU | Latin | Yes | ✓ | — | ✓ |
+| Romanian | RO | Latin | Yes | ✓ | — | ✓ |
+| Tagalog | TL | Latin | Yes | ✓ | — | — |
+| Latin | LA | Latin | Yes | ✓ | — | — |
+| Bulgarian | BG | Cyrillic | Yes | — | — | ✓ |
+| Serbo-Croatian | SH | Latin, Cyrillic | Yes | — | — | — |
+| Irish | GA | Latin | Yes | ✓ | — | — |
+| Welsh | CY | Latin | Yes | ✓ | — | — |
+| Esperanto | EO | Latin | Yes | ✓ | — | — |
+| Georgian | KA | Georgian | Yes | — | — | — |
+| Armenian | HY | Armenian | Yes | — | — | — |
+| Khmer | KM | Khmer | No | — | — | — |
+| Lao | LO | Lao | No | — | — | — |
+| Mongolian | MN | Cyrillic | Yes | — | — | — |
+| Kannada | KN | Kannada | Yes | — | — | — |
+| Estonian | ET | Latin | Yes | ✓ | — | ✓ |
+| Latvian | LV | Latin | Yes | ✓ | — | ✓ |
+| Albanian | SQ | Latin | Yes | ✓ | — | — |
+| Belarusian | BE | Cyrillic | Yes | — | — | — |
+| Basque | EU | Latin | Yes | ✓ | — | — |
+| Scottish Gaelic | GD | Latin | Yes | ✓ | — | — |
+| Maltese | MT | Latin | Yes | ✓ | — | — |
+| Ancient Greek | GRC | Greek | Yes | ✓ | — | — |
+
+Languages written right to left, such as Arabic, Hebrew and Persian, aren't listed yet: the overlay
+can't lay them out.
+
+## OCR engines
+
+| Engine | Reads |
+| --- | --- |
+| **Google Lens**, **Cloud OCR**, **Screen AI**, **OneOCR** (Windows) | Every language in the list. These engines find the script themselves. |
+| **PaddleOCR** | Languages written in Chinese characters, kana, the Latin alphabet or the Greek alphabet, except Vietnamese, whose tone-marked letters its model lacks. See the table above. |
+| **Apple Live Text** (macOS) | Japanese, Korean, Chinese (Simplified and Traditional), Cantonese, English, French, Italian, German, Spanish, Portuguese, Russian, Ukrainian, Thai and Vietnamese. |
+| **MeikiOCR**, **Manga OCR**, **VOCR6** | Japanese only. |
+
+<Todo>TODO(hamish): OneOCR is offered for every language, but its real language coverage hasn't been checked. Screen AI's coverage beyond the languages its model files name is unverified too, and so is whether Google Lens uses the language Kimochi sends as a hint.</Todo>
+
+<Todo>TODO(hamish): Live Text's list is deliberately conservative: macOS 26 also reports Turkish, Indonesian, Czech, Danish, Dutch, Norwegian, Polish, Romanian and Swedish, which Kimochi leaves out until they're checked. Which macOS release added each listed language is unverified. Mention, or keep as is?</Todo>
+
+**The engine follows the language.** Engines that can't read the language you're learning are left
+out of the sidebar's **OCR model** menu and of **Settings → OCR & Overlay**. When you change
+language (in Settings, in the welcome guide, through sync or by switching account):
+
+1. If you used an engine for that language before and it is still available, Kimochi switches back
+   to it.
+2. Otherwise, if the engine in use can't read the language, Kimochi switches to the first available
+   of Apple Live Text (macOS) or OneOCR (Windows), Screen AI, PaddleOCR, Google Lens and Cloud OCR
+   that can.
+3. Otherwise the engine stays as it is.
+
+**Settings → Language** names the engine in use under **Supported OCR engines**. Google Lens,
+Apple Live Text and Cloud OCR are told which language to read; the others read what they see.
+
+**Auto OCR** watches the screen only with engines that read the language: PaddleOCR, Apple Live
+Text and OneOCR for the languages they read, and MeikiOCR for Japanese alone. With none of them,
+it compares pictures instead. See [Auto OCR](/reading/auto-ocr/#how-it-decides-when-to-scan).
+
+## Text in your language
+
+| | Japanese | Other languages |
+| --- | --- | --- |
+| **Drop lines** (the line filter) | **No Japanese** / **Mostly not Japanese** | Named for the language: **No Korean**, **Mostly not Korean**. For a language written only in the Latin alphabet it reads **No letters** / **Mostly not letters**: the filter can tell letters from numbers and symbols, but not English from French. |
+| **Filter out furigana and small text** | Offered, on by default | Not offered: nothing is left out for being small. |
+| Joining pieces of text | Without spaces | With a space in languages that use them, for lines OCR found in parts and lines a [hooked game](/reading/text-hooker/) sent in rows. |
+| Looking up a word | From the character under the pointer | In languages with spaces, from the start of the word under the pointer, so hovering any letter of a word looks up the whole word. Languages without spaces work as Japanese. |
+| Word by word ([Read along](/lookups/looking-up/#with-a-controller), the controller) | By the dictionary's words | The same, with the language's own word splitter when the dictionary has no answer. |
+| Vertical text | Looked for | Looked for in Chinese and Cantonese too. In other languages text is taken as horizontal unless the OCR engine says otherwise. |
+| Reading stats | Characters and characters per hour | Words and words per hour in languages with spaces (counted from when you chose the language); characters otherwise. |
+| Fonts | Kimochi's Japanese font | Fonts for the language's script. |
+
+**Settings → OCR & Overlay → Overlay look** previews the overlay in your language.
+
+## Dictionaries
+
+| Engine | Languages |
+| --- | --- |
+| **Yomitan** | Any language you have a Yomitan dictionary for. |
+| **Yomitan API** | Any language the Yomitan in your browser is set up for. |
+| **Hachidori** | Japanese only. |
+| **10ten** | Japanese only. |
+
+In any other language, Hachidori and 10ten stay in the sidebar's **Dictionary** menu and in
+**Settings → Dictionary**, marked **Japanese only**, but can't be chosen. If one of them is your
+dictionary, Yomitan looks words up in its place until you go back to Japanese; your choice isn't
+changed.
+
+<Screenshot id="dictionary-picker-korean" alt="The sidebar's Dictionary menu with Korean as the language: Yomitan and Yomitan API can be chosen, Hachidori and 10ten are greyed out." width={720} />
+
+**Adding a dictionary.** For Japanese, the welcome guide offers to install Jitendex. For other
+languages, its Yomitan step offers **Import a … dictionary** instead: download one from
+[Yomitan's dictionary list](https://yomitan.wiki/dictionaries/), then import it in Yomitan's
+settings (**Settings → Dictionary → Open Yomitan settings**). With Yomitan, the guide's last step can
+test a lookup of a sample word in your language, for the languages it has one for.
+
+### A dictionary profile for each account
+
+Yomitan, the copy inside Kimochi, keeps your dictionaries once for every account on this computer,
+and gives each account its own **Yomitan profile**: the profile holds the language Yomitan reads and
+which dictionaries are enabled, so a Japanese account and a Korean one don't get in each other's way.
+
+- The first account uses Yomitan's default profile, whatever its language.
+- An account set to another language uses a Yomitan profile for that language: one you already have,
+  or a new one named after the language (copied from your default profile, with Yomitan's
+  recommended settings for the language). Your dictionaries aren't touched: enable the ones for the
+  language in that profile.
+- Switching account switches Yomitan's profile.
+
+**Settings → Account → Dictionary profile** shows the profile, with its language, and lets you
+choose another: Kimochi switches to it whenever you switch to that account. **Manage profiles**
+opens Yomitan's own profile settings, where profiles are added, renamed and removed. If the profile's
+language isn't the one you're learning, the section says so. It's shown while Yomitan is your
+dictionary; Settings → Language shows the profile too.
+
+<Screenshot id="settings-account-profile" alt="Settings, Account, scrolled to Dictionary profile: Yomitan profile set to Korean, and Manage profiles." width={760} />
+
+## Translation and AI
+
+Translations and explanations are in **English**, whatever language you're learning.
+
+| | Languages |
+| --- | --- |
+| **Translate** with **Kimochi cloud** | Every language: through DeepL where it can, otherwise Kimochi's own translator. |
+| **Translate** with **Your DeepL key** | The languages DeepL translates (the **DeepL** column above). For any other, **Settings → Translation & AI** says DeepL can't translate it; choose Kimochi cloud. |
+| **Explain** | Every language. The default prompt names the language you're learning through a `{{language}}` placeholder. A prompt you edited is sent as you wrote it; **Reset to default** gets the one that follows the language. |
+| **Read aloud** | Japanese only: its voices are Japanese. |
+
+<Todo>TODO(hamish): Cloud OCR, translation and Explain with Kimochi cloud send the language to Kimochi's server, which needs its language support (server branch feat/languages) deployed before other languages work there. Confirm it's live before publishing.</Todo>
+
+See [Translation and AI](/lookups/translation-and-ai/).

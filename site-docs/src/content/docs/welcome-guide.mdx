@@ -1,6 +1,6 @@
 ---
 title: Welcome guide
-description: "The first-run walkthrough: capture permission, the OCR engine, a pop-up dictionary and, on a Steam Deck, your Steam library."
+description: "The first-run walkthrough: the language you're learning, capture permission, the OCR engine, a pop-up dictionary and, on a Steam Deck, your Steam library."
 ---
 
 import Screenshot from '../../components/Screenshot.astro'
@@ -8,28 +8,39 @@ import Screenshot from '../../components/Screenshot.astro'
 The first time Kimochi opens, a short welcome guide sets up what it needs. You can open it again from
 **Settings → General → Help → Welcome guide**.
 
-<Screenshot id="welcome-intro" alt="The welcome guide's first page: the Kimochi icon, Read and play in Japanese, and a Get started button." width={640} />
+<Screenshot id="welcome-intro" alt="The welcome guide's first page: the Kimochi icon, Read and play in the language you're learning, and a Get started button." width={640} />
 
 ## The steps
 
 | Step | What it does | Shown on |
 | --- | --- | --- |
+| **What language are you learning?** | Picks the [language you're learning](/language/). | All |
 | **Allow screen recording** | Lets Kimochi capture the window you read. | macOS |
 | **Allow Accessibility** | Optional: lets a click on your source bring that exact window forward. | macOS |
 | **Set up GNOME integration** | Adds the small GNOME extension the [overlay](/install/linux/#the-overlay-on-wayland) and pop-ups need there. Log out and back in once afterwards. | Linux, GNOME |
 | **How should Kimochi read text?** | Picks the [OCR engine](/reading/ocr-engines/). | All |
 | **Choose a pop-up dictionary** | Picks and downloads a [dictionary engine](/lookups/dictionaries/). | All |
-| **Set up …** | Sets up that engine (Jitendex for Yomitan). | All |
+| **Set up …** | Sets up that engine (for Yomitan, a dictionary: Jitendex for Japanese). | All |
 | **Connect your browser's Yomitan** | Sets up the Yomitan API instead, when you chose it. | All |
 | **Add Kimochi to your Steam library** | Adds Kimochi to Steam for Gaming Mode. | Steam Deck, Desktop Mode |
 | **You're ready to read** | Recaps the loop and offers a test lookup. | All |
 
+## Language
+
+The guide asks which language you're learning. Japanese is chosen to begin with; scroll or search
+the list for another. The OCR and dictionary steps that follow are set up for the language you
+pick, and you can change it later in **Settings → Language**. Every language but Japanese is
+experimental, and the step says so when you pick one. See [Choosing a language](/language/).
+
+<Screenshot id="welcome-language" alt="The language step: What language are you learning?, a searchable list of languages with Japanese ticked, and Continue." width={640} />
+
 ## OCR engine
 
 Cloud engines send each capture online and may need credentials. Google Lens is selected to begin with; see [OCR engines](/reading/ocr-engines/) for
-the differences.
+the differences. Only engines that can read your language are listed (see
+[OCR engines by language](/language/support/#ocr-engines)).
 
-<Screenshot id="welcome-ocr" alt="The OCR step: a list of engines (Google Lens, MeikiOCR, Manga OCR, PaddleOCR, Apple Live Text) with Google Lens's details on the right." width={640} />
+<Screenshot id="welcome-ocr" alt="The OCR step: a list of engines (Google Lens, MeikiOCR, Manga OCR, PaddleOCR, Screen AI, VOCR6, Apple Live Text) with Google Lens's details on the right." width={640} />
 
 ## Dictionary engine
 
@@ -42,22 +53,26 @@ official release (Yomitan is recommended). You can switch in **Settings → Dict
 
 Yomitan needs at least one dictionary:
 
-- **Install Jitendex** (chosen to start with) downloads the Jitendex Japanese–English dictionary and enables it in your
-  current Yomitan profile. It carries on in the
+- **Install Jitendex** (Japanese only; chosen to start with) downloads the Jitendex
+  Japanese–English dictionary and enables it in your current Yomitan profile. It carries on in the
   background if you press **Continue while installing**.
-- **Choose your own**, then **Open dictionary settings**, opens Yomitan's settings, to import dictionaries or a settings backup from
-  Yomitan in your browser.
+- **Choose your own** (Japanese), then **Open dictionary settings**, opens Yomitan's settings, to
+  import dictionaries or a settings backup from Yomitan in your browser.
+- **Import a … dictionary** (other languages) does the same: download a dictionary for your
+  language from [Yomitan's dictionary list](https://yomitan.wiki/dictionaries/) (the step links
+  to it), then import it in Yomitan's settings.
 - **Do it later**, then **Continue**, moves on; add a dictionary later in **Settings → Dictionary**.
 
 <Screenshot id="welcome-dictionaries" alt="The Set up Yomitan step: Install Jitendex, Choose your own, and Do it later." width={640} />
 
 Hachidori offers a set of recommended dictionaries the first time its settings open. 10ten works
-straight away and downloads its full dictionaries in the background.
+straight away and downloads its full dictionaries in the background. Both are for Japanese only.
 
 ## You're ready to read
 
 The last step recaps the loop: **choose and crop**, **scan**, **look up** (hold <kbd>Shift</kbd> and
 hover a word, or use controller reading navigation; press **B** to go back to your game). With
-Yomitan, **Test a lookup of 日本語** checks that your dictionary answers.
+Yomitan, **Test a lookup of …** looks up a sample word in your language (<span lang="ja">日本語</span> for Japanese) to
+check that your dictionary answers.
 
 <Screenshot id="welcome-done" alt="The You're ready to read step, with the three-step loop and a Test a lookup button." width={640} />

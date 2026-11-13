@@ -172,7 +172,7 @@ Under **Defaults**:
 | **Speaker names apart** | On | Keeps the speaker's name on the game's nameplate; the card shows what they say. |
 | **Repeated characters** | Undo automatically | For games that send ここここ for こ: **Undo automatically**, **Leave as sent**, or **Each sent twice**, **3 times** or **4 times**. |
 | **Join split lines** | On | For games that send their text a row at a time (SiglusEngine, for one): a row that carries on an unfinished sentence joins the line before it. |
-| **Remove script codes** | On | Takes out asset and label names some engines leave in their text, such as `chr01chr02`. |
+| **Remove script codes** | On | Takes out asset and label names some engines leave in their text, such as `chr01chr02`. Off by default in languages that separate words with spaces, where ordinary words can look like codes. |
 | **Auto align** | On | Lines the card up with the game's text. |
 | **Text size** | Medium | The card's text size (Small, Medium, Large or Larger) until Auto align measures the game's, or with Auto align off. |
 | **Background opacity** | 100% | The card's background, from 100% down to 40%. |
@@ -209,6 +209,9 @@ reset button beside them. It also has what only a game has:
 - **Lines arrive in pieces**: raise **Line delay** for the game, then hook it again.
 - **Lines joined that shouldn't be**: turn off **Join split lines** for the game.
 - **Doubled characters** (ここここ): set **Repeated characters** for the game.
+- **Garbled text in a game that isn't Japanese**: text hooking reads games that don't use Unicode
+  as Japanese (Shift-JIS). Read the game with [OCR](/reading/sources/#choosing-a-window-or-screen)
+  instead.
 - **No text at all**: some games need a hook code. Look one up for your game and add it under
   **Hook codes** on its page. If the game still can't be hooked, turn **Text hooking** off and read it with
   [OCR](/reading/sources/#choosing-a-window-or-screen) instead.

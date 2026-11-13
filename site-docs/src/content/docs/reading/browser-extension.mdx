@@ -1,13 +1,14 @@
 ---
 title: Browser extension
-description: Read Japanese in pictures on web pages, such as manga pages and game screenshots, with the Kimochi browser extension.
+description: Read text in pictures on web pages, such as manga pages and game screenshots, with the Kimochi browser extension.
 ---
 
 import { Steps } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
-The Kimochi extension reads Japanese in pictures on web pages: manga pages, game screenshots,
-comics. Kimochi reads the picture with your OCR engine, adds the lines to the Log, and draws the
+The Kimochi extension reads text in pictures on web pages: manga pages, game screenshots,
+comics. It reads the [language you're learning](/language/), but its text over the picture is still
+laid out for Japanese, so in other languages it may line up less well. Kimochi reads the picture with your OCR engine, adds the lines to the Log, and draws the
 text over the picture so your browser's dictionary extension can look it up. Kimochi has to be
 running.
 
