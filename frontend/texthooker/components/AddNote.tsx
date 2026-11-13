@@ -1,5 +1,5 @@
 import { NotebookPen } from "lucide-react";
-import { Button } from "@kit";
+import { Button, Kbd } from "@kit";
 import { startNote, useNoteDraft } from "@texthooker/lib/lineEdit";
 import { NoteDraft } from "./LineRow";
 
@@ -15,9 +15,9 @@ export function AddNote() {
       <Button variant="ghost" size="sm" className="log-add-note-button" onClick={startNote}>
         <NotebookPen aria-hidden />
         Add a note
-        <kbd className="log-add-note-key" aria-hidden>
-          A
-        </kbd>
+        <span className="log-add-note-key" aria-hidden>
+          <Kbd>A</Kbd>
+        </span>
       </Button>
     </div>
   );

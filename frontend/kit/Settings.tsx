@@ -36,8 +36,11 @@ export function SettingsSection({
   actions,
   footnote,
   grouped = true,
+  id,
   children
 }: {
+  /** Lets Settings be opened at this section (`requestSettingsSection`). */
+  id?: string
   title?: ReactNode
   description?: ReactNode
   actions?: ReactNode
@@ -47,7 +50,7 @@ export function SettingsSection({
   children: ReactNode
 }): ReactNode {
   return (
-    <section className="k-settings-section">
+    <section id={id} className="k-settings-section">
       {(title || description || actions) && (
         <div className="k-settings-section-header">
           <div>

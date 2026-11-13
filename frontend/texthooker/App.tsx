@@ -41,6 +41,7 @@ import { useAddNoteHotkey } from "./hooks/useAddNoteHotkey";
 import { SessionMenu } from "../main/SessionMenu";
 import { ActivityTicker } from "./components/ActivityTicker";
 import { useActivity } from "../bridge/activity";
+import { useViewState } from "../bridge/state";
 import { onEditModalRequest } from "./lib/editModal";
 import { getSettings, onSettingsChange, updateSettings } from "./lib/settings";
 import { getSnapshot, subscribe } from "./bridge";
@@ -52,7 +53,7 @@ import { useTextHookInput } from "./hooks/useTextHookInput";
 import type { SocketStatus } from "./websocket-input";
 import { useScanMode } from "./hooks/useScanMode";
 import { useLineHotkeys } from "./hooks/useLineHotkeys";
-import { onLogDoubleClick, stopEditing } from "./lib/lineEdit";
+import { onLogDoubleClick, onLogMouseDown, stopEditing } from "./lib/lineEdit";
 import {
   onRevealRequest,
   pendingReveal,
@@ -144,6 +145,10 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
 
   const [addText, setAddText] = useState<string | null>(null);
   const hasActivity = useActivity().length > 0;
+  // Auto OCR running: the ticker then just says so (and the Log keeps room for it).
+  const autoOcr = Boolean(useViewState().state.autoOcrEnabled) && settings.inputSource === "ocr";
+  // The scan feed is OCR's (a hooked game's lines speak for themselves), and it can be turned off.
+  const showTicker = settings.inputSource !== "hook" && settings.showActivityTicker;
   // The first frame lays out only the newest lines (laying out a full page of furigana held the
   // window's first frame back by ~130 ms); the rest follow right after it, below the fold.
   const [shown, setShown] = useState(FIRST_FRAME_LINES);
@@ -282,7 +287,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
       )}
       <div
         className="log-transcript-frame"
-        data-activity={hasActivity || undefined}
+        data-activity={(showTicker && (hasActivity || autoOcr)) || undefined}
       >
         <main
           ref={scroll}
@@ -328,6 +333,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
             <div
               className="jp-text scan-region log-lines"
               onDoubleClick={(e) => onLogDoubleClick(e, snap.lines)}
+              onMouseDown={onLogMouseDown}
               translate="no"
               lang={textLang}
               style={{ fontSize: settings.fontSizePx }}
@@ -346,8 +352,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
             </div>
           </LineContextMenu>
         </main>
-        {/* The scan feed is OCR's; a hooked game's lines speak for themselves. */}
-        {settings.inputSource !== "hook" && <ActivityTicker visible={visible} />}
+        {showTicker && <ActivityTicker visible={visible} auto={autoOcr} />}
       </div>
       <Bar position="bottom">
         <StatsFooter

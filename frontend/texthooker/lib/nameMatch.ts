@@ -150,3 +150,49 @@ export function matchLine(line: Line, matcher: Matcher): Match[] {
   lineCache.set(key, result);
   return result;
 }
+
+/** A name found in rendered text: the empty element standing where it was, to hold its chip. */
+export interface NameSlot {
+  slot: HTMLElement;
+  entryId: string;
+  text: string;
+}
+
+/**
+ * Finds the notebook's names in `root`'s text (a rendered note) and stands an empty
+ * `.note-chip-slot` where each was, for the caller to render the entry's chip into. Text in
+ * links and code is left as it is. Text split by formatting (`**岡部**倫太郎`) is not matched across
+ * the split.
+ */
+export function slotNames(root: HTMLElement, matcher: Matcher): NameSlot[] {
+  if (matcher.patterns.length === 0) return [];
+  const slots: NameSlot[] = [];
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      node.parentElement?.closest("a, code, pre, .note-chip-slot")
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
+  });
+  const nodes: Text[] = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+  for (const node of nodes) {
+    const text = node.data;
+    const matches = matcher.find(text);
+    if (matches.length === 0) continue;
+    const doc = root.ownerDocument;
+    const fragment = doc.createDocumentFragment();
+    let at = 0;
+    for (const match of matches) {
+      if (match.start < at) continue;
+      if (match.start > at) fragment.append(text.slice(at, match.start));
+      const slot = doc.createElement("span");
+      slot.className = "note-chip-slot";
+      fragment.append(slot);
+      slots.push({ slot, entryId: match.entryId, text: text.slice(match.start, match.end) });
+      at = match.end;
+    }
+    if (at < text.length) fragment.append(text.slice(at));
+    node.replaceWith(fragment);
+  }
+  return slots;
+}
