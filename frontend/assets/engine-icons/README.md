@@ -1,6 +1,6 @@
 # Engine icons
 
-The picture beside each engine's name in the engine choosers (Settings → OCR & Overlay, Settings →
+The picture beside each engine's name in the engine choosers (Settings → OCR, Settings →
 Dictionary) and onboarding's dictionary step, drawn by `frontend/components/EngineIcon.tsx` at
 1.25rem (20 px at the default interface size). Licences and trademarks are in the repository's
 `NOTICE` ("Engine icons").

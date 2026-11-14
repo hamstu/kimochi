@@ -666,7 +666,7 @@ async function hookScenario() {
   }
 
   await check('hook-read-along', async () => {
-    // Read along as the pop-up style, over the text (Settings → Game Mode).
+    // Read along as the pop-up style, over the text (Settings → Overlay → Game Mode).
     const view = (await invoke(overlay, 'settings_get', { key: 'gameModeSettings' })) ?? {}
     await invoke(overlay, 'settings_set', { key: 'gameModeSettings', value: { ...view, dictionaryView: 'popup' } })
     await focusGame()

@@ -17,7 +17,10 @@ const {
   accountLines,
   accountBarName,
   accountInitial,
-  planNote
+  planNote,
+  hasCloudAccount,
+  localProfileName,
+  localProfileUser
 } = await load('account.ts')
 const { lastSyncLine, syncStateLine, normalizeSyncStatus, conflictTitle, logLine, logText, appendLog } =
   await load('sync.ts')
@@ -177,6 +180,30 @@ test('the accounts on this computer are read strictly, and one is in use', () =>
   assert.equal(status.accounts[0].available, true, 'available unless native says otherwise')
   assert.equal(status.profile.root, 'profiles/cloud-u1')
   assert.equal(activeAccount(normalizeStatus({ signedIn: false })), null, 'the Local profile')
+})
+
+test('local accounts are told apart from Kimochi accounts, and the Local profile can be named', () => {
+  const status = normalizeStatus({
+    signedIn: false,
+    accounts: [
+      { key: 'device-ab12', kind: 'local', user: { id: 'device-ab12', displayName: 'Spanish' }, active: true },
+      { key: 'cloud-u1', kind: 'mystery', user: { id: 'u1' }, signedIn: true }
+    ],
+    localProfile: { displayName: '  ', avatarUrl: 'data:image/png;base64,AA' }
+  })
+  assert.deepEqual(
+    status.accounts.map((a) => a.kind),
+    ['local', 'cloud'],
+    'anything but local is a Kimochi account'
+  )
+  assert.equal(activeAccount(status).key, 'device-ab12')
+  assert.equal(accountLines(status.accounts[0].user).primary, 'Spanish')
+  assert.equal(hasCloudAccount(status), true)
+  assert.equal(hasCloudAccount(normalizeStatus({ accounts: [status.accounts[0]] })), false)
+  assert.equal(localProfileName(status), 'Default', 'a blank name is no name')
+  assert.equal(localProfileUser(status).avatarUrl, 'data:image/png;base64,AA')
+  assert.equal(localProfileName(normalizeStatus({ localProfile: { displayName: 'Home' } })), 'Home')
+  assert.equal(normalizeStatus({ localProfile: 'junk' }).localProfile, null)
 })
 
 test('the server an account belongs to is read strictly', () => {

@@ -1,4 +1,4 @@
-/* Settings → Game Mode (GameModeTab.tsx): Read along's two looks as picture cards. */
+/* Settings → Overlay → Game Mode (GameModeSection.tsx): Read along's two looks as picture cards. */
 
 .read-along-views {
   display: grid;

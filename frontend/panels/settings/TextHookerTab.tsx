@@ -41,6 +41,7 @@ import {
   HOOK_DEFAULTS,
   exeTitle,
   gameKey,
+  hookCardShow,
   hookSettings,
   overrides,
   updateHookGame,
@@ -48,12 +49,17 @@ import {
   useHookGames,
   withSetting,
   withoutOverride,
+  type HookCardShow,
   type HookGame,
   type HookReplacement,
   type HookSettings,
   type Repeats
 } from '../../main/hookGames'
+import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
+import { HookCardPreview } from './HookCardPreview'
+import { lookupKeyName } from './overlayPreview'
+import { HOOK_CARD_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
 import { showSettingsTab } from './showSettingsTab'
 import './text-hooker.css'
 
@@ -160,12 +166,32 @@ function HookSettingsSections({
         return changed
       })
   }
+  /** Several at once, in one write (a game's record is read and written whole). */
+  const setMany = (change: Partial<HookSettings>): void => {
+    if (scope.kind === 'defaults') void setDefaults(change)
+    else
+      void updateHookGame(scope.exe, (game) =>
+        (Object.keys(change) as (keyof HookSettings)[]).reduce(
+          (next, key) => withSetting(next, key, change[key] as HookSettings[typeof key], defaults),
+          game
+        )
+      )
+  }
+  // The preview's card, used as the real one is: a drag or −/+ is the reader placing it by hand,
+  // so Auto align turns off, as on the overlay.
+  const cardActions = {
+    onMoved: () => set('autoAlign', false),
+    onTextSize: (textSize: number) => setMany({ textSize, autoAlign: false }),
+    onOpacity: (opacity: number) => set('opacity', opacity)
+  }
   const reset = (key: keyof HookSettings): void => {
     if (scope.kind === 'defaults') void resetDefault(key)
     else void updateHookGame(scope.exe, (game) => withoutOverride(game, key))
   }
   const badge = (key: keyof HookSettings): ReactNode => (changed(key) ? <Changed onReset={() => reset(key)} /> : null)
   const id = (key: string): string => `th-${scope.kind}-${key}`
+  // Opened at Card style from Settings → Overlay (rendered once the reader's settings are in).
+  useSettingsTarget()
   return (
     <>
       <SettingsSection title="Hooking">
@@ -193,10 +219,10 @@ function HookSettingsSections({
       </SettingsSection>
       <SettingsSection title="Text">
         <SettingsRow
-          label="Speaker names apart"
+          label="Separate speaker names"
           controlId={id('speakers')}
           badge={badge('speakerNames')}
-          description="The name stays on the game's nameplate; the card shows what they say."
+          description="Tries to separate the speaker's name from their dialogue, where possible."
         >
           <Switch id={id('speakers')} checked={value.speakerNames} onCheckedChange={(on) => set('speakerNames', on)} />
         </SettingsRow>
@@ -216,7 +242,7 @@ function HookSettingsSections({
           label="Join split lines"
           controlId={id('join')}
           badge={badge('joinLines')}
-          description="For games that send their text a row at a time: a row that carries on an unfinished sentence joins it."
+          description="Tries to join lines that are split."
         >
           <Switch id={id('join')} checked={value.joinLines} onCheckedChange={(on) => set('joinLines', on)} />
         </SettingsRow>
@@ -230,31 +256,32 @@ function HookSettingsSections({
         </SettingsRow>
         {extra?.text}
       </SettingsSection>
-      <SettingsSection title="Card">
+      <SettingsSection title="Card style" id={scope.kind === 'defaults' ? HOOK_CARD_SECTION : undefined}>
+        <HookCardPreview
+          autoAlign={value.autoAlign}
+          textSize={value.textSize}
+          opacity={value.opacity}
+          actions={cardActions}
+        />
         <SettingsRow
           label="Auto align"
           controlId={id('align')}
           badge={badge('autoAlign')}
-          description="Lines the card up with the game's text."
+          description="Lines the card up with the game's text and matches its size."
         >
           <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
         </SettingsRow>
-        <SettingsRow
-          label="Text size"
-          badge={badge('textSize')}
-          description={
-            scope.kind === 'game' && value.autoAlign && scope.game.text !== undefined
-              ? 'Measured from the game by Auto align.'
-              : 'Until Auto align measures the game’s text, or with it off.'
-          }
-        >
-          <Segmented
-            aria-label="Text size"
-            value={textSizeValue(value.textSize)}
-            onValueChange={(next) => set('textSize', Number(next))}
-            options={TEXT_SIZES}
-          />
-        </SettingsRow>
+        {/* Auto align sizes the text to the game's own, so the size is chosen only with it off. */}
+        {!value.autoAlign && (
+          <SettingsRow label="Text size" badge={badge('textSize')}>
+            <Segmented
+              aria-label="Text size"
+              value={textSizeValue(value.textSize)}
+              onValueChange={(next) => set('textSize', Number(next))}
+              options={TEXT_SIZES}
+            />
+          </SettingsRow>
+        )}
         <SettingsRow label="Background opacity" badge={badge('opacity')}>
           <Select
             aria-label="Background opacity"
@@ -645,17 +672,34 @@ function GameList({ onOpen }: { onOpen: (key: string) => void }): ReactNode {
   )
 }
 
-/** Whether the hooked line's card is shown over the game at all (`textHookerShowCard`). */
+/**
+ * When the hooked line's card is over the game (`textHookerShowCard`, ui/hook-games.ts
+ * `hookCardShow`): always, only while the overlay's lookup key is held, or never.
+ */
 function ShowCard(): ReactNode {
-  const [shown, setShown] = useSetting<boolean>('textHookerShowCard', true)
+  const [stored, setStored] = useSetting<boolean | HookCardShow>('textHookerShowCard', true)
+  const [lookupKey] = useSetting<string>('overlayLookupKey', 'shift')
+  const { os } = useCapabilities()
+  const key = lookupKeyName(lookupKey, os === 'macos')
+  const show = hookCardShow(stored)
+  const descriptions: Record<HookCardShow, string> = {
+    always: 'The hooked line stays over the game as each one comes in.',
+    hold: `Out of the way until you hold ${key} to read or look up the line. The key is set in Shortcuts & Controls.`,
+    never: 'Lines only go to the Log. Auto align doesn’t read the screen.'
+  }
   return (
     <SettingsSection title="Card">
-      <SettingsRow
-        label="Show the card over the game"
-        controlId="th-show-card"
-        description="Auto align only reads the screen while the card is shown."
-      >
-        <Switch id="th-show-card" checked={shown !== false} onCheckedChange={(on) => void setShown(on)} />
+      <SettingsRow label="Show the card over the game" description={descriptions[show]}>
+        <Select
+          aria-label="Show the card over the game"
+          value={show}
+          onValueChange={(next) => void setStored(next === 'always' ? true : next === 'never' ? false : 'hold')}
+          options={[
+            { value: 'always', label: 'Always' },
+            { value: 'hold', label: `While holding ${key}` },
+            { value: 'never', label: 'Never' }
+          ]}
+        />
       </SettingsRow>
     </SettingsSection>
   )
@@ -682,10 +726,7 @@ export function TextHookerTab(): ReactNode {
               scope={{ kind: 'defaults' }}
               extra={{
                 text: (
-                  <SettingsRow
-                    label="Replacements"
-                    description="Each game has its own. Replacements for every source are in Log & Sessions."
-                  >
+                  <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
                     <Button size="sm" onClick={() => showSettingsTab('log')}>
                       Log & Sessions
                     </Button>

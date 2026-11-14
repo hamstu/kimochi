@@ -6,17 +6,27 @@ description: Every page of Kimochi's Settings, with each option's default and wh
 import { Tabs, TabItem } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
-Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settings** row.
+Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the menu of the sidebar's account button.
 
 <Tabs>
+  <TabItem label="Account">
+    Settings, sessions and your notebook are saved per account. See [Accounts and plans](/cloud/)
+    and [Sync and backup](/cloud/sync/).
+
+    | Section | What it has |
+    | --- | --- |
+    | **Accounts** | Every account on this computer, with **Switch** and **Active**. **Add account** adds a **Local account** (kept on this computer, with a name and picture you choose) or a **Cloud subscription** (sign in to Kimochi Cloud). Each account's ⋯ menu has **Edit…** for a local one, or **View details online** and **Sign out** for a Kimochi Cloud one, and removing it. **Default** is the account Kimochi starts with. |
+    | **Yomitan profile** | With Built-in Yomitan, under the account in use: the Yomitan profile it looks words up with, and **Manage**. See [A dictionary profile for each account](/language/support/#a-dictionary-profile-for-each-account). |
+  </TabItem>
   <TabItem label="General">
-    How Kimochi looks on this computer.
+    How Kimochi looks.
 
     | Setting | Default | Notes |
     | --- | --- | --- |
     | **Theme** | System | System, Light or Dark. |
-    | **Interface size** | Medium | Small, Medium, Large or XL. Scales text, spacing and controls in every window; the Log keeps its own text size. |
-    | **Switch to mini mode** (Full-screen games) | Off | When the game goes full screen on Kimochi's screen: on, Kimochi shrinks to [Mini mode](/reading/mini-mode/#when-the-game-goes-full-screen); off, it keeps its size and stays on top of the game. |
+    | **Interface size** | Medium | Small, Medium, Large or XL. Scales text, spacing and controls in every window. |
+    | **Log text size** | 14 px | 12–48 px; the same setting as **Text size** in Log & Sessions. |
+    | **Switch to mini mode when games go full screen** | Off | When the game goes full screen on Kimochi's screen: on, Kimochi shrinks to [Mini mode](/reading/mini-mode/#when-the-game-goes-full-screen); off, it keeps its size and stays on top of the game. |
     | **Sound effects** | On | Every sound on or off. The speaker in each title bar toggles them too. |
     | **Scan sounds** | On | Under Sound effects: a sound when a scan starts, adds lines to the Log or fails. |
     | **Click sounds** | On | Under Sound effects: a click for buttons, switches and menus, and a whoosh when the sidebar shows or hides. |
@@ -61,45 +71,28 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
 
     | Setting | Default |
     | --- | --- |
+    | **Show the card over the game** | Always (or **While holding** the lookup key, or **Never**) |
     | **Games** | Every game you've hooked; click one for its page. |
     | **Hook automatically** | On |
     | **Line delay** | 300 ms |
-    | **Speaker names apart** | On |
+    | **Separate speaker names** | On |
     | **Repeated characters** | Undo automatically |
     | **Join split lines** | On |
     | **Remove script codes** | On (Off in languages that separate words with spaces) |
     | **Auto align** | On |
-    | **Text size** | Medium |
+    | **Text size** (with Auto align off; Auto align matches the game's) | Medium |
     | **Background opacity** | 100% |
     | Per game: **Session**, **Dialogue thread**, **Hook codes**, **Replacements**, **Card position** | — |
 
     <Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the Games list and the Defaults." width={760} />
   </TabItem>
-  <TabItem label="Browser Extension">
-    The [browser extension](/reading/browser-extension/): the connection, its status, and how to
-    install it.
-
-    | Setting | Default |
-    | --- | --- |
-    | **Connect to the browser extension** | On |
-
-    <Screenshot id="settings-browser" alt="Settings, Browser Extension: what the extension does, and the dictionary extensions it needs." width={760} />
-  </TabItem>
-  <TabItem label="OCR & Overlay">
-    Which engine reads the screen, and what is drawn over your source. See
-    [OCR engines](/reading/ocr-engines/), [The overlay](/reading/overlay/) and
+  <TabItem label="OCR">
+    Which engine reads the screen, and when. See [OCR engines](/reading/ocr-engines/) and
     [Auto OCR](/reading/auto-ocr/).
 
     | Setting | Default |
     | --- | --- |
     | **Engine** | Google Lens |
-    | **Overlay mode** | Off |
-    | **Group text into regions** | Off |
-    | **Filter out furigana and small text** (Japanese only) | On, strength Balanced |
-    | **Drop lines** | No Japanese (named for [your language](/language/support/#text-in-your-language)) |
-    | **Click through text to the game** | On |
-    | **Exclude overlay from screen recording** | On |
-    | **Overlay look**: **Highlight colour** / **Highlight opacity** / **Cards** | Indigo / 40% / Same as Kimochi |
     | **Auto OCR** | Off |
     | ↳ **Advanced options**: **Watch the screen with** (online engines and Manga OCR) | Automatic |
     | ↳ **Adaptive polling** | On |
@@ -107,6 +100,21 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | ↳ **Give up waiting after** | 4 seconds |
     | ↳ **Minimum time between requests** | 1.2 seconds |
     | ↳ **Base poll interval** | 500 ms |
+  </TabItem>
+  <TabItem label="Overlay">
+    What Kimochi draws over your source, and how it looks. See [The overlay](/reading/overlay/) and
+    [Controller](/controller/).
+
+    | Setting | Default | Notes |
+    | --- | --- | --- |
+    | **Overlay mode** | Off | |
+    | **Group text into regions** | Off | |
+    | **Filter out furigana and small text** (Japanese only) | On, strength Balanced | |
+    | **Drop lines** | No Japanese | Named for [your language](/language/support/#text-in-your-language). |
+    | **Click through text to the game** | On | |
+    | **Exclude overlay from screen recording** | On | |
+    | **Overlay appearance**: **Highlight colour** / **Highlight opacity** / **Cards** | Indigo / 40% / Same as Kimochi | |
+    | **Game Mode**: how Read along shows the dictionary | Pop-up | **Pop-up** beside the word, or **Full screen**: the scanned text across the top with the dictionary filling the space below, with any dictionary. The buttons Read along uses are in **Shortcuts & Controls**. |
   </TabItem>
   <TabItem label="Log & Sessions">
     How the transcript reads, which lines it keeps, and your sessions. See [The Log](/log/the-log/)
@@ -184,23 +192,6 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     Scan and Controller menu can also be a middle,
     back or forward mouse button; see [Mouse buttons](/reference/shortcuts/#mouse-buttons).
   </TabItem>
-  <TabItem label="Game Mode">
-    How Read along shows the dictionary. See [Controller](/controller/).
-
-    | Setting | Default | Notes |
-    | --- | --- | --- |
-    | **Dictionary in Read along** | Pop-up | **Pop-up** beside the word, or **Full screen**: the scanned text across the top with the dictionary filling the space below, with any dictionary. |
-
-    The buttons Read along uses are in **Shortcuts & Controls**.
-  </TabItem>
-  <TabItem label="Account">
-    Optional. See [Accounts and plans](/cloud/) and
-    [Sync and backup](/cloud/sync/).
-
-    | Section | What it has |
-    | --- | --- |
-    | **Dictionary profile** | With Yomitan: the **Yomitan profile** this account looks words up with, and **Manage profiles**. See [A dictionary profile for each account](/language/support/#a-dictionary-profile-for-each-account). |
-  </TabItem>
   <TabItem label="Command line">
     The `kimochi` command, to control Kimochi from a terminal and scripts. See
     [Command line](/reference/cli/).
@@ -210,6 +201,16 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settin
     | **kimochi** | Not installed | **Install** adds the command (macOS asks for an administrator's password; on Windows, open a new terminal afterwards); **Remove** takes it away. With the Linux `.deb` it is already installed. |
 
     The page also has a few examples to copy, and a link to the full guide.
+  </TabItem>
+  <TabItem label="Browser Extension">
+    The [browser extension](/reading/browser-extension/): the connection, its status, and how to
+    install it.
+
+    | Setting | Default |
+    | --- | --- |
+    | **Connect to the browser extension** | On |
+
+    <Screenshot id="settings-browser" alt="Settings, Browser Extension: what the extension does, and the dictionary extensions it needs." width={760} />
   </TabItem>
   <TabItem label="About">
     Your version and its updates, links and credits.

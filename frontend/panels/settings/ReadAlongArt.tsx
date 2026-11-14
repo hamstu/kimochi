@@ -1,5 +1,5 @@
 /**
- * Line drawings of Read along's two dictionary looks (Settings → Game Mode): the pop-up beside the
+ * Line drawings of Read along's two dictionary looks (Settings → Overlay → Game Mode): the pop-up beside the
  * word, and the full-screen dictionary. Both share one game screen, drawn at 1:1 CSS pixels with
  * every stroke on a half pixel, so the 1px lines land on whole device pixels at 1x and 2x.
  * Colours are CSS variables on `.read-along-art` (game-mode.css), which follow the theme and the

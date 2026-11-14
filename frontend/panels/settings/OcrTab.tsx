@@ -1,8 +1,8 @@
 /**
- * Settings → OCR & Overlay: the engine chooser (`EngineChooser`: the engines, what each is good
- * for, its model or server), then overlay behaviour and Auto OCR (the main window's
- * switch, with change detection's tuning behind an Advanced options disclosure). The page
- * keeps the `ocr` value, so deep links and `onSettingsTab('ocr')` still land here.
+ * Settings → OCR: the engine chooser (`EngineChooser`: the engines, what each is good for, its
+ * model or server), then Auto OCR (the main window's switch, with change detection's tuning
+ * behind an Advanced options disclosure). The overlay's settings are on Settings → Overlay
+ * (OverlayTab.tsx).
  */
 import { useId, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
@@ -17,16 +17,13 @@ import {
   type WatcherChoice
 } from '../../../ui/watcher'
 import { OCR_MODES, ocrModeInfo, type OcrMode } from '../../bridge/settings'
-import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
-import type { AutoOCRSettings, TextOverlayGroupingSettings } from '../../vendor/shared-types'
+import { useCapabilities } from '../../bridge/capabilities'
+import type { AutoOCRSettings } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
 import { useLanguage } from '../../bridge/useLanguage'
 import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
-import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { EngineChooser } from './EngineChooser'
-import { OverlayLook } from './OverlayLook'
-import { SmallTextFilter } from './SmallTextFilter'
 import './ocr-tab.css'
 
 const SETTLE_OPTIONS = [
@@ -75,17 +72,6 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
 }
 
 export function OcrTab(): ReactNode {
-  const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
-  // Gaming Mode always draws the overlay (ui/overlay.js `overlayTextOn`): nothing to switch.
-  const gaming = isGamingMode(useCapabilities())
-  const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
-  const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
-  const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>('textOverlayGrouping', {
-    enabled: false,
-    proximityThreshold: 50,
-    filterSmallText: true,
-    filterSmallTextThreshold: 0.75
-  })
   const [autoOCRSettings, setAutoOCRSettings] = useSetting<AutoOCRSettings>(
     'autoOCRSettings',
     DEFAULT_AUTO_OCR_SETTINGS
@@ -105,7 +91,6 @@ export function OcrTab(): ReactNode {
     })),
     { value: 'image', label: 'Image comparison', detail: 'Any change of picture' }
   ]
-  const filterSmallText = textOverlayGrouping.filterSmallText ?? true
   // Auto OCR is the overlay's live flag, the same one the main window's Auto OCR row flips.
   const autoOcrEnabled = Boolean(useViewState().state.autoOcrEnabled)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -115,83 +100,9 @@ export function OcrTab(): ReactNode {
     void setAutoOCRSettings({ ...autoOCRSettings, ...patch })
 
   return (
-    <SettingsPage
-      title="OCR & Overlay"
-      description="Which engine reads the screen, and what is drawn over your source."
-    >
+    <SettingsPage title="OCR" description="Which engine reads the screen, and when.">
       <SettingsSection title="Engine" grouped={false}>
         <EngineChooser />
-      </SettingsSection>
-
-      <SettingsSection title="Overlay">
-        {!gaming && (
-          <SettingsRow
-            label="Overlay mode"
-            controlId="ocr-live-overlay"
-            description="Hover scanned text on your source to see its definition."
-          >
-            <Switch
-              id="ocr-live-overlay"
-              checked={liveOverlayEnabled}
-              onCheckedChange={(checked) => void setLiveOverlayEnabled(checked)}
-            />
-          </SettingsRow>
-        )}
-        <SettingsRow
-          label="Group text into regions"
-          controlId="ocr-grouping"
-          description="Marks nearby lines with one shared box to hover, instead of a box for each line."
-        >
-          <Switch
-            id="ocr-grouping"
-            checked={textOverlayGrouping.enabled}
-            onCheckedChange={(enabled) => void setTextOverlayGrouping({ ...textOverlayGrouping, enabled })}
-          />
-        </SettingsRow>
-        <SmallTextFilter
-          enabled={filterSmallText}
-          threshold={textOverlayGrouping.filterSmallTextThreshold ?? 0.75}
-          onEnabledChange={(checked) =>
-            void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallText: checked })
-          }
-          onThresholdChange={(value) =>
-            void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
-          }
-        />
-        <JapaneseFilterRow />
-        <SettingsRow
-          label="Click through text to the game"
-          controlId="ocr-click-through"
-          description={
-            clickThrough
-              ? 'Clicks on scanned text go to the game. Hold Shift to light up text, look words up and click them.'
-              : 'Scanned text lights up as you hover it and takes your clicks. Hold Shift to look words up.'
-          }
-        >
-          <Switch
-            id="ocr-click-through"
-            checked={clickThrough}
-            onCheckedChange={(checked) => void setClickThrough(checked)}
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Exclude overlay from screen recording"
-          controlId="ocr-exclude-capture"
-          description="Hides the overlay and pop-ups from captures, so Kimochi doesn't read its own text."
-        >
-          <Switch
-            id="ocr-exclude-capture"
-            checked={excludeFromCapture}
-            onCheckedChange={(checked) => void setExcludeFromCapture(checked)}
-          />
-        </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection
-        title="Overlay look"
-        description="How scanned text is marked on your source, and the card it turns into when you hover it."
-      >
-        <OverlayLook />
       </SettingsSection>
 
       <SettingsSection title="Auto OCR">

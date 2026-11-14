@@ -3442,6 +3442,8 @@ fn main() {
         account::account_sign_out,
         account::account_refresh,
         account::account_open_web,
+        account::account_create_local,
+        account::account_update_local,
         account::account_set_server,
         account::account_switch,
         account::account_remove,

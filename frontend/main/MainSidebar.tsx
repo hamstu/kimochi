@@ -51,8 +51,6 @@ import { EngineValue } from './EngineValue'
 import { progressProps, useSteadyProgress, type FieldProgress } from './fieldProgress'
 import { SidebarNotice } from './SidebarNotice'
 import { UpdateNotice } from './UpdateNotice'
-import { activeAccount } from '@ui/account'
-import { useAccount } from '../bridge/account'
 import { AccountBar } from './AccountBar'
 
 export type MainView = 'source' | 'log' | 'notebook' | 'anki' | 'settings'
@@ -77,7 +75,7 @@ function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgre
 }
 
 /**
- * The same engine choice as Settings → OCR & Overlay (and the same download confirmation), with a way there
+ * The same engine choice as Settings → OCR (and the same download confirmation), with a way there
  * for the engine's own settings.
  */
 export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
@@ -311,8 +309,6 @@ export function MainSidebar({
   const style = mini ? undefined : { width: live ?? width }
   const readsScreen = useReadsScreen()
   const { os } = useCapabilities()
-  // While an account is in use, its switcher takes Settings' place in the foot.
-  const signedIn = activeAccount(useAccount()) !== null
   const [language] = useLanguage()
   const handle = (
     <ResizeHandle
@@ -377,14 +373,14 @@ export function MainSidebar({
       </div>
       <UpdateNotice />
       <div className="sb-footer">
-        {!mini && signedIn ? (
+        {!mini ? (
           <AccountBar
             onOpen={() => onSettingsTab('account')}
             onLanguage={() => onSettingsTab('language')}
             onSettings={() => onSettingsTab(settingsTab)}
           />
         ) : (
-          // No account in use (and mini mode): Settings, and the language tucked in at the right.
+          // Mini mode, too narrow for an account's name: Settings, and the language at the right.
           <div className="sb-foot-split">
             <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
               Settings

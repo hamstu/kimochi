@@ -115,6 +115,20 @@ export const gameKey = (exe: string): string => exe.toLowerCase()
 /** Whether Text hooking is on for a game: the reader's switch, else on for a game hooked before. */
 export const textHookOn = (game: HookGame | null | undefined): boolean => game?.textHook ?? Boolean(game?.hookedAt)
 
+/**
+ * When the hooked line's card is over the game (`textHookerShowCard`): `always`, `hold` (only while
+ * the overlay's lookup key, `overlayLookupKey`, is held, where it can be read) or `never` (lines
+ * still reach the Log). Stored as true / `'hold'` / false, so a setting from before `hold` existed
+ * reads as it did.
+ */
+export type HookCardShow = 'always' | 'hold' | 'never'
+
+export function hookCardShow(value: unknown): HookCardShow {
+  if (value === false || value === 'never') return 'never'
+  if (value === 'hold') return 'hold'
+  return 'always'
+}
+
 /** A game's settings: its own where it has them, the defaults elsewhere. */
 export function hookSettings(
   defaults: Partial<HookSettings> | null | undefined,

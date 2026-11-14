@@ -1437,7 +1437,7 @@ export function SourcePanel({
       info="Draws the scanned text over your source; point at a word to look it up."
       settingsLabel="Overlay settings"
       onToggle={() => controller.onToggleTextOverlayVisibility()}
-      onSettings={() => openSettingsTab('ocr')}
+      onSettings={() => openSettingsTab('overlay')}
     />
   )
 

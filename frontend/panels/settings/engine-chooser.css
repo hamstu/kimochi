@@ -1,5 +1,5 @@
 /*
- * Settings → OCR & Overlay → Engine (EngineChooser.tsx): the engine list beside the panel about
+ * Settings → OCR → Engine (EngineChooser.tsx): the engine list beside the panel about
  * the highlighted one, in one settings group. Narrow, the list sits above the panel.
  */
 .engine-chooser {

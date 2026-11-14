@@ -133,7 +133,7 @@ export function LanguageTab(): ReactNode {
         })}
       </SettingsSection>
 
-      <DictionaryProfileSection readOnly />
+      <DictionaryProfileSection />
     </SettingsPage>
   )
 }

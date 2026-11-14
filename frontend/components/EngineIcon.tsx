@@ -1,6 +1,6 @@
 /**
  * The small picture beside an engine's name: the project's own logo where it has one, a neutral
- * tile otherwise. Used by the engine choosers in Settings (OCR & Overlay, Dictionary) and by
+ * tile otherwise. Used by the engine choosers in Settings (OCR, Dictionary) and by
  * onboarding's dictionary step, so both places show the same pictures.
  *
  * Every picture is the same 22 px rounded square. Logos that are already a full tile (Yomitan,

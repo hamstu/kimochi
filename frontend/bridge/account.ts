@@ -119,7 +119,17 @@ export const accountRemove = (key: string): Promise<AccountStatus> => withStatus
 export const accountSwitch = (key: string | null): Promise<AccountStatus> =>
   withStatus(invoke('account_switch', { key }))
 export const accountRefresh = (): Promise<AccountStatus> => withStatus(invoke('account_refresh'))
-export const accountOpenWeb = (): Promise<void> => invoke('account_open_web')
+/** The account page on the website, for `key`'s server (default: the account in use). */
+export const accountOpenWeb = (key?: string): Promise<void> => invoke('account_open_web', { key: key ?? null })
+/**
+ * Add an account kept only on this computer and switch to it (its profile starts empty). `avatar`
+ * is a PNG, JPEG or WebP `data:` URL.
+ */
+export const accountCreateLocal = (name: string, avatar: string | null): Promise<AccountStatus> =>
+  withStatus(invoke('account_create_local', { name, avatar }))
+/** Rename a local account and set or clear its picture (`key` null: the Local profile). */
+export const accountUpdateLocal = (key: string | null, name: string, avatar: string | null): Promise<AccountStatus> =>
+  withStatus(invoke('account_update_local', { key, name, avatar }))
 /**
  * Development builds only: the server "Add account" signs in to (and, signed out, the server in
  * use). Accounts keep their own server.

@@ -84,10 +84,10 @@ test('every flag the table names is bundled by name, from a file the package has
   )
 })
 
-test('Settings → Language is the second page, registered everywhere a page is', async () => {
+test('Settings → Language comes straight after Account and General, registered everywhere a page is', async () => {
   const nav = await read('frontend/panels/settings/settingsNav.tsx')
   const values = [...nav.matchAll(/\{ value: '(\w+)'/g)].map((m) => m[1])
-  assert.deepEqual(values.slice(0, 2), ['general', 'language'])
+  assert.deepEqual(values.slice(0, 3), ['account', 'general', 'language'])
   assert.match(await read('frontend/bridge/tauri.ts'), /\| 'language'/)
   assert.match(await read('frontend/panels/settings/settingsPages.ts'), /language: \(\) => import\('\.\/LanguageTab'\)/)
   assert.match(await read('frontend/panels/settings/SettingsPageFor.tsx'), /language: page\('language'\)/)

@@ -19,9 +19,9 @@
  *                    and sets the text in its fonts and way, and the game says the language's
  *                    sample sentence (ui/language-samples.ts) unless the studio gives a script
  *   ?typeface=manga  set the text in Manga OCR's typeface
- *   ?highlight=<rrggbb>  the highlight colour over hoverable text (Settings → Overlay look;
+ *   ?highlight=<rrggbb>  the highlight colour over hoverable text (Settings → Overlay → Overlay appearance;
  *                    default: the app's indigo)
- *   ?strength=<0-100> the highlight's opacity (Settings → Overlay look; default 40)
+ *   ?strength=<0-100> the highlight's opacity (Settings → Overlay → Overlay appearance; default 40)
  *   ?cards=light|dark|blend  the hovered cards' and grouped regions' appearance (default: the pop-up's,
  *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
@@ -44,7 +44,7 @@
  *   ?driver=mouse    controller-words: the mouse took over (outline and hints faded)
  *   ?step=<n>        controller-words: step on n words from the first
  *   ?dictionary=full controller-words, controller-history: Read along as the full-screen dictionary
- *                    (Settings → Game Mode), with the stage's pretend Yomitan API (api-dictionary.ts);
+ *                    (Settings → Overlay → Game Mode), with the stage's pretend Yomitan API (api-dictionary.ts);
  *                    with ?popup=yomitan|hachidori|tenten, the stand-in pop-up placed over the space
  *                    under the text instead, as the app places that engine's own pop-up
  *   ?entry=<n>       dictionary=full: step on n entries (RB) for the lit word
@@ -194,7 +194,7 @@ const renderer = new TextOverlayRenderer(words, {
   onLookupStart: () => undefined,
   onActivity: () => undefined
 })
-// The look, as overlay.js applies it from Settings → Overlay look.
+// The look, as overlay.js applies it from Settings → Overlay → Overlay appearance.
 renderer.setStyle({
   color: /^[0-9a-f]{6}$/i.test(params.get('highlight') ?? '')
     ? `#${params.get('highlight')}`
@@ -406,7 +406,7 @@ const controller = createController({
       autoOcr = !autoOcr
       return toast(`Auto OCR ${autoOcr ? 'on' : 'off'}`)
     }
-    toast(id === 'controls' ? 'Opens Kimochi (the main window)' : 'Opens Settings → OCR & Overlay')
+    toast(id === 'controls' ? 'Opens Kimochi (the main window)' : 'Opens Settings → OCR')
   },
   history: async () => history,
   scan: async () => {

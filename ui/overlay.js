@@ -60,7 +60,7 @@ import { recognize } from './ocr.js'
 import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
-import { hookSettings } from './hook-games.js'
+import { hookCardShow, hookSettings } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
 import { publishOcrResult, listHistory } from './output.js'
@@ -374,7 +374,23 @@ const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) ||
 const hookSet = () => hookSettings(setting('textHookerDefaults'), hookGame())
 const hookAutoAlign = () => hookSet().autoAlign
 /** The card over the game at all (Settings → Text Hooker → Show the card; the game menu's Card). */
-const hookCardOn = () => setting('textHookerShowCard') !== false
+const hookCardOn = () => hookCardShow(setting('textHookerShowCard')) !== 'never'
+/**
+ * Only while the lookup key is held (Settings → Text Hooker → Show the card): native's gate
+ * (`gateOpen`) follows `overlayLookupKey`, and a controller's lookup button. Where the key cannot
+ * be read (`shiftGated` false) or in Gaming Mode, there is no key to wait for, so the card stays up.
+ */
+const hookCardOnKey = () =>
+  hookCardShow(setting('textHookerShowCard')) === 'hold' &&
+  shiftGated &&
+  !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
+/**
+ * The lookup key down (the native pointer feed's gate), or a pop-up opened from the card still up:
+ * what a card shown only with the key waits for (`hookCardOnKey`).
+ */
+let hookKeyHeld = false
+/** A dictionary pop-up is showing: a card shown with the key stays while one opened from it is up. */
+const hookPopupOpen = () => Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
 /** Auto align reads the screen with OCR: only while there is a card to align. */
 const hookOcrOn = () => hookMode() && Boolean(hook.sourceId) && hookAutoAlign() && hookCardOn()
 /** The OCR engine in use (Auto align uses the scan engine too). */
@@ -832,7 +848,7 @@ controller = createController({
         : null,
   log: (record) => log(record),
   modeChanged: (mode) => holdForController(mode !== 'idle'),
-  // Read along as the full-screen dictionary (Settings → Game Mode): with the Yomitan API, its
+  // Read along as the full-screen dictionary (Settings → Overlay → Game Mode): with the Yomitan API, its
   // entries are drawn from `lookup`; with any other engine, its pop-up fills the view's lower half.
   fullDictionary: {
     enabled: () => fullscreenDictionary(setting('gameModeSettings')),
@@ -1372,6 +1388,7 @@ function hookCardHidden(bounds) {
   // Off, the card still comes up to be read along (or set up from the game menu).
   const held = Boolean(hook.card?.dragging()) || Boolean(controller?.holdsText) || Boolean(controller?.holdsCard)
   if (!hookCardOn() && !held) return 'card-off'
+  if (hookCardOnKey() && !hookKeyHeld && !held && !hookPopupOpen()) return 'key-up'
   const focus = state.sourceFocus
   if (focus && !(focus.focused && focus.present) && !held) return focus.present ? 'game-behind' : 'game-gone'
   return null
@@ -4830,7 +4847,7 @@ applyTextStyle(languageNow())
 await mirrorDictionaryEngine({ repair: true })
 
 /**
- * The text's look (Settings → OCR & Overlay → Overlay look): the highlight colour, and whether
+ * The text's look (Settings → Overlay → Overlay appearance): the highlight colour, and whether
  * the cards are light or dark, which with "Same as Kimochi" follows the app's appearance and,
  * for `system`, the OS.
  */
@@ -5346,6 +5363,14 @@ await native.listen('pointer', ({ payload }) => {
   // Without click-through, text lights up on hover as it always has.
   gateOpen = Boolean(payload.gate ?? payload.shift)
   feedHover = payload.hover === true
+  // A card shown only with the lookup key comes and goes with it (and stays while its pop-up is up).
+  if (hookCardOnKey()) {
+    const up = gateOpen || hookPopupOpen()
+    if (up !== hookKeyHeld) {
+      hookKeyHeld = up
+      syncHookCard()
+    }
+  }
   const armed = !clickThrough() || gateOpen
   if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.

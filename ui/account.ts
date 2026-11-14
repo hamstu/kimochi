@@ -51,8 +51,12 @@ export interface AccountStatus {
   server?: AccountServer | null
   /** The server "Add account" signs in to (development builds choose it in Settings → Account). */
   linkServer?: AccountServer | null
-  /** Every account signed in to on this computer, most recently used first. */
+  /** Every account on this computer (Kimochi and local), most recently used first. */
   accounts?: AccountSummary[]
+  /** The Local profile's name and picture, once given in Settings → Account. */
+  localProfile?: LocalProfile | null
+  /** The language the Local profile reads (a code from ui/languages.ts). */
+  localLanguage?: string | null
   /** The profile in use: `key` null is the Local profile (no account). */
   profile?: { key: string | null; root: string; needsSignIn: boolean } | null
   /** A switch between accounts is in progress. */
@@ -65,9 +69,25 @@ export interface AccountServer {
   forced: boolean
 }
 
+/** The name and picture the Local profile has been given. */
+export interface LocalProfile {
+  displayName: string | null
+  avatarUrl: string | null
+}
+
+/**
+ * `cloud`: a Kimochi account, signed in to on a server. `local`: kept only on this computer (a
+ * name and picture, its own profile; no sign-in, Kimochi Cloud or Sync).
+ */
+export type AccountKind = 'cloud' | 'local'
+
 /** One account in the switcher. */
 export interface AccountSummary {
   key: string
+  kind: AccountKind
+  /** The language this account reads (a code from ui/languages.ts); the setting itself for the one in use. */
+  language: string | null
+  /** A local account's is its name and picture (no email). */
   user: AccountUser | null
   server: AccountServer | null
   /** Its token is still here (signing out keeps the account listed, and its data). */
@@ -101,6 +121,8 @@ export function normalizeStatus(raw: unknown): AccountStatus {
     server: normalizeServer(value.server),
     linkServer: normalizeServer(value.linkServer),
     accounts: Array.isArray(value.accounts) ? value.accounts.flatMap(normalizeSummary) : [],
+    localProfile: normalizeLocalProfile(value.localProfile),
+    localLanguage: typeof value.localLanguage === 'string' ? value.localLanguage : null,
     profile: profile
       ? {
           key: typeof profile.key === 'string' ? profile.key : null,
@@ -119,6 +141,8 @@ function normalizeSummary(raw: unknown): AccountSummary[] {
   return [
     {
       key: value.key,
+      kind: value.kind === 'local' ? 'local' : 'cloud',
+      language: typeof value.language === 'string' ? value.language : null,
       user: value.user ?? null,
       server: normalizeServer(value.server),
       signedIn: value.signedIn === true,
@@ -127,6 +151,34 @@ function normalizeSummary(raw: unknown): AccountSummary[] {
     }
   ]
 }
+
+function normalizeLocalProfile(raw: unknown): LocalProfile | null {
+  if (!raw || typeof raw !== 'object') return null
+  const value = raw as Partial<LocalProfile>
+  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null)
+  return { displayName: text(value.displayName), avatarUrl: text(value.avatarUrl) }
+}
+
+/** What the Local profile (the one every computer starts with) is called: its given name, else "Default". */
+export function localProfileName(status: AccountStatus): string {
+  return status.localProfile?.displayName?.trim() || 'Default'
+}
+
+/** The Local profile as an avatar and name see it. */
+export function localProfileUser(status: AccountStatus): AccountUser {
+  return {
+    id: 'local',
+    email: null,
+    displayName: localProfileName(status),
+    avatarUrl: status.localProfile?.avatarUrl ?? null,
+    plan: 'free',
+    status: 'active'
+  }
+}
+
+/** Whether any Kimochi (not local) account is on this computer. */
+export const hasCloudAccount = (status: AccountStatus): boolean =>
+  (status.accounts ?? []).some((a) => a.kind === 'cloud')
 
 /** The active account's summary, if an account (not the Local profile) is in use. */
 export function activeAccount(status: AccountStatus): AccountSummary | null {
@@ -259,7 +311,7 @@ export function resetLine(usage: Usage | null | undefined): string | null {
   return date ? `Monthly allowances reset on ${date}.` : null
 }
 
-/** What the person signed in is called on the Account page. */
+/** What the person signed in is called on the Account page (a local account: its name). */
 export function accountName(user: AccountUser | null | undefined): string {
   return user?.displayName?.trim() || user?.email || 'Kimochi account'
 }

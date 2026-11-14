@@ -1085,9 +1085,19 @@ The webviews address profile files as `<root>/<path>` under `BaseDirectory.AppLo
 `root` from `profile_current` (`frontend/texthooker/core/profile.ts`); paths stored inside the
 files (a notebook image's `path`) stay profile-relative.
 
+**Local accounts.** An account can also be kept only on this computer: an entry with
+`kind: "local"`, key `device-<16 hex digits>`, an empty `mode`, and a `user` holding just its name
+(`displayName`) and picture (`avatarUrl`, a PNG, JPEG or WebP `data:` URL of at most 400 KB, shrunk
+by the webview). It has a profile like any account, which starts empty with the default
+preferences, but no token, server, Kimochi Cloud or Sync: `signedIn` is always false and it never
+`needsSignIn`. The Local profile can be given a name and picture too (`localProfile` in
+`accounts.json`).
+
 In a debug build, `KIMOCHI_SERVER=local|cloud` in the environment overrides
-`serverSettings.mode` (`npm run dev:local` sets `local`); release builds ignore it, and accounts
-on the other server cannot be switched to while it is set.
+`serverSettings.mode` (`npm run dev:local` sets `local`); release builds ignore it. It only picks
+where the run starts: choosing the other server in Settings → Account (`account_set_server`) or
+switching to an account on it releases the pin for the rest of the run (written to the sync log),
+and `server.forced` turns false.
 
 | Command | Signature |
 | --- | --- |
@@ -1095,12 +1105,14 @@ on the other server cannot be switched to while it is set.
 | `account_link_start` | `() -> {code, verifyUrl, expiresIn}` — adds an account: `POST /api/v1/link/start` on the sign-in server (`linkServer`) with the computer's name and OS, opens `verifyUrl` in the browser, and polls `/api/v1/link/poll` every `interval` s on a thread until approved (then the account is saved and switched to), denied, expired or cancelled |
 | `account_link_open` | `() -> ()` — opens the pending `verifyUrl` again |
 | `account_link_cancel` | `() -> AccountStatus` |
-| `account_switch` | `({key: string \| null}) -> AccountStatus` — makes that account's profile (`null`: the Local profile) the one in use; see Profiles. Refused (`invalid:`) for an account on the server `KIMOCHI_SERVER` rules out |
+| `account_switch` | `({key: string \| null}) -> AccountStatus` — makes that account's profile (`null`: the Local profile) the one in use; see Profiles. Switching to an account on the other server than `KIMOCHI_SERVER`'s releases its pin |
 | `account_sign_out` | `({key?}) -> AccountStatus` — default the active account: switches to the Local profile if it was active, deletes its token file, then `POST /api/v1/sign-out` (best effort, so it works offline). The account stays listed (`signedIn: false`) with its profile |
-| `account_remove` | `({key}) -> AccountStatus` — signs out, deletes `profiles/<key>/` and forgets the account (what has synced stays on the server) |
+| `account_remove` | `({key}) -> AccountStatus` — signs out (a local account: switches to the Local profile if it was active), deletes `profiles/<key>/` and forgets the account (what has synced stays on the server; a local account's data is gone) |
+| `account_create_local` | `({name, avatar: string \| null}) -> AccountStatus` — adds a local account (name trimmed, 1–40 characters) and switches to it |
+| `account_update_local` | `({key: string \| null, name, avatar: string \| null}) -> AccountStatus` — renames a local account and sets or clears its picture; `key` null is the Local profile. Refused (`invalid:`) for a Kimochi account, whose name and picture come from the website |
 | `account_refresh` | `() -> AccountStatus` — `GET /api/v1/me` and `/api/v1/usage` for the active account |
-| `account_open_web` | `() -> ()` — opens `<active account's server>/account` |
-| `account_set_server` | `({mode: 'cloud' \| 'local'}) -> AccountStatus` — **debug builds only** (an `invalid:` error in release, and while `KIMOCHI_SERVER` pins the server): the server new sign-ins go to (`accountLinkServer`, a machine setting); with no account active it is also `serverSettings.mode` (emitting `settings:changed`). Cancels a sign-in in progress, then emits `account-changed` and `platform-capabilities` |
+| `account_open_web` | `({key?}) -> ()` — opens `<server>/account` for that Kimochi account (default: the active one, else the server in use); refused for a local account |
+| `account_set_server` | `({mode: 'cloud' \| 'local'}) -> AccountStatus` — **debug builds only** (an `invalid:` error in release; choosing the other server than `KIMOCHI_SERVER`'s releases its pin): the server new sign-ins go to (`accountLinkServer`, a machine setting); with no account active it is also `serverSettings.mode` (emitting `settings:changed`). Cancels a sign-in in progress, then emits `account-changed` and `platform-capabilities` |
 | `profile_current` | `() -> {key: string \| null, root: string}` — the profile in use; `root` is `""` for Local or `profiles/<key>` |
 | `cloud_translate` | `({text}) -> string` — `POST /api/v1/translate` from the `language` setting to EN-US (`sourceLang` is `JA` for Japanese, else the app's own code, which the server maps), account only |
 
@@ -1112,7 +1124,9 @@ AccountStatus = {
   linking?: {code, verifyUrl, expiresAt}, // a sign-in waiting for the browser (expiresAt: ms)
   server?: {mode, url, forced},           // the server in use; forced: KIMOCHI_SERVER (debug)
   linkServer?: {mode, url, forced},       // where "Add account" signs in
-  accounts: [{key, user, server, signedIn, active, available}], // most recently used first
+  accounts: [{key, kind, language, user, server, signedIn, active, available}], // most recently used first; kind 'cloud' | 'local' (server null); language: the profile's `language` setting
+  localProfile?: {displayName, avatarUrl}, // the Local profile's name and picture, once given
+  localLanguage: string,                  // the Local profile's `language` setting
   profile: {key, root, needsSignIn},      // needsSignIn: the active account's token was revoked
   switching: boolean
 }
@@ -1806,11 +1820,11 @@ server that ignores the Range header restarts that file. Downloads run on their 
 outlive every panel, and are paused (not discarded) on quit; the next launch reports
 `paused`. Setting `ocrMode` (`settings_set`) to a local engine whose models are `absent`
 starts the download; a `paused` or `failed` one waits for Resume or Retry. The pickers (the
-sidebar and the engine list in Settings → OCR & Overlay, both through `frontend/bridge/useEngineSelection.ts`) ask first
+sidebar and the engine list in Settings → OCR, both through `frontend/bridge/useEngineSelection.ts`) ask first
 when the picked engine is `absent` ("Download Manga OCR?", with the size) and save `ocrMode`
 only on Download; Cancel leaves it unchanged. Nothing starts at launch: an engine selected
 before its models were downloaded (an upgrade from a build that bundled them) reports
-`absent`, and that engine's panel in Settings → OCR & Overlay offers "Download (539 MB)". Auto OCR
+`absent`, and that engine's panel in Settings → OCR offers "Download (539 MB)". Auto OCR
 never starts a download either: it watches with an engine that is already here (`ui/watcher.ts`),
 and with none, compares pictures instead.
 
@@ -2044,9 +2058,12 @@ game's page in Settings → Text Hooker, through `textHookerSettingsGame`). Any 
   as an example (`HOOK_EXAMPLE`, marked "Example", `data-example`) in the reader's settings,
   replaced live by the first line. In Gaming Mode the card is
   drawn bare (`data-bare`: no bar, −/+, ⋯ or corner), since nothing can point at them.
-- `textHookerShowCard` (default true; Settings → Text Hooker → Card, and the panel above): off,
-  the card is not drawn except while Read along or the panel holds it, and Auto align's background
-  OCR does not run. Lines still reach the Log.
+- `textHookerShowCard` (default true; Settings → Text Hooker → Card, and the panel above): `true`
+  (always), `'hold'` (only while the overlay's lookup key is held: the pointer feed's `gate`, which
+  follows `overlayLookupKey` and a controller's lookup button; the card stays while a pop-up opened
+  from it is up, and where the key can't be read or in Gaming Mode it is always shown), or `false`
+  (never: the card is not drawn except while Read along or the panel holds it, and Auto align's
+  background OCR does not run). Lines still reach the Log. `ui/hook-games.ts` `hookCardShow` reads it.
 - The controller's Recent text lists the Log's newest lines (`log_recent`), whatever their source,
   falling back to `scannedTextHistory` when the Log has no open session.
 

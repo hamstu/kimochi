@@ -3,7 +3,10 @@ import { SteamLibrarySection } from './SteamLibrarySection'
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, SettingsSubgroup, Slider, Switch } from '@kit'
+import { updateSettings } from '@texthooker/lib/settings'
 import { useController } from '../useController'
+import { useReaderSettings } from './readerSettings'
+import { NumberField } from './fields'
 import { panel } from '../../bridge/tauri'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
@@ -53,10 +56,7 @@ export function GeneralTab(): ReactNode {
             options={APPEARANCES}
           />
         </SettingsRow>
-        <SettingsRow
-          label="Interface size"
-          description="Scales text, spacing and controls in every window. Transcript text keeps its own size."
-        >
+        <SettingsRow label="Interface size" description="Scales text, spacing and controls in every window.">
           <Segmented
             aria-label="Interface size"
             value={scale}
@@ -64,17 +64,10 @@ export function GeneralTab(): ReactNode {
             options={SCALES}
           />
         </SettingsRow>
+        <LogTextSizeRow />
       </SettingsSection>
       <SettingsSection title="Full-screen games">
-        <SettingsRow
-          label="Switch to mini mode"
-          controlId="general-auto-mini"
-          description={
-            autoMini
-              ? 'When the game you read goes full screen on Kimochi’s screen, Kimochi shrinks to mini mode in a corner.'
-              : 'Off: when the game goes full screen on Kimochi’s screen, Kimochi stays its size and on top of the game.'
-          }
-        >
+        <SettingsRow label="Switch to mini mode when games go full screen" controlId="general-auto-mini">
           <Switch id="general-auto-mini" checked={autoMini} onCheckedChange={(checked) => void setAutoMini(checked)} />
         </SettingsRow>
       </SettingsSection>
@@ -177,5 +170,24 @@ export function GeneralTab(): ReactNode {
         </SettingsRow>
       </SettingsSection>
     </SettingsPage>
+  )
+}
+
+/** The Log's text size, the same setting as Settings → Log & Sessions → Reading → Text size. */
+function LogTextSizeRow(): ReactNode {
+  const { settings } = useReaderSettings()
+  if (!settings) return null
+  return (
+    <SettingsRow label="Log text size" controlId="general-log-font-size" description="In pixels, 12 to 48.">
+      <NumberField
+        id="general-log-font-size"
+        value={settings.fontSizePx}
+        min={12}
+        max={48}
+        step={1}
+        fallback={22}
+        onCommit={(v) => void updateSettings({ fontSizePx: v })}
+      />
+    </SettingsRow>
   )
 }
