@@ -86,6 +86,8 @@ struct HyprClient {
 
 #[derive(Deserialize)]
 struct HyprWorkspace {
+    /// Hyprland 0.57 describes an idle `specialWorkspace` as `{"address":"","type":"","name":""}`.
+    #[serde(default)]
     id: i64,
 }
 
@@ -363,6 +365,17 @@ mod tests {
       {"id":1,"name":"HDMI-A-1","x":1920,"y":0,"width":1920,"height":1080,"scale":1,
        "activeWorkspace":{"id":2,"name":"2"},"specialWorkspace":{"id":0,"name":""},"focused":true}
     ]"#;
+
+    #[test]
+    fn hyprland_idle_special_workspace_without_an_id_keeps_the_monitor() {
+        let clients = br#"[{"address":"0xabc","mapped":true,"hidden":false,"at":[0,0],"size":[800,600],
+          "workspace":{"id":3,"name":"3"},"monitor":0,"pid":100,"focusHistoryID":0}]"#;
+        let monitors = br#"[{"id":0,"name":"HDMI-A-1","activeWorkspace":{"id":3,"name":"3"},
+          "specialWorkspace":{"address":"","type":"","name":""}}]"#;
+        let facts = hyprland_facts(clients, monitors, b"{}").unwrap();
+        assert_eq!(facts[&0xabc].on_screen, Some(true));
+        assert_eq!(facts[&0xabc].output.as_deref(), Some("HDMI-A-1"));
+    }
 
     #[test]
     fn hyprland_clients_become_facts_by_address() {
