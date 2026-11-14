@@ -78,10 +78,13 @@ export function SettingsRow({
   stacked,
   disabled,
   controlId,
-  className
+  className,
+  leading
 }: {
   label: ReactNode
   description?: ReactNode
+  /** A picture before the label and description (an avatar, an engine's logo), centred beside both. */
+  leading?: ReactNode
   badge?: ReactNode
   children?: ReactNode
   stacked?: boolean
@@ -96,6 +99,11 @@ export function SettingsRow({
       className={cn('k-settings-row', stacked && 'k-settings-row-stacked', className)}
       aria-disabled={disabled || undefined}
     >
+      {leading && (
+        <div className="k-settings-row-leading" aria-hidden>
+          {leading}
+        </div>
+      )}
       <div className="k-settings-row-text">
         <label className="k-settings-row-label" htmlFor={controlId}>
           {label}

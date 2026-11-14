@@ -16,7 +16,7 @@
  * the card's settings (ui/controller-card.js), whose Move and resize (`place`) moves the card's top-left with
  * the left stick and its size with the right; A or B keeps it, as every change in the panel is kept.
  *
- * With Settings → Game Mode's full-screen dictionary on, Read along opens `dictionary` instead of
+ * With Settings → Overlay → Game Mode's full-screen dictionary on, Read along opens `dictionary` instead of
  * `words`: the scan across the top of a dimmed screen and the lit word's dictionary below it
  * (ui/game-dictionary.js). With the Yomitan API that is Kimochi's own drawing of its entries; with
  * any other engine it is the engine's own pop-up, looked up on the lit word and placed over the
@@ -149,7 +149,7 @@ export function scrollSpeed(y) {
  *   ignored and the hints name pad buttons (Gaming Mode)
  * @param {() => Promise<object[]>} context.history read durable recent text without publishing it
  * @param {object} [context.fullDictionary] Read along as the full-screen dictionary instead of the
- *   outline and pop-up, while `enabled()` (Settings → Game Mode says so); `source()` says what
+ *   outline and pop-up, while `enabled()` (Settings → Overlay → Game Mode says so); `source()` says what
  *   fills it (`entries` or `popup`, ui/settings.ts `fullscreenDictionarySource`); `lookup`, `anki`
  *   and `play` serve ui/game-dictionary.js's Yomitan API entries
  * @param {(rect: {x: number, y: number, width: number, height: number}|null) => void} [context.placePopup]

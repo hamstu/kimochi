@@ -1,5 +1,5 @@
-//! What each recognised box sits on, for the overlay's "Blend" cards (Settings → OCR & Overlay →
-//! Overlay look): the colour of the source's background around the text, top and bottom, and
+//! What each recognised box sits on, for the overlay's "Blend" cards (Settings → Overlay →
+//! Overlay appearance): the colour of the source's background around the text, top and bottom, and
 //! whether text over it reads better light or dark.
 //!
 //! Computed once, from the frame the scan read, when the scan finishes (`ocr_frame`), and carried

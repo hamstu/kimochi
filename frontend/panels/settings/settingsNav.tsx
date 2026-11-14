@@ -1,9 +1,11 @@
-/** The settings categories, in the order text moves through Kimochi, and older stored names. */
+/**
+ * The settings categories: Account first (every other page's settings are the account's), then the
+ * order text moves through Kimochi; and older stored names.
+ */
 import {
   BookOpen,
   Gamepad2,
   Globe,
-  Joystick,
   Info,
   Layers,
   Languages,
@@ -13,6 +15,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   SquareTerminal,
+  SquaresIntersect,
   UserRound,
   Waypoints
 } from 'lucide-react'
@@ -20,20 +23,20 @@ import type { SettingsTabName } from '../../bridge/tauri'
 import type { SettingsNavItem } from './SettingsShell'
 
 export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName })[] = [
+  { value: 'account', label: 'Account', icon: <UserRound /> },
   { value: 'general', label: 'General', icon: <SlidersHorizontal /> },
   { value: 'language', label: 'Language', icon: <Globe /> },
   { value: 'sources', label: 'Sources', icon: <Waypoints /> },
-  { value: 'browser', label: 'Browser Extension', icon: <Puzzle /> },
   { value: 'texthooker', label: 'Text Hooker', icon: <Plug /> },
-  { value: 'ocr', label: 'OCR & Overlay', icon: <ScanText /> },
+  { value: 'ocr', label: 'OCR', icon: <ScanText /> },
+  { value: 'overlay', label: 'Overlay', icon: <SquaresIntersect /> },
   { value: 'log', label: 'Log & Sessions', icon: <ScrollText /> },
   { value: 'dictionary', label: 'Dictionary', icon: <BookOpen /> },
   { value: 'anki', label: 'Anki', icon: <Layers /> },
   { value: 'assist', label: 'Translation & AI', icon: <Languages /> },
   { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> },
-  { value: 'gamemode', label: 'Game Mode', icon: <Joystick /> },
-  { value: 'account', label: 'Account', icon: <UserRound /> },
   { value: 'cli', label: 'Command line', icon: <SquareTerminal /> },
+  { value: 'browser', label: 'Browser Extension', icon: <Puzzle /> },
   { value: 'about', label: 'About', icon: <Info /> }
 ]
 
@@ -49,7 +52,9 @@ const LEGACY_TABS: Record<string, SettingsTabName> = {
   yomitan: 'dictionary',
   audio: 'log',
   shortcuts: 'controls',
-  gamepad: 'controls'
+  gamepad: 'controls',
+  // Game Mode became a section of Overlay.
+  gamemode: 'overlay'
 }
 
 export function settingsTabOf(stored: string): SettingsTabName {

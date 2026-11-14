@@ -11,7 +11,7 @@ import { SETTINGS_DEFAULTS, withDefaults, type Settings } from '@ui/settings'
 /**
  * The last value seen for each key in this window, from a load, a write or another window's
  * change. A hook mounting later starts from it instead of its default, so a view that opens
- * after the value is known (Settings → OCR & Overlay, after the sidebar loaded `ocrMode`) renders
+ * after the value is known (Settings → OCR, after the sidebar loaded `ocrMode`) renders
  * the real value on its first frame rather than the default for one frame and the real one next.
  */
 const known = new Map<string, unknown>()

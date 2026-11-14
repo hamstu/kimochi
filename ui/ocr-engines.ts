@@ -1,5 +1,5 @@
 /**
- * The engine chooser in Settings → OCR & Overlay, as pure decisions: the short status hint beside
+ * The engine chooser in Settings → OCR, as pure decisions: the short status hint beside
  * each engine in the list, and how its accelerator reads. The engines themselves (names, copy)
  * are `OCR_MODES` in `ui/settings.ts`.
  */

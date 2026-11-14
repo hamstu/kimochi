@@ -15,12 +15,12 @@ const LOADERS: Record<SettingsTabName, () => PageModule> = {
   browser: () => import('./BrowserTab').then((m) => ({ default: m.BrowserTab })),
   texthooker: () => import('./TextHookerTab').then((m) => ({ default: m.TextHookerTab })),
   ocr: () => import('./OcrTab').then((m) => ({ default: m.OcrTab })),
+  overlay: () => import('./OverlayTab').then((m) => ({ default: m.OverlayTab })),
   log: () => import('./LogTab').then((m) => ({ default: m.LogTab })),
   dictionary: () => import('./DictionaryTab').then((m) => ({ default: m.DictionaryTab })),
   anki: () => import('./AnkiTab').then((m) => ({ default: m.AnkiTab })),
   assist: () => import('./AssistTab').then((m) => ({ default: m.AssistTab })),
   controls: () => import('./ControlsTab').then((m) => ({ default: m.ControlsTab })),
-  gamemode: () => import('./GameModeTab').then((m) => ({ default: m.GameModeTab })),
   account: () => import('./AccountTab').then((m) => ({ default: m.AccountTab })),
   cli: () => import('./CliTab').then((m) => ({ default: m.CliTab })),
   about: () => import('./AboutTab').then((m) => ({ default: m.AboutTab }))

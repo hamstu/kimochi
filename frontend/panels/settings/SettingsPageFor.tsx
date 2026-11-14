@@ -22,12 +22,12 @@ const PAGES: Record<SettingsTabName, ComponentType> = {
   browser: page('browser'),
   texthooker: page('texthooker'),
   ocr: page('ocr'),
+  overlay: page('overlay'),
   log: page('log'),
   dictionary: page('dictionary'),
   anki: page('anki'),
   assist: page('assist'),
   controls: page('controls'),
-  gamemode: page('gamemode'),
   account: page('account'),
   cli: page('cli'),
   about: page('about')

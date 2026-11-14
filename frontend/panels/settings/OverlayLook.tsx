@@ -1,16 +1,18 @@
 /**
- * Settings → OCR & Overlay → Overlay look: the colour of the highlight over hoverable text and
- * how opaque it is (side by side, or one under the other in a narrow window), and whether the card a hovered word turns into (and the grouped overlay's regions) is light, dark or
- * the same as Kimochi. Each card choice is previewed with the overlay's own elements and
- * stylesheet (ui/overlay-text.css), in the chosen colour, so what is shown is what is drawn.
+ * Settings → Overlay → Overlay appearance: one large live preview, then three controls side by side
+ * (one under another in a narrow window): the colour of the highlight over hoverable text, how
+ * opaque it is (a slider), and (a dropdown) whether the card a hovered word turns into (and the grouped overlay's regions)
+ * is light, dark, blended or the same as Kimochi. The preview is drawn with the overlay's own
+ * elements and stylesheet (ui/overlay-text.css) and follows every control as it moves, so what is
+ * shown is what is drawn; pointing at a word in it turns that word into its card.
  *
  * The stored setting is `overlayStyle` (ui/settings.ts `OverlayStyleSettings`); the overlay reads
  * it live (overlay.js `applyOverlayStyle`).
  */
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import { Blend, Check, Monitor, Moon, Pipette, Sun } from 'lucide-react'
-import { SettingsRow, Slider, cn } from '@kit'
+import { Select, Slider, cn } from '@kit'
 import {
   DEFAULT_OVERLAY_STYLE,
   OVERLAY_HIGHLIGHT_PRESETS,
@@ -21,64 +23,21 @@ import {
   type OverlayStyleSettings
 } from '@ui/settings'
 import { useSetting } from '../../bridge/useSetting'
-import { useLanguage } from '../../bridge/useLanguage'
 import { usePrefs } from '../../kit/appearance-state'
-import { sampleFor } from '@ui/language-samples'
-import { textLang } from '@ui/language-style'
-import { GlyphBlocks } from '../../components/GlyphBlocks'
-import { blockShape, blockWords } from '../../components/glyphBlockShapes'
+import { PREVIEW_SURFACE, previewWord, usePreviewLine, type PreviewLine } from './overlayPreview'
 import '@ui/overlay-text.css'
 import './overlay-look.css'
 
 const CARD_CHOICES: readonly {
   value: OverlayCardAppearance
   label: string
-  detail: string
   icon: ReactNode
 }[] = [
-  { value: 'app', label: 'Same as Kimochi', detail: 'Follows Appearance in General.', icon: <Monitor /> },
-  { value: 'light', label: 'Light', detail: 'White cards.', icon: <Sun /> },
-  { value: 'dark', label: 'Dark', detail: 'Dark cards.', icon: <Moon /> },
-  {
-    value: 'blend',
-    label: 'Blend',
-    detail: 'The colours behind each word, as if the game drew it.',
-    icon: <Blend />
-  }
+  { value: 'app', label: 'Same as Kimochi', icon: <Monitor /> },
+  { value: 'light', label: 'Light', icon: <Sun /> },
+  { value: 'dark', label: 'Dark', icon: <Moon /> },
+  { value: 'blend', label: 'Blend', icon: <Blend /> }
 ]
-
-/** Blend's preview: what the preview's dialogue box is, behind its words. */
-const PREVIEW_SURFACE = { top: '#1b2033', bottom: '#151a2a', ink: 'light' } as const
-
-/**
- * The line the previews read, a word each with one hovered, in the language being read: its sample
- * (ui/language-samples.ts; Japanese's is 今日は いい 天気 ですね, 天気 hovered), or, for a language
- * with none, glyph blocks shaped like its words.
- */
-interface PreviewLine {
-  /** Each word's text, or its length in blocks. */
-  words: readonly (string | number)[]
-  lit: number
-  /** Set for a language other than Japanese only: the Japanese preview is as it always was. */
-  lang: string | undefined
-  shape: 'square' | 'word'
-}
-
-function usePreviewLine(): PreviewLine {
-  const [language] = useLanguage()
-  return useMemo(() => {
-    const sample = sampleFor(language.code)
-    const shape = blockShape(language.code)
-    const lang = language.code === 'ja' ? undefined : textLang(language.code)
-    return sample
-      ? { words: sample.preview, lit: sample.lit, lang, shape }
-      : { words: blockWords(language.code), lit: 1, lang, shape }
-  }, [language.code])
-}
-
-/** A preview word: its text, or blocks in its shape. */
-const previewWord = (word: string | number, shape: PreviewLine['shape']): ReactNode =>
-  typeof word === 'string' ? word : <GlyphBlocks length={word} shape={shape} />
 
 /**
  * One preview: the overlay's word boxes over a line of game text, as render.js and
@@ -91,7 +50,8 @@ function Preview({
   colorRgb,
   strength,
   line,
-  lit = line.lit
+  lit = line.lit,
+  onPoint
 }: {
   theme: 'light' | 'dark' | 'blend'
   colorRgb: string
@@ -99,6 +59,8 @@ function Preview({
   line: PreviewLine
   /** The hovered word, or null for every box at rest. */
   lit?: number | null
+  /** The pointer came onto a word (its index), or left the line (null). */
+  onPoint?: (index: number | null) => void
 }): ReactNode {
   return (
     <span
@@ -107,9 +69,14 @@ function Preview({
       style={{ '--ocr-hl-rgb': colorRgb, '--ocr-hl-strength': strength } as CSSProperties}
       aria-hidden
     >
-      <span className="overlay-look-scene" lang={line.lang} data-shape={line.shape}>
+      <span
+        className="overlay-look-scene"
+        lang={line.lang}
+        data-shape={line.shape}
+        onPointerLeave={onPoint && (() => onPoint(null))}
+      >
         {line.words.map((word, index) => (
-          <span key={index} className="overlay-look-cell">
+          <span key={index} className="overlay-look-cell" onPointerEnter={onPoint && (() => onPoint(index))}>
             {previewWord(word, line.shape)}
             <span
               className="ocr-word"
@@ -167,105 +134,106 @@ export function OverlayLook(): ReactNode {
     return () => clearTimeout(timer)
   }, [opacityDraft, look, setStored])
 
+  // The preview's word under the pointer, which shows as its card; at rest, the sample's own.
+  const [pointed, setPointed] = useState<number | null>(null)
+  const id = useId()
+
   const chooseColor = (value: string): void => {
     setDraft(null)
     if (value !== look.color) void setStored({ ...look, color: value })
   }
 
+  const cardTheme = look.appearance === 'app' ? resolved : look.appearance
+
   return (
-    <>
-      <div className="overlay-look-highlight">
-        <div className="overlay-look-highlight-grid">
-          <SettingsRow label="Highlight colour" description="The tint and outline over text you can hover." stacked>
-            <div className="overlay-look-swatches">
-              <ToggleGroup.Root
-                type="single"
-                value={preset ? color : ''}
-                onValueChange={(value) => value && chooseColor(value)}
-                className="overlay-look-presets"
-                aria-label="Highlight colour"
-              >
-                {OVERLAY_HIGHLIGHT_PRESETS.map((option) => (
-                  <ToggleGroup.Item
-                    key={option.value}
-                    value={option.value}
-                    className="overlay-look-swatch"
-                    style={{ '--swatch': option.value } as CSSProperties}
-                    aria-label={option.label}
-                    title={option.label}
-                  >
-                    <Check aria-hidden />
-                  </ToggleGroup.Item>
-                ))}
-              </ToggleGroup.Root>
-              <label
-                className={cn('overlay-look-swatch', 'overlay-look-swatch-custom')}
-                data-state={preset ? 'off' : 'on'}
-                style={{ '--swatch': color } as CSSProperties}
-                title="Custom colour"
-              >
-                <input
-                  type="color"
-                  value={color}
-                  aria-label="Custom highlight colour"
-                  onChange={(event) => setDraft(event.target.value.toLowerCase())}
-                />
-                {preset ? <Pipette aria-hidden /> : <Check aria-hidden />}
-              </label>
-            </div>
-          </SettingsRow>
-          <SettingsRow label="Highlight opacity" description="How strongly it shows before you point at it." stacked>
-            <div className="overlay-look-opacity">
-              <div className="overlay-look-opacity-control">
-                <Slider
-                  aria-label="Highlight opacity"
-                  valueText={(value) => `${value}%`}
-                  value={[opacity]}
-                  onValueChange={(values) => setOpacityDraft(values[0])}
-                  min={0}
-                  max={100}
-                  step={5}
-                />
-                <span className="overlay-look-opacity-value" aria-hidden>
-                  {opacity}%
-                </span>
-              </div>
-              <Preview theme={resolved} colorRgb={colorRgb} strength={strength} line={line} lit={null} />
-            </div>
-          </SettingsRow>
-        </div>
+    <div className="overlay-look">
+      <div className="overlay-look-stage">
+        <Preview
+          theme={cardTheme}
+          colorRgb={colorRgb}
+          strength={strength}
+          line={line}
+          lit={pointed ?? line.lit}
+          onPoint={setPointed}
+        />
       </div>
-      <SettingsRow label="Cards" description="The card hovered text turns into." stacked>
-        <div className="overlay-look-cards-frame">
-          <ToggleGroup.Root
-            type="single"
+      <div className="overlay-look-controls">
+        <div className="overlay-look-control">
+          <span className="overlay-look-label" id={`${id}-colour`}>
+            Highlight colour
+          </span>
+          <div className="overlay-look-swatches">
+            <ToggleGroup.Root
+              type="single"
+              value={preset ? color : ''}
+              onValueChange={(value) => value && chooseColor(value)}
+              className="overlay-look-presets"
+              aria-labelledby={`${id}-colour`}
+            >
+              {OVERLAY_HIGHLIGHT_PRESETS.map((option) => (
+                <ToggleGroup.Item
+                  key={option.value}
+                  value={option.value}
+                  className="overlay-look-swatch"
+                  style={{ '--swatch': option.value } as CSSProperties}
+                  aria-label={option.label}
+                  title={option.label}
+                >
+                  <Check aria-hidden />
+                </ToggleGroup.Item>
+              ))}
+            </ToggleGroup.Root>
+            <label
+              className={cn('overlay-look-swatch', 'overlay-look-swatch-custom')}
+              data-state={preset ? 'off' : 'on'}
+              style={{ '--swatch': color } as CSSProperties}
+              title="Custom colour"
+            >
+              <input
+                type="color"
+                value={color}
+                aria-label="Custom highlight colour"
+                onChange={(event) => setDraft(event.target.value.toLowerCase())}
+              />
+              {preset ? <Pipette aria-hidden /> : <Check aria-hidden />}
+            </label>
+          </div>
+        </div>
+        <div className="overlay-look-control">
+          <span className="overlay-look-label">Highlight opacity</span>
+          <div className="overlay-look-opacity-control">
+            <Slider
+              aria-label="Highlight opacity"
+              valueText={(value) => `${value}%`}
+              value={[opacity]}
+              onValueChange={(values) => setOpacityDraft(values[0])}
+              min={0}
+              max={100}
+              step={5}
+            />
+          </div>
+        </div>
+        <div className="overlay-look-control">
+          <span className="overlay-look-label">Cards</span>
+          <Select
+            aria-label="Cards"
+            className="overlay-look-card-select"
             value={look.appearance}
             onValueChange={(value) => {
-              if (value && value !== look.appearance)
-                void setStored({ ...look, appearance: value as OverlayCardAppearance })
+              if (value !== look.appearance) void setStored({ ...look, appearance: value })
             }}
-            className="overlay-look-cards"
-            data-count={CARD_CHOICES.length}
-            aria-label="Cards"
-          >
-            {CARD_CHOICES.map((choice) => (
-              <ToggleGroup.Item key={choice.value} value={choice.value} className="k-choice overlay-look-card">
-                <Preview
-                  theme={choice.value === 'app' ? resolved : choice.value}
-                  colorRgb={colorRgb}
-                  strength={strength}
-                  line={line}
-                />
-                <span className="k-choice-head">
+            options={CARD_CHOICES.map((choice) => ({
+              value: choice.value,
+              label: (
+                <span className="overlay-look-card-option">
                   {choice.icon}
                   {choice.label}
                 </span>
-                <span className="k-choice-detail">{choice.detail}</span>
-              </ToggleGroup.Item>
-            ))}
-          </ToggleGroup.Root>
+              )
+            }))}
+          />
         </div>
-      </SettingsRow>
-    </>
+      </div>
+    </div>
   )
 }

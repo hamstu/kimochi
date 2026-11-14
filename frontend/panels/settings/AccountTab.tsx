@@ -1,12 +1,28 @@
 /**
  * Settings → Account: the accounts on this computer and which one Kimochi is used as (each keeps
- * its own Log, notebook and preferences; "Local" is no account), adding one, and for the account
- * in use its allowances and Sync. Everything runs in Rust (`account.rs`, `sync.rs`); this page shows
+ * its own Log, notebook and preferences; "Local" is no account), adding one (a local account, or
+ * a Kimochi Cloud sign-in), naming local ones, and for the Kimochi account in use its allowances
+ * and Sync. Everything runs in Rust (`account.rs`, `sync.rs`); this page shows
  * their state (`useAccount`, `useSync`) and sends the commands. A token never reaches it.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { save } from '@tauri-apps/plugin-dialog'
-import { Download, ExternalLink, MoreHorizontal, RefreshCw, ScrollText, UserPlus } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  Cloud,
+  Globe,
+  Download,
+  ExternalLink,
+  Laptop,
+  LogOut,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+  ScrollText,
+  Trash2,
+  UserPlus
+} from 'lucide-react'
 import {
   Badge,
   Button,
@@ -16,6 +32,7 @@ import {
   Menu,
   MenuContent,
   MenuItem,
+  MenuSeparator,
   MenuTrigger,
   Select,
   SettingsPage,
@@ -24,10 +41,13 @@ import {
   Spinner
 } from '@kit'
 import {
-  accountLines,
+  accountBarName,
   accountName,
   activeAccount,
   formatBytes,
+  hasCloudAccount,
+  localProfileName,
+  localProfileUser,
   PLAN_LABELS,
   planNote,
   resetLine,
@@ -36,6 +56,7 @@ import {
   type AccountSummary,
   type UsageRow
 } from '@ui/account'
+import { languageOf } from '@ui/languages'
 import { conflictDetail, conflictTitle, syncStateLine, type SyncConflict } from '@ui/sync'
 import {
   accountLinkCancel,
@@ -54,8 +75,10 @@ import {
 import { exportSyncedData, resolveConflict, syncNow, useSync } from '../../bridge/sync'
 import { nativeError, panel } from '../../bridge/tauri'
 import { DEV_BUILD } from '../../bridge/devBuild'
+import { useLanguage } from '../../bridge/useLanguage'
 import { AccountAvatar } from '../../components/AccountAvatar'
-import { DictionaryProfileSection } from './DictionaryProfileSection'
+import { AccountDictionaryProfile } from './DictionaryProfileSection'
+import { LocalAccountDialog, type LocalAccountEdit } from './LocalAccountDialog'
 import './account.css'
 
 const message = (error: unknown): string => nativeError(error).message
@@ -73,15 +96,18 @@ function useNow(): number {
 export function AccountTab(): ReactNode {
   const account = useAccount()
   const active = activeAccount(account)
-  const accounts = account.accounts ?? []
+  const cloudActive = active?.kind === 'cloud' ? active : null
   return (
-    <SettingsPage title="Account" description="Optional.">
-      {DEV_BUILD && <ServerSection account={account} />}
+    <SettingsPage
+      title="Account"
+      description="Settings, sessions and your notebook are saved per account. Local accounts stay on this computer; Kimochi Cloud accounts sync."
+    >
       {account.linking && <Linking code={account.linking.code} />}
-      {accounts.length > 0 ? <AccountsSection account={account} /> : !account.linking && <SignedOut />}
-      {active && account.signedIn && <SignedIn account={account} />}
-      {active && !active.signedIn && <NeedsSignIn summary={active} />}
-      <DictionaryProfileSection />
+      <AccountsSection account={account} />
+      {!account.linking && !hasCloudAccount(account) && <CloudOffer />}
+      {cloudActive && account.signedIn && <SignedIn account={account} />}
+      {cloudActive && !cloudActive.signedIn && <NeedsSignIn summary={cloudActive} />}
+      {DEV_BUILD && <ServerSection account={account} />}
     </SettingsPage>
   )
 }
@@ -94,7 +120,8 @@ const SERVER_OPTIONS = [
 /**
  * Development builds only: which Kimochi server "Add account" signs in to. Every account keeps its
  * own server, so this only matters for the next sign-in (and, while no account is in use, for the
- * server in use). `KIMOCHI_SERVER` in the environment (`npm run dev:local`) pins it for the run.
+ * server in use). `KIMOCHI_SERVER` in the environment (`npm run dev:local`) starts the run on one,
+ * until the other is chosen here or an account on it is switched to.
  */
 function ServerSection({ account }: { account: AccountStatus }): ReactNode {
   const [error, setError] = useState('')
@@ -108,27 +135,49 @@ function ServerSection({ account }: { account: AccountStatus }): ReactNode {
       .catch((caught: unknown) => setError(message(caught)))
       .finally(() => setBusy(false))
   }
+  const [open, setOpen] = useState(false)
   return (
-    <SettingsSection title="Server" description="Development build only. Each account keeps its own server.">
-      <SettingsRow
-        label="Sign in to"
-        badge={server?.forced ? <Badge tone="neutral">KIMOCHI_SERVER</Badge> : undefined}
-        description={
-          <>
-            New accounts sign in at <span className="k-mono">{server?.url || 'unknown'}</span>.
-            {server?.forced ? ' Set by KIMOCHI_SERVER in the environment for this run.' : ''}
-          </>
-        }
-      >
-        <Select
-          aria-label="Server for new sign-ins"
-          value={server?.mode}
-          disabled={busy || !server || server.forced}
-          onValueChange={switchTo}
-          options={SERVER_OPTIONS}
-        />
-      </SettingsRow>
-      {error && <Callout tone="danger">{error}</Callout>}
+    <SettingsSection
+      title="Developer"
+      description="Development build only: the Kimochi server new accounts sign in to."
+      grouped={open}
+      actions={
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={open}
+          className="account-dev-toggle"
+          data-open={open || undefined}
+          onClick={() => setOpen(!open)}
+        >
+          <ChevronDown />
+          {open ? 'Hide' : 'Show'}
+        </Button>
+      }
+    >
+      {open && (
+        <SettingsRow
+          label="Sign in to"
+          badge={server?.forced ? <Badge tone="neutral">KIMOCHI_SERVER</Badge> : undefined}
+          description={
+            <>
+              New accounts sign in at <span className="k-mono">{server?.url || 'unknown'}</span>.
+              {server?.forced
+                ? ' KIMOCHI_SERVER started this run here; choosing the other server, or switching to an account on it, takes over.'
+                : ''}
+            </>
+          }
+        >
+          <Select
+            aria-label="Server for new sign-ins"
+            value={server?.mode}
+            disabled={busy || !server}
+            onValueChange={switchTo}
+            options={SERVER_OPTIONS}
+          />
+        </SettingsRow>
+      )}
+      {open && error && <Callout tone="danger">{error}</Callout>}
     </SettingsSection>
   )
 }
@@ -148,7 +197,8 @@ function LinkOutcome(): ReactNode {
   }
 }
 
-function SignedOut(): ReactNode {
+/** No Kimochi account here yet: what Kimochi Cloud adds, and signing in. */
+function CloudOffer(): ReactNode {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const start = (): void => {
@@ -159,9 +209,9 @@ function SignedOut(): ReactNode {
       .finally(() => setBusy(false))
   }
   return (
-    <SettingsSection title="Kimochi account">
+    <SettingsSection title="Kimochi Cloud">
       <SettingsRow
-        label="Kimochi cloud"
+        label="Cloud subscription"
         description="Kimochi Cloud needs an account. It adds cloud OCR, read aloud, translation, AI explanations and Sync. Try it free for 14 days."
       >
         <Button variant="primary" size="sm" disabled={busy} onClick={start}>
@@ -169,7 +219,6 @@ function SignedOut(): ReactNode {
         </Button>
       </SettingsRow>
       {error && <Callout tone="danger">{error}</Callout>}
-      <LinkOutcome />
     </SettingsSection>
   )
 }
@@ -208,13 +257,65 @@ function Linking({ code }: { code: string }): ReactNode {
   )
 }
 
+/** Where Switch is on the other rows: the account in use, as a button that can't be pressed. */
+function ActiveButton(): ReactNode {
+  return (
+    <Button size="sm" disabled className="account-active-button">
+      <Check />
+      Active
+    </Button>
+  )
+}
+
+/** An account's second line: Local or Cloud with its icon, then the language it reads, then any note. */
+function AccountKind({
+  local,
+  language,
+  children
+}: {
+  local: boolean
+  language: string | null | undefined
+  children?: ReactNode
+}): ReactNode {
+  return (
+    <span className="account-kind">
+      {local ? <Laptop aria-hidden /> : <Cloud aria-hidden />}
+      {local ? 'Local' : 'Cloud'}
+      {language && (
+        <>
+          <span aria-hidden>·</span>
+          <Globe aria-hidden />
+          {languageOf(language).name}
+        </>
+      )}
+      {children ? <span className="account-kind-detail">· {children}</span> : null}
+    </span>
+  )
+}
+
+/** The name, then the email in the description's style. */
+function AccountName({ name, email }: { name: string; email?: string | null }): ReactNode {
+  return (
+    <span className="account-name">
+      <span className="account-name-text">{name}</span>
+      {email && email !== name && <span className="account-name-email">{email}</span>}
+    </span>
+  )
+}
+
 /** Every account on this computer, and Local: which one Kimochi is used as. */
 function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [removing, setRemoving] = useState<AccountSummary | null>(null)
+  const [editing, setEditing] = useState<LocalAccountEdit | null>(null)
+  // Each opening of the dialog starts from what it was opened with.
+  const [editCount, setEditCount] = useState(0)
   const accounts = account.accounts ?? []
   const localActive = !accounts.some((a) => a.active)
+  const localUser = localProfileUser(account)
+  // The live setting, not the account's report: changing language sends no account update.
+  const [language] = useLanguage()
   const run = (work: () => Promise<unknown>): void => {
     setBusy(true)
     setError('')
@@ -222,82 +323,146 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
       .catch((caught: unknown) => setError(message(caught)))
       .finally(() => setBusy(false))
   }
+  const edit = (next: LocalAccountEdit): void => {
+    setEditCount((n) => n + 1)
+    setEditing(next)
+  }
   const disabled = busy || account.switching === true
+  const removingLocal = removing?.kind === 'local'
   return (
     <SettingsSection
-      title="Accounts on this computer"
-      description="Each account keeps its own sessions, notebook, presets and preferences."
+      title="Accounts"
       actions={
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={disabled || Boolean(account.linking)}
-          onClick={() => run(accountLinkStart)}
-        >
-          <UserPlus />
-          Add account
-        </Button>
+        <Menu>
+          <MenuTrigger asChild>
+            <Button size="sm" variant="ghost" disabled={disabled}>
+              <UserPlus />
+              Add account
+            </Button>
+          </MenuTrigger>
+          <MenuContent align="end" className="account-add-menu">
+            <MenuItem className="k-menu-item-described" icon={<Laptop />} onSelect={() => edit({ mode: 'create' })}>
+              Local account
+              <span className="k-menu-item-description">Kept on this computer. Free, no sign-in.</span>
+            </MenuItem>
+            <MenuItem
+              className="k-menu-item-described"
+              icon={<Cloud />}
+              disabled={Boolean(account.linking)}
+              onSelect={() => run(accountLinkStart)}
+            >
+              Cloud subscription
+              <span className="k-menu-item-description">Kimochi Cloud: Sync, cloud OCR and more.</span>
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       }
     >
       {accounts.map((a) => {
-        const { primary, secondary } = accountLines(a.user)
+        const primary = accountBarName(a.user)
+        const email = a.user?.email?.trim() || null
+        const local = a.kind === 'local'
+        const description = (
+          <AccountKind local={local} language={a.active ? language.code : a.language}>
+            {a.server?.mode === 'local' ? 'local server' : null}
+          </AccountKind>
+        )
         return (
-          <SettingsRow
-            key={a.key}
-            label={
-              <span className="account-who">
-                <AccountAvatar user={a.user} />
-                {primary}
-              </span>
-            }
-            badge={
-              a.active ? (
-                <Badge tone="accent">In use</Badge>
-              ) : !a.signedIn ? (
-                <Badge tone="neutral">Signed out</Badge>
-              ) : undefined
-            }
-            description={
-              [secondary, a.server?.mode === 'local' ? 'Local server' : null].filter(Boolean).join(' · ') || undefined
-            }
-          >
-            {!a.active && (
-              <Button size="sm" disabled={disabled || !a.available} onClick={() => run(() => accountSwitch(a.key))}>
-                Switch
-              </Button>
-            )}
-            <Menu>
-              <MenuTrigger asChild>
-                <IconButton label={`More for ${primary}`} size="sm" disabled={disabled}>
-                  <MoreHorizontal />
-                </IconButton>
-              </MenuTrigger>
-              <MenuContent align="end">
-                {a.signedIn && <MenuItem onSelect={() => run(() => accountSignOut(a.key))}>Sign out</MenuItem>}
-                <MenuItem tone="danger" onSelect={() => setRemoving(a)}>
-                  Remove from this computer…
-                </MenuItem>
-              </MenuContent>
-            </Menu>
-          </SettingsRow>
+          <Fragment key={a.key}>
+            <SettingsRow
+              leading={<AccountAvatar user={a.user} className="account-row-avatar" />}
+              label={<AccountName name={primary} email={email} />}
+              className={a.active ? 'account-row-active' : undefined}
+              badge={!local && !a.signedIn ? <Badge tone="neutral">Signed out</Badge> : undefined}
+              description={description}
+            >
+              {a.active ? (
+                <ActiveButton />
+              ) : (
+                <Button size="sm" disabled={disabled || !a.available} onClick={() => run(() => accountSwitch(a.key))}>
+                  Switch
+                </Button>
+              )}
+              <Menu>
+                <MenuTrigger asChild>
+                  <IconButton label={`More for ${primary}`} size="sm" disabled={disabled}>
+                    <MoreHorizontal />
+                  </IconButton>
+                </MenuTrigger>
+                <MenuContent align="end">
+                  {local ? (
+                    <MenuItem
+                      icon={<Pencil />}
+                      onSelect={() =>
+                        edit({ mode: 'edit', key: a.key, name: primary, avatar: a.user?.avatarUrl ?? null })
+                      }
+                    >
+                      Edit…
+                    </MenuItem>
+                  ) : (
+                    <>
+                      <MenuItem icon={<ExternalLink />} onSelect={() => run(() => accountOpenWeb(a.key))}>
+                        View details online
+                      </MenuItem>
+                      {a.signedIn && (
+                        <MenuItem icon={<LogOut />} onSelect={() => run(() => accountSignOut(a.key))}>
+                          Sign out
+                        </MenuItem>
+                      )}
+                    </>
+                  )}
+                  <MenuSeparator />
+                  <MenuItem icon={<Trash2 />} tone="danger" onSelect={() => setRemoving(a)}>
+                    {local ? 'Delete account…' : 'Remove from this computer…'}
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
+            </SettingsRow>
+            {a.active && <AccountDictionaryProfile />}
+          </Fragment>
         )
       })}
       <SettingsRow
-        label={
-          <span className="account-who">
-            <AccountAvatar local />
-            Local
-          </span>
+        leading={<AccountAvatar user={localUser} local className="account-row-avatar" />}
+        label={localProfileName(account)}
+        className={localActive ? 'account-row-active' : undefined}
+        description={
+          <AccountKind local language={localActive ? language.code : account.localLanguage}>
+            The default account Kimochi starts with.
+          </AccountKind>
         }
-        badge={localActive ? <Badge tone="accent">In use</Badge> : undefined}
-        description="The Log you had before signing in."
       >
-        {!localActive && (
+        {localActive ? (
+          <ActiveButton />
+        ) : (
           <Button size="sm" disabled={disabled} onClick={() => run(() => accountSwitch(null))}>
             Switch
           </Button>
         )}
+        <Menu>
+          <MenuTrigger asChild>
+            <IconButton label={`More for ${localProfileName(account)}`} size="sm" disabled={disabled}>
+              <MoreHorizontal />
+            </IconButton>
+          </MenuTrigger>
+          <MenuContent align="end">
+            <MenuItem
+              icon={<Pencil />}
+              onSelect={() =>
+                edit({
+                  mode: 'edit',
+                  key: null,
+                  name: account.localProfile?.displayName ?? '',
+                  avatar: account.localProfile?.avatarUrl ?? null
+                })
+              }
+            >
+              Edit…
+            </MenuItem>
+          </MenuContent>
+        </Menu>
       </SettingsRow>
+      {localActive && <AccountDictionaryProfile />}
       {account.switching && (
         <SettingsRow
           label={
@@ -310,12 +475,21 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
       )}
       {error && <Callout tone="danger">{error}</Callout>}
       <LinkOutcome />
+      {editing && <LocalAccountDialog key={editCount} edit={editing} onClose={() => setEditing(null)} />}
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={`Remove ${accountName(removing?.user)} from this computer?`}
-        description="Signs out and deletes this account's sessions, notebook and preferences from this computer. What has synced stays in your account; anything not synced yet is lost."
-        confirmLabel="Remove"
+        title={
+          removingLocal
+            ? `Delete ${accountName(removing?.user)}?`
+            : `Remove ${accountName(removing?.user)} from this computer?`
+        }
+        description={
+          removingLocal
+            ? "Deletes this account's sessions, notebook and preferences. A local account isn't stored anywhere else, so this can't be undone."
+            : "Signs out and deletes this account's sessions, notebook and preferences from this computer. What has synced stays in your account; anything not synced yet is lost."
+        }
+        confirmLabel={removingLocal ? 'Delete' : 'Remove'}
         tone="danger"
         busy={busy}
         onConfirm={() => {

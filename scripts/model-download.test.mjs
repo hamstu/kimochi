@@ -161,7 +161,7 @@ test('both engine pickers share the confirmation and list engines by name alone'
     assert.ok(!/useSetting<OcrMode>\('ocrMode'/.test(source), `${file} still writes ocrMode directly`)
   }
   const ocrTab = await read('frontend/panels/settings/OcrTab.tsx')
-  assert.ok(ocrTab.includes('<EngineChooser />'), 'Settings → OCR & Overlay no longer shows the engine chooser')
+  assert.ok(ocrTab.includes('<EngineChooser />'), 'Settings → OCR no longer shows the engine chooser')
   assert.ok(!ocrTab.includes('useEngineSelection'), 'OcrTab picks the engine itself instead of through EngineChooser')
   // The name is the name: where a download stands is a separate hint, never a label suffix.
   const sidebar = await read('frontend/main/MainSidebar.tsx')
@@ -204,14 +204,18 @@ test('removing a downloaded model lives in the overflow menu, not beside the bar
   assert.ok(chooser.includes('<RemoveModelDialog'), 'the removal is no longer confirmed')
 })
 
-test('the OCR page is "OCR & Overlay" and still answers to ocr', async () => {
+test('OCR and Overlay are pages of their own, and Game Mode is part of Overlay', async () => {
   const nav = await read('frontend/panels/settings/settingsNav.tsx')
-  assert.ok(
-    nav.includes("{ value: 'ocr', label: 'OCR & Overlay'"),
-    'the nav entry is not OCR & Overlay on the ocr value'
-  )
+  assert.ok(nav.includes("{ value: 'ocr', label: 'OCR'"), 'the nav entry is not OCR on the ocr value')
+  assert.ok(nav.includes("{ value: 'overlay', label: 'Overlay'"), 'there is no Overlay page')
+  assert.ok(!nav.includes("value: 'gamemode'"), 'Game Mode is still a page of its own')
+  assert.ok(nav.includes("gamemode: 'overlay'"), 'a stored Game Mode page does not open Overlay')
   const ocrTab = await read('frontend/panels/settings/OcrTab.tsx')
-  assert.ok(ocrTab.includes('title="OCR & Overlay"'), 'the page title is not OCR & Overlay')
+  assert.ok(ocrTab.includes('title="OCR"'), 'the page title is not OCR')
+  assert.ok(!ocrTab.includes('<OverlayLook'), 'the overlay settings are still on the OCR page')
+  const overlayTab = await read('frontend/panels/settings/OverlayTab.tsx')
+  assert.ok(overlayTab.includes('title="Overlay appearance"'), 'the overlay look is not titled Overlay appearance')
+  assert.ok(overlayTab.includes('<GameModeSection />'), 'Game Mode is not on the Overlay page')
 })
 
 test('only Delete leaves the buttons, and only a downloaded model can be removed', () => {

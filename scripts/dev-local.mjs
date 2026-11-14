@@ -9,7 +9,8 @@
 //      :1450)
 //   5. waits for both to answer
 //   6. runs the app (`node scripts/run.mjs dev`) with KIMOCHI_SERVER=local, which a debug build
-//      uses over the `serverSettings.mode` setting (Settings → Account shows it as pinned)
+//      uses over the `serverSettings.mode` setting until Settings → Account picks Production or
+//      an account on it is switched to (it shows as pinned until then)
 //
 // Child output is prefixed with [server] / [site]. When the app exits, or on Ctrl-C, only the
 // processes this script started are stopped, by their PIDs and process groups (so wrangler's

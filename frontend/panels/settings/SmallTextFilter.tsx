@@ -1,5 +1,5 @@
 /**
- * Settings → OCR & Overlay → Filter out furigana and small text: the switch, and behind a
+ * Settings → Overlay → Filter out furigana and small text: the switch, and behind a
  * disclosure beside it the filter's strength as five named steps on a full-width bar, with what
  * the chosen step removes written under it.
  *

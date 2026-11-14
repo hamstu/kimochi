@@ -1,5 +1,5 @@
 /**
- * The engine choosers in Settings (OCR & Overlay → Engine, Dictionary → Engine), as pure
+ * The engine choosers in Settings (OCR → Engine, Dictionary → Engine), as pure
  * decisions. Both are a list beside a panel: the list only chooses what the panel shows (the
  * VIEWED engine); the panel's header is where an engine is made ACTIVE, with "Use <name>".
  */

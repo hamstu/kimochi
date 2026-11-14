@@ -3,11 +3,12 @@
  * with a simulated sign-in, account switcher and Sync that emit `account-changed`, `account-link`,
  * `sync-status` and `sync-log` like `src-tauri/src/account.rs` and `sync.rs`.
  *
- *   ?account=signedout|linking|signedin|full|suspended|multi|local   the starting state (default:
- *               signedout). `multi` has a second account (on the local server) not in use;
- *               `local` has an account on this computer but uses the Local profile. Signed in
- *               (`signedin`, `full`, `suspended`, `multi`), the foot of the sidebar is the account
- *               switcher (avatar and name, Settings in its menu); otherwise it is the Settings row.
+ *   ?account=signedout|linking|signedin|full|suspended|multi|local|locals   the starting state
+ *               (default: signedout). `multi` has a second account (on the local server) not in
+ *               use; `local` has an account on this computer but uses the Local profile; `locals`
+ *               uses a local account (no sign-in), with a Kimochi account and the Local profile,
+ *               named "Home", beside it. The foot of the sidebar is the account switcher in
+ *               every state (avatar and name, Settings in its menu); Mini mode keeps the Settings row.
  *               Add `&update=available` to see the update notice above it.
  *   ?server=cloud|local|forced   the server new sign-ins go to (development builds' switch in
  *               Settings → Account; `forced` is local pinned by KIMOCHI_SERVER). Default: cloud.
@@ -21,7 +22,7 @@
  * after six seconds. A switch in the preview does not reload the windows.
  */
 import { emit } from '@tauri-apps/api/event'
-import type { AccountServer, AccountStatus, AccountSummary, AccountUser, Usage } from '@ui/account'
+import type { AccountServer, AccountStatus, AccountSummary, AccountUser, LocalProfile, Usage } from '@ui/account'
 import type { SyncLogEntry, SyncStatus } from '@ui/sync'
 
 const params = new URLSearchParams(location.search)
@@ -96,6 +97,8 @@ const OTHER: AccountUser = {
 
 const summary = (user: AccountUser, mode: 'cloud' | 'local', active: boolean): AccountSummary => ({
   key: `${mode}-${user.id}`,
+  kind: 'cloud',
+  language: 'ja',
   user,
   server: serverFor(mode),
   signedIn: true,
@@ -103,8 +106,26 @@ const summary = (user: AccountUser, mode: 'cloud' | 'local', active: boolean): A
   available: true
 })
 
+let localCount = 0
+const localSummary = (name: string, avatar: string | null, active: boolean): AccountSummary => {
+  const key = `device-preview${++localCount}`
+  return {
+    key,
+    kind: 'local',
+    language: name.startsWith('Spanish') ? 'es' : 'ja',
+    user: { id: key, email: null, displayName: name, avatarUrl: avatar, plan: 'free', status: 'active' },
+    server: null,
+    signedIn: false,
+    active,
+    available: true
+  }
+}
+let localProfile: LocalProfile | null = seed === 'locals' ? { displayName: 'Home', avatarUrl: null } : null
+
 let accounts: AccountSummary[] = (() => {
   switch (seed) {
+    case 'locals':
+      return [localSummary('Spanish practice', null, true), summary(USER, 'cloud', false)]
     case 'signedin':
     case 'full':
     case 'suspended':
@@ -124,19 +145,22 @@ let linking: AccountStatus['linking'] =
 
 function status(): AccountStatus {
   const active = accounts.find((a) => a.active) ?? null
+  const cloudActive = active?.kind === 'cloud' ? active : null
   return {
-    signedIn: Boolean(active?.signedIn),
-    cloud: Boolean(active?.signedIn) && active?.user?.cloud !== false,
+    signedIn: Boolean(cloudActive?.signedIn),
+    cloud: Boolean(cloudActive?.signedIn) && cloudActive?.user?.cloud !== false,
     user: active?.user ?? null,
-    usage: active ? usage(seed === 'full') : null,
+    usage: cloudActive ? usage(seed === 'full') : null,
     linking,
-    server: active?.server ?? linkServer,
+    server: cloudActive?.server ?? linkServer,
     linkServer,
     accounts,
+    localProfile,
+    localLanguage: 'ja',
     profile: {
       key: active?.key ?? null,
       root: active ? `profiles/${active.key}` : '',
-      needsSignIn: Boolean(active && !active.signedIn)
+      needsSignIn: Boolean(cloudActive && !cloudActive.signedIn)
     },
     switching: false
   }
@@ -221,7 +245,9 @@ let syncState: SyncStatus = {
 
 function syncStatus(): SyncStatus {
   const active = accounts.find((a) => a.active)
-  return active ? { ...syncState, account: active.key } : { ...syncState, state: 'off', account: null, conflicts: [] }
+  return active?.kind === 'cloud'
+    ? { ...syncState, account: active.key }
+    : { ...syncState, state: 'off', account: active?.key ?? null, conflicts: [] }
 }
 
 function publishSync(): SyncStatus {
@@ -246,8 +272,8 @@ export const ACCOUNT_HANDLERS: Record<string, Handler> = {
   profile_current: () => ({ key: accounts.find((a) => a.active)?.key ?? null, root: '' }),
   account_set_server: (args) => {
     const mode = args?.mode === 'local' ? 'local' : 'cloud'
-    if (linkServer.forced) throw 'invalid: KIMOCHI_SERVER=local picks the server for this run; unset it to switch here'
-    linkServer = serverFor(mode)
+    // Choosing the other server releases KIMOCHI_SERVER's pin, as in account.rs.
+    linkServer = linkServer.forced && linkServer.mode === mode ? linkServer : serverFor(mode)
     return publish()
   },
   account_link_start: () => {
@@ -284,7 +310,8 @@ export const ACCOUNT_HANDLERS: Record<string, Handler> = {
     const key = typeof args?.key === 'string' ? args.key : null
     await wait(400)
     accounts = accounts.map((a) => ({ ...a, active: a.key === key }))
-    log('profile', `Switched to ${accounts.find((a) => a.active)?.user?.email ?? 'Local (no account)'}`)
+    const now = accounts.find((a) => a.active)?.user
+    log('profile', `Switched to ${now?.email ?? now?.displayName ?? 'Local (no account)'}`)
     return publish()
   },
   account_sign_out: (args) => {
@@ -296,8 +323,31 @@ export const ACCOUNT_HANDLERS: Record<string, Handler> = {
     accounts = accounts.filter((a) => a.key !== args?.key)
     return publish()
   },
+  account_create_local: async (args) => {
+    const name = typeof args?.name === 'string' ? args.name.trim() : ''
+    if (!name) throw 'invalid: give the account a name'
+    const avatar = typeof args?.avatar === 'string' ? args.avatar : null
+    await wait(400)
+    accounts = [localSummary(name, avatar, true), ...accounts.map((a) => ({ ...a, active: false }))]
+    log('profile', `Added the local account ${name}`)
+    return publish()
+  },
+  account_update_local: (args) => {
+    const name = typeof args?.name === 'string' ? args.name.trim() : ''
+    if (!name) throw 'invalid: give the account a name'
+    const avatar = typeof args?.avatar === 'string' ? args.avatar : null
+    if (typeof args?.key === 'string') {
+      accounts = accounts.map((a) =>
+        a.key === args.key && a.user ? { ...a, user: { ...a.user, displayName: name, avatarUrl: avatar } } : a
+      )
+    } else {
+      localProfile = { displayName: name, avatarUrl: avatar }
+    }
+    return publish()
+  },
   account_refresh: () => status(),
-  account_open_web: () => console.info('[preview] account_open_web: http://127.0.0.1:1450/account'),
+  account_open_web: (args) =>
+    console.info(`[preview] account_open_web(${String(args?.key ?? 'active')}): http://127.0.0.1:1450/account`),
   sync_status: () => syncStatus(),
   sync_now: () => {
     syncState = { ...syncState, state: 'syncing' }

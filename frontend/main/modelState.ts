@@ -1,7 +1,7 @@
 /**
  * The sidebar's OCR model, while the selected local engine's model is not ready: a fill inside the
  * select while it downloads (one bar over every file, `overallReceived` of `overallTotal`) or
- * verifies, or a short notice under it, with a way to Settings → OCR & Overlay (where the download
+ * verifies, or a short notice under it, with a way to Settings → OCR (where the download
  * is managed), when it is paused, failed or missing. Nothing once it is ready, and nothing for
  * engines without a model to download.
  */

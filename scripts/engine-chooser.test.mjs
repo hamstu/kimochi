@@ -1,5 +1,5 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS test. */
-// The engine choosers (Settings → OCR & Overlay, Settings → Dictionary): a list that only views,
+// The engine choosers (Settings → OCR, Settings → Dictionary): a list that only views,
 // and a panel whose "Use <name>" makes the viewed engine active. ui/engine-chooser.ts holds the
 // decisions; the components are checked for wiring them that way.
 import { test } from 'node:test'

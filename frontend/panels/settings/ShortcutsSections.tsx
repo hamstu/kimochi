@@ -58,7 +58,7 @@ function LookupKeyRow(): ReactNode {
           ) : (
             <>
               Not needed while{' '}
-              <button type="button" className="k-link" onClick={() => showSettingsTab('ocr')}>
+              <button type="button" className="k-link" onClick={() => showSettingsTab('overlay')}>
                 Click through text to the game
               </button>{' '}
               is off.

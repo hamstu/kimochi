@@ -42,7 +42,7 @@ export type Appearance = (typeof APPEARANCES)[number]
  */
 export type OverlayCardAppearance = 'app' | 'light' | 'dark' | 'blend'
 
-/** Settings → OCR & Overlay → Overlay look (ui/overlay-text.css draws it). */
+/** Settings → Overlay → Overlay appearance (ui/overlay-text.css draws it). */
 export interface OverlayStyleSettings {
   /** The highlight over text that can be hovered: its tint and outline, as `#rrggbb`. */
   color: string
@@ -199,7 +199,7 @@ export interface ScanHistoryEntry {
 }
 
 /**
- * How Read along shows the dictionary (Settings → Game Mode): `popup`, an outline on the game's
+ * How Read along shows the dictionary (Settings → Overlay → Game Mode): `popup`, an outline on the game's
  * text and the dictionary's own pop-up beside it; `fullscreen`, the scan across the top of a
  * dimmed screen and the lit word's dictionary below it (ui/game-dictionary.js). Every engine can
  * be full screen: the Yomitan API's entries are drawn by Kimochi, and every other engine's own
@@ -214,7 +214,7 @@ export interface GameModeSettings {
 export const DEFAULT_GAME_MODE_SETTINGS: GameModeSettings = { dictionaryView: 'popup' }
 
 /**
- * Whether Read along opens the full-screen dictionary: Settings → Game Mode says so, whichever
+ * Whether Read along opens the full-screen dictionary: Settings → Overlay → Game Mode says so, whichever
  * engine is in use (it once also needed the Yomitan API; a caller still passing the engine as a
  * second argument from plain JS is unaffected).
  */
@@ -385,7 +385,7 @@ export const SETTINGS_DEFAULTS: Settings = {
 }
 
 /**
- * What an OCR engine is, for Settings → OCR & Overlay's engine chooser, the sidebar picker and the
+ * What an OCR engine is, for Settings → OCR's engine chooser, the sidebar picker and the
  * overlay. Adding an engine is adding an entry here (and its capability in `ui/capabilities.ts`):
  * the chooser lists every key, in this order, and draws the rest from these fields.
  */

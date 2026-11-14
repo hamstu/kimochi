@@ -1518,6 +1518,13 @@
   font-weight: var(--k-weight-medium);
   color: var(--k-text);
 }
+.k-settings-row-leading {
+  display: grid;
+  flex: none;
+  place-items: center;
+  /* Closer to its own text than the row's gap keeps the control. */
+  margin-right: calc(var(--k-space-3) - var(--k-space-4));
+}
 .k-settings-row-control {
   display: flex;
   flex: none;

@@ -53,5 +53,5 @@ The shared design system for every Kimochi window. Import components from `@kit`
 | `Slider` | Continuous values. |
 | `StepSlider` | 3–5 ordered options on a scale (off → strict): notched track, step names below. |
 | `Badge tone`, `StatusDot tone`, `Callout tone`, `EmptyState`, `Spinner`, `Kbd` | Feedback and status. |
-| `SettingsPage`, `SettingsSection`, `SettingsRow`, `SettingsSubgroup` | Every settings page. |
+| `SettingsPage`, `SettingsSection`, `SettingsRow`, `SettingsSubgroup` | Every settings page. `SettingsRow leading` puts a picture (an avatar, an engine logo) before the label and description, centred beside both. |
 | `SettingsTabs` | Tabs across the top of a settings page with several kinds of settings (Anki), in place of its title; wrap them and a title-less `SettingsPage` in `k-settings-tabbed`. |

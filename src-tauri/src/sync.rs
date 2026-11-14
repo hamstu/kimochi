@@ -381,8 +381,9 @@ fn cycle() -> Duration {
     let _cycle = lock(&engine.cycle);
     *lock(&engine.last_cycle) = Some(Instant::now());
     let Some(target) = account::sync_target() else {
-        // Signed in without Kimochi Cloud is off, like no account; only a lost sign-in asks for one.
-        let state = if account::active_key().is_some() && !account::signed_in() { "signed-out" } else { "off" };
+        // Signed in without Kimochi Cloud is off, like no account or a local one; only a lost sign-in
+        // asks for one.
+        let state = if account::needs_sign_in() { "signed-out" } else { "off" };
         let mut status = lock(&engine.status);
         if status.state != state {
             status.state = state;

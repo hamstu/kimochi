@@ -370,10 +370,21 @@ fn parse_server_mode(value: &str) -> Option<&'static str> {
 
 /// The server mode `KIMOCHI_SERVER` forces, in a debug build only.
 pub fn server_mode_override() -> Option<&'static str> {
-    if !cfg!(debug_assertions) {
+    if !cfg!(debug_assertions) || SERVER_ENV_RELEASED.load(std::sync::atomic::Ordering::SeqCst) {
         return None;
     }
     parse_server_mode(&std::env::var(SERVER_ENV).ok()?)
+}
+
+/// Set once Settings → Account picks the other server, or an account on it is switched to: from
+/// then on `KIMOCHI_SERVER` no longer pins this run (it only chose where the run started).
+static SERVER_ENV_RELEASED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Stop `KIMOCHI_SERVER` pinning the server for the rest of this run. Returns whether it did.
+pub fn release_server_override() -> bool {
+    let pinned = server_mode_override().is_some();
+    SERVER_ENV_RELEASED.store(true, std::sync::atomic::Ordering::SeqCst);
+    pinned
 }
 
 /// `serverSettings.mode` as stored: `local` or `cloud` (anything else reads as cloud).

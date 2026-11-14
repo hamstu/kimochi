@@ -15,7 +15,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
 /// What a scan, read-aloud, translation or explanation says without an account.
-pub const NO_ACCOUNT_OCR: &str = "Kimochi cloud OCR needs a Kimochi account. Sign in from Settings → Account, or choose another OCR engine in Settings → OCR & Overlay.";
+pub const NO_ACCOUNT_OCR: &str = "Kimochi cloud OCR needs a Kimochi account. Sign in from Settings → Account, or choose another OCR engine in Settings → OCR.";
 pub const NO_ACCOUNT_TTS: &str = "Read aloud runs on Kimochi cloud. Sign in from Settings → Account to use it.";
 pub const NO_ACCOUNT_TRANSLATE: &str = "Kimochi cloud translation needs a Kimochi account. Sign in from Settings → Account, or use your own DeepL key in Settings → Translation & AI.";
 pub const NO_ACCOUNT_EXPLAIN: &str = "Explanations from Kimochi cloud need a Kimochi account. Sign in from Settings → Account, or choose the Codex or Claude CLI in Settings → Translation & AI.";

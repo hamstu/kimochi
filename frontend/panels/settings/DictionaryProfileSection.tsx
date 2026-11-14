@@ -1,14 +1,18 @@
 /**
- * Which Built-in Yomitan profile the account in use looks words up through (ui/yomitan-profiles.ts):
- * Settings → Account lets it be chosen; Settings → Language shows it (`readOnly`), with the way
- * to Account. Shown only while Built-in Yomitan is the engine in use. The profiles are Yomitan's,
- * made and edited in its own settings, which the button opens at its Profile section.
+ * Which Built-in Yomitan profile the account in use looks words up through (ui/yomitan-profiles.ts).
+ * Settings → Account chooses it in a small inset under the active account's row
+ * (`AccountDictionaryProfile`); Settings → Language shows it (`DictionaryProfileSection`), with the
+ * way to Account. Both show only while Built-in Yomitan is the engine in use and is downloaded
+ * on this computer (without it there are no profiles to choose). The profiles are
+ * Yomitan's, made and edited in its own settings, which Manage opens at its Profile section.
  */
 import { useState, type ReactNode } from 'react'
 import { Button, Callout, Select, SettingsRow, SettingsSection } from '@kit'
 import { accountSlot } from '@ui/yomitan-profiles'
 import { nativeError } from '../../bridge/tauri'
+import { DictionaryEngineIcon } from '../../components/EngineIcon'
 import { useAccount } from '../../bridge/account'
+import { useExtensionStatus } from '../../bridge/extensions'
 import { openDictionarySettingsSection, useDictionaryEngine } from '../../bridge/dictionaryEngine'
 import { useLanguage } from '../../bridge/useLanguage'
 import {
@@ -20,20 +24,21 @@ import {
 } from '../../bridge/yomitanProfiles'
 import { showSettingsTab } from './showSettingsTab'
 
-export function DictionaryProfileSection({ readOnly = false }: { readOnly?: boolean }): ReactNode {
+/** The account in use's Yomitan profile, and choosing or managing it. */
+function useAccountYomitanProfile() {
   const [engine] = useDictionaryEngine()
+  const download = useExtensionStatus('yomitan')
   const account = useAccount()
   const [language] = useLanguage()
   const published = useYomitanProfiles()
   const links = useProfileLinks()
   const [error, setError] = useState<string | null>(null)
-  if (engine !== 'yomitan') return null
 
   const key = account.profile?.key ?? null
   // Published for this account (an older report, from before a switch, is not shown as its).
   const profiles = published && published.account === accountSlot(key) ? published : null
   const inUse = profiles?.profiles[profiles.current] ?? null
-  const mismatch = inUse && !profileReads(inUse.language, language.code)
+  const mismatch = inUse && !profileReads(inUse.language, language.code) ? inUse : null
 
   const choose = (name: string): void => {
     setError(null)
@@ -46,65 +51,74 @@ export function DictionaryProfileSection({ readOnly = false }: { readOnly?: bool
       setError(`Could not open Yomitan’s settings: ${nativeError(caught).message}`)
     )
   }
+  // Not downloaded (or not yet reported): nothing to choose from, so nothing is shown.
+  const yomitan = engine === 'yomitan' && download?.state === 'ready'
+  return { yomitan, language, profiles, inUse, mismatch, error, choose, manage }
+}
 
-  if (readOnly) {
-    return (
-      <SettingsSection title="Dictionary profile">
-        <SettingsRow
-          label={inUse ? `Yomitan profile: ${inUse.name} (${profileLanguageName(inUse.language)})` : 'Yomitan profile'}
-          description="Each account looks words up with its own Yomitan profile. Choose it in Settings → Account."
-        >
-          <Button size="sm" onClick={() => showSettingsTab('account')}>
-            Account settings
-          </Button>
-        </SettingsRow>
-      </SettingsSection>
-    )
-  }
-
+/** Settings → Language: the profile in use, read-only, with the way to Settings → Account. */
+export function DictionaryProfileSection(): ReactNode {
+  const { yomitan, inUse } = useAccountYomitanProfile()
+  if (!yomitan) return null
   return (
-    <SettingsSection
-      title="Dictionary profile"
-      description="Dictionaries are shared by every account on this computer. Each account uses its own Yomitan profile, which keeps its language and dictionary choices apart."
-    >
+    <SettingsSection title="Dictionaries">
       <SettingsRow
-        label="Yomitan profile"
-        controlId="yomitan-profile"
-        description={
-          profiles ? 'Kimochi switches to it whenever you switch to this account.' : 'Shown once Yomitan has started.'
-        }
+        label={inUse ? `Yomitan profile: ${inUse.name} (${profileLanguageName(inUse.language)})` : 'Yomitan profile'}
+        description="Each account looks words up with its own Yomitan profile. Choose it in Settings → Account."
       >
-        <Select
-          aria-label="Yomitan profile"
-          value={inUse?.name}
-          disabled={!profiles}
-          placeholder="Not started"
-          onValueChange={choose}
-          options={(profiles?.profiles ?? []).map((profile) => ({
-            value: profile.name,
-            label: profile.name,
-            detail: profileLanguageName(profile.language)
-          }))}
-        />
-      </SettingsRow>
-      <SettingsRow label="Profiles" description="Add, rename or remove profiles in Yomitan’s settings.">
-        <Button size="sm" onClick={manage}>
-          Manage profiles
+        <Button size="sm" onClick={() => showSettingsTab('account')}>
+          Account settings
         </Button>
       </SettingsRow>
-      {mismatch && inUse && (
-        <div className="settings-note">
-          <Callout tone="warn">
-            {inUse.name} looks words up in {profileLanguageName(inUse.language)}, and you’re learning {language.name}.
-            Choose another profile, or change its language in Yomitan’s settings.
-          </Callout>
-        </div>
-      )}
-      {error && (
-        <div className="settings-note">
-          <Callout tone="danger">{error}</Callout>
-        </div>
-      )}
     </SettingsSection>
+  )
+}
+
+/**
+ * Settings → Account: the active account's Yomitan profile, in an inset under its row. One line of
+ * explanation, then the profile on one line with Manage beside it.
+ */
+export function AccountDictionaryProfile(): ReactNode {
+  const { yomitan, language, profiles, inUse, mismatch, error, choose, manage } = useAccountYomitanProfile()
+  if (!yomitan) return null
+  return (
+    <div className="account-inset">
+      <div className="account-inset-box">
+        <p className="account-inset-note">
+          {profiles
+            ? 'Lookups use this Yomitan profile while this account is in use.'
+            : 'The Yomitan profile shows once Yomitan has started.'}
+        </p>
+        <div className="account-inset-line">
+          <DictionaryEngineIcon engine="yomitan" className="account-inset-icon" />
+          <span className="account-inset-label" id="account-yomitan-profile">
+            Yomitan profile
+          </span>
+          <Select
+            size="sm"
+            aria-label="Yomitan profile"
+            value={inUse?.name}
+            disabled={!profiles}
+            placeholder="Not started"
+            onValueChange={choose}
+            options={(profiles?.profiles ?? []).map((profile) => ({
+              value: profile.name,
+              label: profile.name,
+              detail: profileLanguageName(profile.language)
+            }))}
+          />
+          <Button size="sm" variant="ghost" onClick={manage}>
+            Manage
+          </Button>
+        </div>
+        {mismatch && (
+          <Callout tone="warn">
+            {mismatch.name} looks words up in {profileLanguageName(mismatch.language)}, and you’re learning{' '}
+            {language.name}. Choose another profile, or change its language in Yomitan’s settings.
+          </Callout>
+        )}
+        {error && <Callout tone="danger">{error}</Callout>}
+      </div>
+    </div>
   )
 }

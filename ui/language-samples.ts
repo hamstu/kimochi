@@ -1,5 +1,5 @@
 /**
- * Sample text for the previews that stand for "your text" (Settings → Overlay look, the capture
+ * Sample text for the previews that stand for "your text" (Settings → Overlay → Overlay appearance, the capture
  * border step's game, the Text Hooker card's example), by the language being read. A language
  * with no sample here is previewed with glyph blocks instead (frontend/components/GlyphBlocks.tsx),
  * so nothing claims to be text in a language it is not.

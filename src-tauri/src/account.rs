@@ -18,6 +18,10 @@
 //! Signing out of an account forgets its token and returns to the Local profile; its profile
 //! stays on disk until "Remove from this computer".
 //!
+//! **Local accounts.** An account can also be kept only on this computer (`kind: "local"`): a
+//! name, an optional picture and a profile of its own that starts empty, with no server, token or
+//! Sync. The Local profile itself can be given a name and picture too (`localProfile`).
+//!
 //! Linking is the server's device flow (`/api/v1/link/start`, then `/api/v1/link/poll` every
 //! `interval` seconds on a thread of its own) with the confirmation page opened in the browser.
 //! The `kimochi://account` URL the website's "Open Kimochi" button carries is handled here too.
@@ -35,12 +39,24 @@ const TOKENS: &str = "accounts";
 /// Files of the single sign-in per server that earlier versions kept; imported once.
 const LEGACY: &[(&str, &str)] = &[("account.json", "cloud"), ("account-local.json", "local")];
 const USER_AGENT: &str = "Kimochi/0.1";
+/// `Entry::kind` of an account kept only on this computer.
+const LOCAL_KIND: &str = "local";
+/// The longest name a local account takes, in characters.
+const NAME_MAX: usize = 40;
+/// The largest picture a local account keeps, as a `data:` URL (the webview shrinks it first).
+const AVATAR_MAX: usize = 400_000;
+/// An add of the same local account again within this long is the same request twice.
+const REPEAT_ADD_MS: u64 = 3_000;
 
 /// One account signed in to on this computer (or signed out of, keeping its profile).
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub key: String,
+    /// `local`: kept only on this computer (no server, token or Sync; `mode` is empty). Empty: a
+    /// Kimochi account on `mode`'s server.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
     /// `cloud` or `local`: which built-in server.
     pub mode: String,
     pub user_id: String,
@@ -58,6 +74,17 @@ impl Entry {
     pub fn base(&self) -> &'static str {
         settings::base_for_mode(&self.mode)
     }
+
+    /// Kept only on this computer: never signed in, never synced.
+    pub fn is_local(&self) -> bool {
+        self.kind == LOCAL_KIND
+    }
+
+    /// What the sync log calls it.
+    fn name(&self) -> String {
+        let user = &self.user;
+        user["email"].as_str().or_else(|| user["displayName"].as_str()).unwrap_or(&self.key).to_string()
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -70,6 +97,9 @@ struct Index {
     active: Option<String>,
     #[serde(default)]
     accounts: Vec<Entry>,
+    /// The Local profile's name and picture (`displayName`, `avatarUrl`), when given.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    local_profile: Value,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -197,6 +227,7 @@ fn migrate_legacy(data_dir: &Path, local_dir: &Path, current_mode: &str) -> (Ind
         }
         index.accounts.push(Entry {
             key: key.clone(),
+            kind: String::new(),
             mode: (*mode).to_string(),
             user_id,
             user,
@@ -317,7 +348,7 @@ fn token_of(key: &str) -> Option<String> {
 /// The account token for the server in use, if the active account is signed in there. Only for
 /// request headers.
 pub fn token() -> Option<String> {
-    let entry = active_entry()?;
+    let entry = active_entry().filter(|e| !e.is_local())?;
     if entry.base() != base().ok()? {
         return None;
     }
@@ -326,6 +357,11 @@ pub fn token() -> Option<String> {
 
 pub fn signed_in() -> bool {
     token().is_some()
+}
+
+/// A Kimochi account is in use but its sign-in is gone (not a local account, which has none).
+pub fn needs_sign_in() -> bool {
+    active_entry().is_some_and(|e| !e.is_local()) && !signed_in()
 }
 
 /// Whether a cached user has Kimochi Cloud: the server's `cloud` flag, or for a user cached
@@ -369,6 +405,21 @@ fn server_value(mode: &str) -> Value {
     json!({ "mode": mode, "url": settings::base_for_mode(mode), "forced": settings::server_mode_override().is_some() })
 }
 
+/// The language a profile reads (`None`: the Local profile): the live setting for the profile in
+/// use, else what its saved preferences say, else the default.
+fn profile_language(account: &Account, key: Option<&str>, active: Option<&str>) -> String {
+    let saved = if key == active {
+        account.app.try_state::<Shared>().and_then(|s| s.settings.get("language").ok().flatten())
+    } else {
+        profile::read_json(&profile::profile_dir(&account.local_dir, key).join(profile::SETTINGS_FILE))
+            .and_then(|prefs| prefs.get("language").cloned())
+    };
+    saved
+        .and_then(|v| v.as_str().map(str::to_string))
+        .or_else(|| settings::defaults()["language"].as_str().map(str::to_string))
+        .unwrap_or_else(|| "ja".into())
+}
+
 /// What the webviews may know: never a token.
 fn status_value() -> Value {
     let Some(account) = ACCOUNT.get() else {
@@ -386,18 +437,22 @@ fn status_value() -> Value {
     let accounts: Vec<Value> = accounts
         .into_iter()
         .map(|e| {
+            let local = e.is_local();
             json!({
                 "key": e.key,
+                "kind": if local { "local" } else { "cloud" },
+                "language": profile_language(account, Some(&e.key), index.active.as_deref()),
                 "user": e.user,
-                "server": server_value(&e.mode),
-                "signedIn": read_token(&account.data_dir, &e.key).is_some(),
+                "server": if local { Value::Null } else { server_value(&e.mode) },
+                "signedIn": !local && read_token(&account.data_dir, &e.key).is_some(),
                 "active": Some(&e.key) == index.active.as_ref(),
-                // A forced server (KIMOCHI_SERVER) rules out the other server's accounts.
-                "available": settings::server_mode_override().is_none_or(|m| m == e.mode),
+                // Switching to an account on the other server releases KIMOCHI_SERVER's pin.
+                "available": true,
             })
         })
         .collect();
-    let signed_in = active.is_some_and(|e| read_token(&account.data_dir, &e.key).is_some());
+    let active_cloud = active.filter(|e| !e.is_local());
+    let signed_in = active_cloud.is_some_and(|e| read_token(&account.data_dir, &e.key).is_some());
     json!({
         "signedIn": signed_in,
         // Kimochi Cloud (a trial, a plan, lifetime or a grant): what shows its features.
@@ -405,13 +460,15 @@ fn status_value() -> Value {
         "user": active.map(|e| e.user.clone()),
         "usage": active.and_then(|e| e.usage.clone()),
         "linking": linking,
-        "server": server_value(active.map(|e| e.mode.as_str()).unwrap_or(current_mode)),
+        "server": server_value(active_cloud.map(|e| e.mode.as_str()).unwrap_or(current_mode)),
         "linkServer": server_value(link_mode),
         "accounts": accounts,
+        "localProfile": index.local_profile,
+        "localLanguage": profile_language(account, None, index.active.as_deref()),
         "profile": {
             "key": index.active,
             "root": profile::profile_root(index.active.as_deref()),
-            "needsSignIn": active.is_some() && !signed_in,
+            "needsSignIn": active_cloud.is_some() && !signed_in,
         },
         "switching": account.switching_flag.load(Ordering::SeqCst),
     })
@@ -619,7 +676,7 @@ fn load_profile_settings(
 /// The server in use follows the active account.
 fn follow_server(entry: &Entry) {
     let Ok(store) = settings_store() else { return };
-    if settings::server_mode_override().is_some() || settings::server_mode(&store) == entry.mode {
+    if entry.is_local() || settings::server_mode_override().is_some() || settings::server_mode(&store) == entry.mode {
         return;
     }
     if store.set("serverSettings.mode", json!(entry.mode)).is_ok() {
@@ -642,6 +699,10 @@ fn prepare_profile(account: &Account, entry: &Entry) -> Result<(), String> {
         return Ok(());
     }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if entry.is_local() {
+        // A local account starts empty, with the default preferences; nothing to fetch.
+        return profile::write_json(&dir.join(profile::SETTINGS_FILE), &profile::profile_part(&settings::defaults()));
+    }
     let who = entry.user["email"].as_str().unwrap_or(&entry.user_id).to_string();
     let token = read_token(&account.data_dir, &entry.key);
     let remote = token.as_deref().map(|t| server_status(entry.base(), t));
@@ -700,11 +761,14 @@ fn activate(target: Option<String>) -> Result<(), String> {
         None => None,
     };
     if let (Some(forced), Some(entry)) = (settings::server_mode_override(), &entry) {
-        if entry.mode != forced {
-            return Err(format!(
-                "invalid: {}={forced} picks the server for this run; that account is on the other one",
-                settings::SERVER_ENV
-            ));
+        if !entry.is_local() && entry.mode != forced && settings::release_server_override() {
+            sync::log(
+                "account",
+                &format!(
+                    "{}={forced} no longer pins the server: switching to an account on the other one",
+                    settings::SERVER_ENV
+                ),
+            );
         }
     }
     account.switching_flag.store(true, Ordering::SeqCst);
@@ -733,10 +797,7 @@ fn activate(target: Option<String>) -> Result<(), String> {
         if let Some(entry) = &entry {
             follow_server(entry);
         }
-        let name = entry
-            .as_ref()
-            .map(|e| e.user["email"].as_str().unwrap_or(&e.key).to_string())
-            .unwrap_or_else(|| "Local (no account)".into());
+        let name = entry.as_ref().map(Entry::name).unwrap_or_else(|| "Local (no account)".into());
         sync::log("profile", &format!("Switched to {name}"));
         Ok(())
     });
@@ -937,6 +998,7 @@ fn approved(base: &str, token: String, user: Value) -> Result<(), String> {
             Some(entry) => entry.user = user,
             None => index.accounts.push(Entry {
                 key: key.clone(),
+                kind: String::new(),
                 mode: mode.to_string(),
                 user_id,
                 user,
@@ -1058,7 +1120,7 @@ pub fn account_link_cancel() -> Result<Value, String> {
 
 /// Development builds only: the server "Add account" signs in to (`accountLinkServer`). Signed
 /// out, it is also the server in use. Accounts carry their own server, so switching to one
-/// follows it regardless.
+/// follows it regardless. Choosing the other server than `KIMOCHI_SERVER` releases its pin.
 #[tauri::command]
 pub fn account_set_server(mode: String) -> Result<Value, String> {
     if !cfg!(debug_assertions) {
@@ -1067,11 +1129,8 @@ pub fn account_set_server(mode: String) -> Result<Value, String> {
     if mode != "cloud" && mode != "local" {
         return Err(format!("invalid: unknown server mode {mode:?} (cloud or local)"));
     }
-    if let Some(forced) = settings::server_mode_override() {
-        return Err(format!(
-            "invalid: {}={forced} picks the server for this run; unset it to switch here",
-            settings::SERVER_ENV
-        ));
+    if settings::server_mode_override().is_some_and(|forced| forced != mode) {
+        settings::release_server_override();
     }
     let account = account()?;
     let store = settings_store()?;
@@ -1079,7 +1138,8 @@ pub fn account_set_server(mode: String) -> Result<Value, String> {
         link_event("cancelled", &code, None);
     }
     store.set("accountLinkServer", json!(mode))?;
-    if active_key().is_none() {
+    // With no Kimochi account in use, it is also the server in use.
+    if active_entry().filter(|e| !e.is_local()).is_none() {
         store.set("serverSettings.mode", json!(mode))?;
         let value = store.get("serverSettings").ok().flatten().unwrap_or_else(|| json!({ "mode": mode }));
         let _ = account.app.emit("settings:changed", json!({ "key": "serverSettings", "value": value }));
@@ -1100,6 +1160,9 @@ pub fn account_status() -> Value {
 pub async fn account_sign_out(key: Option<String>) -> Result<Value, String> {
     let key = key.or_else(active_key).ok_or("invalid: no account is signed in")?;
     let entry = entry_for(&key).ok_or("invalid: that account is not on this computer")?;
+    if entry.is_local() {
+        return Err("invalid: a local account has no sign-in to sign out of".into());
+    }
     let account = account()?;
     let token = read_token(&account.data_dir, &key);
     if active_key().as_deref() == Some(key.as_str()) {
@@ -1130,10 +1193,12 @@ pub async fn account_sign_out(key: Option<String>) -> Result<Value, String> {
 /// account, on the server).
 #[tauri::command]
 pub async fn account_remove(key: String) -> Result<Value, String> {
-    if entry_for(&key).is_none() {
-        return Err("invalid: that account is not on this computer".into());
+    let entry = entry_for(&key).ok_or("invalid: that account is not on this computer")?;
+    if !entry.is_local() {
+        account_sign_out(Some(key.clone())).await?;
+    } else if active_key().as_deref() == Some(key.as_str()) {
+        tauri::async_runtime::spawn_blocking(|| activate(None)).await.map_err(|e| e.to_string())??;
     }
-    account_sign_out(Some(key.clone())).await?;
     let account = account()?;
     let dir = profile::profile_dir(&account.local_dir, Some(&key));
     if dir.starts_with(account.local_dir.join(profile::PROFILES_DIR)) && dir.exists() {
@@ -1157,10 +1222,121 @@ pub async fn account_refresh() -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(refresh_blocking).await.map_err(|e| e.to_string())?
 }
 
+/// The account page on the website: of `key`'s server (default: the account in use, else the
+/// server in use).
 #[tauri::command]
-pub fn account_open_web(app: AppHandle) -> Result<(), String> {
-    let base = active_entry().map(|e| e.base().to_string()).map_or_else(base, Ok)?;
+pub fn account_open_web(app: AppHandle, key: Option<String>) -> Result<(), String> {
+    let entry = match key {
+        Some(key) => Some(entry_for(&key).ok_or("invalid: that account is not on this computer")?),
+        None => active_entry().filter(|e| !e.is_local()),
+    };
+    if entry.as_ref().is_some_and(Entry::is_local) {
+        return Err("invalid: a local account has no page on the website".into());
+    }
+    let base = entry.map(|e| e.base().to_string()).map_or_else(base, Ok)?;
     open_in_browser(&app, &format!("{base}/account"))
+}
+
+// ---------------------------------------------------------------- local accounts
+
+/// A name for a local account: trimmed, not empty, at most `NAME_MAX` characters.
+fn clean_name(name: &str) -> Result<String, String> {
+    let name: String = name.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(NAME_MAX).collect();
+    if name.is_empty() {
+        return Err("invalid: give the account a name".into());
+    }
+    Ok(name)
+}
+
+/// A picture for a local account: a PNG, JPEG or WebP `data:` URL of at most `AVATAR_MAX` bytes,
+/// or none.
+fn clean_avatar(avatar: Option<String>) -> Result<Option<String>, String> {
+    let Some(avatar) = avatar.map(|a| a.trim().to_string()).filter(|a| !a.is_empty()) else { return Ok(None) };
+    const TYPES: &[&str] = &["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"];
+    if !TYPES.iter().any(|t| avatar.starts_with(t)) {
+        return Err("invalid: the picture must be a PNG, JPEG or WebP image".into());
+    }
+    if avatar.len() > AVATAR_MAX {
+        return Err("invalid: that picture is too large".into());
+    }
+    Ok(Some(avatar))
+}
+
+/// The `user` a local account shows, in the shape of a Kimochi account's.
+fn local_user(key: &str, name: &str, avatar: Option<&str>) -> Value {
+    json!({ "id": key, "email": null, "displayName": name, "avatarUrl": avatar, "plan": "free", "status": "active" })
+}
+
+/// A fresh key for a local account: `device-` and 16 random hex digits (never a server's
+/// `cloud-` or `local-` key).
+fn new_local_key() -> Result<String, String> {
+    let mut bytes = [0u8; 8];
+    getrandom::getrandom(&mut bytes).map_err(|e| format!("native: {e}"))?;
+    Ok(format!("device-{}", bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()))
+}
+
+/// Add an account kept only on this computer, with an empty profile of its own, and switch to it.
+#[tauri::command]
+pub async fn account_create_local(name: String, avatar: Option<String>) -> Result<Value, String> {
+    let name = clean_name(&name)?;
+    let avatar = clean_avatar(avatar)?;
+    let account = account()?;
+    let key = new_local_key()?;
+    {
+        let mut index = lock(&account.index);
+        if repeated_add(&index.accounts, &name, now_ms()) {
+            return Ok(status_value());
+        }
+        index.accounts.push(Entry {
+            key: key.clone(),
+            kind: LOCAL_KIND.to_string(),
+            mode: String::new(),
+            user_id: key.clone(),
+            user: local_user(&key, &name, avatar.as_deref()),
+            usage: None,
+            added_at: now_ms(),
+            last_used_at: now_ms(),
+        });
+        save_index(&account.data_dir, &index)?;
+    }
+    sync::log("profile", &format!("Added the local account {name}"));
+    tauri::async_runtime::spawn_blocking(move || activate(Some(key))).await.map_err(|e| e.to_string())??;
+    Ok(status_value())
+}
+
+/// Whether a local account named `name` was added a moment ago (a double click or Enter).
+fn repeated_add(accounts: &[Entry], name: &str, now: u64) -> bool {
+    accounts.iter().any(|e| {
+        e.is_local() && e.user["displayName"].as_str() == Some(name) && now.saturating_sub(e.added_at) < REPEAT_ADD_MS
+    })
+}
+
+/// Rename a local account and set or clear its picture; `key` null is the Local profile.
+#[tauri::command]
+pub fn account_update_local(key: Option<String>, name: String, avatar: Option<String>) -> Result<Value, String> {
+    let name = clean_name(&name)?;
+    let avatar = clean_avatar(avatar)?;
+    let account = account()?;
+    {
+        let mut index = lock(&account.index);
+        match &key {
+            Some(key) => {
+                let entry = index
+                    .accounts
+                    .iter_mut()
+                    .find(|e| &e.key == key)
+                    .ok_or("invalid: that account is not on this computer")?;
+                if !entry.is_local() {
+                    return Err("invalid: a Kimochi account's name and picture change on the website".into());
+                }
+                entry.user = local_user(key, &name, avatar.as_deref());
+            }
+            None => index.local_profile = json!({ "displayName": name, "avatarUrl": avatar }),
+        }
+        save_index(&account.data_dir, &index)?;
+    }
+    announce();
+    Ok(status_value())
 }
 
 /// "Open browser again" while linking.
@@ -1191,6 +1367,47 @@ mod tests {
         assert!(is_plan_required(403, r#"{"error":"plan_required","message":"x"}"#));
         assert!(!is_plan_required(403, r#"{"error":"forbidden"}"#));
         assert!(!is_plan_required(402, r#"{"error":"plan_required"}"#));
+    }
+
+    #[test]
+    fn local_account_names_and_pictures_are_checked() {
+        assert_eq!(clean_name("  Spanish   practice ").unwrap(), "Spanish practice");
+        assert!(clean_name("   ").is_err());
+        assert_eq!(clean_name(&"あ".repeat(60)).unwrap().chars().count(), NAME_MAX);
+        assert_eq!(clean_avatar(None).unwrap(), None);
+        assert_eq!(clean_avatar(Some(" ".into())).unwrap(), None);
+        assert!(clean_avatar(Some("data:image/png;base64,AAAA".into())).unwrap().is_some());
+        assert!(clean_avatar(Some("https://example.com/a.png".into())).is_err());
+        assert!(clean_avatar(Some("data:image/svg+xml;base64,AAAA".into())).is_err());
+        assert!(clean_avatar(Some(format!("data:image/png;base64,{}", "A".repeat(AVATAR_MAX)))).is_err());
+    }
+
+    #[test]
+    fn local_account_keys_are_their_own() {
+        let key = new_local_key().unwrap();
+        assert!(key.starts_with("device-") && key.len() == "device-".len() + 16);
+        assert_ne!(key, new_local_key().unwrap());
+        let entry = Entry { key: key.clone(), kind: LOCAL_KIND.into(), ..Default::default() };
+        assert!(entry.is_local());
+        // An index written before local accounts existed reads as Kimochi accounts.
+        let old: Entry = serde_json::from_value(json!({ "key": "cloud-u1", "mode": "cloud", "userId": "u1" })).unwrap();
+        assert!(!old.is_local());
+        assert!(serde_json::to_value(&old).unwrap().get("kind").is_none());
+    }
+
+    #[test]
+    fn the_same_local_account_added_twice_at_once_is_added_once() {
+        let entry = |name: &str, added_at: u64| Entry {
+            key: "device-1".into(),
+            kind: LOCAL_KIND.into(),
+            user: local_user("device-1", name, None),
+            added_at,
+            ..Default::default()
+        };
+        let accounts = [entry("Hamish Local", 10_000)];
+        assert!(repeated_add(&accounts, "Hamish Local", 10_094), "94 ms later: the same click");
+        assert!(!repeated_add(&accounts, "Hamish Local", 10_000 + REPEAT_ADD_MS), "later on purpose");
+        assert!(!repeated_add(&accounts, "Spanish", 10_094), "another name");
     }
 
     #[test]

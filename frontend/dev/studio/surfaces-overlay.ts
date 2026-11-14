@@ -80,7 +80,7 @@ const TEXT: ControlGroup = {
       param: 'highlight',
       label: 'Highlight colour (rrggbb)',
       placeholder: '3e63dd',
-      help: 'Settings → OCR & Overlay → Overlay look: the tint and outline over hoverable text.'
+      help: 'Settings → Overlay → Overlay appearance: the tint and outline over hoverable text.'
     },
     {
       kind: 'select',

@@ -1,7 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
-const { overrides, textHookOn, withSetting } = await load('hook-games.ts')
+const { hookCardShow, overrides, textHookOn, withSetting } = await load('hook-games.ts')
+
+test('the card shows always, only with the lookup key held, or never; older settings read as before', () => {
+  assert.equal(hookCardShow(undefined), 'always', 'shown unless turned off')
+  assert.equal(hookCardShow(true), 'always')
+  assert.equal(hookCardShow(false), 'never', 'the switch turned off, before there was a choice')
+  assert.equal(hookCardShow('hold'), 'hold')
+  assert.equal(hookCardShow('never'), 'never')
+  assert.equal(hookCardShow('sometimes'), 'always', 'anything else is the default')
+})
 
 test('a game value equal to the default is not a change', () => {
   assert.equal(overrides({ autoAlign: true }, 'autoAlign'), false)

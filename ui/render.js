@@ -776,7 +776,7 @@ export class TextOverlayRenderer {
   }
 
   /**
-   * The look (Settings → OCR & Overlay → Overlay look): the highlight colour, `#rrggbb`, and
+   * The look (Settings → Overlay → Overlay appearance): the highlight colour, `#rrggbb`, and
    * the cards' appearance, light, dark or blend. Set on the container, where overlay-text.css reads
    * them; everything drawn, or still to be drawn, follows.
    */

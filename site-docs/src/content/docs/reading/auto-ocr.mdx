@@ -32,7 +32,7 @@ Which engine watches depends on the one you read with:
   text, so a moving background can also set it off. Download PaddleOCR in
   [OCR engines](/reading/ocr-engines/#paddleocr) to watch the text instead.
 
-**Settings → OCR & Overlay → Auto OCR** names the watcher under the switch. When the watcher is slow
+**Settings → OCR → Auto OCR** names the watcher under the switch. When the watcher is slow
 (PaddleOCR on a CPU, say), Auto OCR looks less often, leaving more of the processor to your game.
 
 The Log's activity ticker says what each scan did; click it for the recent history.
@@ -43,7 +43,7 @@ If scans fail several times in a row, Auto OCR pauses.
 
 ## Settings
 
-Open **Advanced options** (the arrow beside it) under **Settings → OCR & Overlay → Auto OCR**:
+Open **Advanced options** (the arrow beside it) under **Settings → OCR → Auto OCR**:
 
 | Setting | Options | Default | What it does |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ Open **Advanced options** (the arrow beside it) under **Settings → OCR & Overl
 | **Minimum time between requests** | No limit, 0.8, 1.2 or 3 seconds | 1.2 seconds | A floor on how often the OCR engine is called. Lines that arrive during the wait are not queued; only the latest is kept. |
 | **Base poll interval** | 250 ms – 5 s | 500 ms | How often to check for screen changes (the starting interval with adaptive polling). |
 
-<Screenshot id="settings-auto-ocr" alt="Settings, OCR & Overlay, scrolled to Auto OCR with its Advanced options open." width={760} />
+<Screenshot id="settings-auto-ocr" alt="Settings, OCR, scrolled to Auto OCR with its Advanced options open." width={760} />
 
 ## Scan after a button press
 

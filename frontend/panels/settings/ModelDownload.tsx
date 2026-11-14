@@ -1,5 +1,5 @@
 /**
- * Settings → OCR & Overlay → a local engine's detail panel (`EngineChooser`): its model. One
+ * Settings → OCR → a local engine's detail panel (`EngineChooser`): its model. One
  * progress bar, one status line under it ("Downloading Manga OCR · 212 MB of 539 MB", "Paused at
  * 40%", "Ready · 539 MB"), and the actions that make sense now: Download, Pause, Resume, Retry or
  * Cancel. Download is offered here without a further dialog: the button, which names the size,

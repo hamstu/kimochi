@@ -5,7 +5,7 @@
  *
  * The renderer sets three things on its container (`#words`): `data-ocr-theme`, light, dark or
  * blend, for the cards; `--ocr-hl-rgb`, the highlight colour as "r, g, b"; and `--ocr-hl-strength`, how
- * strong the highlight is, 1 at the default opacity (all three from Settings → Overlay look).
+ * strong the highlight is, 1 at the default opacity (all three from Settings → Overlay → Overlay appearance).
  * For a language other than Japanese it also sets `lang` and `--kimochi-text-font`, the language's
  * fonts (language-style.ts), which the text below is drawn in; Japanese leaves both unset, so its
  * own stack below applies, exactly as before the language setting existed.

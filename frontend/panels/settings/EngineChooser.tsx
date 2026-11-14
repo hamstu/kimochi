@@ -1,5 +1,5 @@
 /**
- * Settings → OCR & Overlay → Engine (and onboarding's OCR step): a list of the OCR engines beside
+ * Settings → OCR → Engine (and onboarding's OCR step): a list of the OCR engines beside
  * a panel about one of them.
  *
  * Two ideas, kept apart:

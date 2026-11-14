@@ -1,4 +1,4 @@
-/* Settings → OCR & Overlay (OcrTab.tsx): the Advanced options chevron turns like the furigana filter's. */
+/* Settings → OCR (OcrTab.tsx): the Advanced options chevron turns like the furigana filter's. */
 
 .ocr-disclosure svg {
   transition: transform var(--k-fast) var(--k-ease-out);

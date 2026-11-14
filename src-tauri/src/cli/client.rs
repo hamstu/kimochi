@@ -211,8 +211,8 @@ Names match exactly, or as the only session containing the words, ignoring case.
 Usage: kimochi open [log|notebook|anki|settings [<page>]|sources|mini|dictionary]
 
 Start Kimochi if it isn't running, and bring a window forward: the main window (as it was, by
-default; on the Log, the Notebook or the Anki tab when named), Settings (optionally on a page: general, sources, ocr, log, dictionary, anki, assist,
-controls, gamemode, account, cli, about), the source picker, Mini mode, or the dictionary's own
+default; on the Log, the Notebook or the Anki tab when named), Settings (optionally on a page: account, general, language, sources, ocr, overlay,
+log, dictionary, anki, assist, controls, cli, browser, about), the source picker, Mini mode, or the dictionary's own
 settings.",
         "quit" => "Usage: kimochi quit\n\nQuit Kimochi, as Quit Kimochi in the tray menu does. Nothing happens when it isn't running.",
         "settings" => "\
