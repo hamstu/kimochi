@@ -38,6 +38,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Adding a local account no longer freezes Kimochi.** Every window could stop responding right after the new account was added, with the Log stuck at "Loading the log…" until Kimochi was restarted.
 - **The Text Hooker's card sits exactly on the game's text with Auto align.** It was a pixel or two to the right and above it, by more with some OCR engines than others, and a line starting with 「 or without one could be off by more. The card now lines up its own glyphs with the game's, line by line, with every OCR engine.
 - **Voices hooked from SiglusEngine games, and others like them, are used again, each on its own line.** When a game's voices were heard twice (as the sound playing and as the file read), or its script played the same few sound effects with its lines, Kimochi couldn't tell which was the voice: it fell back to recording everything playing, music and all, or gave a line the start of the next line's voice. Lines read in the first minute of a game, before its voices are known, no longer keep a guess from the recording once they are. A soft or breathy voiced line is no longer passed over for the recording, and a short line's clip no longer runs on for seconds of near-silence after it.
 - **Linux: Text Hooker works with games run through Flatpak apps** like Bottles, Lutris, Heroic or Flathub's Steam, where it used to get stuck on "Starting…". If a game can't be hooked, it now says why.
