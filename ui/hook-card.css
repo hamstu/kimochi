@@ -337,3 +337,23 @@
 .hook-card[data-example] :is(.hook-card-text, .hook-card-text-ghost) {
   opacity: 0.85;
 }
+
+/* A manually placed hooked card stays scannable without painting over the game. Auto align
+   uses the OCR renderer instead. Keep computed color/opacity readable to dictionary scanners. */
+[data-overlay-invisible] .hook-card,
+[data-overlay-invisible] .hook-card * {
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+[data-overlay-invisible] .hook-card::before,
+[data-overlay-invisible] .hook-card::after,
+[data-overlay-invisible] .hook-card-text::before {
+  content: none !important;
+}
+[data-overlay-invisible] .hook-card :is(.hook-card-bar, .hook-card-controls, .hook-card-resize, .hook-card-menu) {
+  display: none;
+}
+[data-overlay-invisible] .hook-card ::selection {
+  background: transparent;
+  -webkit-text-fill-color: transparent;
+}

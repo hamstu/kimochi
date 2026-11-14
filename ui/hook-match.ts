@@ -21,7 +21,8 @@
  *
  * No match is a result too: the caller then shows the line in its fallback box.
  */
-import type { OcrGroup } from './ocr-result.js'
+import { remapHookSegments } from './hook-anchors.js'
+import type { OcrGroup, Segment } from './ocr-result.js'
 import type { Annotation } from './geometry.js'
 
 /** Characters that never decide a match (whitespace and punctuation, which OCR drops or misreads). */
@@ -154,7 +155,8 @@ function lineRuns(group: OcrGroup): OcrGroup[] {
         text: lines.slice(from, to + 1).join('\n'),
         bbox: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
         linePolygons: polygons.slice(from, to + 1),
-        lines: lines.slice(from, to + 1)
+        lines: lines.slice(from, to + 1),
+        lineSegments: group.lineSegments?.slice(from, to + 1)
       })
     }
   }
@@ -250,6 +252,8 @@ export function placeHookedLine(groups: OcrGroup[], hooked: string, spaces = fal
   const lines = run.flatMap(groupLines)
   const polygons = run.flatMap((g) => g.linePolygons ?? [])
   const boxes = run.map((g) => g.bbox!)
+  const correctedLines = polygons.length === lines.length ? splitAcrossLines(hooked, lines, spaces) : undefined
+  const sourceSegments = run.flatMap((group) => groupLines(group).map((_, index) => group.lineSegments?.[index] ?? []))
   const id = `hook:${run.map((g) => g.id).join('+')}`
   const placed: OcrGroup = {
     ...run[0],
@@ -262,9 +266,9 @@ export function placeHookedLine(groups: OcrGroup[], hooked: string, spaces = fal
       Math.max(...boxes.map((b) => b[3]))
     ],
     linePolygons: polygons.length === lines.length ? polygons : run[0].linePolygons,
-    lines: polygons.length === lines.length ? splitAcrossLines(hooked, lines, spaces) : undefined,
-    // OCR's word boxes belong to OCR's text, not the hooked text.
-    lineSegments: undefined,
+    lines: correctedLines,
+    // Replace OCR misreads in place, retaining every word's independent coordinate anchor.
+    lineSegments: correctedLines?.map((line, index) => remapHookSegments(line, sourceSegments[index] ?? [])),
     inferred: undefined
   }
   // A run of a group's lines takes the group's place.
@@ -310,7 +314,22 @@ export function annotationGroups(annotations: Annotation[]): OcrGroup[] {
         bbox: boxOf(a),
         orientation: a.orientation === 'vertical' ? 'vertical' : 'horizontal',
         linePolygons: a.linePolygons?.length ? a.linePolygons : [polygon(boxOf(a))],
-        lines: a.lineTexts?.length ? a.lineTexts : undefined
+        lines: a.lineTexts?.length ? a.lineTexts : undefined,
+        lineSegments:
+          a.lineSegments?.map((line) =>
+            line.map((segment) => ({
+              text: segment.text,
+              bbox: [...segment.bbox] as Segment['bbox']
+            }))
+          ) ??
+          (a.segments?.length
+            ? [
+                a.segments.map((segment) => ({
+                  text: segment.text,
+                  bbox: [...segment.bbox] as Segment['bbox']
+                }))
+              ]
+            : undefined)
       })
       return
     }
@@ -363,6 +382,15 @@ export function annotationGroups(annotations: Annotation[]): OcrGroup[] {
       ],
       orientation: vertical ? 'vertical' : 'horizontal',
       linePolygons: rowBoxes.map(polygon),
+      lineSegments: rows.map((row) =>
+        [...row]
+          .sort((a, b) => along(a) - along(b))
+          .flatMap((member) =>
+            member.segments?.length
+              ? member.segments.map((segment) => ({ text: segment.text, bbox: [...segment.bbox] as Segment['bbox'] }))
+              : [{ text: member.description, bbox: boxOf(member) }]
+          )
+      ),
       lines
     })
   }
@@ -568,6 +596,7 @@ function blockOf(group: OcrGroup, annotations: Annotation[]): Ann {
     orientation: group.orientation,
     isVertical: group.orientation === 'vertical',
     linePolygons: group.linePolygons,
+    ...(group.lineSegments ? { lineSegments: group.lineSegments } : {}),
     ...(group.lines ? { lineTexts: group.lines } : {}),
     ...(source?.inkMargin ? { inkMargin: source.inkMargin } : {}),
     ...(source?.typeface ? { typeface: source.typeface } : {}),

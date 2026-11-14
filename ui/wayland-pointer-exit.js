@@ -14,10 +14,13 @@ export function installWaylandPointerExit(win, { leave, enter = () => {}, dismis
   const exit = () => {
     leave()
     if (timer !== null) return
+    const grace = typeof delay === 'function' ? delay() : delay
+    // Zero keeps the dictionary open until a lookup or explicit dismissal replaces it.
+    if (grace === 0) return
     timer = win.setTimeout(() => {
       timer = null
       dismiss()
-    }, delay)
+    }, grace)
   }
   const domEnter = () => {
     // WebKit can deliver queued/synthetic moves after the native surface exit.

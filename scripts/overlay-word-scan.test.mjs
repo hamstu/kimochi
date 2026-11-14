@@ -220,3 +220,34 @@ test("a selection over the joiner extends the box with the next line's word", ()
   ]
   assert.deepEqual(selectionExtension('食べました', 0, japanese), { extension: 'ました', consumed: [1] })
 })
+
+test('OCR-anchored hook text stays scannable across word boxes and wrapped rows', async () => {
+  const { hookAnnotations } = await load('hook-match.ts')
+  const { hookGeometryAnnotations } = await load('hook-anchors.ts')
+  const hooked = '今日は自転車で行った'
+  const ocr = block([
+    [
+      ['今日は自', 96],
+      ['転', 24]
+    ],
+    [
+      ['車', 24],
+      ['で行った', 96]
+    ]
+  ])
+  const placed = hookAnnotations(ocr, hooked, { speakers: false })
+  const anchored = hookGeometryAnnotations(placed.annotations, placed.names)
+  const { host, renderer } = draw(modules, { annotations: anchored })
+  const nodes = textNodes(host.children[0])
+  assert.equal(nodes.map((node) => node.textContent).join(''), hooked)
+  const map = new Map()
+  toDom(host.children[0], map)
+  const start = nodes.find((node) => node.textContent === '転')
+  assert.ok(start, 'the word spanning rows is laid out as independently anchored runs')
+  assert.match(scan(map.get(start), 0, 6), /^転車で行った/)
+  const last = nodes.find((node) => node.textContent === 'で行った')
+  assert.ok(last)
+  // Sentence context scans backwards across elements; word-mode scans intentionally stop there.
+  assert.equal(new DOMTextScanner(map.get(last), 0, false, true, false).seek(-20).content, '今日は自転車')
+  renderer.destroy()
+})

@@ -30,6 +30,8 @@ export interface Annotation {
   lineSegments?: { text: string; bbox: number[] }[][]
   /** For a block: per line, its text, when the engine read each line on its own. */
   lineTexts?: string[]
+  /** Fit each measured word independently; used by invisible hooked-text overlays. */
+  anchorSegments?: boolean
   /** For a line or word: its characters (or words) with their boxes. */
   segments?: { text: string; bbox: number[] }[]
   /** How far outside the ink the engine draws boxes, in ems (INK_MARGINS in ocr-result.ts). */
@@ -56,6 +58,8 @@ export type MappedBox = Rect & {
   lines?: Rect[]
   lineSegments?: MappedSegment[][]
   lineTexts?: string[]
+  /** Fit each measured word independently; used by invisible hooked-text overlays. */
+  anchorSegments?: boolean
   segments?: MappedSegment[]
   inkMargin?: number[]
   typeface?: string
@@ -153,6 +157,7 @@ export function mapAnnotations(info: FrameInfo, annotations: Annotation[], origi
         text: a.description,
         ...(a.orientation !== undefined ? { orientation: a.orientation } : {}),
         ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}),
+        ...(a.anchorSegments ? { anchorSegments: true } : {}),
         ...(a.granularity !== undefined ? { granularity: a.granularity } : {}),
         ...(a.groupId !== undefined ? { groupId: a.groupId } : {}),
         ...(a.bubble ? { bubble: true } : {}),

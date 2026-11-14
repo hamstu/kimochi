@@ -324,3 +324,21 @@ test('a Shift scan is preceded by a plain move a pixel off, so 10ten does not dr
   assert.deepEqual([f.primes[0].clientX, f.primes[0].shiftKey], [18, false])
   assert.deepEqual([f.received[0].clientX, f.received[0].shiftKey], [17, true])
 })
+
+// The overlay's hover policy excludes dictionary pop-ups and controller-driven lookups.
+test('hover policy can exclude popup pointer events without disabling text hover', async () => {
+  const f = fixture()
+  let overPopup = false
+  await installLinuxScanInput(f.win, {
+    passive: true,
+    hover: (event) => event?.clientX === 17 && !overPopup
+  })
+  assert.equal(f.move(false), true)
+  assert.equal(f.received.at(-1).shiftKey, true)
+  const count = f.received.length
+  overPopup = true
+  assert.equal(f.move(false), false, 'popup movement keeps its real modifiers')
+  assert.equal(f.received.length, count, 'no synthetic hover lookup inside the popup')
+  overPopup = false
+  assert.equal(f.move(false), true, 'returning to game text restores hover lookup')
+})

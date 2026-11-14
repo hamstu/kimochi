@@ -1231,7 +1231,17 @@ export function splitPart(part, vertical, measure = null) {
   if (!part.text) return []
   let runs
   const said = part.lineTexts
-  if (said?.length && said.length === part.lines?.length) {
+  if (part.anchorSegments && said?.length && said.length === part.lines?.length) {
+    // The hook supplies text, while OCR supplies independent word positions. Keep one inline
+    // run per measured word so a spacing error cannot propagate into the next word or sentence.
+    runs = part.lines.flatMap((rect, index) => {
+      const segments = part.lineSegments?.[index] ?? []
+      if (segments.length && segments.map((segment) => segment.text).join('') === said[index])
+        return segments.map(({ text, x, y, width, height }) => ({ text, rect: { x, y, width, height } }))
+      // Line-only OCR still anchors each row; missing word geometry is not invented.
+      return said[index] ? [{ text: said[index], rect }] : []
+    })
+  } else if (said?.length && said.length === part.lines?.length) {
     // Each line read on its own: its text is set on it as it is, in the engine's reading order.
     runs = part.lines.flatMap((rect, index) =>
       said[index] ? splitAtGaps({ text: said[index], rect }, part.lineSegments?.[index], vertical, measure) : []

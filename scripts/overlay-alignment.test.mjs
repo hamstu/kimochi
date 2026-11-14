@@ -299,3 +299,29 @@ test('brackets and pauses a game sets in half a cell are drawn so, and the line 
     )
   }
 })
+
+test('invisible hooked text follows Screen AI character anchors on the recorded alignment corpus', async () => {
+  const { hookAnnotations } = await load('hook-match.ts')
+  const { hookGeometryAnnotations } = await load('hook-anchors.ts')
+  let checked = 0
+  for (const fixture of fixtures.filter((entry) => entry.engine === 'screenai')) {
+    const scale = fixture.truth.scale ?? 1
+    const { width, height } = fixture.truth
+    const bounds = { x: 0, y: 0, width: width / scale, height: height / scale }
+    const info = { full_width: width, full_height: height, crop_pixels: [0, 0], source_bounds: bounds }
+    const source = withInkMargins(fixture.ocr.textAnnotations, fixture.ocr.engine)
+    for (const line of fixture.truth.lines) {
+      const hooked = line.text ?? line.glyphs.map((glyph) => glyph.c).join('')
+      const placed = hookAnnotations(source, hooked, { speakers: false })
+      if (placed.recall < 0.9 || placed.precision < 0.8) continue
+      const anchored = hookGeometryAnnotations(placed.annotations, [])
+      const runs = wordLayout(mapAnnotations(info, anchored, bounds), measure).flat()
+      const score = alignmentMetrics({ ...fixture.truth, lines: [line] }, runs.flatMap(drawn), scale)
+      assert.ok(score.coverage >= 0.9, `${fixture.sample}: coverage ${score.coverage}`)
+      assert.ok(score.alongMean <= 0.16, `${fixture.sample}: mean along ${score.alongMean.toFixed(3)} glyphs`)
+      assert.ok(score.alongP90 <= 0.3, `${fixture.sample}: p90 along ${score.alongP90.toFixed(3)} glyphs`)
+      checked++
+    }
+  }
+  assert.ok(checked >= 6, `only ${checked} Screen AI rows were checked`)
+})

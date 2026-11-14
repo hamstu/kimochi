@@ -18,7 +18,7 @@ import { buttonName } from './controller-input.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
 import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
-import { PopupLeave } from './popup-leave.js'
+import { PopupLeave, popupLeaveDelayOf } from './popup-leave.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -59,6 +59,7 @@ import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
+import { hookGeometryAnnotations } from './hook-anchors.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookCardShow, hookSettings } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
@@ -125,12 +126,14 @@ let lastScanShift = false
  * (`overlayClickThrough`, on unless turned off). Off, they take the mouse as before.
  */
 function clickThrough() {
+  // Wayland cannot deliver hover events through a Shift-gated input region.
+  if (waylandSession && hoverLookup()) return false
   return native.getSetting('overlayClickThrough') !== false
 }
 /**
  * Whether resting the pointer on a word looks it up with no key held (`overlayHoverLookup`, off
- * unless turned on). Native says when the pointer rests (the feed's `hover`); the words still let
- * clicks through to the game, and a pop-up no longer takes the next click (`catching`).
+ * unless turned on). Native reports resting pointers (`hover`) on other desktops; Wayland uses
+ * surface events and receives clicks on text. A pop-up no longer catches the next free click.
  */
 function hoverLookup() {
   return hoverLookupApplies(
@@ -138,7 +141,7 @@ function hoverLookup() {
     native.getSetting('overlayHoverLookup')
   )
 }
-/** Linux on Wayland (`caps.session.backend`): hover lookup does not apply there (`hoverLookupApplies`). */
+/** Linux on Wayland uses surface events for hover lookup. */
 let waylandSession = false
 /** Whether the whole overlay is taking the next click (`hitRects`, `onFreeClick`). */
 let catching = false
@@ -311,6 +314,8 @@ const hook = {
   shown: null,
   /** The speaker's name as OCR text where the game shows it, drawn as OCR is (`hookAligned`). */
   names: [],
+  /** Current hooked dialogue, corrected onto OCR word boxes for invisible Auto align. */
+  anchors: [],
   /** The line `names` was found for, kept through readings of it that miss the name. */
   namesLine: null,
   /** The line being looked for (`chaseHookLine`): until it is found the card holds it on one line. */
@@ -343,7 +348,7 @@ const hook = {
   resize: null,
   /** A whole reading somewhere new (`HOOK_MOVE_LINES` away), waiting for a second to agree. */
   moveTo: null,
-  /** Why the card is hidden (`hookCardHidden`), as last logged. */
+  /** Why the card is hidden, as last logged. */
   hidden: undefined,
   /** The card (hook-card.js), made once the overlay's document is ready. */
   card: null,
@@ -375,12 +380,16 @@ const hookSet = () => hookSettings(setting('textHookerDefaults'), hookGame())
 const hookAutoAlign = () => hookSet().autoAlign
 /** The card over the game at all (Settings → Text Hooker → Show the card; the game menu's Card). */
 const hookCardOn = () => hookCardShow(setting('textHookerShowCard')) !== 'never'
+/** Desktop invisible lookup uses OCR geometry; manual placement and Gaming Mode use the card. */
+const hookAnchoredMode = () =>
+  setting('overlayInvisible') === true && hookAutoAlign() && hookCardOn() && !nativeGamescope
 /**
  * Only while the lookup key is held (Settings → Text Hooker → Show the card): native's gate
  * (`gateOpen`) follows `overlayLookupKey`, and a controller's lookup button. Where the key cannot
  * be read (`shiftGated` false) or in Gaming Mode, there is no key to wait for, so the card stays up.
  */
 const hookCardOnKey = () =>
+  !(setting('overlayInvisible') === true && hoverLookup()) &&
   hookCardShow(setting('textHookerShowCard')) === 'hold' &&
   shiftGated &&
   !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
@@ -391,7 +400,7 @@ const hookCardOnKey = () =>
 let hookKeyHeld = false
 /** A dictionary pop-up is showing: a card shown with the key stays while one opened from it is up. */
 const hookPopupOpen = () => Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
-/** Auto align reads the screen with OCR: only while there is a card to align. */
+/** Auto align reads the screen while hooked overlay text is enabled, for word anchors or the card. */
 const hookOcrOn = () => hookMode() && Boolean(hook.sourceId) && hookAutoAlign() && hookCardOn()
 /** The OCR engine in use (Auto align uses the scan engine too). */
 const ocrModeNow = () => native.getSetting('ocrMode')
@@ -448,6 +457,7 @@ async function syncGamingHints() {
 /** Show the hint bar while there is text to point at and nothing else is using the overlay. */
 function syncHints() {
   const shown =
+    native.getSetting('overlayInvisible') !== true &&
     shiftGated &&
     native.getSetting(HINTS_DISMISSED) !== true &&
     !state.regionSelecting &&
@@ -1063,6 +1073,7 @@ function draw() {
   const visible =
     !settling &&
     !browserMode() &&
+    (!hookMode() || !hookAnchoredMode() || hookTextHidden(state.sourceBounds ?? state.info?.source_bounds) === null) &&
     (controller.holdsText ||
       (overlayTextOn() &&
         ((waylandLayer && gamescopeFront) ||
@@ -1118,7 +1129,10 @@ function draw() {
       (state.detached
         ? (state.info?.source_bounds ?? null)
         : (state.sourceBounds ?? state.info?.source_bounds ?? null)),
-    grouping: setting('textOverlayGrouping'),
+    grouping:
+      hookMode() && hookAnchoredMode()
+        ? { ...setting('textOverlayGrouping'), enabled: false }
+        : setting('textOverlayGrouping'),
     opacity: setting('overlayOpacity'),
     scanning: state.scanning
   })
@@ -1130,9 +1144,9 @@ function draw() {
 }
 
 /**
- * What OCR read becomes what is drawn. Outside the Text Hooker, as it is. While hooked, only the
- * speaker's name where the game shows it apart (`hookAligned`): the line is in its card, and a
- * reading otherwise only says where the card goes. OCR's raw
+ * What OCR read becomes what is drawn. Invisible hooked text with Auto align uses the matched
+ * dialogue's OCR word geometry; the visible/manual card path draws only the separate speaker name
+ * here and places the dialogue in its card. OCR's raw
  * reading is kept so a line that arrives after the screen was read is placed without reading it
  * again.
  */
@@ -1143,7 +1157,8 @@ function setOcrAnnotations(annotations) {
     return
   }
   // With Auto align turned off, a reading still in flight when it was places nothing.
-  state.annotations = hookOcrOn() ? hookAligned(annotations) : []
+  const names = hookOcrOn() ? hookAligned(annotations) : []
+  state.annotations = hookAnchoredMode() ? hookGeometryAnnotations(hookOcrOn() ? hook.anchors : [], names) : names
 }
 
 const median = (values) => {
@@ -1199,10 +1214,15 @@ function measuredText(block, box, known = null) {
  * Returns what OCR read that is still drawn: the speaker's name, where the game shows it apart.
  */
 function hookAligned(annotations) {
-  if (!hook.line || !annotations?.length || !state.info) return (hook.names = [])
+  if (!hook.line || !annotations?.length || !state.info) {
+    hook.anchors = []
+    return (hook.names = [])
+  }
   // One reading reaches here more than once (as it is applied, and again as the scene redraws):
   // it counts once, or "two readings agree" would be one reading twice.
-  const reading = `${hook.line}\u0000${JSON.stringify(annotations.map((a) => [a.description, a.boundingPoly]))}`
+  const reading = `${hook.line}\u0000${JSON.stringify(
+    annotations.map((a) => [a.description, a.boundingPoly, a.linePolygons, a.lineTexts, a.lineSegments, a.segments])
+  )}`
   if (reading === hook.reading) return hook.names
   hook.reading = reading
   const info = state.info
@@ -1225,6 +1245,9 @@ function hookAligned(annotations) {
     spaces: languageOf(languageNow()).spaces
   })
   const whole = placed.recall >= 0.9 && placed.precision >= 0.8
+  // A new line may arrive before its pixels. Never expose the old line's coordinates or guess
+  // positions from the previous card; wait for a sufficiently complete match in this frame.
+  hook.anchors = whole && placed.box ? placed.annotations : []
   // A name is only ever returned where it is the speaker's; the card shows what they say even when
   // their quote could not be placed (「……」 OCR did not read). A name found for this line stays
   // through readings that miss it: OCR reads a lone character only now and then.
@@ -1376,8 +1399,8 @@ function hookAligned(annotations) {
  * (Auto align's, the reader's, or centred along the bottom before either) and its size; null
  * while it is not to be seen (the overlay is off, or the game is not in front).
  */
-/** Why the card is not shown, or null when it is (logged as it changes: `hook-card-shown`). */
-function hookCardHidden(bounds) {
+/** Why hooked text is hidden, shared by the card and OCR-anchored lookup layer. */
+function hookTextHidden(bounds) {
   if (!hookMode()) return 'not-hooking'
   if (!hook.line && !controller?.holdsCard) return 'no-line'
   if (!hook.sourceId) return 'no-game'
@@ -1396,7 +1419,7 @@ function hookCardHidden(bounds) {
 
 function hookCardView() {
   const bounds = state.sourceBounds ?? state.info?.source_bounds
-  const hidden = hookCardHidden(bounds)
+  const hidden = hookTextHidden(bounds) ?? (hookAnchoredMode() ? 'ocr-anchors' : null)
   if (hidden !== hook.hidden) {
     hook.hidden = hidden
     if (hookMode()) log({ check: 'hook-card-shown', shown: !hidden, why: hidden ?? undefined })
@@ -1566,7 +1589,9 @@ function hookCardUnits() {
 function syncHookCard() {
   if (!hook.card) return
   // Gaming Mode: nothing can point at the card's bar, buttons or menu; the game menu has them.
-  hook.card.bare(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
+  hook.card.bare(
+    setting('overlayInvisible') === true || (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
+  )
   const view = hookCardView()
   const glide = hook.glide
   hook.glide = false
@@ -1622,6 +1647,8 @@ function onHookLine(payload) {
   hook.line = payload.text
   hook.lineAt = performance.now()
   hook.names = []
+  hook.anchors = []
+  hook.reading = null
   // A game known to show its speakers' names apart, or one that sends the name after the quote on
   // a line of its own: the card shows what they say from the start, Auto align on or off.
   const speech = hookSet().speakerNames ? splitSpeaker(payload.text) : null
@@ -1629,7 +1656,7 @@ function onHookLine(payload) {
   // The chase first: the card shows the line held for it (`pending`) from the start.
   void chaseHookLine(payload.text)
   setOcrAnnotations(state.rawAnnotations ?? [])
-  syncHookCard()
+  draw()
   controller?.hookChanged?.()
 }
 
@@ -1704,6 +1731,8 @@ function onHookStatus(status) {
     hook.line = null
     hook.shown = null
     hook.names = []
+    hook.anchors = []
+    if (hookAnchoredMode()) state.annotations = []
     hook.placed = null
     hook.missed = null
     hook.reading = null
@@ -4039,10 +4068,15 @@ let popupLeavePointer = null
 let popupLeaveTimer = null
 function checkPopupLeave(pointer = popupLeavePointer) {
   popupLeavePointer = pointer
-  // With click-through, a click away is free (`onFreeClick`), so the pop-up stays until then.
-  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups || clickThrough()) return
-  const open = Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
   clearTimeout(popupLeaveTimer)
+  const delay = popupLeaveDelayOf(setting('overlayPopupDismissDelay'))
+  // With click-through, a click away is free (`onFreeClick`), so the pop-up stays until then.
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups || clickThrough() || delay === 0) {
+    popupLeave.update(performance.now(), null, [], false)
+    return
+  }
+  popupLeave.graceMs = delay
+  const open = Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
   if (popupLeave.update(performance.now(), pointer, hitRects(), open)) {
     log({ check: 'popup-left' })
     dismissPopup()
@@ -4853,6 +4887,7 @@ await mirrorDictionaryEngine({ repair: true })
  */
 const systemDark = matchMedia('(prefers-color-scheme: dark)')
 function applyOverlayStyle() {
+  document.documentElement.toggleAttribute('data-overlay-invisible', setting('overlayInvisible') === true)
   const style = setting('overlayStyle')
   renderer.setStyle({
     color: style.color,
@@ -4875,7 +4910,9 @@ await native.watchSettings((key) => {
     key === 'language' ||
     key === 'textHookerGames' ||
     key === 'textHookerDefaults' ||
-    key === 'textHookerShowCard'
+    key === 'textHookerShowCard' ||
+    key === 'overlayInvisible' ||
+    key === 'overlayHoverLookup'
   )
     syncAutoScanner()
   if (
@@ -4883,7 +4920,9 @@ await native.watchSettings((key) => {
     key === 'textHookerGames' ||
     key === 'textHookerDefaults' ||
     key === 'superTexthooker' ||
-    key === 'textHookerShowCard'
+    key === 'textHookerShowCard' ||
+    key === 'overlayInvisible' ||
+    key === 'overlayHoverLookup'
   ) {
     // First, so the last reading is matched afresh too: the line may still be where it was read.
     realignHookCard()
@@ -4892,7 +4931,7 @@ await native.watchSettings((key) => {
   }
   // Mirror only: a switch is reloaded by Settings (`dictionary_engine_apply`), not from here.
   if (key === 'yomitanSettings') void mirrorDictionaryEngine()
-  if (key === 'overlayStyle' || key === 'appearance') applyOverlayStyle()
+  if (key === 'overlayStyle' || key === 'appearance' || key === 'overlayInvisible') applyOverlayStyle()
   syncOverlayText()
 })
 
@@ -4936,6 +4975,7 @@ await native.watchCapabilities(async (caps) => {
       hyprlandPointer = ['Hyprland', 'KDE'].includes(caps.session.compositor)
       const { installWaylandPointerExit } = await import('./wayland-pointer-exit.js')
       const pointerExit = installWaylandPointerExit(window, {
+        delay: () => popupLeaveDelayOf(setting('overlayPopupDismissDelay')),
         leave: () => {
           renderer.clearPointer()
           syncReadingHold()
@@ -4953,7 +4993,12 @@ await native.watchCapabilities(async (caps) => {
     const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
     // Where nothing can report Shift to the overlay (KDE Plasma without Legacy X11 App Support),
     // its text looks up on hover. Asked live: the Shift feed can come up after startup.
-    await installLinuxScanInput(window, { passive: true, hover: () => lookupOnHover })
+    await installLinuxScanInput(window, {
+      passive: true,
+      hover: (event) =>
+        lookupOnHover ||
+        (hoverLookup() && !controller.drivesLookups && (!event || !overPopupAt({ x: event.clientX, y: event.clientY })))
+    })
     window.addEventListener(
       'pointerdown',
       () => {
@@ -5276,11 +5321,11 @@ let feedHover = false
  * Hover lookup, where the overlay has the mouse itself (click-through off, or the words while the
  * gate is open): its real moves carry no key, and 10ten closes a key-opened pop-up on a move
  * without its key, so gliding along a line would flicker between the feed's keyed moves and these.
- * While the feed says the pointer rests, a real move goes on with the lookup key held instead,
+ * While the feed says the pointer rests (or for Wayland surface hover), a real move carries the lookup key,
  * as the feed's own samples do (`withHoverKey`: not over a pop-up, not with a button down).
  */
 function rekeyForHover(event) {
-  if (!feedHover || !hoverLookup() || controller.drivesLookups) return
+  if ((!feedHover && !waylandSession) || !hoverLookup() || controller.drivesLookups) return
   const property = lookupKeyProperty(native.getSetting('overlayLookupKey'))
   if (event[property] || event.buttons !== 0) return
   if (overPopupAt({ x: event.clientX, y: event.clientY })) return
@@ -5368,7 +5413,8 @@ await native.listen('pointer', ({ payload }) => {
     const up = gateOpen || hookPopupOpen()
     if (up !== hookKeyHeld) {
       hookKeyHeld = up
-      syncHookCard()
+      if (hookAnchoredMode()) draw()
+      else syncHookCard()
     }
   }
   const armed = !clickThrough() || gateOpen

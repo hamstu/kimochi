@@ -134,9 +134,8 @@ test('hover lookup applies only where Settings offers it, and only when turned o
   assert.equal(hoverLookupApplies(desktop, false), false)
   assert.equal(hoverLookupApplies(desktop, undefined), false, 'off by default')
   assert.equal(hoverLookupApplies(desktop, 'true'), false, 'only a real true')
-  // Synced or left over from another computer: Wayland and Gaming Mode hide the switch, so the
-  // overlay must not act on it (its click-away and hint stay as they are).
-  assert.equal(hoverLookupApplies({ gamescope: false, wayland: true }, true), false)
+  // Wayland uses real surface events; Gaming Mode keeps controller-driven lookups.
+  assert.equal(hoverLookupApplies({ gamescope: false, wayland: true }, true), true)
   assert.equal(hoverLookupApplies({ gamescope: true, wayland: false }, true), false)
 })
 

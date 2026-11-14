@@ -166,3 +166,15 @@ test('overlay look: the cards follow Kimochi unless told otherwise', () => {
   assert.equal(resolveOverlayCardAppearance({ ...app, appearance: 'light' }, 'dark', true), 'light')
   assert.equal(resolveOverlayCardAppearance({ ...app, appearance: 'dark' }, 'light', false), 'dark')
 })
+
+test('invisible overlay is opt-in in both settings stores', async () => {
+  assert.equal(SETTINGS_DEFAULTS.overlayInvisible, false)
+  const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
+  assert.match(rust, /"overlayInvisible": false/)
+})
+
+test('popup dismissal defaults agree across settings stores', async () => {
+  assert.equal(SETTINGS_DEFAULTS.overlayPopupDismissDelay, 1000)
+  const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
+  assert.match(rust, /"overlayPopupDismissDelay": 1000/)
+})

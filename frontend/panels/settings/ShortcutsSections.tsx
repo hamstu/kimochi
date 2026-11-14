@@ -88,22 +88,20 @@ function LookupKeyRow(): ReactNode {
 
 /**
  * Look up on hover (`overlayHoverLookup`): resting the pointer on a word on the overlay looks it
- * up with no key held. Lookups only: the words keep letting clicks through to the game unless the
- * lookup key is held, so nothing here takes the mouse from it. Native decides when the pointer
- * rests rather than passes by (`state::HoverIntent`). Not on Wayland, where the pointer is read
- * only while the key is held, nor in Gaming Mode.
+ * up with no key held. Native hover intent keeps clicks going through to the game on other
+ * desktops; Wayland instead receives clicks on text to get surface pointer events without a key.
+ * Not available in Gaming Mode.
  */
 function HoverLookupRow(): ReactNode {
   const capabilities = useCapabilities()
   const [hover, setHover] = useSetting<boolean>('overlayHoverLookup', false)
   // Gaming Mode has no pointer to rest; the controller reads words there.
   if (isGamingMode(capabilities)) return null
-  if (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland') return null
   return (
     <SettingsRow
       label="Look up on hover"
       controlId="overlay-hover-lookup"
-      description="Rest the pointer on a word on the overlay to look it up, no key needed."
+      description="Point at a word on the overlay to look it up, no key needed. On Wayland, text receives clicks in this mode."
     >
       <Switch id="overlay-hover-lookup" checked={hover} onCheckedChange={(checked) => void setHover(checked)} />
     </SettingsRow>

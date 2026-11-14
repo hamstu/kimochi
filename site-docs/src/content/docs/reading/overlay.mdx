@@ -18,6 +18,32 @@ and clicks go through it to the game (see
 
 <Screenshot id="overlay-switch" alt="The sidebar with the Show overlay switch highlighted." width={272} />
 
+## Invisible overlay
+
+Turn on **Settings → Overlay → Invisible overlay** to look up words over the game's original
+text without backgrounds, highlights or redrawn characters. Only the dictionary pop-up is drawn.
+Turn it off to restore the usual appearance.
+
+**Look up on hover**, in the same settings page, chooses whether pointing at a word opens its
+pop-up without holding a key. Turn it off to use the **Lookup key** in **Shortcuts & Controls**.
+On KDE Wayland, hover lookup receives clicks on text even if **Click through text to the game**
+is enabled, so the overlay can receive pointer events without a key. Outside text and dictionary
+pop-ups, clicks still go to the game.
+
+**Pop-up dismissal delay** gives you time to cross the gap from the game text into the
+dictionary on Wayland. It defaults to one second; entering the pop-up keeps it open while you
+read or add Anki cards. Choose **Until dismissed** to disable this automatic dismissal. The
+same setting applies on Windows when click-through is off. Dictionary engines may also have
+their own automatic hiding options.
+
+For hooked games, leave **Show the card over the game** enabled and **Auto align** on. Hooked text
+supplies the exact lookup text, while OCR word boxes anchor each word independently over the game.
+The overlay waits until OCR matches the current dialogue, so a new line is never placed using the
+previous line's coordinates. Engines that supply only line boxes fit each row instead.
+
+With **Auto align** off, invisible mode uses the card's manual placement. Turn invisible mode off
+to adjust that card. Alignment accuracy still depends on the selected OCR model.
+
 ## Looking up words
 
 Hover a word with <kbd>Shift</kbd> held to open its pop-up (see

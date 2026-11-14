@@ -19,8 +19,8 @@ export async function installLinuxScanInput(win = window, { passive = false, hov
     listeners: new Set()
   })
   const hovering = typeof hover === 'function' ? hover : () => hover
-  const down = () => hovering() || state.portalHeld || state.keys.size > 0
-  const known = () => hovering() || state.known
+  const down = (event) => hovering(event) || state.portalHeld || state.keys.size > 0
+  const known = (event) => hovering(event) || state.known
   let point = null
   let held = down()
   let forwarding = false
@@ -88,10 +88,10 @@ export async function installLinuxScanInput(win = window, { passive = false, hov
         altKey: e.altKey,
         metaKey: e.metaKey
       }
-      held = down()
+      held = down(e)
       // WebKit's pointer modifiers can lag its keyboard/portal modifier event.
       // Never let an old Shift=true mouse move initiate a lookup after release.
-      if (known() && e.shiftKey !== held) {
+      if (known(e) && e.shiftKey !== held) {
         e.stopImmediatePropagation()
         forwarding = true
         try {
@@ -118,8 +118,8 @@ export async function installLinuxScanInput(win = window, { passive = false, hov
     (e) => {
       if (forwarding || !moveTypes().includes('mousemove')) return
       if (passive && host.__linuxLayerPointerInside === false) return
-      held = down()
-      if (known() && e.shiftKey !== held) {
+      held = down(e)
+      if (known(e) && e.shiftKey !== held) {
         e.stopImmediatePropagation()
         forwarding = true
         try {

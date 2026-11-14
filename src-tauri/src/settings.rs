@@ -81,8 +81,10 @@ pub fn defaults() -> Value {
         "overlayLookupKey": "shift",
         // Look up the overlay's words by resting the pointer on them, no key held
         // (`state::HoverIntent`). Lookups only: clicks still go to the game unless the lookup
-        // key is held. Off by default. Not on Wayland, where positions follow the key.
+        // key is held. Off by default. Wayland uses surface events and takes clicks on text.
         "overlayHoverLookup": false,
+        "overlayInvisible": false,
+        "overlayPopupDismissDelay": 1000,
         // Mini mode when the watched game goes full screen on Kimochi's display (compact.rs).
         // Off: Kimochi is kept on top over the game instead, at its own size.
         "autoMiniMode": false,

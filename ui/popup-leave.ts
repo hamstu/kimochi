@@ -8,6 +8,11 @@
  * long enough to cross the gap between a word and its pop-up, short enough to read as "it went
  * away when I moved on".
  */
+/** Overlay setting: zero means no automatic dismissal; invalid values use one second. */
+export function popupLeaveDelayOf(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(10000, Math.round(value)) : 1000
+}
+
 export interface LeaveRect {
   x: number
   y: number
@@ -18,7 +23,7 @@ export interface LeaveRect {
 export class PopupLeave {
   private awaySince: number | null = null
 
-  constructor(readonly graceMs = 600) {}
+  constructor(public graceMs = 600) {}
 
   /** True exactly once, when the open pop-up should close. `rects` are the words and the pop-up. */
   update(now: number, pointer: { x: number; y: number } | null, rects: LeaveRect[], popupOpen: boolean): boolean {

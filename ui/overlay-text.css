@@ -413,3 +413,43 @@
     transition: none;
   }
 }
+
+/* Invisible lookup layer: retain text layout, hit testing and opaque computed `color` for
+   dictionary scanners. Hiding the glyph paint (rather than opacity/visibility) keeps text
+   discoverable by Yomitan and 10ten, including grouped runs and cross-box lookahead. */
+[data-overlay-invisible] :is(.ocr-word, .ocr-group),
+[data-overlay-invisible] :is(.ocr-word, .ocr-group) * {
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+[data-overlay-invisible] :is(.ocr-word, .ocr-group)::before,
+[data-overlay-invisible] :is(.ocr-word, .ocr-group)::after,
+[data-overlay-invisible] .ocr-word-current::after {
+  content: none !important;
+}
+[data-overlay-invisible] :is(.ocr-word-text, .ocr-group .ocr-runs) {
+  opacity: 1 !important;
+}
+[data-overlay-invisible] :is(.ocr-word, .ocr-group) ::selection {
+  background: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Extension-owned match highlights paint independently of glyph fill and ::selection. Keep
+   their ranges intact for lookup/match tracking, suppressing only paint in the source document. */
+[data-overlay-invisible] ::highlight(tenten-selection),
+[data-overlay-invisible] ::highlight(tenten-selection-blue),
+[data-overlay-invisible] ::highlight(gsm-hoshidicts-match),
+[data-overlay-invisible] ::highlight(hd-word-unknown),
+[data-overlay-invisible] ::highlight(hd-word-learning),
+[data-overlay-invisible] ::highlight(hd-word-known),
+[data-overlay-invisible] ::highlight(hd-word-ignored) {
+  background-color: transparent !important;
+  color: transparent !important;
+  text-shadow: none !important;
+  text-decoration: none !important;
+}
+[data-overlay-invisible] :is(.ocr-word, .ocr-group, .hook-card)::selection {
+  background: transparent !important;
+  -webkit-text-fill-color: transparent;
+}

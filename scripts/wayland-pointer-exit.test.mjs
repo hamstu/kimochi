@@ -4,7 +4,7 @@ import { installWaylandPointerExit } from '../ui/wayland-pointer-exit.js'
 import { load } from './load.mjs'
 const { ReadingHold } = await load('reading-hold.ts')
 
-function fixture() {
+function fixture(delay = 400) {
   const root = new EventTarget(),
     win = new EventTarget(),
     timers = new Map()
@@ -22,6 +22,7 @@ function fixture() {
   win.clearTimeout = (id) => timers.delete(id)
   const held = () => hold.update(pointer, [rect], popup)
   const stop = installWaylandPointerExit(win, {
+    delay,
     leave: () => {
       pointer = null
     },
@@ -129,4 +130,29 @@ test('a stopped compositor poll leaves the surface edges in charge', () => {
   assert.equal(f.stop.outside(), true)
   f.stop.enter()
   assert.equal(f.stop.outside(), false)
+})
+
+test('a live dismissal delay is read when leaving, and zero keeps the popup open', () => {
+  let delay = 0
+  const f = fixture(() => delay)
+  f.popup(true)
+  f.root.dispatchEvent(new Event('mouseleave'))
+  assert.equal(f.timers.size, 0, 'manual mode schedules no dismissal')
+  f.flush()
+  assert.equal(f.dismissed(), 0)
+  delay = 1500
+  let scheduledDelay = null
+  const schedule = f.win.setTimeout
+  f.win.setTimeout = (fn, ms) => {
+    scheduledDelay = ms
+    return schedule(fn)
+  }
+  f.root.dispatchEvent(new Event('mouseleave'))
+  assert.equal(scheduledDelay, 1500)
+  f.root.dispatchEvent(new Event('mouseenter'))
+  f.flush()
+  assert.equal(f.dismissed(), 0, 'entering the popup cancels the configured timer')
+  f.root.dispatchEvent(new Event('mouseleave'))
+  f.flush()
+  assert.equal(f.dismissed(), 1)
 })

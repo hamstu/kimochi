@@ -111,6 +111,22 @@ export function popupRect(win, descriptor) {
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
+/** Hachidori's fallback source paint lives inside its shadow root on older WebKit builds.
+ * Hide that layer only, keeping its ranges and the dictionary popup itself intact. */
+export function syncSourceHighlightStyle(doc, root, invisible) {
+  const attribute = 'data-kimochi-source-highlight'
+  let style = root.querySelector(`style[${attribute}]`)
+  if (!invisible) {
+    style?.remove()
+    return
+  }
+  if (style) return
+  style = doc.createElement('style')
+  style.setAttribute(attribute, '')
+  style.textContent = '.gsm-hoshidicts-source-highlight-layer { visibility: hidden !important; }'
+  root.append(style)
+}
+
 /**
  * Watch the popup: a MutationObserver on the document (the host element is created lazily) and
  * on its open shadow root (popups move by restyling and hide by attribute or class), plus a
@@ -132,6 +148,9 @@ export function observePopup(win, descriptor, callback) {
     if (stopped) return
     const host = doc.querySelector(descriptor.popupSelector)
     const root = host?.shadowRoot ?? host ?? null
+    if (descriptor.id === 'hachidori' && host?.shadowRoot) {
+      syncSourceHighlightStyle(doc, host.shadowRoot, doc.documentElement.hasAttribute('data-overlay-invisible'))
+    }
     if (root !== observedRoot) {
       inner.disconnect()
       observedRoot = root
@@ -172,7 +191,12 @@ export function observePopup(win, descriptor, callback) {
     ;(win.requestAnimationFrame ?? ((f) => setTimeout(f, 16)))(measure)
   }
   const outer = new win.MutationObserver(() => schedule())
-  outer.observe(doc.documentElement, { childList: true, subtree: true })
+  outer.observe(doc.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-overlay-invisible']
+  })
   win.addEventListener('scroll', schedule, true)
   win.addEventListener('resize', schedule)
   schedule()

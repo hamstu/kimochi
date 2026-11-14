@@ -364,6 +364,7 @@ export function partOf(box) {
     rect: { x: box.x, y: box.y, width: box.width, height: box.height },
     lines: box.lines ?? [],
     lineSegments: box.lineSegments,
+    anchorSegments: box.anchorSegments,
     lineTexts: box.lineTexts,
     segments: box.segments,
     margin: box.inkMargin,

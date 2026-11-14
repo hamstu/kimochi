@@ -238,6 +238,10 @@ export interface Settings {
   liveOverlayEnabled: boolean
   /** Rest the pointer on an overlay word to look it up, no key held (native `state::HoverIntent`). */
   overlayHoverLookup: boolean
+  /** Keep lookup text in place without painting it over the source. */
+  overlayInvisible: boolean
+  /** Grace after leaving lookup text and the popup, in ms; zero disables automatic dismissal. */
+  overlayPopupDismissDelay: number
   textOverlayGrouping: GroupingSettings
   /** How the overlay's highlights and cards look; see `OverlayStyleSettings`. */
   overlayStyle: OverlayStyleSettings
@@ -344,6 +348,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   overlayHoverLookup: false,
+  overlayInvisible: false,
+  overlayPopupDismissDelay: 1000,
   textOverlayGrouping: DEFAULT_GROUPING,
   overlayStyle: DEFAULT_OVERLAY_STYLE,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,

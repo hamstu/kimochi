@@ -38,6 +38,8 @@ export interface Annotation {
   isVertical?: boolean
   groupId?: string
   granularity?: 'aggregate' | 'block' | 'line' | 'fragment'
+  /** Exact hooked text fitted to OCR word boxes, rather than OCR text to filter. */
+  anchorSegments?: boolean
   /** A speech bubble (Manga OCR's blocks): its own passage, never grouped with a neighbour. */
   bubble?: boolean
   boundingPoly: { vertices: Vertex[] }
@@ -446,5 +448,5 @@ function sizedAnnotations(words: Annotation[], grouping: GroupingSettings): Anno
 
 function byLanguage(words: Annotation[], filter: JapaneseFilter): Annotation[] {
   if ((filter.japaneseFilter ?? 'off') === 'off') return words
-  return words.filter((a) => a.granularity === 'fragment' || !dropsText(a.description, filter))
+  return words.filter((a) => a.anchorSegments || a.granularity === 'fragment' || !dropsText(a.description, filter))
 }

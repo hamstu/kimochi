@@ -10,6 +10,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- **Invisible overlay.** Look up words over the game's original text without backgrounds, highlights or redrawn characters. With Text Hooker Auto align, OCR word positions keep lookups aligned with the game. On Wayland, look up by hovering without a key, and choose how long the dictionary stays open while you move into it.
+
 - **Show the Text Hooker card only while you hold the lookup key.** **Show the card over the game** in Settings → Text Hooker is now a choice: **Always**, **While holding Shift** (or whichever lookup key you chose in Shortcuts & Controls), or **Never**. Held, the card comes up over the game to read and look up; let go and it's out of the way.
 - **Read in languages other than Japanese (experimental).** Choose the language you're learning in Settings → Language or in the welcome guide; it goes with your Kimochi account to your other computers. Japanese works just as before. Translations and AI explanations are in English, whatever the language.
 - **The OCR engine follows the language.** Engines that can't read it are left out of the list, Kimochi switches to one that can when you change language, and the engine you used for a language comes back when you return to it. Auto OCR watches the screen only with engines that read it too. On macOS, Apple Live Text reads 24 of the languages, among them Turkish, Indonesian, Polish, Dutch, Czech, Romanian and the Scandinavian languages.
