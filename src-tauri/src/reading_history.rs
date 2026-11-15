@@ -662,12 +662,13 @@ fn json_export(lines: &[HistoryLine]) -> Result<String, String> {
 }
 
 /// `lines` in `format`.
-pub fn render(lines: &[HistoryLine], format: Format) -> Result<String, String> {
+/// `lines` in `format`, with days starting at `day_start_hour`.
+pub fn render(lines: &[HistoryLine], format: Format, day_start_hour: i64) -> Result<String, String> {
     match format {
         Format::Json => json_export(lines),
         Format::Csv => Ok(csv(lines)),
         Format::ExstaticLines => Ok(exstatic_lines(lines)),
-        Format::ExstaticStats => Ok(exstatic_stats(lines)),
+        Format::ExstaticStats => Ok(exstatic_stats(lines, day_start_hour)),
     }
 }
 
@@ -748,8 +749,13 @@ fn skipped_lines(lines: &[(u64, usize)]) -> Vec<bool> {
 }
 
 /// The time each line `(ts, chars, session)` (oldest first) counts, and whether it was skipped.
-pub fn credit(lines: &[(u64, usize, &str)], ceiling_ms: u64) -> Vec<(u64, bool)> {
-    let skipped = skipped_lines(&lines.iter().map(|l| (l.0, l.1)).collect::<Vec<_>>());
+/// `skip_fast`: whether skipping counts nothing (`skipFastLines`).
+pub fn credit(lines: &[(u64, usize, &str)], ceiling_ms: u64, skip_fast: bool) -> Vec<(u64, bool)> {
+    let skipped = if skip_fast {
+        skipped_lines(&lines.iter().map(|l| (l.0, l.1)).collect::<Vec<_>>())
+    } else {
+        vec![false; lines.len()]
+    };
     let mut paces: HashMap<&str, Pace> = HashMap::new();
     (0..lines.len())
         .map(|i| {
@@ -771,9 +777,9 @@ pub fn credit(lines: &[(u64, usize, &str)], ceiling_ms: u64) -> Vec<(u64, bool)>
 
 /// Fill in each line's `read_ms` and `skipped` by the rule above, with `ceiling_ms` the most one
 /// line may count. `lines` must be oldest first.
-pub fn with_read_time(lines: &mut [HistoryLine], ceiling_ms: u64) {
+pub fn with_read_time(lines: &mut [HistoryLine], ceiling_ms: u64, skip_fast: bool) {
     let timed: Vec<(u64, usize, &str)> = lines.iter().map(|l| (l.ts, l.chars, l.session.as_str())).collect();
-    let credits = credit(&timed, ceiling_ms);
+    let credits = credit(&timed, ceiling_ms, skip_fast);
     for (line, (ms, skipped)) in lines.iter_mut().zip(credits) {
         line.read_ms = ms;
         line.skipped = skipped;
@@ -782,8 +788,8 @@ pub fn with_read_time(lines: &mut [HistoryLine], ceiling_ms: u64) {
 
 /// The reading day of `ms` (epoch) read `tz` minutes east of UTC, `YYYY-MM-DD`: the local date
 /// [`DAY_START_HOUR`] hours earlier.
-pub fn reading_day(ms: u64, tz: i32) -> String {
-    let shifted = (ms as i64 + i64::from(tz) * 60_000 - DAY_START_HOUR * 3_600_000).max(0) as u64;
+pub fn reading_day(ms: u64, tz: i32, start_hour: i64) -> String {
+    let shifted = (ms as i64 + i64::from(tz) * 60_000 - start_hour * 3_600_000).max(0) as u64;
     iso_local(shifted, 0)[..10].to_string()
 }
 
@@ -845,14 +851,14 @@ fn exstatic_lines(lines: &[HistoryLine]) -> String {
 /// chars_read,lines_read,time_read,read_speed` (`chars_read` by [`count_chars`], `time_read` in
 /// seconds, `read_speed` characters per second), skipped lines left out. Importing it names the media
 /// the lines CSV fills. `lines` need [`with_read_time`].
-fn exstatic_stats(lines: &[HistoryLine]) -> String {
+fn exstatic_stats(lines: &[HistoryLine], day_start_hour: i64) -> String {
     let media = exstatic_media(lines);
     // Characters, lines and ms per (local date, session), in the order first read.
     type Day = ((String, String), (usize, usize, u64));
     let mut days: Vec<Day> = Vec::new();
     let mut index: HashMap<(String, String), usize> = HashMap::new();
     for line in lines.iter().filter(|l| !l.skipped) {
-        let key = (reading_day(line.ts, line.tz), line.session.clone());
+        let key = (reading_day(line.ts, line.tz, day_start_hour), line.session.clone());
         let at = *index.entry(key.clone()).or_insert_with(|| {
             days.push((key, (0, 0, 0)));
             days.len() - 1
@@ -932,21 +938,39 @@ pub async fn reading_history_summary() -> Result<Value, String> {
 const DEFAULT_IDLE_SEC: u64 = 300;
 
 /// `dir`'s history as `format`, with reading time counted up to `idle_sec` per line.
-pub fn export(dir: &Path, format: Format, idle_sec: Option<u64>) -> Result<(usize, String), String> {
+/// What the person chose for the reading stats (Settings → Log): the most one line may count, in
+/// seconds; whether skipping counts nothing; the hour a day starts.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Rules {
+    pub idle_sec: Option<u64>,
+    pub skip_fast: Option<bool>,
+    pub day_start_hour: Option<u8>,
+}
+
+pub fn export(dir: &Path, format: Format, rules: Rules) -> Result<(usize, String), String> {
     let mut lines = lines(dir);
-    with_read_time(&mut lines, idle_sec.unwrap_or(DEFAULT_IDLE_SEC).clamp(10, 3600) * 1000);
-    Ok((lines.len(), render(&lines, format)?))
+    let ceiling_ms = rules.idle_sec.unwrap_or(DEFAULT_IDLE_SEC).clamp(10, 3600) * 1000;
+    with_read_time(&mut lines, ceiling_ms, rules.skip_fast.unwrap_or(true));
+    let day_start = rules.day_start_hour.map_or(DAY_START_HOUR, |h| i64::from(h.min(12)));
+    Ok((lines.len(), render(&lines, format, day_start)?))
 }
 
 /// Write the history to `path` as `format` (`json`, `csv`, `exstatic-lines`, `exstatic-stats`),
 /// counting at most `idleSec` (the AFK threshold) of reading time per line. Returns the lines
 /// written.
 #[tauri::command]
-pub async fn reading_history_export(path: String, format: String, idle_sec: Option<u64>) -> Result<usize, String> {
+pub async fn reading_history_export(
+    path: String,
+    format: String,
+    idle_sec: Option<u64>,
+    skip_fast_lines: Option<bool>,
+    day_start_hour: Option<u8>,
+) -> Result<usize, String> {
     let format = Format::parse(&format)?;
     let dir = profile_dir()?;
     tauri::async_runtime::spawn_blocking(move || {
-        let (count, body) = export(&dir, format, idle_sec)?;
+        let rules = Rules { idle_sec, skip_fast: skip_fast_lines, day_start_hour };
+        let (count, body) = export(&dir, format, rules)?;
         std::fs::write(&path, body).map_err(|e| format!("Could not write {path}: {e}"))?;
         Ok(count)
     })
@@ -1133,11 +1157,13 @@ mod tests {
                 .iter()
                 .map(|c| (c["ms"].as_u64().unwrap(), c["skipped"].as_bool().unwrap()))
                 .collect();
-            assert_eq!(credit(&lines, case["ceilingMs"].as_u64().unwrap()), expected, "{}", case["name"]);
+            let skip_fast = case["skipFast"].as_bool().unwrap_or(true);
+            assert_eq!(credit(&lines, case["ceilingMs"].as_u64().unwrap(), skip_fast), expected, "{}", case["name"]);
         }
         for day in fixture["days"].as_array().unwrap() {
             let (ts, tz) = (day["ts"].as_u64().unwrap(), day["tz"].as_i64().unwrap() as i32);
-            assert_eq!(reading_day(ts, tz), day["day"].as_str().unwrap(), "{}", day["why"]);
+            let start = day["startHour"].as_i64().unwrap_or(DAY_START_HOUR);
+            assert_eq!(reading_day(ts, tz, start), day["day"].as_str().unwrap(), "{}", day["why"]);
         }
     }
 
@@ -1145,8 +1171,8 @@ mod tests {
     fn times_are_local_where_they_were_read() {
         assert_eq!(iso_local(0, 540), "1970-01-01T09:00:00.000+09:00");
         assert_eq!(iso_local(1_500, -330), "1969-12-31T18:30:01.500-05:30");
-        assert_eq!(reading_day(15 * 3600 * 1000, 540), "1970-01-01", "00:00 in Tokyo is the day before");
-        assert_eq!(reading_day(20 * 3600 * 1000, 540), "1970-01-02");
+        assert_eq!(reading_day(15 * 3600 * 1000, 540, 4), "1970-01-01", "00:00 in Tokyo is the day before");
+        assert_eq!(reading_day(20 * 3600 * 1000, 540, 4), "1970-01-02");
     }
 
     #[test]
@@ -1203,8 +1229,8 @@ mod tests {
             ],
             &names,
         );
-        with_read_time(&mut lines, 60_000);
-        render(&lines, format).unwrap()
+        with_read_time(&mut lines, 60_000, true);
+        render(&lines, format, DAY_START_HOUR).unwrap()
     }
 
     #[test]

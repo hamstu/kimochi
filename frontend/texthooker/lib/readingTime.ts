@@ -13,10 +13,12 @@
  * the trackers have used); it needs no tuning, a short line after a long break counts seconds,
  * not minutes, and a long line read slowly with lookups keeps its time.
  *
- * **Skipping**: three or more lines of 12+ characters, each less than a second after the last,
- * were skipped, not read: they count no characters, lines or time.
+ * **Skipping** (Settings → Log, `skipFastLines`, on by default): three or more lines of 12+
+ * characters, each less than a second after the last, were skipped, not read: they count no
+ * characters, lines or time.
  *
- * **Days** start at 4 am, so a late night's reading belongs to the day it began.
+ * **Days** start at `dayStartHour` (4 am by default), so a late night's reading belongs to the day
+ * it began.
  */
 
 /** The most a cap allows, as a multiple of the line's expected time. */
@@ -39,7 +41,7 @@ export const PACE_PERCENTILE = 0.25
 export const SKIP_MIN_CHARS = 12
 export const SKIP_MAX_GAP_MS = 1_000
 export const SKIP_MIN_RUN = 3
-/** A reading day starts at this local hour. */
+/** A reading day starts at this local hour unless the person chose another (`dayStartHour`). */
 export const DAY_START_HOUR = 4
 /** Reading speed is shown once this many lines are counted. */
 export const MIN_LINES_FOR_SPEED = 5
@@ -107,10 +109,11 @@ export function skippedLines(lines: readonly TimedLine[]): boolean[] {
 
 /**
  * The time each of `lines` (oldest first) counts, by the rule above, with `ceilingMs` the most one
- * line may count. The last line has no next line: it counts its cap.
+ * line may count and `skipFast` whether skipping counts nothing. The last line has no next line:
+ * it counts its cap.
  */
-export function creditLines(lines: readonly TimedLine[], ceilingMs: number): Credit[] {
-  const skipped = skippedLines(lines)
+export function creditLines(lines: readonly TimedLine[], ceilingMs: number, skipFast = true): Credit[] {
+  const skipped = skipFast ? skippedLines(lines) : lines.map(() => false)
   const paces = new Map<string, Pace>()
   return lines.map((line, i) => {
     if (skipped[i]) return { ms: 0, skipped: true }
@@ -127,9 +130,13 @@ export function creditLines(lines: readonly TimedLine[], ceilingMs: number): Cre
 }
 
 /**
- * The reading day of `ts` (epoch ms), `YYYY-MM-DD`: the local date `DAY_START_HOUR` hours earlier.
+ * The reading day of `ts` (epoch ms), `YYYY-MM-DD`: the local date `startHour` hours earlier.
  * `tzMinutes` (east of UTC) is where it was read; this computer's zone when omitted.
  */
-export function readingDay(ts: number, tzMinutes = -new Date(ts).getTimezoneOffset()): string {
-  return new Date(ts + tzMinutes * 60_000 - DAY_START_HOUR * 3_600_000).toISOString().slice(0, 10)
+export function readingDay(
+  ts: number,
+  tzMinutes = -new Date(ts).getTimezoneOffset(),
+  startHour = DAY_START_HOUR
+): string {
+  return new Date(ts + tzMinutes * 60_000 - startHour * 3_600_000).toISOString().slice(0, 10)
 }

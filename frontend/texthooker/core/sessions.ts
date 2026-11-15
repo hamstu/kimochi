@@ -407,7 +407,7 @@ export async function sessionSummaries(): Promise<SessionSummary[]> {
         lines = []
       }
     }
-    result.push(summarizeLines(session.id, lines, ceilingMs))
+    result.push(summarizeLines(session.id, lines, ceilingMs, getSettings().skipFastLines))
   }
   return result
 }

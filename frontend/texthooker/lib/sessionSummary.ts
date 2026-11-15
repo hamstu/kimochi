@@ -22,7 +22,8 @@ export const RECENT_LINES = 5
 export function summarizeLines(
   id: string,
   all: readonly Pick<Line, 'text' | 'ts' | 'source'>[],
-  ceilingMs: number
+  ceilingMs: number,
+  skipFast = true
 ): SessionSummary {
   // What was read: the person's notes are neither lines nor reading time.
   const lines = all.filter((line) => line.source !== 'note')
@@ -30,7 +31,7 @@ export function summarizeLines(
     .filter((line) => Number.isFinite(line.ts))
     .map((line) => ({ ts: line.ts, chars: countChars(line.text) }))
     .sort((a, b) => a.ts - b.ts)
-  const readingMs = creditLines(timed, ceilingMs).reduce((sum, credit) => sum + credit.ms, 0)
+  const readingMs = creditLines(timed, ceilingMs, skipFast).reduce((sum, credit) => sum + credit.ms, 0)
   const recent = lines
     .slice(-RECENT_LINES)
     .map((line) => line.text.trim())

@@ -52,7 +52,9 @@ export async function exportReadingHistory(format: HistoryFormat): Promise<void>
     const lines = await invoke<number>('reading_history_export', {
       path,
       format,
-      idleSec: getSettings().afkThresholdSec
+      idleSec: getSettings().afkThresholdSec,
+      skipFastLines: getSettings().skipFastLines,
+      dayStartHour: getSettings().dayStartHour
     })
     postActivity({ text: `Exported ${lines.toLocaleString()} lines read`, tone: 'ok', key: 'reading-history' })
   } catch (error) {

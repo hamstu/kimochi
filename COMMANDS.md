@@ -698,7 +698,7 @@ without a CFRunLoop has not been tested in-app.
 | `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
 | `reading_history_append` | `({events: [{op, uid, at, ts?, text?, originalText?, via?, engine?, session?, sessionName?, source?: {window?, app?, exe?}, language?, tz?}]}) -> number` — the Log's lines read, for the reading history; returns how many were kept |
 | `reading_history_summary` | `() -> {lines, chars, first, last}` |
-| `reading_history_export` | `({path, format, idleSec?}) -> number` — `format`: `json`, `csv`, `exstatic-lines`, `exstatic-stats`; returns the lines written |
+| `reading_history_export` | `({path, format, idleSec?, skipFastLines?, dayStartHour?}) -> number` — `format`: `json`, `csv`, `exstatic-lines`, `exstatic-stats`; the reading-time settings (defaults 300, true, 4); returns the lines written |
 | `ext_relay` | `({target \| null, payload}) -> ()` |
 | `yomitan_request` | `({url, body}) -> Value` |
 | `tts_speak` | `({text, voiceId}) -> ArrayBuffer` (audio) |
@@ -755,10 +755,11 @@ with). A line counts the time until the next line, at most 2.5 × what a line it
 the session's slower pace (the 25th percentile of characters a second of its last 200 lines of 5+
 characters followed by a 1–300 s gap; 3 s a character before 5 are measured), between 2 s and
 `idleSec` (`afkThresholdSec`, "Max time per line", default 300). The live footer's clock
-stops when the last line's allowance runs out, so it never runs backwards. Three or more lines of
-12+ characters each under a second apart were skipped: no characters, lines or time (the footer
-takes back the run's first lines when the third arrives). A reading day starts at 4 am local time
-(`readingDay`, `reading_day`). The footer shows a speed once 5 lines are counted.
+stops when the last line's allowance runs out, so it never runs backwards. With "Ignore skipped
+lines" on (`skipFastLines`, default), three or more lines of 12+ characters each under a second
+apart were skipped: no characters, lines or time (the footer takes back the run's first lines when
+the third arrives). A reading day starts at "Day starts at" (`dayStartHour`, 0–6, default 4) local
+time (`readingDay`, `reading_day`). The footer shows a speed once 5 lines are counted.
 
 `ext_relay_listen` registers a Tauri `Channel` for the calling window. Native forgets it when
 that window's page starts loading again (reload or navigation) and when the window closes, so a

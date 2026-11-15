@@ -21,10 +21,10 @@ const fixture = JSON.parse(readFileSync(new URL('./fixtures/reading-time.json', 
 
 for (const c of fixture.cases) {
   test(c.name, () => {
-    assert.deepEqual(rule.creditLines(c.lines, c.ceilingMs), c.credits)
+    assert.deepEqual(rule.creditLines(c.lines, c.ceilingMs, c.skipFast ?? true), c.credits)
   })
 }
 
-test('a reading day starts at 4 am where it was read', () => {
-  for (const d of fixture.days) assert.equal(rule.readingDay(d.ts, d.tz), d.day, d.why)
+test('a reading day starts at its hour (4 am by default) where it was read', () => {
+  for (const d of fixture.days) assert.equal(rule.readingDay(d.ts, d.tz, d.startHour), d.day, d.why)
 })

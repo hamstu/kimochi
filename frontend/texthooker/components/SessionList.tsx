@@ -577,7 +577,7 @@ function useSummaries(sessions: SessionMeta[], activeId: string, version: number
     const update = () => {
       try {
         const ceilingMs = Math.max(10, getSettings().afkThresholdSec) * 1000
-        const next = summarizeLines(activeId, snapshotLines(), ceilingMs)
+        const next = summarizeLines(activeId, snapshotLines(), ceilingMs, getSettings().skipFastLines)
         setLive((previous) => (sameSummary(previous, next) ? previous : next))
       } catch {
         // The Log has not sent its first snapshot yet.

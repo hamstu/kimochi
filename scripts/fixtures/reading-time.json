@@ -308,6 +308,42 @@
      "skipped": false
     }
    ]
+  },
+  {
+   "name": "with skipping not ignored, fast lines count like any other",
+   "ceilingMs": 300000,
+   "skipFast": false,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 300,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 600,
+     "chars": 20,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 300,
+     "skipped": false
+    },
+    {
+     "ms": 300,
+     "skipped": false
+    },
+    {
+     "ms": 60000,
+     "skipped": false
+    }
+   ]
   }
  ],
  "days": [
@@ -328,6 +364,13 @@
    "tz": -300,
    "day": "2024-11-14",
    "why": "00:53 in New York, before 4 am, belongs to the day before"
+  },
+  {
+   "ts": 1731695400000,
+   "tz": 540,
+   "startHour": 0,
+   "day": "2024-11-16",
+   "why": "with days starting at midnight, 03:30 in Tokyo is that day"
   }
  ]
 }

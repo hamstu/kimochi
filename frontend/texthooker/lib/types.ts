@@ -106,7 +106,12 @@ export interface Settings {
   uiScale: UiScale
 
   // Stats (Bucket 1)
+  /** The most one line may count, in seconds (lib/readingTime.ts). */
   afkThresholdSec: number
+  /** Runs of fast, long lines (skipping) count nothing (lib/readingTime.ts). */
+  skipFastLines: boolean
+  /** The local hour a reading day starts at, 0–6 (lib/readingTime.ts `readingDay`). */
+  dayStartHour: number
   statsShowTime: boolean
   statsShowLines: boolean
   statsShowChars: boolean
@@ -194,6 +199,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   uiScale: 'small',
 
   afkThresholdSec: 300,
+  skipFastLines: true,
+  dayStartHour: 4,
   statsShowTime: true,
   statsShowLines: true,
   statsShowChars: true,

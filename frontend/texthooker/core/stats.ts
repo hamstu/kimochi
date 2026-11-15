@@ -181,7 +181,12 @@ function count(chars: number, words: number | undefined, lines: number) {
 export function recordLine(chars: number, words?: number, session = '') {
   const now = Date.now()
   const last = recent.at(-1)
-  const fast = !!last && now - last.at < SKIP_MAX_GAP_MS && chars >= SKIP_MIN_CHARS && last.chars >= SKIP_MIN_CHARS
+  const fast =
+    getSettings().skipFastLines !== false &&
+    !!last &&
+    now - last.at < SKIP_MAX_GAP_MS &&
+    chars >= SKIP_MIN_CHARS &&
+    last.chars >= SKIP_MIN_CHARS
   fastRun = fast ? fastRun + 1 : 1
   if (last && !last.skipped) paceOf(last.session).learn(last.chars, now - last.at)
   const skipped = fastRun >= SKIP_MIN_RUN

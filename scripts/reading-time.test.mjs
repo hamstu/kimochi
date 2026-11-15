@@ -35,7 +35,7 @@ const built = await build({
             export const inProfile = (p) => p;
             export const exists = async () => false, mkdir = async () => {}, readTextFile = async () => '';
             export const writeTextFile = async () => {};
-            export const getSettings = () => ({ afkThresholdSec: env.afkSec });
+            export const getSettings = () => ({ afkThresholdSec: env.afkSec, skipFastLines: env.skipFast });
             export const onSettingsChange = () => () => {};`
         }))
       }
@@ -44,8 +44,8 @@ const built = await build({
 })
 const source = built.outputFiles[0].text
 
-async function freshStats() {
-  globalThis[ENV_KEY] = { afkSec: AFK_SEC }
+async function freshStats(skipFast = true) {
+  globalThis[ENV_KEY] = { afkSec: AFK_SEC, skipFast }
   return import(`data:text/javascript;base64,${Buffer.from(`${source}\n//${crypto.randomUUID()}`).toString('base64')}`)
 }
 
@@ -188,4 +188,14 @@ test('three fast long lines in a row were skipped: no characters, lines or time'
   assert.equal(totals.totalLines, 1, 'reading again counts again')
   assert.equal(totals.totalChars, 20)
   assert.ok(elapsedMs < SEC, 'the skipped lines kept next to no time')
+})
+
+test('with Ignore skipped lines off, fast lines count like any other', async () => {
+  const stats = await freshStats(false)
+  for (let i = 0; i < 4; i++) {
+    stats.recordLine(20)
+    mock.timers.tick(300)
+  }
+  assert.equal(stats.snapshotStats().stats.totalLines, 4)
+  assert.equal(stats.snapshotStats().stats.totalChars, 80)
 })
