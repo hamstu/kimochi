@@ -331,21 +331,6 @@ export function SentenceAudioSection(): ReactNode {
                     onCommit={(seconds) => update({ seconds })}
                   />
                 </SettingsRow>
-                <SettingsRow
-                  label="Clips kept"
-                  controlId="sentence-audio-clips"
-                  description="Kept for the newest lines, to play from the Log and to add to cards you make later."
-                >
-                  <NumberField
-                    id="sentence-audio-clips"
-                    value={config.clips}
-                    min={5}
-                    max={100}
-                    step={5}
-                    fallback={DEFAULTS.clips}
-                    onCommit={(clips) => update({ clips })}
-                  />
-                </SettingsRow>
               </div>
             </SettingsSubgroup>
           )}

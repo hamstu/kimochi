@@ -108,7 +108,7 @@ impl Config {
             .and_then(|v| serde_json::from_value(v).ok())
             .unwrap_or_default();
         config.seconds = config.seconds.clamp(10.0, 120.0);
-        config.clips = config.clips.clamp(5, 100);
+        config.clips = config.clips.min(100);
         config.start_offset_ms = config.start_offset_ms.clamp(-5_000.0, 5_000.0);
         config.end_offset_ms = config.end_offset_ms.clamp(-5_000.0, 5_000.0);
         config.field = config.field.trim().to_string();
@@ -731,6 +731,9 @@ impl SentenceAudio {
 
     /// Keep what was decided for a line: its clip in the store, its state for the Log.
     fn keep(&self, ears: &Ears, decision: &Decision) {
+        if self.config().clips == 0 {
+            return;
+        }
         if self.line_state(&decision.uid).is_some_and(|l| l.how.as_deref() == Some("hooked")) {
             return;
         }
@@ -802,6 +805,9 @@ impl SentenceAudio {
     }
 
     fn keep_hooked(&self, matched: &kimochi_speech::hooked::Matched) -> Result<(), String> {
+        if self.config().clips == 0 {
+            return Ok(());
+        }
         let mut samples = matched.samples.clone();
         samples.truncate(kimochi_speech::trim::sound_end(&samples, matched.sample_rate));
         kimochi_speech::trim::fade(&mut samples, matched.sample_rate);
@@ -839,6 +845,9 @@ impl SentenceAudio {
     /// matches the card's sentence best, the newest on a tie. A line still being heard is waited
     /// for, up to `MAX_WAIT_MS`.
     pub fn make(&self, fields: &[(String, String)], words: Vec<String>, want_word: bool) -> Result<Made, String> {
+        if self.config().clips == 0 {
+            return Err("Audio clip saving is disabled in Settings → Log & Sessions.".into());
+        }
         let texts: Vec<&str> = fields.iter().map(|(_, v)| v.as_str()).collect();
         let live = if self.recording() {
             let ears = lock(&self.ears);
@@ -1437,7 +1446,9 @@ mod tests {
         let config = Config::load(&settings);
         assert!(config.enabled && config.trim);
         assert_eq!((config.seconds, config.field.as_str(), config.start_offset_ms), (120.0, "Audio", -200.0));
-        assert_eq!((config.clips, config.word_field.as_str()), (5, "Word"));
+        assert_eq!((config.clips, config.word_field.as_str()), (1, "Word"));
+        settings.set("sentenceAudio", json!({ "clips": 0 })).unwrap();
+        assert_eq!(Config::load(&settings).clips, 0);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1811,7 +1822,7 @@ mod hooked_integration_tests {
         service
             .keep_hooked(&kimochi_speech::hooked::Matched {
                 line: line.clone(),
-                clip,
+                clip: clip.clone(),
                 samples: vec![0.2; 16000],
                 sample_rate: 16000,
             })
@@ -1822,10 +1833,41 @@ mod hooked_integration_tests {
             &Decision { uid: line.uid.clone(), text: line.text.clone(), outcome: Outcome::Silent, provisional: false },
         );
         assert_eq!(service.line_state(&line.uid).unwrap().how.as_deref(), Some("hooked"));
-        let made = service.make(&[("Sentence".into(), line.text)], Vec::new(), true).unwrap();
+        let made = service.make(&[("Sentence".into(), line.text.clone())], Vec::new(), true).unwrap();
         assert!(!made.mp3.is_empty());
         assert!(!made.matched);
         assert!(made.word.is_none());
+        service.settings.set("sentenceAudio", json!({ "clips": 0 })).unwrap();
+        service.settings_changed();
+        assert!(service.clip(&line.uid).is_none());
+        service
+            .keep_hooked(&kimochi_speech::hooked::Matched {
+                line: line.clone(),
+                clip,
+                samples: vec![0.2; 16000],
+                sample_rate: 16000,
+            })
+            .unwrap();
+        service.keep(
+            &ears,
+            &Decision {
+                uid: "fallback".into(),
+                text: "猫".into(),
+                outcome: Outcome::Voiced(kimochi_speech::listener::Voice {
+                    from_ms: 1000.,
+                    to_ms: 2000.,
+                    how: kimochi_speech::listener::How::Timed,
+                }),
+                provisional: false,
+            },
+        );
+        assert_eq!(lock(&service.store).all().count(), 0);
+        assert!(service.make(&[("Sentence".into(), line.text)], Vec::new(), false).err().unwrap().contains("disabled"));
+        assert!(std::fs::read_dir(dir.join("clips")).unwrap().all(|e| !e
+            .unwrap()
+            .path()
+            .extension()
+            .is_some_and(|e| e == "mp3")));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

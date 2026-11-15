@@ -1285,6 +1285,9 @@ pub async fn account_create_local(name: String, avatar: Option<String>) -> Resul
     {
         let mut index = lock(&account.index);
         if repeated_add(&index.accounts, &name, now_ms()) {
+            // `status_value` reads the index itself: let go of it first, or this waits on its own
+            // lock for good, and every window with it (the Log sat at "Loading the log…").
+            drop(index);
             return Ok(status_value());
         }
         index.accounts.push(Entry {

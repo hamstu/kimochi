@@ -2291,18 +2291,20 @@ async fn ocr_frame(app: tauri::AppHandle, state: State<'_, Shared>, id: u64, eng
             || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext" | "screenai" | "vocr");
         let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
-        if let Ok(p) = path(&app, "last-ocr-frame.png") {
-            match &png {
-                Some(png) => {
-                    let _ = std::fs::write(p, png);
-                }
-                None => {
-                    let image = image.clone();
-                    std::thread::spawn(move || {
-                        if let Ok(png) = image.png() {
-                            let _ = std::fs::write(p, png);
-                        }
-                    });
+        if screenshots::Config::load(&service.settings).kept > 0 {
+            if let Ok(p) = path(&app, "last-ocr-frame.png") {
+                match &png {
+                    Some(png) => {
+                        let _ = std::fs::write(p, png);
+                    }
+                    None => {
+                        let image = image.clone();
+                        std::thread::spawn(move || {
+                            if let Ok(png) = image.png() {
+                                let _ = std::fs::write(p, png);
+                            }
+                        });
+                    }
                 }
             }
         }

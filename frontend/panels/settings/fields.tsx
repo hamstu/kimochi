@@ -35,7 +35,10 @@ export function NumberField({
       step={step}
       disabled={disabled}
       value={value}
-      onChange={(e) => onCommit(Math.max(min, Math.min(max, parseInt(e.target.value, 10) || fallback)))}
+      onChange={(e) => {
+        const parsed = parseInt(e.target.value, 10)
+        onCommit(Math.max(min, Math.min(max, Number.isNaN(parsed) ? fallback : parsed)))
+      }}
     />
   )
 }

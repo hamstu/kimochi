@@ -1566,9 +1566,11 @@ gives each new card the audio of the line it was mined from (`src-tauri/src/sent
 the listener in `speech-core/`). `sentenceAudio` is a machine key: never synced, shared by every
 profile. Its other fields: `voiceHook` (default true: prefer clean individual voices from the selected Windows Text Hooker game, with automatic system-audio fallback), `field` (the note field the line's audio goes in, default
 `SentenceAudio`), `wordField` (the note field the mined word's audio goes in; empty, the default,
-for none), `clips` (line clips kept on disk, 5–100, default 15), `startOffsetMs` and `endOffsetMs`
+for none), `clips` (line clips kept on disk, 0–100, default 15; 0 skips clip saving), `startOffsetMs` and `endOffsetMs`
 (−5000–5000, moving every clip's ends), `trim` (cut a clip placed by timing to its speech, default
-on).
+on). The clip retention control is in Settings → Log & Sessions, beside image retention and
+the line limit. Setting `clips` to 0 removes retained clips and skips saving new ones, including
+clean hooked clips; recording in memory is controlled separately by `enabled`.
 
 | Command | Signature |
 | --- | --- |
@@ -1645,11 +1647,13 @@ request nor its reply changes.
 
 Each new OCR scan (`history_add`, not skipped) captures its source again, whole (its own frame is
 cut to the OCR crop area), and keeps it as JPEG (longest edge 1920) in
-`<app local data>/screenshots/`, indexed by `shots.json`, the newest `cardScreenshot.kept` (10–500,
+`<app local data>/screenshots/`, indexed by `shots.json`, the newest `cardScreenshot.kept` (0–500,
 default 50) (`src-tauri/src/screenshots.rs`). A Quick Shot's source is its display. Each Log line
 finds its scan's screenshot by `ocr.scanId` (or, for a scan read as one text, its ingest id).
 Setting `cardScreenshot`: `{enabled (default on), field (default Picture), kept}`;
-`screenshotAnnotations` (default on) is the viewer's eye.
+`screenshotAnnotations` (default on) is the viewer's eye. The image retention control is in
+Settings → Log & Sessions. Setting `kept` to 0 removes retained screenshots and skips capturing,
+encoding and saving new screenshots for retention, and skips the diagnostic `last-ocr-frame.png` write.
 
 The `capture:` protocol serves `shot/<scan>` (the kept JPEG) and `shot/<scan>/card` (a card's
 picture: the source's Anki crop area, from `ankiCropRegions`, when it has one; longest edge 1280).
