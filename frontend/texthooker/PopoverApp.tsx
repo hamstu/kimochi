@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 /* eslint react-hooks/preserve-manual-memoization: "off" -- The imported popup derives mutable display locals; this build does not enable React Compiler. */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { ArrowLeft } from 'lucide-react'
@@ -12,6 +12,8 @@ import { NotebookEntryCard } from '@texthooker/components/NotebookEntryCard'
 import { usePopupScan, popupLevel } from '@texthooker/hooks/usePopupScan'
 import { audioItemForEntry, mediaForFields } from '@texthooker/lib/audio'
 import { termAllEntries } from '@texthooker/lib/yomitan'
+import { shareGlossaryStyles } from '@texthooker/lib/glossaryStyles'
+import { displayCss } from '@texthooker/lib/html'
 import type { AnkiMediaItem, ResolvedTheme, SerializedNotebookEntry, YomitanAnkiFields } from '@texthooker/lib/types'
 
 /**
@@ -73,7 +75,10 @@ function jumpEntry(scroller: HTMLElement, step: number): void {
     if (offset <= scroller.scrollTop + 8) current = index
   })
   const next = Math.max(0, Math.min(entries.length - 1, current + step))
-  scroller.scrollTo({ top: next === 0 ? 0 : offsets[next], behavior: 'smooth' })
+  scroller.scrollTo({
+    top: next === 0 ? 0 : offsets[next],
+    behavior: 'smooth'
+  })
 }
 
 /** This window's place in the stack of pop-ups: 0 for the first. */
@@ -440,18 +445,22 @@ function EntryList({
   ankiTriggerNonce?: number
   onCrossRef?: (target: string) => void
 }) {
+  // The dictionaries' stylesheets once for the whole list, not once per entry they appear in
+  // (lib/glossaryStyles.ts); Add to Anki still gets each entry's glossary as Yomitan gave it.
+  const shared = useMemo(() => shareGlossaryStyles(entries.map((f) => f.glossary ?? '')), [entries])
+  const sheet = useMemo(() => displayCss(shared.css), [shared])
   if (state !== 'loaded') {
     return <TermDefinition term={term} state={state} errorMessage={errorMessage} />
   }
   // Autoplay belongs to the first entry that actually has audio — the most
   // exact match wins; shorter sub-term matches stay silent unless clicked.
   const firstAudioIdx = entries.findIndex((f) => audioItemForEntry(f, audioMedia) !== null)
-  return entries.map((f, i) => (
+  const list = entries.map((f, i) => (
     <div key={`${keyPrefix}:${term}:${i}`} className="popover-entry">
       <TermDefinition
         term={term}
         state="loaded"
-        fields={f}
+        fields={f.glossary ? { ...f, glossary: shared.glossaries[i] } : f}
         onCrossRef={onCrossRef}
         actions={
           <>
@@ -476,6 +485,12 @@ function EntryList({
       />
     </div>
   ))
+  return (
+    <>
+      {sheet ? <div hidden dangerouslySetInnerHTML={{ __html: sheet }} /> : null}
+      {list}
+    </>
+  )
 }
 
 export default PopoverApp

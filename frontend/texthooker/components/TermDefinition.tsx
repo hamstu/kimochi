@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { CircleAlert, SearchX } from 'lucide-react'
 import { Badge, EmptyState, Spinner, Tooltip } from '@kit'
 import { displayHtml } from '../lib/html'
@@ -74,6 +75,9 @@ export function TermDefinition({ term, state, fields, errorMessage, actions, onC
   const [language] = useLanguage()
   // The headword and term are the learner's text; pitch accents are Japanese's own.
   const textLang = useTextLang()
+  // Sanitized once per glossary, not on every render (the pop-up re-renders as media arrives).
+  const glossary = fields?.glossary
+  const glossaryHtml = useMemo(() => (glossary ? displayHtml(glossary) : ''), [glossary])
   if (state === 'loading') {
     return (
       <div className="popover-status" role="status">
@@ -198,7 +202,7 @@ export function TermDefinition({ term, state, fields, errorMessage, actions, onC
                 }
               : undefined
           }
-          dangerouslySetInnerHTML={{ __html: displayHtml(fields.glossary) }}
+          dangerouslySetInnerHTML={{ __html: glossaryHtml }}
         />
       ) : null}
 
