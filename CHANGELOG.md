@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **Turn off saved OCR images and audio clips.** Settings → Log & Sessions now has adjacent image and audio retention controls beside the line limit. Set either to 0 to stop saving that media and remove previously retained items.
+
 ### Added
 
 - **Show the Text Hooker card only while you hold the lookup key.** **Show the card over the game** in Settings → Text Hooker is now a choice: **Always**, **While holding Shift** (or whichever lookup key you chose in Shortcuts & Controls), or **Never**. Held, the card comes up over the game to read and look up; let go and it's out of the way.

@@ -141,7 +141,7 @@ impl ClipStore {
             }
         }
         let counter = crate::now_ms() as u64;
-        let mut store = Self { dir, keep: keep.max(1), kept, counter };
+        let mut store = Self { dir, keep, kept, counter };
         store.prune();
         store
     }
@@ -151,13 +151,16 @@ impl ClipStore {
     }
 
     pub fn set_keep(&mut self, keep: usize) {
-        self.keep = keep.max(1);
+        self.keep = keep;
         self.prune();
         self.save();
     }
 
     /// Keep `rendered` as `uid`'s clip (replacing one it had), dropping the oldest beyond `keep`.
     pub fn put(&mut self, uid: &str, text: &str, voice: &Voice, rendered: &Rendered) -> Result<ClipInfo, String> {
+        if self.keep == 0 {
+            return Err("Audio clip saving is disabled in Settings → Log & Sessions.".into());
+        }
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
         self.counter += 1;
         let file = format!("clip-{}.mp3", self.counter);
@@ -294,6 +297,30 @@ mod tests {
         assert_eq!(reopened.all().count(), 1);
         reopened.clear();
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn zero_retention_never_writes_a_clip_and_prunes_existing_clips() {
+        let dir = std::env::temp_dir().join(format!("kimochi-clips-zero-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut store = ClipStore::open(dir.clone(), 0);
+        assert!(store.put("a", "一", &voice(), &rendered(1.0)).is_err());
+        assert!(!dir.exists(), "disabled saving must not create files");
+        assert!(store.get("a").is_none());
+        store.set_keep(1);
+        store.put("a", "一", &voice(), &rendered(1.0)).unwrap();
+        store.set_keep(0);
+        assert_eq!(store.all().count(), 0);
+        assert!(store.read("a").is_none());
+        assert!(store.put("b", "二", &voice(), &rendered(1.0)).is_err());
+        assert!(std::fs::read_dir(&dir).unwrap().all(|e| !e.unwrap().path().extension().is_some_and(|e| e == "mp3")));
+        // A saved clip from an earlier run is removed when opening with zero retention too.
+        store.set_keep(1);
+        store.put("c", "三", &voice(), &rendered(1.0)).unwrap();
+        let reopened = ClipStore::open(dir.clone(), 0);
+        assert_eq!(reopened.all().count(), 0);
+        assert!(reopened.read("c").is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 

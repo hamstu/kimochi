@@ -14,6 +14,7 @@ import { updateSettings } from '@texthooker/lib/settings'
 import type { AudioSettings } from '../../vendor/shared-types'
 import { DEFAULT_VOICE_ID } from '../../vendor/shared-constants'
 import { AVAILABLE_VOICES } from '../../vendor/voices'
+import { SETTINGS_DEFAULTS, type CardScreenshotSettings, type SentenceAudioSettings } from '@ui/settings'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { useLanguage } from '../../bridge/useLanguage'
@@ -34,6 +35,10 @@ export function LogTab(): ReactNode {
   const [audioSettings, setAudioSettings] = useSetting<AudioSettings>('audioSettings', {
     voiceId: DEFAULT_VOICE_ID
   })
+  const [storedShot, saveShot] = useSetting<CardScreenshotSettings>('cardScreenshot', SETTINGS_DEFAULTS.cardScreenshot)
+  const [storedAudio, saveAudio] = useSetting<SentenceAudioSettings>('sentenceAudio', SETTINGS_DEFAULTS.sentenceAudio)
+  const shot = { ...SETTINGS_DEFAULTS.cardScreenshot, ...storedShot }
+  const audio = { ...SETTINGS_DEFAULTS.sentenceAudio, ...storedAudio }
   // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account; without one its
   // voice is moot.
   const { cloudAccess } = useCapabilities()
@@ -148,6 +153,36 @@ export function LogTab(): ReactNode {
                   step={100}
                   fallback={5000}
                   onCommit={(v) => void updateSettings({ maxLines: v })}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Images to retain"
+                controlId="log-images-kept"
+                description="Screenshots of the newest scans for the Log and Anki. Set to 0 to stop saving images."
+              >
+                <NumberField
+                  id="log-images-kept"
+                  value={shot.kept}
+                  min={0}
+                  max={500}
+                  step={1}
+                  fallback={SETTINGS_DEFAULTS.cardScreenshot.kept}
+                  onCommit={(kept) => void saveShot({ ...shot, kept })}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Audio clips to retain"
+                controlId="log-audio-clips"
+                description="Clips of the newest lines for the Log and Anki. Set to 0 to stop saving clips."
+              >
+                <NumberField
+                  id="log-audio-clips"
+                  value={audio.clips}
+                  min={0}
+                  max={100}
+                  step={1}
+                  fallback={SETTINGS_DEFAULTS.sentenceAudio.clips}
+                  onCommit={(clips) => void saveAudio({ ...audio, clips })}
                 />
               </SettingsRow>
             </SettingsSection>

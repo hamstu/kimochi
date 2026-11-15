@@ -59,7 +59,7 @@ impl Config {
     pub fn load(settings: &Settings) -> Self {
         let mut config: Config =
             settings.get(KEY).ok().flatten().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
-        config.kept = config.kept.clamp(10, 500);
+        config.kept = config.kept.min(500);
         config.field = config.field.trim().to_string();
         config
     }
@@ -152,7 +152,9 @@ impl Screenshots {
             .into_iter()
             .filter(|shot| dir.join(&shot.file).is_file())
             .collect();
-        Arc::new(Self { dir, settings, shots: Mutex::new(shots), last: Mutex::new(None) })
+        let store = Arc::new(Self { dir, settings, shots: Mutex::new(shots), last: Mutex::new(None) });
+        store.settings_changed();
+        store
     }
 
     pub fn config(&self) -> Config {
@@ -177,6 +179,9 @@ impl Screenshots {
 
     /// Keep `shot` with its JPEG, the newest last, and let the oldest beyond `kept` go.
     fn put(&self, shot: Shot, jpeg: &[u8]) -> Result<(), String> {
+        if self.config().kept == 0 {
+            return Ok(());
+        }
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
         std::fs::write(self.dir.join(&shot.file), jpeg).map_err(|e| e.to_string())?;
         let mut shots = lock(&self.shots);
@@ -341,7 +346,7 @@ fn marks(
 
 /// A new scan reached the history: capture its source whole, in the background, and keep it.
 pub fn taken(app: &tauri::AppHandle, scan: Scan) {
-    if app.try_state::<Arc<Screenshots>>().is_none() {
+    if app.try_state::<Arc<Screenshots>>().is_none_or(|service| service.config().kept == 0) {
         return;
     }
     let app = app.clone();
@@ -372,6 +377,9 @@ fn capture_source(state: &crate::state::Shared, scan: &Scan) -> Result<(image::R
 
 fn take(app: &tauri::AppHandle, scan: Scan) -> Result<(), String> {
     let service = app.try_state::<Arc<Screenshots>>().ok_or("no store")?.inner().clone();
+    if service.config().kept == 0 {
+        return Ok(());
+    }
     let state = app.try_state::<crate::state::Shared>().ok_or("no state")?;
     let (picture, full) = match &scan.picture {
         Some(image) => {
@@ -636,7 +644,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let settings = Arc::new(Settings::load(dir.join("settings.json")));
         settings.set(KEY, json!({ "kept": 10 })).unwrap();
-        let store = Screenshots::open(dir.join("shots"), settings);
+        let store = Screenshots::open(dir.join("shots"), settings.clone());
         let shot = |i: usize, text: &str| Shot {
             scan: format!("s{i}"),
             file: format!("shot-{i}.jpg"),
@@ -667,6 +675,29 @@ mod tests {
         // Reopened from disk.
         let again = Screenshots::open(dir.join("shots"), Arc::new(Settings::load(dir.join("settings.json"))));
         assert_eq!(again.list().len(), 10);
+        settings.set(KEY, json!({ "kept": 1 })).unwrap();
+        store.settings_changed();
+        assert_eq!(store.list().len(), 1);
+        settings.set(KEY, json!({ "kept": 0 })).unwrap();
+        assert_eq!(store.config().kept, 0);
+        store.settings_changed();
+        assert!(store.list().is_empty());
+        assert!(store.pick_for_card(&card, Some("s11"), 11.0).is_none());
+        assert!(!dir.join("shots/shot-11.jpg").exists());
+        store.put(shot(12, "猫"), b"jpeg").unwrap();
+        assert!(!dir.join("shots/shot-12.jpg").exists());
+        assert!(store.list().is_empty());
+        // A fresh disabled store does not even create its directory.
+        let disabled = Screenshots::open(dir.join("disabled"), settings.clone());
+        disabled.put(shot(13, "猫"), b"jpeg").unwrap();
+        assert!(!dir.join("disabled").exists());
+        // Opening with zero also prunes screenshots saved by an earlier run.
+        settings.set(KEY, json!({ "kept": 1 })).unwrap();
+        store.put(shot(14, "猫"), b"jpeg").unwrap();
+        settings.set(KEY, json!({ "kept": 0 })).unwrap();
+        let reopened = Screenshots::open(dir.join("shots"), settings);
+        assert!(reopened.list().is_empty());
+        assert!(!dir.join("shots/shot-14.jpg").exists());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

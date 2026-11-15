@@ -10,7 +10,6 @@ import { Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { SETTINGS_DEFAULTS, type CardScreenshotSettings } from '@ui/settings'
 import { screenshotStatus } from '@texthooker/lib/screenshots'
 import { useSetting } from '../../bridge/useSetting'
-import { NumberField } from './fields'
 import { FieldInput } from './SentenceAudioSection'
 import { useFieldDetection } from './fieldDetection'
 import { detectPictureField } from './sentenceAudioField'
@@ -98,21 +97,6 @@ export function ScreenshotSection(): ReactNode {
           )}
         </>
       )}
-      <SettingsRow
-        label="Screenshots kept"
-        controlId="card-screenshot-kept"
-        description="Kept for the newest scans, to see from the Log and to add to cards you make later."
-      >
-        <NumberField
-          id="card-screenshot-kept"
-          value={config.kept}
-          min={10}
-          max={500}
-          step={10}
-          fallback={DEFAULTS.kept}
-          onCommit={(kept) => update({ kept })}
-        />
-      </SettingsRow>
     </SettingsSection>
   )
 }

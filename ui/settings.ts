@@ -299,7 +299,7 @@ export interface CardScreenshotSettings {
   enabled: boolean
   /** The note field the picture goes in. */
   field: string
-  /** Screenshots kept on disk, 10 to 500. */
+  /** Screenshots kept on disk, 0 to 500; 0 disables saving. */
   kept: number
 }
 
@@ -323,7 +323,7 @@ export interface SentenceAudioSettings {
   /** The note field the mined word's own audio goes in; empty: none. (A field mapped to (word
       audio) wins for the Yomitan API pop-up.) */
   wordField: string
-  /** Line clips kept on disk, 5 to 100. */
+  /** Line clips kept on disk, 0 to 100; 0 disables saving. */
   clips: number
   /** Move the clip's start and end, in milliseconds (negative: earlier). */
   startOffsetMs: number
