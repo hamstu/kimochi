@@ -9,6 +9,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.
+- **Text Hooker card:** moved off the game window, the card now takes clicks without holding the lookup key, instead of letting them through and disappearing. Over the game it stays click-through as before.
 
 ## [1.0.0] - 2026-11-15
 
