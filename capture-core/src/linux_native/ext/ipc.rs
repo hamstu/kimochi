@@ -89,6 +89,17 @@ struct HyprWorkspace {
     /// Hyprland 0.57 describes an idle `specialWorkspace` as `{"address":"","type":"","name":""}`.
     #[serde(default)]
     id: i64,
+    /// Hyprland 0.57 numbers only regular workspaces: a special one has an address (its name),
+    /// never an id. Before 0.57 there is no address, and special workspaces have negative ids.
+    #[serde(default)]
+    address: String,
+}
+
+impl HyprWorkspace {
+    /// Whether `client` is on this special workspace (`id` 0 or missing means none is shown).
+    fn shows_special(&self, client: &HyprWorkspace) -> bool {
+        (self.id != 0 && self.id == client.id) || (!self.address.is_empty() && self.address == client.address)
+    }
 }
 
 #[derive(Deserialize)]
@@ -136,7 +147,7 @@ pub fn hyprland_facts(clients: &[u8], monitors: &[u8], active: &[u8]) -> Option<
         let Some(address) = parse_address(&c.address) else { continue };
         let monitor = monitors.iter().find(|m| m.id == c.monitor);
         let shown_workspace = monitor.is_some_and(|m| {
-            m.active.id == c.workspace.id || m.special.as_ref().is_some_and(|s| s.id != 0 && s.id == c.workspace.id)
+            m.active.id == c.workspace.id || m.special.as_ref().is_some_and(|s| s.shows_special(&c.workspace))
         });
         let focused = match active {
             Some(a) => a == address,
@@ -375,6 +386,29 @@ mod tests {
         let facts = hyprland_facts(clients, monitors, b"{}").unwrap();
         assert_eq!(facts[&0xabc].on_screen, Some(true));
         assert_eq!(facts[&0xabc].output.as_deref(), Some("HDMI-A-1"));
+    }
+
+    #[test]
+    fn hyprland_open_special_workspace_without_ids_is_matched_by_address() {
+        // Hyprland 0.57 numbers only regular workspaces: a special one has an address, never an id.
+        let clients = br#"[
+          {"address":"0xabc","mapped":true,"hidden":false,"at":[0,0],"size":[800,600],
+           "workspace":{"address":"special:scratchpad","type":"special","name":"special:scratchpad"},
+           "monitor":0,"pid":100,"focusHistoryID":0},
+          {"address":"0xdef","mapped":true,"hidden":false,"at":[0,0],"size":[800,600],
+           "workspace":{"address":"special:magic","type":"special","name":"special:magic"},
+           "monitor":0,"pid":101,"focusHistoryID":1},
+          {"address":"0x123","mapped":true,"hidden":false,"at":[0,0],"size":[800,600],
+           "workspace":{"address":"3","id":3,"type":"normal","name":"3"},
+           "monitor":0,"pid":102,"focusHistoryID":2}]"#;
+        let monitors = br#"[{"id":0,"name":"HDMI-A-1",
+          "activeWorkspace":{"address":"3","id":3,"type":"normal","name":"3"},
+          "specialWorkspace":{"address":"special:scratchpad","type":"special","name":"special:scratchpad"}}]"#;
+        let facts = hyprland_facts(clients, monitors, b"{}").unwrap();
+        // The open special workspace, the regular one under it, and not a closed special one.
+        assert_eq!(facts[&0xabc].on_screen, Some(true));
+        assert_eq!(facts[&0x123].on_screen, Some(true));
+        assert_eq!(facts[&0xdef].on_screen, Some(false));
     }
 
     #[test]
