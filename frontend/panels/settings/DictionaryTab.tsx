@@ -120,9 +120,9 @@ export function DictionaryTab(): ReactNode {
             onSave={(value) => void setYomitanSettings({ ...yomitanSettings, customApiUrl: value })}
           />
           <SettingsRow
-            label="Look up words on screen in advance"
+            label="Pre-fetch lookups"
             controlId="dictionary-api-prefetch"
-            description="When new text appears on the overlay, Kimochi asks Yomitan about its words while you aren't pointing at anything, so their pop-ups open at once. Your browser's Yomitan does a little work in the background for each new line."
+            description="Starts looking up words in the background before you hover, to speed up the pop-up. May use more CPU."
           >
             <Switch
               id="dictionary-api-prefetch"
