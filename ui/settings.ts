@@ -747,12 +747,12 @@ export interface EngineSwitchRecord {
   /** The engine just chosen, for "Now using …". */
   engine: DictionaryEngine
   /** The main window's view to reopen: Settings for a switch made there, else the Log, Notebook or
-   * Anki tab the sidebar's dictionary picker was used from. */
-  view: 'settings' | 'source' | 'log' | 'notebook' | 'anki'
+   * Anki or Stats tab the sidebar's dictionary picker was used from. */
+  view: 'settings' | 'source' | 'log' | 'notebook' | 'anki' | 'stats'
   /** The Settings page (`settingsActiveTab`), so the first frame is that page, not the default. */
   tab: string
   /** Where Back from Settings returns to. */
-  back: 'source' | 'log' | 'notebook' | 'anki'
+  back: 'source' | 'log' | 'notebook' | 'anki' | 'stats'
   /** The Settings page's scroll offset, in CSS pixels. */
   scrollTop: number
   /** `Date.now()` when the switch was made. */
@@ -776,7 +776,15 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
   const record = value as Record<string, unknown>
   const { engine, view, tab, back, scrollTop, at } = record
   if (typeof engine !== 'string' || !Object.hasOwn(DICTIONARY_ENGINES, engine)) return null
-  if (view !== 'settings' && view !== 'source' && view !== 'log' && view !== 'notebook' && view !== 'anki') return null
+  if (
+    view !== 'settings' &&
+    view !== 'source' &&
+    view !== 'log' &&
+    view !== 'notebook' &&
+    view !== 'anki' &&
+    view !== 'stats'
+  )
+    return null
   if (typeof tab !== 'string' || !tab) return null
   if (typeof at !== 'number' || !Number.isFinite(at)) return null
   // A clock that stepped back a little still counts; a record from the future does not.
@@ -785,7 +793,7 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
     engine: engine as DictionaryEngine,
     view,
     tab,
-    back: back === 'source' || back === 'notebook' || back === 'anki' ? back : 'log',
+    back: back === 'source' || back === 'notebook' || back === 'anki' || back === 'stats' ? back : 'log',
     scrollTop: typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 0 ? scrollTop : 0,
     at
   }

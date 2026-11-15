@@ -1,0 +1,724 @@
+/*
+ * The Stats tab. One scrolling column on the window ground, sections divided by hairlines, no
+ * cards. Indigo carries the data (the heatmap's shades, the bars, the speed line): the reading is
+ * what is "on" here. Everything else is the kit's neutrals.
+ */
+
+.stats-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--k-bg);
+  color: var(--k-text);
+}
+.stats-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.stats-foot {
+  flex: none;
+  gap: var(--k-space-3);
+  padding: 0 var(--k-space-1) 0 var(--k-space-3);
+}
+.stats-center {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: var(--k-space-6);
+}
+.stats-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-6);
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: var(--k-space-5) var(--k-space-6) var(--k-space-8);
+}
+
+.stats-page h2,
+.stats-page h3 {
+  margin: 0;
+  font-weight: var(--k-weight-semibold);
+}
+.stats-page h2 {
+  font-size: var(--k-text-lg);
+  line-height: var(--k-leading-lg);
+  letter-spacing: -0.005em;
+}
+.stats-page h3 {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+}
+.stats-quiet {
+  margin: 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}
+
+/* The readout beside a chart's title: the pointed-at bar, else a summary. */
+.stats-readout {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0 var(--k-space-2);
+  min-width: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.stats-readout strong {
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
+}
+.stats-readout > * + *::before {
+  content: '·';
+  margin-right: var(--k-space-2);
+  color: var(--k-text-3);
+}
+
+/* ------------------------------------------------------------------ heatmap (the centrepiece) */
+
+.stats-heatmap {
+  --cell-gap: 0.1875rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+}
+.stats-heatmap-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--k-space-4);
+}
+.stats-streak {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.stats-streak-icon {
+  width: var(--k-icon);
+  height: var(--k-icon);
+  color: var(--k-text-3);
+}
+.stats-streak-icon[data-on] {
+  color: var(--k-accent-text);
+}
+.stats-streak-value {
+  font-size: var(--k-text-xl);
+  line-height: var(--k-leading-xl);
+  font-weight: var(--k-weight-semibold);
+}
+.stats-streak-label {
+  color: var(--k-text-2);
+  font-weight: var(--k-weight-medium);
+}
+.stats-streak-facts {
+  display: flex;
+  gap: var(--k-space-5);
+  margin: 0;
+}
+.stats-streak-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--k-space-1-5);
+}
+.stats-streak-facts dt {
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}
+.stats-streak-facts dd {
+  margin: 0;
+  font-weight: var(--k-weight-medium);
+}
+
+.stats-heatmap-body {
+  display: flex;
+  gap: var(--k-space-2);
+}
+.stats-heatmap-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  gap: var(--cell-gap);
+  /* Under the month row. */
+  padding-top: calc(var(--k-leading-xs) + var(--k-space-1));
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: 1;
+}
+.stats-heatmap-weekdays > span {
+  display: flex;
+  align-items: center;
+}
+.stats-heatmap-main {
+  flex: 1;
+  min-width: 0;
+}
+.stats-heatmap-months {
+  display: grid;
+  gap: var(--cell-gap);
+  height: var(--k-leading-xs);
+  margin-bottom: var(--k-space-1);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  white-space: nowrap;
+}
+.stats-heatmap-grid {
+  display: grid;
+  grid-template-rows: repeat(7, auto);
+  grid-auto-flow: column;
+  gap: var(--cell-gap);
+}
+
+.stats-heatmap-cell {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 0.1875rem;
+  background: var(--gray-a3);
+  transition: box-shadow var(--k-fast) ease-out;
+}
+.stats-heatmap-cell[data-level='1'] {
+  background: var(--accent-a5);
+}
+.stats-heatmap-cell[data-level='2'] {
+  background: var(--accent-a7);
+}
+.stats-heatmap-cell[data-level='3'] {
+  background: var(--accent-9);
+  opacity: 0.8;
+}
+.stats-heatmap-cell[data-level='4'] {
+  background: var(--accent-10);
+}
+.stats-heatmap-cell[data-future] {
+  background: transparent;
+}
+/* Today waits with an outline until it is read. */
+.stats-heatmap-cell[data-today][data-level='0'] {
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+}
+/* The current streak wears a ring; the run under the pointer, a stronger one. */
+.stats-heatmap-cell[data-streak] {
+  box-shadow:
+    0 0 0 1px var(--k-bg),
+    0 0 0 2px var(--accent-a8);
+}
+.stats-heatmap-cell[data-run] {
+  box-shadow:
+    0 0 0 1px var(--k-bg),
+    0 0 0 2px var(--k-accent-text);
+}
+.stats-heatmap-cell[data-hovered] {
+  box-shadow:
+    0 0 0 1px var(--k-bg),
+    0 0 0 2px var(--k-text);
+}
+
+.stats-heatmap-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-4);
+  min-height: var(--k-leading-sm);
+  /* Line up with the grid, past the weekday labels. */
+  padding-left: calc(1.75rem + var(--k-space-2));
+}
+.stats-heatmap-foot .stats-readout {
+  justify-content: flex-start;
+}
+.stats-legend {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--cell-gap);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.stats-legend > .stats-heatmap-cell {
+  width: 0.6875rem;
+}
+.stats-legend > span:first-child {
+  margin-right: var(--k-space-1);
+}
+.stats-legend > span:last-child {
+  margin-left: var(--k-space-1);
+}
+.stats-heatmap-weekdays {
+  width: 1.75rem;
+  flex: none;
+}
+
+/* ------------------------------------------------------------------ figures */
+
+.stats-figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--k-line);
+  border-bottom: 1px solid var(--k-line);
+}
+.stats-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+  padding: var(--k-space-3) var(--k-space-4);
+}
+.stats-figure:first-child {
+  padding-left: 0;
+}
+.stats-figure + .stats-figure {
+  border-left: 1px solid var(--k-line);
+}
+.stats-figure-label {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-xs);
+}
+.stats-figure-value {
+  overflow: hidden;
+  font-size: var(--k-text-xl);
+  font-weight: var(--k-weight-semibold);
+  line-height: var(--k-leading-xl);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats-figure-detail {
+  overflow: hidden;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ range */
+
+.stats-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-2) var(--k-space-3);
+  margin-bottom: calc(var(--k-space-2) * -1);
+}
+.stats-range-totals {
+  flex: 1;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+}
+
+/* ------------------------------------------------------------------ charts */
+
+.stats-chart,
+.stats-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  min-width: 0;
+}
+.stats-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  min-height: var(--k-control-h);
+}
+.stats-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  font-weight: var(--k-weight-medium);
+}
+.stats-metric > span:last-child {
+  color: var(--k-text-2);
+  font-weight: var(--k-weight-regular);
+}
+
+.stats-plot {
+  position: relative;
+  /* The highest value sits on the top rule. */
+  border-top: 1px dashed var(--k-line);
+  border-bottom: 1px solid var(--k-line);
+}
+.stats-plot-max {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: 0 var(--k-space-1) 0 0;
+  background: var(--k-bg);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  transform: translateY(-50%);
+}
+.stats-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 0.1875rem;
+  height: 8rem;
+  padding-top: var(--k-space-2);
+}
+.stats-bars[data-dense] {
+  gap: 1px;
+}
+.stats-bar {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  min-width: 0;
+}
+.stats-bar > span {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  border-radius: 0.125rem 0.125rem 0 0;
+  background: var(--accent-a7);
+  transition: background var(--k-fast) ease-out;
+}
+.stats-bar[data-current] > span {
+  background: var(--k-accent);
+}
+.stats-bar[data-hovered] > span {
+  background: var(--k-accent-hover);
+}
+.stats-bar[data-hovered] {
+  background: var(--gray-a2);
+}
+
+.stats-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+
+.stats-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--k-space-6);
+}
+.stats-pair .stats-bars {
+  height: 6rem;
+}
+.stats-bars-hours {
+  gap: 0.125rem;
+}
+
+.stats-line {
+  position: relative;
+  height: 6rem;
+  padding-top: var(--k-space-2);
+}
+.stats-line > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.stats-line path {
+  fill: none;
+  stroke: var(--k-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.stats-line-cursor {
+  stroke: var(--k-line-strong);
+  stroke-width: 1;
+}
+.stats-line-hit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.stats-line-hit > span {
+  flex: 1;
+}
+.stats-line-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}
+
+/* ------------------------------------------------------------------ sessions */
+
+.stats-table {
+  display: flex;
+  flex-direction: column;
+}
+.stats-table-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) 6.5rem 5rem 5.5rem 5.5rem;
+  align-items: center;
+  gap: var(--k-space-3);
+  min-height: var(--k-row-h);
+  border-bottom: 1px solid var(--k-line);
+  font-size: var(--k-text-md);
+}
+.stats-table-row > span:not(:first-child) {
+  text-align: right;
+}
+.stats-table-head {
+  min-height: var(--k-leading-md);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+}
+.stats-table-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+  padding: var(--k-space-1-5) 0;
+}
+.stats-table-label {
+  overflow: hidden;
+  font-weight: var(--k-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats-table-share {
+  display: block;
+  height: 0.1875rem;
+  border-radius: 999px;
+  background: var(--gray-a3);
+}
+.stats-table-share > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-a8);
+}
+.stats-table-faint {
+  color: var(--k-text-3);
+}
+
+/* ------------------------------------------------------------------ kanji */
+
+.stats-kanji {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr));
+  gap: var(--k-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stats-kanji > li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--k-space-1) 0 var(--k-space-0-5);
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+}
+.stats-kanji > li[data-level='4'] {
+  background: var(--accent-a4);
+}
+.stats-kanji > li[data-level='3'] {
+  background: var(--accent-a3);
+}
+.stats-kanji > li[data-level='2'] {
+  background: var(--accent-a2);
+}
+/* First met in the range: a small indigo dot. */
+.stats-kanji > li[data-fresh]::after {
+  content: '';
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 999px;
+  background: var(--k-accent);
+}
+.stats-kanji-glyph {
+  font-family: var(--k-font-jp);
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+.stats-kanji-count {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+
+/* ------------------------------------------------------------------ session picker */
+
+.stats-session-menu {
+  width: 17rem;
+  max-height: min(24rem, 70vh);
+  display: flex;
+  flex-direction: column;
+}
+.stats-session-head {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+  padding-bottom: var(--k-space-1);
+  border-bottom: 1px solid var(--k-line);
+  margin: 0 calc(var(--k-space-1) * -1) var(--k-space-1);
+  padding-inline: var(--k-space-1);
+}
+.stats-session-head > .k-menu-label {
+  flex: 1;
+  padding-block: 0;
+}
+.stats-session-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+.stats-session-option {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-height: var(--k-item-h);
+  padding: 0 var(--k-space-2);
+  border-radius: var(--k-radius-md);
+  font-size: var(--k-text-md);
+}
+.stats-session-option:hover {
+  background: var(--k-press);
+}
+.stats-session-option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ narrow windows */
+
+@container stats (max-width: 40rem) {
+  .stats-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats-figure:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .stats-figure:nth-child(n + 3) {
+    border-top: 1px solid var(--k-line);
+  }
+  .stats-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stats-table-row {
+    grid-template-columns: minmax(6rem, 1fr) 5.5rem 4.5rem;
+  }
+  .stats-table-row > :nth-child(n + 4) {
+    display: none;
+  }
+  .stats-page {
+    padding-inline: var(--k-space-4);
+  }
+  .stats-heatmap-head {
+    flex-wrap: wrap;
+  }
+}
+.stats-scroll {
+  container: stats / inline-size;
+}
+
+/* ------------------------------------------------------------------ loading and reveal */
+
+/* The skeleton: quiet sunken shapes; the heatmap's squares brighten in a slow wave, left to right. */
+.stats-skeleton-bar {
+  display: block;
+  height: var(--k-leading-sm);
+  border-radius: var(--k-radius-sm);
+  background: var(--gray-a3);
+}
+.stats-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(53, 1fr);
+  grid-template-rows: repeat(7, auto);
+  grid-auto-flow: column;
+  gap: 0.1875rem;
+  margin-top: calc(var(--k-leading-xs) + var(--k-space-1));
+  padding-left: calc(1.75rem + var(--k-space-2));
+}
+.stats-skeleton-grid > span {
+  aspect-ratio: 1;
+  border-radius: 0.1875rem;
+  background: var(--gray-a3);
+  animation: stats-wave 1.6s ease-in-out infinite both;
+  animation-delay: calc(var(--w) * 24ms);
+}
+.stats-skeleton-chart {
+  height: 10rem;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-sunken);
+}
+.stats-skeleton-tile {
+  height: 3rem;
+  border-radius: var(--k-radius-md);
+  background: var(--gray-a3);
+  animation: stats-wave 1.6s ease-in-out infinite both;
+  animation-delay: calc(var(--i) * 30ms);
+}
+/* The skeleton itself arrives softly, so a quick load never flashes it. */
+.stats-skeleton {
+  animation: stats-fade 400ms ease-out 120ms both;
+}
+@keyframes stats-wave {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+    background: var(--accent-a4);
+  }
+}
+@keyframes stats-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes stats-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+}
+
+/* The first numbers: each section fades up after the one above it. */
+.stats-page[data-reveal] > * {
+  animation: stats-in 360ms var(--k-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+.stats-fade-in {
+  animation: stats-fade 280ms ease-out both;
+}
+/* A new answer on its way (another range or sessions): the last one waits, dimmed. */
+.stats-kanji {
+  transition: opacity var(--k-base) ease-out;
+}
+.stats-kanji[data-stale] {
+  opacity: 0.5;
+}
+/* The heatmap's squares settle in as one wave on first show. */
+.stats-page[data-reveal] .stats-heatmap-cell {
+  animation: stats-fade 420ms ease-out both;
+  animation-delay: calc(120ms + var(--w, 0) * 6ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stats-skeleton,
+  .stats-skeleton-grid > span,
+  .stats-skeleton-tile,
+  .stats-page[data-reveal] > *,
+  .stats-page[data-reveal] .stats-heatmap-cell,
+  .stats-fade-in {
+    animation: none;
+  }
+}

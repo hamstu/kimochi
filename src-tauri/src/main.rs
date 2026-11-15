@@ -3432,6 +3432,8 @@ fn main() {
         log_lines::log_recent,
         reading_history::reading_history_append,
         reading_history::reading_history_summary,
+        reading_history::reading_history_stats,
+        reading_history::reading_history_kanji,
         reading_history::reading_history_export,
         cli::install::cli_status,
         cli::install::cli_install,
