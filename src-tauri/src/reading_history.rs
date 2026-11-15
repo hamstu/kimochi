@@ -123,11 +123,14 @@ pub struct HistoryLine {
     pub read_ms: u64,
 }
 
-/// Characters read, the way reading trackers count them (exSTATic, GSM, ttu reader): letters and
-/// digits of any script, so kana, kanji and full-width alphanumerics count and punctuation,
-/// symbols and spaces do not. `text` itself is kept, so a different count can always be re-run.
+/// Characters read, the way the Japanese reading trackers count them (GameSentenceMiner,
+/// exSTATic, Rubi): every character but punctuation, symbols, spaces and line breaks, by code
+/// point. The same rule as `countChars` (frontend/texthooker/core/charCount.ts), which the Log's
+/// footer counts with. `text` itself is kept, so a different count can always be re-run.
 pub fn count_chars(text: &str) -> usize {
-    text.chars().filter(|c| c.is_alphanumeric()).count()
+    static NOT_READ: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"[\p{P}\p{S}\p{Z}\p{Cc}]").expect("a valid pattern"));
+    NOT_READ.replace_all(text, "").chars().count()
 }
 
 fn now_ms() -> u64 {
@@ -225,19 +228,180 @@ fn files(dir: &Path) -> Vec<PathBuf> {
     all
 }
 
-/// Every event in `dir`'s history, in the order recorded. A line that does not parse (a write cut
-/// short) is passed over.
-pub fn events(dir: &Path) -> Vec<Event> {
+type Stamp = (std::time::SystemTime, u64);
+
+/// Parsed files by modification time and size: a quiet Sync cycle or a second export reads
+/// nothing again.
+type Parsed = HashMap<PathBuf, (Stamp, Vec<Event>)>;
+static CACHE: Mutex<Option<Parsed>> = Mutex::new(None);
+
+fn stamp(path: &Path) -> Option<Stamp> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+/// The events in one file: a `.jsonl` of this computer's, or another computer's chunk
+/// (`{"events": [...]}`). Anything that does not parse (a write cut short) is passed over.
+fn file_events(path: &Path) -> Vec<Event> {
+    let Some(at) = stamp(path) else { return Vec::new() };
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let cache = cache.get_or_insert_with(HashMap::new);
+    if let Some((seen, events)) = cache.get(path) {
+        if *seen == at {
+            return events.clone();
+        }
+    }
+    let events: Vec<Event> = if path.extension().is_some_and(|e| e == "jsonl") {
+        let Ok(file) = std::fs::File::open(path) else { return Vec::new() };
+        std::io::BufReader::new(file)
+            .lines()
+            .map_while(Result::ok)
+            .filter_map(|line| serde_json::from_str::<Event>(&line).ok())
+            .collect()
+    } else {
+        chunk_events(&crate::profile::read_json(path).unwrap_or(Value::Null))
+    };
+    cache.insert(path.to_path_buf(), (at, events.clone()));
+    events
+}
+
+/// The events a synced chunk holds.
+fn chunk_events(chunk: &Value) -> Vec<Event> {
+    chunk["events"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| serde_json::from_value::<Event>(e.clone()).ok())
+        .filter_map(tidy)
+        .collect()
+}
+
+/// The other computers' chunks kept here (`devices/<device>/<chunk>.json`), as `(record id,
+/// path)`.
+fn device_chunks(dir: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
-    for path in files(dir) {
-        let Ok(file) = std::fs::File::open(&path) else { continue };
-        for line in std::io::BufReader::new(file).lines().map_while(Result::ok) {
-            if let Ok(event) = serde_json::from_str::<Event>(&line) {
-                out.push(event);
+    for device in std::fs::read_dir(dir.join(DIR).join(DEVICES_DIR)).into_iter().flatten().flatten() {
+        let Some(name) = device.file_name().to_str().map(str::to_string) else { continue };
+        if !crate::sync_core::safe_segment(&name) {
+            continue;
+        }
+        for chunk in std::fs::read_dir(device.path()).into_iter().flatten().flatten() {
+            let path = chunk.path();
+            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else { continue };
+            if path.extension().is_some_and(|e| e == "json") {
+                out.push((format!("{name}/{stem}"), path.clone()));
             }
         }
     }
+    out.sort();
     out
+}
+
+/// Every event in `dir`'s history, this computer's and the other computers' it has from Sync,
+/// in the order they were made (`at`; events made at the same moment keep their file order).
+pub fn events(dir: &Path) -> Vec<Event> {
+    let mut out = Vec::new();
+    for path in files(dir) {
+        out.extend(file_events(&path));
+    }
+    for (_, path) in device_chunks(dir) {
+        out.extend(file_events(&path));
+    }
+    out.sort_by_key(|event| event.at);
+    out
+}
+
+// --- Sync ---------------------------------------------------------------------------------------
+//
+// Each computer's events travel as records in the `history` collection, written only by the
+// computer that made them, so two never edit one record (like `stats`). A record is a chunk of
+// one file's events from one UTC hour, at most CHUNK_EVENTS of them and CHUNK_BYTES long:
+// `<device>/<YYYYMMDDHH>.<n>`, or `<device>/b<YYYYMMDDHH>.<n>` from the backfill. The files are
+// only appended to, so a new event changes only the last chunk of its hour, and a push sends a
+// few kilobytes, not the day. Other computers' chunks are kept as they arrive, in
+// `devices/<device>/<chunk>.json`, and fold into `lines` like this computer's own events.
+
+const DEVICES_DIR: &str = "devices";
+const CHUNK_EVENTS: usize = 50;
+/// Well under the server's 256 KB per record.
+const CHUNK_BYTES: usize = 192 * 1024;
+
+fn hour_key(at: u64) -> String {
+    let date =
+        time::OffsetDateTime::from_unix_timestamp((at / 1000) as i64).unwrap_or(time::OffsetDateTime::UNIX_EPOCH);
+    format!("{:04}{:02}{:02}{:02}", date.year(), u8::from(date.month()), date.day(), date.hour())
+}
+
+/// One file's events as chunks: `(chunk name, events)`.
+fn chunks(prefix: &str, events: &[Event]) -> Vec<(String, Vec<Value>)> {
+    let mut hours: BTreeMap<String, Vec<Vec<Value>>> = BTreeMap::new();
+    let mut sizes: HashMap<String, usize> = HashMap::new();
+    for event in events {
+        let Ok(value) = serde_json::to_value(event) else { continue };
+        let size = value.to_string().len();
+        let hour = hour_key(event.at);
+        let pieces = hours.entry(hour.clone()).or_default();
+        let used = sizes.entry(hour).or_insert(0);
+        let full = pieces.last().is_none_or(|last| last.len() >= CHUNK_EVENTS || *used + size > CHUNK_BYTES);
+        if full {
+            pieces.push(Vec::new());
+            *used = 0;
+        }
+        *used += size;
+        pieces.last_mut().expect("a chunk").push(value);
+    }
+    hours
+        .into_iter()
+        .flat_map(|(hour, pieces)| {
+            pieces
+                .into_iter()
+                .enumerate()
+                .map(move |(n, events)| (format!("{prefix}{hour}.{n}"), events))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The history as Sync records, `(id, data)`: this computer's events in chunks under
+/// `device_id`, and the other computers' chunks as they were received.
+pub fn sync_records(dir: &Path, device_id: &str) -> Vec<(String, Value)> {
+    let mut out = Vec::new();
+    if crate::sync_core::safe_segment(device_id) {
+        for path in files(dir) {
+            let prefix = if path.ends_with(BACKFILL_FILE) { "b" } else { "" };
+            for (name, events) in chunks(prefix, &file_events(&path)) {
+                out.push((format!("{device_id}/{name}"), json!({ "events": events })));
+            }
+        }
+    }
+    for (id, path) in device_chunks(dir) {
+        if id.split('/').next() == Some(device_id) {
+            continue;
+        }
+        if let Some(chunk) = crate::profile::read_json(&path) {
+            out.push((id, chunk));
+        }
+    }
+    out
+}
+
+/// Keep (or, with None, drop) another computer's chunk `id` (`<device>/<chunk>`) from Sync.
+pub fn write_synced(dir: &Path, id: &str, data: Option<&Value>) -> Result<(), String> {
+    let Some((device, chunk)) = id.split_once('/') else { return Ok(()) };
+    if !crate::sync_core::safe_segment(device) || !crate::sync_core::safe_segment(chunk) {
+        return Ok(());
+    }
+    let path = dir.join(DIR).join(DEVICES_DIR).join(device).join(format!("{chunk}.json"));
+    if let Some(cache) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        cache.remove(&path);
+    }
+    match data {
+        Some(value) => crate::profile::write_json(&path, value),
+        None => match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            _ => Ok(()),
+        },
+    }
 }
 
 /// The sessions' names now, by id.
@@ -564,22 +728,14 @@ fn exstatic_lines(lines: &[HistoryLine]) -> String {
     out
 }
 
-/// exSTATic's character count (`charsInLine` in its `calculations.ts`): every character but its
-/// list of Japanese and ASCII punctuation and spaces.
-pub fn exstatic_chars(text: &str) -> usize {
-    const IGNORE: &str =
-        "〔〕《》〖〗〘〙〚〛【】「」［］『』｛｝[]()（）｟｠〈〉≪≫。、.,※＊'：！?？‥…―─ｰ〽～→♪♫♬♩\"　 \t\n";
-    text.chars().filter(|c| !IGNORE.contains(*c)).count()
-}
-
 /// `ms` (epoch) as the local date it was read, `YYYY-MM-DD`.
 fn local_date(ms: u64, tz: i32) -> String {
     iso_local(ms, tz)[..10].to_string()
 }
 
 /// exSTATic's stats CSV: per media and local day, `client,uuid,name,given_identifier,type,date,
-/// chars_read,lines_read,time_read,read_speed` (`time_read` in seconds, `read_speed` characters
-/// per second). Importing it names the media the lines CSV fills. `lines` need `read_ms`.
+/// chars_read,lines_read,time_read,read_speed` (`chars_read` by [`count_chars`], `time_read` in
+/// seconds, `read_speed` characters per second). Importing it names the media the lines CSV fills. `lines` need `read_ms`.
 fn exstatic_stats(lines: &[HistoryLine]) -> String {
     let media = exstatic_media(lines);
     // Characters, lines and ms per (local date, session), in the order first read.
@@ -593,7 +749,7 @@ fn exstatic_stats(lines: &[HistoryLine]) -> String {
             days.len() - 1
         });
         let day = &mut days[at].1;
-        day.0 += exstatic_chars(&line.text);
+        day.0 += line.chars;
         day.1 += 1;
         day.2 += line.read_ms;
     }
@@ -718,11 +874,27 @@ mod tests {
     }
 
     #[test]
-    fn characters_count_letters_and_digits_of_any_script() {
-        assert_eq!(count_chars("「わたしは、見守る。」"), 7);
-        assert_eq!(count_chars("ＡＢＣ１２３ abc!"), 9);
-        assert_eq!(exstatic_chars("「わたしは、見守る。」"), 7);
-        assert_eq!(exstatic_chars("♡あ"), 2, "exSTATic counts what its list leaves in");
+    fn characters_are_counted_as_gsm_and_exstatic_count_them() {
+        // The cases where the trackers are compared (Rubi's docs/ocr-history.md).
+        for (text, count) in [
+            ("「わたしは、見守る。」", 7),
+            ("ABC abc!", 6),
+            ("……", 0),
+            ("♪", 0),
+            ("！", 0),
+            ("～", 0),
+            ("ー", 1),
+            ("１２３", 3),
+            ("・", 0),
+            ("〜", 0),
+            ("😀", 0),
+            ("𠮟る", 2),
+            ("○○さん", 2),
+            ("行こう\n明日", 5),
+            ("ＡＢＣ１２３ abc!", 9),
+        ] {
+            assert_eq!(count_chars(text), count, "{text}");
+        }
     }
 
     #[test]
@@ -846,6 +1018,45 @@ mod tests {
         assert_eq!(iso_local(0, 540), "1970-01-01T09:00:00.000+09:00");
         assert_eq!(iso_local(1_500, -330), "1969-12-31T18:30:01.500-05:30");
         assert_eq!(local_date(15 * 3600 * 1000, 540), "1970-01-02");
+    }
+
+    #[test]
+    fn sync_chunks_are_small_and_only_the_last_of_an_hour_grows() {
+        let hour = 3_600_000;
+        let events: Vec<Event> = (0..120).map(|i| add(&format!("u{i}"), hour + i, "一")).collect();
+        let sizes: Vec<(String, usize)> = chunks("", &events).into_iter().map(|(name, e)| (name, e.len())).collect();
+        assert_eq!(
+            sizes,
+            [("1970010101.0".to_string(), 50), ("1970010101.1".to_string(), 50), ("1970010101.2".to_string(), 20)]
+        );
+        let mut more = events.clone();
+        more.push(add("late", hour + 500, "二"));
+        more.push(add("next", 2 * hour, "三"));
+        let after = chunks("", &more);
+        assert_eq!(after[..2], chunks("", &events)[..2], "full chunks never change");
+        assert_eq!(after[2].1.len(), 21);
+        assert_eq!(after[3].0, "1970010102.0");
+        // Long lines fill a chunk by size before count.
+        let long: Vec<Event> = (0..20).map(|i| add(&format!("l{i}"), hour, &"あ".repeat(TEXT_LIMIT))).collect();
+        let pieces = chunks("b", &long);
+        assert!(pieces.len() > 1 && pieces[0].0.starts_with("b1970010101."));
+        assert!(pieces.iter().all(|(_, e)| serde_json::to_string(e).unwrap().len() <= CHUNK_BYTES));
+    }
+
+    #[test]
+    fn another_computers_chunks_fold_in_and_never_go_back_as_ours() {
+        let dir = temp("devices");
+        append(&dir, vec![add("a", 1_000, "一")]).unwrap();
+        let theirs = json!({ "events": [add("b", 2_000, "二"), Event { op: "delete".into(), uid: "a".into(), at: 3_000, ..Default::default() }] });
+        write_synced(&dir, "other/1970010100.0", Some(&theirs)).unwrap();
+        write_synced(&dir, "../evil/x", Some(&theirs)).unwrap();
+        assert!(!dir.join(DIR).join("evil").exists());
+        assert_eq!(lines(&dir).iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["二"]);
+        let ids: Vec<String> = sync_records(&dir, "me").into_iter().map(|(id, _)| id).collect();
+        assert_eq!(ids, ["me/1970010100.0", "other/1970010100.0"]);
+        write_synced(&dir, "other/1970010100.0", None).unwrap();
+        assert_eq!(lines(&dir).len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn exported(format: Format) -> String {

@@ -727,13 +727,25 @@ appended to) and folds them by `uid` when read: the latest text wins, the first 
 audio retention never remove history. The first call in a profile copies every session's
 `lines.json` into `backfill.jsonl` (lines marked `backfilled`; a live record of the same `uid`
 wins); that file's presence means the backfill ran. A profile copied into an account takes its
-history with it (`profile::copy_profile_data`). Sync does not carry it yet.
+history with it (`profile::copy_profile_data`). Sync carries it as the `history` collection:
+each computer pushes only its own events, as chunks of one file's events from one UTC hour (at
+most 50 events and 192 KB: `<device>/<YYYYMMDDHH>.<n>`, `b…` from the backfill), so a new line
+changes only the last chunk of its hour; other computers' chunks are kept as they arrive in
+`reading-history/devices/<device>/<chunk>.json`, never pushed back, and fold in with this
+computer's events in the order they were made. A line deleted on one computer is gone from the
+history on all of them.
+
+Characters are counted by one rule everywhere, the Log's footer included (`countChars`,
+`frontend/texthooker/core/charCount.ts`, and `reading_history::count_chars`): every code point but
+Unicode punctuation, symbols, separators and control characters, as GameSentenceMiner and
+exSTATic count (GSM also counts line breaks inside a line; exSTATic also counts `!`, `・`, `〜`
+and emoji).
 
 Export (the Log's ⋯ → Export reading history) writes: `exstatic-lines`, exSTATic's lines CSV
 `uuid,given_identifier,name,line,time` (BOM, `time` in epoch seconds; `uuid` is the session id,
 `given_identifier` the hooked game's executable or else the session name), which exSTATic imports
 and GameSentenceMiner's exSTATic import reads; `exstatic-stats`, exSTATic's stats CSV per session
-and local day (`chars_read` counted exSTATic's way, `time_read` seconds), which names the media in
+and local day (`chars_read` by the rule above, `time_read` seconds), which names the media in
 exSTATic; `csv` and `json`, every field, with `read_ms`, the time to the next line read capped at
 `idleSec` (the Log's AFK threshold), as the footer counts reading time.
 
