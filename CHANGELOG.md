@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Text Hooker on Linux:** a game run with Wine (for example by double-clicking its .exe) no longer fails with a vague "is not running in its Wine prefix". If the game's prefix is 32-bit, Kimochi now says so (Text Hooker needs a 64-bit prefix, which runs 32-bit games too). Otherwise it shows Wine's actual error and the prefix it checked, and verbose logging records the details for a debug report.
+
 ## [1.0.0] - 2026-11-15
 
 ### Added
