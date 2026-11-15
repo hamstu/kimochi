@@ -16,7 +16,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { AppWindow, Monitor, ScreenShare, ShieldAlert } from 'lucide-react'
+import { AppWindow, Monitor, RefreshCw, ScreenShare, ShieldAlert } from 'lucide-react'
 import { Button, Callout, Spinner } from '@kit'
 import { invoke } from '@tauri-apps/api/core'
 import {
@@ -233,23 +233,31 @@ export function SourceGrid({
       </div>
     )
   }
-  return <WindowGrid currentId={currentId} hookable={hookable} onChoose={onChoose} />
+  return (
+    <WindowGrid key={hookable ? 'hook' : 'capture'} currentId={currentId} hookable={hookable} onChoose={onChoose} />
+  )
 }
 
 /**
  * Missing capture permission, as something to click rather than a red line: opens the system's
  * screen recording settings, as the first-run guide's button does.
  */
-function GrantCaptureItem({ os }: { os: string }): ReactNode {
+function GrantCaptureItem({ os, check = false }: { os: string; check?: boolean }): ReactNode {
   return (
     <MenuPrimitive.Item className="sg-permission" onSelect={() => void openScreenCapturePreferences()}>
       <ShieldAlert className="sg-permission-icon" />
       <span className="sg-caption-text">
-        <span className="sg-caption-title">{os === 'macos' ? 'Allow Screen Recording…' : 'Allow screen capture…'}</span>
+        <span className="sg-caption-title">
+          {check ? 'Check capture permission…' : os === 'macos' ? 'Allow Screen Recording…' : 'Allow screen capture…'}
+        </span>
         <span className="sg-caption-detail">
-          {os === 'macos'
-            ? 'Kimochi needs it to see your windows. Opens System Settings.'
-            : 'Kimochi needs it to see your windows. Opens your system settings.'}
+          {check
+            ? os === 'macos'
+              ? 'If your app is missing, check Screen Recording for Kimochi in System Settings.'
+              : 'If your app is missing, check screen capture permission in your system settings.'
+            : os === 'macos'
+              ? 'Kimochi needs it to see your windows. Opens System Settings.'
+              : 'Kimochi needs it to see your windows. Opens your system settings.'}
         </span>
       </span>
     </MenuPrimitive.Item>
@@ -268,40 +276,42 @@ function WindowGrid({
   const [sources, setSources] = useState<CatalogSource[] | null>(null)
   const [targets, setTargets] = useState<Record<string, HookTarget> | null>(null)
   const [error, setError] = useState<NativeError | null>(null)
+  const [refresh, setRefresh] = useState(0)
+  const [loading, setLoading] = useState(true)
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const capabilities = useCapabilities()
-  // Only a platform with a settings page to send the user to gets told to go there.
+  // An empty list alone does not establish that permission was denied.
   const emptyHint = isGamingMode(capabilities)
-    ? 'Nothing is running. Start a game from Steam, then choose it here.'
-    : !capabilities.capture.canOpenSettings
-      ? 'No windows to read.'
-      : capabilities.os === 'macos'
-        ? 'No windows to read. Enable Screen Recording for Kimochi in System Settings.'
-        : 'No windows to read. Allow screen capture for Kimochi in your system settings.'
+    ? 'No games found. Start a game from Steam, then refresh sources.'
+    : hookable
+      ? 'No app windows found. Open the game you want to hook, then refresh sources.'
+      : 'No windows or screens found. Open the app you want to read, then refresh sources.'
 
   // A fresh list each time the submenu opens: windows come and go.
   useEffect(() => {
     let live = true
-    invoke<CatalogSource[]>('source_catalog').then(
-      async (catalog) => {
+    void invoke<CatalogSource[]>('source_catalog')
+      .then(async (catalog) => {
         if (!hookable) {
           if (live) setSources(catalog)
           return
         }
         const windows = catalog.filter((source) => !isDisplay(source))
-        const found = await texthookTargets(windows.map((source) => source.id)).catch(() => ({}))
+        const found = await texthookTargets(windows.map((source) => source.id))
         if (!live) return
         setTargets(found)
         setSources(windows)
-      },
-      (caught: unknown) => {
+      })
+      .catch((caught: unknown) => {
         if (live) setError(nativeError(caught))
-      }
-    )
+      })
+      .finally(() => {
+        if (live) setLoading(false)
+      })
     return () => {
       live = false
     }
-  }, [hookable])
+  }, [hookable, refresh])
 
   // Gaming Mode lists games first, and its screen has no thumbnail: only one app shows at a
   // time, and while this menu is open that app is Kimochi.
@@ -334,19 +344,43 @@ function WindowGrid({
 
   return (
     <div className="sg-scroll" ref={setRoot} data-grid={hookable ? 'hook' : 'capture'}>
+      <MenuPrimitive.Item
+        className="k-menu-item sg-refresh"
+        aria-disabled={loading}
+        onSelect={(event) => {
+          // Keep the menu and its keyboard focus in place while the catalog is refreshed.
+          event.preventDefault()
+          if (loading) return
+          setLoading(true)
+          setError(null)
+          setRefresh((attempt) => attempt + 1)
+        }}
+      >
+        <RefreshCw aria-hidden />
+        {loading ? 'Refreshing sources…' : 'Refresh sources'}
+      </MenuPrimitive.Item>
       {error &&
         (error.kind === 'permission' && capabilities.capture.canOpenSettings ? (
           <GrantCaptureItem os={capabilities.os} />
         ) : (
-          <div className="sg-status sg-error">{error.message}</div>
+          <div className="sg-status sg-error" role="alert">
+            Couldn’t load sources. {error.message} Try refreshing sources.
+          </div>
         ))}
-      {!sources && !error && (
+      {loading && (
         <div className="sg-status" role="status">
           <Spinner label="Finding sources" />
           Finding windows…
         </div>
       )}
-      {sources && sources.length === 0 && <div className="sg-status">{emptyHint}</div>}
+      {!loading && !error && sources?.length === 0 && (
+        <>
+          <div className="sg-status" role="status">
+            {emptyHint}
+          </div>
+          {capabilities.capture.canOpenSettings && <GrantCaptureItem os={capabilities.os} check />}
+        </>
+      )}
       {!gaming && screens}
       {root && windows.length > 0 && (
         <section className="sg-section" aria-label={gaming ? 'Games and apps' : 'App windows'}>

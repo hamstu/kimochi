@@ -95,11 +95,20 @@ export const DEFAULT_GROUPING: GroupingSettings = {
 
 /** The endpoint omits x/y entirely when the value is 0, so every read defaults. */
 export function getBoundingBox(annotation: Annotation): BoundingBox {
-  const vertices = annotation.boundingPoly.vertices
-  const minX = Math.min(...vertices.map((v) => v.x ?? 0))
-  const minY = Math.min(...vertices.map((v) => v.y ?? 0))
-  const maxX = Math.max(...vertices.map((v) => v.x ?? 0))
-  const maxY = Math.max(...vertices.map((v) => v.y ?? 0))
+  // This runs during filtering, grouping, sorting and mapping every scan. Accumulate the
+  // extrema together rather than allocating four coordinate arrays for each polygon.
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity
+  for (const vertex of annotation.boundingPoly.vertices) {
+    const x = vertex.x ?? 0,
+      y = vertex.y ?? 0
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+  }
   const width = maxX - minX
   const height = maxY - minY
   return {

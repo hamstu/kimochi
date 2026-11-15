@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react'
+import * as Tabs from '@radix-ui/react-tabs'
 import { cn } from './cn'
 
 /**
@@ -135,34 +136,42 @@ export interface SettingsTabOption<T extends string> {
  * Tabs across the top of a settings page with several kinds of settings (Anki: AnkiConnect,
  * Mining, Card enhancement), in place of its title: the full width of the page, drawn like the
  * main window's Log and Notebook tabs, and kept in view: the page scrolls below them (`k-settings-tabbed-scroll`). Put them and a
- * title-less `SettingsPage` in a `k-settings-tabbed` element.
+ * title-less `SettingsPage` inside this component. The active panel is labelled by its tab;
+ * arrows and Home/End select a tab, and Tab moves from the tab strip into the panel.
  */
 export function SettingsTabs<T extends string>({
   value,
   onValueChange,
   options,
+  children,
   'aria-label': ariaLabel
 }: {
   value: T
   onValueChange: (value: T) => void
   options: readonly SettingsTabOption<T>[]
+  children: ReactNode
   'aria-label'?: string
 }): ReactNode {
   return (
-    <div className="k-settings-tabs" role="tablist" aria-label={ariaLabel}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          role="tab"
-          className="k-settings-tab"
-          aria-selected={option.value === value}
-          onClick={() => onValueChange(option.value)}
-        >
-          {option.icon}
-          <span>{option.label}</span>
-        </button>
-      ))}
-    </div>
+    <Tabs.Root
+      className="k-settings-tabbed"
+      value={value}
+      onValueChange={(next) => {
+        const option = options.find((item) => item.value === next)
+        if (option) onValueChange(option.value)
+      }}
+    >
+      <Tabs.List className="k-settings-tabs" aria-label={ariaLabel}>
+        {options.map((option) => (
+          <Tabs.Trigger key={option.value} value={option.value} className="k-settings-tab">
+            {option.icon}
+            <span>{option.label}</span>
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
+      <Tabs.Content key={value} value={value} className="k-settings-tabbed-scroll">
+        {children}
+      </Tabs.Content>
+    </Tabs.Root>
   )
 }

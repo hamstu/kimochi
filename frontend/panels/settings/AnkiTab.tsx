@@ -82,30 +82,27 @@ function AnkiPage({ settings }: { settings: Settings }): ReactNode {
   const saved = settings.ankiConnectUrl || DEFAULT_ANKI_CONNECT_URL
   const connection = useAnkiConnection(saved, settings.ankiConnectKey)
   return (
-    <div className="k-settings-tabbed">
-      <SettingsTabs aria-label="Anki" value={tab} onValueChange={setTab} options={TABS} />
-      <div className="k-settings-tabbed-scroll">
-        <SettingsPage>
-          {tab === 'connect' && (
-            <ConnectionSection
-              settings={settings}
-              engine={engine}
-              status={connection.status}
-              checking={connection.checking}
-              onCheck={connection.check}
-            />
-          )}
-          {tab === 'mining' && <AnkiSections settings={settings} engine={engine} connection={connection.epoch} />}
-          {tab === 'enhance' && (
-            <>
-              <SentenceAudioSection />
-              <ScreenshotSection />
-              <CardTagsSection />
-            </>
-          )}
-        </SettingsPage>
-      </div>
-    </div>
+    <SettingsTabs aria-label="Anki" value={tab} onValueChange={setTab} options={TABS}>
+      <SettingsPage>
+        {tab === 'connect' && (
+          <ConnectionSection
+            settings={settings}
+            engine={engine}
+            status={connection.status}
+            checking={connection.checking}
+            onCheck={connection.check}
+          />
+        )}
+        {tab === 'mining' && <AnkiSections settings={settings} engine={engine} connection={connection.epoch} />}
+        {tab === 'enhance' && (
+          <>
+            <SentenceAudioSection />
+            <ScreenshotSection />
+            <CardTagsSection />
+          </>
+        )}
+      </SettingsPage>
+    </SettingsTabs>
   )
 }
 
