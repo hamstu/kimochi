@@ -8,7 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- **Your reading history is kept.** Kimochi now keeps every line you read, with when you read it and which game or session it came from, even after you clear the Log or turn off saved images and audio. Lines already in your Log are included. Export it from the Log's **⋯** menu as a CSV that exSTATic and GameSentenceMiner can import, or as a full CSV or JSON file.
+- **Your reading history is kept.** Kimochi now keeps every line you read, with when you read it and which game or session it came from, even after you clear the Log or turn off saved images and audio. Lines already in your Log are included. Export it from the Log's **⋯** menu as a CSV that exSTATic and GameSentenceMiner can import, or as a full CSV or JSON file. With Sync on, it follows you across your computers.
+- **Character counts now match GameSentenceMiner and exSTATic.** Punctuation, symbols and spaces no longer count, so your characters and chars/hour line up with other reading trackers. Totals from before stay as they were.
 
 ## [1.0.0] - 2026-11-15
 

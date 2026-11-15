@@ -12,6 +12,7 @@ import { recordCharDelta, recordLine } from './stats'
 import { dropsText, japaneseFilterOf } from '@ui/japanese-text'
 import { currentLanguage, currentLanguageInfo } from './language'
 import { countWords } from './wordCount'
+import { countChars } from './charCount'
 import { acceptsInput } from '../input-source'
 import type { Line, LineSource } from '@texthooker/lib/types'
 
@@ -78,7 +79,7 @@ export const ingestText = async (
     const prev = recordedText(last)
     const merged = replaceLastLineText(value)
     if (merged && ingestId) merged.ingestIds = [...(merged.ingestIds || []), ingestId]
-    recordCharDelta(value.length - prev.length, wordDelta(prev, value))
+    recordCharDelta(countChars(value) - countChars(prev), wordDelta(prev, value))
     return
   }
 
@@ -89,7 +90,7 @@ export const ingestText = async (
     if (value !== prev && value.slice(0, len) === prev.slice(0, len)) {
       const merged = replaceLastLineText(value)
       if (merged && ingestId) merged.ingestIds = [...(merged.ingestIds || []), ingestId]
-      recordCharDelta(value.length - prev.length, wordDelta(prev, value))
+      recordCharDelta(countChars(value) - countChars(prev), wordDelta(prev, value))
       return
     }
   }
@@ -101,5 +102,5 @@ export const ingestText = async (
   const line = appendLine({ text: value, source, ts, ocr })
   if (!line) return
   if (ingestId) line.ingestIds = [ingestId]
-  recordLine(value.length, words(value))
+  recordLine(countChars(value), words(value))
 }
