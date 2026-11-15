@@ -934,6 +934,36 @@ pub async fn reading_history_summary() -> Result<Value, String> {
     .map_err(|e| e.to_string())
 }
 
+/// `lines` as the Stats tab reads them: only those of `sessions` when given, each with only
+/// `fields` (HistoryLine's camelCase names) when given, which keeps a long history's reply small.
+pub fn select(lines: Vec<HistoryLine>, sessions: Option<&[String]>, fields: Option<&[String]>) -> Vec<Value> {
+    let wanted: Option<std::collections::HashSet<&str>> = sessions.map(|s| s.iter().map(String::as_str).collect());
+    lines
+        .into_iter()
+        .filter(|line| wanted.as_ref().is_none_or(|w| w.contains(line.session.as_str())))
+        .map(|line| {
+            let mut value = serde_json::to_value(line).unwrap_or(Value::Null);
+            if let (Some(fields), Value::Object(map)) = (fields, &mut value) {
+                map.retain(|key, _| fields.iter().any(|f| f == key));
+            }
+            value
+        })
+        .collect()
+}
+
+/// The lines read, oldest first, for the Stats tab: only `sessions`' when given, with only
+/// `fields` when given.
+#[tauri::command]
+pub async fn reading_history_lines(
+    sessions: Option<Vec<String>>,
+    fields: Option<Vec<String>>,
+) -> Result<Vec<Value>, String> {
+    let dir = profile_dir()?;
+    tauri::async_runtime::spawn_blocking(move || select(lines(&dir), sessions.as_deref(), fields.as_deref()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// The idle limit when none is given: the Log's AFK threshold's default.
 const DEFAULT_IDLE_SEC: u64 = 300;
 
@@ -1028,6 +1058,20 @@ mod tests {
         ] {
             assert_eq!(count_chars(text), count, "{text}");
         }
+    }
+
+    #[test]
+    fn lines_are_selected_by_session_with_only_the_fields_asked_for() {
+        let mut other = add("b", 2_000, "二行目");
+        other.session = Some("s2".into());
+        let lines = fold(vec![add("a", 1_000, "一行目"), other], &HashMap::new());
+        let all = select(lines.clone(), None, None);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0]["text"], "一行目");
+        assert_eq!(all[1]["sessionName"], "Game");
+        let fields = ["ts".to_string(), "chars".to_string(), "session".to_string()];
+        let some = select(lines, Some(&["s2".to_string()]), Some(&fields));
+        assert_eq!(some, vec![json!({"ts": 2_000, "chars": 3, "session": "s2"})]);
     }
 
     #[test]
