@@ -29,11 +29,15 @@ fn owns_input(navigation: bool, controls: bool, yielding: bool, managed: bool) -
 /// External overlays need the watchdog because Steam reads HID directly.
 /// A registered ordinary Steam app uses Steam's own foreground routing, just
 /// like the session harness: do not suspend its launcher while using controls.
+/// Only while Kimochi reads the Deck's own controller: on other hardware its input comes
+/// through Steam's virtual pad, which a paused Steam stops sending.
 pub fn refresh_input_lease() -> Result<(), String> {
     let controls = CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()).is_some();
     let routed_here = super::gamescope_focus::owns_input(std::process::id());
     super::steam_input::update(
-        routed_here && owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst), managed()),
+        routed_here
+            && crate::gamepad::deck_controller_live()
+            && owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst), managed()),
     )
 }
 pub fn control_focus(window: &tauri::WebviewWindow, focused: bool) {
@@ -185,7 +189,7 @@ pub fn return_to(app: &tauri::AppHandle, target: Option<u32>) {
         if let Err(error) = super::gamescope_handoff::select(game) {
             eprintln!("Gamescope return: {error}");
         }
-        let _ = app.emit("controller-nav-cancel", ());
+        let _ = app.emit("controller-nav-cancel", serde_json::json!({"reason": "returned to the game"}));
     });
 }
 pub fn handles(window: &tauri::WebviewWindow) -> bool {
@@ -366,7 +370,7 @@ pub fn show(window: &tauri::WebviewWindow) -> Result<(), String> {
         input(window, true)?;
         YIELDING.store(false, Ordering::SeqCst);
         control_focus(window, true);
-        let _ = window.app_handle().emit("controller-nav-cancel", ());
+        let _ = window.app_handle().emit("controller-nav-cancel", serde_json::json!({"reason": "controls opened"}));
     }
     window.show().map_err(|e| e.to_string())?;
     if managed_controls(window) {
@@ -381,7 +385,7 @@ pub fn hide(window: &tauri::WebviewWindow) -> Result<(), String> {
         return Ok(());
     }
     if active() && window.label() == "overlay" {
-        let _ = window.emit("controller-nav-cancel", ());
+        let _ = window.emit("controller-nav-cancel", serde_json::json!({"reason": "overlay hidden"}));
         property(window, b"_NET_WM_WINDOW_OPACITY", 0)?;
     }
     if active() && controls(window) {
@@ -429,7 +433,7 @@ pub fn yield_to_steam(app: &tauri::AppHandle) {
                 let _ = keyboard(&window, false);
             }
         }
-        let _ = app.emit("controller-nav-cancel", ());
+        let _ = app.emit("controller-nav-cancel", serde_json::json!({"reason": "Steam system button"}));
     });
 }
 

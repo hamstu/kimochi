@@ -101,6 +101,11 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         let mut deck = crate::platform::deck_input::Reader::with_desktop();
         #[cfg(target_os = "linux")]
         let mut previous_system_menu = false;
+        // Whether the Deck's own controller was read while the controller menu was open: only
+        // then does losing it end the menu. Any other controller (a Steam Machine's, a desktop
+        // pad under Bazzite's Game Mode) never shows up in that reader at all.
+        #[cfg(target_os = "linux")]
+        let mut deck_drove_nav = false;
         let mut previous: Vec<bool> = vec![false; STANDARD.len()];
         // The stick positions last sent in a `controller-nav` event.
         let mut reported = [(0.0, 0.0); 2];
@@ -198,6 +203,8 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 }
             };
             #[cfg(target_os = "linux")]
+            DECK_LIVE.store(deck.connected(), Ordering::SeqCst);
+            #[cfg(target_os = "linux")]
             if crate::platform::gamescope::active() {
                 let system_menu = deck.system_menu();
                 if system_menu && !previous_system_menu {
@@ -246,15 +253,21 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             // included (the overlay sees it pressed and closes itself).
             if navigating() {
                 #[cfg(target_os = "linux")]
-                if crate::platform::gamescope::active() && (!deck.connected() || deck.system_menu()) {
-                    crate::platform::steam_input::handoff();
-                    set_navigation(&app, false, false);
-                    let _ = app.emit(
-                        "controller-nav-cancel",
-                        json!({"reason": "Steam system button or physical controller disconnected"}),
-                    );
-                    previous = buttons;
-                    continue;
+                {
+                    deck_drove_nav |= deck.connected();
+                    if crate::platform::gamescope::active()
+                        && ends_deck_navigation(deck_drove_nav, deck.connected(), deck.system_menu())
+                    {
+                        deck_drove_nav = false;
+                        crate::platform::steam_input::handoff();
+                        set_navigation(&app, false, false);
+                        let _ = app.emit(
+                            "controller-nav-cancel",
+                            json!({"reason": "Steam system button or physical controller disconnected"}),
+                        );
+                        previous = buttons;
+                        continue;
+                    }
                 }
                 let sticks = [stick(axes[0], axes[1]), stick(axes[2], axes[3])];
                 if let Some(payload) = nav_report(&previous, &buttons, &mut reported, sticks) {
@@ -264,6 +277,10 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 continue;
             }
             reported = [(0.0, 0.0); 2];
+            #[cfg(target_os = "linux")]
+            {
+                deck_drove_nav = false;
+            }
             // Rising edge only: holding a button must not repeat the action. While Settings
             // records a binding the press is still emitted above, so it can be assigned, but
             // it does not fire whatever the button is bound to now.
@@ -683,6 +700,25 @@ const IDLE_TICK: Duration = Duration::from_millis(16);
 /// The shortest gap between ticks: input is picked up within this, at most 250 times a second.
 const MIN_TICK: Duration = Duration::from_millis(4);
 /// The gap between ticks without gilrs (XInput): a wired Xbox controller reports about this often.
+/// Whether the Steam Deck's own controller is being read right now (Linux).
+#[cfg(target_os = "linux")]
+static DECK_LIVE: AtomicBool = AtomicBool::new(false);
+
+/// Whether Kimochi reads the Steam Deck's built-in controller itself, so pausing Steam's
+/// controller reader does not cut off its own input (platform/linux/gamescope.rs).
+#[cfg(target_os = "linux")]
+pub fn deck_controller_live() -> bool {
+    DECK_LIVE.load(Ordering::SeqCst)
+}
+
+/// Open controller navigation in Gaming Mode ends when Steam's system button is pressed, or
+/// when the Deck's own controller drove it and has gone. A machine without one (Bazzite on a
+/// desktop, a Steam Machine) reads its controller elsewhere and must keep the menu open.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn ends_deck_navigation(deck_drove: bool, deck_connected: bool, system_menu: bool) -> bool {
+    system_menu || (deck_drove && !deck_connected)
+}
+
 const POLL_TICK: Duration = Duration::from_millis(8);
 /// How often an unchanged `gamepad` state is sent again.
 const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
@@ -909,7 +945,10 @@ pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<u32>, source: 
         app,
         json!({ "check": "controller-nav", "cancelled": "another application came to the front", "frontmost": front }),
     );
-    let _ = app.emit("controller-nav-cancel", json!({ "frontmost": front }));
+    let _ = app.emit(
+        "controller-nav-cancel",
+        json!({ "reason": "another application came to the front", "frontmost": front }),
+    );
 }
 
 fn log(app: &tauri::AppHandle, entry: Value) {
@@ -1061,6 +1100,18 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
 
 #[cfg(test)]
 mod tests {
+    /// #165: on Bazzite's Game Mode or a Steam Machine there is no Deck controller to read,
+    /// so the menu must stay open; on a Deck, losing its controller or Steam's button ends it.
+    #[test]
+    fn only_the_decks_own_controller_going_away_ends_gaming_mode_navigation() {
+        use super::ends_deck_navigation as ends;
+        assert!(!ends(false, false, false), "no Deck controller ever: keep the menu open");
+        assert!(!ends(true, true, false), "Deck controller still there");
+        assert!(ends(true, false, false), "Deck controller drove the menu and went away");
+        assert!(ends(true, true, true), "Steam's system button");
+        assert!(ends(false, false, true));
+    }
+
     #[test]
     fn resting_stick_jitter_is_not_broadcast() {
         assert_eq!(broadcast_axis(0.0025), 0.0);
