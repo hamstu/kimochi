@@ -843,8 +843,8 @@ a window running a dead host. `dictionary_engine_effective` answers `selected` (
 host engine for the language being learned), `chosen` (the setting's host engine as stored),
 `effective`, and `ready` per engine.
 
-**The engine follows the language.** Hachidori (at its pinned 0.3.0) and 10ten read Japanese
-only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
+**The engine follows the language.** Hachidori (whose other languages, since 0.5.0, need its
+experimental "Multiple languages" switch) and 10ten read Japanese only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
 computer's while `language` is the account's, so the stored choice is never rewritten: while
 `language` is not `ja`, a stored `hachidori` or `tenten` stands for Yomitan
 (`extensions::selected_engine`, `effectiveDictionaryEngine`), and Settings → Dictionary shows
@@ -1715,7 +1715,7 @@ Implementation: `src-tauri/src/extension_store.rs`.
 
 ```ts
 ExtensionStatus = {
-  engine, name, version,             // "tenten", "10ten Japanese Reader", "1.28.0"
+  engine, name, version,             // "tenten", "10ten Japanese Reader", "1.29.0"
   state: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready',
   source: 'downloaded' | 'development' | null,  // where a ready engine is served from
   file,                              // "<version>.zip" while downloading or verifying it; "unpacking"

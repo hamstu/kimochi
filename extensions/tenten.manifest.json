@@ -3,7 +3,7 @@
   "manifest_version": 3,
   "name": "10ten Japanese Reader (Rikaichamp)",
   "author": "Brian Birtles",
-  "version": "1.28.0",
+  "version": "1.29.0",
   "description": "__MSG_extension_description__",
   "default_locale": "en",
   "minimum_chrome_version": "100",
@@ -48,8 +48,8 @@
       "matches": ["https://docs.google.com/*"],
       "js": ["10ten-ja-gdocs-bootstrap.js"],
       "all_frames": true,
-      "run_at": "document_start",
-      "world": "MAIN"
+      "world": "MAIN",
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [{

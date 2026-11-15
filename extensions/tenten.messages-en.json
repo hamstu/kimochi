@@ -201,10 +201,22 @@
   "content_names_tag_surname": { "message": "surname" },
   "content_names_tag_unclass": { "message": "unclassified" },
   "content_names_tag_work": { "message": "work" },
+  "content_play_readings_error": {
+    "message": "Could not play readings",
+    "description": "Screen reader announcement when an entry's reading audio fails to play"
+  },
+  "content_play_readings_label": {
+    "message": "Play readings",
+    "description": "Button label and title for playing an entry's readings"
+  },
   "content_sk_match_src": {
     "message": "From $src$",
     "description": "The text used to show the sK/sk (search only) text that was used to look up the entry",
     "placeholders": { "src": { "content": "$1", "example": "御久しぶり" } }
+  },
+  "content_stop_readings_label": {
+    "message": "Stop readings",
+    "description": "Button label and title for stopping reading audio while it loads or plays"
   },
   "content_stroke_animation_play": {
     "message": "Play stroke animation",
@@ -1372,6 +1384,10 @@
     "message": "None",
     "description": "Label for not showing pitch accent information"
   },
+  "options_audio_heading": {
+    "message": "Audio",
+    "description": "Heading for the section for configuring audio playback of readings"
+  },
   "options_browser_commands_no_toggle_key": {
     "message": "This shortcut key cannot be configured in this browser.",
     "description": "Descriptive text used for other browsers which do not permit configuring extension keys from the extension itself."
@@ -1451,6 +1467,10 @@
     "message": "Database storage unavailable. This may be due to Firefox being set to “Never remember history”.",
     "description": "Label when IndexedDB is unusable with Firefox-specific help."
   },
+  "options_db_corrupt": {
+    "message": "The downloaded dictionary data could not be read. Re-download it to replace the damaged data. Your settings will be kept."
+  },
+  "options_db_rebuild_button": { "message": "Re-download dictionary data" },
   "options_db_update_error": {
     "message": "Update failed: $errormessage$",
     "description": "Label when we failed to update the data for some reason",
@@ -1665,6 +1685,14 @@
     "message": "Could not check for updates because this device is currently offline. An update will be performed once the device is online.",
     "description": "Message shown when the system is offline so updates cannot be performed"
   },
+  "options_play_readings_description": {
+    "message": "Experimental: this feature will be enabled by default in a future release.",
+    "description": "Note under the temporary audio setting. This setting affects reading audio only, not kanji stroke animations."
+  },
+  "options_play_readings_label": {
+    "message": "Enable play button for readings",
+    "description": "Checkbox label to enable reading audio and its play buttons. This setting does not affect kanji stroke animations."
+  },
   "options_popup_close_popup": { "message": "Close popup" },
   "options_popup_copy_entry": { "message": "Copy entry" },
   "options_popup_copy_fields": { "message": "Copy tab-separated fields" },
@@ -1692,6 +1720,10 @@
   },
   "options_popup_switch_dictionaries": { "message": "Switch dictionaries" },
   "options_popup_toggle_definition": { "message": "Toggle definition" },
+  "options_popup_toggle_playback": {
+    "message": "Play readings or stroke animation",
+    "description": "Keyboard shortcut label. Plays or stops readings in the Words and Names tabs, or the stroke animation in the Kanji tab."
+  },
   "options_pos_display_code": {
     "message": "Code (e.g. “v5r”)",
     "description": "Label for simply displaying dictionary part-of-speech codes"

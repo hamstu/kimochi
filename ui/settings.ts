@@ -576,7 +576,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     requirements: 'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/yomidevs/yomitan',
-    version: '26.10.22.0',
+    version: '26.11.2.0',
     runs: 'local',
     optionsPage: 'settings.html'
   },
@@ -589,13 +589,14 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Recommended dictionaries on first run',
       'Anki mining through AnkiConnect'
     ],
-    requirements: 'Downloaded when you choose it (about 5 MB). Needs at least one dictionary.',
+    requirements: 'Downloaded when you choose it (about 7 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/bee-san/hachidori',
-    version: '0.3.0',
+    version: '0.5.2',
     runs: 'local',
     optionsPage: 'settings.html',
-    // 0.3.0 looks up Japanese text only; its language profiles arrive in 0.5.0.
+    // Japanese only in Kimochi: since 0.5.0 Hachidori reads other languages too, but behind its
+    // experimental "Multiple languages" switch (off by default), which Kimochi does not drive yet.
     languages: ['ja']
   },
   tenten: {
@@ -607,7 +608,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Downloaded when you choose it (about 18 MB), then fetches its full dictionaries in the background. No Anki mining.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/birchill/10ten-ja-reader',
-    version: '1.28.0',
+    version: '1.29.0',
     runs: 'local',
     optionsPage: 'options.html',
     languages: ['ja']
