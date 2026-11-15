@@ -66,6 +66,23 @@ export function popupAnkiConfig(reader) {
 }
 
 /**
+ * The pop-up's audio from the reader settings, with the defaults the Log's settings fill in
+ * (`SETTINGS_DEFAULTS` in frontend/texthooker/lib/types.ts): audio on, autoplay on, volume 0.9.
+ * Reader settings are saved only once something in them is changed, so a key never touched is
+ * absent here, and Settings shows its default (Fetch word audio on). Reading the raw value made
+ * the overlay's pop-up skip audio until mining was turned on.
+ */
+export function popupAudio(reader) {
+  const audioEnabled = reader?.audioEnabled ?? true
+  const audioAutoplay = reader?.audioAutoplay ?? true
+  return {
+    includeMedia: Boolean(audioEnabled || reader?.ankiEnabled),
+    audioAutoplay: Boolean(audioEnabled && audioAutoplay),
+    audioVolume: typeof reader?.audioVolume === 'number' ? reader.audioVolume : 0.9
+  }
+}
+
+/**
  * The pointer event property for a lookup key (`overlayLookupKey`: "shift", "ctrl", "alt" or
  * "meta"); anything else is Shift, as native reads it (`Modifiers::holds`).
  * @param {unknown} key
@@ -110,9 +127,7 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
         baseUrl: baseUrl(),
         focus,
         sentence,
-        includeMedia: Boolean(reader.audioEnabled || reader.ankiEnabled),
-        audioAutoplay: Boolean(reader.audioEnabled && reader.audioAutoplay),
-        audioVolume: reader.audioVolume ?? 0.9,
+        ...popupAudio(reader),
         ankiConfig: popupAnkiConfig(reader)
       })
     } catch (error) {

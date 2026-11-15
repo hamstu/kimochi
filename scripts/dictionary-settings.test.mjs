@@ -37,7 +37,8 @@ const { buildAnkiConfigForPopover, ankiMiningGap } = await bundle(
   '../frontend/texthooker/lib/ankiConfig.ts',
   'anki-config.mjs'
 )
-const { popupAnkiConfig } = await bundle('../ui/api-lookup.js', 'api-lookup.mjs', ['/spike/*'])
+const { popupAnkiConfig, popupAudio } = await bundle('../ui/api-lookup.js', 'api-lookup.mjs', ['/spike/*'])
+const { SETTINGS_DEFAULTS } = await bundle('../frontend/texthooker/lib/types.ts', 'reader-types.mjs')
 
 const starting = { phase: 'starting', settingsReady: false, message: 'Starting the dictionary…' }
 
@@ -231,4 +232,21 @@ test('Settings → Anki says what mining still needs before the pop-up shows Add
   for (const settings of [reader, { ...reader, ankiDeckName: null }, { ...reader, ankiModelFields: [] }]) {
     assert.equal(ankiMiningGap(settings) === null, buildAnkiConfigForPopover(settings) !== null)
   }
+})
+
+test('the pop-up over the game fetches audio as the Log does, defaults included', () => {
+  // Never saved, or saved before the audio settings were touched: audio is on, as Settings shows.
+  for (const saved of [undefined, {}, { ankiEnabled: false }]) {
+    const settings = { ...SETTINGS_DEFAULTS, ...saved }
+    assert.deepEqual(popupAudio(saved), {
+      includeMedia: settings.audioEnabled || settings.ankiEnabled,
+      audioAutoplay: settings.audioEnabled && settings.audioAutoplay,
+      audioVolume: settings.audioVolume
+    })
+    assert.equal(popupAudio(saved).includeMedia, true)
+  }
+  assert.deepEqual(popupAudio({ audioEnabled: false }), { includeMedia: false, audioAutoplay: false, audioVolume: 0.9 })
+  assert.equal(popupAudio({ audioEnabled: false, ankiEnabled: true }).includeMedia, true, 'mining needs media')
+  assert.equal(popupAudio({ audioAutoplay: false }).audioAutoplay, false)
+  assert.equal(popupAudio({ audioVolume: 0.3 }).audioVolume, 0.3)
 })
