@@ -1,13 +1,14 @@
 import { DownloadButton } from '../DownloadButton'
 import { DiscordButton } from '../DiscordButton'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { GlyphGlow } from './GlyphGlow'
-import { LanguageFlipper } from './LanguageFlipper'
+import { LANGUAGES, VERBS, WordFlipper, useFlipClock } from './WordFlipper'
 
 /**
  * The home hero: the app icon, wordmark, promise, lede, the download button and a quieter Discord
- * link, centred, over a glow of letters from many writing systems. The headline's last word flips
- * through languages (LanguageFlipper); screen readers hear "Read and play in any language".
+ * link, centred, over a glow of letters from many writing systems. The headline is one line,
+ * "<verb> in <language>", whose two words take turns changing (WordFlipper); screen readers hear
+ * "Read, play and learn in any language".
  */
 // Fades the glow out towards the bottom and thins it behind the headline and lede.
 const GLOW_MASK = {
@@ -18,6 +19,8 @@ const GLOW_MASK = {
 
 export function Hero() {
   const [hovered, setHovered] = useState(false)
+  const headline = useRef<HTMLHeadingElement>(null)
+  const step = useFlipClock(headline, hovered)
   return (
     // z-10 and no overflow clip here: the download button's menu hangs below the hero, over the demo.
     <section className="relative isolate z-10">
@@ -36,20 +39,20 @@ export function Hero() {
         />
         <p className="mt-7 text-[1.375rem] font-semibold tracking-[-0.015em] text-ink">Kimochi</p>
         <h1
-          className="mt-5 text-display text-ink"
+          ref={headline}
+          className="lf-headline mt-5 text-display text-ink"
           onPointerEnter={() => setHovered(true)}
           onPointerLeave={() => setHovered(false)}
         >
-          Read and play in <span className="sr-only">any language</span>
-          <span className="lf-line">
-            <LanguageFlipper paused={hovered} />
-          </span>
+          <span className="sr-only">Read, play and learn in any language</span>
+          <WordFlipper words={VERBS} index={Math.ceil(step / 2)} />
+          <span aria-hidden="true"> in </span>
+          <WordFlipper words={LANGUAGES} index={Math.floor(step / 2)} />
         </h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
           Kimochi is a free, open-source desktop app for language learners. It reads the text in your games, visual
           novels, manga and videos directly, or with OCR, so you can hover any word to look it up in your favorite
-          dictionary and make flash cards for Anki. Built for Japanese, and now for the language you’re learning too
-          (experimental).
+          dictionary and make flash cards for Anki.
         </p>
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
         <div id="get-kimochi" className="mt-10 scroll-mt-24">

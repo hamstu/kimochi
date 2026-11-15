@@ -1,14 +1,16 @@
 /*
- * The hero's language flipper (LanguageFlipper.tsx). The box sits on its own line of the h1 and
- * never changes that line's height: its own line box is the headline font's (Figtree, 1.05), its
+ * The hero's word flippers (WordFlipper.tsx): "<verb> in <language>" on one line. A box never
+ * changes the line's height: its own line box is the headline font's (Figtree, 1.05), its
  * vertical padding is cancelled by negative margins, and the characters are inline-blocks at
  * line-height 0, so a script with tall marks (Thai, Devanagari, Vietnamese) cannot push it.
  */
 
-.lf-line {
-  display: block;
-  /* Room between the first line's descenders and the box's top edge. */
-  margin-top: 0.2em;
+/* Always one line: the headline shrinks with a narrow window instead of wrapping. The longest
+   pairing, "Learn in Bahasa Indonesia", measures 11.94em in Figtree; 12.2em of the page's width
+   inside its gutters (1.5rem a side) leaves it a little room on a phone. */
+.lf-headline {
+  white-space: nowrap;
+  font-size: min(var(--text-display), calc((100vw - 3rem) / 12.2));
 }
 
 .lf-box {
