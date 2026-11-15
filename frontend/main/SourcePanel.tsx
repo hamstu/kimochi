@@ -612,11 +612,10 @@ function useLiveFrames(
 }
 
 /**
- * Whether the chosen window fills its display (a full-screen app, or a borderless full-screen
- * window): then it reads like a screen. Asked once on mount, since the card is remounted coming
- * back from Settings, then followed.
+ * The selected window's geometry and visibility. Asked once on mount, since the card is
+ * remounted coming back from Settings, then followed through source-bounds events.
  */
-function useFullScreen(sourceId: string): boolean {
+function useSourceWindowState(sourceId: string): SourceWindowState | null {
   const [state, setState] = useState<SourceWindowState | null>(null)
   useEffect(() => {
     let alive = true
@@ -629,7 +628,11 @@ function useFullScreen(sourceId: string): boolean {
       void off.then((unlisten) => unlisten())
     }
   }, [sourceId])
-  return Boolean(state && state.sourceId === sourceId && state.fullscreen)
+  return state?.sourceId === sourceId ? state : null
+}
+
+function useFullScreen(sourceId: string): boolean {
+  return Boolean(useSourceWindowState(sourceId)?.fullscreen)
 }
 
 /** A crop as percentages of its reference frame, for positioning over the preview. */
@@ -1406,23 +1409,30 @@ export function SourcePanel({
     ) : null
 
   const placement = useHookPlacement(mode === 'hook' ? hook.exe : null)
+  const windowState = useSourceWindowState(source?.type === 'window' ? source.sourceId : '')
+  const nativeWindowUntracked =
+    capabilities.sources.nativeWindows &&
+    source?.type === 'window' &&
+    (windowState?.geometryAvailable === undefined
+      ? !capabilities.sources.followWindowBounds
+      : !windowState.geometryAvailable)
   const overlayUnavailable =
-    capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
-  // A shared Wayland window is anonymous: outside GNOME (its extension) and Hyprland nothing says
-  // where it is, so the overlay has nowhere to draw. A shared screen needs no tracking.
+    nativeWindowUntracked ||
+    (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive)
+  // Portal windows may be anonymous; native windows may have identity but no position (Niri).
+  // A screen needs no window tracking.
   const windowUntracked =
     mode === 'ocr' &&
     overlayOn &&
-    !overlayUnavailable &&
+    capabilities.overlay.passive &&
     !isGamingMode(capabilities) &&
-    !capabilities.sources.followWindowBounds &&
-    source?.type !== 'screen' &&
-    (source?.sourceId?.startsWith('portal:window:') ?? false)
+    (nativeWindowUntracked ||
+      (!capabilities.sources.followWindowBounds && (source?.sourceId?.startsWith('portal:window:') ?? false)))
   const untrackedNotice = windowUntracked ? (
     <Callout tone="warn" className="src-notice">
       <span>
-        <strong>The overlay can&rsquo;t follow a shared window on this desktop.</strong> Try sharing your whole screen
-        instead. Words in the Log can still be looked up.
+        <strong>The overlay can&rsquo;t follow a window on this desktop.</strong> Choose a whole screen to use the
+        overlay. Window capture and words in the Log still work.
       </span>
     </Callout>
   ) : null
@@ -1433,7 +1443,13 @@ export function SourcePanel({
       label={overlayUnavailable ? 'Overlay unavailable' : 'Show overlay'}
       checked={!overlayUnavailable && overlayOn}
       disabled={overlayUnavailable}
-      title={overlayUnavailable ? 'Native overlay is unavailable on this desktop.' : undefined}
+      title={
+        nativeWindowUntracked
+          ? 'This desktop does not report window positions. Choose a screen to use the overlay.'
+          : overlayUnavailable
+            ? 'Native overlay is unavailable on this desktop.'
+            : undefined
+      }
       info="Draws the scanned text over your source; point at a word to look it up."
       settingsLabel="Overlay settings"
       onToggle={() => controller.onToggleTextOverlayVisibility()}

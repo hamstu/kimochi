@@ -134,7 +134,7 @@ function clickThrough() {
  */
 function hoverLookup() {
   return hoverLookupApplies(
-    { gamescope: nativeGamescope, wayland: waylandSession },
+    { gamescope: nativeGamescope, wayland: waylandSession, lookupOnHover },
     native.getSetting('overlayHoverLookup')
   )
 }

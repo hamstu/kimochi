@@ -383,7 +383,7 @@ pub fn capabilities() -> Value {
             "layerShell": s.layer_shell,
             "nativeLayerShell": layer::available(),
             "nativeGamescope": gamescope::active(),
-            "captureBackend": if gaming { "gamescope-pipewire" } else if native { match native::driver() { Some("mutter") => "native-mutter", Some("kwin") => "native-kwin", _ => "native-ext" } } else if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
+            "captureBackend": if gaming { "gamescope-pipewire" } else if native { match native::driver() { Some("mutter") => "native-mutter", Some("kwin") => "native-kwin", Some("niri") => "native-niri", _ => "native-ext" } } else if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
             "nativeGnomeShell": gnome,
             "xwayland": s.xwayland || gamescope::active(),
         },
@@ -406,7 +406,7 @@ pub fn capabilities() -> Value {
             "thumbnails": !portal,
             "icons": !portal || tracking,
             // A Gaming Mode app fills the output; nothing moves to follow.
-            "followWindowBounds": !gaming && (!portal || tracking || tracking::available()),
+            "followWindowBounds": !gaming && (if native { native::follows_windows() } else { !portal || tracking || tracking::available() }),
             "foregroundTracking": !gaming && !portal,
             // Native sources name their windows: bounds, focus and activation need no linking.
             "nativeWindows": native,
@@ -441,7 +441,7 @@ pub fn capabilities() -> Value {
             // text looks up on hover instead (host/linux-scan-input.js): KDE Plasma with Legacy
             // X11 App Support turned off, and Hyprland until its Shift binds have delivered a
             // press (`hyprland_binds`; none at all when the Shift keys are bound to something else).
-            "lookupOnHover": !x11 && layer::available() && matches!(s.compositor.as_deref(), Some("KDE" | "Hyprland")) && feed.is_none(),
+            "lookupOnHover": !x11 && layer::available() && matches!(s.compositor.as_deref(), Some("KDE" | "Hyprland" | "niri")) && feed.is_none(),
             "nativeHoverWorkaround": false,
         },
         "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else if shortcuts::report()["backend"] == "gnome-shell" { "gnome-shell" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if x11 { None } else { shortcuts::hyprland_remediation() }},

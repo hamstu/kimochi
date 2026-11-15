@@ -8,6 +8,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Niri window capture.** Select individual windows, follow them with the overlay when Niri supplies window positions, and use Text hooking with identifiable Wine/Proton games through xwayland-satellite.
+- **Text hooking with NixOS Steam.** Hook helpers can reach games launched with a private Wine session. This requires `nsenter` from util-linux.
+
+### Fixed
+
+- **Dictionary popups on Niri.** Automatic-hover popups close when the pointer leaves the text and dictionary.
+
 ## [1.0.0] - 2026-11-15
 
 ### Added
