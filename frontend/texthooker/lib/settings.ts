@@ -42,6 +42,8 @@ onNativeChange((key, value) => {
   if (key === 'yomitanSettings') void mergeDictionary().then(emit)
 })
 export function loadSettings(): Promise<Settings> {
+  // A reopened Settings view needs the live snapshot, not the initial load's resolved value.
+  if (loaded) return Promise.resolve(current)
   if (!loading)
     loading = (async () => {
       const saved = await getSetting<Partial<Settings>>('superTexthooker', {})
