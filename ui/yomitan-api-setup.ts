@@ -21,6 +21,8 @@ export interface HostManifest {
   method: HostMethod | null
   hostExists: boolean
   problem: string | null
+  /** Kimochi's helper only: whether its program is the version this Kimochi installs. */
+  current: boolean | null
 }
 
 export interface HostStatus {
@@ -30,6 +32,8 @@ export interface HostStatus {
   /** Kimochi's when any working one is, else upstream's, else unknown; null when none works. */
   method: HostMethod | null
   browsers: HostManifest[]
+  /** A working registration runs an older Kimochi helper; Kimochi updates it at startup. */
+  kimochiOutdated: boolean
 }
 
 export interface ApiStatus {
@@ -39,6 +43,11 @@ export interface ApiStatus {
   /** Yomitan answered through it (`/yomitanVersion`): lookups will work. */
   yomitan: boolean
   yomitanVersion: string | null
+  /** What the running helper says it is: Kimochi's from v3 says `kimochi`; others say nothing. */
+  hostName: string | null
+  hostVersion: string | null
+  /** It relays several requests at once (a slow audio download holds up no other lookup). */
+  concurrent: boolean
   latencyMs: number | null
   error: string | null
 }
@@ -85,7 +94,10 @@ export function describeHost(host: HostStatus | null): string {
       : 'Not installed.'
   }
   const names = workingBrowsers(host)
-  const who = METHOD_LABEL[host.method ?? 'unknown']
+  const who =
+    host.method === 'kimochi' && host.kimochiOutdated
+      ? "An older version of Kimochi's helper"
+      : METHOD_LABEL[host.method ?? 'unknown']
   return names.length > 0 ? `${who}, for ${listNames(names)}.` : `${who}.`
 }
 
@@ -155,4 +167,52 @@ export function stepDone(step: SetupStep, host: HostStatus | null, api: ApiStatu
     case 'connect':
       return Boolean(api?.yomitan)
   }
+}
+
+/** What the helper section recommends, when anything. */
+export type HelperAdviceKind = 'replace' | 'update' | 'restart'
+
+export interface HelperAdvice {
+  kind: HelperAdviceKind
+  title: string
+  text: string
+  /** The install button's label; null when there is nothing to install (restart the browser). */
+  action: string | null
+}
+
+const WHY_KIMOCHI =
+  "It passes several lookups to Yomitan at once. With the official helper, every word you point at waits while Yomitan fetches the previous word's audio: seconds, with many dictionaries."
+
+/**
+ * Kimochi's helper over any other (the official one relays one request at a time), the current
+ * version over an older one, and a browser restart once the helper on disk is newer than the one
+ * answering.
+ */
+export function helperAdvice(host: HostStatus | null, api: ApiStatus | null): HelperAdvice | null {
+  if (!host?.installed) return null
+  if (host.method === 'official' || host.method === 'unknown') {
+    return {
+      kind: 'replace',
+      title: "Kimochi's helper makes lookups faster",
+      text: `${WHY_KIMOCHI} Installing it replaces ${host.method === 'official' ? 'the official helper' : 'this helper'} in every browser; restart your browser afterwards.`,
+      action: "Use Kimochi's helper"
+    }
+  }
+  if (host.kimochiOutdated) {
+    return {
+      kind: 'update',
+      title: "Update Kimochi's helper",
+      text: 'An older version is installed. The new one passes several lookups to Yomitan at once, so the words you point at no longer wait while it fetches audio. Restart your browser after updating.',
+      action: 'Update helper'
+    }
+  }
+  if (api?.server && api.hostName !== 'kimochi') {
+    return {
+      kind: 'restart',
+      title: 'Restart your browser',
+      text: "Kimochi's helper has been updated, but your browser is still running the old one. Quit and reopen it to use the new one.",
+      action: null
+    }
+  }
+  return null
 }

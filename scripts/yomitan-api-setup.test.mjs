@@ -109,3 +109,41 @@ test('lists read naturally', () => {
   assert.equal(setup.listNames(['Chrome', 'Firefox']), 'Chrome and Firefox')
   assert.equal(setup.listNames(['Chrome', 'Brave', 'Firefox']), 'Chrome, Brave and Firefox')
 })
+
+// ---- K-023: Kimochi's helper recommended, kept current, and run --------------------------------
+
+const outdated = { ...KIMOCHI, kimochiOutdated: true }
+const identified = (name) => ({
+  ...api(true, true, '26.10.22.0'),
+  hostName: name,
+  hostVersion: name ? 'v3' : null,
+  concurrent: Boolean(name)
+})
+
+test('the official helper (or one Kimochi does not know) gets Kimochi’s recommended in its place', () => {
+  const advice = setup.helperAdvice(OFFICIAL, api(true, true))
+  assert.equal(advice.kind, 'replace')
+  assert.equal(advice.action, "Use Kimochi's helper")
+  assert.match(advice.text, /replaces the official helper in every browser/)
+  assert.equal(setup.helperAdvice(host('unknown', [browser('Brave', 'unknown')]), null).kind, 'replace')
+})
+
+test('an older Kimochi helper is offered an update and described as older', () => {
+  assert.equal(setup.helperAdvice(outdated, null).kind, 'update')
+  assert.equal(setup.helperAdvice(outdated, null).action, 'Update helper')
+  assert.match(setup.describeHost(outdated), /^An older version of Kimochi's helper, for Chrome/)
+})
+
+test('a current helper on disk but an old one answering asks for a browser restart', () => {
+  const advice = setup.helperAdvice(KIMOCHI, identified(null))
+  assert.equal(advice.kind, 'restart')
+  assert.equal(advice.action, null)
+  assert.equal(setup.helperAdvice(KIMOCHI, identified('kimochi')), null, 'the new helper is running')
+  assert.equal(setup.helperAdvice(KIMOCHI, api(false, false)), null, 'a closed browser is not a restart')
+  assert.equal(setup.helperAdvice(KIMOCHI, null), null)
+})
+
+test('nothing installed, nothing to advise (the wizard installs)', () => {
+  assert.equal(setup.helperAdvice(NOTHING, null), null)
+  assert.equal(setup.helperAdvice(BROKEN, null), null)
+})

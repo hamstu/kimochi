@@ -9,6 +9,7 @@
  *   ?yapi=official  the official Python helper for Chrome and Firefox; the browser is closed
  *   ?yapi=unknown   an unrecognised helper for Brave; the browser is closed
  *   ?yapi=kimochi   Kimochi's helper for Chrome, Brave and Firefox; the browser is closed
+ *   ?yapi=outdated  an older Kimochi helper for Chrome and Firefox (Update helper installs v3)
  *   ?yapi=broken    a registration whose program is missing
  *   ?yapi=host      installed, and the helper answers, but Yomitan does not through it
  *   ?yapi=ready     installed and connected (Yomitan 26.9.8.0)
@@ -25,6 +26,9 @@ const windows = params.get('platform') === 'windows'
 const os = windows ? 'windows' : params.get('platform') === 'linux' ? 'linux' : 'macos'
 
 const BROWSERS: Record<string, string> = { chrome: 'Google Chrome', brave: 'Brave', firefox: 'Firefox' }
+
+/** Set once the preview's Install has run: the helper is then the current version. */
+let reinstalled = false
 
 function manifest(browser: string, method: HostMethod, exists = true): HostManifest {
   const folder = windows
@@ -50,7 +54,8 @@ function manifest(browser: string, method: HostMethod, exists = true): HostManif
     hostPath: `${folder}${sep}${program}`,
     method,
     hostExists: exists,
-    problem: exists ? null : 'The program this manifest names is missing.'
+    problem: exists ? null : 'The program this manifest names is missing.',
+    current: method === 'kimochi' && exists ? seed !== 'outdated' || reinstalled : null
   }
 }
 
@@ -58,6 +63,7 @@ const SEEDS: Record<string, HostManifest[]> = {
   official: [manifest('chrome', 'official'), manifest('firefox', 'official')],
   unknown: [manifest('brave', 'unknown')],
   kimochi: ['chrome', 'brave', 'firefox'].map((b) => manifest(b, 'kimochi')),
+  outdated: ['chrome', 'firefox'].map((b) => manifest(b, 'kimochi')),
   broken: [manifest('chrome', 'kimochi', false)],
   host: [manifest('chrome', 'kimochi')],
   ready: ['chrome', 'firefox'].map((b) => manifest(b, 'kimochi'))
@@ -70,7 +76,8 @@ let answersFrom: number | null = seed === 'ready' || seed === 'host' ? 0 : null
 function hostStatus(): HostStatus {
   const working = browsers.filter((b) => b.method && b.hostExists && !b.problem)
   const method = (['kimochi', 'official', 'unknown'] as const).find((m) => working.some((b) => b.method === m)) ?? null
-  return { os, installed: method !== null, method, browsers }
+  const kimochiOutdated = working.some((b) => b.method === 'kimochi' && b.current === false)
+  return { os, installed: method !== null, method, browsers, kimochiOutdated }
 }
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -85,6 +92,9 @@ async function apiCheck(args: Record<string, unknown> | undefined): Promise<ApiS
     server,
     yomitan,
     yomitanVersion: yomitan ? '26.9.8.0' : null,
+    hostName: server && hostStatus().method === 'kimochi' && !hostStatus().kimochiOutdated ? 'kimochi' : null,
+    hostVersion: server && hostStatus().method === 'kimochi' && !hostStatus().kimochiOutdated ? 'v3' : null,
+    concurrent: server && hostStatus().method === 'kimochi' && !hostStatus().kimochiOutdated,
     latencyMs: server ? 3 : null,
     error: yomitan
       ? null
@@ -97,6 +107,7 @@ async function apiCheck(args: Record<string, unknown> | undefined): Promise<ApiS
 async function install(): Promise<string> {
   await delay(1500)
   if (seed === 'fail') throw 'Download failed with status: 404 Not Found (preview)'
+  reinstalled = true
   browsers = ['chrome', 'brave', 'firefox'].map((b) => manifest(b, 'kimochi'))
   if (seed === 'flow') answersFrom = Date.now() + 6000
   return windows

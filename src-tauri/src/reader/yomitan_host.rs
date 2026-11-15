@@ -201,6 +201,9 @@ pub struct ManifestReport {
     pub host_exists: bool,
     /// Why this registration cannot work, in words.
     pub problem: Option<String>,
+    /// For Kimochi's helper: whether its program is the version this Kimochi installs
+    /// (`yomitan_install::HOST_VERSION`, by sha256). None for other helpers, or when unknown.
+    pub current: Option<bool>,
 }
 
 impl ManifestReport {
@@ -225,6 +228,7 @@ pub fn inspect_manifest(
         method: None,
         host_exists: false,
         problem: None,
+        current: None,
     };
     let text = match contents {
         Ok(text) => text,
@@ -274,13 +278,18 @@ pub struct HostStatus {
     pub method: Option<HostMethod>,
     /// Every registration found, working or not, one per browser location.
     pub browsers: Vec<ManifestReport>,
+    /// A working registration runs an older Kimochi helper than this Kimochi installs: Kimochi
+    /// updates it (`yomitan_install::update_if_outdated`).
+    pub kimochi_outdated: bool,
 }
 
 pub fn summarize(os: Os, browsers: Vec<ManifestReport>) -> HostStatus {
     let usable: Vec<HostMethod> = browsers.iter().filter(|r| r.usable()).filter_map(|r| r.method).collect();
     let method =
         [HostMethod::Kimochi, HostMethod::Official, HostMethod::Unknown].into_iter().find(|m| usable.contains(m));
-    HostStatus { os: os.id(), installed: method.is_some(), method, browsers }
+    let kimochi_outdated =
+        browsers.iter().any(|r| r.usable() && r.method == Some(HostMethod::Kimochi) && r.current == Some(false));
+    HostStatus { os: os.id(), installed: method.is_some(), method, browsers, kimochi_outdated }
 }
 
 /// The default value of a `reg query <key> /ve` answer. The value's label is localised
@@ -321,7 +330,7 @@ fn home() -> Option<PathBuf> {
 /// Looks at every location on this computer. Reads only.
 pub fn detect() -> HostStatus {
     let Some(os) = Os::current() else {
-        return HostStatus { os: "other", installed: false, method: None, browsers: vec![] };
+        return HostStatus { os: "other", installed: false, method: None, browsers: vec![], kimochi_outdated: false };
     };
     let home = home().unwrap_or_default();
     let exists = |path: &str| Path::new(path).is_file();
@@ -341,7 +350,11 @@ pub fn detect() -> HostStatus {
             },
         };
         let contents = std::fs::read_to_string(&manifest).map_err(|e| e.kind().to_string());
-        reports.push(inspect_manifest(&location, &manifest.to_string_lossy(), contents, &exists));
+        let mut report = inspect_manifest(&location, &manifest.to_string_lossy(), contents, &exists);
+        if report.method == Some(HostMethod::Kimochi) && report.host_exists {
+            report.current = report.host_path.as_deref().and_then(|p| super::yomitan_install::is_current(Path::new(p)));
+        }
+        reports.push(report);
     }
     summarize(os, reports)
 }
@@ -362,6 +375,13 @@ pub struct ApiStatus {
     pub server: bool,
     pub yomitan: bool,
     pub yomitan_version: Option<String>,
+    /// What the running helper says it is (`/serverVersion`): Kimochi's helper from v3 answers
+    /// `{"host": "kimochi", "hostVersion": "v3", "concurrent": true}`; older ones and the official
+    /// helper say only `{"version": 1}`.
+    pub host_name: Option<String>,
+    pub host_version: Option<String>,
+    /// The helper relays several requests at once, so a slow one (audio) holds up no other.
+    pub concurrent: bool,
     pub latency_ms: Option<u64>,
     pub error: Option<String>,
 }
@@ -398,7 +418,15 @@ pub async fn yomitan_api_check(window: tauri::WebviewWindow, url: String) -> Res
         .send()
         .await;
     match server {
-        Ok(response) if response.status().is_success() => status.server = true,
+        Ok(response) if response.status().is_success() => {
+            status.server = true;
+            if let Ok(identity) = response.json::<Value>().await {
+                let text = |key: &str| identity.get(key).and_then(Value::as_str).map(str::to_string);
+                status.host_name = text("host");
+                status.host_version = text("hostVersion");
+                status.concurrent = identity.get("concurrent").and_then(Value::as_bool).unwrap_or(false);
+            }
+        }
         Ok(response) => {
             status.error = Some(format!("HTTP {}", response.status().as_u16()));
             return Ok(status);
@@ -676,5 +704,25 @@ mod tests {
         assert_eq!(value["method"], "kimochi");
         assert_eq!(value["browsers"][0]["browserName"], "Firefox");
         assert_eq!(value["browsers"][0]["hostExists"], true);
+    }
+
+    /// An older Kimochi helper in a working registration is flagged for the update; a broken one,
+    /// or another installer's, is not.
+    #[test]
+    fn an_older_kimochi_helper_is_flagged() {
+        let report = |id: &str, path: &str, current: Option<bool>| {
+            let mut r = inspect_manifest(&location(Os::Mac, id), "/m/yomitan_api.json", Ok(manifest(path)), &ALL);
+            r.current = current;
+            r
+        };
+        let old = summarize(Os::Mac, vec![report("chrome", "/x/yomitan-host-darwin-arm64", Some(false))]);
+        assert!(old.kimochi_outdated);
+        let new = summarize(Os::Mac, vec![report("chrome", "/x/yomitan-host-darwin-arm64", Some(true))]);
+        assert!(!new.kimochi_outdated);
+        let official = summarize(Os::Mac, vec![report("chrome", "/x/yomitan_api.py", Some(false))]);
+        assert!(!official.kimochi_outdated);
+        let mut broken = report("chrome", "/x/yomitan-host-darwin-arm64", Some(false));
+        broken.host_exists = false;
+        assert!(!summarize(Os::Mac, vec![broken]).kimochi_outdated);
     }
 }

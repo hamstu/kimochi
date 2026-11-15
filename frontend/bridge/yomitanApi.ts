@@ -21,6 +21,9 @@ const refused = (url: string, error: unknown): ApiStatus => ({
   server: false,
   yomitan: false,
   yomitanVersion: null,
+  hostName: null,
+  hostVersion: null,
+  concurrent: false,
   latencyMs: null,
   error: nativeError(error).message
 })

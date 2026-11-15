@@ -1472,8 +1472,10 @@ BraveSoftware/Brave-Browser, Microsoft Edge, Vivaldi, Arc/User Data, Mozilla>`; 
 `~/.mozilla/native-messaging-hosts`), and on Windows reads the default value of
 `HKCU\Software\<Google\Chrome | Chromium | BraveSoftware\Brave-Browser | Microsoft\Edge | Vivaldi |
 Mozilla>\NativeMessagingHosts\yomitan_api` (`reg query`) and reads the manifest it names.
-`HostStatus` is `{os, installed, method, browsers: [{browser, browserName, manifestPath, hostPath,
-method, hostExists, problem}]}`. `method` is classified from the program the manifest names:
+`HostStatus` is `{os, installed, method, kimochiOutdated, browsers: [{browser, browserName,
+manifestPath, hostPath, method, hostExists, problem, current}]}`. `current` (Kimochi's helper only)
+says whether its program's sha256 is the pinned `HOST_VERSION` asset's; `kimochiOutdated` is true
+when a working registration's is not. `method` is classified from the program the manifest names:
 `'official'` (yomidevs/yomitan-api: `yomitan_api.py`, or its `yomitan_api.bat` wrapper),
 `'kimochi'` (the Go helper: `yomitan-host-*`, `go-yomitan-native-messaging-host`) or `'unknown'`;
 it is null when the manifest cannot be read as a `yomitan_api` manifest. `installed` is true when
@@ -1482,19 +1484,30 @@ the official one.
 
 `yomitan_api_check` POSTs `/serverVersion` (answered by the helper itself, 1.5 s timeout), then
 `/yomitanVersion` (a round trip into the extension, 4 s): `ApiStatus` is `{url, server, yomitan,
-yomitanVersion, latencyMs, error}`. Connection failures are answers, not errors; only an address
+yomitanVersion, hostName, hostVersion, concurrent, latencyMs, error}`. The middle three are what
+the running helper says it is on `/serverVersion`: Kimochi's helper from v3 answers
+`{"version":1,"host":"kimochi","hostVersion":"v3","concurrent":true}`; older ones and the official
+helper answer `{"version":1}`, so they read null, null, false. The setup uses them to tell a browser
+still running an old helper (restart it) from one running the current one. Connection failures are answers, not errors; only an address
 `validate_configured_api_url` refuses (`invalid:`) rejects. Not callable from `overlay`, like
 `yomitan_request`. The setup wizard calls it every second while it is open (never overlapping),
 Settings → Dictionary every five seconds.
 
-`install_yomitan_native_host` is the only command that writes registrations, and only runs from
-the wizard's Install button. It downloads the latest release asset `yomitan-host-<os>-<arch>` of
-[hamstu/go-yomitan-native-messaging-host](https://github.com/hamstu/go-yomitan-native-messaging-host).
+`install_yomitan_native_host` is the only command that writes registrations. It runs from the
+wizard's Install button, Settings → Dictionary's "Use Kimochi's helper" / "Update helper", and once
+at startup when a working registration runs an older Kimochi helper (`update_if_outdated`; other
+installers' helpers are never replaced unasked). It downloads the release asset
+`yomitan-host-<os>-<arch>` of the pinned version (`reader/yomitan_install.rs` `HOST_VERSION`) of
+[hamstu/go-yomitan-native-messaging-host](https://github.com/hamstu/go-yomitan-native-messaging-host)
+and refuses it unless its sha256 is the one pinned for that asset (`HOST_SHA256`, from the release's
+`SHA256SUMS`).
 On macOS and Linux the binary's own `install` copies it into every browser's folder and writes the
 manifests there; the download is then deleted. On Windows Kimochi keeps the binary at
 `<app local data>/yomitan-host/yomitan-host.exe`, writes `yomitan_api.json` (Chromium
 `allowed_origins`) and `yomitan_api_firefox.json` (Firefox `allowed_extensions`) beside it, and
-sets each browser's `HKCU` key above with `reg add`.
+sets each browser's `HKCU` key above with `reg add`. A running `yomitan-host.exe` (the browser has
+it open) is renamed to `.exe.old` and the new one renamed into place; the browser runs the new one
+the next time it starts the helper.
 
 ## AnkiConnect
 

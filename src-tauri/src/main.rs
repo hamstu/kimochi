@@ -3503,6 +3503,8 @@ fn main() {
             platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
             debug_report::install(&handle);
+            // An older Kimochi Yomitan API helper is brought up to the version this build pins.
+            reader::yomitan_install::update_if_outdated(handle.clone());
             // Before any window loads: the WebView must never expire the dictionary engines'
             // website data (IndexedDB, OPFS), wherever it lives. Recorded once the log exists.
             let website_data = platform::keep_website_data();

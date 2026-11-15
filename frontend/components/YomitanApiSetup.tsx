@@ -28,6 +28,7 @@ import {
   connectionState,
   describeConnection,
   describeHost,
+  helperAdvice,
   initialStep,
   listNames,
   stepDone,
@@ -172,21 +173,17 @@ function HelperStep({
             <StatusDot tone="ok" />
             {describeHost(host)}
           </p>
-          {host.method === 'kimochi' && (
-            <p className="yomitan-setup-aside">
-              Reinstalling fetches its latest version; restart your browser afterwards so it runs.{' '}
-              <button type="button" className="k-link" disabled={install.state === 'installing'} onClick={onInstall}>
-                Reinstall
-              </button>
-            </p>
-          )}
-          {host.method !== 'kimochi' && (
-            <p className="yomitan-setup-aside">
-              Installing Kimochi&apos;s helper replaces this one in every browser.{' '}
-              <button type="button" className="k-link" disabled={install.state === 'installing'} onClick={onInstall}>
-                Use Kimochi&apos;s helper instead
-              </button>
-            </p>
+          {helperAdvice(host, null) ? (
+            <HelperAdviceCallout advice={helperAdvice(host, null)} install={install} onInstall={onInstall} />
+          ) : (
+            host.method === 'kimochi' && (
+              <p className="yomitan-setup-aside">
+                Reinstalling puts its files back; restart your browser afterwards so it runs.{' '}
+                <button type="button" className="k-link" disabled={install.state === 'installing'} onClick={onInstall}>
+                  Reinstall
+                </button>
+              </p>
+            )
           )}
         </>
       )}
@@ -411,6 +408,32 @@ export function YomitanApiSetupDialog({
   )
 }
 
+/** Kimochi's helper recommended over another, an update, or a browser restart (`helperAdvice`). */
+function HelperAdviceCallout({
+  advice,
+  install,
+  onInstall
+}: {
+  advice: ReturnType<typeof helperAdvice>
+  install: Install
+  onInstall: () => void
+}): JSX.Element | null {
+  if (!advice) return null
+  return (
+    <Callout tone={advice.kind === 'restart' ? 'warn' : 'neutral'}>
+      <span className="k-medium">{advice.title}</span>
+      <span>{advice.text}</span>
+      {advice.action && (
+        <span>
+          <Button size="sm" variant="primary" disabled={install.state === 'installing'} onClick={onInstall}>
+            {install.state === 'installing' ? 'Installing…' : advice.action}
+          </Button>
+        </span>
+      )}
+    </Callout>
+  )
+}
+
 /**
  * Settings → Dictionary's two lines about the Yomitan API: is the helper installed, does the API
  * answer. Asked every few seconds while shown (the wizard, when open, asks every second itself).
@@ -427,8 +450,29 @@ export function YomitanApiStatusRows({
 }): JSX.Element {
   const { host, api, refresh } = useYomitanApiSetup(url, { active, apiEveryMs: 5000, hostEveryMs: 10000 })
   const state = connectionState(host, api)
+  const advice = helperAdvice(host, api)
+  const [install, setInstall] = useState<Install>({ state: 'idle', message: null })
+  const runInstall = (): void => {
+    setInstall({ state: 'installing', message: null })
+    installHost()
+      .then((output) => {
+        setInstall({ state: 'done', message: output.trim() || null })
+        return refresh()
+      })
+      .catch((error: unknown) => setInstall({ state: 'error', message: nativeError(error).message }))
+  }
   return (
     <>
+      {advice && <HelperAdviceCallout advice={advice} install={install} onInstall={runInstall} />}
+      {install.state === 'done' && advice?.kind !== 'restart' && (
+        <Callout tone="ok">Kimochi&apos;s helper is installed. Restart your browser so it runs.</Callout>
+      )}
+      {install.state === 'error' && (
+        <Callout tone="danger">
+          <span className="k-medium">The helper could not be installed.</span>
+          {install.message && <pre className="yomitan-setup-pre">{install.message}</pre>}
+        </Callout>
+      )}
       <SettingsRow label="Helper" description={describeHost(host)}>
         <Button size="sm" variant={state === 'ready' ? 'secondary' : 'primary'} onClick={onSetUp}>
           {state === 'ready' ? 'Open setup' : 'Set up…'}
