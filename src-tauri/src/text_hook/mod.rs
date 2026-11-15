@@ -1107,6 +1107,10 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     let targets = match found {
         Ok(targets) => targets,
         Err(reason) => {
+            crate::debug_report::trace(
+                &hook.app,
+                json!({ "check": "texthook-start-failed", "source": source_id, "pid": pid, "reason": reason }),
+            );
             // The game's card waits on a session for its window: one that failed, with why, rather
             // than none (which reads as still starting).
             let mut session = hook.lock();
