@@ -95,6 +95,9 @@ export type DictionaryEngine = 'yomitan' | 'hachidori' | 'tenten' | 'custom-api'
 export type YomitanSettings = {
   popupType: PopupType
   customApiUrl: string
+  /** Yomitan API only: fetch the overlay's words while the reader isn't looking anything up
+      (`yomitan_warm`), so their pop-ups open from the cache. Off unless turned on. */
+  prefetchScreen?: boolean
 }
 
 export type TokenPart = {

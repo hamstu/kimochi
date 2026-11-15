@@ -59,7 +59,7 @@ pub fn defaults() -> Value {
             "sendToWebSocket": false,
             "webSocketUrl": "ws://localhost:6677"
         },
-        "yomitanSettings": { "popupType": "builtin", "customApiUrl": "" },
+        "yomitanSettings": { "popupType": "builtin", "customApiUrl": "", "prefetchScreen": false },
         // An object, not a flat scalar: `useSetting<ServerSettings>('serverSettings')`.
         "serverSettings": { "mode": "cloud" },
         "textOverlayGrouping": {

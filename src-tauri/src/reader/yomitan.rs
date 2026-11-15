@@ -79,8 +79,13 @@ fn client() -> &'static reqwest::Client {
 
 #[tauri::command]
 pub async fn yomitan_tokenize(base_url: String, body: TokenizeBody) -> Result<Value, String> {
+    lane(&base_url).touch();
+    tokenize(&base_url, &body.text, body.scan_length).await
+}
+
+async fn tokenize(base_url: &str, text: &str, scan_length: u32) -> Result<Value, String> {
     let url = format!("{}/tokenize", base_url.trim_end_matches('/'));
-    let req = TokenizeRequest { text: &body.text, scan_length: body.scan_length };
+    let req = TokenizeRequest { text, scan_length };
     let res = client().post(&url).json(&req).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("HTTP {}", res.status()));
@@ -116,9 +121,10 @@ fn trim_tokenize(value: &mut Value) {
 /// How many entries a word's first answer carries. Yomitan renders every marker of every entry it
 /// returns, so its time (and the answer's size) grows with the entries: a word with many shorter
 /// sub-term matches (この先, そんな) across many dictionaries takes it hundreds of milliseconds
-/// for 32 and a quarter of that for 4. The pop-up opens on the first answer; the rest follow
-/// (`Stage::All`) once it is showing.
-pub const FIRST_ENTRIES: u32 = 4;
+/// for 32 and a quarter of that for 4 (over 40 common words: 59 ms median for 32, 54 for 4, 35
+/// for 2). A pop-up shows one or two entries before it scrolls, so it opens on two; the rest
+/// follow (`Stage::All`) once it is showing.
+pub const FIRST_ENTRIES: u32 = 2;
 
 /// Which of a word's entries a lookup asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -156,6 +162,21 @@ struct Lane {
     gate: tokio::sync::Semaphore,
     latest: std::sync::atomic::AtomicU64,
     showing: Mutex<Option<String>>,
+    /// When the reader last caused a request (a tokenize, a prefetch, a pop-up): warming
+    /// (`yomitan_warm`) waits until they have been quiet for `WARM_IDLE`.
+    touched: Mutex<std::time::Instant>,
+    /// The newest warm: an older one stops at its next word.
+    warm: std::sync::atomic::AtomicU64,
+}
+
+impl Lane {
+    fn touch(&self) {
+        *self.touched.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = std::time::Instant::now();
+    }
+
+    fn quiet_for(&self) -> Duration {
+        self.touched.lock().unwrap_or_else(std::sync::PoisonError::into_inner).elapsed()
+    }
 }
 
 fn lane(base_url: &str) -> Arc<Lane> {
@@ -168,6 +189,8 @@ fn lane(base_url: &str) -> Arc<Lane> {
                 gate: tokio::sync::Semaphore::new(1),
                 latest: std::sync::atomic::AtomicU64::new(0),
                 showing: Mutex::new(None),
+                touched: Mutex::new(std::time::Instant::now()),
+                warm: std::sync::atomic::AtomicU64::new(0),
             })
         })
         .clone()
@@ -175,7 +198,9 @@ fn lane(base_url: &str) -> Arc<Lane> {
 
 /// The newest pop-up's word: its prefetch is never dropped, since the pop-up is waiting for it.
 pub fn set_showing(base_url: &str, term: &str) {
-    *lane(base_url).showing.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(term.to_string());
+    let lane = lane(base_url);
+    lane.touch();
+    *lane.showing.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(term.to_string());
 }
 
 /// A word's entries at `stage`, from the cache or asked for in turn; `wanted` says, when the
@@ -286,6 +311,7 @@ pub fn yomitan_prefetch(base_url: String, term: String) {
 fn prefetch(base_url: String, term: String) -> impl std::future::Future<Output = ()> {
     use std::sync::atomic::Ordering;
     let lane = lane(&base_url);
+    lane.touch();
     let ticket = lane.latest.fetch_add(1, Ordering::SeqCst) + 1;
     async move {
         let wanted = || {
@@ -294,6 +320,116 @@ fn prefetch(base_url: String, term: String) -> impl std::future::Future<Output =
         };
         let _ = entries_once(&base_url, &term, Stage::First, &wanted).await;
     }
+}
+
+/// How long the reader's requests must have been quiet before warming sends one.
+const WARM_IDLE: Duration = Duration::from_millis(250);
+/// At most this many words are warmed for one screen of text, and this much text is read.
+const WARM_WORDS: usize = 80;
+const WARM_CHARS: usize = 1200;
+
+/// Warm the first entries of every word in `texts` (the overlay's boxes, in reading order), so
+/// pointing at any of them opens its pop-up from the cache instead of waiting on Yomitan.
+///
+/// Background work that must never cost the reader anything: each request (a box's `/tokenize`,
+/// then each word's first entries) waits until the lane is free and the reader's own requests have
+/// been quiet for `WARM_IDLE`, and a newer warm (new text on screen) stops this one at its next
+/// step. The most a hover can then wait for warming is the one request already sent.
+#[tauri::command]
+pub fn yomitan_warm(base_url: String, texts: Vec<String>) {
+    use std::sync::atomic::Ordering;
+    let lane = lane(&base_url);
+    let ticket = lane.warm.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn(warm(base_url, texts, lane, ticket));
+}
+
+async fn warm(base_url: String, texts: Vec<String>, lane: Arc<Lane>, ticket: u64) {
+    use std::sync::atomic::Ordering;
+    let current = || lane.warm.load(Ordering::SeqCst) == ticket;
+    // Until the lane is free and the reader quiet; false once a newer warm took over.
+    let idle = || async {
+        loop {
+            if !current() {
+                return false;
+            }
+            if lane.gate.available_permits() > 0 && lane.quiet_for() >= WARM_IDLE {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut budget = WARM_CHARS;
+    for text in texts {
+        let text: String = text.trim().chars().take(budget).collect();
+        if text.is_empty() {
+            continue;
+        }
+        budget = budget.saturating_sub(text.chars().count());
+        if !idle().await {
+            return;
+        }
+        let Ok(parsed) = tokenize(&base_url, &text, 16).await else { return };
+        for word in words_of_parse(&parsed, &text) {
+            if seen.len() >= WARM_WORDS {
+                return;
+            }
+            if !seen.insert(word.clone()) || entries_ready(&base_url, &word, Stage::First).is_some() {
+                continue;
+            }
+            if !idle().await {
+                return;
+            }
+            // Sent only if, when its turn comes, the reader is still quiet and no newer warm began.
+            let quiet = || current() && lane.quiet_for() >= WARM_IDLE;
+            let _ = entries_once(&base_url, &word, Stage::First, &quiet).await;
+        }
+        if budget == 0 {
+            return;
+        }
+    }
+}
+
+/// The words a pointer resting at each token's start would look up, from a `/tokenize` of the
+/// whole `text`: per token with headwords, the widest of its text and its headwords'
+/// `originalText` that starts there (as `wordAtStart` in ui/scan-text.ts picks).
+fn words_of_parse(parsed: &Value, text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut offset = 0;
+    for chunk in parsed.as_array().into_iter().flatten() {
+        if chunk.get("source").and_then(Value::as_str).is_some_and(|s| s != "scanning-parser") {
+            continue;
+        }
+        for token in chunk.get("content").and_then(Value::as_array).into_iter().flatten() {
+            let segments = token.as_array().map(Vec::as_slice).unwrap_or_default();
+            let value: String = segments.iter().filter_map(|s| s.get("text").and_then(Value::as_str)).collect();
+            if value.is_empty() {
+                continue;
+            }
+            let Some(found) = text[offset..].find(&value) else { break };
+            let start = offset + found;
+            offset = start + value.len();
+            let Some(groups) = segments.first().and_then(|s| s.get("headwords")).and_then(Value::as_array) else {
+                continue;
+            };
+            let rest = &text[start..];
+            let mut widest = value.clone();
+            for headword in groups.iter().filter_map(Value::as_array).flatten() {
+                for source in headword.get("sources").and_then(Value::as_array).into_iter().flatten() {
+                    if let Some(original) = source.get("originalText").and_then(Value::as_str) {
+                        if original.chars().count() > widest.chars().count()
+                            && original.starts_with(&value)
+                            && rest.starts_with(original)
+                        {
+                            widest = original.to_string();
+                        }
+                    }
+                }
+            }
+            words.push(widest);
+        }
+    }
+    words
 }
 
 /// The first `max_entries` entries of a lookup. With media, Yomitan fetches the audio of every
@@ -371,7 +507,7 @@ mod tests {
         assert_eq!(seen.lock().unwrap().len(), 2, "the failure, then one request for all three");
         assert!(entries(&url, "猫", Stage::All, ALWAYS).await.is_ok());
         assert_eq!(seen.lock().unwrap().len(), 3, "every entry is its own request");
-        assert!(seen.lock().unwrap()[1].contains(r#""maxEntries":4"#));
+        assert!(seen.lock().unwrap()[1].contains(r#""maxEntries":2"#));
         assert!(seen.lock().unwrap()[2].contains(r#""maxEntries":32"#));
         let _ = ankifields_media(&url, "猫").await;
         let _ = ankifields_media(&url, "猫").await;
@@ -428,5 +564,58 @@ mod tests {
         assert_eq!(value[0]["source"], "scanning-parser");
         assert_eq!(value[0]["content"][0][1]["text"], "き込み");
         assert_eq!(value[0]["content"][1][0]["text"], "、");
+    }
+
+    /// One parse of a box gives the words a pointer would look up at each token's start; an
+    /// inflected word reads as its whole span, and unmatched runs give none.
+    #[test]
+    fn a_boxes_words_come_from_one_parse() {
+        let text = "書き込みを見た。";
+        let parsed = serde_json::json!([{ "source": "scanning-parser", "content": [
+            [{"text": "書", "reading": "か", "headwords": [[{"term": "書き込む", "reading": "かきこむ",
+                "sources": [{"originalText": "書き込み"}, {"originalText": "書"}]}]]}, {"text": "き込み", "reading": "きこみ"}],
+            [{"text": "を", "reading": "", "headwords": [[{"term": "を", "reading": "を", "sources": [{"originalText": "を"}]}]]}],
+            [{"text": "見", "reading": "み", "headwords": [[{"term": "見る", "reading": "みる", "sources": [{"originalText": "見た"}]}]]}, {"text": "た", "reading": ""}],
+            [{"text": "。", "reading": ""}]
+        ]}]);
+        assert_eq!(words_of_parse(&parsed, text), ["書き込み", "を", "見た"]);
+    }
+
+    /// Warming parses each box, then asks for each new word's first entries, and does nothing more
+    /// once newer text has arrived.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn warming_fetches_each_words_first_entries_and_gives_way_to_newer_text() {
+        use crate::reader::ankiconnect::tests::serve;
+        let (url, seen) = serve(|body| {
+            if body.contains("scanLength") {
+                (
+                    200,
+                    serde_json::json!([{ "source": "scanning-parser", "content": [
+                        [{"text": "森", "headwords": [[{"term": "森", "sources": [{"originalText": "森"}]}]]}],
+                        [{"text": "の", "headwords": [[{"term": "の", "sources": [{"originalText": "の"}]}]]}],
+                        [{"text": "奥", "headwords": [[{"term": "奥", "sources": [{"originalText": "奥"}]}]]}]
+                    ]}])
+                    .to_string(),
+                )
+            } else {
+                (200, r#"{"fields":[]}"#.into())
+            }
+        });
+        // The lane has been quiet: the warm runs at once.
+        let lane = lane(&url);
+        *lane.touched.lock().unwrap() = std::time::Instant::now() - WARM_IDLE * 2;
+        let ticket = lane.warm.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        warm(url.clone(), vec!["森の奥".into(), "森".into()], lane.clone(), ticket).await;
+        let asked: Vec<String> =
+            seen.lock().unwrap().iter().map(|r| r.split("\r\n\r\n").nth(1).unwrap_or("").to_string()).collect();
+        assert_eq!(asked.len(), 5, "two parses, then 森, の, 奥 once each: {asked:?}");
+        assert!(asked[1].contains(r#""text":"森""#) && asked[1].contains(r#""maxEntries":2"#));
+        assert!(entries_ready(&url, "奥", Stage::First).is_some());
+
+        // A newer warm began: the older one sends nothing more.
+        let stale = lane.warm.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        lane.warm.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        warm(url.clone(), vec!["新しい".into()], lane.clone(), stale + 1).await;
+        assert_eq!(seen.lock().unwrap().len(), 5);
     }
 }

@@ -39,6 +39,8 @@ export function dismissApiLookup() {
 }
 
 const WORD_BOX = '[data-ocr-word-box]'
+/** How long the overlay's boxes must stay unchanged before their words are warmed. */
+const WARM_SETTLE_MS = 300
 
 /** AnkiConnect's address when the setting has none (ankiconnect.rs `DEFAULT_URL`). */
 const DEFAULT_ANKI_CONNECT_URL = 'http://127.0.0.1:8765'
@@ -141,10 +143,40 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     if (!apiMode()) scanner.stop()
   }
   update()
+  // New text on the overlay: its words' first entries are fetched while the reader isn't looking
+  // anything up (`yomitan_warm`), so pointing at one opens from the cache. Boxes in document
+  // order; the same text twice (automatic OCR redraws) is warmed once.
+  let warmed = ''
+  let warmTimer = null
+  const warmBoxes = () => {
+    warmTimer = null
+    if (!apiMode() || settings?.prefetchScreen !== true) return
+    const texts = [...document.querySelectorAll(WORD_BOX)]
+      .map((box) => (box.renderText ?? box.querySelector('.ocr-word-current')?.textContent ?? '').trim())
+      .filter(Boolean)
+    const key = texts.join('\n')
+    if (!key || key === warmed) return
+    warmed = key
+    void invoke('yomitan_warm', { baseUrl: baseUrl(), texts }).catch(() => {})
+  }
+  // (Absent where tests run the overlay without a DOM.)
+  if (globalThis.MutationObserver) {
+    new MutationObserver(() => {
+      clearTimeout(warmTimer)
+      warmTimer = setTimeout(warmBoxes, WARM_SETTLE_MS)
+    }).observe(document.body, { childList: true, subtree: true })
+  }
+
   await window.__TAURI__.event.listen('settings:changed', ({ payload }) => {
     if (payload.key === 'yomitanSettings') {
+      const warmingTurnedOn = payload.value?.prefetchScreen === true && settings?.prefetchScreen !== true
       settings = payload.value
       update()
+      // Turned on: the text already on screen is warmed now, not with the next line.
+      if (warmingTurnedOn) {
+        warmed = ''
+        warmBoxes()
+      }
       if (!apiMode()) void invoke('hide_popover')
     }
     if (payload.key === 'superTexthooker') reader = payload.value || {}
