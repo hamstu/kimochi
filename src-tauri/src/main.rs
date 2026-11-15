@@ -1230,9 +1230,14 @@ fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>)
     #[cfg(target_os = "linux")]
     if platform::gamescope::active() {
         let previous = gamepad::set_navigation(&app, active, false);
-        let result = platform::gamescope::refresh_input_lease()
+        let lease = platform::gamescope::refresh_input_lease();
+        let result = lease
+            .clone()
             .and_then(|()| app.get_webview_window("overlay").ok_or_else(|| "overlay unavailable".to_owned()))
             .and_then(|window| platform::gamescope::keyboard(&window, active));
+        if active {
+            debug_report::record_now(platform::gamescope::nav_opened(&lease, &result));
+        }
         return json!({"previousPid": previous, "gamescopeInput": result.is_ok(), "error": result.err()});
     }
     let previous = gamepad::set_navigation(&app, active, take_focus.unwrap_or(true));

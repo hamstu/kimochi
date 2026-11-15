@@ -101,6 +101,10 @@ pub fn update(active: bool) -> Result<(), String> {
         .write_all(b"A")
         .map_err(|e| e.to_string())
 }
+/// Whether Kimochi holds Steam paused now (diagnostics).
+pub fn paused() -> bool {
+    LEASE.lock().map(|lease| lease.is_some()).unwrap_or(false)
+}
 /// System buttons must reach Steam while still physically held, rather than
 /// waiting for the normal B/confirm release delay.
 pub fn handoff() {

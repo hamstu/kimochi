@@ -97,6 +97,73 @@ pub(super) fn prepare_control(window: &tauri::WebviewWindow) -> Result<(), Strin
 }
 pub fn start() {
     super::gamescope_handoff::start();
+    if let Some(record) = environment(|key| std::env::var(key).ok(), |path| std::fs::read_to_string(path).ok()) {
+        crate::debug_report::record_now(record);
+    }
+}
+/// What tells one Gaming Mode machine from another in a report (#165): the distribution
+/// (SteamOS, Bazzite…), the hardware, and what the session gave Kimochi to work with.
+/// `None` outside Gamescope.
+fn environment(
+    var: impl Fn(&str) -> Option<String>,
+    read: impl Fn(&str) -> Option<String>,
+) -> Option<serde_json::Value> {
+    let in_gamescope = var("XDG_CURRENT_DESKTOP").is_some_and(|desktop| desktop.eq_ignore_ascii_case("gamescope"));
+    if !in_gamescope && !active() {
+        return None;
+    }
+    let os = read("/etc/os-release").unwrap_or_default();
+    let field = |name: &str| {
+        os.lines()
+            .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
+            .map(|value| value.trim().trim_matches('"').to_owned())
+    };
+    let dmi = |name: &str| read(&format!("/sys/class/dmi/id/{name}")).map(|value| value.trim().to_owned());
+    let socket = match (var("XDG_RUNTIME_DIR"), var("WAYLAND_DISPLAY")) {
+        (Some(runtime), Some(display)) => {
+            let path = if display.starts_with('/') { display } else { format!("{runtime}/{display}") };
+            Some(std::path::Path::new(&path).exists())
+        }
+        _ => None,
+    };
+    let env: serde_json::Map<_, _> = [
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_TYPE",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "GDK_BACKEND",
+        "KIMOCHI_GAMESCOPE_OVERLAY",
+        "KIMOCHI_STEAM_MANAGED",
+        "KIMOCHI_GAMING_RELAUNCHED",
+    ]
+    .into_iter()
+    .map(|key| (key.to_owned(), serde_json::json!(var(key))))
+    .collect();
+    Some(serde_json::json!({
+        "check": "gaming-mode-environment",
+        "gamescope": active(),
+        "managed": managed(),
+        "os": { "id": field("ID"), "variant": field("VARIANT_ID"), "version": field("VERSION_ID"), "name": field("PRETTY_NAME") },
+        "machine": { "vendor": dmi("sys_vendor"), "product": dmi("product_name"), "board": dmi("board_name") },
+        "steamDeck": crate::steam_library::is_steam_deck(),
+        "steamAppId": var("SteamAppId").is_some() || var("KIMOCHI_STEAM_APP_ID").is_some(),
+        "waylandSocket": socket,
+        "env": env,
+    }))
+}
+/// How controller navigation opened in Gaming Mode (#165): whether Kimochi reads the Deck's
+/// own controller, whether Steam is paused, and who Gamescope gives input to.
+pub fn nav_opened(lease: &Result<(), String>, input: &Result<(), String>) -> serde_json::Value {
+    serde_json::json!({
+        "check": "controller-nav-opened",
+        "deckControllerLive": crate::gamepad::deck_controller_live(),
+        "steamPaused": super::steam_input::paused(),
+        "leaseError": lease.as_ref().err(),
+        "inputError": input.as_ref().err(),
+        "gamescopeInputHere": super::gamescope_focus::owns_input(std::process::id()),
+        "managed": managed(),
+        "controlsRouted": controls_routed(),
+    })
 }
 /// Tell the windows whether Gamescope is showing Kimochi (`gamescope-shown`, a bool): at once
 /// on every change, and again every few seconds for a window that has (re)loaded since. A
@@ -440,6 +507,30 @@ pub fn yield_to_steam(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod input_tests {
     use super::*;
+    #[test]
+    fn the_gaming_mode_environment_names_the_distribution_and_machine() {
+        let vars = |key: &str| match key {
+            "XDG_CURRENT_DESKTOP" => Some("gamescope".to_owned()),
+            "DISPLAY" => Some(":0".to_owned()),
+            _ => None,
+        };
+        let files = |path: &str| match path {
+            "/etc/os-release" => {
+                Some("NAME=\"Bazzite\"\nID=bazzite\nVARIANT_ID=bazzite-deck\nVERSION_ID=\"43\"\n".to_owned())
+            }
+            "/sys/class/dmi/id/product_name" => Some("ROG Ally RC71L\n".to_owned()),
+            _ => None,
+        };
+        let record = environment(vars, files).expect("in gamescope");
+        assert_eq!(record["check"], "gaming-mode-environment");
+        assert_eq!(record["os"]["id"], "bazzite");
+        assert_eq!(record["os"]["variant"], "bazzite-deck");
+        assert_eq!(record["os"]["version"], "43");
+        assert_eq!(record["machine"]["product"], "ROG Ally RC71L");
+        assert_eq!(record["env"]["DISPLAY"], ":0");
+        assert_eq!(record["env"]["WAYLAND_DISPLAY"], serde_json::Value::Null);
+        assert!(environment(|_| None, |_| None).is_none() || active());
+    }
     #[test]
     fn closing_radial_keeps_focused_controls_owned() {
         assert!(owns_input(true, false, false, false));

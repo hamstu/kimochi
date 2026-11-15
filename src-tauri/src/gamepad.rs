@@ -116,6 +116,9 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         // The controllers last recorded as connected, so the diagnostics log names each change.
         let mut logged_pads: Option<Vec<String>> = None;
         let mut raw = RawEventLog::default();
+        // The controller menu open now: when it opened, the presses it received and from
+        // which controller, recorded when it closes (`controller-nav-closed`).
+        let mut nav_session: Option<NavSession> = None;
         loop {
             // The switch in Settings takes effect here, without a restart. Only one backend
             // runs at a time: dropping gilrs stops its Windows.Gaming.Input thread.
@@ -218,6 +221,13 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             LOOKUP_HELD
                 .store(!navigating() && lookup_button_held(lookup, &buttons, physical.as_deref()), Ordering::SeqCst);
             hand_back_when_released(&app);
+            let active_name =
+                active.and_then(|index| devices.get(index)).and_then(|pad| pad["id"].as_str()).map(str::to_owned);
+            match (navigating(), nav_session.take()) {
+                (true, session) => nav_session = Some(session.unwrap_or_else(NavSession::start)),
+                (false, Some(session)) => crate::debug_report::record_now(session.closed()),
+                (false, None) => {}
+            }
             // `overlayNavigation`: the overlay's controller menu or reading has the controller, so
             // a focused panel must not act on the same presses (ui/panel-controller.js). Opening
             // it brings Kimochi to the front, and the Log window can be the one with focus.
@@ -271,6 +281,9 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 }
                 let sticks = [stick(axes[0], axes[1]), stick(axes[2], axes[3])];
                 if let Some(payload) = nav_report(&previous, &buttons, &mut reported, sticks) {
+                    if let Some(session) = nav_session.as_mut() {
+                        session.note(&payload, active_name.as_deref());
+                    }
                     let _ = app.emit("controller-nav", payload);
                 }
                 previous = buttons;
@@ -719,6 +732,40 @@ fn ends_deck_navigation(deck_drove: bool, deck_connected: bool, system_menu: boo
     system_menu || (deck_drove && !deck_connected)
 }
 
+/// One opening of the controller menu, for the diagnostics log: a report of a menu that
+/// opened but never answered shows no presses, and names the controller that was read.
+struct NavSession {
+    opened: Instant,
+    presses: usize,
+    moves: usize,
+    pads: Vec<String>,
+}
+
+impl NavSession {
+    fn start() -> Self {
+        Self { opened: Instant::now(), presses: 0, moves: 0, pads: Vec::new() }
+    }
+    fn note(&mut self, report: &Value, pad: Option<&str>) {
+        let pressed = report["pressed"].as_array().map_or(0, Vec::len);
+        self.presses += pressed;
+        if pressed == 0 {
+            self.moves += 1;
+        }
+        if let Some(pad) = pad.filter(|pad| !self.pads.iter().any(|seen| seen == pad)) {
+            self.pads.push(pad.to_owned());
+        }
+    }
+    fn closed(self) -> Value {
+        json!({
+            "check": "controller-nav-closed",
+            "openMs": self.opened.elapsed().as_millis() as u64,
+            "presses": self.presses,
+            "stickMoves": self.moves,
+            "pads": self.pads,
+        })
+    }
+}
+
 const POLL_TICK: Duration = Duration::from_millis(8);
 /// How often an unchanged `gamepad` state is sent again.
 const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
@@ -1100,6 +1147,19 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_controller_menu_session_counts_presses_and_names_each_controller_once() {
+        let mut session = super::NavSession::start();
+        session.note(&serde_json::json!({"pressed": [0, 12]}), Some("Steam Virtual Gamepad"));
+        session.note(&serde_json::json!({"pressed": [], "stick": {"x": 1.0}}), Some("Steam Virtual Gamepad"));
+        session.note(&serde_json::json!({"pressed": [1]}), None);
+        let record = session.closed();
+        assert_eq!(record["check"], "controller-nav-closed");
+        assert_eq!(record["presses"], 3);
+        assert_eq!(record["stickMoves"], 1);
+        assert_eq!(record["pads"], serde_json::json!(["Steam Virtual Gamepad"]));
+    }
+
     /// #165: on Bazzite's Game Mode or a Steam Machine there is no Deck controller to read,
     /// so the menu must stay open; on a Deck, losing its controller or Steam's button ends it.
     #[test]
