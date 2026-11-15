@@ -7,6 +7,7 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { BookOpen, ChartColumn, Gamepad2, Layers, ScrollText, Settings } from 'lucide-react'
 import { getSnapshot, subscribe } from '@texthooker/bridge'
 import { useAnkiCards } from './ankiCardsStore'
+import { loadView } from './lazyViews'
 
 export type TabView = 'source' | 'log' | 'notebook' | 'anki' | 'stats' | 'settings'
 
@@ -32,7 +33,15 @@ export function ViewTabs({
   const counts = useCounts()
   const anki = useAnkiCards()
   const tab = (value: TabView, icon: ReactNode, label: string, count: number | null): JSX.Element => (
-    <button type="button" role="tab" className="main-tab" aria-selected={view === value} onClick={() => onView(value)}>
+    <button
+      type="button"
+      role="tab"
+      className="main-tab"
+      aria-selected={view === value}
+      onClick={() => onView(value)}
+      // Stats starts loading as the pointer arrives, so it is ready by the click.
+      onPointerEnter={value === 'stats' ? prefetchStatsView : undefined}
+    >
       {icon}
       <span>{label}</span>
       {count !== null && <span className="main-tab-count">{count.toLocaleString()}</span>}
@@ -48,4 +57,12 @@ export function ViewTabs({
       {gaming && tab('settings', <Settings />, 'Settings', null)}
     </div>
   )
+}
+
+/** The Stats view's code, then its numbers (native works them out meanwhile). */
+function prefetchStatsView(): void {
+  void loadView('stats')
+    .then(() => import('./stats/statsData'))
+    .then((data) => data.prefetchStats())
+    .catch(() => undefined)
 }

@@ -1,9 +1,11 @@
 /**
- * DEV-ONLY: a reading history for the browser preview's Stats tab (`reading_history_lines`):
+ * DEV-ONLY: a reading history for the browser preview's Stats tab (`reading_history_stats` and
+ * `reading_history_kanji`, summed here by the same rule as native):
  * about seven months of evenings across the demo sessions, with gaps, a long run in the summer and
  * a streak running up to today, plus a session since deleted. Seeded, so every load looks the same.
  */
 import { countChars } from '../texthooker/core/charCount'
+import { creditLines, readingDay } from '../texthooker/lib/readingTime'
 import { DEMO_CONTENT } from './demo-content'
 import { SESSION_IDS } from './demo-data'
 
@@ -113,8 +115,8 @@ function build(): PreviewHistoryLine[] {
           sessionName: NAMES[session],
           ...(back > 150 ? { backfilled: true } : {})
         })
-        // About 4–9 characters a second, with a pause now and then.
-        ts += Math.round((chars / (4 + rand() * 5)) * 1000) + (rand() > 0.97 ? 4 * MINUTE : 0)
+        // About 1–3 characters a second, with a pause now and then.
+        ts += Math.round((chars / (1 + rand() * 2)) * 1000) + (rand() > 0.97 ? 4 * MINUTE : 0)
         if (back === 0 && ts > Date.now()) break
       }
     }
@@ -122,12 +124,98 @@ function build(): PreviewHistoryLine[] {
   return out.sort((a, b) => a.ts - b.ts)
 }
 
-/** `reading_history_lines`: the preview's history, of `sessions` when given, with only `fields`. */
-export function previewHistoryLines(args: { sessions?: string[]; fields?: string[] } | undefined): unknown[] {
+const KANJI = /\p{Script=Han}/gu
+const kanjiByText = new Map<string, string[]>()
+/** A text's kanji (the demo repeats a few texts, so once each). */
+function kanjiOf(text: string): string[] {
+  let found = kanjiByText.get(text)
+  if (!found) kanjiByText.set(text, (found = text.match(KANJI) ?? []))
+  return found
+}
+/** Native takes a moment over a long history; the preview waits as long, so the loading shows. */
+const NATIVE_MS = 450
+const later = <T>(value: () => T): Promise<T> => new Promise((done) => setTimeout(() => done(value()), NATIVE_MS))
+
+interface Rules {
+  idleSec?: number
+  skipFastLines?: boolean
+  dayStartHour?: number
+  tz?: number
+}
+
+let creditedFor: { key: string; lines: ReturnType<typeof creditOnce> } | null = null
+
+/** The demo lines credited by the rule, with their reading day, local hour and kanji (once per rules). */
+function credited(rules: Rules | undefined): ReturnType<typeof creditOnce> {
+  const key = JSON.stringify([rules?.idleSec, rules?.skipFastLines, rules?.dayStartHour])
+  if (creditedFor?.key !== key) creditedFor = { key, lines: creditOnce(rules) }
+  return creditedFor.lines
+}
+
+function creditOnce(rules: Rules | undefined) {
   cache ??= build()
-  const sessions = args?.sessions ? new Set(args.sessions) : null
-  const fields = args?.fields
-  return cache
-    .filter((line) => !sessions || sessions.has(line.session))
-    .map((line) => (fields ? Object.fromEntries(Object.entries(line).filter(([key]) => fields.includes(key))) : line))
+  const lines = cache
+  const credits = creditLines(lines, Math.max(10, rules?.idleSec ?? 300) * 1000, rules?.skipFastLines ?? true)
+  return lines.flatMap((line, i) =>
+    credits[i].skipped
+      ? []
+      : [
+          {
+            ...line,
+            ms: credits[i].ms,
+            day: readingDay(line.ts, line.tz, rules?.dayStartHour ?? 4),
+            hour: new Date(line.ts + line.tz * 60_000).getUTCHours(),
+            kanji: kanjiOf(line.text)
+          }
+        ]
+  )
+}
+
+/** `reading_history_stats`, as native sums it (`reading_history::buckets`). */
+export function previewHistoryStats(rules: Rules | undefined): Promise<unknown> {
+  return later(() => {
+    const sums = new Map<
+      string,
+      { day: string; session: string; hour: number; chars: number; ms: number; lines: number; last: number }
+    >()
+    for (const line of credited(rules)) {
+      const key = `${line.day}|${line.session}|${String(line.hour).padStart(2, '0')}`
+      let bucket = sums.get(key)
+      if (!bucket)
+        sums.set(
+          key,
+          (bucket = { day: line.day, session: line.session, hour: line.hour, chars: 0, ms: 0, lines: 0, last: 0 })
+        )
+      bucket.chars += line.chars
+      bucket.ms += line.ms
+      bucket.lines += 1
+      bucket.last = Math.max(bucket.last, line.ts)
+    }
+    const sessions = Object.entries(NAMES).map(([id, name]) => ({ id, name }))
+    return { sessions, buckets: [...sums.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, b]) => b) }
+  })
+}
+
+/** `reading_history_kanji`, as native counts them (`reading_history::kanji`). */
+export function previewHistoryKanji(
+  args: (Rules & { sessions?: string[] | null; since?: string | null; limit?: number }) | undefined
+): Promise<unknown> {
+  return later(() => {
+    const wanted = args?.sessions ? new Set(args.sessions) : null
+    const counts = new Map<string, number>()
+    const before = new Set<string>()
+    for (const line of credited(args)) {
+      if (wanted && !wanted.has(line.session)) continue
+      const earlier = args?.since ? line.day < args.since : false
+      for (const ch of line.kanji) {
+        if (earlier) before.add(ch)
+        else counts.set(ch, (counts.get(ch) ?? 0) + 1)
+      }
+    }
+    const top = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+      .slice(0, args?.limit ?? 60)
+      .map(([kanji, count]) => ({ kanji, count, fresh: !before.has(kanji) }))
+    return { distinct: counts.size, fresh: [...counts.keys()].filter((k) => !before.has(k)).length, top }
+  })
 }

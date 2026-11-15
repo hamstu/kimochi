@@ -4,7 +4,7 @@
  * current streak wears a ring, and pointing at any day rings its whole run of days in a row, so
  * streaks read at a glance.
  */
-import { useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
 import { Flame } from 'lucide-react'
 import { formatReadingTime } from '@texthooker/lib/sessionSummary'
 import { addDays, daysBetween, type Streaks, type Totals } from './statsModel'
@@ -146,12 +146,13 @@ export function Heatmap({
             aria-label={`${plural(readDays, 'day')} read in the last ${weeks} weeks; current streak ${plural(streaks.current, 'day')}`}
             onPointerLeave={() => setHovered(null)}
           >
-            {cells.map((day) => {
+            {cells.map((day, i) => {
               const future = day > today
               return (
                 <span
                   key={day}
                   className="stats-heatmap-cell"
+                  style={{ '--w': Math.floor(i / 7) } as CSSProperties}
                   data-level={future ? undefined : shade(days.get(day)?.chars ?? 0)}
                   data-future={future || undefined}
                   data-today={day === today || undefined}
@@ -185,9 +186,12 @@ export function Heatmap({
               )}
             </>
           ) : (
-            <span>
-              {plural(readDays, 'day')} read in the last {weeks} weeks
-            </span>
+            <>
+              <span>
+                {plural(readDays, 'day')} read in the last {weeks} weeks
+              </span>
+              {streaks.current > 0 && !days.has(today) && <span>Read today to make it {streaks.current + 1}</span>}
+            </>
           )}
         </span>
         <span className="stats-legend" aria-hidden>

@@ -1,35 +1,37 @@
 /**
- * The Stats tab's numbers, from the reading history (`reading_history_lines`). Every time, skip,
- * day and speed comes from the one rule in `@texthooker/lib/readingTime` (the footer and the
- * exports count by it too): lines are credited once, oldest first across every session, and only
- * then narrowed to the sessions being looked at, so a line's time doesn't change with the choice.
+ * The Stats tab's numbers. Native reads the reading history, credits every line by the reading-time
+ * rule (`with_read_time` in src-tauri/src/reading_history.rs, the same rule and fixtures as
+ * `@texthooker/lib/readingTime`) and sums it by reading day, session and hour
+ * (`reading_history_stats`), off the UI thread; this adds those sums up for the sessions and range
+ * being looked at, which is quick however long the history is.
  */
-import { creditLines, MIN_LINES_FOR_SPEED, readingDay } from '@texthooker/lib/readingTime'
+import { MIN_LINES_FOR_SPEED } from '@texthooker/lib/readingTime'
 
-/** A line as `reading_history_lines` returns it, with the fields the tab asks for. */
-export interface HistoryLine {
-  ts: number
-  /** Minutes east of UTC where it was read (0 when unknown). */
-  tz: number
-  chars: number
-  session: string
-  sessionName: string
-  text?: string
-  backfilled?: boolean
-}
-
-/** The fields the tab asks native for. */
-export const STATS_FIELDS = ['ts', 'tz', 'chars', 'session', 'sessionName', 'text', 'backfilled'] as const
-
-/** A line read (not skipped), with its credited time, reading day and local hour. */
-export interface ReadLine {
-  ts: number
+/** One session's reading on one reading day in one local hour (`reading_history::Bucket`). */
+export interface Bucket {
   day: string
+  session: string
   hour: number
   chars: number
   ms: number
-  session: string
-  text: string
+  lines: number
+  last: number
+}
+
+/** What `reading_history_stats` returns. */
+export interface StatsSource {
+  sessions: { id: string; name: string }[]
+  buckets: Bucket[]
+}
+
+/** What `reading_history_kanji` returns. */
+export interface KanjiStats {
+  /** Distinct kanji read in the range. */
+  distinct: number
+  /** Of those, how many were never read before it. */
+  fresh: number
+  /** The range's kanji, most read first. */
+  top: { kanji: string; count: number; fresh: boolean }[]
 }
 
 export interface Totals {
@@ -53,6 +55,8 @@ export interface SessionStats extends Totals {
   id: string
   name: string
   last: number
+  /** The reading day of `last`. */
+  lastDay: string
 }
 
 export interface Streaks {
@@ -95,35 +99,10 @@ export function speed(totals: Totals): number | null {
 }
 
 const zero = (): Totals => ({ chars: 0, ms: 0, lines: 0 })
-const add = (into: Totals, line: ReadLine): void => {
-  into.chars += line.chars
-  into.ms += line.ms
-  into.lines += 1
-}
-
-/**
- * The history's lines (oldest first) credited by the reading-time rule, skipped lines left out.
- * `ceilingMs` is the most one line may count (Settings → Log, `afkThresholdSec`). A backfilled line
- * from before the history kept time zones (`tz` 0) is placed in this computer's zone.
- */
-export function readLines(lines: readonly HistoryLine[], ceilingMs: number): ReadLine[] {
-  const credits = creditLines(lines, ceilingMs)
-  const out: ReadLine[] = []
-  lines.forEach((line, i) => {
-    const credit = credits[i]
-    if (credit.skipped) return
-    const tz = line.backfilled && line.tz === 0 ? -new Date(line.ts).getTimezoneOffset() : line.tz
-    out.push({
-      ts: line.ts,
-      day: readingDay(line.ts, tz),
-      hour: new Date(line.ts + tz * 60_000).getUTCHours(),
-      chars: line.chars,
-      ms: credit.ms,
-      session: line.session,
-      text: line.text ?? ''
-    })
-  })
-  return out
+const add = (into: Totals, from: Totals): void => {
+  into.chars += from.chars
+  into.ms += from.ms
+  into.lines += from.lines
 }
 
 /** Current and longest runs of reading days, by `today`. */
@@ -154,22 +133,15 @@ export function rangeStart(range: Range, today: string, first: string | undefine
 }
 
 /**
- * The stats of `lines` (from `readLines`) of `sessions` (all when null), at `now`, with the charts
- * for `range`. `names` names each session (the history's own names fill in deleted sessions).
+ * The stats of `buckets` (oldest first, already narrowed to the sessions looked at) on reading
+ * day `today`, with the charts for `range`. `names` names each session.
  */
 export function computeStats(
-  lines: readonly ReadLine[],
-  {
-    sessions,
-    range,
-    now,
-    names
-  }: { sessions: ReadonlySet<string> | null; range: Range; now: number; names: ReadonlyMap<string, string> }
+  buckets: readonly Bucket[],
+  { range, today, names }: { range: Range; today: string; names: ReadonlyMap<string, string> }
 ): Stats {
-  const today = readingDay(now)
   const weekStart = addDays(today, -6)
-  const picked = sessions ? lines.filter((line) => sessions.has(line.session)) : lines
-  const first = picked.length ? picked[0].day : undefined
+  const first = buckets.length ? buckets[0].day : undefined
   const start = rangeStart(range, today, first)
 
   const all = zero()
@@ -180,23 +152,32 @@ export function computeStats(
   const hours = Array.from({ length: 24 }, zero)
   const bySession = new Map<string, SessionStats>()
 
-  for (const line of picked) {
-    add(all, line)
-    let day = days.get(line.day)
-    if (!day) days.set(line.day, (day = zero()))
-    add(day, line)
-    if (line.day === today) add(todayTotals, line)
-    if (line.day >= weekStart && line.day <= today) add(week, line)
-    if (line.day < start || line.day > today) continue
-    add(rangeTotals, line)
-    add(hours[line.hour], line)
-    let session = bySession.get(line.session)
+  for (const bucket of buckets) {
+    add(all, bucket)
+    let day = days.get(bucket.day)
+    if (!day) days.set(bucket.day, (day = zero()))
+    add(day, bucket)
+    if (bucket.day === today) add(todayTotals, bucket)
+    if (bucket.day >= weekStart && bucket.day <= today) add(week, bucket)
+    if (bucket.day < start || bucket.day > today) continue
+    add(rangeTotals, bucket)
+    add(hours[bucket.hour], bucket)
+    let session = bySession.get(bucket.session)
     if (!session) {
-      session = { id: line.session, name: names.get(line.session) ?? 'Untitled', last: 0, ...zero() }
-      bySession.set(line.session, session)
+      session = {
+        id: bucket.session,
+        name: names.get(bucket.session) ?? 'Untitled',
+        last: 0,
+        lastDay: bucket.day,
+        ...zero()
+      }
+      bySession.set(bucket.session, session)
     }
-    add(session, line)
-    session.last = Math.max(session.last, line.ts)
+    add(session, bucket)
+    if (bucket.last >= session.last) {
+      session.last = bucket.last
+      session.lastDay = bucket.day
+    }
   }
 
   // Up to 120 days are drawn a bar a day; longer, a bar a week.
@@ -228,41 +209,4 @@ export function computeStats(
     hours,
     sessions: [...bySession.values()].sort((a, b) => b.chars - a.chars || b.last - a.last)
   }
-}
-
-const KANJI = /\p{Script=Han}/u
-
-export interface KanjiStats {
-  /** Distinct kanji read in the range. */
-  distinct: number
-  /** Of those, how many were first read in the range. */
-  fresh: number
-  /** The range's kanji, most read first. */
-  top: { kanji: string; count: number; fresh: boolean }[]
-}
-
-/** The kanji in `lines` (from `readLines`, already narrowed to the sessions) read in `range`. */
-export function computeKanji(
-  lines: readonly ReadLine[],
-  { range, now, limit = 60 }: { range: Range; now: number; limit?: number }
-): KanjiStats {
-  const today = readingDay(now)
-  const start = rangeStart(range, today, lines[0]?.day)
-  const counts = new Map<string, number>()
-  const before = new Set<string>()
-  for (const line of lines) {
-    const inRange = line.day >= start && line.day <= today
-    for (const ch of line.text) {
-      if (!KANJI.test(ch)) continue
-      if (inRange) counts.set(ch, (counts.get(ch) ?? 0) + 1)
-      else if (line.day < start) before.add(ch)
-    }
-  }
-  const top = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-    .slice(0, limit)
-    .map(([kanji, count]) => ({ kanji, count, fresh: !before.has(kanji) }))
-  let fresh = 0
-  for (const kanji of counts.keys()) if (!before.has(kanji)) fresh++
-  return { distinct: counts.size, fresh, top }
 }

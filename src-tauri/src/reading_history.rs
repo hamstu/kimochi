@@ -904,6 +904,162 @@ fn exstatic_stats(lines: &[HistoryLine], day_start_hour: i64) -> String {
     out
 }
 
+// --- Stats --------------------------------------------------------------------------------------
+//
+// The Stats tab's numbers are worked out here, off the UI thread, by the same rule as the exports
+// (`with_read_time`, `reading_day`): the tab gets small sums to add up, never the lines.
+
+/// One session's reading on one reading day in one hour of the day.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bucket {
+    pub day: String,
+    pub session: String,
+    /// The local hour (0–23) where the lines were read.
+    pub hour: u8,
+    pub chars: u64,
+    /// Reading time credited, ms.
+    pub ms: u64,
+    pub lines: u32,
+    /// The latest line's time, epoch ms.
+    pub last: u64,
+}
+
+/// A line's zone: its own, or `local_tz` for a backfilled line from before the history kept
+/// zones (0).
+fn zone(line: &HistoryLine, local_tz: i32) -> i32 {
+    if line.backfilled && line.tz == 0 {
+        local_tz
+    } else {
+        line.tz
+    }
+}
+
+/// `lines` (credited by [`with_read_time`]) summed by reading day, session and local hour, oldest
+/// first; skipped lines count nothing. Also every session's name, `(id, name)`.
+pub fn buckets(lines: &[HistoryLine], day_start: i64, local_tz: i32) -> (Vec<Bucket>, Vec<(String, String)>) {
+    let mut sums: BTreeMap<(String, String, u8), Bucket> = BTreeMap::new();
+    let mut names: BTreeMap<String, String> = BTreeMap::new();
+    for line in lines {
+        names.insert(line.session.clone(), line.session_name.clone());
+        if line.skipped {
+            continue;
+        }
+        let tz = zone(line, local_tz);
+        let day = reading_day(line.ts, tz, day_start);
+        let hour = (((line.ts as i64 + i64::from(tz) * 60_000).rem_euclid(86_400_000)) / 3_600_000) as u8;
+        let bucket = sums.entry((day.clone(), line.session.clone(), hour)).or_insert_with(|| Bucket {
+            day,
+            session: line.session.clone(),
+            hour,
+            chars: 0,
+            ms: 0,
+            lines: 0,
+            last: 0,
+        });
+        bucket.chars += line.chars as u64;
+        bucket.ms += line.read_ms;
+        bucket.lines += 1;
+        bucket.last = bucket.last.max(line.ts);
+    }
+    (sums.into_values().collect(), names.into_iter().collect())
+}
+
+/// Whether `c` is a kanji (the Han script: the CJK ideograph blocks, 々 and 〇).
+fn is_kanji(c: char) -> bool {
+    matches!(c as u32,
+        0x3005 | 0x3007 | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3134F)
+}
+
+/// The kanji read by `sessions` (all when None) from reading day `since` (all time when None):
+/// how many different ones, how many of those were never read before `since`, and the `limit`
+/// most read.
+pub fn kanji(
+    lines: &[HistoryLine],
+    sessions: Option<&[String]>,
+    since: Option<&str>,
+    day_start: i64,
+    local_tz: i32,
+    limit: usize,
+) -> Value {
+    let wanted: Option<std::collections::HashSet<&str>> = sessions.map(|s| s.iter().map(String::as_str).collect());
+    let mut counts: HashMap<char, u64> = HashMap::new();
+    let mut before: std::collections::HashSet<char> = std::collections::HashSet::new();
+    for line in lines {
+        if line.skipped || wanted.as_ref().is_some_and(|w| !w.contains(line.session.as_str())) {
+            continue;
+        }
+        let earlier = since.is_some_and(|since| reading_day(line.ts, zone(line, local_tz), day_start).as_str() < since);
+        for c in line.text.chars().filter(|&c| is_kanji(c)) {
+            if earlier {
+                before.insert(c);
+            } else {
+                *counts.entry(c).or_default() += 1;
+            }
+        }
+    }
+    let fresh = counts.keys().filter(|c| !before.contains(c)).count();
+    let mut top: Vec<(char, u64)> = counts.iter().map(|(&c, &n)| (c, n)).collect();
+    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    top.truncate(limit);
+    json!({
+        "distinct": counts.len(),
+        "fresh": fresh,
+        "top": top.iter().map(|(c, n)| json!({"kanji": c.to_string(), "count": n, "fresh": !before.contains(c)})).collect::<Vec<_>>(),
+    })
+}
+
+/// The last history read and credited, with what it was read from (each file's length and time)
+/// and the rules it was credited by, so the Stats tab's calls fold the files only when they change.
+struct Credited {
+    dir: PathBuf,
+    stamp: Vec<(PathBuf, u64, Option<std::time::SystemTime>)>,
+    rules: (u64, bool),
+    lines: std::sync::Arc<Vec<HistoryLine>>,
+}
+static CREDITED: Mutex<Option<Credited>> = Mutex::new(None);
+
+/// `dir`'s lines credited by the rules, from the cache while no file has changed.
+fn credited_lines(dir: &Path, ceiling_ms: u64, skip_fast: bool) -> std::sync::Arc<Vec<HistoryLine>> {
+    let stamp = |dir: &Path| -> Vec<(PathBuf, u64, Option<std::time::SystemTime>)> {
+        let mut paths = files(dir);
+        paths.extend(device_chunks(dir).into_iter().map(|(_, path)| path));
+        paths.push(dir.join(DIR).join(BACKFILL_FILE));
+        paths.push(dir.join("sessions.json"));
+        paths
+            .into_iter()
+            .map(|path| {
+                let meta = std::fs::metadata(&path).ok();
+                let (len, modified) = meta.map_or((0, None), |m| (m.len(), m.modified().ok()));
+                (path, len, modified)
+            })
+            .collect()
+    };
+    let before = stamp(dir);
+    let rules = (ceiling_ms, skip_fast);
+    if let Some(cached) = CREDITED.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        if cached.dir == dir && cached.rules == rules && cached.stamp == before {
+            return cached.lines.clone();
+        }
+    }
+    let mut read = lines(dir);
+    with_read_time(&mut read, ceiling_ms, skip_fast);
+    let read = std::sync::Arc::new(read);
+    // Stamped after reading (the backfill may have just been written), so the next call can reuse it.
+    *CREDITED.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some(Credited { dir: dir.to_path_buf(), stamp: stamp(dir), rules, lines: read.clone() });
+    read
+}
+
+/// The Stats tab's settings (Settings → Log) and this computer's zone, minutes east of UTC.
+fn stats_rules(idle_sec: Option<u64>, skip_fast: Option<bool>, day_start_hour: Option<u8>) -> (u64, bool, i64) {
+    (
+        idle_sec.unwrap_or(DEFAULT_IDLE_SEC).clamp(10, 3600) * 1000,
+        skip_fast.unwrap_or(true),
+        day_start_hour.map_or(DAY_START_HOUR, |h| i64::from(h.min(12))),
+    )
+}
+
 // --- Commands -----------------------------------------------------------------------------------
 
 fn profile_dir() -> Result<PathBuf, String> {
@@ -932,36 +1088,6 @@ pub async fn reading_history_summary() -> Result<Value, String> {
     })
     .await
     .map_err(|e| e.to_string())
-}
-
-/// `lines` as the Stats tab reads them: only those of `sessions` when given, each with only
-/// `fields` (HistoryLine's camelCase names) when given, which keeps a long history's reply small.
-pub fn select(lines: Vec<HistoryLine>, sessions: Option<&[String]>, fields: Option<&[String]>) -> Vec<Value> {
-    let wanted: Option<std::collections::HashSet<&str>> = sessions.map(|s| s.iter().map(String::as_str).collect());
-    lines
-        .into_iter()
-        .filter(|line| wanted.as_ref().is_none_or(|w| w.contains(line.session.as_str())))
-        .map(|line| {
-            let mut value = serde_json::to_value(line).unwrap_or(Value::Null);
-            if let (Some(fields), Value::Object(map)) = (fields, &mut value) {
-                map.retain(|key, _| fields.iter().any(|f| f == key));
-            }
-            value
-        })
-        .collect()
-}
-
-/// The lines read, oldest first, for the Stats tab: only `sessions`' when given, with only
-/// `fields` when given.
-#[tauri::command]
-pub async fn reading_history_lines(
-    sessions: Option<Vec<String>>,
-    fields: Option<Vec<String>>,
-) -> Result<Vec<Value>, String> {
-    let dir = profile_dir()?;
-    tauri::async_runtime::spawn_blocking(move || select(lines(&dir), sessions.as_deref(), fields.as_deref()))
-        .await
-        .map_err(|e| e.to_string())
 }
 
 /// The idle limit when none is given: the Log's AFK threshold's default.
@@ -1006,6 +1132,53 @@ pub async fn reading_history_export(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The Stats tab's reading, summed by reading day, session and local hour (see [`buckets`]), with
+/// every session's name: `{sessions: [{id, name}], buckets: [Bucket]}`. `tz` is this computer's
+/// zone, for lines from before the history kept zones.
+#[tauri::command]
+pub async fn reading_history_stats(
+    idle_sec: Option<u64>,
+    skip_fast_lines: Option<bool>,
+    day_start_hour: Option<u8>,
+    tz: Option<i32>,
+) -> Result<Value, String> {
+    let dir = profile_dir()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (ceiling_ms, skip_fast, day_start) = stats_rules(idle_sec, skip_fast_lines, day_start_hour);
+        let lines = credited_lines(&dir, ceiling_ms, skip_fast);
+        let (buckets, names) = buckets(&lines, day_start, tz.unwrap_or(0));
+        json!({
+            "sessions": names.into_iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>(),
+            "buckets": buckets,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// The kanji the Stats tab shows (see [`kanji`]): of `sessions` (all when absent), from reading day
+/// `since` (all time when absent), the `limit` (default 60) most read.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn reading_history_kanji(
+    sessions: Option<Vec<String>>,
+    since: Option<String>,
+    limit: Option<usize>,
+    idle_sec: Option<u64>,
+    skip_fast_lines: Option<bool>,
+    day_start_hour: Option<u8>,
+    tz: Option<i32>,
+) -> Result<Value, String> {
+    let dir = profile_dir()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (ceiling_ms, skip_fast, day_start) = stats_rules(idle_sec, skip_fast_lines, day_start_hour);
+        let lines = credited_lines(&dir, ceiling_ms, skip_fast);
+        kanji(&lines, sessions.as_deref(), since.as_deref(), day_start, tz.unwrap_or(0), limit.unwrap_or(60).min(500))
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -1061,17 +1234,38 @@ mod tests {
     }
 
     #[test]
-    fn lines_are_selected_by_session_with_only_the_fields_asked_for() {
-        let mut other = add("b", 2_000, "二行目");
+    fn stats_sum_by_day_session_and_hour_and_skip_nothing_twice() {
+        // 2026-03-01 10:00 UTC is 19:00 in Tokyo (tz 540).
+        let base = 1_772_359_200_000;
+        let mut other = add("c", base + 3_600_000, "三行目です");
         other.session = Some("s2".into());
-        let lines = fold(vec![add("a", 1_000, "一行目"), other], &HashMap::new());
-        let all = select(lines.clone(), None, None);
-        assert_eq!(all.len(), 2);
-        assert_eq!(all[0]["text"], "一行目");
-        assert_eq!(all[1]["sessionName"], "Game");
-        let fields = ["ts".to_string(), "chars".to_string(), "session".to_string()];
-        let some = select(lines, Some(&["s2".to_string()]), Some(&fields));
-        assert_eq!(some, vec![json!({"ts": 2_000, "chars": 3, "session": "s2"})]);
+        other.session_name = Some("Other".into());
+        let mut lines = fold(vec![add("a", base, "一行目"), add("b", base + 10_000, "二行目"), other], &HashMap::new());
+        with_read_time(&mut lines, 300_000, true);
+        let (buckets, names) = buckets(&lines, 4, 0);
+        assert_eq!(names, vec![("s1".into(), "Game".into()), ("s2".into(), "Other".into())]);
+        assert_eq!(buckets.len(), 2);
+        assert_eq!(
+            (buckets[0].day.as_str(), buckets[0].hour, buckets[0].lines, buckets[0].chars),
+            ("2026-03-01", 19, 2, 6)
+        );
+        assert_eq!(buckets[0].ms, lines[0].read_ms + lines[1].read_ms);
+        assert_eq!((buckets[1].session.as_str(), buckets[1].hour), ("s2", 20));
+    }
+
+    #[test]
+    fn kanji_are_counted_with_the_ones_new_since_a_day() {
+        let day = 86_400_000;
+        let base = 1_772_359_200_000;
+        let mut lines = fold(vec![add("a", base, "日本語"), add("b", base + day, "日本の夏々")], &HashMap::new());
+        with_read_time(&mut lines, 300_000, true);
+        let all = kanji(&lines, None, None, 4, 0, 60);
+        assert_eq!(all["distinct"], 5);
+        assert_eq!(all["top"][0], json!({"kanji": "日", "count": 2, "fresh": true}));
+        let recent = kanji(&lines, None, Some("2026-03-02"), 4, 0, 60);
+        assert_eq!(recent["distinct"], 4);
+        assert_eq!(recent["fresh"], 2);
+        assert_eq!(kanji(&lines, Some(&["none".to_string()]), None, 4, 0, 60)["distinct"], 0);
     }
 
     #[test]

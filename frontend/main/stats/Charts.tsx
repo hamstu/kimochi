@@ -73,7 +73,9 @@ export function DailyChart({
             <span>{describe(point, metric)}</span>
           </>
         ) : (
-          <span>{read.length ? `${axis(average, metric)} a ${per} read` : `Nothing read in this range`}</span>
+          <span>
+            {read.length ? `${axis(average, metric)} a ${per} on ${per}s read` : `Nothing read in this range`}
+          </span>
         )
       }
     >
@@ -122,15 +124,11 @@ export function SpeedChart({ series, today }: { series: DayPoint[]; today: strin
   const x = (i: number): number => (n <= 1 ? 50 : (i / (n - 1)) * 100)
   const y = (s: number): number => 100 - ((s - min) / (max - min || 1)) * 100
 
-  // Runs of days with a speed, each its own line; a lone day is a short dash.
+  // One line through the days with a speed (days without one are passed over); a lone day is a dash.
   const paths: string[] = []
-  let run: string[] = []
+  const run: string[] = []
   speeds.forEach((s, i) => {
-    if (s === null) {
-      if (run.length) paths.push(run.join(' '))
-      run = []
-      return
-    }
+    if (s === null) return
     run.push(`${run.length ? 'L' : 'M'}${x(i).toFixed(2)},${y(s).toFixed(2)}`)
   })
   if (run.length) paths.push(run.join(' '))

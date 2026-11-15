@@ -97,7 +97,7 @@
  *                    (see `listenToEmbedder`)
  */
 import { setPreviewIpc } from './preview-ipc'
-import { previewHistoryLines } from './demo-history'
+import { previewHistoryKanji, previewHistoryStats } from './demo-history'
 import { mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
 import {
@@ -1291,7 +1291,10 @@ const HANDLERS: Record<string, Handler> = {
   open_screen_capture_preferences: ok,
   history_add: ok,
   // The Stats tab, and ?empty=1's first-run look.
-  reading_history_lines: (a) => (params.get('empty') === '1' ? [] : previewHistoryLines(a as never)),
+  reading_history_stats: (a) =>
+    params.get('empty') === '1' ? { sessions: [], buckets: [] } : previewHistoryStats(a as never),
+  reading_history_kanji: (a) =>
+    params.get('empty') === '1' ? { distinct: 0, fresh: 0, top: [] } : previewHistoryKanji(a as never),
   history_delete: ok,
   history_clear: ok,
   history_merge_reset: ok,
