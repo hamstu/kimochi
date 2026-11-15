@@ -40,7 +40,7 @@ export default function IntroStep({ next }: { next: string }): JSX.Element {
       onClick={() => setSettled(true)}
     >
       <KimochiLogo size={136} animate settled={settled} className={style.introLogo} />
-      <h1 id="intro-title" className={style.wordmark}>
+      <h1 id="intro-title" className={style.wordmark} tabIndex={-1} data-welcome-heading>
         Kimochi
       </h1>
       <p className={style.tagline}>Read and play in the language you&apos;re learning.</p>

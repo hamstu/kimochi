@@ -168,3 +168,21 @@ test('installed, it stops dropped events in the capture phase and reports when a
   uninstall()
   assert.equal(window.listeners.size, 0)
 })
+
+test('keyboard clicks pass without replacing pointer history, even on Linux or after touch', () => {
+  const window = target()
+  const reports = []
+  installPointerFilter(window, { active: true, debug: true, report: (value) => reports.push(value) })
+  const keyboard = (t) => mouse('click', t, { detail: 0, clientX: 0, clientY: 0 })
+  assert.deepEqual(window.dispatch(keyboard(0)), { stopped: false, prevented: false })
+  assert.deepEqual(window.dispatch(keyboard(1)), { stopped: false, prevented: false })
+  window.dispatch(pointer('pointerdown', 100, { clientX: 0, clientY: 0 }))
+  window.dispatch(pointer('pointerup', 110, { clientX: 0, clientY: 0 }))
+  const click = (t) => mouse('click', t, { detail: 1, clientX: 0, clientY: 0 })
+  assert.deepEqual(window.dispatch(click(120)), { stopped: false, prevented: false })
+  assert.deepEqual(window.dispatch(keyboard(121)), { stopped: false, prevented: false })
+  assert.deepEqual(window.dispatch(keyboard(122)), { stopped: false, prevented: false })
+  assert.deepEqual(window.dispatch(click(123)), { stopped: true, prevented: false })
+  assert.deepEqual(window.dispatch(click(120 + CLICK_MS + 1)), { stopped: false, prevented: false })
+  assert.equal(reports.filter((report) => report.type === 'click' && report.verdict === 'duplicate').length, 1)
+})

@@ -11,6 +11,7 @@ import { listen } from '@tauri-apps/api/event'
 import { getSetting, onSettingsChange } from '../../bridge/settings'
 import type { SentenceAudioSettings } from '@ui/settings'
 import type { Line } from './types'
+import { createLineAudioPlayer } from './lineAudioPlayer'
 
 /** What Settings → Anki shows about the recording (`sentence_audio_status`). */
 export type SentenceAudioStatus = (
@@ -139,7 +140,11 @@ function follow(): void {
   try {
     listen<LineAudio>('sentence-audio-line', (event) => set(event.payload)).catch(() => {})
     invoke<LineAudio[]>('sentence_audio_lines').then(
-      (known) => known.forEach(set),
+      (known) => {
+        // Publish the initial inventory once. A live decision received while it was loading wins.
+        for (const line of known) if (!lines.has(line.uid)) lines.set(line.uid, line)
+        for (const notify of subscribers) notify()
+      },
       () => {}
     )
   } catch {
@@ -162,44 +167,20 @@ export function useLineAudio(uid: string | undefined): LineAudio | undefined {
   )
 }
 
-let playing: { uid: string; audio: HTMLAudioElement } | null = null
 const playListeners = new Set<() => void>()
-
-function playChanged(): void {
-  for (const notify of playListeners) notify()
-}
-
-/** Play line `uid`'s clip, or stop it if it is the one playing. One clip plays at a time. */
-export async function toggleLineAudio(uid: string): Promise<void> {
-  const current = playing
-  if (current) {
-    current.audio.pause()
-    playing = null
-    playChanged()
-    if (current.uid === uid) return
+const player = createLineAudioPlayer(
+  (uid) => invoke<string | null>('sentence_audio_clip', { uid }),
+  (base64) => new Audio(`data:audio/mpeg;base64,${base64}`),
+  () => {
+    for (const notify of playListeners) notify()
   }
-  const base64 = await invoke<string | null>('sentence_audio_clip', { uid })
-  if (!base64) return
-  const audio = new Audio(`data:audio/mpeg;base64,${base64}`)
-  playing = { uid, audio }
-  const done = (): void => {
-    if (playing?.audio === audio) {
-      playing = null
-      playChanged()
-    }
-  }
-  audio.addEventListener('ended', done)
-  audio.addEventListener('error', done)
-  playChanged()
-  await audio.play().catch(done)
-}
+)
 
-/** How far line `uid`'s clip has played, 0..1, while it is the one playing; null otherwise. */
-export function lineProgress(uid: string): number | null {
-  if (playing?.uid !== uid) return null
-  const { currentTime, duration } = playing.audio
-  return duration > 0 && Number.isFinite(duration) ? Math.min(1, currentTime / duration) : 0
-}
+/** Play or stop a clip. A newer request cancels earlier requests, including pending fetches. */
+export const toggleLineAudio = player.toggle
+
+/** How far this clip has played, 0..1; null while it is not playing. */
+export const lineProgress = player.progress
 
 /** Whether line `uid`'s clip is playing. */
 export function useLinePlaying(uid: string | undefined): boolean {
@@ -208,7 +189,7 @@ export function useLinePlaying(uid: string | undefined): boolean {
       playListeners.add(notify)
       return () => playListeners.delete(notify)
     },
-    () => Boolean(uid && playing?.uid === uid),
+    () => player.isPlaying(uid),
     () => false
   )
 }

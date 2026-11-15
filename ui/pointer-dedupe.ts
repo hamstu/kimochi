@@ -36,6 +36,8 @@ export type PointerVerdict = 'pass' | 'duplicate' | 'ghost'
 export interface InputEventLike {
   type: string
   timeStamp: number
+  /** A click count of zero identifies keyboard/assistive activation, not a pointer tap. */
+  detail?: number
   pointerType?: string
   pointerId?: number
   clientX?: number
@@ -101,6 +103,9 @@ export function createPointerFilter({ active = true }: { active?: boolean } = {}
   let click: Seen | null = null
   return {
     classify(event) {
+      // Keyboard/assistive clicks share (0, 0), even across unrelated controls. They are not
+      // doubled touchscreen input and must not consume or replace the pointer click history.
+      if (event.type === 'click' && event.detail === 0) return 'pass'
       if (isTouch(event)) touchSeen = true
       if (!active && !touchSeen) return 'pass'
       const seen = describe(event)

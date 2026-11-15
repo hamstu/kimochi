@@ -30,6 +30,10 @@
   outline: none;
   scrollbar-gutter: stable;
 }
+.settings-page-scroll:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
 /* A tabbed page (Anki) scrolls inside, below its tabs. */
 .settings-page-scroll:has(> .k-settings-tabbed) {
   overflow: hidden;
@@ -56,7 +60,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .settings-page-scroll > .k-settings-page {
+  .settings-page-scroll > .k-settings-page,
+  .settings-page-scroll > .k-settings-tabbed {
     animation: none;
   }
 }

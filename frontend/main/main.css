@@ -1403,6 +1403,14 @@ html[data-mini] .main-help {
   width: 26rem;
   padding: 0;
 }
+/* Radix flips submenus but cannot fit this grid beside its parent in a narrow window.
+   Let it overlap the parent by the missing width, keeping every source and action reachable. */
+.src-grid-menu[data-side='right'] {
+  translate: min(0px, calc(var(--radix-dropdown-menu-content-available-width) - 100%)) 0;
+}
+.src-grid-menu[data-side='left'] {
+  translate: max(0px, calc(100% - var(--radix-dropdown-menu-content-available-width))) 0;
+}
 .sg-scroll {
   max-height: min(28rem, var(--radix-dropdown-menu-content-available-height, 28rem));
   overflow-y: auto;
@@ -1555,6 +1563,12 @@ html[data-mini] .main-help {
 .sg-error {
   color: var(--k-danger-text);
 }
+.sg-refresh {
+  margin: var(--k-space-1) 0;
+}
+.sg-refresh[aria-disabled='true'] {
+  color: var(--k-text-3);
+}
 .sg-permission {
   display: flex;
   align-items: flex-start;
@@ -1568,6 +1582,11 @@ html[data-mini] .main-help {
 }
 .sg-permission[data-highlighted] {
   background: var(--k-press);
+}
+.sg-permission .sg-caption-detail {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 .sg-permission-icon {
   flex: none;
