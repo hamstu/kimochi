@@ -1,14 +1,14 @@
 /**
- * The Log, Notebook and Anki views as tabs across the top of the content, each as wide as it can be. The
+ * The Log, Notebook, Anki and Stats views as tabs across the top of the content, each as wide as it can be. The
  * active one takes the content's ground and an accent underline, so it reads as the page below it.
  * Gaming Mode, which has no sidebar, adds Source first and Settings last (`gaming`).
  */
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
-import { BookOpen, Gamepad2, Layers, ScrollText, Settings } from 'lucide-react'
+import { BookOpen, ChartColumn, Gamepad2, Layers, ScrollText, Settings } from 'lucide-react'
 import { getSnapshot, subscribe } from '@texthooker/bridge'
 import { useAnkiCards } from './ankiCardsStore'
 
-export type TabView = 'source' | 'log' | 'notebook' | 'anki' | 'settings'
+export type TabView = 'source' | 'log' | 'notebook' | 'anki' | 'stats' | 'settings'
 
 function useCounts(): { lines: number; entries: number } {
   const count = (): { lines: number; entries: number } => {
@@ -44,6 +44,7 @@ export function ViewTabs({
       {tab('log', <ScrollText />, 'Log', counts.lines)}
       {tab('notebook', <BookOpen />, 'Notebook', counts.entries)}
       {tab('anki', <Layers />, 'Anki', anki.cards.length)}
+      {tab('stats', <ChartColumn />, 'Stats', null)}
       {gaming && tab('settings', <Settings />, 'Settings', null)}
     </div>
   )
