@@ -47,6 +47,7 @@ mod panels;
 mod platform;
 mod pp_ocr;
 mod profile;
+mod reading_history;
 mod relay_link;
 mod scan_trace;
 mod screen_ai;
@@ -3429,6 +3430,9 @@ fn main() {
         history_delete,
         history_clear,
         log_lines::log_recent,
+        reading_history::reading_history_append,
+        reading_history::reading_history_summary,
+        reading_history::reading_history_export,
         cli::install::cli_status,
         cli::install::cli_install,
         cli::install::cli_uninstall,

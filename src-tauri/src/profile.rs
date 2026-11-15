@@ -226,6 +226,10 @@ pub fn copy_profile_data(from: &Path, to: &Path) -> Result<u64, String> {
     if from.join("sessions").is_dir() {
         copied += copy_dir(&from.join("sessions"), &to.join("sessions")).map_err(|e| e.to_string())?;
     }
+    // What was read goes with it (src-tauri/src/reading_history.rs).
+    if from.join("reading-history").is_dir() {
+        copied += copy_dir(&from.join("reading-history"), &to.join("reading-history")).map_err(|e| e.to_string())?;
+    }
     Ok(copied)
 }
 
@@ -365,7 +369,10 @@ mod tests {
         std::fs::create_dir_all(&to).unwrap();
         std::fs::write(to.join("presets.json"), "mine").unwrap();
         std::fs::write(from.join("presets.json"), "theirs").unwrap();
-        assert_eq!(copy_profile_data(&from, &to).unwrap(), 3);
+        std::fs::create_dir_all(from.join("reading-history")).unwrap();
+        std::fs::write(from.join("reading-history/2026-11.jsonl"), "{}\n").unwrap();
+        assert_eq!(copy_profile_data(&from, &to).unwrap(), 4);
+        assert!(to.join("reading-history/2026-11.jsonl").exists(), "what was read goes with the Log");
         assert_eq!(std::fs::read_to_string(to.join("presets.json")).unwrap(), "mine");
         assert_eq!(std::fs::read_to_string(to.join("sessions/s1/images/a.png")).unwrap(), "png");
         assert!(from.join("sessions/s1/lines.json").exists(), "a copy, not a move");

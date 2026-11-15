@@ -696,6 +696,9 @@ without a CFRunLoop has not been tested in-app.
 | `history_delete` | `({id}) -> ()` |
 | `history_clear` | `() -> ()` |
 | `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
+| `reading_history_append` | `({events: [{op, uid, at, ts?, text?, originalText?, via?, engine?, session?, sessionName?, source?: {window?, app?, exe?}, language?, tz?}]}) -> number` — the Log's lines read, for the reading history; returns how many were kept |
+| `reading_history_summary` | `() -> {lines, chars, first, last}` |
+| `reading_history_export` | `({path, format, idleSec?}) -> number` — `format`: `json`, `csv`, `exstatic-lines`, `exstatic-stats`; returns the lines written |
 | `ext_relay` | `({target \| null, payload}) -> ()` |
 | `yomitan_request` | `({url, body}) -> Value` |
 | `tts_speak` | `({text, voiceId}) -> ArrayBuffer` (audio) |
@@ -711,6 +714,28 @@ stalled client cannot freeze publishing or a settings change.
 History add/delete go through Rust with the 50-entry cap applied there, so the overlay
 and the Log panel cannot race each other with read-modify-write cycles on one key. Each
 change re-emits `settings:changed` for `scannedTextHistory`.
+
+**Reading history** (`reading_history.rs`) is every line read, kept for stats and export apart
+from the Log's transcript, which the person trims (Max lines), clears and moves between sessions.
+The Log (`frontend/texthooker/core/history.ts`) reports each line it logs (`add`), each change to
+its text (`edit`: a fuller reading, or Edit line) and each line deleted from it (`delete`: a
+misreading, or fragments a fuller reading replaced), in batches a second apart and on every Log
+flush. Notes are not reading and are never sent. Native appends them to
+`<profile>/reading-history/YYYY-MM.jsonl` (UTC month of `at`, one JSON object per line, only ever
+appended to) and folds them by `uid` when read: the latest text wins, the first `ts` stays, and a
+`delete` drops the line. Clearing the Log, its line limit, deleting a session and screenshot or
+audio retention never remove history. The first call in a profile copies every session's
+`lines.json` into `backfill.jsonl` (lines marked `backfilled`; a live record of the same `uid`
+wins); that file's presence means the backfill ran. A profile copied into an account takes its
+history with it (`profile::copy_profile_data`). Sync does not carry it yet.
+
+Export (the Log's ⋯ → Export reading history) writes: `exstatic-lines`, exSTATic's lines CSV
+`uuid,given_identifier,name,line,time` (BOM, `time` in epoch seconds; `uuid` is the session id,
+`given_identifier` the hooked game's executable or else the session name), which exSTATic imports
+and GameSentenceMiner's exSTATic import reads; `exstatic-stats`, exSTATic's stats CSV per session
+and local day (`chars_read` counted exSTATic's way, `time_read` seconds), which names the media in
+exSTATic; `csv` and `json`, every field, with `read_ms`, the time to the next line read capped at
+`idleSec` (the Log's AFK threshold), as the footer counts reading time.
 
 `ext_relay_listen` registers a Tauri `Channel` for the calling window. Native forgets it when
 that window's page starts loading again (reload or navigation) and when the window closes, so a
