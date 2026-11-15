@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows: the overlay's text comes back after Alt+Tab.** With a screen as the source, switching away and back to your game could leave the text hidden, because Windows briefly reported the Alt+Tab switcher as the app in front after your game.
+
 ## [1.0.0] - 2026-11-15
 
 ### Added
