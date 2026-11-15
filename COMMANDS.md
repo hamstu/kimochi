@@ -746,8 +746,19 @@ Export (the Log's ⋯ → Export reading history) writes: `exstatic-lines`, exST
 `given_identifier` the hooked game's executable or else the session name), which exSTATic imports
 and GameSentenceMiner's exSTATic import reads; `exstatic-stats`, exSTATic's stats CSV per session
 and local day (`chars_read` by the rule above, `time_read` seconds), which names the media in
-exSTATic; `csv` and `json`, every field, with `read_ms`, the time to the next line read capped at
-`idleSec` (the Log's AFK threshold), as the footer counts reading time.
+exSTATic; `csv` and `json`, every field, with `read_ms` and `skipped`.
+
+**Reading time, skipping and days** follow one rule everywhere: the footer (live), the session
+list, the exports and the Stats tab (`frontend/texthooker/lib/readingTime.ts`, natively
+`reading_history::credit`; `scripts/fixtures/reading-time.json` holds the cases both are tested
+with). A line counts the time until the next line, at most 2.5 × what a line its length takes at
+the session's slower pace (the 25th percentile of characters a second of its last 200 lines of 5+
+characters followed by a 1–300 s gap; 3 s a character before 5 are measured), between 2 s and
+`idleSec` (`afkThresholdSec`, "Max time per line", default 300). The live footer's clock
+stops when the last line's allowance runs out, so it never runs backwards. Three or more lines of
+12+ characters each under a second apart were skipped: no characters, lines or time (the footer
+takes back the run's first lines when the third arrives). A reading day starts at 4 am local time
+(`readingDay`, `reading_day`). The footer shows a speed once 5 lines are counted.
 
 `ext_relay_listen` registers a Tauri `Channel` for the calling window. Native forgets it when
 that window's page starts loading again (reload or navigation) and when the window closes, so a

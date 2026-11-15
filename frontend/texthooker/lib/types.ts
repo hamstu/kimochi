@@ -193,7 +193,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   theme: 'system',
   uiScale: 'small',
 
-  afkThresholdSec: 60,
+  afkThresholdSec: 300,
   statsShowTime: true,
   statsShowLines: true,
   statsShowChars: true,

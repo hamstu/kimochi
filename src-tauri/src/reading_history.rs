@@ -118,9 +118,12 @@ pub struct HistoryLine {
     pub language: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub backfilled: bool,
-    /// Time spent on it, ms: until the next line, at most the idle limit ([`with_read_time`]).
-    /// Worked out at export from the timestamps; 0 until then.
+    /// Time spent on it, ms ([`with_read_time`]). Worked out at export from the timestamps; 0
+    /// until then.
     pub read_ms: u64,
+    /// Skipped, not read ([`with_read_time`]): it counts no characters, line or time.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
 }
 
 /// Characters read, the way the Japanese reading trackers count them (GameSentenceMiner,
@@ -442,6 +445,7 @@ pub fn fold(events: Vec<Event>, names: &HashMap<String, String>) -> Vec<HistoryL
             language: event.language,
             backfilled: event.backfilled,
             read_ms: 0,
+            skipped: false,
         };
         match lines.get_mut(&event.uid) {
             Some(existing) => {
@@ -616,6 +620,7 @@ pub const CSV_HEADER: &[&str] = &[
     "original_text",
     "backfilled",
     "read_ms",
+    "skipped",
 ];
 
 fn csv(lines: &[HistoryLine]) -> String {
@@ -640,6 +645,7 @@ fn csv(lines: &[HistoryLine]) -> String {
             line.original_text.clone().unwrap_or_default(),
             if line.backfilled { "1".into() } else { String::new() },
             line.read_ms.to_string(),
+            if line.skipped { "1".into() } else { String::new() },
         ]));
     }
     out
@@ -665,14 +671,120 @@ pub fn render(lines: &[HistoryLine], format: Format) -> Result<String, String> {
     }
 }
 
-/// Fill in each line's `read_ms` the way the Log's footer counts reading time
-/// (frontend/texthooker/core/stats.ts): the time to the next line read, at most `idle_ms`, and
-/// `idle_ms` after the last line of a run. `lines` must be oldest first.
-pub fn with_read_time(lines: &mut [HistoryLine], idle_ms: u64) {
-    let next: Vec<Option<u64>> = (0..lines.len()).map(|i| lines.get(i + 1).map(|l| l.ts)).collect();
-    for (line, next) in lines.iter_mut().zip(next) {
-        line.read_ms = next.map_or(idle_ms, |next| next.saturating_sub(line.ts).min(idle_ms));
+// --- Reading time -------------------------------------------------------------------------------
+//
+// The rule every stat uses, as frontend/texthooker/lib/readingTime.ts explains it and implements it
+// for the app; scripts/fixtures/reading-time.json holds the cases both are tested with. A line
+// counts the time until the next, at most 2.5 x what a line its length takes at the session's
+// slower pace (3 s a character before 5 lines are measured), between 2 s and the ceiling; three
+// or more fast, long lines in a row were skipped; a day starts at 4 am.
+
+const CAP_FACTOR: f64 = 2.5;
+const CAP_FLOOR_MS: f64 = 2_000.0;
+const FALLBACK_MS_PER_CHAR: f64 = 3_000.0;
+const PACE_MIN_SAMPLES: usize = 5;
+const PACE_MIN_CHARS: usize = 5;
+const PACE_MIN_GAP_MS: u64 = 1_000;
+const PACE_MAX_GAP_MS: u64 = 300_000;
+const PACE_WINDOW: usize = 200;
+const PACE_PERCENTILE: f64 = 0.25;
+const SKIP_MIN_CHARS: usize = 12;
+const SKIP_MAX_GAP_MS: u64 = 1_000;
+const SKIP_MIN_RUN: usize = 3;
+/// A reading day starts at this local hour.
+pub const DAY_START_HOUR: i64 = 4;
+
+/// A session's pace: characters a second of its recent measured lines.
+#[derive(Default)]
+struct Pace {
+    samples: std::collections::VecDeque<f64>,
+}
+
+impl Pace {
+    fn learn(&mut self, chars: usize, gap_ms: u64) {
+        if chars < PACE_MIN_CHARS || !(PACE_MIN_GAP_MS..=PACE_MAX_GAP_MS).contains(&gap_ms) {
+            return;
+        }
+        self.samples.push_back(chars as f64 / (gap_ms as f64 / 1000.0));
+        if self.samples.len() > PACE_WINDOW {
+            self.samples.pop_front();
+        }
     }
+
+    fn cap_ms(&self, chars: usize, ceiling_ms: u64) -> f64 {
+        if chars == 0 {
+            return 0.0;
+        }
+        let expected = if self.samples.len() >= PACE_MIN_SAMPLES {
+            let mut sorted: Vec<f64> = self.samples.iter().copied().collect();
+            sorted.sort_by(f64::total_cmp);
+            let pace = sorted[(PACE_PERCENTILE * (sorted.len() - 1) as f64).floor() as usize];
+            CAP_FACTOR * (chars as f64 / pace) * 1000.0
+        } else {
+            chars as f64 * FALLBACK_MS_PER_CHAR
+        };
+        expected.max(CAP_FLOOR_MS).min(ceiling_ms as f64)
+    }
+}
+
+/// Which lines, `(ts, chars)` oldest first, were skipped.
+fn skipped_lines(lines: &[(u64, usize)]) -> Vec<bool> {
+    let mut skipped = vec![false; lines.len()];
+    let mut start = 0;
+    for i in 1..=lines.len() {
+        let fast = i < lines.len()
+            && lines[i].0.saturating_sub(lines[i - 1].0) < SKIP_MAX_GAP_MS
+            && lines[i].1 >= SKIP_MIN_CHARS
+            && lines[i - 1].1 >= SKIP_MIN_CHARS;
+        if fast {
+            continue;
+        }
+        if i - start >= SKIP_MIN_RUN {
+            skipped[start..i].iter_mut().for_each(|s| *s = true);
+        }
+        start = i;
+    }
+    skipped
+}
+
+/// The time each line `(ts, chars, session)` (oldest first) counts, and whether it was skipped.
+pub fn credit(lines: &[(u64, usize, &str)], ceiling_ms: u64) -> Vec<(u64, bool)> {
+    let skipped = skipped_lines(&lines.iter().map(|l| (l.0, l.1)).collect::<Vec<_>>());
+    let mut paces: HashMap<&str, Pace> = HashMap::new();
+    (0..lines.len())
+        .map(|i| {
+            if skipped[i] {
+                return (0, true);
+            }
+            let (ts, chars, session) = lines[i];
+            let pace = paces.entry(session).or_default();
+            let cap = pace.cap_ms(chars, ceiling_ms);
+            let Some(next) = lines.get(i + 1) else { return (cap.round() as u64, false) };
+            let gap = next.0.saturating_sub(ts);
+            if !skipped[i + 1] {
+                pace.learn(chars, gap);
+            }
+            ((gap as f64).min(cap).round() as u64, false)
+        })
+        .collect()
+}
+
+/// Fill in each line's `read_ms` and `skipped` by the rule above, with `ceiling_ms` the most one
+/// line may count. `lines` must be oldest first.
+pub fn with_read_time(lines: &mut [HistoryLine], ceiling_ms: u64) {
+    let timed: Vec<(u64, usize, &str)> = lines.iter().map(|l| (l.ts, l.chars, l.session.as_str())).collect();
+    let credits = credit(&timed, ceiling_ms);
+    for (line, (ms, skipped)) in lines.iter_mut().zip(credits) {
+        line.read_ms = ms;
+        line.skipped = skipped;
+    }
+}
+
+/// The reading day of `ms` (epoch) read `tz` minutes east of UTC, `YYYY-MM-DD`: the local date
+/// [`DAY_START_HOUR`] hours earlier.
+pub fn reading_day(ms: u64, tz: i32) -> String {
+    let shifted = (ms as i64 + i64::from(tz) * 60_000 - DAY_START_HOUR * 3_600_000).max(0) as u64;
+    iso_local(shifted, 0)[..10].to_string()
 }
 
 /// Epoch ms as exSTATic's `time`: epoch seconds with a fraction.
@@ -729,21 +841,18 @@ fn exstatic_lines(lines: &[HistoryLine]) -> String {
 }
 
 /// `ms` (epoch) as the local date it was read, `YYYY-MM-DD`.
-fn local_date(ms: u64, tz: i32) -> String {
-    iso_local(ms, tz)[..10].to_string()
-}
-
-/// exSTATic's stats CSV: per media and local day, `client,uuid,name,given_identifier,type,date,
+/// exSTATic's stats CSV: per media and reading day ([`reading_day`]), `client,uuid,name,given_identifier,type,date,
 /// chars_read,lines_read,time_read,read_speed` (`chars_read` by [`count_chars`], `time_read` in
-/// seconds, `read_speed` characters per second). Importing it names the media the lines CSV fills. `lines` need `read_ms`.
+/// seconds, `read_speed` characters per second), skipped lines left out. Importing it names the media
+/// the lines CSV fills. `lines` need [`with_read_time`].
 fn exstatic_stats(lines: &[HistoryLine]) -> String {
     let media = exstatic_media(lines);
     // Characters, lines and ms per (local date, session), in the order first read.
     type Day = ((String, String), (usize, usize, u64));
     let mut days: Vec<Day> = Vec::new();
     let mut index: HashMap<(String, String), usize> = HashMap::new();
-    for line in lines {
-        let key = (local_date(line.ts, line.tz), line.session.clone());
+    for line in lines.iter().filter(|l| !l.skipped) {
+        let key = (reading_day(line.ts, line.tz), line.session.clone());
         let at = *index.entry(key.clone()).or_insert_with(|| {
             days.push((key, (0, 0, 0)));
             days.len() - 1
@@ -820,7 +929,7 @@ pub async fn reading_history_summary() -> Result<Value, String> {
 }
 
 /// The idle limit when none is given: the Log's AFK threshold's default.
-const DEFAULT_IDLE_SEC: u64 = 60;
+const DEFAULT_IDLE_SEC: u64 = 300;
 
 /// `dir`'s history as `format`, with reading time counted up to `idle_sec` per line.
 pub fn export(dir: &Path, format: Format, idle_sec: Option<u64>) -> Result<(usize, String), String> {
@@ -1006,18 +1115,38 @@ mod tests {
     }
 
     #[test]
-    fn reading_time_is_the_gap_to_the_next_line_up_to_the_idle_limit() {
-        let names = HashMap::new();
-        let mut lines = fold(vec![add("a", 0, "一"), add("b", 10_000, "二"), add("c", 500_000, "三")], &names);
-        with_read_time(&mut lines, 60_000);
-        assert_eq!(lines.iter().map(|l| l.read_ms).collect::<Vec<_>>(), [10_000, 60_000, 60_000]);
+    fn reading_time_follows_the_rule_the_app_uses() {
+        // The cases the app's own rule (frontend/texthooker/lib/readingTime.ts) is tested with.
+        let fixture: Value = serde_json::from_str(include_str!("../../scripts/fixtures/reading-time.json")).unwrap();
+        for case in fixture["cases"].as_array().unwrap() {
+            let lines: Vec<(u64, usize, &str)> = case["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| {
+                    (l["ts"].as_u64().unwrap(), l["chars"].as_u64().unwrap() as usize, l["session"].as_str().unwrap())
+                })
+                .collect();
+            let expected: Vec<(u64, bool)> = case["credits"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| (c["ms"].as_u64().unwrap(), c["skipped"].as_bool().unwrap()))
+                .collect();
+            assert_eq!(credit(&lines, case["ceilingMs"].as_u64().unwrap()), expected, "{}", case["name"]);
+        }
+        for day in fixture["days"].as_array().unwrap() {
+            let (ts, tz) = (day["ts"].as_u64().unwrap(), day["tz"].as_i64().unwrap() as i32);
+            assert_eq!(reading_day(ts, tz), day["day"].as_str().unwrap(), "{}", day["why"]);
+        }
     }
 
     #[test]
     fn times_are_local_where_they_were_read() {
         assert_eq!(iso_local(0, 540), "1970-01-01T09:00:00.000+09:00");
         assert_eq!(iso_local(1_500, -330), "1969-12-31T18:30:01.500-05:30");
-        assert_eq!(local_date(15 * 3600 * 1000, 540), "1970-01-02");
+        assert_eq!(reading_day(15 * 3600 * 1000, 540), "1970-01-01", "00:00 in Tokyo is the day before");
+        assert_eq!(reading_day(20 * 3600 * 1000, 540), "1970-01-02");
     }
 
     #[test]
@@ -1094,9 +1223,9 @@ mod tests {
         let csv = exported(Format::ExstaticStats);
         let rows: Vec<&str> = csv.trim_start_matches('\u{feff}').split("\r\n").collect();
         assert_eq!(rows[0], "client,uuid,name,given_identifier,type,date,chars_read,lines_read,time_read,read_speed");
-        // 7 + 10 characters; 10 s to the next line, then the 60 s idle limit.
-        assert_eq!(rows[1], "kimochi,s1,Game,game.exe,vn,2024-11-15,17,2,70,0.24285714285714285");
-        assert!(rows[2].starts_with("kimochi,s2,Book,Book,vn,2024-11-16,1,1,60,"));
+        // 7 + 10 characters; 10 s to the next line, then a break: the line's 30 s (3 s a character).
+        assert_eq!(rows[1], "kimochi,s1,Game,game.exe,vn,2024-11-15,17,2,40,0.425");
+        assert_eq!(rows[2], "kimochi,s2,Book,Book,vn,2024-11-16,1,1,3,0.3333333333333333");
     }
 
     #[test]
@@ -1106,7 +1235,7 @@ mod tests {
         assert_eq!(rows.next().unwrap(), CSV_HEADER.join(","));
         assert_eq!(
             rows.next().unwrap(),
-            "a,1731650000123,2024-11-15T14:53:20.123+09:00,「わたしは、見守る。」,7,s1,Game,hook,,ゲーム,,game.exe,ja,,,10000"
+            "a,1731650000123,2024-11-15T14:53:20.123+09:00,「わたしは、見守る。」,7,s1,Game,hook,,ゲーム,,game.exe,ja,,,10000,"
         );
         let json: Value = serde_json::from_str(&exported(Format::Json)).unwrap();
         assert_eq!(json["format"], "kimochi-reading-history");

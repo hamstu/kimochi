@@ -13,6 +13,7 @@ import { dropsText, japaneseFilterOf } from '@ui/japanese-text'
 import { currentLanguage, currentLanguageInfo } from './language'
 import { countWords } from './wordCount'
 import { countChars } from './charCount'
+import { getManifest } from './sessions'
 import { acceptsInput } from '../input-source'
 import type { Line, LineSource } from '@texthooker/lib/types'
 
@@ -27,6 +28,15 @@ function words(text: string): number | undefined {
 function wordDelta(prev: string, next: string): number | undefined {
   const after = words(next)
   return after === undefined ? undefined : after - (words(prev) ?? 0)
+}
+
+/** The session the Log has open: each has its own reading pace (core/stats.ts). */
+function activeSession(): string {
+  try {
+    return getManifest().activeId
+  } catch {
+    return ''
+  }
 }
 
 /** Steps 1–4 below: the text a line would be stored with, or null when nothing is left. */
@@ -102,5 +112,5 @@ export const ingestText = async (
   const line = appendLine({ text: value, source, ts, ocr })
   if (!line) return
   if (ingestId) line.ingestIds = [ingestId]
-  recordLine(countChars(value), words(value))
+  recordLine(countChars(value), words(value), activeSession())
 }

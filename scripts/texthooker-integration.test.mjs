@@ -657,11 +657,12 @@ test("the session list's summaries count each session's lines and reading time, 
       JSON.stringify({
         version: 1,
         lines: [
-          { id: 1, text: '一', source: 'ocr', ts: 0 },
-          { id: 2, text: '二', source: 'ocr', ts: 30_000 },
-          // A pause past the idle threshold (60s by default) is not reading time.
-          { id: 3, text: '三', source: 'ocr', ts: 600_000 },
-          { id: 4, text: '四', source: 'ocr', ts: 610_000 }
+          // Ten characters each: before the pace is known, a line may count 30 s (3 s each).
+          { id: 1, text: '一二三四五六七八九十', source: 'ocr', ts: 0 },
+          { id: 2, text: '二二三四五六七八九十', source: 'ocr', ts: 30_000 },
+          // A pause past what the line may count is a break, not reading time.
+          { id: 3, text: '三二三四五六七八九十', source: 'ocr', ts: 600_000 },
+          { id: 4, text: '四二三四五六七八九十', source: 'ocr', ts: 610_000 }
         ]
       })
     ]
@@ -669,7 +670,13 @@ test("the session list's summaries count each session's lines and reading time, 
   const h = await harness({ superTexthooker: { inputSource: 'ocr' } }, files)
   const [open, other] = await h.call('sessions', 'sessionSummaries')
   assert.deepEqual(open, { id: 's1', lines: 0, readingMs: 0, recent: [] })
-  assert.deepEqual(other, { id: 's2', lines: 4, readingMs: 40_000, recent: ['一', '二', '三', '四'] })
+  assert.deepEqual(other, {
+    id: 's2',
+    lines: 4,
+    // 30 s, 30 s of the break, 10 s, and the last line's 30 s.
+    readingMs: 100_000,
+    recent: ['一二三四五六七八九十', '二二三四五六七八九十', '三二三四五六七八九十', '四二三四五六七八九十']
+  })
   await h.setSetting('scannedTextHistory', [{ id: 'n1', text: '猫', timestamp: 2 }])
   await h.drain()
   const [after] = await h.call('sessions', 'sessionSummaries')

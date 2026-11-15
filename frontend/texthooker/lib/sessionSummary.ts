@@ -5,11 +5,13 @@
  * another computer too.
  */
 import type { Line } from './types'
+import { countChars } from '../core/charCount'
+import { creditLines } from './readingTime'
 
 export interface SessionSummary {
   id: string
   lines: number
-  /** The time between consecutive lines, leaving out any pause longer than the idle threshold. */
+  /** The reading time of its lines, by the rule every stat uses (readingTime.ts). */
   readingMs: number
   /** The newest lines' text, oldest first. */
   recent: string[]
@@ -20,19 +22,15 @@ export const RECENT_LINES = 5
 export function summarizeLines(
   id: string,
   all: readonly Pick<Line, 'text' | 'ts' | 'source'>[],
-  idleMs: number
+  ceilingMs: number
 ): SessionSummary {
   // What was read: the person's notes are neither lines nor reading time.
   const lines = all.filter((line) => line.source !== 'note')
-  const times = lines
-    .map((line) => line.ts)
-    .filter((ts) => Number.isFinite(ts))
-    .sort((a, b) => a - b)
-  let readingMs = 0
-  for (let i = 1; i < times.length; i++) {
-    const gap = times[i] - times[i - 1]
-    if (gap > 0 && gap <= idleMs) readingMs += gap
-  }
+  const timed = lines
+    .filter((line) => Number.isFinite(line.ts))
+    .map((line) => ({ ts: line.ts, chars: countChars(line.text) }))
+    .sort((a, b) => a.ts - b.ts)
+  const readingMs = creditLines(timed, ceilingMs).reduce((sum, credit) => sum + credit.ms, 0)
   const recent = lines
     .slice(-RECENT_LINES)
     .map((line) => line.text.trim())

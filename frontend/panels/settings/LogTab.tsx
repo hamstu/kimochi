@@ -209,12 +209,12 @@ export function LogTab(): ReactNode {
 
             <SettingsSection
               title="Reading timer"
-              footnote="Choose which stats the footer shows from the Log's ⋯ menu."
+              footnote="Lines you skip through quickly aren't counted. Each day starts at 4 am. To choose which stats show in the footer, use the ⋯ menu in the Log."
             >
               <SettingsRow
-                label="Pause when idle for"
+                label="Max time per line"
                 controlId="log-afk"
-                description="Seconds without a new line before the timer pauses."
+                description="The timer counts the time you spend on each line, up to a limit based on how fast you usually read. It never counts more than this many seconds for one line."
               >
                 <NumberField
                   id="log-afk"
@@ -222,7 +222,7 @@ export function LogTab(): ReactNode {
                   min={10}
                   max={600}
                   step={5}
-                  fallback={60}
+                  fallback={300}
                   onCommit={(v) => void updateSettings({ afkThresholdSec: v })}
                 />
               </SettingsRow>
