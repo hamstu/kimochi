@@ -73,12 +73,18 @@ async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
     },
     invoked: [],
     holds: [],
+    /** What the Log sent the reading history (`reading_history_append`). */
+    history: [],
     async invoke(command, args) {
       env.invoked.push(command)
       if (command === 'hide_popover') return
       if (command === 'history_merge_reset') return
       if (command === 'profile_current') return { key: null, root: options.profileRoot ?? '' }
       if (command === 'sync_local_changed') return
+      if (command === 'reading_history_append') {
+        env.history.push(...structuredClone(args.events))
+        return args.events.length
+      }
       if (command === 'sync_hold_ready') {
         env.holds.push(args.id)
         return
@@ -590,6 +596,45 @@ test('a hooked line that carries on the last one replaces it, and only that one'
     ['「はぁっ、もうだめよぉ、んーーっ」', '「何よ……！」', '「何よ……！　私を」']
   )
   assert.deepEqual(lines[0].ingestIds, ['hook-1', 'hook-2'])
+  await h.call('stats', 'resetStats')
+})
+
+test('every line read reaches the reading history with its session and source; notes do not', async () => {
+  const h = await harness({
+    superTexthooker: { inputSource: 'hook', autoMatchSource: false, japaneseFilter: 'off' }
+  })
+  await h.emit('texthook-status', { phase: 'hooked', exe: 'C:\\Games\\game.exe' })
+  await h.setSetting('lastSelectedSource', source('ゲーム', 'game.exe'))
+  await h.drain()
+  await h.call('host', 'ingest', ['「はぁっ、ん', 'hook', 1, 'hook-1'])
+  await h.call('host', 'ingest', ['「はぁっ、んーーっ」', 'hook', 2, 'hook-2', null, 'hook-1'])
+  await h.call('host', 'ingest', ['誤読', 'hook', 3, 'hook-3'])
+  await h.call('store', 'addNote', ['my own note'])
+  const misread = h.snapshot().lines.find((l) => l.text === '誤読')
+  await h.call('store', 'deleteLine', [misread.id])
+  await h.call('store', 'clearLines')
+  // The Log flushes the history with its files: everything has been sent by now.
+  assert.deepEqual(
+    h.history.map((e) => [e.op, e.text]),
+    [
+      ['add', '「はぁっ、ん'],
+      ['edit', '「はぁっ、んーーっ」'],
+      ['add', '誤読'],
+      ['delete', undefined]
+    ],
+    'a fuller reading edits its line, a deleted line is deleted, a note and clearing the Log are not sent'
+  )
+  const [first, edit] = h.history
+  assert.equal(edit.uid, first.uid)
+  assert.equal(first.ts, 1)
+  assert.equal(edit.ts, 1, 'an edit keeps when the line was read')
+  assert.equal(first.via, 'hook')
+  assert.equal(first.session, h.snapshot().sessions.activeId)
+  assert.equal(first.sessionName, h.snapshot().sessions.sessions[0].name)
+  assert.deepEqual(first.source, { window: 'ゲーム', app: 'game.exe', exe: 'C:\\Games\\game.exe' })
+  assert.equal(first.language, 'ja')
+  assert.equal(typeof first.tz, 'number')
+  assert.equal(h.history[3].uid, misread.uid)
   await h.call('stats', 'resetStats')
 })
 
