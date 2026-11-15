@@ -288,9 +288,9 @@ export function createController(context) {
   })
   // Native ended navigation because another app came to the front: its keys are already
   // given back, so just leave controller mode quietly.
-  void native.listen('controller-nav-cancel', () => {
+  void native.listen('controller-nav-cancel', ({ payload } = {}) => {
     note('nav-cancel')
-    context.log({ check: 'controller-cancelled', reason: 'focus-elsewhere' })
+    context.log({ check: 'controller-cancelled', reason: payload?.reason ?? 'focus-elsewhere' })
     void close()
   })
   void native.listen('controller-key', ({ payload }) => {
