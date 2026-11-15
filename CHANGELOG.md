@@ -10,7 +10,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **⭐ Read in other languages!** Pick the language you're learning in Settings → Language. This is expermimental, since Kimochi was built originally for Japanese-only. So feedback is welcome.
+- **⭐ Read in other languages!** Pick the language you're learning in Settings → Language. This is experimental, since Kimochi was built originally for Japanese-only. So feedback is welcome.
 - **Add more local accounts.** Add accounts that live only on your computer. Each account can also have its own Yomitan profile, which is helpful if you're learning multiple languages.
 - **📝 Edit lines and add notes in the Log.** Press **E** to fix a misread line, or **A** to add a Markdown note (with **@** mentions from your Notebook).
 - **Look up on hover** can now work with hover only (no key required) (Settings → Shortcuts & Controls).
@@ -22,18 +22,18 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **✨ Settings, reorganised.** An updated Account section comes first (all your settings are saved per account), OCR and Overlay are separate pages, and Overlay appearance has a nice live preview.
 - ⚡ **Auto OCR is about twice as fast with local engines**, it also adapts to your computer, drops less lines during fast dialogue, and uses less CPU.
-- ⚡ **Yomitan API lookups are faster**, even with lots of dictionaries. (Be sure to update the helper in Setting > Dictionary).
+- ⚡ **Yomitan API lookups are faster**, even with lots of dictionaries. (Be sure to update the helper in Settings → Dictionary).
 - **Quieter activity ticker** at the foot of the Log. You can also hide it entirely.
 - **Browser extension:** Some fixes to make it work better on manga sites.
 
 ### Fixed
 
-- **Text Hooker:** the overlay card lines betterwith the game text, and hooked voice audio mathces better. Games run through Flatpak apps on Linux can now be hooked. 
+- **Text Hooker:** the overlay card lines up better with the game text, and hooked voice audio matches better. Games run through Flatpak apps on Linux can now be hooked.
 - **Lookups:** Some fixes to lookups over line-breaks.
 - **Linux:** Misc. fixes for the GNOME extension, and Auto OCR now sees your game on Hyprland 0.57.
 - **Gaming Mode on Bazzite and other non-Deck hardware:** the controller menu should stay open.
-- **Controllers:** The controller settings show the button presses for the correct controler.
-- **Settings:** Fixed issue saving some settings, and a prevented crashes with bad settings.
+- **Controllers:** The controller settings show the button presses for the correct controller.
+- **Settings:** Fixed issue saving some settings, and prevented crashes with bad settings.
 - **Reading time** accuracy improvement; it keeps your whole session after a break.
 
 ## [0.9.0] - 2026-11-11
