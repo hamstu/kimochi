@@ -8,7 +8,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JS
 import { Flame } from 'lucide-react'
 import { formatReadingTime } from '@texthooker/lib/sessionSummary'
 import { addDays, daysBetween, type Streaks, type Totals } from './statsModel'
-import { formatDay, plural } from './format'
+import { formatCompactDay, plural } from './format'
 
 const MAX_WEEKS = 53
 const MIN_WEEKS = 12
@@ -170,14 +170,18 @@ export function Heatmap({
         <span className="stats-readout k-num" aria-live="polite">
           {hovered ? (
             <>
-              <strong>{formatDay(hovered, true)}</strong>
+              <strong>{formatCompactDay(hovered, today)}</strong>
               {hoveredTotals ? (
                 <>
-                  <span>{plural(hoveredTotals.chars, 'character')}</span>
+                  <span>{hoveredTotals.chars.toLocaleString()} chars</span>
                   <span>{formatReadingTime(hoveredTotals.ms)}</span>
                   {hoveredRun && hoveredRun.length > 1 && (
-                    <span>
-                      day {hoveredRun.index} of {hoveredRun.length} in a row
+                    <span
+                      className="stats-readout-run"
+                      title={`Day ${hoveredRun.index} of ${hoveredRun.length} in a row`}
+                    >
+                      <Flame aria-hidden />
+                      {hoveredRun.index}/{hoveredRun.length}
                     </span>
                   )}
                 </>

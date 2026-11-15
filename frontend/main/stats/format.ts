@@ -23,6 +23,18 @@ export function formatDay(day: string, long = false): string {
   })
 }
 
+/** "Tue, 12 Nov" or, in another year than `today`'s, "Tue, 12 Nov 2025": a day in a compact
+    readout. */
+export function formatCompactDay(day: string, today: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(day.slice(0, 4) !== today.slice(0, 4) ? { year: 'numeric' } : {})
+  })
+}
+
 /** "12 Nov" or, in another year than `today`'s, "12 Nov 2025". */
 export function formatShortDay(day: string, today: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {

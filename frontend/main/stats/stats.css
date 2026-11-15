@@ -77,6 +77,18 @@
   margin-right: var(--k-space-2);
   color: var(--k-text-3);
 }
+/* The hovered day's place in its run of days in a row: a flame and "3/32". */
+.stats-readout-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.stats-readout-run svg {
+  width: 0.95em;
+  height: 0.95em;
+  align-self: center;
+  color: var(--k-accent-text);
+}
 
 /* ------------------------------------------------------------------ heatmap (the centrepiece) */
 
