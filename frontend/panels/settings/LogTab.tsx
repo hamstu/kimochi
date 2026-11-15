@@ -212,10 +212,7 @@ export function LogTab(): ReactNode {
               </SettingsRow>
             </SettingsSection>
 
-            <SettingsSection
-              title="Reading timer"
-              footnote="Choose which stats the footer shows from the Log's ⋯ menu."
-            >
+            <SettingsSection title="Stats" footnote="Choose which stats the footer shows from the Log's ⋯ menu.">
               <SettingsRow
                 label="Max time per line"
                 controlId="log-afk"
