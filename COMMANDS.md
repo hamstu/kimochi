@@ -698,6 +698,8 @@ without a CFRunLoop has not been tested in-app.
 | `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
 | `reading_history_append` | `({events: [{op, uid, at, ts?, text?, originalText?, via?, engine?, session?, sessionName?, source?: {window?, app?, exe?}, language?, tz?}]}) -> number` — the Log's lines read, for the reading history; returns how many were kept |
 | `reading_history_summary` | `() -> {lines, chars, first, last}` |
+| `reading_history_stats` | `({idleSec?, skipFastLines?, dayStartHour?, tz?}) -> {sessions: [{id, name}], buckets: [{day, session, hour, chars, ms, lines, last}]}` — the Stats tab's reading, summed by reading day, session and local hour by the reading-time rule; `tz`: this computer's zone, for backfilled lines from before the history kept zones |
+| `reading_history_kanji` | `({sessions?, since?, limit?, idleSec?, skipFastLines?, dayStartHour?, tz?}) -> {…, top: [{kanji, count, fresh}]}` — the kanji read in `sessions` (all when absent) from reading day `since`: how many, how many new, and the `limit` (default 60, at most 500) most read |
 | `reading_history_export` | `({path, format, idleSec?, skipFastLines?, dayStartHour?}) -> number` — `format`: `json`, `csv`, `exstatic-lines`, `exstatic-stats`; the reading-time settings (defaults 300, true, 4); returns the lines written |
 | `ext_relay` | `({target \| null, payload}) -> ()` |
 | `yomitan_request` | `({url, body}) -> Value` |
