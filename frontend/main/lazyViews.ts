@@ -1,21 +1,24 @@
 /**
- * The main window's lazy views (the Notebook and the Anki cards). They stay out of the startup
+ * The main window's lazy views (the Notebook, the Anki cards and Stats). They stay out of the startup
  * bundle, but are fetched as soon as the window has shown its first content and gone idle, so
  * opening their tab later renders at once instead of behind a loading state.
  */
 import type { NotebookPanel } from '@texthooker/components/NotebookPanel'
 import type { AnkiPanel } from './AnkiPanel'
+import type { StatsPanel } from './stats/StatsPanel'
 
 interface Views {
   notebook: typeof NotebookPanel
   anki: typeof AnkiPanel
+  stats: typeof StatsPanel
 }
 export type LazyView = keyof Views
 type ViewModule<V extends LazyView> = Promise<{ default: Views[V] }>
 
 const LOADERS: { [V in LazyView]: () => ViewModule<V> } = {
   notebook: () => import('@texthooker/components/NotebookPanel').then((m) => ({ default: m.NotebookPanel })),
-  anki: () => import('./AnkiPanel').then((m) => ({ default: m.AnkiPanel }))
+  anki: () => import('./AnkiPanel').then((m) => ({ default: m.AnkiPanel })),
+  stats: () => import('./stats/StatsPanel').then((m) => ({ default: m.StatsPanel }))
 }
 
 // One request per view, shared by `lazy` and the preload; and the views that have arrived.

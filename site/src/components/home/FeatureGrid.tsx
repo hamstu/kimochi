@@ -11,7 +11,7 @@ const linkClass =
 export function FeatureGrid() {
   return (
     <ul className="grid gap-x-8 gap-y-14 md:grid-cols-2 md:gap-y-16">
-      {features.map(({ id, title, body, Visual, docs, tag, link }) => (
+      {features.map(({ id, title, body, Visual, docs, tag, link, more }) => (
         <li key={id} className="flex flex-col">
           <Visual />
           <h3 className="mt-6 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-heading font-semibold text-ink">
@@ -31,6 +31,12 @@ export function FeatureGrid() {
                 <ArrowRight size={14} aria-hidden />
               </a>
             )
+          )}
+          {more && (
+            <Link to={more.to} className={linkClass}>
+              {more.label}
+              <ArrowRight size={14} aria-hidden />
+            </Link>
           )}
         </li>
       ))}
@@ -54,7 +60,7 @@ function FeatureTag({ tag }: { tag: NonNullable<Feature['tag']> }) {
   return (
     <span className={`${CHIP} bg-hover text-ink-2`}>
       {tag === 'windows' ? <WindowsMark className="size-3" /> : <DeckMark className="size-3.5" />}
-      {tag === 'windows' ? 'Windows games' : 'Steam Deck'}
+      {tag === 'windows' ? 'Windows games, also on Linux & Steam Deck' : 'Steam Deck'}
     </span>
   )
 }

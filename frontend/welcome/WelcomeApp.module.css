@@ -35,6 +35,12 @@
   height: 100%;
   padding: 0;
 }
+/* These are navigation announcements, not interactive controls. */
+.page:focus,
+.title:focus,
+.wordmark:focus {
+  outline: none;
+}
 /* Opacity only: a moving page would briefly overflow the content area and flash its scrollbar. */
 @keyframes page-in {
   from {
@@ -52,6 +58,16 @@
 }
 .step > :global(.k-callout) {
   max-width: 34rem;
+}
+.errorDetails {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.errorDetails summary {
+  cursor: pointer;
+}
+.errorDetails p {
+  margin: var(--k-space-2) 0 0;
 }
 .step[data-centered] {
   margin-block: auto;

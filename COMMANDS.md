@@ -84,10 +84,10 @@ held; never on Wayland or in Gaming Mode; a machine key, never synced; see `poin
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
-`gamepadSettings.{enabled,preferredGamepadIndex,lookupButton,xinput}` (enabled defaults true; `lookupButton`, a
+`gamepadSettings.{enabled,preferredGamepadIndex,lookupButton}` (enabled defaults true; `lookupButton`, a
 button index held as the lookup key (`gamepad::lookup_held`), defaults on a Steam Deck to the first
-back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere; `xinput`, Windows only
-and off when absent, reads controllers through XInput instead of Windows.Gaming.Input, see below),
+back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere; an `xinput` left by
+1.0.0 is ignored: Windows picks its backend itself, see below),
 `lastSelectedSource.{sourceId,type,name,appName}`,
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
@@ -655,7 +655,7 @@ unmapped".
 A change in the connected controllers is always recorded as `{check: "gamepad", connected:
 [names], backend, pads: [{name, osName, vendor, product, uuid, mapping, power}]}`, and gilrs's own
 warnings and errors (a controller it lists but cannot read) as `{check: "gamepad-backend", level,
-message}`. With `gamepadSettings.xinput` on, `backend` is `xinput`, `pads` is `[{index, name, slot,
+message}`. While XInput reads the controllers (Windows, below), `backend` is `xinput`, `pads` is `[{index, name, slot,
 connected}]`, `pad` in the press records is the XInput slot (0-3), `code` is XInput's name for the
 button, and verbose logging records each change of a controller's buttons as `{check:
 "gamepad-raw", event: "ButtonsChanged", pad, name, active, standardPressed}`. Kimochi does not watch
@@ -679,11 +679,12 @@ natively because the whole point of the feature is to fire while a *game* holds 
 and the overlay that would host a browser gamepad module is deliberately unfocused and
 click-through — exactly where WebKit is least likely to report devices.
 **Windows backends.** gilrs reads controllers through Windows.Gaming.Input, which lists every kind
-of controller but can list one and then deliver none of its input. With `gamepadSettings.xinput`
-on (Settings → Shortcuts & Controls → Read controllers with XInput), `gamepad_xinput.rs` polls
-`XInputGetState` for the four XInput slots instead: Xbox-style controllers only, no Home button,
-no USB ids, read whether or not Kimochi has focus. The poll switches between the two when the
-setting changes, without a restart, and only one runs at a time. **Unverified:**
+of controller but can list one and then deliver none of its input, and delivers nothing while
+another app (the game) is in front. So whenever an XInput controller is connected,
+`gamepad_xinput.rs` polls `XInputGetState` for the four XInput slots instead: Xbox-style
+controllers only, no Home button, no USB ids, read whether or not Kimochi has focus. While gilrs
+reads, the poll asks XInput once a second whether a controller has connected; when the last XInput
+controller leaves it goes back to gilrs. Only one runs at a time, and there is no setting. **Unverified:**
 gilrs reads HID through IOKit, and whether events arrive on a plain polling thread
 without a CFRunLoop has not been tested in-app.
 
@@ -696,6 +697,11 @@ without a CFRunLoop has not been tested in-app.
 | `history_delete` | `({id}) -> ()` |
 | `history_clear` | `() -> ()` |
 | `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
+| `reading_history_append` | `({events: [{op, uid, at, ts?, text?, originalText?, via?, engine?, session?, sessionName?, source?: {window?, app?, exe?}, language?, tz?}]}) -> number` — the Log's lines read, for the reading history; returns how many were kept |
+| `reading_history_summary` | `() -> {lines, chars, first, last}` |
+| `reading_history_stats` | `({idleSec?, skipFastLines?, dayStartHour?, tz?}) -> {sessions: [{id, name}], buckets: [{day, session, hour, chars, ms, lines, last}]}` — the Stats tab's reading, summed by reading day, session and local hour by the reading-time rule; `tz`: this computer's zone, for backfilled lines from before the history kept zones |
+| `reading_history_kanji` | `({sessions?, since?, limit?, idleSec?, skipFastLines?, dayStartHour?, tz?}) -> {…, top: [{kanji, count, fresh}]}` — the kanji read in `sessions` (all when absent) from reading day `since`: how many, how many new, and the `limit` (default 60, at most 500) most read |
+| `reading_history_export` | `({path, format, idleSec?, skipFastLines?, dayStartHour?}) -> number` — `format`: `json`, `csv`, `exstatic-lines`, `exstatic-stats`; the reading-time settings (defaults 300, true, 4); returns the lines written |
 | `ext_relay` | `({target \| null, payload}) -> ()` |
 | `yomitan_request` | `({url, body}) -> Value` |
 | `tts_speak` | `({text, voiceId}) -> ArrayBuffer` (audio) |
@@ -711,6 +717,52 @@ stalled client cannot freeze publishing or a settings change.
 History add/delete go through Rust with the 50-entry cap applied there, so the overlay
 and the Log panel cannot race each other with read-modify-write cycles on one key. Each
 change re-emits `settings:changed` for `scannedTextHistory`.
+
+**Reading history** (`reading_history.rs`) is every line read, kept for stats and export apart
+from the Log's transcript, which the person trims (Max lines), clears and moves between sessions.
+The Log (`frontend/texthooker/core/history.ts`) reports each line it logs (`add`), each change to
+its text (`edit`: a fuller reading, or Edit line) and each line deleted from it (`delete`: a
+misreading, or fragments a fuller reading replaced), in batches a second apart and on every Log
+flush. Notes are not reading and are never sent. Native appends them to
+`<profile>/reading-history/YYYY-MM.jsonl` (UTC month of `at`, one JSON object per line, only ever
+appended to) and folds them by `uid` when read: the latest text wins, the first `ts` stays, and a
+`delete` drops the line. Clearing the Log, its line limit, deleting a session and screenshot or
+audio retention never remove history. The first call in a profile copies every session's
+`lines.json` into `backfill.jsonl` (lines marked `backfilled`; a live record of the same `uid`
+wins); that file's presence means the backfill ran. A profile copied into an account takes its
+history with it (`profile::copy_profile_data`). Sync carries it as the `history` collection:
+each computer pushes only its own events, as chunks of one file's events from one UTC hour (at
+most 50 events and 192 KB: `<device>/<YYYYMMDDHH>.<n>`, `b…` from the backfill), so a new line
+changes only the last chunk of its hour; other computers' chunks are kept as they arrive in
+`reading-history/devices/<device>/<chunk>.json`, never pushed back, and fold in with this
+computer's events in the order they were made. A line deleted on one computer is gone from the
+history on all of them.
+
+Characters are counted by one rule everywhere, the Log's footer included (`countChars`,
+`frontend/texthooker/core/charCount.ts`, and `reading_history::count_chars`): every code point but
+Unicode punctuation, symbols, separators and control characters, as GameSentenceMiner and
+exSTATic count (GSM also counts line breaks inside a line; exSTATic also counts `!`, `・`, `〜`
+and emoji).
+
+Export (the Log's ⋯ → Export reading history) writes: `exstatic-lines`, exSTATic's lines CSV
+`uuid,given_identifier,name,line,time` (BOM, `time` in epoch seconds; `uuid` is the session id,
+`given_identifier` the hooked game's executable or else the session name), which exSTATic imports
+and GameSentenceMiner's exSTATic import reads; `exstatic-stats`, exSTATic's stats CSV per session
+and local day (`chars_read` by the rule above, `time_read` seconds), which names the media in
+exSTATic; `csv` and `json`, every field, with `read_ms` and `skipped`.
+
+**Reading time, skipping and days** follow one rule everywhere: the footer (live), the session
+list, the exports and the Stats tab (`frontend/texthooker/lib/readingTime.ts`, natively
+`reading_history::credit`; `scripts/fixtures/reading-time.json` holds the cases both are tested
+with). A line counts the time until the next line, at most 2.5 × what a line its length takes at
+the session's slower pace (the 25th percentile of characters a second of its last 200 lines of 5+
+characters followed by a 1–300 s gap; 3 s a character before 5 are measured), between 2 s and
+`idleSec` (`afkThresholdSec`, "Max time per line", default 300). The live footer's clock
+stops when the last line's allowance runs out, so it never runs backwards. With "Ignore skipped
+lines" on (`skipFastLines`, default), three or more lines of 12+ characters each under a second
+apart were skipped: no characters, lines or time (the footer takes back the run's first lines when
+the third arrives). A reading day starts at "Day starts at" (`dayStartHour`, 0–6, default 4) local
+time (`readingDay`, `reading_day`). The footer shows a speed once 5 lines are counted.
 
 `ext_relay_listen` registers a Tauri `Channel` for the calling window. Native forgets it when
 that window's page starts loading again (reload or navigation) and when the window closes, so a
@@ -843,8 +895,8 @@ a window running a dead host. `dictionary_engine_effective` answers `selected` (
 host engine for the language being learned), `chosen` (the setting's host engine as stored),
 `effective`, and `ready` per engine.
 
-**The engine follows the language.** Hachidori (at its pinned 0.3.0) and 10ten read Japanese
-only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
+**The engine follows the language.** Hachidori (whose other languages, since 0.5.0, need its
+experimental "Multiple languages" switch) and 10ten read Japanese only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
 computer's while `language` is the account's, so the stored choice is never rewritten: while
 `language` is not `ja`, a stored `hachidori` or `tenten` stands for Yomitan
 (`extensions::selected_engine`, `effectiveDictionaryEngine`), and Settings → Dictionary shows
@@ -1715,7 +1767,7 @@ Implementation: `src-tauri/src/extension_store.rs`.
 
 ```ts
 ExtensionStatus = {
-  engine, name, version,             // "tenten", "10ten Japanese Reader", "1.28.0"
+  engine, name, version,             // "tenten", "10ten Japanese Reader", "1.29.0"
   state: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready',
   source: 'downloaded' | 'development' | null,  // where a ready engine is served from
   file,                              // "<version>.zip" while downloading or verifying it; "unpacking"

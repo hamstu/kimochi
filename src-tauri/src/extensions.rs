@@ -85,7 +85,8 @@ pub fn chosen_engine(settings: &Settings) -> String {
     engine_for(settings.get_path(&["yomitanSettings", "popupType"]).ok().flatten().as_ref())
 }
 
-/// The languages an extension engine reads: Japanese alone for both (Hachidori 0.3.0, 10ten).
+/// The languages an extension engine reads: Japanese alone for both (10ten; Hachidori's other
+/// languages, since 0.5.0, sit behind its experimental "Multiple languages" switch, off by default).
 const JAPANESE_ONLY: &[&str] = &["hachidori", "tenten"];
 
 /// `engine` (a host engine) for `language` (a code): Yomitan in place of an engine that cannot

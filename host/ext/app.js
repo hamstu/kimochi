@@ -13,6 +13,7 @@ import { createExtensionContext } from './chrome-api.js'
 import {
   createDriver,
   injectContentScripts,
+  installOpenPopupRoot,
   installScope,
   observePopup as watchPopup,
   tentenPopupSize
@@ -280,6 +281,8 @@ export function installApp(win, { engine, descriptor }) {
     installCaretPosition(win)
     // The pop-up's selection, for Anki's `popup-selection-text` (selection.js).
     installShadowSelection(win)
+    // Hachidori's pop-up root, open as Kimochi reads it (content.js `installOpenPopupRoot`).
+    installOpenPopupRoot(win, descriptor)
     installScope(win, { origin, popupSelector: descriptor.popupSelector, state: scopeState })
     driver = createDriver(win, {
       descriptor,

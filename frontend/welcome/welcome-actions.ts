@@ -19,16 +19,35 @@ export const openYomitanBackup = (): Promise<void> =>
 /**
  * Electron's `complete-onboarding`: record it, show the main window, close onboarding.
  *
- * If the flag cannot be persisted this throws instead of closing: silently hiding the window would
- * send the user back through onboarding on the next launch with no explanation.
+ * Keep the guide open if saving or opening the main window fails. Concurrent callers (including
+ * Strict Mode's effect replay) share one handoff; a settled attempt can be retried after failure.
  */
-export async function completeOnboarding(): Promise<void> {
+let completing: Promise<void> | null = null
+
+export function completeOnboarding(): Promise<void> {
+  completing ??= finishOnboarding().finally(() => {
+    completing = null
+  })
+  return completing
+}
+
+async function finishOnboarding(): Promise<void> {
   try {
     await setSetting('hasCompletedOnboarding', true)
   } catch (error) {
     report('Complete onboarding')(error)
     throw new Error(`Couldn't save your setup: ${nativeError(error).message}. Try again.`)
   }
-  await panel('log', 'show').catch(report('Show Kimochi'))
-  await panel('welcome', 'hide').catch(report('Close onboarding'))
+  try {
+    await panel('log', 'show')
+  } catch (error) {
+    report('Show Kimochi')(error)
+    throw new Error(`Your setup was saved, but Kimochi couldn't open: ${nativeError(error).message}. Try again.`)
+  }
+  try {
+    await panel('welcome', 'hide')
+  } catch (error) {
+    report('Close onboarding')(error)
+    throw new Error(`Kimochi is open, but this guide couldn't close: ${nativeError(error).message}. Try again.`)
+  }
 }

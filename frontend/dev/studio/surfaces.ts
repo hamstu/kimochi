@@ -251,6 +251,7 @@ function locateMain(frame: Window): StudioContext {
   const selected = doc.querySelector('[role="tab"][aria-selected="true"], [role="tab"][data-state="active"]')
   if (selected?.textContent?.trim().toLowerCase().startsWith('notebook')) return { view: 'notebook' }
   if (selected?.textContent?.trim().toLowerCase().startsWith('anki')) return { view: 'anki' }
+  if (selected?.textContent?.trim().toLowerCase().startsWith('stats')) return { view: 'stats' }
   return { view: 'log' }
 }
 
@@ -305,7 +306,13 @@ const MAIN: Surface = {
     {
       param: 'view',
       label: 'View',
-      options: opts(['log', 'Log'], ['notebook', 'Notebook'], ['anki', 'Anki'], ['settings', 'Settings'])
+      options: opts(
+        ['log', 'Log'],
+        ['notebook', 'Notebook'],
+        ['anki', 'Anki'],
+        ['stats', 'Stats'],
+        ['settings', 'Settings']
+      )
     },
     { param: 'tab', label: 'Settings page', options: SETTINGS_TABS, when: in_('view', 'settings') }
   ],

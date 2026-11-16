@@ -394,7 +394,7 @@ export async function deleteSessions(ids: string[]): Promise<void> {
 /** What the session list shows about each session (`SessionSummary`), in the manifest's order. */
 export async function sessionSummaries(): Promise<SessionSummary[]> {
   if (!manifest) throw new Error('sessions not loaded')
-  const idleMs = Math.max(10, getSettings().afkThresholdSec) * 1000
+  const ceilingMs = Math.max(10, getSettings().afkThresholdSec) * 1000
   const result: SessionSummary[] = []
   for (const session of manifest.sessions) {
     let lines: Line[] = []
@@ -407,7 +407,7 @@ export async function sessionSummaries(): Promise<SessionSummary[]> {
         lines = []
       }
     }
-    result.push(summarizeLines(session.id, lines, idleMs))
+    result.push(summarizeLines(session.id, lines, ceilingMs, getSettings().skipFastLines))
   }
   return result
 }

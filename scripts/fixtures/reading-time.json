@@ -1,0 +1,376 @@
+{
+ "cases": [
+  {
+   "name": "before the pace is known a character is allowed 3 s; a longer gap is a break",
+   "ceilingMs": 60000,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 20000,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 200000,
+     "chars": 10,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 20000,
+     "skipped": false
+    },
+    {
+     "ms": 30000,
+     "skipped": false
+    },
+    {
+     "ms": 30000,
+     "skipped": false
+    }
+   ]
+  },
+  {
+   "name": "no line counts more than the ceiling",
+   "ceilingMs": 60000,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 40,
+     "session": "s"
+    },
+    {
+     "ts": 500000,
+     "chars": 5,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 60000,
+     "skipped": false
+    },
+    {
+     "ms": 15000,
+     "skipped": false
+    }
+   ]
+  },
+  {
+   "name": "a line with no characters counts nothing",
+   "ceilingMs": 60000,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 0,
+     "session": "s"
+    },
+    {
+     "ts": 10000,
+     "chars": 4,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 0,
+     "skipped": false
+    },
+    {
+     "ms": 12000,
+     "skipped": false
+    }
+   ]
+  },
+  {
+   "name": "three fast long lines in a row were skipped; two are not",
+   "ceilingMs": 300000,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 300,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 600,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 900,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 5000,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 5300,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 10000,
+     "chars": 20,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 0,
+     "skipped": true
+    },
+    {
+     "ms": 0,
+     "skipped": true
+    },
+    {
+     "ms": 0,
+     "skipped": true
+    },
+    {
+     "ms": 0,
+     "skipped": true
+    },
+    {
+     "ms": 300,
+     "skipped": false
+    },
+    {
+     "ms": 4700,
+     "skipped": false
+    },
+    {
+     "ms": 60000,
+     "skipped": false
+    }
+   ]
+  },
+  {
+   "name": "after 5 measured lines the cap follows the slower quarter of the session's pace",
+   "ceilingMs": 300000,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 5000,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 10000,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 15000,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 20000,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 25000,
+     "chars": 10,
+     "session": "s"
+    },
+    {
+     "ts": 125000,
+     "chars": 10,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 12500,
+     "skipped": false
+    },
+    {
+     "ms": 12500,
+     "skipped": false
+    }
+   ]
+  },
+  {
+   "name": "each session has its own pace",
+   "ceilingMs": 300000,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 10,
+     "session": "a"
+    },
+    {
+     "ts": 5000,
+     "chars": 10,
+     "session": "a"
+    },
+    {
+     "ts": 10000,
+     "chars": 10,
+     "session": "a"
+    },
+    {
+     "ts": 15000,
+     "chars": 10,
+     "session": "a"
+    },
+    {
+     "ts": 20000,
+     "chars": 10,
+     "session": "a"
+    },
+    {
+     "ts": 25000,
+     "chars": 10,
+     "session": "a"
+    },
+    {
+     "ts": 30000,
+     "chars": 10,
+     "session": "b"
+    },
+    {
+     "ts": 200000,
+     "chars": 10,
+     "session": "b"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 5000,
+     "skipped": false
+    },
+    {
+     "ms": 30000,
+     "skipped": false
+    },
+    {
+     "ms": 30000,
+     "skipped": false
+    }
+   ]
+  },
+  {
+   "name": "with skipping not ignored, fast lines count like any other",
+   "ceilingMs": 300000,
+   "skipFast": false,
+   "lines": [
+    {
+     "ts": 0,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 300,
+     "chars": 20,
+     "session": "s"
+    },
+    {
+     "ts": 600,
+     "chars": 20,
+     "session": "s"
+    }
+   ],
+   "credits": [
+    {
+     "ms": 300,
+     "skipped": false
+    },
+    {
+     "ms": 300,
+     "skipped": false
+    },
+    {
+     "ms": 60000,
+     "skipped": false
+    }
+   ]
+  }
+ ],
+ "days": [
+  {
+   "ts": 1731695400000,
+   "tz": 540,
+   "day": "2024-11-15",
+   "why": "03:30 in Tokyo belongs to the day before"
+  },
+  {
+   "ts": 1731699000000,
+   "tz": 540,
+   "day": "2024-11-16",
+   "why": "04:30 in Tokyo starts the next day"
+  },
+  {
+   "ts": 1731650000000,
+   "tz": -300,
+   "day": "2024-11-14",
+   "why": "00:53 in New York, before 4 am, belongs to the day before"
+  },
+  {
+   "ts": 1731695400000,
+   "tz": 540,
+   "startHour": 0,
+   "day": "2024-11-16",
+   "why": "with days starting at midnight, 03:30 in Tokyo is that day"
+  }
+ ]
+}

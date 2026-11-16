@@ -23,6 +23,11 @@ import { WithReaderSettings } from './ReaderSettingsProvider'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { NumberField } from './fields'
 
+/** When a reading day starts (lib/readingTime.ts `readingDay`). */
+const DAY_START_OPTIONS = [0, 1, 2, 3, 4, 5, 6].map((hour) => ({
+  value: String(hour),
+  label: hour === 0 ? 'Midnight' : `${hour} am`
+}))
 const VOICE_OPTIONS = AVAILABLE_VOICES.map((voice) => ({ value: voice.id, label: voice.name }))
 // The ElevenLabs speech models Kimochi's server accepts (`TTS_MODELS` in src-tauri/src/cloud.rs).
 const MODEL_OPTIONS = [
@@ -207,14 +212,11 @@ export function LogTab(): ReactNode {
               </SettingsRow>
             </SettingsSection>
 
-            <SettingsSection
-              title="Reading timer"
-              footnote="Choose which stats the footer shows from the Log's ⋯ menu."
-            >
+            <SettingsSection title="Stats" footnote="Choose which stats the footer shows from the Log's ⋯ menu.">
               <SettingsRow
-                label="Pause when idle for"
+                label="Max time per line"
                 controlId="log-afk"
-                description="Seconds without a new line before the timer pauses."
+                description="The maximum amount of time Kimochi will count for you reading a single line."
               >
                 <NumberField
                   id="log-afk"
@@ -222,8 +224,27 @@ export function LogTab(): ReactNode {
                   min={10}
                   max={600}
                   step={5}
-                  fallback={60}
+                  fallback={300}
                   onCommit={(v) => void updateSettings({ afkThresholdSec: v })}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Ignore skipped lines"
+                controlId="log-skip-fast"
+                description="Lines that flash by under a second apart don't count."
+              >
+                <Switch
+                  id="log-skip-fast"
+                  checked={settings.skipFastLines}
+                  onCheckedChange={(v) => void updateSettings({ skipFastLines: v })}
+                />
+              </SettingsRow>
+              <SettingsRow label="Day starts at" description="Reading before this hour counts toward the day before.">
+                <Select
+                  aria-label="Day starts at"
+                  value={String(settings.dayStartHour)}
+                  onValueChange={(hour) => void updateSettings({ dayStartHour: Number(hour) })}
+                  options={DAY_START_OPTIONS}
                 />
               </SettingsRow>
             </SettingsSection>

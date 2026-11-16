@@ -8,9 +8,22 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-### Fixed
+- **📊 New Stats tab.** See your reading at a glance: a heatmap with streaks, characters and time per day, reading speed, when in the day you read, each session's totals and the kanji you've read most. Pick which sessions to include from the session menu at the bottom right (all of them by default).
+- **Your reading history is kept.** Kimochi now keeps every line you read, with when you read it and which game or session it came from, even after you clear the Log or turn off saved images and audio. Lines already in your Log are included. Export it from the Log's **⋯** menu as a CSV that exSTATic and GameSentenceMiner can import, or as a full CSV or JSON file. With Sync on, it follows you across your computers.
+- **Character counts now match GameSentenceMiner and exSTATic.** Punctuation, symbols and spaces no longer count, so your characters and chars/hour line up with other reading trackers. Totals from before stay as they were.
+- **Smarter reading time.** Each line now counts until the next one, up to about 2.5 times what a line its length usually takes you, so a short line before a break no longer adds a whole minute, and a long line you read slowly keeps its time. Settings → Log → **Max time per line** caps how long one line can count (5 minutes by default).
+- **Skipping doesn't count.** Lines that fly by faster than you could read them (three or more long lines under a second apart) add no characters, lines or time. Turn this off in Settings → Log → **Ignore skipped lines**.
+- **Choose when your day starts** (Settings → Log → **Day starts at**, 4 am by default), so late-night reading counts toward the day it began. Reading speed shows once you've read 5 lines.
+- **Controllers on Windows:** an Xbox controller (or one that works like it) is now read with XInput automatically, so its buttons register even when Windows listed it but never passed on a press, and while a game is in front. The "Read controllers with XInput" switch is gone.
+- Performance fixes and improvements, with more reliable setup, source selection, translations, audio playback and keyboard navigation.
 
+- Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.
+- **Text Hooker card:** moved off the game window, the card now takes clicks without holding the lookup key, instead of letting them through and disappearing. Over the game it stays click-through as before.
+- **Text Hooker on Linux:** hooking a Wine game now explains why it failed, such as a 32-bit Wine prefix, instead of saying the game is not running.
 - **Windows: the overlay's text comes back after Alt+Tab.** With a screen as the source, switching away and back to your game could leave the text hidden, because Windows briefly reported the Alt+Tab switcher as the app in front after your game.
+- Hachidori is updated to 0.5.2: it understands older and literary Japanese conjugations (思ふ, 食べてゐる, 食べやしない), common in visual novels, splits headword furigana per kanji, and can add a card to Anki without waiting for its duplicate check. It downloads once more (about 7 MB) and keeps your dictionaries and settings.
+- Built-in Yomitan is updated to 26.11.2.0: word audio from a local audio server releases the sound device once it has played, and the Anki card settings show the right fields for kanji cards. It downloads once more (about 15 MB) and keeps your dictionaries and settings.
+- 10ten is updated to 1.29.0: it can read a word aloud, with each sound highlighted as it plays (turn it on under Audio in 10ten's settings), <kbd>P</kbd> plays the reading or a kanji's stroke order, and damaged dictionary data can be downloaded again without losing your settings. It downloads once more (about 18 MB).
 
 ## [1.0.0] - 2026-11-15
 

@@ -264,32 +264,32 @@ from the releases named below and remain under GPL-3.0-or-later.
 
 Yomitan: https://github.com/yomidevs/yomitan (GPL-3.0-or-later)
 Not included in Kimochi. When you choose it, Kimochi downloads release
-26.10.22.0 (commit d3c54c10264673eca0d66b970ef74cd5c8b048e3, asset
+26.11.2.0 (commit ac1d839f9fe4d7f852381b693bba2b159b5c943a, asset
 yomitan-chrome.zip, SHA-256
-83bbb0761c3bb55a64f1ab12afbbd338a3741c59daaeda2b3d7e7024fc4f4c65) from
+6f7e9c4df5df63a6cf093039a82cc3a4338cda011e6b2c32b5f28148c266ce51) from
 https://github.com/yomidevs/yomitan/releases and runs it unmodified. Its
 legal notices (legal.html, legal-npm.html) are part of that download.
-Source: the upstream tag 26.10.22.0.
+Source: the upstream tag 26.11.2.0.
 
 Hachidori: https://github.com/bee-san/hachidori (GPL-3.0-or-later)
-Not included in Kimochi. When you choose it, Kimochi downloads release 0.3.0
-(commit 51eb85486fd9d9b00561c623bbc6defa60853f16, asset
-hachidori-0.3.0-51eb85486fd9-chrome.zip, SHA-256
-9345e6acf1b31a2d7bdecc423439a57e5c97f3ad188bcc2d6e5368642703bf8e) from
+Not included in Kimochi. When you choose it, Kimochi downloads release 0.5.2
+(commit 6cd6124abaa1b222828d8ee3ab5b9ced3169605e, asset
+hachidori-0.5.2-6cd6124abaa1-chrome.zip, SHA-256
+e984e263de235529a2b7a94edbb16b5a14cbe073053635729dd5339dfe0a5571) from
 https://github.com/bee-san/hachidori/releases and runs it unmodified. Its
 LICENSE, THIRD_PARTY_NOTICES.md and licenses/ (notices for Hoshidicts,
 Zstandard, zip.js, Emscripten, musl, LLVM runtimes, KANJIDIC2 under
 CC BY-SA 4.0 and others) are part of that download; SOURCE.json names the
-matching corresponding-source archive. Source: the upstream tag 0.3.0.
+matching corresponding-source archive. Source: the upstream tag 0.5.2.
 
 10ten Japanese Reader: https://github.com/birchill/10ten-ja-reader
 (GPL-3.0-or-later). Not included in Kimochi. When you choose it, Kimochi
-downloads release v1.28.0 (commit 05e9fe2815de2eb1c7807b3d7bebdef456cbb5d1,
-asset 10ten-ja-reader-1.28.0-chrome.zip, SHA-256
-9ce5dcf9930c6dbb5988dbb25e088150dcd77d70cfee70af448df5c8420cbede) from
+downloads release v1.29.0 (commit 89b2f2420033f35cdd5063f646c91a8322851c34,
+asset 10ten-ja-reader-1.29.0-chrome.zip, SHA-256
+69753a221e8cf472cf1a7e17ff51133c471511638934ef4414a102e9d4c0252d) from
 https://github.com/birchill/10ten-ja-reader/releases and runs it unmodified.
 Its fonts carry their licences beside them (fonts/*.LICENSE.txt in the
-download). Source: the upstream tag v1.28.0.
+download). Source: the upstream tag v1.29.0.
 Its dictionary data (data/ in the download, and the updates it fetches) is
 derived from the JMdict, KANJIDIC and ENAMDICT/JMnedict files of the
 Electronic Dictionary Research and Development Group

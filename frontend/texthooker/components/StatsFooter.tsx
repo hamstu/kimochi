@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Clock, NotebookPen } from 'lucide-react'
 import { useStats } from '@texthooker/hooks/useStats'
 import { getSettings } from '@texthooker/lib/settings'
+import { MIN_LINES_FOR_SPEED } from '@texthooker/lib/readingTime'
 import { useLanguage } from '../../bridge/useLanguage'
 
 function formatTime(ms: number): string {
@@ -19,8 +20,10 @@ function formatNumber(n: number): string {
   return n.toLocaleString()
 }
 
-function formatSpeed(chars: number, ms: number): string {
-  if (ms < 1000) return '—'
+/** Characters (or words) an hour, once `lines` lines are counted: before that, one quick line
+    would read as a wild speed. */
+function formatSpeed(chars: number, ms: number, lines: number): string {
+  if (lines < MIN_LINES_FOR_SPEED || ms < 1000) return '—'
   const hours = ms / 3_600_000
   if (hours <= 0) return '—'
   const cph = Math.round(chars / hours)
@@ -59,7 +62,7 @@ export function StatsFooter({ lineCount, noteCount, onOpenNotes }: Props) {
   if (s.statsShowTime) bits.push(stat('time', formatTime(elapsedMs), undefined, <Clock aria-label="Reading time" />))
   if (s.statsShowLines) bits.push(stat('lines', formatNumber(lineCount), lineCount === 1 ? 'line' : 'lines'))
   if (s.statsShowChars) bits.push(stat('chars', formatNumber(amount), unit))
-  if (s.statsShowSpeed) bits.push(stat('speed', formatSpeed(amount, elapsedMs), `${unit}/h`))
+  if (s.statsShowSpeed) bits.push(stat('speed', formatSpeed(amount, elapsedMs, stats.totalLines), `${unit}/h`))
 
   if (noteCount > 0)
     bits.push(

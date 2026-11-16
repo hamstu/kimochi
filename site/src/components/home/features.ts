@@ -24,11 +24,13 @@ export interface Feature {
   docs?: string
   /**
    * A chip beside the title: `cloud` marks a Kimochi Cloud (paid) feature in the accent; `windows`
-   * ("Windows games") and `deck` are quiet grey chips for a feature made for that platform.
+   * ("Windows games, also on Linux & Steam Deck") and `deck` are quiet grey chips for a feature made for that platform.
    */
   tag?: 'cloud' | 'windows' | 'deck'
   /** A link on this site instead of the docs link, e.g. to the plans. */
   link?: { to: string; label: string }
+  /** A page on this site that goes further, shown after the docs link. */
+  more?: { to: string; label: string }
 }
 
 /**
@@ -57,6 +59,7 @@ export const features: Feature[] = [
     body: "Pick a game's window, turn on Text hooking, and Kimochi reads its text directly from the game, with each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
+    more: { to: '/linux-steam-deck-text-hooker', label: 'On Linux and Steam Deck' },
     tag: 'windows'
   },
   {

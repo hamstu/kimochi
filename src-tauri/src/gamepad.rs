@@ -70,24 +70,28 @@ fn new_gilrs() -> Option<Gilrs> {
         .ok()
 }
 
-/// `gamepadSettings.xinput`: read controllers through XInput rather than gilrs's
-/// Windows.Gaming.Input (`gamepad_xinput.rs`).
+/// How often, while gilrs reads the controllers, the poll asks whether an XInput controller has
+/// connected: asking an empty XInput slot costs far more than reading a controller.
 #[cfg(windows)]
-fn xinput_chosen(service: &Shared) -> bool {
-    service.settings.get_or("gamepadSettings.xinput", false)
-}
+const XINPUT_PROBE: Duration = Duration::from_secs(1);
 
 pub fn start(app: &tauri::AppHandle, service: &Shared) {
     // gilrs reports a controller it cannot read (Windows.Gaming.Input's id or reading failing)
     // only through `log`, then skips it: without this a pad that is listed but never presses
     // leaves nothing behind.
     install_gilrs_log();
+    // Windows reads an XInput controller (an Xbox pad, or anything presenting itself as one)
+    // through XInput whenever one is connected, and any other controller through gilrs:
+    // Windows.Gaming.Input, which gilrs reads with, can list a controller and then deliver none
+    // of its presses, and delivers nothing at all while another app (the game) is in front.
     #[cfg(windows)]
-    let mut xinput = xinput_chosen(service).then(xinput::Reader::default);
+    let mut xinput = xinput::any_connected().then(xinput::Reader::default);
     #[cfg(windows)]
     let mut gilrs = if xinput.is_some() { None } else { new_gilrs() };
-    // Without gilrs there is nothing to read. (On Windows the poll runs anyway: XInput can
-    // still be switched on.)
+    #[cfg(windows)]
+    let mut xinput_probed = Instant::now();
+    // Without gilrs there is nothing to read. (On Windows the poll runs anyway: an XInput
+    // controller can still connect.)
     #[cfg(not(windows))]
     let Some(gilrs) = new_gilrs() else {
         return;
@@ -120,13 +124,24 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         // which controller, recorded when it closes (`controller-nav-closed`).
         let mut nav_session: Option<NavSession> = None;
         loop {
-            // The switch in Settings takes effect here, without a restart. Only one backend
-            // runs at a time: dropping gilrs stops its Windows.Gaming.Input thread.
+            // An XInput controller connecting hands the reading to XInput, and the last one
+            // leaving hands it back to gilrs. Only one backend runs at a time: dropping gilrs
+            // stops its Windows.Gaming.Input thread.
             #[cfg(windows)]
-            if xinput_chosen(&service) != xinput.is_some() {
+            let switch = match xinput.as_ref() {
+                Some(reader) => reader.emptied(),
+                None if xinput_probed.elapsed() >= XINPUT_PROBE => {
+                    xinput_probed = Instant::now();
+                    xinput::any_connected()
+                }
+                None => false,
+            };
+            #[cfg(windows)]
+            if switch {
                 if xinput.is_some() {
                     xinput = None;
                     gilrs = new_gilrs();
+                    xinput_probed = Instant::now();
                 } else {
                     gilrs = None;
                     xinput = Some(xinput::Reader::default());

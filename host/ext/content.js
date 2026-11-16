@@ -37,6 +37,48 @@ export async function injectContentScripts(win, { origin, descriptor, report }) 
   report({ check: 'ext-host-content-injected', scripts: descriptor.contentScripts.length })
 }
 
+const OPEN_ROOT_MARK = Symbol.for('kimochi.openPopupRoot')
+
+/**
+ * Keep the pop-up's shadow root open (descriptor `openPopupRoot`). Hachidori 0.5 attaches its
+ * pop-up's root closed (content.js `attachPopupRoot`) so that Dark Reader, which rewrites the styles
+ * in every open root, cannot recolour it; only its search page and an overlay host running user
+ * scripts get an open one. No Dark Reader runs in Kimochi, and everything Kimochi does with the
+ * pop-up goes through `host.shadowRoot`: its rectangle for the overlay's interactive region
+ * (`popupRect`, `observePopup`), the controller's scrolling, entry stepping and button focus, the
+ * fill and size styles, and the hit-tests that descend into it (ui/overlay.js, host/
+ * windows-pointer.js). A closed root makes all of that see an empty host. So a request for a
+ * closed root on the pop-up's host element is answered with an open one; every other element,
+ * and an open request, is passed through as it is. Installed before the content scripts.
+ */
+export function installOpenPopupRoot(win, descriptor) {
+  if (!descriptor?.openPopupRoot || !descriptor.popupSelector) return false
+  const proto = win.Element?.prototype
+  const native = proto?.attachShadow
+  if (typeof native !== 'function' || native[OPEN_ROOT_MARK]) return false
+  const selector = descriptor.popupSelector
+  const isPopupHost = (element) => {
+    try {
+      return typeof element?.matches === 'function' && element.matches(selector)
+    } catch {
+      return false
+    }
+  }
+  function attachShadow(init, ...rest) {
+    const open = init && typeof init === 'object' && init.mode === 'closed' && isPopupHost(this)
+    return native.call(this, open ? { ...init, mode: 'open' } : init, ...rest)
+  }
+  Object.defineProperty(attachShadow, OPEN_ROOT_MARK, { value: true })
+  const own = Object.getOwnPropertyDescriptor(proto, 'attachShadow')
+  Object.defineProperty(proto, 'attachShadow', {
+    configurable: true,
+    writable: true,
+    enumerable: own?.enumerable ?? true,
+    value: attachShadow
+  })
+  return true
+}
+
 /**
  * Confine the extension's scanner to `scope` without touching its code. Both extensions find the
  * text under the pointer with these four calls (Hachidori content-scan.js `caretRangeAt`, its

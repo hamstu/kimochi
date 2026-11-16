@@ -104,3 +104,30 @@ export function exceptRects(area: Rect, holes: Iterable<Rect>): Rect[] {
   }
   return pieces
 }
+
+/** Whether two rectangles share any area. Touching edges do not count. */
+export function overlaps(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+/** A rectangle with finite numbers and some area. */
+function usable(rect: Rect | null | undefined): rect is Rect {
+  return (
+    rect !== null &&
+    rect !== undefined &&
+    [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
+    rect.width > 0 &&
+    rect.height > 0
+  )
+}
+
+/**
+ * Whether the Text Hooker's card is clear of the game window: not one pixel of it over the game,
+ * so it takes clicks with no lookup key held (#187). Both in desktop points. Over the game, even
+ * partly, it stays click-through, as it covers some of the game's own buttons. False whenever
+ * either rectangle is unknown (a compositor that does not report the game's window): the safe
+ * answer is the old one, click-through.
+ */
+export function clearOfGame(card: Rect | null | undefined, game: Rect | null | undefined): boolean {
+  return usable(card) && usable(game) && !overlaps(card, game)
+}

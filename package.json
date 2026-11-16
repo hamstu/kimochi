@@ -76,7 +76,7 @@
     "circle-flags": "2.8.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.18",
     "lucide-react": "^1.46.0",
     "marked": "^18.0.14",
     "motion": "^13.3.0",
@@ -101,6 +101,6 @@
     "oxlint": "^1.93.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^7.3.6"
+    "vite": "^7.3.8"
   }
 }

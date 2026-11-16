@@ -1,4 +1,5 @@
-//! Controllers read through XInput instead of gilrs (`gamepadSettings.xinput`, Windows only).
+//! Controllers read through XInput instead of gilrs, on Windows whenever an XInput controller is
+//! connected (`gamepad::start`).
 //!
 //! gilrs reads Windows controllers through Windows.Gaming.Input, which can list a controller and
 //! then deliver nothing for it; its XInput backend is a compile-time alternative to that one, not
@@ -104,6 +105,11 @@ fn name(slot: usize) -> String {
     format!("XInput controller {}", slot + 1)
 }
 
+/// Whether any XInput slot has a controller in it now.
+pub fn any_connected() -> bool {
+    (0..SLOTS).any(|slot| get_state(slot).is_some())
+}
+
 fn get_state(slot: usize) -> Option<State> {
     let mut state = XINPUT_STATE::default();
     // SAFETY: `state` is a valid XINPUT_STATE for the call to fill, and any index is accepted
@@ -127,12 +133,20 @@ pub struct Reader {
     first_press: [bool; SLOTS],
     /// Button changes traced one by one (verbose logging), up to `RAW_BUTTON_EVENTS`.
     traced: u32,
+    /// Whether the slots have been read at least once.
+    polled: bool,
 }
 
 impl Reader {
+    /// Whether the last read found no controller: time to hand back to gilrs.
+    pub fn emptied(&self) -> bool {
+        self.polled && self.slots.iter().all(Option::is_none)
+    }
+
     /// Polls the four slots and reports the connected ones, in slot order, as gilrs's are.
     pub fn read(&mut self, preferred: Option<usize>, logged: &mut Option<Vec<String>>) -> Tick {
         let now = Instant::now();
+        self.polled = true;
         // Records waiting to learn whether their controller is the one read: `(slot, record, always)`.
         let mut pending: Vec<(usize, Value, bool)> = Vec::new();
         for slot in 0..SLOTS {

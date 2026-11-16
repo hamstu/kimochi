@@ -73,12 +73,18 @@ async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
     },
     invoked: [],
     holds: [],
+    /** What the Log sent the reading history (`reading_history_append`). */
+    history: [],
     async invoke(command, args) {
       env.invoked.push(command)
       if (command === 'hide_popover') return
       if (command === 'history_merge_reset') return
       if (command === 'profile_current') return { key: null, root: options.profileRoot ?? '' }
       if (command === 'sync_local_changed') return
+      if (command === 'reading_history_append') {
+        env.history.push(...structuredClone(args.events))
+        return args.events.length
+      }
       if (command === 'sync_hold_ready') {
         env.holds.push(args.id)
         return
@@ -593,6 +599,45 @@ test('a hooked line that carries on the last one replaces it, and only that one'
   await h.call('stats', 'resetStats')
 })
 
+test('every line read reaches the reading history with its session and source; notes do not', async () => {
+  const h = await harness({
+    superTexthooker: { inputSource: 'hook', autoMatchSource: false, japaneseFilter: 'off' }
+  })
+  await h.emit('texthook-status', { phase: 'hooked', exe: 'C:\\Games\\game.exe' })
+  await h.setSetting('lastSelectedSource', source('ゲーム', 'game.exe'))
+  await h.drain()
+  await h.call('host', 'ingest', ['「はぁっ、ん', 'hook', 1, 'hook-1'])
+  await h.call('host', 'ingest', ['「はぁっ、んーーっ」', 'hook', 2, 'hook-2', null, 'hook-1'])
+  await h.call('host', 'ingest', ['誤読', 'hook', 3, 'hook-3'])
+  await h.call('store', 'addNote', ['my own note'])
+  const misread = h.snapshot().lines.find((l) => l.text === '誤読')
+  await h.call('store', 'deleteLine', [misread.id])
+  await h.call('store', 'clearLines')
+  // The Log flushes the history with its files: everything has been sent by now.
+  assert.deepEqual(
+    h.history.map((e) => [e.op, e.text]),
+    [
+      ['add', '「はぁっ、ん'],
+      ['edit', '「はぁっ、んーーっ」'],
+      ['add', '誤読'],
+      ['delete', undefined]
+    ],
+    'a fuller reading edits its line, a deleted line is deleted, a note and clearing the Log are not sent'
+  )
+  const [first, edit] = h.history
+  assert.equal(edit.uid, first.uid)
+  assert.equal(first.ts, 1)
+  assert.equal(edit.ts, 1, 'an edit keeps when the line was read')
+  assert.equal(first.via, 'hook')
+  assert.equal(first.session, h.snapshot().sessions.activeId)
+  assert.equal(first.sessionName, h.snapshot().sessions.sessions[0].name)
+  assert.deepEqual(first.source, { window: 'ゲーム', app: 'game.exe', exe: 'C:\\Games\\game.exe' })
+  assert.equal(first.language, 'ja')
+  assert.equal(typeof first.tz, 'number')
+  assert.equal(h.history[3].uid, misread.uid)
+  await h.call('stats', 'resetStats')
+})
+
 test("the session list's summaries count each session's lines and reading time, live for the open one", async () => {
   const files = new Map([
     [
@@ -612,11 +657,12 @@ test("the session list's summaries count each session's lines and reading time, 
       JSON.stringify({
         version: 1,
         lines: [
-          { id: 1, text: '一', source: 'ocr', ts: 0 },
-          { id: 2, text: '二', source: 'ocr', ts: 30_000 },
-          // A pause past the idle threshold (60s by default) is not reading time.
-          { id: 3, text: '三', source: 'ocr', ts: 600_000 },
-          { id: 4, text: '四', source: 'ocr', ts: 610_000 }
+          // Ten characters each: before the pace is known, a line may count 30 s (3 s each).
+          { id: 1, text: '一二三四五六七八九十', source: 'ocr', ts: 0 },
+          { id: 2, text: '二二三四五六七八九十', source: 'ocr', ts: 30_000 },
+          // A pause past what the line may count is a break, not reading time.
+          { id: 3, text: '三二三四五六七八九十', source: 'ocr', ts: 600_000 },
+          { id: 4, text: '四二三四五六七八九十', source: 'ocr', ts: 610_000 }
         ]
       })
     ]
@@ -624,7 +670,13 @@ test("the session list's summaries count each session's lines and reading time, 
   const h = await harness({ superTexthooker: { inputSource: 'ocr' } }, files)
   const [open, other] = await h.call('sessions', 'sessionSummaries')
   assert.deepEqual(open, { id: 's1', lines: 0, readingMs: 0, recent: [] })
-  assert.deepEqual(other, { id: 's2', lines: 4, readingMs: 40_000, recent: ['一', '二', '三', '四'] })
+  assert.deepEqual(other, {
+    id: 's2',
+    lines: 4,
+    // 30 s, 30 s of the break, 10 s, and the last line's 30 s.
+    readingMs: 100_000,
+    recent: ['一二三四五六七八九十', '二二三四五六七八九十', '三二三四五六七八九十', '四二三四五六七八九十']
+  })
   await h.setSetting('scannedTextHistory', [{ id: 'n1', text: '猫', timestamp: 2 }])
   await h.drain()
   const [after] = await h.call('sessions', 'sessionSummaries')
@@ -722,4 +774,25 @@ test('deleting several sessions at once keeps at least one', async () => {
   )
   assert.equal(h.snapshot().sessions.activeId, first, 'the active session moved off the deleted ones')
   assert.ok(![...h.files.keys()].some((path) => path.startsWith(`sessions/${b.id}`)))
+})
+
+test('translation writes recheck their originating line after bridge delivery', async () => {
+  const h = await harness({ superTexthooker: { inputSource: 'clipboard', autoMatchSource: false } })
+  await h.call('host', 'ingest', ['猫', 'clipboard'])
+  const original = h.snapshot().lines[0]
+  const expected = {
+    sessionId: h.snapshot().sessions.activeId,
+    uid: original.uid,
+    text: original.text,
+    ts: original.ts
+  }
+  await h.call('store', 'setLineTranslation', [original.id, 'Wrong session', true, { ...expected, sessionId: 'other' }])
+  assert.equal(h.snapshot().lines[0].translation, undefined)
+  await h.call('store', 'setLineTranslation', [original.id, 'Wrong line', true, { ...expected, uid: 'other' }])
+  assert.equal(h.snapshot().lines[0].translation, undefined)
+  await h.call('store', 'setLineTranslation', [original.id, 'Cat', true, expected])
+  assert.equal(h.snapshot().lines[0].translation, 'Cat')
+  await h.call('store', 'setLineText', [original.id, '犬'])
+  await h.call('store', 'setLineTranslation', [original.id, 'Cat', true, expected])
+  assert.equal(h.snapshot().lines[0].translation, undefined, 'an edit invalidates a queued translation')
 })

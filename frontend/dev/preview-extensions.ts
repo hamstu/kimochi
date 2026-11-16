@@ -23,17 +23,17 @@ const ENGINES: Record<
 > = {
   yomitan: {
     name: 'Yomitan',
-    version: '26.10.22.0',
-    previous: '26.8.24.0',
+    version: '26.11.2.0',
+    previous: '26.10.22.0',
     total: 15_412_388,
     file: 'yomitan-chrome.zip'
   },
-  hachidori: { name: 'Hachidori', version: '0.3.0', previous: '0.2.1', total: 5_238_012, file: 'hachidori-chrome.zip' },
+  hachidori: { name: 'Hachidori', version: '0.5.2', previous: '0.3.0', total: 7_069_808, file: 'hachidori-chrome.zip' },
   tenten: {
     name: '10ten Japanese Reader',
-    version: '1.28.0',
-    previous: '1.27.2',
-    total: 18_022_441,
+    version: '1.29.0',
+    previous: '1.28.0',
+    total: 18_304_130,
     file: '10ten-ja-reader-chrome.zip'
   }
 }

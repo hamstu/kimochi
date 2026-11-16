@@ -3,14 +3,14 @@
   "name": "10ten Japanese Reader",
   "upstream": "https://github.com/birchill/10ten-ja-reader",
   "license": "GPL-3.0-or-later",
-  "version": "1.28.0",
-  "tag": "v1.28.0",
-  "commit": "05e9fe2815de2eb1c7807b3d7bebdef456cbb5d1",
-  "released": "2026-09-02",
+  "version": "1.29.0",
+  "tag": "v1.29.0",
+  "commit": "89b2f2420033f35cdd5063f646c91a8322851c34",
+  "released": "2026-10-21",
   "asset": {
-    "url": "https://github.com/birchill/10ten-ja-reader/releases/download/v1.28.0/10ten-ja-reader-1.28.0-chrome.zip",
-    "sha256": "9ce5dcf9930c6dbb5988dbb25e088150dcd77d70cfee70af448df5c8420cbede",
-    "size": 18253849
+    "url": "https://github.com/birchill/10ten-ja-reader/releases/download/v1.29.0/10ten-ja-reader-1.29.0-chrome.zip",
+    "sha256": "69753a221e8cf472cf1a7e17ff51133c471511638934ef4414a102e9d4c0252d",
+    "size": 18304130
   },
   "unpack": {},
   "fixtures": {

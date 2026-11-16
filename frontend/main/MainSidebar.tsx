@@ -53,7 +53,7 @@ import { SidebarNotice } from './SidebarNotice'
 import { UpdateNotice } from './UpdateNotice'
 import { AccountBar } from './AccountBar'
 
-export type MainView = 'source' | 'log' | 'notebook' | 'anki' | 'settings'
+export type MainView = 'source' | 'log' | 'notebook' | 'anki' | 'stats' | 'settings'
 
 /** Narrowest and widest the sidebar can be dragged, in CSS pixels. */
 const MIN_WIDTH = 200

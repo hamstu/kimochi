@@ -1,6 +1,7 @@
-/** The Log footer's ⋯ menu: which stats the footer shows, the session's reset actions, settings. */
+/** The Log footer's ⋯ menu: which stats the footer shows, the session's reset actions, exporting
+    what was read, settings. */
 import { useEffect, useState } from 'react'
-import { Ellipsis, Eraser, RotateCcw, Settings } from 'lucide-react'
+import { Download, Ellipsis, Eraser, RotateCcw, Settings } from 'lucide-react'
 import {
   IconButton,
   Menu,
@@ -9,6 +10,9 @@ import {
   MenuItem,
   MenuLabel,
   MenuSeparator,
+  MenuSub,
+  MenuSubContent,
+  MenuSubTrigger,
   MenuTrigger,
   Tooltip
 } from '@kit'
@@ -17,6 +21,7 @@ import type { Settings as ReaderSettings } from '@texthooker/lib/types'
 import { useLogActions } from '../../main/logActions'
 import { openSettings } from '../../bridge/tauri'
 import { useLanguage } from '../../bridge/useLanguage'
+import { exportReadingHistory, HISTORY_FORMATS } from '@texthooker/lib/readingHistory'
 
 const STATS = [
   { key: 'statsShowTime', label: 'Reading time' },
@@ -60,6 +65,17 @@ export function LogMoreMenu() {
         <MenuItem icon={<RotateCcw />} onSelect={actions.resetStats}>
           Reset stats…
         </MenuItem>
+        <MenuSeparator />
+        <MenuSub>
+          <MenuSubTrigger icon={<Download />}>Export reading history</MenuSubTrigger>
+          <MenuSubContent>
+            {HISTORY_FORMATS.map((choice) => (
+              <MenuItem key={choice.format} onSelect={() => void exportReadingHistory(choice.format)}>
+                {choice.label}…
+              </MenuItem>
+            ))}
+          </MenuSubContent>
+        </MenuSub>
         <MenuSeparator />
         <MenuItem icon={<Settings />} onSelect={() => void openSettings('log')}>
           Log settings…
