@@ -15,6 +15,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Skipping doesn't count.** Lines that fly by faster than you could read them (three or more long lines under a second apart) add no characters, lines or time. Turn this off in Settings → Log → **Ignore skipped lines**.
 - **Choose when your day starts** (Settings → Log → **Day starts at**, 4 am by default), so late-night reading counts toward the day it began. Reading speed shows once you've read 5 lines.
 - **Controllers on Windows:** an Xbox controller (or one that works like it) is now read with XInput automatically, so its buttons register even when Windows listed it but never passed on a press, and while a game is in front. The "Read controllers with XInput" switch is gone.
+- **Steam Deck Gaming Mode: Set OCR crop works again.** Choosing it switched back to the game but the crop box never appeared, because the editor closed the moment it opened. It now stays open, so you can draw the crop with touch or the controller.
 - Performance fixes and improvements, with more reliable setup, source selection, translations, audio playback and keyboard navigation.
 
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.
