@@ -162,6 +162,25 @@ impl GameClock {
         wall_ms - cut
     }
 
+    /// The wall-clock time at game time `game_ms` (the inverse of `game_ms`): a moment a pause
+    /// stood still at is given as the pause's start. For showing game times to a person.
+    pub fn wall_ms(&self, game_ms: f64) -> f64 {
+        let mut cut = 0.0;
+        for (from, to) in self.merged() {
+            if from <= self.folded_until {
+                continue;
+            }
+            if game_ms <= from - cut - self.folded {
+                break;
+            }
+            match to {
+                Some(to) => cut += to - from,
+                None => return from,
+            }
+        }
+        game_ms + cut + if game_ms > self.folded_until - self.folded { self.folded } else { 0.0 }
+    }
+
     /// Whether `wall_ms` falls in a cut (a pause or its guards).
     pub fn paused_at(&self, wall_ms: f64) -> bool {
         self.merged().any(|(from, to)| wall_ms >= from && to.is_none_or(|t| wall_ms < t))
@@ -278,8 +297,8 @@ impl Splicer {
         let fade = self.ms_to_samples(FADE_MS).max(1);
         if let Some(done) = self.fading_in {
             let count = (fade - done.min(fade)).min(n);
-            for i in 0..count {
-                self.held[i] *= (done + i + 1) as f32 / (fade + 1) as f32;
+            for (i, sample) in self.held.iter_mut().take(count).enumerate() {
+                *sample *= (done + i + 1) as f32 / (fade + 1) as f32;
             }
             self.fading_in = (done + count < fade).then_some(done + count);
         }
@@ -361,8 +380,22 @@ mod tests {
         assert_eq!(clock.game_ms(3_000.0), 3_000.0 - first);
         assert_eq!(clock.game_ms(7_000.0), 7_000.0 - first - second);
         // Spans arrive in any order.
-        let shuffled = super::tests::clock(&[span(5_000.0, Some(6_000.0)), span(1_000.0, Some(2_000.0)), span(2_100.0, Some(2_500.0))]);
+        let shuffled = super::tests::clock(&[
+            span(5_000.0, Some(6_000.0)),
+            span(1_000.0, Some(2_000.0)),
+            span(2_100.0, Some(2_500.0)),
+        ]);
         assert_eq!(shuffled.game_ms(7_000.0), clock.game_ms(7_000.0));
+    }
+
+    #[test]
+    fn game_times_map_back_to_wall_clock_times() {
+        let clock = clock(&[span(1_000.0, Some(2_000.0)), span(5_000.0, Some(6_000.0)), span(9_000.0, None)]);
+        for wall in [0.0, 500.0, 2_500.0, 4_000.0, 7_000.0, 8_000.0] {
+            assert_eq!(clock.wall_ms(clock.game_ms(wall)), wall, "{wall}");
+        }
+        assert_eq!(clock.wall_ms(clock.game_ms(1_500.0)), 1_000.0 - GUARD_BEFORE_MS, "a pause shows as its start");
+        assert_eq!(clock.wall_ms(clock.game_ms(20_000.0)), 9_000.0 - GUARD_BEFORE_MS, "so does an open one");
     }
 
     #[test]
@@ -499,7 +532,9 @@ mod tests {
         // A voice from 1_000 to 4_000 wall (values 1.0), two pauses inside it, quiet around it.
         let spans = [span(1_500.0, Some(9_000.0)), span(10_000.0, Some(40_000.0))];
         let clock = clock(&spans);
-        let voice = |t: f64| (1_000.0..1_500.0).contains(&t) || (9_000.0..10_000.0).contains(&t) || (40_000.0..41_500.0).contains(&t);
+        let voice = |t: f64| {
+            (1_000.0..1_500.0).contains(&t) || (9_000.0..10_000.0).contains(&t) || (40_000.0..41_500.0).contains(&t)
+        };
         let (mut splicer, mut ring) = (Splicer::new(), AudioRing::new(RATE, 30.0));
         let mut t = 0.0;
         while t < 45_000.0 {

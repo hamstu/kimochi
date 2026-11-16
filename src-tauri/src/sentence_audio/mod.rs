@@ -17,12 +17,17 @@
 //!   and the clip was matched by its words, the mined word's own audio in that field. Only empty
 //!   fields are filled. The card is never held up: the audio follows it.
 //!
+//! - **Game pauses** ("Pause the game while reading", `game_pause`): the recording and everything
+//!   timed against it run on a game clock that leaves out the time the game was paused, so a voice
+//!   cut by a pause comes out whole, without the pause's silence or the stutter after it, and a
+//!   card added during a pause waits for the game to play the rest (`kimochi_capture::audio::pause`).
+//!
 //! Settings: `sentenceAudio` (a machine key, never synced: recording is this computer's choice).
 pub(crate) mod voice_hook;
 use crate::reader::ankiconnect;
 use crate::settings::Settings;
 use base64::Engine as _;
-use kimochi_capture::audio::{now_ms, AudioRing, SystemAudio};
+use kimochi_capture::audio::{now_ms, AudioRing, GameClock, PauseSpans, Splicer, SystemAudio};
 use kimochi_speech::clips::{self, ClipStore};
 use kimochi_speech::listener::{Cutting, Decision, Listener, Outcome};
 use kimochi_speech::sense_voice::SenseVoice;
@@ -37,6 +42,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
+/// However long the game stays paused, a card stops waiting for its line after this long.
+const MAX_PAUSED_WAIT: Duration = Duration::from_secs(10 * 60);
 /// How long a card waits for its line to be decided (its voice to end) before taking what has
 /// been heard.
 const MAX_WAIT_MS: f64 = 15_000.0;
@@ -249,6 +256,48 @@ pub struct Host {
     pub emit: Box<dyn Fn(&LineAudio) + Send + Sync>,
 }
 
+/// The game's pauses, from "Pause the game while reading".
+struct GamePauses;
+
+impl PauseSpans for GamePauses {
+    fn spans_since(&self, since_ms: f64) -> Vec<kimochi_capture::audio::PauseSpan> {
+        crate::game_pause::spans_since(since_ms)
+            .into_iter()
+            .map(|s| kimochi_capture::audio::PauseSpan { start_ms: s.start_ms, end_ms: s.end_ms })
+            .collect()
+    }
+}
+
+/// The game clock (`kimochi_capture::audio::pause`): Unix ms with the game's pauses left out.
+/// Every time that is measured against the recording goes through it.
+pub(crate) struct Pauses {
+    source: Box<dyn PauseSpans>,
+    clock: Mutex<GameClock>,
+}
+
+impl Pauses {
+    fn new(source: Box<dyn PauseSpans>) -> Arc<Self> {
+        Arc::new(Self { source, clock: Mutex::new(GameClock::new()) })
+    }
+
+    /// The clock, brought up to date.
+    fn clock(&self) -> std::sync::MutexGuard<'_, GameClock> {
+        let mut clock = lock(&self.clock);
+        clock.sync(self.source.as_ref());
+        clock
+    }
+
+    /// Game time at Unix ms `wall_ms`.
+    fn game(&self, wall_ms: f64) -> f64 {
+        self.clock().game_ms(wall_ms)
+    }
+
+    /// Game time now: standing still while the game is paused.
+    fn now(&self) -> f64 {
+        self.game(now_ms())
+    }
+}
+
 enum Input {
     Line(Line),
     Forget(Vec<String>),
@@ -286,6 +335,7 @@ pub struct SentenceAudio {
     last: Mutex<Option<LastCard>>,
     /// Bumped on every stop, so the threads from before exit.
     generation: Arc<AtomicU64>,
+    pauses: Arc<Pauses>,
     running: Mutex<bool>,
 }
 
@@ -313,10 +363,15 @@ impl SentenceAudio {
                 let _ = emit_app.emit("sentence-audio-line", line);
             }),
         };
-        Self::with_host(settings, host, clips_dir)
+        Self::with_pauses(settings, host, clips_dir, Pauses::new(Box::new(GamePauses)))
     }
 
+    #[cfg(test)]
     fn with_host(settings: Arc<Settings>, host: Host, clips_dir: PathBuf) -> Arc<Self> {
+        Self::with_pauses(settings, host, clips_dir, Pauses::new(Box::new(kimochi_capture::audio::NoPauses)))
+    }
+
+    fn with_pauses(settings: Arc<Settings>, host: Host, clips_dir: PathBuf, pauses: Arc<Pauses>) -> Arc<Self> {
         let config = Config::load(&settings);
         Arc::new(Self {
             capture: Mutex::new(voice_hook::Capture::default()),
@@ -331,6 +386,7 @@ impl SentenceAudio {
             recogniser: Arc::new(Mutex::new(Recogniser::Absent)),
             last: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
+            pauses,
             running: Mutex::new(false),
         })
     }
@@ -377,9 +433,10 @@ impl SentenceAudio {
     fn start(self: &Arc<Self>, generation: u64) {
         *lock(&self.state) = State::Starting;
         let (ring, state, current) = (self.ring.clone(), self.state.clone(), self.generation.clone());
+        let pauses = self.pauses.clone();
         std::thread::Builder::new()
             .name("sentence-audio".into())
-            .spawn(move || record(generation, current, ring, state))
+            .spawn(move || record(generation, current, ring, state, pauses))
             .ok();
         let service = self.clone();
         std::thread::Builder::new().name("sentence-audio-listen".into()).spawn(move || service.listen(generation)).ok();
@@ -411,8 +468,11 @@ impl SentenceAudio {
         self.generation.load(Ordering::SeqCst) == generation
     }
 
-    pub fn record_line(&self, line: Line) {
+    /// A line the Log reported, its times in Unix ms.
+    pub fn record_line(&self, mut line: Line) {
         if *lock(&self.running) {
+            line.ts = self.pauses.game(line.ts);
+            line.appeared = line.appeared.map(|t| self.pauses.game(t));
             lock(&self.inbox).push(Input::Line(line));
         }
     }
@@ -452,6 +512,24 @@ impl SentenceAudio {
                 }
             }
         }
+        if let Some(report) = report.as_mut() {
+            // Game time back to the wall clock, for times of day.
+            let clock = self.pauses.clock().clone();
+            let wall = |t: f64| clock.wall_ms(t);
+            report.heard_until = report.heard_until.map(wall);
+            report.transcribed_until = report.transcribed_until.map(wall);
+            for line in &mut report.lines {
+                line.ts = wall(line.ts);
+                line.appeared = line.appeared.map(wall);
+                line.clip = line.clip.map(|(a, b)| (wall(a), wall(b)));
+                line.window = line.window.map(|(a, b)| (wall(a), wall(b)));
+                line.decided_at = line.decided_at.map(wall);
+            }
+            for heard in &mut report.heard {
+                heard.start_ms = wall(heard.start_ms);
+                heard.end_ms = wall(heard.end_ms);
+            }
+        }
         let hooked = lock(&self.ears).as_ref().map(|ears| ears.hooked.report.clone()).unwrap_or_default();
         Debug {
             status: self.status(),
@@ -465,7 +543,7 @@ impl SentenceAudio {
     /// The automatic-scan observer read `text` from the screen at `at_ms`.
     pub fn screen_text(&self, text: &str, at_ms: f64) {
         if *lock(&self.running) {
-            lock(&self.inbox).push(Input::Screen(text.to_string(), at_ms));
+            lock(&self.inbox).push(Input::Screen(text.to_string(), self.pauses.game(at_ms)));
         }
     }
 
@@ -541,7 +619,7 @@ impl SentenceAudio {
                 }
             }
             let inputs_ms = began.elapsed().as_millis();
-            let now = now_ms();
+            let now = self.pauses.now();
             for matched in ears.hooked.tick(now) {
                 if let Err(e) = self.keep_hooked(&matched) {
                     ears.hooked.report.error = Some(e);
@@ -607,6 +685,8 @@ impl SentenceAudio {
         listener.cutting = config.cutting();
         // Its own speech detection: the listener's streams the recording, this one judges whole clips.
         let mut hooked = kimochi_speech::hooked::Hooked::default();
+        let pauses = self.pauses.clone();
+        hooked.clock = Some(Arc::new(move |t| pauses.game(t)));
         hooked.speech = (self.host.runtime)().and_then(|()| Vad::new()).ok();
         Ears {
             hooked,
@@ -918,21 +998,26 @@ impl SentenceAudio {
     fn decide(&self, uid: &str, ts: f64) {
         // Longer while the game's own voice for the line is still expected (a long line still
         // playing, or held until the game's timing is learned): its clean clip beats the recording.
+        // `ts` and the waits are in game time: while the game is paused, the line's voice is too, so
+        // the wait stands still (a card added during a lookup gets the voice played after it).
+        let now = || self.pauses.now();
         let hook_waiting = || {
             lock(&self.ears)
                 .as_ref()
-                .is_some_and(|ears| ears.hooked.waiting(uid, now_ms()) || ears.hooked.pending(uid, now_ms()))
+                .is_some_and(|ears| ears.hooked.waiting(uid, now()) || ears.hooked.pending(uid, now()))
         };
+        let began = Instant::now();
         while self.line_state(uid).is_none()
-            && (now_ms() - ts < MAX_WAIT_MS || (now_ms() - ts < HOOK_WAIT_MS && hook_waiting()))
+            && (now() - ts < MAX_WAIT_MS || (now() - ts < HOOK_WAIT_MS && hook_waiting()))
             && self.recording()
+            && began.elapsed() < MAX_PAUSED_WAIT
         {
             std::thread::sleep(Duration::from_millis(200));
         }
         if self.line_state(uid).is_none_or(|l| !matches!(l.how.as_deref(), Some("matched" | "hooked"))) {
             let mut guard = lock(&self.ears);
             if let Some(ears) = guard.as_mut() {
-                if let Some(decision) = ears.listener.decide_now(&ears.ring, now_ms(), uid) {
+                if let Some(decision) = ears.listener.decide_now(&ears.ring, self.pauses.now(), uid) {
                     self.keep(ears, &decision);
                 }
             }
@@ -1153,7 +1238,13 @@ pub fn run_check() -> bool {
 
 /// The capture thread: start, drain into the ring, and start again after a failure, until the
 /// generation moves on.
-fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>, state: Arc<Mutex<State>>) {
+fn record(
+    generation: u64,
+    current: Arc<AtomicU64>,
+    ring: Arc<Mutex<AudioRing>>,
+    state: Arc<Mutex<State>>,
+    pauses: Arc<Pauses>,
+) {
     let live = || current.load(Ordering::SeqCst) == generation;
     let set = |next: State| {
         if live() {
@@ -1165,10 +1256,14 @@ fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>,
         match SystemAudio::start() {
             Ok(mut capture) => {
                 set(State::Recording { source: capture.source(), excludes_own_audio: capture.excludes_own_audio() });
+                // What played while the game was paused is cut out, the rest stamped in game time.
+                let mut splicer = Splicer::new();
                 while live() {
                     std::thread::sleep(DRAIN_EVERY);
-                    capture.drain_into(&mut lock(&ring));
+                    let clock = pauses.clock().clone();
+                    capture.drain_spliced(&mut splicer, &clock, &mut lock(&ring));
                     if let Some(why) = capture.ended() {
+                        splicer.flush(&clock, &mut lock(&ring));
                         set(State::Error { message: format!("Recording stopped: {why}") });
                         break;
                     }
@@ -1435,6 +1530,76 @@ mod tests {
             Some("天気")
         );
         assert_eq!(card_word(&[field("A", "weather")], line), None);
+    }
+
+    /// Pauses as a test sets them.
+    struct Spans(Arc<Mutex<Vec<kimochi_capture::audio::PauseSpan>>>);
+    impl PauseSpans for Spans {
+        fn spans_since(&self, since: f64) -> Vec<kimochi_capture::audio::PauseSpan> {
+            lock(&self.0).iter().filter(|s| s.end_ms.is_none_or(|e| e > since)).copied().collect()
+        }
+    }
+
+    #[test]
+    fn lines_and_now_run_on_the_game_clock() {
+        use kimochi_capture::audio::pause::{GUARD_AFTER_MS, GUARD_BEFORE_MS};
+        use kimochi_capture::audio::PauseSpan;
+        let spans = Arc::new(Mutex::new(Vec::new()));
+        let pauses = Pauses::new(Box::new(Spans(spans.clone())));
+        let dir = std::env::temp_dir().join(format!("kimochi-sa-pause-{}", std::process::id()));
+        let host = Host {
+            runtime: Box::new(|| Err("no runtime in tests".into())),
+            model_dir: Box::new(|| None),
+            fetch_model: Box::new(|| {}),
+            emit: Box::new(|_| {}),
+        };
+        let service = SentenceAudio::with_pauses(
+            Arc::new(Settings::load(dir.join("settings.json"))),
+            host,
+            dir.join("clips"),
+            pauses,
+        );
+        *lock(&service.running) = true;
+        let start = now_ms() - 10_000.0;
+        lock(&spans).push(PauseSpan { start_ms: start, end_ms: None });
+        // Paused: game time stands still at the pause's start.
+        let frozen = service.pauses.now();
+        assert_eq!(frozen, start - GUARD_BEFORE_MS);
+        std::thread::sleep(Duration::from_millis(20));
+        assert_eq!(service.pauses.now(), frozen);
+        // A line reported during the pause is placed where the game stopped.
+        service.record_line(Line {
+            uid: "a".into(),
+            text: "x".into(),
+            ts: now_ms(),
+            ocr: false,
+            appeared: None,
+            scan: None,
+        });
+        // Resumed 5 s later: a line after that is 5 s (and the guards) earlier in game time.
+        lock(&spans)[0].end_ms = Some(start + 5_000.0);
+        let later = now_ms();
+        service.record_line(Line {
+            uid: "b".into(),
+            text: "y".into(),
+            ts: later,
+            ocr: false,
+            appeared: Some(later - 100.0),
+            scan: None,
+        });
+        let inbox = lock(&service.inbox);
+        let ts: Vec<(f64, Option<f64>)> = inbox
+            .iter()
+            .filter_map(|i| match i {
+                Input::Line(l) => Some((l.ts, l.appeared)),
+                _ => None,
+            })
+            .collect();
+        let cut = 5_000.0 + GUARD_BEFORE_MS + GUARD_AFTER_MS;
+        assert_eq!(ts[0], (frozen, None));
+        assert_eq!(ts[1], (later - cut, Some(later - 100.0 - cut)));
+        drop(inbox);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
