@@ -55,6 +55,7 @@ const SETTINGS: &[&str] = &[
     "autoScanSettings",
     "liveOverlayEnabled",
     "excludeOverlayFromCapture",
+    "pauseGameWhileReading",
     "hasCompletedOnboarding",
     "gamepadSettings",
     "hotkeys",

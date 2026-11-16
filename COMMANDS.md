@@ -2382,6 +2382,66 @@ finds the profile in `accounts.json`). A line with source `cli` is taken whateve
 lines and sessions (only lines newer than the last one it saw, never history), and `hotkey` for
 actions.
 
+## Game pause
+
+"Pause the game while reading" (`pauseGameWhileReading`, Settings → Overlay; machine-local, off by
+default). While it is on, the game's processes are suspended while the reader is busy with the
+overlay and resumed when they are done. Native: `src-tauri/src/game_pause/`. Input isolation
+(focus, hooks, Gamescope focus, Steam's controller reader) is unchanged and stays the fallback.
+
+Holds, by reason: `lookup` (a lookup started, or a dictionary pop-up is up), `navigation`
+(controller navigation: taken by `controller_nav`/`set_navigation`, after the overlay has taken
+activation), `regionEditor` (`region_keys(true)` until `region_keys(false)`). A pause is wanted
+while any hold is live; a hold lapses 2 s after its last refresh. Forced resumes: the setting
+turned off, `select_source` to another source, another application in front (not in Gaming
+Mode), `overlayVisible` set false, the paused game exiting, quit, and `game_pause_resume_all`.
+After a forced resume nothing pauses again until the overlay beats with no reason. Resuming
+waits (at most 1.5 s) for controller buttons, the macOS menu keys and the lookup button to be
+released.
+
+| Command | Arguments | Returns |
+| --- | --- | --- |
+| `game_pause_status` | — | `{capability: {supported, backend, note?}, enabled, status: Status \| null}` |
+| `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor")[]}` | — |
+| `game_pause_resume_all` | — | `{running, recovered: [{pid, exe, outcome, since}]}` |
+| `game_pause_spans` | `{since?: number}` | `PauseSpan[]` |
+
+`game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`): every 500 ms while any
+reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
+the overlay is alive. A beat refreshes the listed reasons and releases `lookup` and
+`regionEditor` when absent.
+
+Events:
+- `game-pause` — `Status {enabled, phase: "idle"|"pausing"|"paused"|"resuming", holds, game?,
+  processes, mechanism?, refusal?: {kind, detail}}`, on every change.
+- `game-pause-notice` — `{game, title?, kind, detail}`, once per game and refusal kind per run,
+  when a game cannot be paused. `kind`: `unsupported`, `noPid`, `notFound`, `protected`,
+  `antiCheat`, `elevated`, `denylisted`, `permissionDenied`, `other`. The main window shows it.
+- `game-pause-span` — `PauseSpan {id, startMs, endMs: number|null, startMono?, endMono?}` when a
+  span opens and when it closes. `startMs`/`endMs` are Unix wall-clock ms (the audio clock,
+  `kimochi_capture::audio::now_ms`). A span opens when the suspend is sent to the guard and closes
+  when the app learns the game runs again (resumed, rolled back, or the guard went away). Native
+  consumers: `game_pause::spans_since(ms)`, `paused()`, `wait_until_resumed(timeout)`.
+
+**Guard.** Every pause is owned by a separate process, the app binary run as
+`--game-pause-guard <journal path>` (its own session on Unix, no window on Windows), spoken to in
+JSON lines on stdin/stdout: requests `{op:"suspend", id, plan}`, `{op:"resume", id, reason}`,
+`{op:"beat"}`, `{op:"quit"}`; replies `{event:"ready"|"suspended"|"failed"|"resumed"|"refreshed", …}`.
+It resumes on `resume`/`quit`, 3 s without a request while paused, stdin EOF (the app died),
+SIGTERM/SIGINT/SIGHUP, and a panic. Before it stops anything it writes the plan to
+`game-pause-journal.json` in the app data folder; the app and every new guard resume what that
+names at start, only where pid and process start time still match.
+
+**Backends** (`game_pause/platform/<os>.rs`, behind `game_pause::backend::Backend`): `plan` (in the
+app), `suspend`/`resume`/`refresh` (in the guard), `identity`. Stubs refuse as `unsupported`
+until a platform's backend lands; `capability.supported` follows.
+
+Logs (`{"check":"game-pause", …}` in the evidence log): each pause (`paused`, processes,
+mechanism, micros) and resume (`resumed`, heldMs, reason, `by: "guard"` when the guard did it),
+every refusal (once per game and kind; later ones verbose), orphans recovered, guard failures.
+Verbose: the full plan (pid, exe, role, why; excluded processes), per-pid results, hold changes,
+waits for release.
+
 ## Capabilities
 
 `capabilities/core.json` grants `core:event:default` plus a few read-only window

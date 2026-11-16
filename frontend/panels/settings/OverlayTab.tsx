@@ -15,6 +15,7 @@ import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
 import { GameModeSection } from './GameModeSection'
 import { TextHookerCardSection } from './TextHookerCardSection'
+import { GamePauseRow } from './GamePauseRow'
 
 export function OverlayTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
@@ -94,6 +95,7 @@ export function OverlayTab(): ReactNode {
             onCheckedChange={(checked) => void setExcludeFromCapture(checked)}
           />
         </SettingsRow>
+        <GamePauseRow />
       </SettingsSection>
 
       <SettingsSection

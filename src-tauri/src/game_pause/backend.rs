@@ -143,6 +143,8 @@ impl Refusal {
     pub fn new(kind: RefusalKind, detail: impl Into<String>) -> Self {
         Refusal { kind, detail: detail.into() }
     }
+    // Used only by the stub of an OS without a backend yet.
+    #[allow(dead_code)]
     pub fn unsupported() -> Self {
         Refusal::new(RefusalKind::Unsupported, "no game pause backend on this system")
     }
@@ -240,6 +242,13 @@ pub trait Backend: Send + Sync {
     /// The identity of `pid` now, or `None` when it is gone or cannot be read.
     fn identity(&self, pid: u32) -> Option<ProcIdentity>;
 
+    /// Whether `id` is stopped right now (by anyone), when the backend can tell. The guard leaves
+    /// such processes out of the journal it writes before suspending, so recovery after a crash
+    /// never continues a process somebody else had stopped. Default: unknown.
+    fn stopped(&self, _id: &ProcIdentity) -> Option<bool> {
+        None
+    }
+
     /// Called by the guard about once a second while paused: catch threads or children that
     /// escaped a non-atomic suspend, re-check stopped state. May add members. Default: nothing.
     fn refresh(&self, _suspended: &mut Suspended) -> Result<(), PauseError> {
@@ -259,6 +268,7 @@ pub struct Capability {
 }
 
 /// The backend of a platform that cannot pause games (yet).
+#[allow(dead_code)]
 pub struct Unsupported;
 
 impl Backend for Unsupported {
@@ -383,6 +393,10 @@ pub mod fake {
                     let message = if matches { "fake suspend failure" } else { "identity changed" };
                     return Err(PauseError { pid: Some(pid), ..PauseError::new(message) });
                 }
+                if state.procs[&pid].stopped {
+                    state.calls.push(format!("not ours {pid}"));
+                    continue;
+                }
                 state.procs.get_mut(&pid).unwrap().stopped = true;
                 state.calls.push(format!("stop {pid}"));
                 done.push(member.id.clone());
@@ -418,6 +432,10 @@ pub mod fake {
         fn identity(&self, pid: u32) -> Option<ProcIdentity> {
             let state = self.state.lock().unwrap();
             state.procs.get(&pid).map(|p| ProcIdentity { pid, start: p.start, exe: p.exe.clone() })
+        }
+        fn stopped(&self, id: &ProcIdentity) -> Option<bool> {
+            let state = self.state.lock().unwrap();
+            state.procs.get(&id.pid).filter(|p| p.start == id.start).map(|p| p.stopped)
         }
     }
 }

@@ -35,6 +35,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "windowPositions",
     // Whether screen capture can see the overlay: this computer's recording setup.
     "excludeOverlayFromCapture",
+    // Pausing games: what this computer's games tolerate (game_pause/).
+    "pauseGameWhileReading",
     "nativeWindowBounds",
     "nativeWindowPinned",
     "capture",
