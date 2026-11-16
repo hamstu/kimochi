@@ -83,6 +83,9 @@ pub fn defaults() -> Value {
         // (`state::HoverIntent`). Lookups only: clicks still go to the game unless the lookup
         // key is held. Off by default. Not on Wayland, where positions follow the key.
         "overlayHoverLookup": false,
+        // Suspend the game while the reader is busy with the overlay (game_pause/). Opt-in: online
+        // games may time out and some engines jump on resume. This computer's choice.
+        "pauseGameWhileReading": false,
         // Mini mode when the watched game goes full screen on Kimochi's display (compact.rs).
         // Off: Kimochi is kept on top over the game instead, at its own size.
         "autoMiniMode": false,
