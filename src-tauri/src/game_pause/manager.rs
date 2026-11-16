@@ -186,8 +186,11 @@ pub struct Machine {
     current: Option<Current>,
     /// The last hold went at this moment; the resume waits for the inputs.
     released_at: Option<Instant>,
-    /// No pause until the UI reported no hold (after a forced resume or a refusal).
+    /// No pause until nothing is held any more, by the UI or natively (after a forced resume that
+    /// overrode a hold, or a refusal).
     suppressed: bool,
+    /// The overlay's last beat held nothing.
+    ui_quiet: bool,
     refusal: Option<Refusal>,
     notified: HashSet<String>,
     next_id: u64,
@@ -207,6 +210,7 @@ impl Machine {
             current: None,
             released_at: None,
             suppressed: false,
+            ui_quiet: true,
             refusal: None,
             notified: HashSet::new(),
             next_id: 1,
@@ -274,9 +278,7 @@ impl Machine {
                 }
             }
             Input::Beat(reasons) => {
-                if reasons.is_empty() {
-                    self.suppressed = false;
-                }
+                self.ui_quiet = reasons.is_empty();
                 // The UI owns lookup and the region editor outright; navigation is also taken
                 // natively, and a beat without it ends it only after that native hold went stale.
                 for reason in [Reason::Lookup, Reason::RegionEditor] {
@@ -285,6 +287,15 @@ impl Machine {
                     }
                 }
                 for reason in reasons {
+                    // Navigation is opened and closed natively (`Hold` / `Release`); a beat only keeps
+                    // that hold fresh. A beat sent just before the release, but handled after it,
+                    // must not take it again (a pause right after the menu closed).
+                    if reason == Reason::Navigation {
+                        if let Some(at) = self.holds.get_mut(&reason) {
+                            *at = now;
+                        }
+                        continue;
+                    }
                     if self.holds.insert(reason, now).is_none() {
                         self.log_verbose(&mut out, json!({ "hold": reason.name(), "taken": true, "by": "beat" }));
                     }
@@ -342,6 +353,11 @@ impl Machine {
                 }
             }
         }
+        // A forced resume or a refusal lasts until nothing is held by anyone: the overlay's beat
+        // says it holds nothing and every native hold has been released (in either order).
+        if self.suppressed && self.ui_quiet && self.holds.is_empty() {
+            self.suppressed = false;
+        }
         self.reconcile(&mut out, now, backend, cx);
         if before != (self.phase, self.holds(), self.enabled) {
             out.push(Effect::Status(self.status()));
@@ -374,7 +390,10 @@ impl Machine {
         let had_holds = !self.holds.is_empty();
         self.holds.clear();
         self.released_at = None;
-        if had_holds || matches!(self.phase, Phase::Pausing | Phase::Paused) {
+        // Only a resume that overrides a hold still wanted keeps the game from pausing again. One
+        // after every hold went (handing focus back once the menu closed, the release wait cut
+        // short) is just an early resume: suppressing there left the next open unpaused.
+        if had_holds {
             self.suppressed = true;
         }
         if matches!(self.phase, Phase::Pausing | Phase::Paused) {
@@ -839,6 +858,83 @@ mod tests {
         rig.input(Input::Beat(vec![]));
         rig.input(Input::Beat(vec![Reason::Lookup]));
         assert!(rig.stopped());
+    }
+
+    /// Controller navigation as the app drives it, open after open: the overlay's beat names
+    /// navigation before the native hold arrives (that waits for activation), and on close the
+    /// overlay's empty beat comes before the native release, after which focus is handed back
+    /// (`resume_before_activating`, a forced resume while still paused). A controller close still
+    /// has its button down (the release wait); a keyboard close does not. Every open must pause for
+    /// its whole length and nothing may pause after a close. Before the fix, the hand-back's forced
+    /// resume suppressed the next open, whose close then paused for a moment.
+    #[test]
+    fn every_navigation_open_pauses_for_its_whole_length_and_never_after_close() {
+        for (variant, button_down_at_close) in [("controller", true), ("keyboard", false)] {
+            let mut rig = Rig::new(&format!("nav-cycles-{variant}"));
+            for cycle in 0..60 {
+                // Open.
+                rig.input(Input::Beat(vec![Reason::Navigation]));
+                assert!(!rig.stopped(), "{variant} {cycle}: the beat alone never pauses");
+                rig.advance(40);
+                rig.input(Input::Hold(Reason::Navigation));
+                assert!(rig.stopped(), "{variant} {cycle}: the open pauses at once");
+                for _ in 0..16 {
+                    rig.advance(500);
+                    rig.input(Input::Beat(vec![Reason::Navigation]));
+                    assert!(rig.stopped(), "{variant} {cycle}: paused for the whole open");
+                }
+                // Close: the overlay goes idle first, then native releases and hands focus back.
+                rig.cx.held.set(button_down_at_close);
+                rig.input(Input::Beat(vec![]));
+                rig.advance(90);
+                rig.input(Input::Release(Reason::Navigation));
+                if rig.machine.phase() != Phase::Idle {
+                    rig.input(Input::ForceResume("handing focus back to the game".into()));
+                }
+                rig.cx.held.set(false);
+                assert!(!rig.stopped(), "{variant} {cycle}: resumed on close");
+                // A beat sent before the close but handled after it, every other cycle.
+                if cycle % 2 == 0 {
+                    rig.input(Input::Beat(vec![Reason::Navigation]));
+                }
+                for _ in 0..10 {
+                    rig.advance(100);
+                    assert!(!rig.stopped(), "{variant} {cycle}: nothing pauses after the close");
+                }
+                assert_eq!(rig.machine.phase(), Phase::Idle);
+                rig.advance(700);
+            }
+        }
+    }
+
+    /// The reader resumes by hand while the menu is open: the game stays running for the rest of
+    /// that open, whichever order the close's beat and release come in, and the next open pauses.
+    #[test]
+    fn a_reader_resume_lasts_until_the_menu_closes_then_the_next_open_pauses() {
+        for beat_first in [true, false] {
+            let mut rig = Rig::new(&format!("nav-forced-{beat_first}"));
+            rig.input(Input::Beat(vec![Reason::Navigation]));
+            rig.input(Input::Hold(Reason::Navigation));
+            assert!(rig.stopped());
+            rig.input(Input::ForceResume("resumed by the reader".into()));
+            for _ in 0..6 {
+                rig.advance(500);
+                rig.input(Input::Beat(vec![Reason::Navigation, Reason::Lookup]));
+                assert!(!rig.stopped(), "stays running after the reader's resume");
+            }
+            if beat_first {
+                rig.input(Input::Beat(vec![]));
+                rig.input(Input::Release(Reason::Navigation));
+            } else {
+                rig.input(Input::Release(Reason::Navigation));
+                rig.input(Input::Beat(vec![]));
+            }
+            rig.advance(100);
+            assert!(!rig.stopped(), "no pause after the close");
+            rig.input(Input::Beat(vec![Reason::Navigation]));
+            rig.input(Input::Hold(Reason::Navigation));
+            assert!(rig.stopped(), "the next open pauses");
+        }
     }
 
     #[test]
