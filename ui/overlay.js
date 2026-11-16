@@ -5265,6 +5265,27 @@ for (const type of [
   )
 }
 
+// Windows: opening the controller menu brings this overlay to the front, and Windows does not
+// call Kimochi's low-level keyboard hook (platform/windows/mouseguard.rs) for keys typed into
+// Kimochi's own windows, so the menu's keys never became `controller-key` events and the menu
+// ignored the keyboard. They arrive here instead: hand them to the controller as the hook
+// would have, and keep them from the page, as the hook keeps them from the game. While a game
+// is in front the hook still takes them, and this page never sees them.
+const MENU_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', ' '])
+for (const type of ['keydown', 'keyup']) {
+  window.addEventListener(
+    type,
+    (event) => {
+      if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || !event.isTrusted || !MENU_KEYS.has(event.key)) return
+      if (!controller || controller.mode === 'idle') return
+      event.stopImmediatePropagation()
+      event.preventDefault()
+      controller.key({ key: event.key, type })
+    },
+    { capture: true }
+  )
+}
+
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return
   // 10ten is dismissed with a synthetic Escape on this window (host/ext/content.js); if it

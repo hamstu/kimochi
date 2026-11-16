@@ -19,7 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Performance fixes and improvements, with more reliable setup, source selection, translations, audio playback and keyboard navigation.
 
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.
-- **Controller menu on Windows:** opened with its keyboard shortcut, the menu now answers the arrow keys, Return, Escape and Space even while the game stays in front, as it does on macOS.
+- **Controller menu on Windows:** the menu now answers the arrow keys, Return, Escape and Space, as it does on macOS. Before, opened with its keyboard shortcut, it ignored the keyboard and only a controller could drive it.
 - **Text Hooker card:** moved off the game window, the card now takes clicks without holding the lookup key, instead of letting them through and disappearing. Over the game it stays click-through as before.
 - **Text Hooker on Linux:** hooking a Wine game now explains why it failed, such as a 32-bit Wine prefix, instead of saying the game is not running.
 - Hachidori is updated to 0.5.2: it understands older and literary Japanese conjugations (思ふ, 食べてゐる, 食べやしない), common in visual novels, splits headword furigana per kanji, and can add a card to Anki without waiting for its duplicate check. It downloads once more (about 7 MB) and keeps your dictionaries and settings.
