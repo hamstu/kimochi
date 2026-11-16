@@ -7,7 +7,7 @@
 //! replace a bundle it cannot write. Run from a disk image the bundle is read-only too.
 //!
 //! [`app_location`] says where the bundle is and whether it should move; the panels ask on
-//! launch and offer the move before anything else (`frontend/components/MoveToApplications.tsx`).
+//! launch and offer the move before anything else (`frontend/components/MoveToApplicationsDialog.tsx`).
 //! [`app_move_to_applications`] does what LetsMove (`PFMoveToApplicationsFolderIfNecessary`) does:
 //!
 //!  1. Work from the bundle the user put somewhere: a translocated path is resolved to its
@@ -25,6 +25,9 @@
 //!     a disk image, ejects it. This process then quits as `app_quit` does.
 //!
 //! Elsewhere (and in a `tauri dev` binary, which is not inside a `.app`) nothing needs to move.
+// The path helpers below are used by the macOS module only (and the tests, on every platform).
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+
 use serde::Serialize;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
