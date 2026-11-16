@@ -4,11 +4,6 @@ mod boot;
 mod browser_bridge;
 mod cli;
 mod evidence;
-// Interim wiring until the shared game_pause module lands; replaced by game_pause/mod.rs.
-#[cfg(target_os = "macos")]
-#[allow(dead_code)]
-#[path = "game_pause/platform/macos.rs"]
-mod game_pause_macos;
 mod reader;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
@@ -29,6 +24,7 @@ mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
 mod extensions;
+mod game_pause;
 mod gamepad;
 mod google_lens;
 mod history_merge;
@@ -3133,6 +3129,10 @@ fn main() {
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
             "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server",
         );
+    }
+    // The game pause guard (game_pause/guard.rs): owns paused games, resumes them if the app dies.
+    if game_pause::guard::run_if_invoked() {
+        return;
     }
     #[cfg(target_os = "linux")]
     if platform::steam_input::run_watchdog() {

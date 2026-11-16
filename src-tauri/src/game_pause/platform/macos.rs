@@ -29,10 +29,21 @@
 //! stops. Never activate a stopped app or make a synchronous call into it (accessibility
 //! queries block until their timeout).
 
-use serde::{Deserialize, Serialize};
+use super::super::backend::{
+    Backend, Excluded, GameRef, Member, PauseError, PidResult, Plan, ProcIdentity, Refusal, RefusalKind, Role,
+    Suspended,
+};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
+/// This build can pause games on macOS.
+pub const SUPPORTED: bool = true;
+
+pub fn backend() -> Box<dyn Backend> {
+    Box::new(MacBackend { ctx: Context::current() })
+}
+
+const MECHANISM: &str = "SIGSTOP";
 /// Longest descendant chain followed from the owner.
 const MAX_DEPTH: usize = 8;
 /// More processes than this is not a game; refuse rather than stop half a session.
@@ -88,22 +99,13 @@ fn outer_bundle(exe: &str) -> Option<&str> {
     Some(&exe[..end + 4])
 }
 
-/// A process as identified across time: a pid alone can be recycled.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ProcIdentity {
-    pub pid: u32,
-    /// Start time in microseconds since the epoch, from the kernel.
-    pub start_us: u64,
-    /// Executable path (or the kernel's short name when the path is unreadable).
-    pub exe: String,
-}
-
 /// One process in a [`snapshot`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcRecord {
     pub pid: u32,
     pub ppid: u32,
     pub uid: u32,
+    /// Start time in microseconds since the epoch, from the kernel.
     pub start_us: u64,
     pub exe: String,
     pub stopped: bool,
@@ -113,95 +115,37 @@ pub struct ProcRecord {
 
 impl ProcRecord {
     pub fn identity(&self) -> ProcIdentity {
-        ProcIdentity { pid: self.pid, start_us: self.start_us, exe: self.exe.clone() }
+        ProcIdentity { pid: self.pid, start: self.start_us, exe: self.exe.clone() }
     }
 }
 
-/// Why a process is in the plan.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Role {
-    /// Owns the game's window.
+/// Why a process is in the plan (finer than [`Role`], for the verbose log).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Why {
     Owner,
-    /// A descendant of the owner by parent pid.
     Descendant,
-    /// macOS holds the owner responsible for it.
     Responsible,
-    /// Runs an executable from the owner's `.app` bundle.
     SameBundle,
-    /// Another Wine process of the owner's prefix.
     WinePrefix,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Member {
-    pub identity: ProcIdentity,
-    pub role: Role,
-}
-
-/// A process the planner looked at and left out, with the reason, for the verbose log.
-#[derive(Clone, Debug, Serialize)]
-pub struct Excluded {
-    pub pid: u32,
-    pub exe: String,
-    pub why: &'static str,
-}
-
-/// Every process that must stop for this game, in stop order.
-#[derive(Clone, Debug, Serialize)]
-pub struct Plan {
-    pub members: Vec<Member>,
-    pub excluded: Vec<Excluded>,
-    /// Whose user and whose process tree the plan was made for (reused by the second pass).
-    #[serde(skip)]
-    pub ctx: Context,
-}
-
-impl Plan {
-    pub fn owner(&self) -> &ProcIdentity {
-        &self.members[0].identity
+impl Why {
+    fn role(self) -> Role {
+        match self {
+            Why::Owner => Role::Main,
+            Why::Descendant => Role::Child,
+            Why::Responsible | Why::SameBundle | Why::WinePrefix => Role::Sibling,
+        }
     }
-}
-
-/// Why the game cannot be paused; the UI shows it once per game.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
-pub enum Refusal {
-    /// The window's process is gone or was never known.
-    NoProcess,
-    /// The game runs as another user (or root); signalling it is not allowed.
-    OtherUser,
-    /// The window belongs to Kimochi itself.
-    OwnProcess,
-    /// A system or session process.
-    Protected { exe: String },
-    /// More processes than a game would have.
-    TooMany { count: usize },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
-pub enum PauseError {
-    /// The owner is no longer the process that was planned (exited or pid reused).
-    OwnerChanged,
-    /// `kill` failed for a pid; everything already stopped was continued.
-    Signal { pid: u32, errno: i32 },
-    /// A pid did not reach the stopped state in time; everything was continued.
-    NotStopped { pid: u32 },
-    /// Some pids are still stopped after resume's retries.
-    StillStopped { pids: Vec<u32> },
-}
-
-/// What [`suspend`] stopped, in stop order. Only these are ever continued.
-#[derive(Clone, Debug, Serialize)]
-pub struct Suspended {
-    pub stopped: Vec<ProcIdentity>,
-    /// Processes planned but not stopped by us: already stopped by someone else, exited,
-    /// or recycled. Never continued by [`resume`].
-    pub skipped: Vec<(ProcIdentity, &'static str)>,
-    /// Processes that appeared during the pause and were stopped in the second pass.
-    pub late: usize,
-    pub took: Duration,
+    fn text(self) -> &'static str {
+        match self {
+            Why::Owner => "owns the game window",
+            Why::Descendant => "descendant of the game",
+            Why::Responsible => "the game is its responsible process",
+            Why::SameBundle => "runs from the game's app bundle",
+            Why::WinePrefix => "Wine process of the game's prefix",
+        }
+    }
 }
 
 /// Which processes are Kimochi's and whose user we are.
@@ -225,18 +169,26 @@ pub type PrefixLookup<'a> = &'a dyn Fn(u32) -> Option<Option<String>>;
 // Planning (pure)
 // ---------------------------------------------------------------------------------------
 
-/// Plan the stop set for the game whose window `owner` owns.
-pub fn plan_from(records: &[ProcRecord], owner: u32, ctx: Context, prefix_of: PrefixLookup) -> Result<Plan, Refusal> {
+/// Plan the stop set for `game`, whose window's process is `game.pid`.
+pub fn plan_from(
+    records: &[ProcRecord],
+    game: &GameRef,
+    ctx: Context,
+    prefix_of: PrefixLookup,
+) -> Result<Plan, Refusal> {
+    let Some(owner) = game.pid else { return Err(Refusal::new(RefusalKind::NoPid, "no process for the window")) };
     let by_pid: HashMap<u32, &ProcRecord> = records.iter().map(|r| (r.pid, r)).collect();
-    let Some(&own) = by_pid.get(&owner) else { return Err(Refusal::NoProcess) };
+    let Some(&own) = by_pid.get(&owner) else {
+        return Err(Refusal::new(RefusalKind::NotFound, format!("pid {owner} is gone")));
+    };
     if own.uid != ctx.uid {
-        return Err(Refusal::OtherUser);
+        return Err(Refusal::new(RefusalKind::Elevated, format!("pid {owner} runs as uid {}", own.uid)));
     }
     if is_kimochi(&by_pid, own, ctx) {
-        return Err(Refusal::OwnProcess);
+        return Err(Refusal::new(RefusalKind::Denylisted, format!("pid {owner} is Kimochi's own process")));
     }
-    if protected(&own.exe).is_some() {
-        return Err(Refusal::Protected { exe: own.exe.clone() });
+    if let Some((kind, why)) = protected(&own.exe) {
+        return Err(Refusal::new(kind, format!("pid {owner} {}: {why}", own.exe)));
     }
 
     let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
@@ -250,15 +202,15 @@ pub fn plan_from(records: &[ProcRecord], owner: u32, ctx: Context, prefix_of: Pr
     }
 
     // pid -> (role, depth for ordering)
-    let mut chosen: BTreeMap<u32, (Role, usize)> = BTreeMap::new();
+    let mut chosen: BTreeMap<u32, (Why, usize)> = BTreeMap::new();
     let mut excluded: Vec<Excluded> = Vec::new();
     let mut seen_excluded: HashSet<u32> = HashSet::new();
-    chosen.insert(owner, (Role::Owner, 0));
+    chosen.insert(owner, (Why::Owner, 0));
 
     let mut consider = |r: &ProcRecord,
-                        role: Role,
+                        role: Why,
                         depth: usize,
-                        chosen: &mut BTreeMap<u32, (Role, usize)>,
+                        chosen: &mut BTreeMap<u32, (Why, usize)>,
                         excluded: &mut Vec<Excluded>|
      -> bool {
         if chosen.contains_key(&r.pid) {
@@ -269,12 +221,12 @@ pub fn plan_from(records: &[ProcRecord], owner: u32, ctx: Context, prefix_of: Pr
         } else if is_kimochi(&by_pid, r, ctx) {
             Some("Kimochi's own process")
         } else {
-            protected(&r.exe)
+            protected(&r.exe).map(|(_, why)| why)
         };
         match why {
             Some(why) => {
                 if seen_excluded.insert(r.pid) {
-                    excluded.push(Excluded { pid: r.pid, exe: r.exe.clone(), why });
+                    excluded.push(Excluded { pid: r.pid, exe: r.exe.clone(), why: why.into() });
                 }
                 false
             }
@@ -308,16 +260,16 @@ pub fn plan_from(records: &[ProcRecord], owner: u32, ctx: Context, prefix_of: Pr
         }
     }
 
-    let roots = |chosen: &BTreeMap<u32, (Role, usize)>| -> Vec<(u32, usize)> {
+    let roots = |chosen: &BTreeMap<u32, (Why, usize)>| -> Vec<(u32, usize)> {
         chosen.iter().map(|(pid, (_, depth))| (*pid, *depth)).collect()
     };
 
     let start = roots(&chosen);
-    walk(&start, &children, &by_pid, |r, d| consider(r, Role::Descendant, d, &mut chosen, &mut excluded));
+    walk(&start, &children, &by_pid, |r, d| consider(r, Why::Descendant, d, &mut chosen, &mut excluded));
 
     for r in records {
         if r.pid != owner && r.responsible == Some(owner) {
-            consider(r, Role::Responsible, 1, &mut chosen, &mut excluded);
+            consider(r, Why::Responsible, 1, &mut chosen, &mut excluded);
         }
     }
 
@@ -328,7 +280,7 @@ pub fn plan_from(records: &[ProcRecord], owner: u32, ctx: Context, prefix_of: Pr
         if let Some(bundle) = outer_bundle(&own.exe) {
             for r in records {
                 if r.pid != owner && outer_bundle(&r.exe) == Some(bundle) {
-                    consider(r, Role::SameBundle, 1, &mut chosen, &mut excluded);
+                    consider(r, Why::SameBundle, 1, &mut chosen, &mut excluded);
                 }
             }
         }
@@ -344,28 +296,31 @@ pub fn plan_from(records: &[ProcRecord], owner: u32, ctx: Context, prefix_of: Pr
                     continue;
                 }
                 if prefix_of(r.pid).is_some_and(|p| prefixes.contains(&p)) {
-                    consider(r, Role::WinePrefix, 1, &mut chosen, &mut excluded);
+                    consider(r, Why::WinePrefix, 1, &mut chosen, &mut excluded);
                 }
             }
         }
     }
 
     let start = roots(&chosen);
-    walk(&start, &children, &by_pid, |r, d| consider(r, Role::Descendant, d, &mut chosen, &mut excluded));
+    walk(&start, &children, &by_pid, |r, d| consider(r, Why::Descendant, d, &mut chosen, &mut excluded));
 
     if chosen.len() > MAX_MEMBERS {
-        return Err(Refusal::TooMany { count: chosen.len() });
+        return Err(Refusal::new(RefusalKind::Other, format!("{} processes is more than a game", chosen.len())));
     }
 
     // Stop order: the owner first (it can no longer start anything), then shallower before
     // deeper so a parent is stopped before its children, then by pid for determinism.
-    let mut ranked: Vec<(usize, u32, Role)> = chosen
+    let mut ranked: Vec<(usize, u32, Why)> = chosen
         .into_iter()
-        .map(|(pid, (role, depth))| (if role == Role::Owner { 0 } else { depth + 1 }, pid, role))
+        .map(|(pid, (why, depth))| (if why == Why::Owner { 0 } else { depth + 1 }, pid, why))
         .collect();
     ranked.sort_by_key(|(rank, pid, _)| (*rank, *pid));
-    let members = ranked.into_iter().map(|(_, pid, role)| Member { identity: by_pid[&pid].identity(), role }).collect();
-    Ok(Plan { members, excluded, ctx })
+    let members = ranked
+        .into_iter()
+        .map(|(_, pid, why)| Member { id: by_pid[&pid].identity(), role: why.role(), why: why.text().into() })
+        .collect();
+    Ok(Plan { game: game.clone(), members, excluded, mechanism: MECHANISM.into() })
 }
 
 /// Whether `r` is Kimochi, one of its descendants, or a helper it is responsible for.
@@ -390,15 +345,15 @@ fn is_kimochi(by_pid: &HashMap<u32, &ProcRecord>, r: &ProcRecord, ctx: Context) 
 }
 
 /// Why an executable is never stopped, if it is one of those.
-fn protected(exe: &str) -> Option<&'static str> {
+fn protected(exe: &str) -> Option<(RefusalKind, &'static str)> {
     if SYSTEM_PREFIXES.iter().any(|p| exe.starts_with(p)) {
-        return Some("system executable");
+        return Some((RefusalKind::Protected, "system executable"));
     }
     if CRITICAL_NAMES.contains(&file_name(exe)) {
-        return Some("session process");
+        return Some((RefusalKind::Denylisted, "session process"));
     }
     if exe.is_empty() || !exe.starts_with('/') {
-        return Some("executable path unknown");
+        return Some((RefusalKind::Other, "executable path unknown"));
     }
     None
 }
@@ -539,14 +494,9 @@ fn parse_procargs_env(buf: &[u8], key: &str) -> Option<Option<String>> {
     Some(None)
 }
 
-/// Plan against the live process list.
-pub fn plan(owner: u32) -> Result<Plan, Refusal> {
-    plan_with(owner, Context::current())
-}
-
-/// [`plan`] for another notion of "Kimochi" (tests plan for their own children).
-pub fn plan_with(owner: u32, ctx: Context) -> Result<Plan, Refusal> {
-    plan_from(&snapshot(), owner, ctx, &|pid| wine_prefix(pid))
+/// Plan against the live process list, as Kimochi (`ctx`).
+pub fn plan_with(game: &GameRef, ctx: Context) -> Result<Plan, Refusal> {
+    plan_from(&snapshot(), game, ctx, &|pid| wine_prefix(pid))
 }
 
 // ---------------------------------------------------------------------------------------
@@ -564,14 +514,14 @@ fn live(id: &ProcIdentity) -> Live {
     match bsd_info(id.pid) {
         None => Live::Gone,
         Some(info) if info.pbi_status == SZOMB => Live::Gone,
-        Some(info) if start_us(&info) != id.start_us => Live::Different,
+        Some(info) if start_us(&info) != id.start => Live::Different,
         Some(info) => Live::Matches { stopped: info.pbi_status == SSTOP },
     }
 }
 
 #[cfg(test)]
 thread_local! {
-    /// A pid whose next signal fails with `EPERM`, for the rollback test.
+    /// A pid whose stop fails with `EPERM`, for the rollback test.
     static REFUSE_PID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
@@ -590,56 +540,69 @@ fn signal(pid: u32, sig: libc::c_int) -> Result<(), i32> {
     }
 }
 
-/// Stop every member of `plan`, owner first. All or nothing: on any failure everything this
-/// call stopped is continued again before the error is returned.
-pub fn suspend(plan: &Plan) -> Result<Suspended, PauseError> {
-    let began = Instant::now();
-    let mut stopped: Vec<ProcIdentity> = Vec::new();
-    let mut skipped: Vec<(ProcIdentity, &'static str)> = Vec::new();
+fn result(pid: u32, began: Instant, outcome: Result<(), i32>, note: &str) -> PidResult {
+    PidResult {
+        pid,
+        ok: outcome.is_ok(),
+        code: outcome.err().map(i64::from),
+        note: note.into(),
+        micros: began.elapsed().as_micros() as u64,
+    }
+}
 
-    let fail = |stopped: &[ProcIdentity], err: PauseError| -> PauseError {
+fn failure(message: &str, pid: u32, errno: Option<i32>, results: Vec<PidResult>) -> PauseError {
+    PauseError {
+        message: message.into(),
+        pid: Some(pid),
+        code: errno.map(i64::from),
+        refusal: (errno == Some(libc::EPERM)).then_some(RefusalKind::PermissionDenied),
+        results,
+    }
+}
+
+/// Stop every member of `plan`, owner first. All or nothing: on any failure everything this
+/// call stopped is continued again before the error is returned. Processes already stopped by
+/// someone else, gone, or recycled are left out of the result, so they are never continued.
+pub fn suspend_plan(plan: &Plan, ctx: Context) -> Result<Suspended, PauseError> {
+    let mut stopped: Vec<ProcIdentity> = Vec::new();
+    let mut results: Vec<PidResult> = Vec::new();
+
+    let rollback = |stopped: &[ProcIdentity], err: PauseError| -> PauseError {
         let _ = resume_identities(stopped);
         err
     };
 
     for (i, m) in plan.members.iter().enumerate() {
         let owner = i == 0;
-        match live(&m.identity) {
-            Live::Gone | Live::Different if owner => return Err(fail(&stopped, PauseError::OwnerChanged)),
-            Live::Gone => skipped.push((m.identity.clone(), "exited")),
-            Live::Different => skipped.push((m.identity.clone(), "pid reused")),
-            Live::Matches { stopped: true } => skipped.push((m.identity.clone(), "already stopped")),
-            Live::Matches { stopped: false } => match signal(m.identity.pid, libc::SIGSTOP) {
-                Ok(()) => stopped.push(m.identity.clone()),
-                Err(libc::ESRCH) if !owner => skipped.push((m.identity.clone(), "exited")),
-                Err(libc::ESRCH) => return Err(fail(&stopped, PauseError::OwnerChanged)),
-                Err(errno) => return Err(fail(&stopped, PauseError::Signal { pid: m.identity.pid, errno })),
+        let began = Instant::now();
+        let pid = m.id.pid;
+        match live(&m.id) {
+            Live::Gone | Live::Different if owner => {
+                return Err(rollback(&stopped, failure("the game's process changed", pid, None, results)));
+            }
+            Live::Gone => results.push(result(pid, began, Ok(()), "exited")),
+            Live::Different => results.push(result(pid, began, Ok(()), "pid reused, skipped")),
+            Live::Matches { stopped: true } => results.push(result(pid, began, Ok(()), "already stopped, not ours")),
+            Live::Matches { stopped: false } => match signal(pid, libc::SIGSTOP) {
+                Ok(()) => {
+                    results.push(result(pid, began, Ok(()), ""));
+                    stopped.push(m.id.clone());
+                }
+                Err(libc::ESRCH) if !owner => results.push(result(pid, began, Ok(()), "exited")),
+                Err(errno) => {
+                    results.push(result(pid, began, Err(errno), "kill(SIGSTOP)"));
+                    let message = if errno == libc::ESRCH { "the game's process exited" } else { "could not stop" };
+                    return Err(rollback(&stopped, failure(message, pid, Some(errno), results)));
+                }
             },
         }
     }
 
-    // A process started between the snapshot and the owner's stop escaped the plan: take
-    // a second look at the tree and stop newcomers. Cheap, and the owner can no longer
-    // spawn by now.
-    let mut late = 0;
+    // A process started between the snapshot and the owner's stop escaped the plan.
     if !stopped.is_empty() {
-        let records = snapshot();
-        let known: HashSet<u32> = plan.members.iter().map(|m| m.identity.pid).collect();
-        if let Ok(again) = plan_from(&records, plan.owner().pid, plan.ctx, &|pid| wine_prefix(pid)) {
-            for m in again.members.into_iter().filter(|m| !known.contains(&m.identity.pid)) {
-                let Some(r) = records.iter().find(|r| r.pid == m.identity.pid) else { continue };
-                if r.stopped {
-                    continue;
-                }
-                match signal(m.identity.pid, libc::SIGSTOP) {
-                    Ok(()) => {
-                        stopped.push(m.identity);
-                        late += 1;
-                    }
-                    Err(libc::ESRCH) => {}
-                    Err(errno) => return Err(fail(&stopped, PauseError::Signal { pid: m.identity.pid, errno })),
-                }
-            }
+        let known: HashSet<u32> = plan.members.iter().map(|m| m.id.pid).collect();
+        if let Err((pid, errno)) = stop_newcomers(&plan.game, ctx, &known, &mut stopped, &mut results) {
+            return Err(rollback(&stopped, failure("could not stop", pid, Some(errno), results)));
         }
     }
 
@@ -653,18 +616,50 @@ pub fn suspend(plan: &Plan) -> Result<Suspended, PauseError> {
                     std::thread::sleep(Duration::from_millis(2))
                 }
                 Live::Matches { stopped: false } => {
-                    return Err(fail(&stopped, PauseError::NotStopped { pid: id.pid }));
+                    let err = failure("did not stop in time", id.pid, None, results);
+                    return Err(rollback(&stopped, err));
                 }
             }
         }
     }
 
-    Ok(Suspended { stopped, skipped, late, took: began.elapsed() })
+    Ok(Suspended { game: plan.game.clone(), members: stopped, mechanism: MECHANISM.into(), results })
 }
 
-/// Continue everything [`suspend`] stopped, in reverse order.
-pub fn resume(suspended: &Suspended) -> Result<(), PauseError> {
-    resume_identities(&suspended.stopped)
+/// Re-plan the game and stop processes that are not in `known` yet (children started during
+/// the pause, or in the moment before the owner stopped). Appends to `stopped`.
+fn stop_newcomers(
+    game: &GameRef,
+    ctx: Context,
+    known: &HashSet<u32>,
+    stopped: &mut Vec<ProcIdentity>,
+    results: &mut Vec<PidResult>,
+) -> Result<usize, (u32, i32)> {
+    let records = snapshot();
+    let Ok(again) = plan_from(&records, game, ctx, &|pid| wine_prefix(pid)) else { return Ok(0) };
+    let mut added = 0;
+    for m in again.members.into_iter().filter(|m| !known.contains(&m.id.pid)) {
+        if stopped.iter().any(|s| s.pid == m.id.pid) {
+            continue;
+        }
+        if records.iter().any(|r| r.pid == m.id.pid && r.stopped) {
+            continue;
+        }
+        let began = Instant::now();
+        match signal(m.id.pid, libc::SIGSTOP) {
+            Ok(()) => {
+                results.push(result(m.id.pid, began, Ok(()), "late member"));
+                stopped.push(m.id);
+                added += 1;
+            }
+            Err(libc::ESRCH) => {}
+            Err(errno) => {
+                results.push(result(m.id.pid, began, Err(errno), "kill(SIGSTOP), late member"));
+                return Err((m.id.pid, errno));
+            }
+        }
+    }
+    Ok(added)
 }
 
 /// Continue each process that still is the one its identity names, last first, and check
@@ -672,13 +667,16 @@ pub fn resume(suspended: &Suspended) -> Result<(), PauseError> {
 /// effort: one failure does not stop the others. Also the recovery path for a journal.
 pub fn resume_identities(ids: &[ProcIdentity]) -> Result<(), PauseError> {
     let mut pending: Vec<&ProcIdentity> = ids.iter().rev().collect();
-    for attempt in 0..4 {
+    let mut last_errno: Option<i32> = None;
+    for attempt in 0..4u64 {
         if attempt > 0 {
             std::thread::sleep(Duration::from_millis(10 * attempt));
         }
         for id in &pending {
             if let Live::Matches { stopped: true } = live(id) {
-                let _ = signal(id.pid, libc::SIGCONT);
+                if let Err(errno) = signal(id.pid, libc::SIGCONT) {
+                    last_errno = Some(errno);
+                }
             }
         }
         let deadline = Instant::now() + SETTLE / 2;
@@ -695,18 +693,84 @@ pub fn resume_identities(ids: &[ProcIdentity]) -> Result<(), PauseError> {
             return Ok(());
         }
     }
-    Err(PauseError::StillStopped { pids: pending.iter().map(|id| id.pid).collect() })
+    let results = pending
+        .iter()
+        .map(|id| PidResult {
+            pid: id.pid,
+            ok: false,
+            code: last_errno.map(i64::from),
+            note: "still stopped".into(),
+            micros: 0,
+        })
+        .collect();
+    let pids: Vec<String> = pending.iter().map(|id| id.pid.to_string()).collect();
+    Err(PauseError {
+        message: format!("still stopped after resume: {}", pids.join(", ")),
+        pid: pending.first().map(|id| id.pid),
+        code: last_errno.map(i64::from),
+        refusal: None,
+        results,
+    })
 }
 
-/// One line per process for the verbose log: pid, role, executable; then the exclusions.
+/// Called while paused: stop late children, and stop again any member someone continued.
+pub fn refresh_suspended(suspended: &mut Suspended, ctx: Context) -> Result<(), PauseError> {
+    let mut results = Vec::new();
+    for id in &suspended.members {
+        if let Live::Matches { stopped: false } = live(id) {
+            let began = Instant::now();
+            let outcome = signal(id.pid, libc::SIGSTOP);
+            results.push(result(id.pid, began, outcome, "continued by someone else; stopped again"));
+        }
+    }
+    let known: HashSet<u32> = suspended.members.iter().map(|id| id.pid).collect();
+    let mut stopped = std::mem::take(&mut suspended.members);
+    let outcome = stop_newcomers(&suspended.game, ctx, &known, &mut stopped, &mut results);
+    suspended.members = stopped;
+    suspended.results.extend(results.iter().cloned());
+    match outcome {
+        Ok(_) => Ok(()),
+        Err((pid, errno)) => Err(failure("could not stop a late member", pid, Some(errno), results)),
+    }
+}
+
+/// One line per process for the verbose log: pid, role, why, executable; then the exclusions.
 pub fn describe(plan: &Plan) -> Vec<String> {
     let mut lines: Vec<String> = plan
         .members
         .iter()
-        .map(|m| format!("stop pid={} role={:?} exe={}", m.identity.pid, m.role, m.identity.exe))
+        .map(|m| format!("stop pid={} role={:?} why={} exe={}", m.id.pid, m.role, m.why, m.id.exe))
         .collect();
     lines.extend(plan.excluded.iter().map(|e| format!("skip pid={} why={} exe={}", e.pid, e.why, e.exe)));
     lines
+}
+
+/// The macOS backend. Holds no per-pause state: a stopped process stays stopped by itself, and
+/// every signal is re-checked against the process's identity.
+pub struct MacBackend {
+    /// Who "Kimochi" is for the planner: the app when planning, the guard when refreshing.
+    ctx: Context,
+}
+
+impl Backend for MacBackend {
+    fn name(&self) -> &'static str {
+        "macos-sigstop"
+    }
+    fn plan(&self, game: &GameRef) -> Result<Plan, Refusal> {
+        plan_with(game, self.ctx)
+    }
+    fn suspend(&self, plan: &Plan) -> Result<Suspended, PauseError> {
+        suspend_plan(plan, self.ctx)
+    }
+    fn resume(&self, suspended: &Suspended) -> Result<(), PauseError> {
+        resume_identities(&suspended.members)
+    }
+    fn identity(&self, pid: u32) -> Option<ProcIdentity> {
+        identity(pid)
+    }
+    fn refresh(&self, suspended: &mut Suspended) -> Result<(), PauseError> {
+        refresh_suspended(suspended, self.ctx)
+    }
 }
 
 #[cfg(test)]
