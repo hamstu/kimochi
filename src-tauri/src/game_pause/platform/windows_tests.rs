@@ -740,3 +740,15 @@ mod gui {
         search.found
     }
 }
+
+/// Prints the real plan (or refusal) for `KIMOCHI_PAUSE_PLAN_PID` as JSON, for driving the guard
+/// by hand on a real game (`docs/game-pause` scripts). Read-only.
+#[test]
+#[ignore]
+fn print_plan() {
+    let Some(pid) = std::env::var("KIMOCHI_PAUSE_PLAN_PID").ok().and_then(|p| p.parse().ok()) else { return };
+    match WindowsBackend::default().plan(&GameRef { pid: Some(pid), ..Default::default() }) {
+        Ok(plan) => println!("PLAN {}", serde_json::to_string(&plan).unwrap()),
+        Err(refusal) => println!("REFUSAL {}", serde_json::to_string(&refusal).unwrap()),
+    }
+}
