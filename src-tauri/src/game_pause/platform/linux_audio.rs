@@ -267,13 +267,22 @@ fn run(mut command: Command) -> Result<String, String> {
     }
 }
 
+/// A PipeWire tool from the host, without the AppImage runtime's library path: with it, the
+/// host's `pw-*` tools load the bundled libpipewire, which cannot find the host's SPA plugins
+/// ("can't make support.system handle"), so nothing could be parked or put back.
+fn host(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD");
+    command
+}
+
 fn dump() -> Result<Value, String> {
-    let text = run(Command::new("pw-dump"))?;
+    let text = run(host("pw-dump"))?;
     serde_json::from_str(&text).map_err(|e| format!("pw-dump: {e}"))
 }
 
 fn apply(change: &Change) -> Result<(), String> {
-    let mut command = Command::new("pw-metadata");
+    let mut command = host("pw-metadata");
     command.args(["-n", "default"]);
     match &change.set {
         Some((value, kind)) => {
@@ -321,7 +330,7 @@ impl Drop for Parked {
 fn spawn_owner(name: &str) -> Result<Child, String> {
     use std::io::Write;
     use std::os::unix::process::CommandExt;
-    let mut command = Command::new("pw-cli");
+    let mut command = host("pw-cli");
     command.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
     unsafe {
         command.pre_exec(|| {
