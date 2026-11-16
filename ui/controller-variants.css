@@ -97,8 +97,8 @@
   --cm-shadow-pop: 0 1px 2px rgb(15 17 26 / 0.1), 0 10px 28px -8px rgb(15 17 26 / 0.3);
   --cm-scrim: rgb(15 17 26 / 0.32);
   --cm-ring-bright: color-mix(in srgb, var(--cm-ring) 80%, #000);
-  --cm-ring-lit-from: rgb(var(--cm-bg-rgb) / 0.5);
-  --cm-ring-lit-to: rgba(var(--cm-ring-rgb), 0.5);
+  --cm-ring-lit-from: rgba(var(--cm-ring-rgb), 0.55);
+  --cm-ring-lit-to: rgba(var(--cm-ring-rgb), 0.95);
 }
 
 /* --- the ring ------------------------------------------------------- */
@@ -548,9 +548,17 @@
   background: none;
   box-shadow: none;
 }
+/* Icons rest in a greyed tint of the ring's colour; the chosen one grows, bright white. */
+[data-cm-variant='halo'] .cm-item {
+  color: color-mix(in srgb, var(--cm-ring) 50%, var(--cm-text-2));
+}
+[data-cm-variant='halo'][data-cm-theme='light'] .cm-item {
+  color: color-mix(in srgb, var(--cm-ring) 45%, var(--cm-text-3));
+}
 [data-cm-variant='halo'] .cm-item.cm-selected .cm-icon {
-  color: var(--cm-text);
-  transform: scale(1.14);
+  color: #fff;
+  transform: scale(1.28);
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.35));
 }
 [data-cm-variant='halo'] .cm-item[data-lit] .cm-icon::after {
   bottom: 6px;
