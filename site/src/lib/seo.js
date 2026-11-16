@@ -6,6 +6,10 @@
  * Every fact here must already be on the site.
  */
 import { FAQ } from '../content/faq.js'
+import { LINUX_HOOKER_FAQ } from '../content/linuxHooker.js'
+
+/** The Linux and Steam Deck text hooking page, which carries its own FAQPage. */
+export const LINUX_HOOKER_PATH = '/linux-steam-deck-text-hooker'
 
 /** The production origin. No trailing slash. */
 export const SITE_URL = 'https://kimochiapp.com'
@@ -46,7 +50,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-11-12'
+    updated: '2026-11-16'
   },
   {
     path: '/faq',
@@ -56,7 +60,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-21',
-    updated: '2026-11-12'
+    updated: '2026-11-16'
   },
   {
     path: '/compare',
@@ -77,6 +81,16 @@ export const ROUTES = [
     render: 'full',
     published: '2026-10-20',
     updated: '2026-11-05'
+  },
+  {
+    path: LINUX_HOOKER_PATH,
+    title: 'Text hooking Japanese games on Linux and Steam Deck · Kimochi',
+    description:
+      'Hook Windows visual novels and games running through Proton or Wine on Linux and Steam Deck, with no Wine-prefix setup. Kimochi is free and open source, and runs LunaHook for you with Yomitan lookups and Anki cards.',
+    index: true,
+    render: 'full',
+    published: '2026-11-16',
+    updated: '2026-11-16'
   },
   {
     path: '/privacy',
@@ -270,12 +284,13 @@ const APP = {
 /**
  * FAQPage from the published questions (the ones with an answer).
  * @param {typeof FAQ} faq
+ * @param {string} [path] The page the questions are on.
  */
-export function faqPage(faq) {
+export function faqPage(faq, path = '/faq') {
   return {
     '@type': 'FAQPage',
-    '@id': `${SITE_URL}/faq#faq`,
-    url: `${SITE_URL}/faq`,
+    '@id': `${canonicalUrl(path)}#faq`,
+    url: canonicalUrl(path),
     isPartOf: { '@id': WEBSITE_ID },
     mainEntity: faq.map((item) => ({
       '@type': 'Question',
@@ -287,7 +302,7 @@ export function faqPage(faq) {
 
 /**
  * The JSON-LD graph for a route: the site and its maker everywhere, the app on home and compare,
- * the FAQ on /faq. Null for pages that are not indexed.
+ * the FAQ on /faq, and its own questions on the Linux text hooking page. Null for pages that are not indexed.
  * @param {RouteMeta} route
  */
 export function jsonLd(route) {
@@ -296,6 +311,7 @@ export function jsonLd(route) {
   const graph = [WEBSITE, PERSON]
   if (route.path === '/' || route.path === '/compare') graph.push(APP)
   if (route.path === '/faq') graph.push(APP, faqPage(FAQ))
+  if (route.path === LINUX_HOOKER_PATH) graph.push(faqPage(LINUX_HOOKER_FAQ, LINUX_HOOKER_PATH))
   graph.push({
     '@type': 'WebPage',
     '@id': `${canonicalUrl(route.path)}#page`,

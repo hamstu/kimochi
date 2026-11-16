@@ -4,7 +4,7 @@
 import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { NOT_FOUND, ROUTES, canonicalUrl, escapeHtml, outputFile } from '../src/lib/seo.js'
+import { LINUX_HOOKER_PATH, NOT_FOUND, ROUTES, canonicalUrl, escapeHtml, outputFile } from '../src/lib/seo.js'
 
 const dist = fileURLToPath(new URL('../dist', import.meta.url))
 const problems = []
@@ -33,7 +33,7 @@ for (const route of [...ROUTES, NOT_FOUND]) {
   const types = ld.flatMap((d) => d['@graph'] ?? [d]).map((n) => n['@type'])
   if (route.index && !types.includes('WebSite')) fail('no JSON-LD WebSite')
   if (route.path === '/' && !types.includes('SoftwareApplication')) fail('no SoftwareApplication')
-  if (route.path === '/faq' && !types.includes('FAQPage')) fail('no FAQPage')
+  if ((route.path === '/faq' || route.path === LINUX_HOOKER_PATH) && !types.includes('FAQPage')) fail('no FAQPage')
   const root = html.match(/<div id="root">([\s\S]*)<\/div>\s*<\/body>/)?.[1] ?? ''
   const text = root
     .replace(/<[^>]+>/g, ' ')

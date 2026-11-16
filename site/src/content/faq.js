@@ -107,6 +107,7 @@ export const FAQ = [
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
       { href: docsUrl('/reading/text-hooker/'), label: 'Text hooking' },
+      { href: '/linux-steam-deck-text-hooker', label: 'Text hooking on Linux and Steam Deck' },
       { href: docsUrl('/reading/texthookers/'), label: 'Texthookers' }
     ]
   },
