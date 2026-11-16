@@ -75,6 +75,20 @@ export async function prepareExtensionHost() {
   })
 }
 
+/**
+ * Each `ui/*.ts` module is compiled alone (its imports stay imports of the other modules), except
+ * that a JSON import is inlined: dist/ui is served to the browser as is, which cannot import JSON
+ * (ui/hachidori-languages.ts reads `extensions/hachidori.languages.json`).
+ */
+const inlineJson = {
+  name: 'inline-json',
+  setup(build) {
+    build.onResolve({ filter: /.*/ }, (args) =>
+      args.kind === 'entry-point' || args.path.endsWith('.json') ? undefined : { path: args.path, external: true }
+    )
+  }
+}
+
 /** `ui/` → `dist/ui/`, with every `ui/*.ts` module compiled to `dist/ui/*.js`. */
 export async function prepareUi() {
   await cp(at('ui'), at('dist/ui'), { recursive: true })
@@ -86,7 +100,9 @@ export async function prepareUi() {
       entryPoints: [at('ui', name)],
       outfile: at('dist/ui', name.replace(/\.ts$/, '.js')),
       format: 'esm',
-      target: 'safari17'
+      target: 'safari17',
+      bundle: true,
+      plugins: [inlineJson]
     })
   }
   await prepareMangaFont()

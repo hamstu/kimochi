@@ -233,6 +233,36 @@ export function runsOnInto(unit, next) {
 }
 
 /**
+ * Where `offset` of a unit's text is in the text nodes it is drawn with (`nodes`, in order: a box
+ * whose glyphs were placed one by one is several, ui/render.js `appendRunText`), as `{node,
+ * offset}` for a Range. At a boundary between two nodes a start is the beginning of the second and
+ * an `end` the end of the first, so a range covers no node it takes nothing from. Past the text it
+ * is the end of the last node; null when there are no nodes.
+ */
+export function nodePosition(nodes, offset, end = false) {
+  let before = 0
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index]
+    const within = offset - before
+    const last = index === nodes.length - 1
+    if (within < node.length || (within === node.length && (end || last)) || last)
+      return { node, offset: Math.max(0, Math.min(node.length, within)) }
+    before += node.length
+  }
+  return null
+}
+
+/** The offset in a unit's text of `offset` in `node`, one of its text nodes (`nodes`); -1 for another node. */
+export function offsetInNodes(nodes, node, offset) {
+  let before = 0
+  for (const candidate of nodes) {
+    if (candidate === node) return before + offset
+    before += candidate.length
+  }
+  return -1
+}
+
+/**
  * What goes between two boxes' texts read on from one into the next: nothing in Japanese, where a
  * word OCR split in two runs straight on; a space in a language that spaces its words, unless one
  * side has it already, since two boxes there are two words (or two lines).
@@ -483,5 +513,7 @@ export default {
   readingUnits,
   dominantVertical,
   segmentAcross,
-  runsOnInto
+  runsOnInto,
+  nodePosition,
+  offsetInNodes
 }

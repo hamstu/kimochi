@@ -59,6 +59,18 @@ pub fn driver() -> Option<&'static str> {
     nat::driver_name()
 }
 
+/// Capture identity does not imply desktop geometry. Niri currently omits tiled positions.
+pub fn follows_windows() -> bool {
+    driver() != Some("niri")
+        || nat::inventory().is_some_and(|i| !i.windows.is_empty() && i.windows.iter().all(|w| w.bounds.is_some()))
+}
+
+/// Per-source answer: a compositor may know positions for floating windows but not tiled ones.
+pub fn geometry_available(source_id: &str) -> Option<bool> {
+    let handle = nat::window_handle(source_id)?;
+    Some(inventory()?.window(&handle)?.bounds.is_some())
+}
+
 pub fn is_source(id: &str) -> bool {
     nat::is_native_id(id)
 }
@@ -165,8 +177,18 @@ pub fn window_open(id: &SourceId) -> bool {
 pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
     let inventory = inventory()?;
     let window = inventory.window(id.handle())?;
-    let rect = overlay_rect(&inventory, window, window.bounds?)?;
-    Some((rect, drawable(&inventory, window)))
+    // Missing geometry means "hide", not "closed". In particular, Niri may withhold positions
+    // during a transition; publish a hidden state so yesterday's overlay cannot stay on screen.
+    let bounds = window.bounds.or_else(|| {
+        window.output.as_deref().and_then(|output| inventory.output(output)).map(|output| Rect {
+            x: output.bounds.x,
+            y: output.bounds.y,
+            width: 0.0,
+            height: 0.0,
+        })
+    })?;
+    let rect = overlay_rect(&inventory, window, bounds)?;
+    Some((rect, window.bounds.is_some() && drawable(&inventory, window)))
 }
 
 /// A native frame's `source_bounds` in the overlay's coordinates (capture-core reports global).

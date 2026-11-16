@@ -35,9 +35,12 @@ export async function importLocalZip(win, message, send, report) {
       bytes += part.length
       chunks++
     }
+    // The profile the page imports into (the language Settings shows): without it Hachidori puts
+    // the dictionary in Japanese, whatever language it is for.
     const reply = await request('hd_upload_import', {
       fileName: message.fileName,
-      importDecision: message.importDecision
+      importDecision: message.importDecision,
+      ...(typeof message.profileId === 'string' ? { profileId: message.profileId } : {})
     })
     report({ check: 'ext-host-local-archive', bytes, chunks, ms: Date.now() - started, ok: reply?.ok === true })
     return reply

@@ -94,8 +94,18 @@ function YomitanApiSetup(): JSX.Element {
   )
 }
 
+/**
+ * Hachidori in another language: its recommended dictionaries are Japanese, so the language's
+ * profile (ui/hachidori-languages.ts) starts empty and its own dictionaries are imported.
+ */
+const hachidoriLanguageSetup = (language: Language): string =>
+  `Hachidori keeps ${language.name} apart from Japanese, with its own dictionaries and settings. Import ${aDictionaryFor(language.name)} in its settings: a Yomitan dictionary or an MDict file.`
+
 function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
   const name = DICTIONARY_ENGINES[engine].name
+  const [language] = useLanguage()
+  const setup =
+    engine === 'hachidori' && language.code !== 'ja' ? hachidoriLanguageSetup(language) : ENGINE_SETUP[engine]
   const runtime = useDictionaryReadiness(engine)
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +116,7 @@ function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
   return (
     <Step title={`Set up ${name}`} lede={`Kimochi looks words up with ${name}.`}>
       <div className={style.block}>
-        <p className={style.text}>{ENGINE_SETUP[engine]}</p>
+        <p className={style.text}>{setup}</p>
         <DictionaryReadiness engine={engine} />
         {runtime.settingsReady && (
           <div>

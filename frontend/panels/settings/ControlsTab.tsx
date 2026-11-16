@@ -3,11 +3,14 @@ import type { ReactNode } from 'react'
 import { SettingsPage } from '@kit'
 import { ShortcutsSections } from './ShortcutsSections'
 import { GamepadSections } from './GamepadSections'
+import { RadialMenuSection } from './RadialMenuSection'
 
 export function ControlsTab(): ReactNode {
   return (
     <SettingsPage title="Shortcuts & Controls" description="Keyboard shortcuts and a game controller.">
       <ShortcutsSections />
+      {/* Below the shortcut that opens the radial menu. */}
+      <RadialMenuSection />
       <GamepadSections />
     </SettingsPage>
   )

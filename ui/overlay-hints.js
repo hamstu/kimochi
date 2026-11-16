@@ -98,8 +98,8 @@ export function createOverlayHints(parent, hooks) {
       ])
       line.replaceChildren(
         ...(parts.length
-          ? [document.createTextNode('Press '), ...parts, document.createTextNode(' for the game menu to read words')]
-          : [document.createTextNode('Choose a button for the game menu in Kimochi’s Settings to read words')])
+          ? [document.createTextNode('Press '), ...parts, document.createTextNode(' for the radial menu to read words')]
+          : [document.createTextNode('Choose a button for the radial menu in Kimochi’s Settings to read words')])
       )
     },
     /**

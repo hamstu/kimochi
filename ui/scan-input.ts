@@ -130,14 +130,15 @@ export function scanPointerInit(
 }
 
 /**
- * Whether hover lookup (`overlayHoverLookup`) is on for this overlay. Not in Gaming Mode (the
- * resting "pointer" is the Deck trackpad's mouse) and not on Wayland, where native reads the
- * pointer only while the key is held and never says `hover`. There Settings hides the switch, so
- * a value left from before (or written by hand) must not turn off the overlay's click-away
- * (`catching`) or change its hint either. Only `true` turns it on.
+ * Hover lookup follows the desktop setting except on Wayland, where only the automatic
+ * fallback without a modifier feed uses it. Gaming Mode keeps controller-driven lookups.
  */
-export function hoverLookupApplies(session: { gamescope: boolean; wayland: boolean }, setting: unknown): boolean {
-  return setting === true && !session.gamescope && !session.wayland
+export function hoverLookupApplies(
+  session: { gamescope: boolean; wayland: boolean; lookupOnHover?: boolean },
+  setting: unknown
+): boolean {
+  // The fallback must also disable the popup click catcher so pointer-leave can dismiss it.
+  return !session.gamescope && (session.wayland ? session.lookupOnHover === true : setting === true)
 }
 
 /** The lookup keys `overlayLookupKey` names, as a sample carries them. */

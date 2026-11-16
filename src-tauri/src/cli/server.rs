@@ -228,9 +228,10 @@ fn status(app: &tauri::AppHandle, service: &Shared) -> Value {
         .as_str()
         .map(str::to_string)
         .unwrap_or_else(|| if reader["clipboardEnabled"] == json!(true) { "clipboard" } else { "ocr" }.to_string());
-    // The dictionary in use: Hachidori and 10ten read Japanese only, so in another language the
-    // windows run Built-in Yomitan in their place (`extensions::selected_engine`); the stored
-    // choice is told too when it is not the one in use.
+    // The dictionary in use: in a language Hachidori or 10ten cannot read (10ten reads Japanese
+    // only, Hachidori the languages it has packs for), the windows run Built-in Yomitan in their
+    // place (`extensions::selected_engine`); the stored choice is told too when it is not the one
+    // in use.
     let chosen = settings.get("yomitanSettings").ok().flatten().map(|v| v["popupType"].clone());
     let language = &crate::language::current(settings).code;
     let stands_in = chosen

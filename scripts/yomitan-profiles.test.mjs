@@ -241,12 +241,18 @@ test('codes, links and options are read defensively', () => {
   )
 })
 
-const { DICTIONARY_ENGINES, dictionaryEngineReads, effectiveDictionaryEngine, dictionaryEngineLanguageReason } =
-  await load('settings.ts')
+const {
+  DICTIONARY_ENGINES,
+  dictionaryEngineReads,
+  effectiveDictionaryEngine,
+  dictionaryEngineLanguageReason,
+  dictionaryEngineLanguageHint
+} = await load('settings.ts')
 
-test('10ten and Hachidori read Japanese only; Yomitan stands in for them in another language', () => {
+test('10ten reads Japanese only, Hachidori its packs; Yomitan stands in for them in another language', () => {
   assert.deepEqual(DICTIONARY_ENGINES.tenten.languages, ['ja'])
-  assert.deepEqual(DICTIONARY_ENGINES.hachidori.languages, ['ja'])
+  for (const code of ['ja', 'ko', 'zh-Hans', 'zh-Hant', 'en', 'es', 'ru'])
+    assert.ok(DICTIONARY_ENGINES.hachidori.languages.includes(code), code)
   assert.equal(DICTIONARY_ENGINES.yomitan.languages, undefined)
   assert.equal(DICTIONARY_ENGINES['custom-api'].languages, undefined)
   for (const engine of Object.keys(DICTIONARY_ENGINES)) {
@@ -254,10 +260,15 @@ test('10ten and Hachidori read Japanese only; Yomitan stands in for them in anot
     assert.equal(dictionaryEngineLanguageReason(engine, 'ja'), null)
   }
   assert.equal(effectiveDictionaryEngine('tenten', 'en'), 'yomitan')
-  assert.equal(effectiveDictionaryEngine('hachidori', 'zh-Hans'), 'yomitan')
+  assert.equal(effectiveDictionaryEngine('hachidori', 'zh-Hans'), 'hachidori')
+  assert.equal(effectiveDictionaryEngine('hachidori', 'yue'), 'yomitan')
   assert.equal(effectiveDictionaryEngine('custom-api', 'ko'), 'custom-api')
   assert.equal(dictionaryEngineReads('yomitan', 'ru'), true)
   assert.equal(dictionaryEngineLanguageReason('tenten', 'en'), '10ten reads Japanese only.')
+  assert.equal(dictionaryEngineLanguageHint('tenten', 'en'), 'Japanese only')
+  assert.equal(dictionaryEngineLanguageReason('hachidori', 'yue'), 'Hachidori doesn’t read Cantonese.')
+  assert.equal(dictionaryEngineLanguageHint('hachidori', 'yue'), 'No Cantonese')
+  assert.equal(dictionaryEngineLanguageHint('hachidori', 'zh-Hans'), null)
   // An unknown code reads as Japanese.
   assert.equal(effectiveDictionaryEngine('tenten', 'xx'), 'tenten')
 })

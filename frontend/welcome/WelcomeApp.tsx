@@ -44,6 +44,8 @@ import { AccessibilityWhy, ScreenRecordingWhy } from './PermissionWhy'
 import SteamLibraryStep from './SteamLibraryStep'
 import { STEAM_ROUTE } from './steamRoute'
 import KimochiLogo from '../components/KimochiLogo'
+import { MoveToApplicationsDialog } from '../components/MoveToApplicationsDialog'
+import { useAppLocation } from '../bridge/appLocation'
 import Step from './Step'
 import { StepActions } from './StepActions'
 import { StepActionsSlot } from './stepActionsSlot'
@@ -512,6 +514,8 @@ export default function WelcomeApp(): JSX.Element {
   const contentRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
+  // Outside Applications (macOS) the Screen Recording step cannot work: the move comes first.
+  const appLocation = useAppLocation()
 
   // Routes replace the step, but keep the scrolling surface and footer. Start each step at
   // its heading so keyboard and screen-reader users do not remain on a removed action (or Back).
@@ -592,6 +596,7 @@ export default function WelcomeApp(): JSX.Element {
           <div ref={setSlot} className={style.barActions} />
         </footer>
       </div>
+      <MoveToApplicationsDialog location={appLocation} />
     </StepActionsSlot.Provider>
   )
 }

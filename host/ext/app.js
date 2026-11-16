@@ -420,6 +420,18 @@ export function installApp(win, { engine, descriptor }) {
       .catch((error) => report({ check: 'ext-host-open-failed', error: describe(error) }))
   }
   api.clickAction = () => hub?.clickAction()
+  /**
+   * The engine's own storage and messages, as a content script of it sees them: what
+   * ui/hachidori-languages.ts reads and sends to keep Hachidori in the language being learned.
+   */
+  api.extension = context
+    ? {
+        storage: (keys) => context.chrome.storage.local.get(keys),
+        send: (message) => context.chrome.runtime.sendMessage(message),
+        // Hachidori's reader-options.js, one of its content scripts here: its reading of the flags.
+        experimental: (stored) => win.HDReaderOptions?.normaliseExperimental?.(stored) ?? stored
+      }
+    : null
   api.status = () => (hub ? hub.status() : { ...relay?.status, hub: relay?.status.hub ?? null })
 
   win.__kimochiExtensionHost = api

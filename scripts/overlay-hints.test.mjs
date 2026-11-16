@@ -91,17 +91,17 @@ test('Gaming Mode names the game-menu buttons instead of Shift, at handheld size
   const hints = createOverlayHints(new Element('body'), { onDismiss() {} })
   hints.gaming(['L4'])
   hints.sync(true, true)
-  assert.equal(hints.element.textContent, 'Press L4 for the game menu to read words')
+  assert.equal(hints.element.textContent, 'Press L4 for the radial menu to read words')
   assert.ok(hints.element.classList.contains('overlay-hints-gaming'))
   hints.gaming(['View', 'Menu'])
-  assert.equal(hints.element.textContent, 'Press View + Menu for the game menu to read words')
+  assert.equal(hints.element.textContent, 'Press View + Menu for the radial menu to read words')
   assert.doesNotMatch(hints.element.textContent, /Shift/)
 })
 
 test('Gaming Mode with no button bound points to Settings', () => {
   const hints = createOverlayHints(new Element('body'), { onDismiss() {} })
   hints.gaming([])
-  assert.match(hints.element.textContent, /Choose a button for the game menu in Kimochi’s Settings/)
+  assert.match(hints.element.textContent, /Choose a button for the radial menu in Kimochi’s Settings/)
 })
 
 test('leaving Gaming Mode brings the Shift hint back', () => {

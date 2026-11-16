@@ -11,25 +11,30 @@
 const SVG = 'http://www.w3.org/2000/svg'
 /**
  * The ring's geometry (the Halo design, styled by controller-variants.css): the hub naming the
- * chosen item, the orbit the icons sit on, the halo fading out past the hub, and how far the
- * spokes stop short of the hub and of each icon.
+ * chosen item, the track round it (a band from HUB to INNER) that the marker fills as it slides,
+ * the donut of segments (from INNER to OUTER) the icons sit in on the orbit, how far the chosen
+ * segment stands out past the rim, and the size of the whole.
  */
 const HUB = 96
-const ORBIT = 198
+const INNER = 106
+const TRACK = (HUB + INNER) / 2
+export const ORBIT = 196
+const OUTER = 276
+const LIFT = 8
 const HALO = 292
-const SPOKE_IN = 6
-const SPOKE_OUT = 44
 /** How far the stick must lean before it points at an item. */
 export const AIM_THRESHOLD = 0.5
 /** How far past an item's edge the stick may stray before the next item takes over. */
 export const AIM_HYSTERESIS_DEGREES = 6
-/** How far the stick must lean before the pointer shows. */
+/** How far the stick must lean before the marker follows it. */
 const POINTER_THRESHOLD = 0.3
 /**
- * The pointer's time constant: it closes most of the gap to the stick within a frame or two,
- * enough to blend the controller's discrete reports into a smooth sweep without trailing it.
+ * The marker's time constant following the stick: it closes most of the gap within a frame or
+ * two, enough to blend the controller's discrete reports into a smooth sweep without trailing it.
  */
 const POINTER_SMOOTHING_MS = 18
+/** Its time constant gliding to an item chosen by the D-pad, the mouse or a drag. */
+const GLIDE_SMOOTHING_MS = 45
 
 /** Lucide icons: one for each menu item, and the read-along mark. */
 export const ICONS = {
@@ -101,8 +106,12 @@ function polar(degrees, radius) {
   return [radius * Math.cos(radians), radius * Math.sin(radians)]
 }
 
-/** An annular sector from `from` to `to` degrees, clockwise from the top. */
+/** An annular sector from `from` to `to` degrees, clockwise from the top; the whole ring at 360. */
 function sectorPath(from, to, outer, inner) {
+  if (to - from >= 360) {
+    const ring = (r) => `M0 ${-r}A${r} ${r} 0 1 1 0 ${r}A${r} ${r} 0 1 1 0 ${-r}Z`
+    return `${ring(outer)}${ring(inner)}`
+  }
   const [ax, ay] = polar(from, outer)
   const [bx, by] = polar(to, outer)
   const [cx, cy] = polar(to, inner)
@@ -126,11 +135,18 @@ export class RadialMenu {
     this.root = null
     this.items = []
     this.selected = -1
-    /** The pointer: where the stick points, where it is drawn, and the frame drawing it. */
+    /**
+     * The marker on the track: where it is headed (the stick, or the chosen item), where it is
+     * drawn, how quickly it closes the gap, and the frame drawing it.
+     */
     this.aimTarget = null
     this.aimDrawn = null
+    this.aimSmoothing = POINTER_SMOOTHING_MS
     this.aimFrame = 0
     this.aimTime = 0
+    /** Whether the stick is leaning far enough to steer the marker. */
+    this.stickAiming = false
+    this.span = 360
   }
 
   get open() {
@@ -157,9 +173,12 @@ export class RadialMenu {
     const size = HALO * 2
     ring.style.setProperty('--cm-size', `${size}px`)
     ring.style.setProperty('--cm-hub', `${HUB}px`)
+    ring.style.setProperty('--cm-track', `${TRACK}px`)
+    ring.style.setProperty('--cm-inner', `${INNER}px`)
     ring.style.setProperty('--cm-orbit', `${ORBIT}px`)
+    ring.style.setProperty('--cm-outer', `${OUTER}px`)
     ring.style.setProperty('--cm-halo', `${HALO}px`)
-    // The halo: a fading wash (and blur) outside the hub, behind the spokes and icons.
+    // The glass: the game blurred behind the hub and the donut, clear in the gap between.
     const glass = document.createElement('div')
     glass.className = 'cm-glass'
     ring.append(glass)
@@ -168,50 +187,64 @@ export class RadialMenu {
     svg.setAttribute('class', 'cm-wedges')
     svg.setAttribute('viewBox', `${-size / 2} ${-size / 2} ${size} ${size}`)
     const span = 360 / items.length
-    // Spokes fade from the hub out towards their icons.
+    this.span = span
+    // The chosen segment lights from its outer edge in, whichever way it faces: the gradient is
+    // round the ring's centre, so every segment's runs out along its own angle.
     svg.innerHTML = `
       <defs>
-        <radialGradient id="cm-spoke-fade" cx="0" cy="0" r="${ORBIT}" gradientUnits="userSpaceOnUse">
-          <stop offset="${HUB / ORBIT}" class="cm-fade-from"/>
-          <stop offset="1" class="cm-fade-to"/>
+        <radialGradient id="cm-lit" cx="0" cy="0" r="${OUTER + LIFT}" gradientUnits="userSpaceOnUse">
+          <stop offset="${INNER / (OUTER + LIFT)}" class="cm-lit-from"/>
+          <stop offset="1" class="cm-lit-to"/>
         </radialGradient>
-      </defs>`
-    // The wedges draw nothing: they are where the mouse points at an item.
+      </defs>
+      <circle class="cm-track" r="${TRACK}" stroke-width="${INNER - HUB}"/>
+      <circle class="cm-rim" r="${OUTER}"/>`
+    // The segments of the donut, each an item's, and where the mouse points at it. Each reaches
+    // past the rim, unseen, so the chosen one stands out beyond it.
     this.wedges = items.map((item, index) => {
       const middle = index * span
       const path = document.createElementNS(SVG, 'path')
-      path.setAttribute('d', sectorPath(middle - span / 2, middle + span / 2, HALO - 8, HUB))
+      path.setAttribute('d', sectorPath(middle - span / 2, middle + span / 2, OUTER + LIFT, INNER))
       path.setAttribute('class', 'cm-wedge')
       path.dataset.index = String(index)
       svg.append(path)
       return path
     })
-    this.spokes = items.map((item, index) => {
-      const [x1, y1] = polar(index * span, HUB + SPOKE_IN)
-      const [x2, y2] = polar(index * span, ORBIT - SPOKE_OUT)
-      const spoke = document.createElementNS(SVG, 'line')
-      Object.entries({ class: 'cm-spoke', x1, y1, x2, y2 }).forEach(([name, value]) =>
-        spoke.setAttribute(name, String(value))
-      )
-      svg.append(spoke)
-      return spoke
-    })
+    // Thin lines between the segments.
+    this.spokes =
+      items.length < 2
+        ? []
+        : items.map((item, index) => {
+            const [x1, y1] = polar(index * span - span / 2, INNER)
+            const [x2, y2] = polar(index * span - span / 2, OUTER)
+            const spoke = document.createElementNS(SVG, 'line')
+            Object.entries({ class: 'cm-spoke', x1, y1, x2, y2 }).forEach(([name, value]) =>
+              spoke.setAttribute(name, String(value))
+            )
+            svg.append(spoke)
+            return spoke
+          })
     const disc = document.createElementNS(SVG, 'circle')
     disc.setAttribute('class', 'cm-disc')
     disc.setAttribute('r', String(HUB))
     svg.append(disc)
     ring.append(svg)
 
-    // The pointer turns every frame the stick moves, so it is its own layer: rotating it
-    // repaints nothing else, the blurred halo behind it included.
+    // The marker: a bright bar filling the track, from the hub's edge to the chosen segment's and
+    // between its sides, with a notch pointing out into it. It turns every frame the stick moves,
+    // so it is its own layer: rotating it repaints nothing else, the blurred glass included.
     const pointer = document.createElement('div')
     pointer.className = 'cm-pointer'
-    pointer.style.setProperty('--cm-pointer-size', `${HUB * 2}px`)
-    pointer.innerHTML = `<svg viewBox="${-HUB} ${-HUB} ${HUB * 2} ${HUB * 2}" aria-hidden="true"><path d="M0 ${-HUB - 3}l-8 10h16z"/></svg>`
+    pointer.style.setProperty('--cm-pointer-size', `${INNER * 2}px`)
+    pointer.innerHTML = `<svg viewBox="${-INNER} ${-INNER} ${INNER * 2} ${INNER * 2}" aria-hidden="true">
+      <path class="cm-marker-arc" fill-rule="evenodd" d="${sectorPath(-span / 2, span / 2, INNER, HUB)}"/>
+      <path class="cm-marker-notch" d="M-11 ${-INNER + 1}L0 ${-INNER - 11}L11 ${-INNER + 1}Z"/>
+    </svg>`
     ring.append(pointer)
     this.pointer = pointer
     this.aimTarget = null
     this.aimDrawn = null
+    this.stickAiming = false
 
     this.labels = items.map((item, index) => {
       const [x, y] = polar(index * span, ORBIT)
@@ -270,28 +303,54 @@ export class RadialMenu {
   /** Point with the stick; a stick back at rest keeps whatever was pointed at last. */
   aim(x, y) {
     if (!this.open) return
-    const showing = Math.hypot(x, y) >= POINTER_THRESHOLD
-    this.pointer.classList.toggle('cm-aiming', showing)
-    if (showing) {
-      const degrees = stickDegrees(x, y)
-      if (this.aimDrawn === null) {
-        // Appearing: start where the stick is, not swinging in from wherever it last was.
-        this.aimDrawn = degrees
-        this.drawPointer()
-      }
-      this.aimTarget = degrees
-      this.animatePointer()
-    } else {
+    const steering = Math.hypot(x, y) >= POINTER_THRESHOLD
+    const was = this.stickAiming
+    this.stickAiming = steering
+    if (steering) this.pointAt(stickDegrees(x, y), POINTER_SMOOTHING_MS)
+    const index = itemAt(x, y, this.items.length, this.selected)
+    if (index >= 0) this.select(index)
+    else if (was && !steering) this.pointAtSelected()
+  }
+
+  /**
+   * Slide the marker to `degrees` (clockwise from the top), closing the gap with time constant
+   * `smoothing` (0: there at once). It appears where it is sent, rather than swinging in from
+   * where it last was.
+   */
+  pointAt(degrees, smoothing = GLIDE_SMOOTHING_MS) {
+    if (!this.root) return
+    this.pointer.classList.add('cm-aiming')
+    this.aimSmoothing = smoothing
+    this.aimTarget = degrees
+    // Appearing, or told to be there at once (0): no glide.
+    if (this.aimDrawn === null || smoothing <= 0) {
+      this.aimDrawn = degrees
+      this.drawPointer()
+      return
+    }
+    this.animatePointer()
+  }
+
+  /** The marker at the chosen item, or hidden with none chosen; the stick steers it otherwise. */
+  pointAtSelected() {
+    if (this.stickAiming || !this.root) return
+    if (this.selected >= 0) this.pointAt(this.selected * this.span)
+    else {
+      this.pointer.classList.remove('cm-aiming')
       this.aimTarget = null
       this.aimDrawn = null
     }
-    const index = itemAt(x, y, this.items.length, this.selected)
-    if (index >= 0) this.select(index)
   }
 
   /** Ease the pointer towards the stick, a frame at a time, until it is there. */
   animatePointer() {
     if (this.aimFrame) return
+    // Nowhere to animate (a document without frames): there at once.
+    if (typeof requestAnimationFrame !== 'function') {
+      this.aimDrawn = this.aimTarget
+      this.drawPointer()
+      return
+    }
     this.aimTime = performance.now()
     const step = (now) => {
       this.aimFrame = 0
@@ -303,7 +362,7 @@ export class RadialMenu {
       const settled = Math.abs(gap) < 0.05
       this.aimDrawn = settled
         ? this.aimTarget
-        : (this.aimDrawn + gap * (1 - Math.exp(-elapsed / POINTER_SMOOTHING_MS)) + 360) % 360
+        : (this.aimDrawn + gap * (1 - Math.exp(-elapsed / Math.max(this.aimSmoothing, 1))) + 360) % 360
       this.drawPointer()
       if (!settled) this.aimFrame = requestAnimationFrame(step)
     }
@@ -350,10 +409,6 @@ export class RadialMenu {
       wedge.classList.toggle('cm-disabled', !this.items[index].enabled)
     })
     this.labels.forEach((label, index) => label.classList.toggle('cm-selected', index === this.selected))
-    this.spokes.forEach((spoke, index) => {
-      spoke.classList.toggle('cm-selected', index === this.selected)
-      spoke.classList.toggle('cm-disabled', !this.items[index].enabled)
-    })
     const item = this.items[this.selected]
     this.currentDetail.textContent = item?.enabled ? (item.detail ?? '') : ''
     this.current.textContent = item
@@ -362,6 +417,7 @@ export class RadialMenu {
         : (item.unavailable ?? 'Unavailable')
       : 'Choose an action'
     this.current.classList.toggle('cm-muted', !item || !item.enabled)
+    this.pointAtSelected()
   }
 
   /** Where the ring is, in overlay coordinates, so the overlay can take clicks over it. */

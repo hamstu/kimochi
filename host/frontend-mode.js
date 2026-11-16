@@ -101,7 +101,10 @@ export async function lookupText({ text, sentence = '', offset = 0, rect }) {
     return { shown: false, length: 0 }
   }
   const { tabId, frameId } = frontend._application
-  const pageTheme = scanner?._themeController?.computeSiteTheme?.() ?? 'light'
+  // Yomitan's scanner only makes its theme controller on its first pointer scan (text-scanner.js),
+  // so before one (read along straight after a launch) the page's theme is asked for the same way.
+  const { ThemeController } = await import('/js/app/theme-controller.js')
+  const pageTheme = (scanner?._themeController ?? new ThemeController(document.documentElement)).computeSiteTheme()
   const vertical = rect?.vertical === true
   await popup.showContent(
     {

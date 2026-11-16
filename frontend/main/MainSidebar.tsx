@@ -217,7 +217,7 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
             {DICTIONARY_LIST.map((engine) => {
-              // 10ten and Hachidori read Japanese only: listed, disabled, with the reason.
+              // An engine that cannot read the language (10ten: Japanese only) is listed, disabled, with why.
               const reason = dictionaryEngineLanguageReason(engine, dictionary.language.code)
               return (
                 <SelectItem

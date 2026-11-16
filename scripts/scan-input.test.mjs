@@ -140,6 +140,29 @@ test('hover lookup applies only where Settings offers it, and only when turned o
   assert.equal(hoverLookupApplies({ gamescope: true, wayland: false }, true), false)
 })
 
+test('Wayland without a modifier feed uses hover mode even with the optional hover setting off', async () => {
+  const { hoverLookupApplies, withHoverKey } = await load('scan-input.ts')
+  const fallback = { gamescope: false, wayland: true, lookupOnHover: true }
+  for (const setting of [false, undefined]) {
+    const hover = hoverLookupApplies(fallback, setting)
+    assert.equal(hover, true, 'automatic hover must also disable the popup click catcher')
+    const scan = (s, overPopup = false) => {
+      const keyed = withHoverKey(s, hover, 'shift', overPopup)
+      return scanPointerInit(keyed, local(keyed), 10000)
+    }
+    assert.equal(scan(sample({ hover: true })).shiftKey, true)
+    assert.equal(scan(sample({ hover: true }), true).shiftKey, false, 'popup keeps its own input')
+    assert.equal(scan(sample({ hover: true, down: true })).shiftKey, false, 'a click stays unkeyed')
+  }
+  assert.equal(
+    hoverLookupApplies({ ...fallback, lookupOnHover: false }, false),
+    false,
+    'a modifier feed keeps key mode'
+  )
+  assert.equal(hoverLookupApplies({ ...fallback, wayland: false }, false), false, 'desktop settings are respected')
+  assert.equal(hoverLookupApplies({ ...fallback, gamescope: true }, true), false, 'controller lookups stay separate')
+})
+
 test('hover lookup never keys a press: a click on resting text is a click, not a lookup', async () => {
   const { withHoverKey } = await load('scan-input.ts')
   const scan = (s) => scanPointerInit(s, local(s), 10000)

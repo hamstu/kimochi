@@ -14,6 +14,8 @@ import {
   ensureExtension,
   extensionIds,
   hashTree,
+  extensionsDir,
+  languageRecord,
   loadSource,
   PREVIOUS_KEPT,
   readZip,
@@ -541,6 +543,39 @@ test('every pin names its size, and its committed record copies are the release 
     )
     // The manifest the host inlines (host/ext/engines.js) and the test fixtures are exact copies.
     assert.deepEqual(await checkRecordCopies(id), [], id)
+  }
+})
+
+test("Hachidori's languages are read from its release's registry, and an edited list is caught", async () => {
+  const source = await loadSource('hachidori')
+  assert.equal(source.languages, 'vendor/languages/registry.js')
+  const registry = Buffer.from(
+    '(function () { const packs = [{code: "ja"}, {code: "zh"}]; globalThis.HDLanguages = { version: 1, codes: packs.map(p => p.code), get: () => null }; }());'
+  )
+  const record = languageRecord('vendor/languages/registry.js', registry)
+  assert.deepEqual(record.codes, ['ja', 'zh'])
+  assert.equal(record.sha256, sha256(registry))
+  assert.throws(() => languageRecord('x.js', Buffer.from('globalThis.HDLanguages = {codes: []}')), /no language codes/)
+  // The committed record names the release's file by its hash, and lists Japanese.
+  const committed = JSON.parse(await readFile(path.join(extensionsDir, 'hachidori.languages.json'), 'utf8'))
+  const hashes = JSON.parse(await readFile(path.join(extensionsDir, 'hachidori.sha256.json'), 'utf8'))
+  assert.equal(committed.sha256, hashes[source.languages])
+  assert.ok(committed.codes.includes('ja'))
+  // A list edited by hand no longer matches the registry it claims to come from.
+  const dir = await tempDir()
+  try {
+    for (const name of ['source.json', 'sha256.json', 'manifest.json'])
+      await writeFile(
+        path.join(dir, `hachidori.${name}`),
+        await readFile(path.join(extensionsDir, `hachidori.${name}`))
+      )
+    await writeFile(
+      path.join(dir, 'hachidori.languages.json'),
+      JSON.stringify({ ...committed, sha256: 'f'.repeat(64) })
+    )
+    assert.match((await checkRecordCopies('hachidori', dir)).join('\n'), /was not made from the release/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 })
 

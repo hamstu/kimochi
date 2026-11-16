@@ -12,6 +12,7 @@ mod account;
 mod actions;
 mod activity;
 mod anki_cards;
+mod app_location;
 mod bug_report;
 mod capture_unavailable;
 mod card_tags;
@@ -256,8 +257,8 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
         follow_language(app, settings, false);
         // A hooked game's ANSI text is read in the new language's code page.
         text_hook::language_changed();
-        // Hachidori and 10ten read Japanese only: the reader windows move to the engine the new
-        // language has (`extensions::selected_engine`), and back.
+        // 10ten reads Japanese only, Hachidori the languages it has packs for: the reader windows
+        // move to the engine the new language has (`extensions::selected_engine`), and back.
         follow_effective_engine(app);
     }
 }
@@ -3526,6 +3527,9 @@ fn main() {
         updater::update_retry,
         updater::update_dismiss,
         updater::changelog,
+        app_location::app_location,
+        app_location::app_move_to_applications,
+        app_location::app_location_dismiss,
     ]);
     builder
         // The invoke guard: an extension window (`ext-<id>`) runs extension code in a top
@@ -3692,6 +3696,14 @@ fn main() {
             }
             if let Some(report) = platform::instance_report() {
                 service.log(report);
+            }
+            // Outside Applications the panels offer the move (app_location.rs); a bug report
+            // should say where the app was running from.
+            let location = app_location::app_location();
+            if location.needs_move {
+                let mut value = serde_json::to_value(&location).unwrap_or_default();
+                value["check"] = json!("app-location");
+                record(&handle, &service, value);
             }
             if let Some(reason) = capture_unavailable {
                 let _ = CAPTURE_UNAVAILABLE.set(reason.clone());
@@ -5066,7 +5078,7 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
 }
 
 fn source_state_payload(source_id: &str, state: &platform::WindowState) -> Value {
-    json!({
+    let payload = json!({
         "sourceId": source_id,
         "bounds": state.bounds,
         "onScreen": state.on_screen,
@@ -5074,7 +5086,16 @@ fn source_state_payload(source_id: &str, state: &platform::WindowState) -> Value
         "settling": state.settling,
         "display": state.display,
         "scaled": state.scaled,
-    })
+    });
+    #[cfg(target_os = "linux")]
+    let payload = {
+        let mut payload = payload;
+        if let Some(available) = platform::native::geometry_available(source_id) {
+            payload["geometryAvailable"] = json!(available);
+        }
+        payload
+    };
+    payload
 }
 
 /// The tracked window's state as last announced by `source-bounds`, or null when no window is

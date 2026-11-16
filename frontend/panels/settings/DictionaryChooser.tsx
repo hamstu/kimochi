@@ -26,10 +26,11 @@
  * moved an engine's pin, its new release downloads in the background while the earlier one stays
  * in use; that update has its own progress block ("Updating to …").
  *
- * An engine that cannot read the language being learned (10ten and Hachidori read Japanese only,
- * `DICTIONARY_ENGINES[…].languages`) stays listed, faded with "Japanese only", and its panel's
- * "Use" is disabled with the reason. When the setting names such an engine, Yomitan is in use in
- * its place (`effectiveDictionaryEngine`), and a note under the frame says so.
+ * An engine that cannot read the language being learned (10ten reads Japanese only, Hachidori the
+ * languages it has packs for: `DICTIONARY_ENGINES[…].languages`) stays listed, faded with "Japanese
+ * only" (or "No Cantonese"), and its panel's "Use" is disabled with the reason. When the setting
+ * names such an engine, Yomitan is in use in its place (`effectiveDictionaryEngine`), and a note
+ * under the frame says so.
  *
  * Each row leads with the engine's picture (`DictionaryEngineIcon`). Copy comes from
  * `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture beside the description from
@@ -53,11 +54,11 @@ import {
 } from '@kit'
 import {
   DICTIONARY_ENGINES,
+  dictionaryEngineLanguageHint,
   dictionaryEngineLanguageReason,
   type DictionaryEngine
 } from '../../bridge/dictionaryEngine'
 import { useLanguage } from '../../bridge/useLanguage'
-import { languageOf } from '@ui/languages'
 import { useExtensionControls, useExtensionStatus, type ExtensionControls } from '../../bridge/extensions'
 import {
   canRemoveExtension,
@@ -79,13 +80,6 @@ import './dictionary-chooser.css'
 import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 
 const ENGINES = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
-
-/** The languages an engine reads, by name ("Japanese"); every engine that has a list has one. */
-const languageNameFor = (engine: DictionaryEngine): string =>
-  (DICTIONARY_ENGINES[engine].languages ?? []).map((code) => languageOf(code).name).join(' and ')
-
-/** The row's short hint for an engine limited to some languages: "Japanese only". */
-const onlyLabel = (engine: DictionaryEngine): string => `${languageNameFor(engine)} only`
 
 function DictionaryItem({
   engine,
@@ -111,6 +105,7 @@ function DictionaryItem({
   const info = DICTIONARY_ENGINES[engine]
   const status = useExtensionStatus(engine === 'custom-api' ? null : engine)
   const missing = status !== null && status.state !== 'ready'
+  const [language] = useLanguage()
   return (
     <div
       id={id}
@@ -141,7 +136,7 @@ function DictionaryItem({
         {unsupported && (
           <Tooltip content={unsupported}>
             <span className="engine-item-hint" data-tone="muted">
-              {onlyLabel(engine)}
+              {dictionaryEngineLanguageHint(engine, language.code)}
             </span>
           </Tooltip>
         )}
@@ -435,9 +430,9 @@ export function DictionaryChooser({
       {standIn && (
         <div className="dictionary-chooser-status">
           <Callout tone="neutral">
-            {DICTIONARY_ENGINES[standIn].name} is chosen on this computer, but it reads {languageNameFor(standIn)} only,
-            so {DICTIONARY_ENGINES[active].name} looks words up while you learn {language.name}.{' '}
-            {DICTIONARY_ENGINES[standIn].name} comes back when you switch to {languageNameFor(standIn)}.
+            {DICTIONARY_ENGINES[standIn].name} is chosen on this computer, but it doesn’t read {language.name}, so{' '}
+            {DICTIONARY_ENGINES[active].name} looks words up while you learn it. {DICTIONARY_ENGINES[standIn].name}{' '}
+            comes back when you switch to a language it reads.
           </Callout>
         </div>
       )}

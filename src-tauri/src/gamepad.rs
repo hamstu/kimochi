@@ -110,6 +110,10 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         // pad under Bazzite's Game Mode) never shows up in that reader at all.
         #[cfg(target_os = "linux")]
         let mut deck_drove_nav = false;
+        // When the Deck's own controller was last read, so a moment without its reports is not
+        // taken for the controller going away (`ends_deck_navigation`).
+        #[cfg(target_os = "linux")]
+        let mut deck_seen: Option<Instant> = None;
         let mut previous: Vec<bool> = vec![false; STANDARD.len()];
         // The stick positions last sent in a `controller-nav` event.
         let mut reported = [(0.0, 0.0); 2];
@@ -223,6 +227,10 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             #[cfg(target_os = "linux")]
             DECK_LIVE.store(deck.connected(), Ordering::SeqCst);
             #[cfg(target_os = "linux")]
+            if deck.connected() {
+                deck_seen = Some(Instant::now());
+            }
+            #[cfg(target_os = "linux")]
             if crate::platform::gamescope::active() {
                 let system_menu = deck.system_menu();
                 if system_menu && !previous_system_menu {
@@ -280,16 +288,15 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 #[cfg(target_os = "linux")]
                 {
                     deck_drove_nav |= deck.connected();
-                    if crate::platform::gamescope::active()
-                        && ends_deck_navigation(deck_drove_nav, deck.connected(), deck.system_menu())
-                    {
+                    let unread = deck_seen.map_or(Duration::ZERO, |seen| seen.elapsed());
+                    let ended = crate::platform::gamescope::active()
+                        .then(|| ends_deck_navigation(deck_drove_nav, unread, deck.system_menu()))
+                        .flatten();
+                    if let Some(reason) = ended {
                         deck_drove_nav = false;
                         crate::platform::steam_input::handoff();
                         set_navigation(&app, false, false);
-                        let _ = app.emit(
-                            "controller-nav-cancel",
-                            json!({"reason": "Steam system button or physical controller disconnected"}),
-                        );
+                        let _ = app.emit("controller-nav-cancel", json!({ "reason": reason }));
                         previous = buttons;
                         continue;
                     }
@@ -739,12 +746,25 @@ pub fn deck_controller_live() -> bool {
     DECK_LIVE.load(Ordering::SeqCst)
 }
 
-/// Open controller navigation in Gaming Mode ends when Steam's system button is pressed, or
-/// when the Deck's own controller drove it and has gone. A machine without one (Bazzite on a
-/// desktop, a Steam Machine) reads its controller elsewhere and must keep the menu open.
+/// How long the Deck's own controller can go unread before open navigation takes it as gone.
+/// Its reports pause for up to about a second when the game is brought forward from Kimochi's
+/// main window (Steam resuming and taking the controller back), which is exactly when the crop
+/// editor takes it: a shorter wait closed the editor before it was drawn.
+const DECK_GONE: Duration = Duration::from_secs(3);
+
+/// Why open controller navigation in Gaming Mode ends now, if it does: Steam's system button is
+/// held, or the Deck's own controller drove it and has not been read for `DECK_GONE`. A machine
+/// without one (Bazzite on a desktop, a Steam Machine) reads its controller elsewhere and must
+/// keep the menu open.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn ends_deck_navigation(deck_drove: bool, deck_connected: bool, system_menu: bool) -> bool {
-    system_menu || (deck_drove && !deck_connected)
+fn ends_deck_navigation(deck_drove: bool, deck_unread: Duration, system_menu: bool) -> Option<&'static str> {
+    if system_menu {
+        Some("Steam system button held")
+    } else if deck_drove && deck_unread >= DECK_GONE {
+        Some("Steam Deck controller stopped reporting")
+    } else {
+        None
+    }
 }
 
 /// One opening of the controller menu, for the diagnostics log: a report of a menu that
@@ -1278,12 +1298,24 @@ mod tests {
     /// so the menu must stay open; on a Deck, losing its controller or Steam's button ends it.
     #[test]
     fn only_the_decks_own_controller_going_away_ends_gaming_mode_navigation() {
+        use super::{ends_deck_navigation as ends, DECK_GONE};
+        use std::time::Duration;
+        let gone = DECK_GONE + Duration::from_millis(1);
+        assert_eq!(ends(false, gone, false), None, "no Deck controller ever: keep the menu open");
+        assert_eq!(ends(true, Duration::ZERO, false), None, "Deck controller still there");
+        assert!(ends(true, gone, false).is_some(), "Deck controller drove the menu and went away");
+        assert!(ends(true, Duration::ZERO, true).is_some(), "Steam's system button");
+        assert!(ends(false, gone, true).is_some());
+    }
+
+    /// Bringing the game forward from the main window pauses the Deck controller's reports for a
+    /// moment (Steam Deck, 1.0.0): the crop editor taking the controller then must stay open.
+    #[test]
+    fn a_pause_in_the_deck_controllers_reports_keeps_navigation_open() {
         use super::ends_deck_navigation as ends;
-        assert!(!ends(false, false, false), "no Deck controller ever: keep the menu open");
-        assert!(!ends(true, true, false), "Deck controller still there");
-        assert!(ends(true, false, false), "Deck controller drove the menu and went away");
-        assert!(ends(true, true, true), "Steam's system button");
-        assert!(ends(false, false, true));
+        use std::time::Duration;
+        assert_eq!(ends(true, Duration::from_millis(300), false), None);
+        assert_eq!(ends(true, Duration::from_millis(1200), false), None);
     }
 
     #[test]
