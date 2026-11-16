@@ -33,7 +33,8 @@ fn child_process() {
         children.push(spawn_child(Path::new(&path), 0, false));
     }
     if std::env::var_os(GUI).is_some() {
-        std::thread::spawn(gui::run);
+        let cloak = gui::cloak_flag(&counter);
+        std::thread::spawn(move || gui::run(&cloak));
     }
     let started = Instant::now();
     let mut n = 0u64;
@@ -522,6 +523,112 @@ fn rapid_pause_and_resume_never_leaves_the_game_paused() {
     assert!(tree.all_run());
 }
 
+/// A window source names its pid only while that window is still open as that process
+/// (`AppCx::game` asks `window_bounds`): in every state a game's window can be in, and never once
+/// the window is destroyed or the handle belongs to another process.
+#[test]
+fn a_selected_window_names_its_pid_only_while_it_is_open() {
+    use crate::platform::{picker_sources, window_bounds, window_fullscreen};
+    use kimochi_capture::SourceId;
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        IsIconic, IsWindow, IsWindowVisible, IsZoomed, SetWindowLongW, SetWindowPos, ShowWindowAsync, GWL_STYLE,
+        HWND_BOTTOM, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_MAXIMIZE,
+        SW_MINIMIZE, SW_SHOWNOACTIVATE, WS_POPUP, WS_VISIBLE,
+    };
+
+    let tree = Tree::start("window", 0, true);
+    let pid = tree.pid();
+    // The id exactly as the picker lists it.
+    let started = Instant::now();
+    let selection = loop {
+        let listed = picker_sources()
+            .unwrap()
+            .into_iter()
+            .find(|source| source.kind == "window" && SourceId::parse(&source.id).and_then(|id| id.pid()) == Some(pid));
+        if let Some(source) = listed {
+            break source.id;
+        }
+        assert!(started.elapsed() < Duration::from_secs(10), "the child's window was never listed");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let id = SourceId::parse(&selection).unwrap();
+    let hwnd = gui::find_window(pid).unwrap();
+    // What `AppCx::game` does on Windows.
+    let named = |selection: &str| {
+        super::super::super::target::game_ref(Some(selection), None, &|_| None, &|id| window_bounds(id).is_some()).pid
+    };
+    let settle = |state: &str, settled: &dyn Fn() -> bool| {
+        let started = Instant::now();
+        while !settled() {
+            assert!(started.elapsed() < Duration::from_secs(5), "{state}: the window never got there");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    };
+    let expect = |state: &str, want: Option<u32>| assert_eq!(named(&selection), want, "{state}");
+
+    settle("normal", &|| unsafe { IsWindowVisible(hwnd).as_bool() && !IsIconic(hwnd).as_bool() });
+    expect("normal", Some(pid));
+
+    unsafe { ShowWindowAsync(hwnd, SW_MINIMIZE) }.ok().unwrap();
+    settle("minimised", &|| unsafe { IsIconic(hwnd) }.as_bool());
+    expect("minimised", Some(pid));
+
+    unsafe { ShowWindowAsync(hwnd, SW_MAXIMIZE) }.ok().unwrap();
+    settle("maximised", &|| unsafe { IsZoomed(hwnd) }.as_bool());
+    expect("maximised", Some(pid));
+
+    // Borderless full screen: no caption, the monitor's size.
+    let mut monitor = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    unsafe {
+        assert!(GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut monitor).as_bool());
+        SetWindowLongW(hwnd, GWL_STYLE, (WS_POPUP | WS_VISIBLE).0 as i32);
+        let r = monitor.rcMonitor;
+        SetWindowPos(
+            hwnd,
+            None,
+            r.left,
+            r.top,
+            r.right - r.left,
+            r.bottom - r.top,
+            SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED,
+        )
+        .unwrap();
+    }
+    settle("borderless full screen", &|| window_fullscreen(&id) == Some(true));
+    expect("borderless full screen", Some(pid));
+
+    unsafe { SetWindowPos(hwnd, Some(HWND_BOTTOM), 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE) }.unwrap();
+    expect("behind every other window", Some(pid));
+
+    unsafe { ShowWindowAsync(hwnd, SW_HIDE) }.ok().unwrap();
+    settle("hidden", &|| !unsafe { IsWindowVisible(hwnd) }.as_bool());
+    expect("hidden", Some(pid));
+
+    // Cloaked by DWM, as a window on another virtual desktop is.
+    unsafe { ShowWindowAsync(hwnd, SW_SHOWNOACTIVATE) }.ok().unwrap();
+    std::fs::write(gui::cloak_flag(&tree.counters[0]), b"").unwrap();
+    settle("cloaked", &|| {
+        let mut cloaked = 0u32;
+        let read = unsafe {
+            DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &mut cloaked as *mut u32 as *mut core::ffi::c_void, 4)
+        };
+        read.is_ok() && cloaked != 0
+    });
+    expect("cloaked", Some(pid));
+
+    // The handle with someone else's pid: refused.
+    let (handle, _) = selection.rsplit_once(':').unwrap();
+    let foreign = format!("{handle}:{}", std::process::id());
+    assert_eq!(named(&foreign), None, "a handle another process owns");
+
+    // The game closed: refused, even though its pid is in the id.
+    drop(tree);
+    settle("destroyed", &|| !unsafe { IsWindow(Some(hwnd)) }.as_bool());
+    expect("destroyed", None);
+}
+
 /// Measured, not asserted: what a frozen window does (ghosting, message timeouts). Run with
 /// `cargo test ... ghost -- --ignored --nocapture`; findings go to docs/game-pause/windows-notes.md.
 #[test]
@@ -669,17 +776,42 @@ fn foreground_steps_against_a_frozen_thread() {
 }
 
 mod gui {
-    //! A plain window with a message loop, for `observe_a_frozen_window`.
+    //! A plain window with a message loop, for `observe_a_frozen_window` and the window checks.
     use windows::core::w;
     use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK};
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DispatchMessageW, EnumWindows, GetMessageW, GetWindowThreadProcessId, ShowWindow,
         TranslateMessage, MSG, SW_SHOWNOACTIVATE, WINDOW_EX_STYLE, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
     };
 
-    pub fn run() {
-        create("kimochi pause test");
+    pub fn run(cloak: &std::path::Path) {
+        let hwnd = create("kimochi pause test");
+        // Cloaks the window (as Windows does to one on another virtual desktop) once the test asks,
+        // by creating `cloak`: only the window's own process may cloak it.
+        let (cloak, handle) = (cloak.to_owned(), hwnd.0 as usize);
+        std::thread::spawn(move || {
+            while !cloak.exists() {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            let on = windows::core::BOOL::from(true);
+            unsafe {
+                let _ = DwmSetWindowAttribute(
+                    HWND(handle as *mut _),
+                    DWMWA_CLOAK,
+                    &on as *const _ as *const core::ffi::c_void,
+                    std::mem::size_of_val(&on) as u32,
+                );
+            }
+        });
         pump();
+    }
+
+    /// The file whose existence makes the child cloak its window.
+    pub fn cloak_flag(counter: &std::path::Path) -> std::path::PathBuf {
+        let mut path = counter.to_owned().into_os_string();
+        path.push(".cloak");
+        path.into()
     }
 
     pub fn create(title: &str) -> HWND {
