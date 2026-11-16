@@ -418,6 +418,19 @@ fn a_process_stopped_by_someone_else_is_left_stopped() {
 }
 
 #[test]
+fn stopped_tells_who_is_stopped_and_only_for_that_process() {
+    let tree = Tree::spawn("sleep 60 & wait", 1);
+    let backend = linux();
+    let id = backend.identity(tree.root()).unwrap();
+    assert_eq!(backend.stopped(&id), Some(false));
+    unsafe { libc::kill(tree.root() as i32, libc::SIGSTOP) };
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(backend.stopped(&id), Some(true));
+    assert_eq!(backend.stopped(&ProcIdentity { start: id.start + 1, ..id.clone() }), None);
+    unsafe { libc::kill(tree.root() as i32, libc::SIGCONT) };
+}
+
+#[test]
 fn a_child_started_after_the_plan_is_caught() {
     let tree = Tree::spawn("sleep 60 & sleep 0.4; sleep 60 & wait", 2);
     let backend = linux();
@@ -481,12 +494,12 @@ fn the_guard_resumes_when_the_heartbeat_stops() {
     let backend = linux();
     let dir = std::env::temp_dir().join(format!("kimochi-linux-guard-{}", std::process::id()));
     let now = Instant::now();
-    let mut core = Core::new(&backend, Journal::in_dir(&dir), now).with_heartbeat_loss(Duration::from_millis(200));
+    let mut core = Core::new(&backend, Journal::in_dir(&dir), now);
     let plan = backend.plan(&window(tree.root())).unwrap();
     let replies = core.handle(Request::Suspend { id: 1, plan }, now);
     assert!(matches!(replies.last(), Some(Reply::Suspended { .. })), "{replies:?}");
     assert!(tree.all().into_iter().all(stopped));
-    let replies = core.tick(now + Duration::from_millis(300));
+    let replies = core.tick(now + super::super::super::guard::HEARTBEAT_LOSS + Duration::from_millis(100));
     assert!(matches!(replies.first(), Some(Reply::Resumed { reason, .. }) if reason == "heartbeat"), "{replies:?}");
     assert!(tree.all().into_iter().all(running));
     // And when the guard itself goes away holding a pause.

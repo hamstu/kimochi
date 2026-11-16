@@ -876,6 +876,16 @@ impl Backend for Linux {
         read_identity(pid)
     }
 
+    fn stopped(&self, id: &ProcIdentity) -> Option<bool> {
+        let fd = pidfd_open(id.pid).ok()?;
+        if !read_identity(id.pid).is_some_and(|now| id.same_process(&now)) {
+            return None;
+        }
+        let stopped = any_stopped(id.pid);
+        drop(fd);
+        stopped
+    }
+
     fn refresh(&self, suspended: &mut Suspended) -> Result<(), PauseError> {
         let me = self.me();
         let mut results = Vec::new();
