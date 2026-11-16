@@ -2,7 +2,7 @@
 import { API_URLS } from '../../vendor/shared-constants'
 import type { TranslationProvider } from '../../../ui/account'
 import { DEFAULT_JAPANESE_FILTER, type JapaneseFilterMode } from '../../../ui/japanese-text'
-import { defaultExplainPrompt } from './explainPrompt'
+import { defaultExplainPrompt } from '../../../ui/explain-prompt'
 
 export type { TranslationProvider }
 
@@ -159,6 +159,10 @@ export interface Settings {
   explainClaudeModel: string
   /** Model passed to `codex exec -m`. Empty = the CLI's default model. */
   explainCodexModel: string
+  /** How hard Claude thinks before it answers (`claude --effort`); empty = the CLI's default. */
+  explainClaudeEffort: string
+  /** Codex's reasoning effort (`codex exec -c model_reasoning_effort=…`); empty = the CLI's (config.toml). */
+  explainCodexEffort: string
   /** Prompt template; {{language}}, {{context}} and {{sentence}} are substituted. A default
       (explainPrompt.ts) follows the language; anything else is sent as written. */
   explainPrompt: string
@@ -232,6 +236,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   explainProvider: 'codex',
   explainClaudeModel: 'opus',
   explainCodexModel: '',
+  explainClaudeEffort: '',
+  explainCodexEffort: '',
   explainPrompt: DEFAULT_EXPLAIN_PROMPT
 }
 

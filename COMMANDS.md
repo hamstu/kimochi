@@ -1265,6 +1265,16 @@ not_configured`, `429`, and anything else with its status.
 `explain:error`, including for the server's trailing `[error: …]` line), with the same
 requestId and the same cancel and supersede rules as the CLI providers.
 
+**Effort.** `explain_run` (`({requestId, provider, model, effort, prompt}) -> ()`) takes `effort`
+(null: the CLI's own default), how hard the CLI thinks before it answers:
+`claude --effort <low|medium|high|xhigh|max>`, or `codex exec -c model_reasoning_effort=<minimal|
+low|medium|high|xhigh>` (over the user's `config.toml`). Any other value, like a model name with
+characters outside `[A-Za-z0-9._-]`, is refused with `invalid:` before anything runs. The Log's
+Explain settings store it per CLI (`superTexthooker.explainClaudeEffort`, `explainCodexEffort`;
+`''` is the default), read with the provider and model by `explainSettings` in
+`ui/explain-settings.ts`. A model that thinks first shows nothing until it has: Claude Haiku at the
+default took 5–8 s to its first words on the Explain prompt, 1.6 s at `low`.
+
 **Translation.** The Log's `translationProvider` (`superTexthooker`; `'auto'` (default) |
 `'deepl'` | `'kimochi'`) picks `cloud_translate` or `deepl_translate`; `auto` is Kimochi cloud
 while signed in, otherwise the DeepL key. `deepl_translate` (`({text, apiKey}) -> string`) translates

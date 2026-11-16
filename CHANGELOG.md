@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - ⏸️ **Pause game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again, Escape or B on your controller to carry on. **Pause & scan** and **Pause & read along** pause the game and then scan it or step through its text, in one press. Give them a key or controller button in Settings → Shortcuts & Controls, or add them to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
 - 🖱️ **Keep the mouse cursor visible in games** (opt-in, Windows, Settings → Overlay). Some games hide the mouse pointer even while you move it, so you can't see what you're pointing at for a lookup. With this on, Kimochi makes the pointer show whenever you move the mouse in the game you've selected, with no other software and no changes to the game. Games that hide a resting pointer still do. Don't use it with online games that use anti-cheat.
+- **Choose how hard the AI thinks before it explains.** Settings → Translation & AI → Explain with AI → **Configure…** has an **Effort** choice for the Claude and Codex CLIs. Lower effort starts the answer sooner (Claude Haiku at Low starts writing in under 2 seconds instead of 5 or more); higher can help with harder lines.
 
 ### Fixed
 
