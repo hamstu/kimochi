@@ -879,6 +879,10 @@ impl Backend for Linux {
     }
 
     fn resume(&self, suspended: &Suspended) -> Result<(), PauseError> {
+        self.resume_with_results(suspended).map(|_| ())
+    }
+
+    fn resume_with_results(&self, suspended: &Suspended) -> Result<Vec<PidResult>, PauseError> {
         let me = self.me();
         let mut results = Vec::new();
         let failed = continue_all(suspended.members.iter().rev(), &me, &mut results);
@@ -887,12 +891,9 @@ impl Backend for Linux {
         let mut steps = Vec::new();
         let parked = self.audio.lock().unwrap_or_else(|e| e.into_inner()).take();
         audio::unpark(parked, &mut steps);
-        for step in &steps {
-            eprintln!("game pause: {step}");
-        }
         results.extend(audio_results(steps));
         match failed.first() {
-            None => Ok(()),
+            None => Ok(results),
             Some((pid, code, _)) => Err(PauseError {
                 message: format!(
                     "could not resume {}",

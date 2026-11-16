@@ -641,8 +641,10 @@ fn a_paused_native_pipewire_game_does_not_silence_other_apps() {
     assert!(notes.iter().any(|n| n.contains("parked 1 stream")), "{notes:?}");
     assert!(stopped(game.id()));
     std::thread::sleep(Duration::from_millis(3000));
-    backend.resume(&suspended).unwrap();
+    let notes = backend.resume_with_results(&suspended).unwrap();
     assert!(running(game.id()));
+    assert!(notes.iter().any(|r| r.note.contains("park sink") && r.note.contains("removed")), "{notes:?}");
+    assert!(notes.iter().any(|r| r.pid == game.id() && r.note == "continued"), "{notes:?}");
     assert!(pw(|d| audio::park_sinks(d).is_empty()), "the park sink is gone");
     assert!(pw(|d| !audio::metadata(d, "default").iter().any(|e| e.key == audio::RESTORE_KEY)), "nothing left saved");
     assert!(
