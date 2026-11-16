@@ -120,7 +120,11 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
             {provider !== 'kimochi' && (
               <SettingsRow
                 label="Effort"
-                description="How long the model thinks before it answers. Lower starts the answer sooner; higher can explain harder lines better."
+                description={
+                  provider === 'codex'
+                    ? "How long the model thinks before it answers. Lower starts the answer sooner; higher can explain harder lines better. Not every model takes every effort: if Codex refuses one, choose another or the CLI's default."
+                    : 'How long the model thinks before it answers. Lower starts the answer sooner; higher can explain harder lines better.'
+                }
               >
                 <Select
                   aria-label="Effort"

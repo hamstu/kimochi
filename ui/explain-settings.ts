@@ -28,12 +28,15 @@ export const EXPLAIN_EFFORTS = {
     { value: 'xhigh', label: 'Extra high' },
     { value: 'max', label: 'Max' }
   ],
+  // OpenAI's efforts, which Codex passes on: which a model takes varies (gpt-6-astra: Low to Max).
   codex: [
+    { value: 'none', label: 'None' },
     { value: 'minimal', label: 'Minimal' },
     { value: 'low', label: 'Low' },
     { value: 'medium', label: 'Medium' },
     { value: 'high', label: 'High' },
-    { value: 'xhigh', label: 'Extra high' }
+    { value: 'xhigh', label: 'Extra high' },
+    { value: 'max', label: 'Max' }
   ]
 } as const
 
@@ -72,7 +75,7 @@ export function explainSettings(stored: unknown): ExplainSettings {
 export function providerLabel(settings: ExplainSettings): string {
   if (settings.provider === 'kimochi') return 'Kimochi cloud'
   const label = EXPLAIN_EFFORTS[settings.provider].find((e) => e.value === settings.effort)?.label
-  const effort = label ? ` · ${label.toLowerCase()} effort` : ''
+  const effort = label ? ` · ${settings.effort === 'none' ? 'no thinking' : `${label.toLowerCase()} effort`}` : ''
   if (settings.provider === 'claude') return `Claude · ${settings.model ?? 'default'}${effort}`
   return settings.model ? `Codex · ${settings.model}${effort}` : `Codex${effort}`
 }

@@ -63,7 +63,9 @@ fn validate_model(model: &str) -> Result<(), String> {
 /// is refused rather than passed on: like model names, they go into a shell string on macOS.
 /// Must match `EXPLAIN_EFFORTS` in ui/explain-settings.ts, which the settings offer.
 const CLAUDE_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
-const CODEX_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh"];
+// Codex passes its effort on to OpenAI as it is, so these are OpenAI's; which a model takes varies
+// (gpt-6-astra: low to max), and OpenAI's refusal names the ones it does.
+const CODEX_EFFORTS: &[&str] = &["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /// The CLI to run for a provider and its arguments: the model when one is chosen (else the CLI's
 /// default), and the effort when one is chosen (else the CLI's default, for Codex its config.toml).
@@ -362,7 +364,8 @@ mod tests {
     #[test]
     fn an_effort_the_cli_does_not_take_is_refused() {
         assert!(cli_args("claude", None, Some("minimal")).unwrap_err().starts_with("invalid:"));
-        assert!(cli_args("codex", None, Some("max")).unwrap_err().starts_with("invalid:"));
+        assert!(cli_args("codex", None, Some("ultra")).unwrap_err().starts_with("invalid:"));
+        assert!(cli_args("claude", None, Some("none")).unwrap_err().starts_with("invalid:"));
         assert!(cli_args("codex", None, Some("low; rm -rf ~")).is_err());
         assert!(cli_args("claude", Some("opus'; x"), None).is_err());
     }

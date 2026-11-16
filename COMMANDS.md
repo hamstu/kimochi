@@ -1267,8 +1267,9 @@ requestId and the same cancel and supersede rules as the CLI providers.
 
 **Effort.** `explain_run` (`({requestId, provider, model, effort, prompt}) -> ()`) takes `effort`
 (null: the CLI's own default), how hard the CLI thinks before it answers:
-`claude --effort <low|medium|high|xhigh|max>`, or `codex exec -c model_reasoning_effort=<minimal|
-low|medium|high|xhigh>` (over the user's `config.toml`). Any other value, like a model name with
+`claude --effort <low|medium|high|xhigh|max>`, or `codex exec -c model_reasoning_effort=<none|
+minimal|low|medium|high|xhigh|max>` (over the user's `config.toml`; Codex passes it on to OpenAI as
+it is, which model takes which varies, and OpenAI's refusal names the ones it takes). Any other value, like a model name with
 characters outside `[A-Za-z0-9._-]`, is refused with `invalid:` before anything runs. The Log's
 Explain settings store it per CLI (`superTexthooker.explainClaudeEffort`, `explainCodexEffort`;
 `''` is the default), read with the provider and model by `explainSettings` in

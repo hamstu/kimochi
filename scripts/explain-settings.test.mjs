@@ -37,7 +37,9 @@ test("the effort is the chosen provider's own, and only one its CLI takes", () =
   // Empty is the CLI's default; one the CLI does not take is never sent.
   assert.equal(effort({ explainProvider: 'claude', explainClaudeEffort: '' }), null)
   assert.equal(effort({ explainProvider: 'claude', explainClaudeEffort: 'minimal' }), null)
-  assert.equal(effort({ explainProvider: 'codex', explainCodexEffort: 'max' }), null)
+  assert.equal(effort({ explainProvider: 'codex', explainCodexEffort: 'ultra' }), null)
+  assert.equal(effort({ explainProvider: 'claude', explainClaudeEffort: 'none' }), null)
+  assert.equal(effort({ explainProvider: 'codex', explainCodexEffort: 'none' }), 'none')
   assert.equal(
     settings.providerLabel(
       settings.explainSettings({ explainProvider: 'claude', explainClaudeModel: 'haiku', explainClaudeEffort: 'low' })
