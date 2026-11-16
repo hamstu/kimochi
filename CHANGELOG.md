@@ -20,6 +20,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Mac: Kimochi offers to move itself to Applications.** Opened straight from Downloads or the disk image, Kimochi was missing from Screen Recording and System Audio Recording in System Settings, and from Spotlight. It now says so when it starts and moves itself to your Applications folder and reopens with one click, or explains how to drag it there yourself.
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.
+- **Read along outlines the right word.** Stepping through a line with a comma, full stop or bracket in it (or with unevenly spaced letters) could outline a whole line or two instead of the word, skip the words after it, and offer only part of the line to step through. Each stop is now the word the dictionary found, and nothing before it.
+- Read along with the built-in Yomitan: the pop-up follows Kimochi's dark or light appearance from the first lookup, not only after a lookup with the pointer.
 - **Text Hooker card:** moved off the game window, the card now takes clicks without holding the lookup key, instead of letting them through and disappearing. Over the game it stays click-through as before.
 - **Text Hooker on Linux:** hooking a Wine game now explains why it failed, such as a 32-bit Wine prefix, instead of saying the game is not running.
 - **Windows: the overlay's text comes back after Alt+Tab.** With a screen as the source, switching away and back to your game could leave the text hidden, because Windows briefly reported the Alt+Tab switcher as the app in front after your game.

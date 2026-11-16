@@ -22,7 +22,9 @@ import {
   tokensFromSpans,
   readingUnits,
   dominantVertical,
-  segmentAcross
+  segmentAcross,
+  nodePosition,
+  offsetInNodes
 } from '../ui/word-nav.js'
 import { itemAt, itemFor } from '../ui/radial-menu.js'
 import { scrollSpeed, pointerSpeed, characterAt } from '../ui/controller.js'
@@ -574,4 +576,28 @@ test("a word runs on across the card's rows, but not out of the card into other 
   seen.length = 0
   await segmentAcross([{ text: 'ポッシュの作' }, { text: 'った剣でも' }], split)
   assert.deepEqual(seen, ['ポッシュの作った剣でも', 'った剣でも'])
+})
+
+test('a place in a box drawn as several text nodes is in the node that holds it', () => {
+  // 上画面は、情報が少なく with its comma squeezed: plain text, the mark's own span, plain text.
+  const nodes = ['上画面は', '、', '情報が少なく'].map((text) => ({ textContent: text, length: text.length }))
+  const at = (offset, end) => {
+    const place = nodePosition(nodes, offset, end)
+    return [nodes.indexOf(place.node), place.offset]
+  }
+  // 少なく: from the third node's fourth character to its end, and nothing of another line.
+  assert.deepEqual(at(8), [2, 3])
+  assert.deepEqual(at(11, true), [2, 6])
+  // Between two nodes a start is the second's beginning and an end the first's end, so a word's
+  // range holds no node it has no character of.
+  assert.deepEqual(at(4), [1, 0])
+  assert.deepEqual(at(4, true), [0, 4])
+  assert.deepEqual(at(0), [0, 0])
+  assert.deepEqual(at(11), [2, 6])
+  assert.deepEqual(at(99, true), [2, 6])
+  assert.equal(nodePosition([], 0), null)
+  // And back: where the engine says its match is, as an offset in the box's text.
+  assert.equal(offsetInNodes(nodes, nodes[2], 3), 8)
+  assert.equal(offsetInNodes(nodes, nodes[0], 0), 0)
+  assert.equal(offsetInNodes(nodes, { length: 3 }, 1), -1)
 })

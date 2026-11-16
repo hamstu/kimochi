@@ -37,6 +37,8 @@ import {
   readingUnits,
   segmentAcross,
   runsOnInto,
+  nodePosition,
+  offsetInNodes,
   segmentText,
   SCAN_LENGTH
 } from './word-nav.js'
@@ -1060,9 +1062,11 @@ export function createController(context) {
   // --- word mode -------------------------------------------------------------
 
   /**
-   * The scan's text in reading order, one unit per text node a lookup ranges over: the box's text
+   * The scan's text in reading order, one unit per run of text a lookup ranges over: the box's text
    * in word mode (each of its lines, for a block drawn line by line), and each laid-out line or
-   * word of a group in grouped mode.
+   * word of a group in grouped mode. A run is drawn as one text node, or as several when its glyphs
+   * were placed one by one (ui/render.js `appendRunText`: plain text between `.ocr-glyph` spans);
+   * the unit is all of them (`nodes`), its text theirs joined, which is the box's own text.
    */
   function readUnits() {
     if (historical) return history.units()
@@ -1071,20 +1075,20 @@ export function createController(context) {
       if (!element.dataset?.ocrWordBox) continue
       const vertical = element.classList.contains('ocr-vertical')
       const current = element.querySelector('.ocr-word-current')
-      const holders =
-        current && [...current.childNodes].some((child) => child.nodeType === Node.TEXT_NODE)
-          ? [current]
-          : [...element.querySelectorAll('.ocr-run')]
+      const runs = [...element.querySelectorAll('.ocr-run')]
+      const holders = runs.length ? runs : current ? [current] : []
       for (const holder of holders) {
-        const node = [...holder.childNodes].find((child) => child.nodeType === Node.TEXT_NODE)
-        if (!node?.textContent) continue
+        const nodes = runTextNodes(holder)
+        if (!nodes.length) continue
         const range = document.createRange()
-        range.selectNodeContents(node)
+        range.setStart(nodes[0], 0)
+        range.setEnd(nodes[nodes.length - 1], nodes[nodes.length - 1].length)
         const { left, top, width, height } = range.getBoundingClientRect()
         units.push({
           element,
-          node,
-          text: node.textContent,
+          node: nodes[0],
+          nodes,
+          text: nodes.map((node) => node.textContent).join(''),
           vertical,
           box: { x: left, y: top, width, height }
         })
@@ -1093,6 +1097,24 @@ export function createController(context) {
     // Text drawn outside the scan's boxes: the Text Hooker's card.
     for (const extra of context.extraUnits?.() ?? []) units.push(extra)
     return readingUnits(units, dominantVertical(units), words())
+  }
+
+  /**
+   * The text nodes a run's text is drawn with, in order: its own, and those of the glyphs placed
+   * one by one (`.ocr-glyph`). Not the joiner that follows a run, which is no part of its text.
+   */
+  function runTextNodes(holder) {
+    const text = (parent) => [...parent.childNodes].filter((child) => child.nodeType === Node.TEXT_NODE)
+    return [...holder.childNodes]
+      .flatMap((child) =>
+        child.nodeType === Node.TEXT_NODE ? [child] : child.classList?.contains('ocr-glyph') ? text(child) : []
+      )
+      .filter((node) => node.length)
+  }
+
+  /** A unit's text nodes: one, except a box whose glyphs were placed one by one (`readUnits`). */
+  function nodesOf(unit) {
+    return unit.nodes ?? [unit.node]
   }
 
   /** Lean the right stick: scroll the popup until it is back at rest. */
@@ -1396,15 +1418,17 @@ export function createController(context) {
     const unit = cursor.units[unitIndex]
     if (!unit.node.isConnected) return null
     const range = document.createRange()
-    range.setStart(unit.node, start)
+    const first = nodePosition(nodesOf(unit), start)
+    range.setStart(first.node, first.offset)
     let remaining = length
     for (let index = unitIndex; index < cursor.units.length; index++) {
-      const node = cursor.units[index].node
-      if (!node.isConnected) break
-      if (index > unitIndex && !runsOnInto(cursor.units[index - 1], cursor.units[index])) break
+      const next = cursor.units[index]
+      if (!next.node.isConnected) break
+      if (index > unitIndex && !runsOnInto(cursor.units[index - 1], next)) break
       const from = index === unitIndex ? start : 0
-      const take = Math.min(node.length - from, remaining)
-      range.setEnd(node, from + take)
+      const take = Math.min(next.text.length - from, remaining)
+      const last = nodePosition(nodesOf(next), from + take, true)
+      range.setEnd(last.node, last.offset)
       remaining -= take
       if (remaining <= 0) break
     }
@@ -1774,19 +1798,19 @@ export function createController(context) {
       if (cursor?.current !== word) return // moved on
       const match = context.matchedRange()
       if (!match) continue
-      if (match.startContainer !== unit.node || match.startOffset !== word.start) return
+      if (offsetInNodes(nodesOf(unit), match.startContainer, match.startOffset) !== word.start) return
       // The match's length in this unit's text and the units it runs on into.
       let length = 0
       for (let index = word.unit; index < cursor.units.length; index++) {
-        const node = cursor.units[index].node
         const from = index === word.unit ? word.start : 0
-        if (node === match.endContainer) {
-          length += match.endOffset - from
+        const end = offsetInNodes(nodesOf(cursor.units[index]), match.endContainer, match.endOffset)
+        if (end >= 0) {
+          length += end - from
           if (cursor.fit(length)) render()
           context.log({ check: 'controller-fit-match', length })
           return
         }
-        length += node.length - from
+        length += cursor.units[index].text.length - from
       }
       return
     }
