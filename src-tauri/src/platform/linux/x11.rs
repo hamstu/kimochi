@@ -118,6 +118,15 @@ pub fn picker_sources() -> Result<Vec<Source>, String> {
     Ok(d.sources(std::process::id()))
 }
 
+/// Game pause: whether window source `id` is still open as the process it was listed for (a
+/// minimised window counts). The id's pid is compared with the window's, since a closed client's
+/// window ids and X-Resource slot are handed to the next client.
+pub fn window_open(id: &SourceId) -> bool {
+    let Some(window) = resolve(id) else { return false };
+    id.pid().is_some()
+        || desktop().is_some_and(|d| d.conn.get_geometry(window).ok().and_then(|c| c.reply().ok()).is_some())
+}
+
 pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
     let d = desktop()?;
     let window = resolve(id)?;

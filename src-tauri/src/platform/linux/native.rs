@@ -154,6 +154,13 @@ fn covered_by_own_window(inventory: &Inventory, game: &NativeWindow) -> bool {
         })
 }
 
+/// Game pause: whether native window source `id` is still in the compositor's list as the process
+/// it was listed for (a minimised window counts).
+pub fn window_open(id: &SourceId) -> bool {
+    inventory()
+        .is_some_and(|inventory| inventory.window(id.handle()).is_some_and(|w| id.pid().is_none() || w.pid == id.pid()))
+}
+
 /// A native window source's bounds (where the overlay draws) and whether it is drawable now.
 pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
     let inventory = inventory()?;

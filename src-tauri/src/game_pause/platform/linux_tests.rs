@@ -225,6 +225,11 @@ fn the_denylist_matches_names_not_games() {
         assert!(denied(name, None).is_none(), "{name}");
     }
     assert!(denied("game", Some("bwrap")).is_some());
+    // `comm` holds 15 bytes; a longer denylisted name is still caught when the executable does
+    // not name it (a session script run by its interpreter).
+    assert!(denied("gamescope-sessi", Some("bash")).is_some());
+    assert!(denied("flatpak-session", None).is_some());
+    assert!(denied("gamescope-sess", Some("bash")).is_none());
 }
 
 #[test]

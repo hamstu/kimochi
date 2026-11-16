@@ -154,12 +154,21 @@ impl Context for AppCx {
         #[cfg(target_os = "linux")]
         {
             let steam = crate::platform::gamescope::focused_app_id();
-            super::target::game_ref(selection.as_deref(), steam, &crate::platform::x11_window_host_pid)
+            super::target::game_ref(
+                selection.as_deref(),
+                steam,
+                &crate::platform::x11_window_host_pid,
+                &crate::platform::game_window_open,
+            )
         }
         // Only a selected window names the game: with a display (or nothing) selected, the app in
-        // front could be anything (a browser, a call), and is never paused.
+        // front could be anything (a browser, a call), and is never paused. The window must still
+        // be open: `window_bounds` checks a Windows handle against the id's pid (handles are
+        // recycled); a macOS window number is not reused, so its window existing is enough.
         #[cfg(not(target_os = "linux"))]
-        super::target::game_ref(selection.as_deref(), None, &|_| None)
+        super::target::game_ref(selection.as_deref(), None, &|_| None, &|id| {
+            crate::platform::window_bounds(id).is_some()
+        })
     }
     fn inputs_held(&self) -> bool {
         #[cfg(target_os = "macos")]
