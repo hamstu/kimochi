@@ -27,6 +27,8 @@ pub struct Feed {
     pub last_event: Option<f64>,
     /// The game's executable, from the capture's `start` event.
     pub exe: Option<String>,
+    /// The capture's times (Unix ms) to the time lines are measured in (`Hooked::clock`).
+    pub clock: Option<super::Clock>,
 }
 impl Feed {
     pub fn new(dir: PathBuf) -> Self {
@@ -41,6 +43,7 @@ impl Feed {
             clips_seen: 0,
             last_event: None,
             exe: None,
+            clock: None,
         }
     }
     pub fn dir(&self) -> &Path {
@@ -89,8 +92,11 @@ impl Feed {
         self.prune(now);
         Ok((self.clips_seen - before) as usize)
     }
+    fn time(&self, t: f64) -> f64 {
+        self.clock.as_ref().map_or(t, |clock| clock(t))
+    }
     fn event(&mut self, e: Value) {
-        let t = e["t"].as_f64().unwrap_or(0.0);
+        let t = self.time(e["t"].as_f64().unwrap_or(0.0));
         self.last_event = Some(t);
         let id = e["s"].as_u64().unwrap_or(0);
         match e["ev"].as_str().unwrap_or("") {
@@ -129,6 +135,7 @@ impl Feed {
             }
             "exit" => self.streams.clear(),
             "clip" => {
+                let start = e["start"].as_f64().map_or(t, |start| self.time(start));
                 let s = self.streams.entry(id).or_default();
                 s.start = None;
                 s.last = t;
@@ -140,7 +147,7 @@ impl Feed {
                     seq: e["seq"].as_u64().unwrap_or(0),
                     stream: id,
                     api: e["api"].as_str().unwrap_or("").into(),
-                    start: e["start"].as_f64().unwrap_or(t),
+                    start,
                     dur: e["dur"].as_f64().unwrap_or(0.0),
                     file: e["file"].as_str().map(str::to_owned),
                     source: e["source"].as_str().map(str::to_owned),

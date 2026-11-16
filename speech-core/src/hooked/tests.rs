@@ -724,3 +724,21 @@ fn a_soft_quote_on_time_in_an_established_stream_keeps_its_voice() {
     let matched = h.tick(60_000.);
     assert_eq!(matched.iter().map(|m| m.line.uid.as_str()).collect::<Vec<_>>(), vec!["soft"]);
 }
+#[test]
+fn a_voice_that_starts_after_a_pause_is_timed_on_the_game_clock() {
+    // The game was paused from 1_100 to 31_100 (Unix ms): its voice started 30 s late by the wall
+    // clock, 100 ms after its line by the game's.
+    let clock: Clock = std::sync::Arc::new(|t: f64| if t <= 1_100. { t } else { (t - 30_000.).max(1_100.) });
+    let f = Fixture::new();
+    f.clip(1, 31_200., Some("voice/001"), 1.);
+    f.clip(2, 1_000., Some("bgm/theme"), 60.);
+    let mut wall = f.hooked();
+    wall.line(line("a", 1000.));
+    assert!(wall.tick(2_400.).is_empty(), "by the wall clock the voice is far from its line");
+    let mut h = f.hooked();
+    h.clock = Some(clock);
+    h.line(line("a", 1000.));
+    let matched = h.tick(2_400.);
+    assert_eq!(matched.len(), 1);
+    assert_eq!((matched[0].clip.seq, matched[0].clip.start), (1, 1_200.));
+}

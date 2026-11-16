@@ -20,7 +20,9 @@ use crate::CaptureError;
 use crate::Result;
 use std::sync::{Arc, Mutex};
 
+pub mod pause;
 pub mod ring;
+pub use pause::{GameClock, NoPauses, PauseSpan, PauseSpans, Splicer};
 pub use ring::{AudioRing, Clip};
 
 #[cfg(target_os = "linux")]
@@ -173,6 +175,11 @@ struct Drain {
 
 impl Drain {
     fn move_into(&mut self, ring: &mut AudioRing) -> usize {
+        self.each(|wall_ms, rate, samples| ring.push(wall_ms, rate, samples))
+    }
+
+    /// Hand every chunk that has arrived to `deliver(wall_ms, sample_rate, samples)`.
+    fn each(&mut self, mut deliver: impl FnMut(f64, u32, &[f32])) -> usize {
         let mut moved = 0;
         while let Ok(marker) = self.markers.pop() {
             let Ok(chunk) = self.samples.read_chunk(marker.len) else {
@@ -183,7 +190,7 @@ impl Drain {
             self.scratch.extend_from_slice(a);
             self.scratch.extend_from_slice(b);
             chunk.commit_all();
-            ring.push(marker.wall_ms, marker.sample_rate, &self.scratch);
+            deliver(marker.wall_ms, marker.sample_rate, &self.scratch);
             moved += marker.len;
         }
         moved
@@ -240,6 +247,12 @@ impl SystemAudio {
     /// Move the audio that has arrived into `ring`; the number of samples moved.
     pub fn drain_into(&mut self, ring: &mut AudioRing) -> usize {
         self.drain.move_into(ring)
+    }
+
+    /// Move the audio that has arrived into `ring` through `splicer`, which cuts out what played
+    /// while the game was paused (`clock`); the number of samples moved.
+    pub fn drain_spliced(&mut self, splicer: &mut Splicer, clock: &GameClock, ring: &mut AudioRing) -> usize {
+        self.drain.each(|wall_ms, rate, samples| splicer.push(clock, ring, wall_ms, rate, samples))
     }
 
     /// Why the capture stopped, once it has (the stream must then be started again).
