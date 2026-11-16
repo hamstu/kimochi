@@ -734,17 +734,6 @@ pub fn refresh_suspended(suspended: &mut Suspended, ctx: Context) -> Result<(), 
     }
 }
 
-/// One line per process for the verbose log: pid, role, why, executable; then the exclusions.
-pub fn describe(plan: &Plan) -> Vec<String> {
-    let mut lines: Vec<String> = plan
-        .members
-        .iter()
-        .map(|m| format!("stop pid={} role={:?} why={} exe={}", m.id.pid, m.role, m.why, m.id.exe))
-        .collect();
-    lines.extend(plan.excluded.iter().map(|e| format!("skip pid={} why={} exe={}", e.pid, e.why, e.exe)));
-    lines
-}
-
 /// The macOS backend. Holds no per-pause state: a stopped process stays stopped by itself, and
 /// every signal is re-checked against the process's identity.
 pub struct MacBackend {

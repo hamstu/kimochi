@@ -21,6 +21,17 @@ fn no_prefix(_: u32) -> Option<Option<String>> {
     None
 }
 
+/// One line per process for the verbose log: pid, role, why, executable; then the exclusions.
+fn describe(plan: &Plan) -> Vec<String> {
+    let mut lines: Vec<String> = plan
+        .members
+        .iter()
+        .map(|m| format!("stop pid={} role={:?} why={} exe={}", m.id.pid, m.role, m.why, m.id.exe))
+        .collect();
+    lines.extend(plan.excluded.iter().map(|e| format!("skip pid={} why={} exe={}", e.pid, e.why, e.exe)));
+    lines
+}
+
 fn game(pid: u32) -> GameRef {
     GameRef { pid: Some(pid), ..GameRef::default() }
 }
@@ -571,15 +582,15 @@ fn the_guard_resumes_a_real_game_when_the_heartbeat_stops() {
     let backend = MacBackend { ctx: other() };
     let journal = Journal::in_dir(&scratch.0);
     let t0 = Instant::now();
-    let mut core = Core::new(&backend, journal, t0).with_heartbeat_loss(Duration::from_millis(500));
+    let mut core = Core::new(&backend, journal, t0);
     let plan = backend.plan(&game(tree.pid())).unwrap();
     let replies = core.handle(Request::Suspend { id: 1, plan }, t0);
     assert!(matches!(replies.last(), Some(Reply::Suspended { .. })), "{replies:?}");
     for pid in tree.all() {
         assert!(is_stopped(pid));
     }
-    // The app goes quiet.
-    let replies = core.tick(t0 + Duration::from_millis(600));
+    // The app goes quiet (the guard's clock is driven by hand: no real wait).
+    let replies = core.tick(t0 + super::super::super::guard::HEARTBEAT_LOSS + Duration::from_millis(100));
     assert!(matches!(replies.as_slice(), [Reply::Resumed { reason, .. }] if reason == "heartbeat"), "{replies:?}");
     for pid in tree.all() {
         assert!(!is_stopped(pid));
