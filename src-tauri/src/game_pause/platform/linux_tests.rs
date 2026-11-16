@@ -307,7 +307,10 @@ impl Drop for Tree {
 
 /// The backend as an unrelated caller (this test's children are otherwise Kimochi's own).
 fn linux() -> Linux {
-    Linux { me: Some(Me { pid: 0x7fff_fff0, uid: unsafe { libc::geteuid() }, exe: None, home: None }) }
+    Linux {
+        me: Some(Me { pid: 0x7fff_fff0, uid: unsafe { libc::geteuid() }, exe: None, home: None }),
+        ..Default::default()
+    }
 }
 fn stopped(pid: u32) -> bool {
     all_stopped(pid) == Some(true)
@@ -520,4 +523,164 @@ fn rapid_pause_and_resume_never_leaves_the_game_stopped() {
         backend.resume(&suspended).unwrap();
     }
     assert!(tree.all().into_iter().all(running));
+}
+
+// ---- PipeWire parking, against the session's real PipeWire ----
+
+/// A sine as a 16-bit mono 48 kHz WAV.
+fn sine_wav(path: &Path, freq: f64, seconds: u32) {
+    let rate = 48_000u32;
+    let samples: Vec<i16> = (0..rate * seconds)
+        .map(|i| (8000.0 * (2.0 * std::f64::consts::PI * freq * f64::from(i) / f64::from(rate)).sin()) as i16)
+        .collect();
+    let data: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+    let mut wav = Vec::new();
+    wav.extend(b"RIFF");
+    wav.extend((36 + data.len() as u32).to_le_bytes());
+    wav.extend(b"WAVEfmt ");
+    wav.extend(16u32.to_le_bytes());
+    wav.extend(1u16.to_le_bytes());
+    wav.extend(1u16.to_le_bytes());
+    wav.extend(rate.to_le_bytes());
+    wav.extend((rate * 2).to_le_bytes());
+    wav.extend(2u16.to_le_bytes());
+    wav.extend(16u16.to_le_bytes());
+    wav.extend(b"data");
+    wav.extend((data.len() as u32).to_le_bytes());
+    wav.extend(data);
+    std::fs::write(path, wav).unwrap();
+}
+
+/// The samples of a 16-bit WAV's first channel.
+fn wav_samples(path: &Path) -> (Vec<i16>, u32) {
+    let bytes = std::fs::read(path).unwrap();
+    let channels = u16::from_le_bytes([bytes[22], bytes[23]]) as usize;
+    let rate = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]);
+    let mut at = 12;
+    while at + 8 <= bytes.len() {
+        let size = u32::from_le_bytes([bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]]) as usize;
+        if &bytes[at..at + 4] == b"data" {
+            let end = (at + 8 + size).min(bytes.len());
+            let all: Vec<i16> = bytes[at + 8..end].chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect();
+            return (all.into_iter().step_by(channels).collect(), rate);
+        }
+        at += 8 + size;
+    }
+    (Vec::new(), rate)
+}
+
+/// The longest stretch of silence, in ms, between the first and the last sound.
+fn longest_silence_ms(samples: &[i16], rate: u32) -> u64 {
+    let loud = |s: &i16| s.unsigned_abs() > 200;
+    let (Some(first), Some(last)) = (samples.iter().position(loud), samples.iter().rposition(loud)) else {
+        return u64::MAX;
+    };
+    let (mut run, mut longest) = (0u64, 0u64);
+    for s in &samples[first..=last] {
+        run = if loud(s) { 0 } else { run + 1 };
+        longest = longest.max(run);
+    }
+    longest * 1000 / u64::from(rate)
+}
+
+fn pw(dump_filter: impl Fn(&serde_json::Value) -> bool) -> bool {
+    let out = std::process::Command::new("pw-dump").output().unwrap();
+    dump_filter(&serde_json::from_slice(&out.stdout).unwrap())
+}
+
+#[test]
+#[ignore = "needs a PipeWire session with pw-play and pw-record; run by hand"]
+fn a_paused_native_pipewire_game_does_not_silence_other_apps() {
+    use std::process::{Command, Stdio};
+    if std::process::Command::new("pw-dump").output().map(|o| !o.status.success()).unwrap_or(true) {
+        eprintln!("no PipeWire here; skipped");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("kimochi-park-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    sine_wav(&dir.join("other.wav"), 440.0, 60);
+    sine_wav(&dir.join("game.wav"), 1000.0, 60);
+    // The "real" output: a null sink of this test's own (never the user's speakers).
+    let sink = format!("kimochi-pause-test-sink-{}", std::process::id());
+    let mut owner =
+        Command::new("pw-cli").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+    {
+        use std::io::Write;
+        let line = format!("create-node adapter {{ factory.name=support.null-audio-sink node.name={sink} media.class=Audio/Sink object.linger=false audio.position=[FL FR] priority.session=0 priority.driver=0 }}\n");
+        owner.stdin.as_mut().unwrap().write_all(line.as_bytes()).unwrap();
+    }
+    std::thread::sleep(Duration::from_millis(800));
+    let spawn = |args: &[&str]| {
+        Command::new(args[0]).args(&args[1..]).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap()
+    };
+    let record = dir.join("record.wav");
+    let mut recorder = spawn(&[
+        "pw-record",
+        "-P",
+        "{ stream.capture.sink=true }",
+        "--target",
+        &sink,
+        "--channels",
+        "1",
+        "--rate",
+        "48000",
+        record.to_str().unwrap(),
+    ]);
+    std::thread::sleep(Duration::from_millis(300));
+    let mut other = spawn(&["pw-play", "--target", &sink, dir.join("other.wav").to_str().unwrap()]);
+    let mut game = spawn(&["pw-play", "--target", &sink, dir.join("game.wav").to_str().unwrap()]);
+    std::thread::sleep(Duration::from_millis(1500));
+
+    let backend = linux();
+    let plan = backend.plan(&window(game.id())).unwrap();
+    let suspended = backend.suspend(&plan).unwrap();
+    let notes: Vec<&str> =
+        suspended.results.iter().filter(|r| r.note.starts_with("audio:")).map(|r| r.note.as_str()).collect();
+    eprintln!("{notes:#?}");
+    assert!(notes.iter().any(|n| n.contains("parked 1 stream")), "{notes:?}");
+    assert!(stopped(game.id()));
+    std::thread::sleep(Duration::from_millis(3000));
+    backend.resume(&suspended).unwrap();
+    assert!(running(game.id()));
+    assert!(pw(|d| audio::park_sinks(d).is_empty()), "the park sink is gone");
+    assert!(pw(|d| !audio::metadata(d, "default").iter().any(|e| e.key == audio::RESTORE_KEY)), "nothing left saved");
+    assert!(
+        pw(|d| audio::metadata(d, "default").iter().all(|e| !e.value.starts_with(audio::PARK_PREFIX))),
+        "no stream points at a park sink"
+    );
+    std::thread::sleep(Duration::from_millis(1000));
+
+    // The guard dies while holding the pause: its park sink goes with its pw-cli, and a later
+    // resume by another process (the journal's recovery) puts the stream back.
+    let suspended = backend.suspend(&backend.plan(&window(game.id())).unwrap()).unwrap();
+    let owner_pid = backend.audio.lock().unwrap().as_ref().map(|p| p.owner_pid()).expect("parked again");
+    unsafe { libc::kill(owner_pid as i32, libc::SIGKILL) };
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(pw(|d| audio::park_sinks(d).is_empty()), "the park sink died with its owner");
+    assert!(
+        pw(|d| audio::metadata(d, "default").iter().any(|e| e.key == audio::RESTORE_KEY)),
+        "what to restore is still known"
+    );
+    let recovery = linux();
+    recovery.resume(&suspended).unwrap();
+    assert!(running(game.id()));
+    assert!(pw(|d| !audio::metadata(d, "default").iter().any(|e| e.key == audio::RESTORE_KEY)));
+    // The first backend's leftover (its owner already dead) is harmless.
+    drop(backend);
+
+    std::thread::sleep(Duration::from_millis(500));
+    for child in [&mut other, &mut game] {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    unsafe { libc::kill(recorder.id() as i32, libc::SIGINT) };
+    let _ = recorder.wait();
+    let _ = owner.kill();
+    let _ = owner.wait();
+    let (samples, rate) = wav_samples(&record);
+    let silence = longest_silence_ms(&samples, rate);
+    eprintln!("recorded {} ms, longest silence {silence} ms", samples.len() as u64 * 1000 / u64::from(rate));
+    // Without parking, the output is silent for the whole 3 s pause.
+    assert!(silence < 300, "the other app went quiet for {silence} ms");
+    let _ = std::fs::remove_dir_all(dir);
 }

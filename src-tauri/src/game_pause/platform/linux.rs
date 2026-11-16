@@ -788,6 +788,13 @@ pub struct Linux {
     /// Who counts as Kimochi; tests stand in for an unrelated caller (their throwaway processes
     /// are their own children, which Kimochi never stops).
     me: Option<Me>,
+    /// The game's native PipeWire streams parked for the pause held now (see `linux_audio`).
+    audio: std::sync::Mutex<Option<audio::Parked>>,
+}
+
+/// Audio steps as log lines in a suspend's results (pid 0: they are about the game as a whole).
+fn audio_results(steps: audio::Steps) -> Vec<PidResult> {
+    steps.into_iter().map(|note| PidResult { pid: 0, ok: true, code: None, note, micros: 0 }).collect()
 }
 
 impl Linux {
@@ -835,21 +842,39 @@ impl Backend for Linux {
         let me = self.me();
         let mut stopped = Vec::new();
         let mut results = Vec::new();
-        stop_all(plan.members.iter().map(|m| &m.id), &me, &mut stopped, &mut results)?;
+        // While the game still runs: its own PipeWire streams must leave the shared output first.
+        let mut steps = Vec::new();
+        let pids: Vec<u32> = plan.members.iter().map(|m| m.id.pid).collect();
+        let parked = audio::park(&pids, &mut steps);
+        let fail = |error: PauseError, parked, mut steps: audio::Steps| {
+            audio::unpark(parked, &mut steps);
+            let mut results = error.results.clone();
+            results.extend(audio_results(steps));
+            Err(PauseError { results, ..error })
+        };
+        if let Err(error) = stop_all(plan.members.iter().map(|m| &m.id), &me, &mut stopped, &mut results) {
+            return fail(error, parked, steps);
+        }
         // Children started while the plan was carried out.
         if let Err(error) = self.second_pass(&plan.game, &me, &mut stopped, &mut results) {
             let mut results = error.results.clone();
             continue_all(stopped.iter().rev(), &me, &mut results);
-            return Err(PauseError { results, ..error });
+            return fail(PauseError { results, ..error }, parked, steps);
         }
         if stopped.is_empty() {
-            return Err(PauseError {
+            let error = PauseError {
                 refusal: Some(RefusalKind::NotFound),
                 results,
                 ..PauseError::new("none of the game's processes is running any more")
-            });
+            };
+            return fail(error, parked, steps);
         }
         confirm_stopped(&stopped, &mut results);
+        results.extend(audio_results(steps));
+        if let Some(previous) = std::mem::replace(&mut *self.audio.lock().unwrap_or_else(|e| e.into_inner()), parked) {
+            // A pause is always resumed before the next; should one not have been, its sink goes.
+            drop(previous);
+        }
         Ok(Suspended { game: plan.game.clone(), members: stopped, mechanism: MECHANISM.into(), results })
     }
 
@@ -857,6 +882,15 @@ impl Backend for Linux {
         let me = self.me();
         let mut results = Vec::new();
         let failed = continue_all(suspended.members.iter().rev(), &me, &mut results);
+        // Once the game runs again: its streams back where they were (also streams parked by a
+        // guard that died, found through the metadata), and the park sink gone.
+        let mut steps = Vec::new();
+        let parked = self.audio.lock().unwrap_or_else(|e| e.into_inner()).take();
+        audio::unpark(parked, &mut steps);
+        for step in &steps {
+            eprintln!("game pause: {step}");
+        }
+        results.extend(audio_results(steps));
         match failed.first() {
             None => Ok(()),
             Some((pid, code, _)) => Err(PauseError {
@@ -934,6 +968,9 @@ impl Backend for Linux {
         }
     }
 }
+
+#[path = "linux_audio.rs"]
+mod audio;
 
 #[cfg(test)]
 #[path = "linux_tests.rs"]
