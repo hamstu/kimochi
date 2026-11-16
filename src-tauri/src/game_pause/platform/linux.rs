@@ -204,12 +204,21 @@ impl Proc {
     }
 }
 
+/// The most of a program's name `comm` holds: a longer name is cut there (`TASK_COMM_LEN` - 1).
+const COMM_MAX: usize = 15;
+
 /// Why a process is never stopped, when it is on the denylist.
 pub fn denied(comm: &str, exe_name: Option<&str>) -> Option<String> {
     for name in [Some(comm), exe_name].into_iter().flatten() {
         if NEVER.contains(&name) || NEVER_PREFIX.iter().any(|p| name.starts_with(p)) {
             return Some(format!("{name} is never stopped"));
         }
+    }
+    // A name longer than `comm` holds shows cut, and the executable does not always name it (a
+    // script's is its interpreter's): compare the cut names too.
+    let cut = |name: &'static str| name.get(..COMM_MAX).unwrap_or(name);
+    if comm.len() == COMM_MAX && NEVER.iter().chain(NEVER_PREFIX).any(|n| n.len() > COMM_MAX && cut(n) == comm) {
+        return Some(format!("{comm} is never stopped"));
     }
     None
 }
