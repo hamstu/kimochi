@@ -757,6 +757,12 @@ impl Backend for MacBackend {
     fn identity(&self, pid: u32) -> Option<ProcIdentity> {
         identity(pid)
     }
+    fn stopped(&self, id: &ProcIdentity) -> Option<bool> {
+        match live(id) {
+            Live::Matches { stopped } => Some(stopped),
+            Live::Gone | Live::Different => None,
+        }
+    }
     fn refresh(&self, suspended: &mut Suspended) -> Result<(), PauseError> {
         refresh_suspended(suspended, self.ctx)
     }

@@ -127,9 +127,15 @@ impl<'a> Core<'a> {
     fn suspend(&mut self, id: u64, plan: Plan, now: Instant) -> Reply {
         // The whole plan goes in the journal first: a crash halfway through still names every
         // process that might be stopped.
+        // Processes already stopped by someone else are left out: recovery must never continue them.
         let mut entry = Entry {
             game: plan.game.clone(),
-            members: plan.members.iter().map(|m| m.id.clone()).collect(),
+            members: plan
+                .members
+                .iter()
+                .filter(|m| self.backend.stopped(&m.id) != Some(true))
+                .map(|m| m.id.clone())
+                .collect(),
             mechanism: plan.mechanism.clone(),
             at: wall_ms(),
             guard: self.pid,

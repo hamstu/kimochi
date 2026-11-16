@@ -847,8 +847,20 @@ fn pending_return() -> std::sync::MutexGuard<'static, Option<(u32, Instant)>> {
 }
 
 fn reactivate(app: &tauri::AppHandle, pid: u32) {
-    let _ = app.run_on_main_thread(move || {
-        let _ = crate::platform::activate_process(pid);
+    let app = app.clone();
+    // A paused game is resumed before it is activated, never after: activating a stopped app
+    // waits on it (macOS Accessibility, Windows' foreground hand-off).
+    std::thread::spawn(move || {
+        if !crate::game_pause::app::resume_before_activating("handing focus back to the game") {
+            log(
+                &app,
+                json!({ "check": "controller-nav", "handBack": "skipped: the game is still paused", "pid": pid }),
+            );
+            return;
+        }
+        let _ = app.run_on_main_thread(move || {
+            let _ = crate::platform::activate_process(pid);
+        });
     });
 }
 

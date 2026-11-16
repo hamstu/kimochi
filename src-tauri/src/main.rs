@@ -1344,6 +1344,15 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
     let window = SourceId::parse(&source_id)
         .filter(|id| id.is_window() && id.is_local() && id.pid().is_some_and(|pid| pid > 0))
         .ok_or("invalid: only a window source can be brought to the front")?;
+    // A paused game runs again before it is brought forward (it must never be activated stopped).
+    let resumed = tauri::async_runtime::spawn_blocking(|| {
+        game_pause::app::resume_before_activating("source brought to the front")
+    })
+    .await
+    .unwrap_or(false);
+    if !resumed {
+        return Err("busy: the game is still paused".into());
+    }
     let (tx, rx) = std::sync::mpsc::channel();
     // The window itself, switching to its Space or desktop: a full-screen app is in one of
     // its own, and its application may have other windows elsewhere.

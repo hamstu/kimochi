@@ -26,8 +26,11 @@ static EPOCH: LazyLock<Instant> = LazyLock::new(Instant::now);
 struct Shared {
     status: Option<Status>,
     spans: Vec<PauseSpan>,
+    /// The processes of the pause in effect (from the suspend request until the resume is
+    /// confirmed).
+    pids: Vec<u32>,
 }
-static SHARED: Mutex<Shared> = Mutex::new(Shared { status: None, spans: Vec::new() });
+static SHARED: Mutex<Shared> = Mutex::new(Shared { status: None, spans: Vec::new(), pids: Vec::new() });
 static RESUMED: Condvar = Condvar::new();
 static TX: OnceLock<Mutex<Sender<Input>>> = OnceLock::new();
 
@@ -46,6 +49,24 @@ pub fn status() -> Option<Status> {
 /// Whether a pause span is open (the game is suspended, or about to be, or not yet confirmed resumed).
 pub fn paused() -> bool {
     SHARED.lock().unwrap_or_else(|p| p.into_inner()).spans.last().is_some_and(|s| s.end_ms.is_none())
+}
+
+/// Whether `pid` is part of the pause in effect: nothing may wait on it (Accessibility,
+/// synchronous window messages) or bring it to the front.
+pub fn holds_pid(pid: u32) -> bool {
+    SHARED.lock().unwrap_or_else(|p| p.into_inner()).pids.contains(&pid)
+}
+
+/// Before Kimochi brings an application to the front (handing focus back after the controller
+/// menu, a source brought forward): a paused game is resumed first, and this waits for it (at
+/// most 1.5 s). False when it is still paused: then it must not be activated. Never call it from
+/// the game pause thread; from the main thread only where a short wait is acceptable.
+pub fn resume_before_activating(why: &str) -> bool {
+    if !paused() {
+        return true;
+    }
+    send(Input::ForceResume(why.into()));
+    wait_until_resumed(Duration::from_millis(1500))
 }
 
 /// Pause spans that ended after `since_ms` (Unix wall-clock ms, `kimochi_capture::audio::now_ms`)
@@ -153,6 +174,7 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                     Effect::Log { verbose, value } => log(&app, verbose, value),
                 }
             }
+            SHARED.lock().unwrap_or_else(|p| p.into_inner()).pids = machine.paused_pids();
             publish_spans(&app, machine.spans());
         }
     });

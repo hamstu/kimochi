@@ -206,6 +206,19 @@ impl Machine {
         }
     }
 
+    /// Every process of the pause in effect, from the suspend request until the resume is confirmed.
+    pub fn paused_pids(&self) -> Vec<u32> {
+        if self.phase == Phase::Idle {
+            return Vec::new();
+        }
+        let Some(current) = &self.current else { return Vec::new() };
+        let mut pids: Vec<u32> = current.plan.iter().flat_map(|p| p.members.iter().map(|m| m.id.pid)).collect();
+        pids.extend(current.game.pid);
+        pids.sort_unstable();
+        pids.dedup();
+        pids
+    }
+
     pub fn phase(&self) -> Phase {
         self.phase
     }
@@ -927,6 +940,25 @@ mod tests {
         let Reply::Ready { recovered, .. } = next.start() else { panic!() };
         assert_eq!(recovered.len(), 2);
         assert!(!fake.any_stopped());
+    }
+
+    #[test]
+    fn recovery_never_continues_a_process_stopped_by_someone_else() {
+        let fake = Fake::new();
+        fake.spawn(100, 1, None);
+        fake.spawn(101, 2, Some(100));
+        fake.state.lock().unwrap().procs.get_mut(&101).unwrap().stopped = true; // a debugger's
+        let j = journal("notours");
+        let plan = fake.plan(&GameRef { pid: Some(100), ..Default::default() }).unwrap();
+        let mut core = Core::new(&fake, j.clone(), Instant::now());
+        let replies = core.handle(Request::Suspend { id: 1, plan }, Instant::now());
+        let Reply::Suspended { suspended, .. } = &replies[0] else { panic!("{replies:?}") };
+        assert_eq!(suspended.members.iter().map(|m| m.pid).collect::<Vec<_>>(), [100]);
+        assert_eq!(j.read().unwrap().members.iter().map(|m| m.pid).collect::<Vec<_>>(), [100]);
+        std::mem::forget(core);
+        Core::new(&fake, j, Instant::now()).start();
+        assert!(!fake.stopped(100));
+        assert!(fake.stopped(101), "someone else's stop is left alone");
     }
 
     #[test]
