@@ -108,16 +108,31 @@ function place(label: HTMLElement, degrees: number): void {
   label.style.setProperty('--y', `${y}px`)
 }
 
-/** A drag under way: the item's label, the slot it holds now, and every slot's item. */
+/** A drag under way: the item's label and spoke, the slot it holds now, and every slot's item. */
 interface Drag {
   pointerId: number
   startX: number
   startY: number
   moving: boolean
   label: HTMLElement
+  spoke: SVGElement
   slot: number
   ids: string[]
   labels: HTMLElement[]
+  spokes: SVGElement[]
+  /** How far each spoke is turned from where it was drawn, in degrees, unwrapped. */
+  turns: Map<SVGElement, number>
+}
+
+/**
+ * Turn `spoke` (drawn at `drawnAt` degrees) to point at `degrees`, the short way round from where
+ * it points now, so a snap across the top never spins it the long way.
+ */
+function turn(drag: Drag, spoke: SVGElement, drawnAt: number, degrees: number): void {
+  const now = drag.turns.get(spoke) ?? 0
+  const gap = ((((degrees - drawnAt - now) % 360) + 540) % 360) - 180
+  drag.turns.set(spoke, now + gap)
+  spoke.style.transform = `rotate(${now + gap}deg)`
 }
 
 /**
@@ -192,7 +207,7 @@ function RadialPreview({
   /** Light the slot the dragged item is over, and name it in the hub. */
   const light = (ring: RingParts, drag: Drag): void => {
     ring.wedges.forEach((wedge, index) => wedge.classList.toggle('cm-selected', index === drag.slot))
-    ring.spokes.forEach((spoke, index) => spoke.classList.toggle('cm-selected', index === drag.slot))
+    ring.spokes.forEach((spoke) => spoke.classList.toggle('cm-selected', spoke === drag.spoke))
     ring.labels.forEach((label) => label.classList.toggle('cm-selected', label === drag.label))
     ring.current.textContent = drag.label.querySelector('.cm-label')?.textContent ?? ''
     ring.current.classList.remove('cm-muted')
@@ -209,9 +224,12 @@ function RadialPreview({
       startY: event.clientY,
       moving: false,
       label: menu.labels[slot],
+      spoke: menu.spokes[slot] as SVGElement,
       slot,
       ids: items.map(({ item }) => item.id),
-      labels: [...menu.labels]
+      labels: [...menu.labels],
+      spokes: [...menu.spokes] as SVGElement[],
+      turns: new Map()
     }
   }
 
@@ -230,21 +248,27 @@ function RadialPreview({
       }
       previewRef.current?.setAttribute('data-dragging', '')
       drag.label.setAttribute('data-dragging', '')
+      drag.spoke.setAttribute('data-dragging', '')
     }
     // The stage is scaled, but its centre is the ring's: the angle needs no scaling.
     const rect = host.getBoundingClientRect()
     const dx = event.clientX - (rect.left + rect.width / 2)
     const dy = event.clientY - (rect.top + rect.height / 2)
     const degrees = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360
-    place(drag.label, degrees)
     const span = 360 / drag.ids.length
+    const drawnAt = (spoke: SVGElement): number => ring.spokes.indexOf(spoke) * span
+    place(drag.label, degrees)
+    turn(drag, drag.spoke, drawnAt(drag.spoke), degrees)
     const nearest = Math.round(degrees / span) % drag.ids.length
     if (nearest !== drag.slot) {
       // The item it reached takes the place it left, and slides there.
       const displaced = drag.labels[nearest]
+      const displacedSpoke = drag.spokes[nearest]
       ;[drag.labels[drag.slot], drag.labels[nearest]] = [displaced, drag.label]
+      ;[drag.spokes[drag.slot], drag.spokes[nearest]] = [displacedSpoke, drag.spoke]
       ;[drag.ids[drag.slot], drag.ids[nearest]] = [drag.ids[nearest], drag.ids[drag.slot]]
       place(displaced, drag.slot * span)
+      turn(drag, displacedSpoke, drawnAt(displacedSpoke), drag.slot * span)
       drag.slot = nearest
     }
     light(ring, drag)
@@ -258,7 +282,11 @@ function RadialPreview({
     draggedAt.current = performance.now()
     // Snap into its place, then keep the new order.
     drag.label.removeAttribute('data-dragging')
-    place(drag.label, (drag.slot * 360) / drag.ids.length)
+    drag.spoke.removeAttribute('data-dragging')
+    const span = 360 / drag.ids.length
+    const ring = menuRef.current as unknown as RingParts | null
+    place(drag.label, drag.slot * span)
+    if (ring) turn(drag, drag.spoke, ring.spokes.indexOf(drag.spoke) * span, drag.slot * span)
     const ids = drag.ids
     const id = ids[drag.slot]
     // Redrawn only now: picking its row while it moved would redraw the ring under the pointer.
