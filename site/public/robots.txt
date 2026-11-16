@@ -25,4 +25,7 @@ User-agent: MistralAI-User
 User-agent: CCBot
 Allow: /
 
+# The docs live on their own host, with their own sitemap; listing it here is the cross-host way to
+# point crawlers at it (a sitemap may only list URLs on its own host).
 Sitemap: https://kimochiapp.com/sitemap.xml
+Sitemap: https://docs.kimochiapp.com/sitemap.xml

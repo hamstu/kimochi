@@ -1,4 +1,5 @@
 // Kimochi docs: Astro + Starlight, served from docs.kimochiapp.com (see README.md).
+import { copyFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
@@ -156,6 +157,20 @@ export default defineConfig({
         }
       ],
       plugins: [starlightLinksValidator({ errorOnLocalLinks: true, exclude: ['/changelog/'] })]
-    })
+    }),
+    sitemapAlias()
   ]
 })
+
+// Starlight's sitemap is dist/sitemap-index.xml (an index of sitemap-0.xml…), but crawlers and
+// people try /sitemap.xml first. Serve the same index there too (robots.txt names it).
+function sitemapAlias() {
+  return {
+    name: 'kimochi-sitemap-alias',
+    hooks: {
+      'astro:build:done': async ({ dir }) => {
+        await copyFile(new URL('sitemap-index.xml', dir), new URL('sitemap.xml', dir))
+      }
+    }
+  }
+}

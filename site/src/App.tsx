@@ -7,6 +7,7 @@ import { Terms } from './pages/Terms'
 import { Compare } from './pages/Compare'
 import { Faq } from './pages/Faq'
 import { DownloadLinux } from './pages/DownloadLinux'
+import { LinuxTextHooker } from './pages/LinuxTextHooker'
 import { NotFound } from './pages/NotFound'
 import { Account } from './pages/Account'
 import { AccountSignIn } from './pages/AccountSignIn'
@@ -58,6 +59,7 @@ export function App() {
           <Route path="faq" element={<Faq />} />
           <Route path="compare" element={<Compare />} />
           <Route path="download/linux" element={<DownloadLinux />} />
+          <Route path="linux-steam-deck-text-hooker" element={<LinuxTextHooker />} />
           <Route path="account" element={<Account />} />
           <Route path="account/sign-in" element={<AccountSignIn />} />
           <Route path="account/sign-up" element={<AccountSignUp />} />
