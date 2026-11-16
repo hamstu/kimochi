@@ -11,14 +11,16 @@
 const SVG = 'http://www.w3.org/2000/svg'
 /**
  * The ring's geometry (the Halo design, styled by controller-variants.css): the hub naming the
- * chosen item, the track round it that the marker slides along, the donut of segments (from
- * INNER to OUTER) the icons sit in on the orbit, and the size of the whole.
+ * chosen item, the track round it (a band from HUB to INNER) that the marker fills as it slides,
+ * the donut of segments (from INNER to OUTER) the icons sit in on the orbit, how far the chosen
+ * segment stands out past the rim, and the size of the whole.
  */
 const HUB = 96
-const TRACK = 107
-const INNER = 118
-export const ORBIT = 198
-const OUTER = 278
+const INNER = 106
+const TRACK = (HUB + INNER) / 2
+export const ORBIT = 196
+const OUTER = 276
+const LIFT = 8
 const HALO = 292
 /** How far the stick must lean before it points at an item. */
 export const AIM_THRESHOLD = 0.5
@@ -190,23 +192,25 @@ export class RadialMenu {
     // round the ring's centre, so every segment's runs out along its own angle.
     svg.innerHTML = `
       <defs>
-        <radialGradient id="cm-lit" cx="0" cy="0" r="${OUTER}" gradientUnits="userSpaceOnUse">
-          <stop offset="${INNER / OUTER}" class="cm-lit-from"/>
+        <radialGradient id="cm-lit" cx="0" cy="0" r="${OUTER + LIFT}" gradientUnits="userSpaceOnUse">
+          <stop offset="${INNER / (OUTER + LIFT)}" class="cm-lit-from"/>
           <stop offset="1" class="cm-lit-to"/>
         </radialGradient>
       </defs>
-      <circle class="cm-track" r="${TRACK}"/>`
-    // The segments of the donut, each an item's, and where the mouse points at it.
+      <circle class="cm-track" r="${TRACK}" stroke-width="${INNER - HUB}"/>
+      <circle class="cm-rim" r="${OUTER}"/>`
+    // The segments of the donut, each an item's, and where the mouse points at it. Each reaches
+    // past the rim, unseen, so the chosen one stands out beyond it.
     this.wedges = items.map((item, index) => {
       const middle = index * span
       const path = document.createElementNS(SVG, 'path')
-      path.setAttribute('d', sectorPath(middle - span / 2, middle + span / 2, OUTER, INNER))
+      path.setAttribute('d', sectorPath(middle - span / 2, middle + span / 2, OUTER + LIFT, INNER))
       path.setAttribute('class', 'cm-wedge')
       path.dataset.index = String(index)
       svg.append(path)
       return path
     })
-    // Thin lines between the segments, and the donut's rim over them.
+    // Thin lines between the segments.
     this.spokes =
       items.length < 2
         ? []
@@ -220,17 +224,14 @@ export class RadialMenu {
             svg.append(spoke)
             return spoke
           })
-    const rim = document.createElementNS(SVG, 'circle')
-    rim.setAttribute('class', 'cm-rim')
-    rim.setAttribute('r', String(OUTER))
-    svg.append(rim)
     const disc = document.createElementNS(SVG, 'circle')
     disc.setAttribute('class', 'cm-disc')
     disc.setAttribute('r', String(HUB))
     svg.append(disc)
     ring.append(svg)
 
-    // The marker: a bright arc on the track with a notch pointing out at the chosen segment. It
+    // The marker: a bright bar filling the track, from the hub's edge to the chosen segment's,
+    // with a notch pointing out into it. It
     // turns every frame the stick moves, so it is its own layer: rotating it repaints nothing
     // else, the blurred glass behind it included.
     const pointer = document.createElement('div')
@@ -240,8 +241,8 @@ export class RadialMenu {
     const [ax, ay] = polar(-reach, TRACK)
     const [bx, by] = polar(reach, TRACK)
     pointer.innerHTML = `<svg viewBox="${-INNER} ${-INNER} ${INNER * 2} ${INNER * 2}" aria-hidden="true">
-      <path class="cm-marker-arc" d="M${ax} ${ay}A${TRACK} ${TRACK} 0 0 1 ${bx} ${by}"/>
-      <path class="cm-marker-notch" d="M-6 ${-TRACK - 1}L0 ${-TRACK - 8}L6 ${-TRACK - 1}Z"/>
+      <path class="cm-marker-arc" stroke-width="${INNER - HUB}" d="M${ax} ${ay}A${TRACK} ${TRACK} 0 0 1 ${bx} ${by}"/>
+      <path class="cm-marker-notch" d="M-7 ${-INNER + 0.5}L0 ${-INNER - 6}L7 ${-INNER + 0.5}Z"/>
     </svg>`
     ring.append(pointer)
     this.pointer = pointer
