@@ -678,6 +678,39 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
     }
 }
 
+/// Game pause: whether window source `id` still exists as a window of the process it names, so a
+/// game that closed (whose pid will soon be free) is never planned. Minimised windows, windows on
+/// another Space and full-screen windows count: `window_bounds`' single-window query returns
+/// nothing for a minimised or ordered-out window, so this reads the full list instead (once per
+/// plan, not per frame).
+pub fn game_window_open(id: &SourceId) -> bool {
+    if !id.is_window() || !id.is_local() {
+        return false;
+    }
+    let (Some(window_number), Some(pid)) = (id.handle_u32(), id.pid()) else {
+        return false;
+    };
+    objc2::rc::autoreleasepool(|_| unsafe {
+        // kCGWindowListOptionAll: every window, on screen or not.
+        let ptr = CGWindowListCopyWindowInfo(0, 0);
+        if ptr.is_null() {
+            return false;
+        }
+        let Some(list): Option<Retained<objc2_foundation::NSArray<NSDictionary<NSString, AnyObject>>>> =
+            Retained::from_raw(ptr.cast())
+        else {
+            return false;
+        };
+        list.iter().any(|entry| {
+            let number = |key: &NSString| -> Option<f64> {
+                entry.objectForKey(key).map(|value| msg_send![&*value, doubleValue])
+            };
+            number(ns_string!("kCGWindowNumber")) == Some(f64::from(window_number))
+                && number(ns_string!("kCGWindowOwnerPID")) == Some(f64::from(pid))
+        })
+    })
+}
+
 /// The window the reader is actually working in: the frontmost ordinary window **of
 /// the frontmost application**.
 ///

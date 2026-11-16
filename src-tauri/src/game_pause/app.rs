@@ -164,8 +164,13 @@ impl Context for AppCx {
         // Only a selected window names the game: with a display (or nothing) selected, the app in
         // front could be anything (a browser, a call), and is never paused. The window must still
         // be open: `window_bounds` checks a Windows handle against the id's pid (handles are
-        // recycled); a macOS window number is not reused, so its window existing is enough.
-        #[cfg(not(target_os = "linux"))]
+        // recycled) and answers for a minimised window too; on macOS it does not (its query skips
+        // minimised and ordered-out windows), so the full window list is read there.
+        #[cfg(target_os = "macos")]
+        {
+            super::target::game_ref(selection.as_deref(), None, &|_| None, &crate::platform::game_window_open)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         super::target::game_ref(selection.as_deref(), None, &|_| None, &|id| {
             crate::platform::window_bounds(id).is_some()
         })
