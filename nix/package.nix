@@ -5,25 +5,32 @@ let
   rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
   x64 = pkgs.stdenv.hostPlatform.isx86_64;
   resourceName = (builtins.fromJSON (builtins.readFile ../src-tauri/tauri.conf.json)).productName;
+  summary = (builtins.fromJSON (builtins.readFile ../src-tauri/tauri.linux.conf.json)).bundle.shortDescription;
+  # The OCR crates' licence files and model manifest come from the revisions src-tauri/Cargo.lock
+  # pins, so updating a crate there needs no change here.
+  cargoLockPackages = (builtins.fromTOML (builtins.readFile ../src-tauri/Cargo.lock)).package;
+  lockedGitSource = name:
+    let
+      source = (lib.findFirst (p: p.name == name) (throw "${name} is not in src-tauri/Cargo.lock")
+        cargoLockPackages).source;
+    in
+    builtins.fetchGit {
+      url = lib.removePrefix "git+" (builtins.head (lib.splitString "?" source));
+      rev = lib.last (lib.splitString "#" source);
+      allRefs = true;
+    };
   ocrSources = {
-    meikiocr = pkgs.fetchFromGitHub {
-      owner = "hamstu";
-      repo = "kimochi-meikiocr";
-      rev = "7a1b9a762acbdf6b09d7386b4395c366f135733b";
-      hash = "sha256-9UrrJtPSbMSyc/irBw5RYIcVBpuW4XjBSrXWSXpLZsI=";
-    };
-    mangaocr = pkgs.fetchFromGitHub {
-      owner = "hamstu";
-      repo = "kimochi-mangaocr";
-      rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd";
-      hash = "sha256-TYDUTuG9Nh6v5ryco5X6TT9SBnJBXBPVxywqsUps8ks=";
-    };
+    meikiocr = lockedGitSource "meikiocr";
+    mangaocr = lockedGitSource "mangaocr";
   };
   frontend = pkgs.buildNpmPackage {
     pname = "kimochi-frontend";
     inherit version src;
     nodejs = pkgs.nodejs_22;
-    npmDepsHash = "sha256-INLBxoRwHPdUfTQSrxZoN7mY/7IMB9JVY+njIW+IBoQ=";
+    # Fetch each package by the integrity hash in package-lock.json, so a lockfile change needs
+    # no hash update here.
+    npmDeps = pkgs.importNpmLock { npmRoot = src; };
+    npmConfigHook = pkgs.importNpmLock.npmConfigHook;
     npmFlags = [ "--ignore-scripts" ];
     preBuild = "node scripts/prepare.mjs";
     npmBuildScript = "build:frontend";
@@ -91,11 +98,8 @@ rustPlatform.buildRustPackage {
   buildAndTestSubdir = "src-tauri";
   cargoLock = {
     lockFile = ../src-tauri/Cargo.lock;
-    outputHashes = {
-      "meikiocr-0.1.0" = "sha256-9UrrJtPSbMSyc/irBw5RYIcVBpuW4XjBSrXWSXpLZsI=";
-      "mangaocr-0.1.0" = "sha256-TYDUTuG9Nh6v5ryco5X6TT9SBnJBXBPVxywqsUps8ks=";
-      "ppocr-0.1.0" = "sha256-c0BGWoq6FNySpMnkmMjc1Yx/j0+amKS4/7CtC6HAd4s=";
-    };
+    # Git dependencies are fetched by the revision the lockfile pins, without separate hashes.
+    allowBuiltinFetchGit = true;
   };
   nativeBuildInputs = with pkgs; [
     pkg-config cmake perl python3 wrapGAppsHook3 autoPatchelfHook makeWrapper
@@ -140,7 +144,7 @@ rustPlatform.buildRustPackage {
     install -Dm644 ${pkgs.makeDesktopItem {
       name = "kimochi";
       desktopName = "Kimochi";
-      comment = "Read visual novels with OCR and pop-up dictionaries";
+      comment = summary;
       exec = "kimochi %u";
       icon = "kimochi";
       categories = [ "Education" "Languages" ];
@@ -183,7 +187,7 @@ rustPlatform.buildRustPackage {
     inherit hookd voicehook;
   };
   meta = {
-    description = "On-screen OCR, pop-up dictionaries and a reading log for visual novels";
+    description = summary;
     homepage = "https://github.com/hamstu/kimochi";
     license = lib.licenses.gpl3Only;
     platforms = [ "x86_64-linux" "aarch64-linux" ];

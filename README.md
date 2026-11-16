@@ -72,7 +72,7 @@ can take some time. Dictionary engines and OCR models are downloaded by the app 
 temporary virtual desktop.
 
 To install it through a NixOS flake, add this repository as an input and select its package
-for your system (replace the URL with your fork if these changes are not upstream):
+for your system:
 
 ```nix
 {
@@ -95,8 +95,8 @@ for your system (replace the URL with your fork if these changes are not upstrea
 }
 ```
 
-The same package works in Home Manager's `home.packages`. You can use a local input such as
-`path:/home/you/src/kimochi` while these changes are only on your machine.
+The same package works in Home Manager's `home.packages`. To build from a local checkout,
+use an input such as `path:/home/you/src/kimochi`.
 
 For an interactive development environment instead:
 
@@ -114,8 +114,8 @@ by the flake. Native overlays also depend on your compositor's support (see the
 [Linux notes](src-tauri/src/platform/linux/DEPS.md)).
 
 If flakes are not enabled, add `--extra-experimental-features 'nix-command flakes'` to the
-`nix` command. When adding these files to your own Git checkout, track `flake.nix`,
-`flake.lock` and the files under `nix/` before using `nix run .`, since Git flakes omit untracked files.
+`nix` command. A flake in a Git checkout sees only tracked files, so `git add` new files before
+`nix run .` or `nix build`.
 
 ### Other source builds
 
