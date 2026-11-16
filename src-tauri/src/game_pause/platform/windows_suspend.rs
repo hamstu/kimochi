@@ -29,11 +29,11 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use windows::core::{s, w, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED, FILETIME, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, FILETIME, HANDLE};
 use windows::Win32::Security::{
     EqualSid, GetTokenInformation, TokenElevation, TokenUser, TOKEN_ELEVATION, TOKEN_QUERY, TOKEN_USER,
 };
@@ -292,7 +292,6 @@ pub struct Step {
 /// One frozen process: its handles, and what to undo.
 pub(super) struct Frozen {
     pub(super) identity: Identity,
-    pub(super) role: Role,
     pub(super) mechanism: Mechanism,
     process: Owned,
     /// The state change object, for `Mechanism::StateChange`. Closing it resumes the process.
@@ -674,15 +673,7 @@ pub(super) fn freeze_one(planned: &Planned, use_state_change: bool) -> Result<(F
             }
         }
     }
-    let mut frozen = Frozen {
-        identity: planned.identity.clone(),
-        role: planned.role,
-        mechanism,
-        process,
-        state,
-        baseline,
-        suspends: 0,
-    };
+    let mut frozen = Frozen { identity: planned.identity.clone(), mechanism, process, state, baseline, suspends: 0 };
     if let Err(status) = suspend_once(&mut frozen) {
         // Nothing to undo: the one suspend failed (a state change object closes on drop).
         return Err(FreezeError::Suspend { pid, status });
@@ -856,16 +847,4 @@ pub fn recover(identity: &Identity) -> Recovery {
     // told apart any more, but a fully frozen game is the worse outcome.
     let corrected = if is_frozen(pid) { settle(pid, &HashMap::new()) } else { 0 };
     Recovery::Resumed { corrected }
-}
-
-/// Wait until `pid` is no longer fully frozen (tests and diagnostics).
-pub fn wait_running(pid: u32, limit: Duration) -> bool {
-    let started = Instant::now();
-    while started.elapsed() < limit {
-        if !is_frozen(pid) {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    false
 }

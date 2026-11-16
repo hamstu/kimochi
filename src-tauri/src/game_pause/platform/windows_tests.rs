@@ -2,7 +2,7 @@
 //! child (`child_process` below, which does nothing unless the environment asks it to). Every
 //! test resumes and kills what it started; nothing else is ever suspended.
 use super::super::super::backend::{Backend, GameRef, Member, ProcIdentity, RefusalKind, Role};
-use super::super::super::guard::{Core, Reply, Request};
+use super::super::super::guard::{Core, Reply, Request, HEARTBEAT_LOSS};
 use super::super::super::journal::Journal;
 use super::suspend::{self, ProcEntry};
 use super::WindowsBackend;
@@ -457,16 +457,39 @@ fn the_guard_resumes_on_heartbeat_loss() {
     let b = WindowsBackend::default();
     let plan = b.plan(&tree.game()).unwrap();
     let t0 = Instant::now();
-    let mut core = Core::new(&b, Journal::in_dir(&dir.0), t0).with_heartbeat_loss(Duration::from_millis(500));
+    let mut core = Core::new(&b, Journal::in_dir(&dir.0), t0);
     let replies = core.handle(Request::Suspend { id: 1, plan }, t0);
     assert!(matches!(replies.last(), Some(Reply::Suspended { .. })), "{replies:?}");
     assert!(tree.none_run());
     // Beats keep it; then they stop.
-    assert!(core.tick(t0 + Duration::from_millis(400)).is_empty());
-    let replies = core.tick(t0 + Duration::from_millis(1000));
+    assert!(core.tick(t0 + HEARTBEAT_LOSS / 2).is_empty());
+    let replies = core.tick(t0 + HEARTBEAT_LOSS + Duration::from_millis(100));
     assert!(matches!(replies.as_slice(), [Reply::Resumed { reason, .. }] if reason == "heartbeat"), "{replies:?}");
     assert!(tree.all_run());
     assert!(Journal::in_dir(&dir.0).read().is_none());
+}
+
+#[test]
+fn a_process_stopped_by_someone_else_is_left_alone() {
+    let tree = Tree::start("foreign", 1, false);
+    let b = backend(false);
+    let plan = b.plan(&tree.game()).unwrap();
+    let kid = plan.members[1].id.clone();
+    // Someone else stops the child first.
+    let other = backend(false);
+    let foreign = other
+        .suspend(&super::super::super::backend::Plan { members: vec![plan.members[1].clone()], ..plan.clone() })
+        .unwrap();
+    assert_eq!(b.stopped(&kid), Some(true));
+    assert_eq!(b.stopped(&plan.members[0].id), Some(false));
+    let ours = b.suspend(&plan).unwrap();
+    assert_eq!(ours.members, vec![plan.members[0].id.clone()], "a foreign-stopped member is not ours");
+    b.resume(&ours).unwrap();
+    assert!(suspend::is_frozen(kid.pid), "our resume continued a process someone else stopped");
+    other.resume(&foreign).unwrap();
+    assert!(tree.all_run());
+    // A wrong identity is unknown, not "running".
+    assert_eq!(b.stopped(&ProcIdentity { start: kid.start + 1, ..kid }), None);
 }
 
 #[test]
@@ -552,6 +575,98 @@ fn observe_a_frozen_window() {
     }
 }
 
+/// Measured, not asserted: the steps of `force_foreground` against a frozen game's thread, as
+/// when the reader opens the controller menu while a lookup pause holds the game. Brings this
+/// test's own window to the front for a moment. Run with `-- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn foreground_steps_against_a_frozen_thread() {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        AllowSetForegroundWindow, BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, PeekMessageW,
+        SendMessageTimeoutW, SetForegroundWindow, ASFW_ANY, MSG, PM_NOREMOVE, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT,
+        WM_NULL,
+    };
+    let tree = Tree::start("attach", 0, true);
+    let game = {
+        let started = Instant::now();
+        loop {
+            if let Some(h) = gui::find_window(tree.pid()) {
+                break h;
+            }
+            assert!(started.elapsed() < Duration::from_secs(10), "no window");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    };
+    let game_thread = unsafe { GetWindowThreadProcessId(game, None) };
+    // Make the game the foreground window, as it is while the reader plays.
+    unsafe {
+        let _ = AllowSetForegroundWindow(ASFW_ANY);
+        let _ = SetForegroundWindow(game);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    eprintln!("game is foreground: {}", unsafe { GetForegroundWindow() } == game);
+    let b = WindowsBackend::default();
+    let s = b.suspend(&b.plan(&tree.game()).unwrap()).unwrap();
+    eprintln!("frozen ({})", s.mechanism);
+    // Our "Kimochi window", on a thread with its own queue.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let game_raw = game.0 as usize;
+    std::thread::spawn(move || {
+        let game = windows::Win32::Foundation::HWND(game_raw as *mut _);
+        let ours_window = gui::create("kimochi pause test (ours)");
+        let mut msg = MSG::default();
+        unsafe {
+            let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+        }
+        let ours = unsafe { GetCurrentThreadId() };
+        let step = |name: &str, f: &dyn Fn() -> String| {
+            let t = Instant::now();
+            let r = f();
+            eprintln!("  {name}: {r} in {:?}", t.elapsed());
+        };
+        step("SetForegroundWindow(ours)", &|| format!("{:?}", unsafe { SetForegroundWindow(ours_window) }.as_bool()));
+        step("AttachThreadInput(ours, game, true)", &|| {
+            format!("{}", unsafe { AttachThreadInput(ours, game_thread, true) }.as_bool())
+        });
+        step("BringWindowToTop(ours)", &|| format!("{:?}", unsafe { BringWindowToTop(ours_window) }.is_ok()));
+        step("SetForegroundWindow(ours) attached", &|| {
+            format!("{:?}", unsafe { SetForegroundWindow(ours_window) }.as_bool())
+        });
+        step("AttachThreadInput(ours, game, false)", &|| {
+            format!("{}", unsafe { AttachThreadInput(ours, game_thread, false) }.as_bool())
+        });
+        step("SendMessageTimeout(ours, WM_NULL, 500)", &|| {
+            let r = unsafe {
+                SendMessageTimeoutW(
+                    ours_window,
+                    WM_NULL,
+                    WPARAM(0),
+                    LPARAM(0),
+                    SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+                    500,
+                    None,
+                )
+            };
+            format!("{}", r.0 != 0)
+        });
+        step("SendMessageTimeout(game, WM_NULL, 500)", &|| {
+            let r = unsafe {
+                SendMessageTimeoutW(game, WM_NULL, WPARAM(0), LPARAM(0), SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 500, None)
+            };
+            format!("{}", r.0 != 0)
+        });
+        eprintln!("  ours is foreground: {}", unsafe { GetForegroundWindow() } == ours_window);
+        let _ = tx.send(());
+    });
+    let finished = rx.recv_timeout(Duration::from_secs(20)).is_ok();
+    eprintln!("sequence finished: {finished}");
+    b.resume(&s).unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(finished, "a step blocked on the frozen thread");
+}
+
 mod gui {
     //! A plain window with a message loop, for `observe_a_frozen_window`.
     use windows::core::w;
@@ -562,11 +677,17 @@ mod gui {
     };
 
     pub fn run() {
+        create("kimochi pause test");
+        pump();
+    }
+
+    pub fn create(title: &str) -> HWND {
+        let title = windows::core::HSTRING::from(title);
         unsafe {
-            let Ok(hwnd) = CreateWindowExW(
+            let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 w!("STATIC"),
-                w!("kimochi pause test"),
+                &title,
                 WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                 100,
                 100,
@@ -576,13 +697,18 @@ mod gui {
                 None,
                 None,
                 None,
-            ) else {
-                return;
-            };
+            )
+            .expect("CreateWindowExW");
             // The first ShowWindow takes the launcher's show state (minimised, hidden); the
             // second shows it for real, without taking the foreground.
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            hwnd
+        }
+    }
+
+    fn pump() {
+        unsafe {
             let mut msg = MSG::default();
             while GetMessageW(&mut msg, None, 0, 0).as_bool() {
                 let _ = TranslateMessage(&msg);

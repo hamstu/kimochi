@@ -104,8 +104,12 @@ pub struct WindowsBackend {
 }
 
 impl WindowsBackend {
-    /// Freeze one member; `Ok(None)` when a child is gone (no longer part of the game).
+    /// Freeze one member; `Ok(None)` when a child is gone (no longer part of the game) or the
+    /// member is already stopped by someone else (left alone, never ours to continue).
     fn freeze(&self, member: &Member) -> Result<Option<(Frozen, PidResult)>, PauseError> {
+        if self.stopped(&member.id) == Some(true) {
+            return Ok(None);
+        }
         let state_change = self.state_change.unwrap_or_else(suspend::prefer_state_change);
         match suspend::freeze_one(&planned(member), state_change) {
             Ok((frozen, step)) => Ok(Some((frozen, frozen_result(&step)))),
@@ -166,7 +170,7 @@ impl Backend for WindowsBackend {
                     pid: member.id.pid,
                     ok: true,
                     code: None,
-                    note: "exited before the pause; skipped".into(),
+                    note: "exited, or already stopped by someone else; left alone".into(),
                     micros: 0,
                 }),
                 Err(mut error) => {
@@ -249,6 +253,13 @@ impl Backend for WindowsBackend {
 
     fn identity(&self, pid: u32) -> Option<ProcIdentity> {
         suspend::identity(pid).map(|id| proc_identity(&id))
+    }
+
+    /// Fully frozen (every thread suspended), by anyone. `None` when the pid is gone or now names
+    /// another process.
+    fn stopped(&self, id: &ProcIdentity) -> Option<bool> {
+        let now = suspend::identity(id.pid)?;
+        (now.created == id.start).then(|| suspend::is_frozen(id.pid))
     }
 
     /// Catch threads created since the suspend (each held process), and children the game started
