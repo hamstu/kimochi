@@ -293,11 +293,13 @@ export function createController(context) {
     context.log({ check: 'controller-cancelled', reason: payload?.reason ?? 'focus-elsewhere' })
     void close()
   })
-  void native.listen('controller-key', ({ payload }) => {
+  /** A menu key (`controller-key` payload), from native or the overlay's own key events. */
+  function takeKey(payload) {
     if (mode === 'idle' || context.padOnly?.()) return
     if (payload?.type === 'keydown') input = 'keys'
     controls.key(payload)
-  })
+  }
+  void native.listen('controller-key', ({ payload }) => takeKey(payload))
 
   async function setNav(active) {
     note('nav', { active })
@@ -1820,6 +1822,8 @@ export function createController(context) {
       return openHistory()
     },
     close,
+    /** A menu key the overlay received itself, as `controller-key` would deliver it. */
+    key: takeKey,
     /** What the overlay must take clicks over while the menu is up. */
     hitRects() {
       const bounds = menu.bounds()
