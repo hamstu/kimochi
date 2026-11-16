@@ -15,7 +15,7 @@ const SVG = 'http://www.w3.org/2000/svg'
  * spokes stop short of the hub and of each icon.
  */
 const HUB = 96
-const ORBIT = 198
+export const ORBIT = 198
 const HALO = 292
 const SPOKE_IN = 6
 const SPOKE_OUT = 44

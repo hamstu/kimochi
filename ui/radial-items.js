@@ -133,15 +133,20 @@ export function removeRadialItem(menu, id) {
   return canRemoveRadialItem(ids, id) ? ids.filter((other) => other !== id) : ids
 }
 
-/** `menu` with `id` moved `step` places clockwise (+1) or anticlockwise (−1), wrapping round. */
-export function moveRadialItem(menu, id, step) {
+/**
+ * `menu` with the items `shown` (some of its ids, as a source shows them) put in that order, in
+ * the places those items held: dragging round the ring with one kind of source never moves the
+ * items that only the other kind shows.
+ *
+ * @param {unknown} menu
+ * @param {string[]} shown
+ */
+export function reorderShownItems(menu, shown) {
   const ids = effectiveRadialMenu(menu)
-  const from = ids.indexOf(id)
-  if (from < 0 || ids.length < 2 || !step) return ids
-  const to = (((from + step) % ids.length) + ids.length) % ids.length
-  const next = ids.filter((other) => other !== id)
-  next.splice(to, 0, id)
-  return next
+  const moved = shown.filter((id) => ids.includes(id))
+  if (moved.length !== new Set(moved).size) return ids
+  let next = 0
+  return ids.map((id) => (moved.includes(id) ? moved[next++] : id))
 }
 
 /**
@@ -210,7 +215,7 @@ export default {
   addRadialItem,
   canRemoveRadialItem,
   removeRadialItem,
-  moveRadialItem,
+  reorderShownItems,
   radialItemsFor,
   hotkeyConflicts
 }

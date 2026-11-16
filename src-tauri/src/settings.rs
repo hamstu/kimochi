@@ -547,7 +547,7 @@ fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
     hotkeys.insert(
         "openControllerMenu".into(),
         json!({
-            "name": "Controller menu",
+            "name": "Radial menu",
             "accelerator": DEFAULT_KEYS.1,
             "description": "Open the radial menu over your source",
             "enabled": true,

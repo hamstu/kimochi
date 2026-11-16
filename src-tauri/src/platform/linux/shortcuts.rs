@@ -318,7 +318,7 @@ fn bind(app: &tauri::AppHandle, definitions: serde_json::Map<String, Value>, gen
         }
         let description = match name.as_str() {
             "triggerScan" => "Scan text",
-            "openControllerMenu" => "Open Kimochi controls",
+            "openControllerMenu" => "Open the radial menu",
             _ => actions::MENU_ITEM_ACTIONS
                 .iter()
                 .find(|(action, _, _)| *action == name)

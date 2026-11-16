@@ -15,10 +15,10 @@ import {
   hotkeyConflicts,
   isDefaultRadialMenu,
   missingRadialItems,
-  moveRadialItem,
   radialItemForHotkey,
   radialItemsFor,
-  removeRadialItem
+  removeRadialItem,
+  reorderShownItems
 } from '../ui/radial-items.js'
 
 test('nothing stored is the shipped menu, which is the menu as it was before it could be changed', () => {
@@ -72,16 +72,6 @@ test('an item added goes back where it was in the shipped menu, once', () => {
   assert.deepEqual(missingRadialItems(DEFAULT_RADIAL_MENU), [])
 })
 
-test('items move round the ring, wrapping at either end', () => {
-  const menu = ['scan', 'dictionary', 'history']
-  assert.deepEqual(moveRadialItem(menu, 'dictionary', 1), ['scan', 'history', 'dictionary'])
-  assert.deepEqual(moveRadialItem(menu, 'dictionary', -1), ['dictionary', 'scan', 'history'])
-  assert.deepEqual(moveRadialItem(menu, 'history', 1), ['history', 'scan', 'dictionary'])
-  assert.deepEqual(moveRadialItem(menu, 'scan', -1), ['dictionary', 'history', 'scan'])
-  assert.deepEqual(moveRadialItem(menu, 'auto', 1), menu)
-  assert.deepEqual(moveRadialItem(['scan'], 'scan', 1), ['scan'])
-})
-
 test('a menu of items for the other kind of source shows them, unavailable, rather than nothing', () => {
   assert.deepEqual(radialItemsFor(['scan', 'auto'], true), [
     { id: 'scan', inapplicable: true },
@@ -113,13 +103,13 @@ test('every item has its own shortcut action, which native knows, in the same or
 test('a shortcut that another one already uses is named, by keys and by buttons', () => {
   const hotkeys = {
     triggerScan: { name: 'Scan', accelerator: 'Shift+F8', enabled: true, gamepadButtons: [] },
-    openControllerMenu: { name: 'Controller menu', accelerator: 'Shift+F9', enabled: true, gamepadButtons: [10, 11] },
+    openControllerMenu: { name: 'Radial menu', accelerator: 'Shift+F9', enabled: true, gamepadButtons: [10, 11] },
     menuReadAlong: { name: 'Read along', accelerator: 'shift+f8', enabled: true, gamepadButtons: [11, 10] },
     menuRecentText: { name: 'Recent text', accelerator: '', enabled: true, gamepadButtons: [] },
     menuKimochi: { name: 'Kimochi', accelerator: '', enabled: true, gamepadButton: 10 },
     menuSettings: { name: 'Settings', accelerator: 'Shift+F8', enabled: false, gamepadButtons: [10, 11] }
   }
-  assert.deepEqual(hotkeyConflicts(hotkeys, 'menuReadAlong'), { keys: ['Scan'], buttons: ['Controller menu'] })
+  assert.deepEqual(hotkeyConflicts(hotkeys, 'menuReadAlong'), { keys: ['Scan'], buttons: ['Radial menu'] })
   assert.deepEqual(hotkeyConflicts(hotkeys, 'triggerScan'), { keys: ['Read along'], buttons: [] })
   // Unbound shortcuts never clash with one another.
   assert.deepEqual(hotkeyConflicts(hotkeys, 'menuRecentText'), { keys: [], buttons: [] })
@@ -128,4 +118,15 @@ test('a shortcut that another one already uses is named, by keys and by buttons'
   // A switched-off shortcut fires nothing, so clashes with nothing.
   assert.deepEqual(hotkeyConflicts(hotkeys, 'menuSettings'), { keys: [], buttons: [] })
   assert.deepEqual(hotkeyConflicts(hotkeys, 'missing'), { keys: [], buttons: [] })
+})
+
+test('dragging round the ring reorders what it shows, leaving the other source’s items where they were', () => {
+  // With the Text Hooker the ring shows Read along, Text Hooker, Recent text, Kimochi, settings.
+  assert.deepEqual(
+    reorderShownItems(DEFAULT_RADIAL_MENU, ['card', 'dictionary', 'history', 'controls', 'ocr-settings']),
+    ['scan', 'card', 'auto', 'dictionary', 'history', 'controls', 'ocr-settings']
+  )
+  assert.deepEqual(reorderShownItems(['history', 'scan'], ['scan', 'history']), ['scan', 'history'])
+  // Nonsense leaves the menu as it was.
+  assert.deepEqual(reorderShownItems(['history', 'scan'], ['scan', 'scan']), ['history', 'scan'])
 })

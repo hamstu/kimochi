@@ -19,7 +19,7 @@ export const DEFAULT_HOTKEYS: HotkeysSettings = {
     gamepadButtons: []
   },
   openControllerMenu: {
-    name: 'Controller menu',
+    name: 'Radial menu',
     accelerator: MAC ? 'CommandOrControl+Shift+Space' : 'Shift+F9',
     description: 'Open the radial menu over the game',
     enabled: true,

@@ -9,7 +9,7 @@ export function ControlsTab(): ReactNode {
   return (
     <SettingsPage title="Shortcuts & Controls" description="Keyboard shortcuts and a game controller.">
       <ShortcutsSections />
-      {/* Below the shortcut that opens the controller menu. */}
+      {/* Below the shortcut that opens the radial menu. */}
       <RadialMenuSection />
       <GamepadSections />
     </SettingsPage>
