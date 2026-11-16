@@ -23,7 +23,7 @@ export default function Step({
   return (
     <section className={style.step} data-centered={centered || undefined} aria-labelledby={id}>
       <header className={style.header}>
-        <h1 id={id} className={style.title}>
+        <h1 id={id} className={style.title} tabIndex={-1} data-welcome-heading>
           {title}
         </h1>
         {lede && <p className={style.lede}>{lede}</p>}

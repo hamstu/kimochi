@@ -30,6 +30,64 @@ test('bounding box tolerates the omitted-zero vertices the endpoint sends', () =
   assert.deepEqual([box.minX, box.minY, box.maxX, box.maxY], [0, 0, 30, 40])
 })
 
+test('bounding boxes enclose unordered polygons, negative coordinates and degenerate edges', () => {
+  const bounds = (vertices) => getBoundingBox({ description: 'あ', boundingPoly: { vertices } })
+  assert.deepEqual(bounds([{ x: 25.5, y: -8 }, { x: -4, y: 7.5 }, { x: 2, y: -20 }, { x: -3 }]), {
+    minX: -4,
+    minY: -20,
+    maxX: 25.5,
+    maxY: 7.5,
+    width: 29.5,
+    height: 27.5,
+    centerX: 10.75,
+    centerY: -6.25
+  })
+  assert.deepEqual(bounds([{ x: -2, y: 3 }]), {
+    minX: -2,
+    minY: 3,
+    maxX: -2,
+    maxY: 3,
+    width: 0,
+    height: 0,
+    centerX: -2,
+    centerY: 3
+  })
+  // Invalid geometry stays invalid for the caller's filter; it must not become a box at zero.
+  const empty = bounds([])
+  assert.equal(empty.minX, Infinity)
+  assert.equal(empty.maxY, -Infinity)
+  assert.equal(empty.width, -Infinity)
+  assert.ok(Number.isNaN(empty.centerX))
+  const invalid = bounds([
+    { x: NaN, y: 1 },
+    { x: 5, y: 2 }
+  ])
+  assert.ok(Number.isNaN(invalid.minX) && Number.isNaN(invalid.maxX))
+  assert.equal(invalid.height, 1)
+  const zeros = bounds([
+    { x: 0, y: -0 },
+    { x: -0, y: 0 }
+  ])
+  assert.equal(zeros.minX, -0)
+  assert.equal(zeros.maxY, 0)
+})
+
+test('bounding boxes do not depend on polygon vertex count or mutate the input', () => {
+  const vertices = Array.from({ length: 150_000 }, (_, i) => Object.freeze({ x: i - 50_000, y: i % 11 }))
+  Object.freeze(vertices)
+  const box = getBoundingBox({ description: 'あ', boundingPoly: { vertices } })
+  assert.deepEqual(box, {
+    minX: -50_000,
+    minY: 0,
+    maxX: 99_999,
+    maxY: 10,
+    width: 149_999,
+    height: 10,
+    centerX: 24_999.5,
+    centerY: 5
+  })
+})
+
 test('furigana, thin artifacts and crammed noise are dropped; long words survive', () => {
   // The long word is the regression the per-character median fixes: with a
   // whole-word median, a page of long words raises the bar so far that shorter

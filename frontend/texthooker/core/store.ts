@@ -316,9 +316,25 @@ export function setLineText(id: number, text: string) {
 }
 
 /** Cache a translation on a line and (by default) switch the row to it. */
-export function setLineTranslation(id: number, translation: string, show = true) {
+export function setLineTranslation(
+  id: number,
+  translation: string,
+  show = true,
+  expected?: { sessionId: string; uid?: string; text: string; ts: number }
+) {
   const idx = lines.findIndex((l) => l.id === id)
   if (idx === -1) return
+  // Recheck at the writer: the UI snapshot can become stale while its bridge
+  // request is queued behind a session switch or an edit.
+  const current = lines[idx]
+  if (
+    expected &&
+    (activeSessionId() !== expected.sessionId ||
+      current.uid !== expected.uid ||
+      current.text !== expected.text ||
+      current.ts !== expected.ts)
+  )
+    return
   const updated: Line = { ...lines[idx], translation, showTranslation: show }
   lines[idx] = updated
   emit({ type: 'update', line: updated })

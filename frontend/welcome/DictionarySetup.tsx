@@ -11,6 +11,7 @@ import {
 } from '../bridge/dictionaryEngine'
 import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
 import { aDictionaryFor, sampleWord } from '@ui/sample-words'
+import type { Language } from '@ui/languages'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { useLanguage } from '../bridge/useLanguage'
 import { radioTarget } from '@ui/radio-navigation'
@@ -144,22 +145,30 @@ function jobLine(job: Job): { tone: Tone; text: string } {
 }
 
 function YomitanSetup(): JSX.Element {
-  const navigate = useNavigate()
   // Japanese has a quick setup (Jitendex); another language imports its own in Yomitan's settings.
   const [language] = useLanguage()
+  return <YomitanLanguageSetup key={language.code} language={language} />
+}
+
+function YomitanLanguageSetup({ language }: { language: Language }): JSX.Element {
+  const navigate = useNavigate()
   const japanese = language.code === 'ja'
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [catalogAttempt, setCatalogAttempt] = useState(0)
   // What is installed already (null while it is asked): someone going through the guide again,
   // or who imported before reaching this step, is not offered a dictionary they do not need.
   const [installed, setInstalled] = useState<Installed[] | null>(null)
   useEffect(() => {
+    let active = true
     void request<{ catalog: CatalogItem[]; dictionaries?: Installed[]; job?: Job | null }>({
       command: 'catalog',
       language: language.code
     })
       .then((result) => {
+        if (!active) return
         // The quick setup is Japanese's alone (an older backend may not filter it).
         setCatalog(japanese ? result.catalog : [])
         setInstalled((result.dictionaries ?? []).filter((item) => item.importSuccess !== false))
@@ -168,10 +177,12 @@ function YomitanSetup(): JSX.Element {
         if (result.job) setJob((current) => current ?? result.job ?? null)
       })
       .catch((caught) => {
-        setError(String(caught))
-        setInstalled([])
+        if (active) setCatalogError(nativeError(caught).message)
       })
-  }, [language.code, japanese])
+    return () => {
+      active = false
+    }
+  }, [language.code, japanese, catalogAttempt])
   const [starting, setStarting] = useState(false)
   // Which way to add a dictionary. Choosing a card only selects it, as on the guide's other steps;
   // the bar's primary button acts on it (installs, opens dictionary settings, or moves on).
@@ -219,13 +230,23 @@ function YomitanSetup(): JSX.Element {
   // The recommended dictionary until another card is chosen.
   const selected = choice ?? (catalog[0] ? `install:${catalog[0].id}` : japanese ? LATER : OWN)
   const installing = catalog.find((item) => selected === `install:${item.id}`)
-  const primary: { label: string; act: () => void; disabled?: boolean } = !offer
-    ? { label: 'Continue', act: () => void navigate(NEXT) }
-    : selected === OWN
-      ? { label: 'Open dictionary settings', act: () => void navigate('/dictionary-settings') }
-      : installing && !busy && !done
-        ? { label: `Install ${installing.title}`, act: () => void start(installing.id), disabled: starting }
-        : { label: busy ? 'Continue while installing' : 'Continue', act: () => void navigate(NEXT) }
+  const primary: { label: string; act: () => void; disabled?: boolean } = catalogError
+    ? {
+        label: 'Retry dictionary check',
+        act: () => {
+          setCatalogError(null)
+          setCatalogAttempt((attempt) => attempt + 1)
+        }
+      }
+    : installed === null
+      ? { label: 'Checking dictionaries…', act: () => {}, disabled: true }
+      : !offer
+        ? { label: 'Continue', act: () => void navigate(NEXT) }
+        : selected === OWN
+          ? { label: 'Open dictionary settings', act: () => void navigate('/dictionary-settings') }
+          : installing && !busy && !done
+            ? { label: `Install ${installing.title}`, act: () => void start(installing.id), disabled: starting }
+            : { label: busy ? 'Continue while installing' : 'Continue', act: () => void navigate(NEXT) }
   return (
     <Step
       title={offer || installed === null ? 'Set up Yomitan' : 'Your dictionaries are ready'}
@@ -237,10 +258,22 @@ function YomitanSetup(): JSX.Element {
           : 'Yomitan already has dictionaries. You can add or change them in Settings → Dictionary.'
       }
     >
-      {installed === null && !error && (
+      {installed === null && !catalogError && (
         <p className="k-description" role="status">
           Checking your dictionaries…
         </p>
+      )}
+      {catalogError && (
+        <Callout tone="danger">
+          <span>Couldn’t check your dictionaries. Retry when Yomitan has finished starting, or set up later.</span>
+          <details className={style.errorDetails}>
+            <summary>Error details</summary>
+            <p className="k-selectable">{catalogError}</p>
+          </details>
+          <Button asChild size="sm">
+            <Link to="/dictionary-settings">Open dictionary settings</Link>
+          </Button>
+        </Callout>
       )}
       {!offer && ready.length > 0 && (
         <div className={style.block}>
@@ -358,6 +391,11 @@ function YomitanSetup(): JSX.Element {
         </p>
       )}
       <StepActions>
+        {installed === null && (
+          <Button variant="ghost" asChild>
+            <Link to={NEXT}>Set up later</Link>
+          </Button>
+        )}
         <Button variant="primary" disabled={primary.disabled} onClick={primary.act}>
           {primary.label}
         </Button>

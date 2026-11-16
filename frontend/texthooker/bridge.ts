@@ -35,20 +35,32 @@ export function subscribe(fn: (value: ReaderSnapshot) => void): () => void {
   }
 }
 async function connect(): Promise<void> {
-  if (!ready)
+  if (!ready) {
     ready = (async () => {
-      await listen<ReaderSnapshot>('reader:snapshot', (e) => acceptSnapshot(e.payload))
-      await listen<{ id: string; value?: unknown; error?: string }>('reader:response', (e) => {
-        const item = pending.get(e.payload.id)
-        if (!item) return
-        pending.delete(e.payload.id)
-        if (e.payload.error) item.reject(new Error(e.payload.error))
-        else item.resolve(e.payload.value)
-      })
-    })()
+      const unlistenSnapshot = await listen<ReaderSnapshot>('reader:snapshot', (e) => acceptSnapshot(e.payload))
+      try {
+        await listen<{ id: string; value?: unknown; error?: string }>('reader:response', (e) => {
+          const item = pending.get(e.payload.id)
+          if (!item) return
+          pending.delete(e.payload.id)
+          if (e.payload.error) item.reject(new Error(e.payload.error))
+          else item.resolve(e.payload.value)
+        })
+      } catch (error) {
+        unlistenSnapshot()
+        throw error
+      }
+    })().catch((error) => {
+      // A transient subscription failure must not poison every subsequent retry.
+      ready = null
+      throw error
+    })
+  }
   return ready
 }
 export async function call<T>(module: string, method: string, args: unknown[] = [], timeoutMs = 60000): Promise<T> {
+  // Capture before the first await: a snapshot may change while listeners connect.
+  const sessionId = snapshot?.sessions.activeId
   await connect()
   const id = crypto.randomUUID()
   return new Promise<T>((resolve, reject) => {
@@ -71,7 +83,7 @@ export async function call<T>(module: string, method: string, args: unknown[] = 
       module,
       method,
       args,
-      sessionId: snapshot?.sessions.activeId
+      sessionId
     }).catch((error) => {
       clearTimeout(timeout)
       pending.delete(id)

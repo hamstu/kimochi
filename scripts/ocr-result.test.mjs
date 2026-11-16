@@ -182,6 +182,143 @@ test("OneOCR's semantic line overrides jittered glyph gaps without inserting Jap
   assert.deepEqual(result.textAnnotations[1].linePolygons, [polygon])
 })
 
+test('fragment segments stay with their group even when polygons overlap and ids resemble object keys', () => {
+  const polygon = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100]
+  ]
+  const raw = {
+    groups: ['__proto__', 'constructor'].map((id, index) => ({
+      id,
+      text: index ? '縦書き' : '横書き',
+      bbox: [0, 0, 100, 100],
+      orientation: index ? 'vertical' : 'horizontal',
+      linePolygons: [polygon]
+    })),
+    textAnnotations: [
+      annotation('右', 60, 0, 10, 10, { groupId: '__proto__', granularity: 'fragment' }),
+      annotation('下', 0, 60, 10, 10, { groupId: 'constructor', granularity: 'fragment' }),
+      annotation('左', 0, 0, 10, 10, { groupId: '__proto__', granularity: 'fragment' }),
+      annotation('上', 0, 0, 10, 10, { groupId: 'constructor', granularity: 'fragment' }),
+      annotation('別', 0, 0, 10, 10, { groupId: 'other', granularity: 'fragment' }),
+      annotation('無', 0, 0, 10, 10, { granularity: 'fragment' }),
+      annotation('行', 0, 0, 10, 10, { groupId: '__proto__', granularity: 'line' }),
+      annotation('外', 200, 0, 10, 10, { groupId: '__proto__', granularity: 'fragment' })
+    ]
+  }
+  const before = structuredClone(raw)
+  const blocks = normalizeOcrResult(raw, 'oneocr').textAnnotations.slice(1)
+  assert.deepEqual(
+    blocks.map((b) => b.lineSegments),
+    [
+      [
+        [
+          { text: '左', bbox: [0, 0, 10, 10] },
+          { text: '右', bbox: [60, 0, 70, 10] }
+        ]
+      ],
+      [
+        [
+          { text: '上', bbox: [0, 0, 10, 10] },
+          { text: '下', bbox: [0, 60, 10, 70] }
+        ]
+      ]
+    ]
+  )
+  assert.deepEqual(raw, before, 'normalizing must not reorder or annotate the engine result')
+})
+
+test('fragment centers on an edge go to the first matching line and preserve equal-position order', () => {
+  const raw = {
+    groups: [
+      {
+        id: 'line',
+        text: '上下',
+        bbox: [0, 0, 100, 100],
+        orientation: 'horizontal',
+        linePolygons: [
+          [
+            [0, 0],
+            [100, 0],
+            [100, 50],
+            [0, 50]
+          ],
+          [
+            [0, 50],
+            [100, 50],
+            [100, 100],
+            [0, 100]
+          ]
+        ]
+      }
+    ],
+    textAnnotations: [
+      annotation('境', 10, 45, 10, 10, { groupId: 'line', granularity: 'fragment' }),
+      annotation('同', 10, 10, 10, 10, { groupId: 'line', granularity: 'fragment' }),
+      annotation('下', 30, 60, 10, 10, { groupId: 'line', granularity: 'fragment' })
+    ]
+  }
+  const block = normalizeOcrResult(raw, 'oneocr').textAnnotations[1]
+  assert.deepEqual(
+    block.lineSegments.map((line) => line.map((s) => s.text)),
+    [['境', '同'], ['下']]
+  )
+})
+
+test('engine segments retain precedence, including empty lists, while mismatched lists use fragments', () => {
+  const polygon = [
+    [0, 0],
+    [100, 0],
+    [100, 20],
+    [0, 20]
+  ]
+  const group = { id: 'g', text: '本文', bbox: [0, 0, 100, 20], orientation: 'horizontal', linePolygons: [polygon] }
+  const fragment = annotation('断片', 0, 0, 20, 20, { groupId: 'g', granularity: 'fragment' })
+  const block = (extra) =>
+    normalizeOcrResult({ groups: [{ ...group, ...extra }], textAnnotations: [fragment] }, 'googlelens')
+      .textAnnotations[1]
+  const own = { text: '本文', bbox: [0, 0, 100, 20] }
+  assert.deepEqual(
+    block({ lineSegments: [[own, { text: 1, bbox: own.bbox }, { text: '壊', bbox: [NaN, 0, 1, 2] }]] }).lineSegments,
+    [[own]]
+  )
+  for (const lineSegments of [[[]], [null]]) assert.equal(block({ lineSegments }).lineSegments, undefined)
+  for (const lineSegments of [undefined, [], [[], []]]) {
+    assert.deepEqual(block({ lineSegments }).lineSegments, [[{ text: '断片', bbox: [0, 0, 20, 20] }]])
+  }
+  assert.equal(block({ linePolygons: [] }).lineSegments, undefined)
+  assert.equal(block({ linePolygons: undefined }).lineSegments, undefined)
+})
+
+test('fragment ownership uses normalized ids for duplicate and missing group ids', () => {
+  const polygon = [
+    [0, 0],
+    [100, 0],
+    [100, 20],
+    [0, 20]
+  ]
+  const groups = ['same', 'same', ''].map((id) => ({
+    id,
+    text: '本文',
+    bbox: [0, 0, 100, 20],
+    linePolygons: [polygon]
+  }))
+  const textAnnotations = ['same', 'same-1', 'group-2', '', undefined].map((groupId, i) =>
+    annotation(String(i), 0, 0, 20, 20, { groupId, granularity: 'fragment' })
+  )
+  const blocks = normalizeOcrResult({ groups, textAnnotations }, 'oneocr').textAnnotations.slice(1)
+  assert.deepEqual(
+    blocks.map((b) => [b.groupId, b.lineSegments[0].map((s) => s.text)]),
+    [
+      ['same', ['0']],
+      ['same-1', ['1']],
+      ['group-2', ['2']]
+    ]
+  )
+})
+
 test("normalising a saved result again keeps the engine's words, not one box per group", () => {
   // A cloud result: words, no groups. A reloaded overlay redraws the saved, normalised scan.
   const words = ['今日', 'は', 'いい', '天気', 'です', 'ね'].map((d, i) => annotation(d, 100 + i * 60, 100, 55, 40))

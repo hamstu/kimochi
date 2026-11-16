@@ -106,9 +106,8 @@ const ordered = (segments: Segment[], vertical: boolean): Segment[] =>
  * Where an engine puts the words of a line, as segments: OneOCR returns its lines as groups and
  * their words as fragments with the group's id; each fragment goes to the line it lies in.
  */
-function fragmentSegments(group: OcrGroup, fragments: Annotation[]): Segment[][] | undefined {
+function fragmentSegments(group: OcrGroup, words: Annotation[]): Segment[][] | undefined {
   const lines = group.linePolygons ?? []
-  const words = fragments.filter((a) => a.groupId === group.id)
   if (!lines.length || !words.length) return undefined
   const bounds = lines.map((polygon) => [
     Math.min(...polygon.map((p) => p[0])),
@@ -137,17 +136,18 @@ const isSegment = (s: unknown): s is Segment =>
  * A block's `lineSegments`: the engine's own (Google Lens), else its word fragments placed on its
  * lines (OneOCR), one list per line polygon; nothing when neither is there or they do not fit.
  */
-function lineSegmentsOf(group: OcrGroup, fragments: Annotation[]): { lineSegments?: Segment[][] } {
+function lineSegmentsOf(
+  group: OcrGroup,
+  fragments: ReadonlyMap<string | undefined, Annotation[]>
+): { lineSegments?: Segment[][] } {
   const lines = group.linePolygons?.length ?? 0
+  if (!lines) return {}
   const own = group.lineSegments
   const segments =
     Array.isArray(own) && own.length === lines
       ? own.map((line) => (Array.isArray(line) ? line.filter(isSegment) : []))
-      : fragmentSegments(
-          group,
-          fragments.filter((a) => a.granularity === 'fragment')
-        )
-  return lines && segments?.some((line) => line.length) ? { lineSegments: segments } : {}
+      : fragmentSegments(group, fragments.get(group.id) ?? [])
+  return segments?.some((line) => line.length) ? { lineSegments: segments } : {}
 }
 
 /** A block's `lines`, as `lineTexts`, when there is one string for each of its line polygons. */
@@ -411,6 +411,15 @@ export function normalizeOcrResult(raw: Partial<OcrResult>, engine: string, lang
       return b.width > 0 && b.height > 0
     })
   if (supplied) {
+    // OneOCR can return hundreds of lines, each with several word fragments. Associate the
+    // words once per result instead of filtering the entire page again for every line.
+    const fragmentsByGroup = new Map<string | undefined, Annotation[]>()
+    for (const fragment of fragments) {
+      if (fragment.granularity !== 'fragment') continue
+      const words = fragmentsByGroup.get(fragment.groupId)
+      if (words) words.push(fragment)
+      else fragmentsByGroup.set(fragment.groupId, [fragment])
+    }
     annotations = groups
       .filter((g) => g.bbox)
       .map((g) => ({
@@ -422,7 +431,7 @@ export function normalizeOcrResult(raw: Partial<OcrResult>, engine: string, lang
         // Where the engine found each line inside the block; grouped text is laid out on them.
         ...(Array.isArray(g.linePolygons) && g.linePolygons.length ? { linePolygons: g.linePolygons } : {}),
         // And the words on each line, which place the text past a gap OCR left out (a space).
-        ...lineSegmentsOf(g, fragments),
+        ...lineSegmentsOf(g, fragmentsByGroup),
         // And each line's own text, where the engine read the lines one by one.
         ...lineTextsOf(g),
         // And what it sits on, read from the frame (surface.rs), for Blend cards.

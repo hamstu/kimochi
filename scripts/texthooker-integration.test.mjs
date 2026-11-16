@@ -775,3 +775,24 @@ test('deleting several sessions at once keeps at least one', async () => {
   assert.equal(h.snapshot().sessions.activeId, first, 'the active session moved off the deleted ones')
   assert.ok(![...h.files.keys()].some((path) => path.startsWith(`sessions/${b.id}`)))
 })
+
+test('translation writes recheck their originating line after bridge delivery', async () => {
+  const h = await harness({ superTexthooker: { inputSource: 'clipboard', autoMatchSource: false } })
+  await h.call('host', 'ingest', ['猫', 'clipboard'])
+  const original = h.snapshot().lines[0]
+  const expected = {
+    sessionId: h.snapshot().sessions.activeId,
+    uid: original.uid,
+    text: original.text,
+    ts: original.ts
+  }
+  await h.call('store', 'setLineTranslation', [original.id, 'Wrong session', true, { ...expected, sessionId: 'other' }])
+  assert.equal(h.snapshot().lines[0].translation, undefined)
+  await h.call('store', 'setLineTranslation', [original.id, 'Wrong line', true, { ...expected, uid: 'other' }])
+  assert.equal(h.snapshot().lines[0].translation, undefined)
+  await h.call('store', 'setLineTranslation', [original.id, 'Cat', true, expected])
+  assert.equal(h.snapshot().lines[0].translation, 'Cat')
+  await h.call('store', 'setLineText', [original.id, '犬'])
+  await h.call('store', 'setLineTranslation', [original.id, 'Cat', true, expected])
+  assert.equal(h.snapshot().lines[0].translation, undefined, 'an edit invalidates a queued translation')
+})

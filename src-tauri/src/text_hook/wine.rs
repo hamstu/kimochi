@@ -191,6 +191,53 @@ fn file_name(windows: &str) -> &str {
     windows.rsplit(['\\', '/']).next().unwrap_or(windows)
 }
 
+/// The architecture a prefix was made for, from the head of its `system.reg` (`#arch=win32` or
+/// `#arch=win64`, which Wine writes when it creates the prefix).
+#[cfg(any(target_os = "linux", test))]
+pub fn prefix_arch(system_reg: &str) -> Option<&str> {
+    system_reg.lines().take(20).find_map(|l| l.trim().strip_prefix("#arch=")).map(str::trim)
+}
+
+/// Why the game was not found among what the helper listed, for the person hooking it. The
+/// helper may not have run at all: Wine reports an exe it cannot start (`Bad EXE format`) on
+/// stdout, not stderr, and exits with an error, so both are looked at, not only stderr.
+#[cfg(any(target_os = "linux", test))]
+pub fn not_found_reason(
+    image: &str,
+    prefix: &Path,
+    listed: &[Listed],
+    success: bool,
+    stdout: &str,
+    stderr: &str,
+) -> String {
+    let said = |text: &str| -> Option<String> {
+        text.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .filter_map(|l| match serde_json::from_str::<serde_json::Value>(l) {
+                // The helper's own error event.
+                Ok(v) if v["event"] == "error" => v["text"].as_str().map(str::to_string),
+                Ok(_) => None,
+                Err(_) => Some(l.to_string()),
+            })
+            .next_back()
+    };
+    if listed.is_empty() {
+        let what = said(stderr).or_else(|| said(stdout));
+        return match (what, success) {
+            (Some(what), _) => format!("Could not run the hook helper with the game's Wine: {what}"),
+            (None, false) => "Could not run the hook helper with the game's Wine (it exited with an error and said nothing). Turn on verbose logging and send a debug report.".into(),
+            (None, true) => format!("The hook helper found no programs in the Wine prefix {}.", prefix.display()),
+        };
+    }
+    format!(
+        "{} is not running in the Wine prefix Kimochi checked ({}; {} other programs there)",
+        file_name(image),
+        prefix.display(),
+        listed.len()
+    )
+}
+
 /// The game's processes inside the prefix: the one running `image` (by full path, else by file
 /// name) and its engine children (a launcher's `.bin`/`.log` process), with Wine's ids.
 #[cfg(any(target_os = "linux", test))]
@@ -278,6 +325,20 @@ mod imp {
         let lower = image.to_ascii_lowercase().replace('/', "\\");
         if lower.starts_with("c:\\windows\\") || lower.contains("\\proton") && lower.contains("\\files\\") {
             return Err("this is part of Wine, not a game".into());
+        }
+        // The helper is a 64-bit program (it hosts LunaHook's 64-bit server), which a 32-bit
+        // prefix cannot run; Wine would only say "Bad EXE format".
+        let system_reg = std::fs::File::open(outside(&prefix.join("system.reg"))).ok().and_then(|f| {
+            use std::io::Read;
+            let mut text = String::new();
+            f.take(1024).read_to_string(&mut text).ok()?;
+            Some(text)
+        });
+        if system_reg.as_deref().and_then(prefix_arch) == Some("win32") {
+            return Err(format!(
+                "This game's Wine prefix ({}) is 32-bit (WINEARCH=win32), and Text Hooker needs a 64-bit prefix. A 64-bit prefix runs 32-bit games too.",
+                prefix.display()
+            ));
         }
         if flatpak.is_none() && !server_reachable(pid, &prefix) {
             return Err("This game runs in a sandbox Kimochi cannot reach its Wine through.".into());
@@ -463,16 +524,32 @@ mod imp {
             }
             std::thread::sleep(Duration::from_millis(50));
         };
-        let listed = parse_listing(&reader.join().unwrap_or_default());
+        let stdout = reader.join().unwrap_or_default();
+        let stderr = errors.join().unwrap_or_default();
+        let listed = parse_listing(&stdout);
         let found = pick(&listed, &wine.image);
+        // What was asked and what came back, for a debug report (verbose logging): which Wine and
+        // prefix, the image looked for, and every program the helper saw there.
+        let tail = |text: &str| -> Vec<String> {
+            let lines: Vec<&str> =
+                text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("{\"bits\"")).collect();
+            lines[lines.len().saturating_sub(8)..].iter().map(|l| l.to_string()).collect()
+        };
+        crate::debug_report::trace_now(serde_json::json!({
+            "check": "texthook-wine-processes",
+            "wine": wine.binary,
+            "prefix": wine.prefix,
+            "flatpak": wine.flatpak.is_some(),
+            "image": wine.image,
+            "helper": windows_path(&hookd),
+            "exit": status.code(),
+            "listed": listed.iter().map(|p| serde_json::json!({ "pid": p.pid, "parent": p.parent, "name": p.name, "path": p.path, "bits": p.bits })).collect::<Vec<_>>(),
+            "found": found.iter().map(|p| p.pid).collect::<Vec<_>>(),
+            "stdout": tail(&stdout),
+            "stderr": tail(&stderr),
+        }));
         if found.is_empty() {
-            // Nothing listed at all: Wine (or `flatpak enter`) did not run; say why.
-            let error = errors.join().unwrap_or_default();
-            let last = error.lines().map(str::trim).rfind(|l| !l.is_empty());
-            if let (true, false, Some(last)) = (listed.is_empty(), status.success(), last) {
-                return Err(format!("could not run the hook helper with the game's Wine: {last}"));
-            }
-            return Err(format!("{} is not running in its Wine prefix", file_name(&wine.image)));
+            return Err(not_found_reason(&wine.image, &wine.prefix, &listed, status.success(), &stdout, &stderr));
         }
         Ok(found
             .into_iter()
@@ -586,5 +663,45 @@ not json"#;
         // Wine may report another drive for the same file; the name still finds it.
         assert_eq!(pids("Z:\\home\\deck\\Game\\game.exe"), vec![308, 400]);
         assert!(pids("S:\\Other\\Other.exe").is_empty());
+    }
+
+    #[test]
+    fn a_32_bit_prefix_is_told_from_its_registry() {
+        let head = "WINE REGISTRY Version 2\n;; All keys relative to REGISTRY\\\\Machine\n\n#arch=win32\n";
+        assert_eq!(prefix_arch(head), Some("win32"));
+        assert_eq!(prefix_arch(&head.replace("win32", "win64")), Some("win64"));
+        assert_eq!(prefix_arch("WINE REGISTRY Version 2\n"), None);
+    }
+
+    #[test]
+    fn a_helper_that_did_not_run_says_why_rather_than_that_the_game_is_missing() {
+        let prefix = Path::new("/var/data/wine");
+        let image = "Z:\\home\\deck\\Games\\VN\\Game.exe";
+        // A 64-bit helper in a 32-bit prefix (Wine 11, live): exit 1, the reason on stdout only.
+        let stdout = "Application could not be started, or no application associated with the specified file.\nShellExecuteEx failed: Bad EXE format for Z:\\x\\kimochi-hookd-x64.exe.\n\n";
+        let reason = not_found_reason(image, prefix, &[], false, stdout, "");
+        assert!(reason.contains("Bad EXE format"), "{reason}");
+        // The helper's own error event, and stderr ahead of stdout.
+        let reason = not_found_reason(
+            image,
+            prefix,
+            &[],
+            false,
+            "{\"event\":\"error\",\"text\":\"could not list processes\"}",
+            "",
+        );
+        assert!(reason.ends_with("could not list processes"), "{reason}");
+        assert!(not_found_reason(image, prefix, &[], false, "noise", "wine: cannot find L\"x.exe\"")
+            .ends_with("cannot find L\"x.exe\""));
+        assert!(not_found_reason(image, prefix, &[], false, "", "").contains("said nothing"));
+        // It ran and listed programs, none of them the game: the prefix it looked in is named.
+        let listed = parse_listing(
+            r#"{"bits":64,"event":"process","name":"services.exe","parent":0,"path":"C:\\windows\\system32\\services.exe","pid":32}"#,
+        );
+        let reason = not_found_reason(image, prefix, &listed, true, "", "");
+        assert!(
+            reason.starts_with("Game.exe is not running in the Wine prefix Kimochi checked (/var/data/wine;"),
+            "{reason}"
+        );
     }
 }

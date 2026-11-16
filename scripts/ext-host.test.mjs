@@ -38,6 +38,7 @@ const HACHIDORI_VERSION = JSON.parse(
 const HACHIDORI_CONTENT = JSON.parse(await readFile(new URL('extensions/hachidori.manifest.json', root), 'utf8'))
   .content_scripts[0].js
 const TENTEN_LOCALE = await readFile(new URL('extensions/tenten.messages-en.json', root), 'utf8')
+const TENTEN_VERSION = JSON.parse(await readFile(new URL('extensions/tenten.manifest.json', root), 'utf8')).version
 
 const NO_RECEIVER = 'Could not establish connection. Receiving end does not exist.'
 const ORIGINS = { hachidori: 'hachidori://localhost', tenten: 'tenten://localhost' }
@@ -723,7 +724,7 @@ test('an extension frame takes its engine from its own origin, which the prelude
     files: {
       'http://127.0.0.1:1441/manifest.json': JSON.stringify({
         name: '10ten Japanese Reader (Rikaichamp)',
-        version: '1.28.0'
+        version: TENTEN_VERSION
       })
     }
   })
