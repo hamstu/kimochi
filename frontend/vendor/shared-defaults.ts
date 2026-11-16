@@ -1,7 +1,8 @@
 /**
  * ADAPTED from `src/shared/defaults.ts` in the Electron app.
- * Deltas: only Scan, the controller menu and the menu's items (unbound by default) remain
- * bindable (the radial menu reaches the rest), and gamepad bindings are chords (`gamepadButtons`). Must match `default_hotkeys` and
+ * Deltas: only Scan, the controller menu, the menu's items (unbound by default) and Explain
+ * (word and sentence) remain bindable (the radial menu reaches the rest), and gamepad bindings
+ * are chords (`gamepadButtons`). Must match `default_hotkeys` and
  * `merged_hotkeys` in `src-tauri/src/settings.rs`, which is what the app actually loads.
  */
 import { HotkeysSettings, HotkeyOverrides } from './shared-types'
@@ -33,7 +34,23 @@ export const DEFAULT_HOTKEYS: HotkeysSettings = {
       item.hotkey,
       { name: item.label, accelerator: '', description: item.description, enabled: true, gamepadButtons: [] }
     ])
-  )
+  ),
+  // Alt+X: X alone is Explain over a line in the Log, and a key games use.
+  explainText: {
+    name: 'Explain',
+    accelerator: 'Alt+X',
+    description: 'Explain the text on the overlay with AI, starting from the word you point at',
+    enabled: true,
+    gamepadButtons: []
+  },
+  // With Control too: the whole sentence, not the word pointed at. Not Shift: the lookup key.
+  explainSentence: {
+    name: 'Explain sentence',
+    accelerator: 'Control+Alt+X',
+    description: 'Explain the whole sentence on the overlay with AI, not one word in it',
+    enabled: true,
+    gamepadButtons: []
+  }
 }
 
 /** A binding's chord: `gamepadButtons` when present (even null), else the legacy single button. */

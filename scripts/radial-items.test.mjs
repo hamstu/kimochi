@@ -25,15 +25,15 @@ test('nothing stored is the shipped menu, which is the menu as it was before it 
   assert.deepEqual(effectiveRadialMenu(undefined), DEFAULT_RADIAL_MENU)
   assert.deepEqual(effectiveRadialMenu(null), DEFAULT_RADIAL_MENU)
   assert.equal(isDefaultRadialMenu(undefined), true)
-  // An OCR source: Scan, Read along, Auto OCR, Recent text, Kimochi, settings.
+  // An OCR source: Scan, Read along, Auto OCR, Explain, Recent text, Kimochi, settings.
   assert.deepEqual(
     radialItemsFor(undefined, false).map((item) => item.id),
-    ['scan', 'dictionary', 'auto', 'history', 'controls', 'ocr-settings']
+    ['scan', 'dictionary', 'auto', 'explain', 'history', 'controls', 'ocr-settings']
   )
   // The Text Hooker: no Scan or Auto OCR, and its own card.
   assert.deepEqual(
     radialItemsFor(undefined, true).map((item) => item.id),
-    ['dictionary', 'card', 'history', 'controls', 'ocr-settings']
+    ['dictionary', 'card', 'explain', 'history', 'controls', 'ocr-settings']
   )
 })
 
@@ -63,7 +63,15 @@ test('an item added goes back where it was in the shipped menu, once', () => {
     missingRadialItems(menu).map((item) => item.id),
     ['scan', 'auto', 'pause', 'pause-scan', 'pause-read-along']
   )
-  assert.deepEqual(addRadialItem(menu, 'auto'), ['dictionary', 'auto', 'card', 'history', 'controls', 'ocr-settings'])
+  assert.deepEqual(addRadialItem(menu, 'auto'), [
+    'dictionary',
+    'auto',
+    'card',
+    'explain',
+    'history',
+    'controls',
+    'ocr-settings'
+  ])
   assert.deepEqual(addRadialItem(menu, 'scan')[0], 'scan')
   assert.deepEqual(addRadialItem(menu, 'dictionary'), menu)
   assert.deepEqual(addRadialItem(menu, 'unknown'), menu)
@@ -153,10 +161,10 @@ test('a shortcut that another one already uses is named, by keys and by buttons'
 })
 
 test('dragging round the ring reorders what it shows, leaving the other source’s items where they were', () => {
-  // With the Text Hooker the ring shows Read along, Text Hooker, Recent text, Kimochi, settings.
+  // With the Text Hooker the ring shows Read along, Text Hooker, Explain, Recent text, Kimochi, settings.
   assert.deepEqual(
-    reorderShownItems(DEFAULT_RADIAL_MENU, ['card', 'dictionary', 'history', 'controls', 'ocr-settings']),
-    ['scan', 'card', 'auto', 'dictionary', 'history', 'controls', 'ocr-settings']
+    reorderShownItems(DEFAULT_RADIAL_MENU, ['card', 'dictionary', 'explain', 'history', 'controls', 'ocr-settings']),
+    ['scan', 'card', 'auto', 'dictionary', 'explain', 'history', 'controls', 'ocr-settings']
   )
   assert.deepEqual(reorderShownItems(['history', 'scan'], ['scan', 'history']), ['scan', 'history'])
   // Nonsense leaves the menu as it was.

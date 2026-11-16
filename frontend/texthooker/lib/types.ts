@@ -176,6 +176,9 @@ export interface Settings {
   /** Prompt template; {{language}}, {{context}} and {{sentence}} are substituted. A default
       (explainPrompt.ts) follows the language; anything else is sent as written. */
   explainPrompt: string
+  /** The instruction added when a word is highlighted over the game (ui/explain-screen.ts
+      `DEFAULT_FOCUS_PROMPT`, `{{word}}` the word); empty = the default. */
+  explainFocusPrompt: string
 }
 
 /** The default Explain prompt as stored: the Japanese template, which follows the language
@@ -252,7 +255,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   explainOpenaiEffort: 'none',
   explainOpenaiTier: 'fast',
   openaiApiKey: '',
-  explainPrompt: DEFAULT_EXPLAIN_PROMPT
+  explainPrompt: DEFAULT_EXPLAIN_PROMPT,
+  explainFocusPrompt: ''
 }
 
 export type AnkiStatus = 'ok' | 'err' | 'unknown'

@@ -208,6 +208,9 @@ export type HotkeyName =
   | 'menuPause'
   | 'menuPauseScan'
   | 'menuPauseReadAlong'
+  | 'menuExplain'
+  | 'explainText'
+  | 'explainSentence'
 
 /** Declared once in the shared schema module; re-exported here for convenience. */
 export type { OcrMode } from '@ui/settings'

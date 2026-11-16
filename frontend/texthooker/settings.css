@@ -99,6 +99,10 @@
   min-height: 18rem;
   line-height: var(--k-leading-sm);
 }
+.explain-focus-prompt {
+  min-height: 9rem;
+  line-height: var(--k-leading-sm);
+}
 .explain-prompt-head {
   display: flex;
   align-items: center;

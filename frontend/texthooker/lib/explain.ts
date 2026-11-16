@@ -9,6 +9,7 @@ import { listen } from '@tauri-apps/api/event'
 import { currentLanguage } from '../core/language'
 import { explainPromptFor } from '@ui/explain-prompt'
 import { explainSettings } from '@ui/explain-settings'
+import { sectionText } from '@ui/log-sections'
 import { getSettings } from './settings'
 import { setLineExplanation, snapshotLines } from './store'
 import type { Line } from './types'
@@ -86,7 +87,8 @@ function ensureListeners(): Promise<void> {
       if (getActiveSession().id === originSession) void setLineExplanation(state.line.id, e.payload.text)
     })
     await listen<ExplainEvent>('explain:error', (e) => {
-      if (e.payload.requestId !== activeRequestId || !state) return
+      // A finished answer stays: nothing that comes after it (another run taking over) replaces it.
+      if (e.payload.requestId !== activeRequestId || !state || state.status === 'done') return
       setState({ ...state, status: 'error', text: e.payload.text })
     })
   })()
@@ -99,14 +101,17 @@ export function buildExplainPrompt(line: Line, template: string): string {
   const all = snapshotLines()
   const idx = all.findIndex((l) => l.id === line.id)
   const prev = idx === -1 ? [] : all.slice(Math.max(0, idx - CONTEXT_LINES), idx)
-  const context = prev.length ? prev.map((l) => l.text).join('\n') : '(no previous lines available)'
-  return explainPromptFor(template, currentLanguage(), context, line.text)
+  // A line read with OCR has a break wherever its text wraps on screen: it is given as one run, as
+  // the Log shows it, so the break is not taken for a misreading (ui/log-sections.js).
+  const run = (l: Line): string => (l.source === 'ocr' ? sectionText(l.text) : l.text)
+  const context = prev.length ? prev.map(run).join('\n') : '(no previous lines available)'
+  return explainPromptFor(template, currentLanguage(), context, run(line))
 }
 
 async function runExplain(line: Line): Promise<void> {
   const settings = getSettings()
   const prompt = buildExplainPrompt(line, settings.explainPrompt)
-  // Provider, model and effort as the settings choose them (ui/explain-settings.ts).
+  // Provider, model, effort and tier as the overlay reads them too (ui/explain-settings.ts).
   const { provider, model, effort, tier } = explainSettings(settings)
 
   const requestId = ++requestCounter
@@ -154,7 +159,9 @@ export function regenerateExplain(): void {
 
 /** Close the modal and cancel any in-flight CLI run. */
 export function closeExplain(): void {
+  const requestId = activeRequestId
   activeRequestId = 0
   setState(null)
-  void invoke('explain_cancel').catch(() => {})
+  // Only this window's run: an explanation the overlay asked for meanwhile keeps going.
+  if (requestId) void invoke('explain_cancel', { requestId }).catch(() => {})
 }

@@ -117,6 +117,8 @@ export function scrollSpeed(y) {
  * @param {typeof import('./native.js')} context.native
  * @param {() => {hasText: boolean, autoOcr: boolean, autoAvailable: boolean, textVisible: boolean, center: {x: number, y: number}|null, area: {x: number, y: number, width: number, height: number}|null, origin: {x: number, y: number}|null}} context.status
  * @param {(id: 'auto'|'pause'|'pause-scan'|'pause-read-along'|'controls'|'ocr-settings') => void} context.run carries out a menu action
+ * @param {{show: () => Promise<boolean>, hide: () => void, scroll: (y: number) => void}} [context.explain]
+ *   the overlay's Explain panel (ui/overlay-explain.js); without it the menu has no Explain
  * @param {() => Promise<boolean>} context.scan scan the source, resolving once its text is applied;
  *   true when the text drawn is current even if no new scan was applied (automatic OCR caught up)
  * @param {(control: {scroll?: number, step?: number, focus?: string}) => boolean} context.popupControl scroll
@@ -370,6 +372,13 @@ export function createController(context) {
         detail: hooked && context.card && !context.card.state().shown ? 'Card hidden' : undefined,
         unavailable: 'Only with the Text Hooker'
       },
+      explain: {
+        id: 'explain',
+        label: 'Explain',
+        icon: ICONS.explain,
+        enabled: Boolean(context.explain) && status.hasText,
+        unavailable: !context.explain ? 'Not in this window' : hooked ? 'No line yet' : 'Scan first'
+      },
       history: {
         id: 'history',
         label: 'Recent text',
@@ -413,8 +422,11 @@ export function createController(context) {
   function menuItems() {
     const status = context.status()
     const catalog = menuCatalog(status)
-    // Without the card's panel here (GNOME's controller host) the Text Hooker item has nothing to open.
-    const configured = effectiveRadialMenu(context.menuItems?.()).filter((id) => id !== 'card' || context.card)
+    // Without the card's panel here (GNOME's controller host) the Text Hooker item has nothing to
+    // open, and without the Explain panel the Explain item has nothing to show.
+    const configured = effectiveRadialMenu(context.menuItems?.()).filter(
+      (id) => (id !== 'card' || context.card) && (id !== 'explain' || context.explain)
+    )
     // Items that only apply to the other kind of source are left out; a menu of nothing but those
     // shows them all, unavailable, rather than an empty ring.
     return radialItemsFor(configured, Boolean(status.hooked)).map(({ id, inapplicable }) =>
@@ -429,7 +441,13 @@ export function createController(context) {
    */
   async function runItem(id) {
     if (mode !== 'idle') {
-      const own = { dictionary: ['words', 'dictionary'], history: ['history'], card: ['card', 'place'] }[id] ?? []
+      const own =
+        {
+          dictionary: ['words', 'dictionary'],
+          history: ['history'],
+          card: ['card', 'place'],
+          explain: ['explain']
+        }[id] ?? []
       const was = mode
       await close()
       if (own.includes(was)) return
@@ -517,9 +535,12 @@ export function createController(context) {
     if (mode === 'idle') return
     generation++
     const wasWords = mode === 'words' || mode === 'dictionary'
+    const explaining = mode === 'explain'
     // Also from the radial menu opened over the full-screen view, which is still up beneath it.
     leaveDictionary()
     setMode('idle')
+    // After leaving the mode: the panel closing hands the game back only while the menu holds it.
+    if (explaining) context.explain?.hide()
     controls.reset()
     scroll(0)
     menu.close()
@@ -534,8 +555,20 @@ export function createController(context) {
     await setNav(false)
   }
 
+  /**
+   * The text on screen explained by AI, in the overlay's panel (ui/overlay-explain.js): the
+   * controller stays here, so B closes it and the right stick scrolls it.
+   */
+  async function openExplain() {
+    menu.close()
+    setMode('explain')
+    controls.reset()
+    await context.explain.show()
+  }
+
   async function choose(id) {
     if (id === 'history') return openHistory()
+    if (id === 'explain') return openExplain()
     if (id === 'card') return openCard()
     if (id === 'dictionary') {
       menu.close()
@@ -606,6 +639,11 @@ export function createController(context) {
       if (command.type === 'dir' && command.source !== 'stick') return void nudge(command.dir)
       // Kept either way, as every change in the panel is kept the moment it is made.
       if (command.type === 'confirm' || command.type === 'cancel') return void finishPlace(true)
+      return
+    }
+    if (mode === 'explain') {
+      if (command.type === 'cancel' || command.type === 'confirm') return void close()
+      if (command.type === 'scroll') context.explain.scroll(command.y)
       return
     }
     if (mode === 'history') {
@@ -1912,6 +1950,17 @@ export function createController(context) {
      */
     get holdsText() {
       return (mode === 'words' || mode === 'dictionary') && !historical
+    },
+    /**
+     * The word read along is on (its outline), for Explain: `{text, rect, range}` in overlay coordinates,
+     * or null when not reading word by word.
+     */
+    focusedWord() {
+      const word = cursor?.current
+      if (!word || (mode !== 'words' && mode !== 'dictionary')) return null
+      const range = rangeFor(word)
+      const text = range?.toString().trim()
+      return text ? { text, rect: range.getBoundingClientRect(), range } : null
     },
     /** The hook's status or line changed: the Text Hooker panel, if open, shows it now. */
     hookChanged() {

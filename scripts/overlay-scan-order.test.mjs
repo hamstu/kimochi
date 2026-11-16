@@ -7,16 +7,19 @@
  * the range's end on the last node it passed, at the end of the document. When a `data-no-scan`
  * node (the hook card's controls, the hint bar) lies between, `TextScanner#_constrainTextSource`
  * sees it in the range and trims the word (`食べました` → `食べまし`; diagnosed in PR #131). So
- * Kimochi keeps every `data-no-scan` node ahead of the text that is looked up: the hint bar first
- * on the page, then the card, whose line is its own last child, then the OCR'd text.
+ * Kimochi keeps every `data-no-scan` node ahead of the text that is looked up: the Explain card and
+ * the hint bar first on the page, then the Text Hooker's card, whose line is its own last child,
+ * then the OCR'd text.
  *
- * These build the overlay with the real `createHookCard` and `createOverlayHints` over a small
+ * These build the overlay with the real `createHookCard`, `createOverlayHints` and
+ * `createOverlayExplain` over a small
  * linked DOM, and read it with the vendored `TextScanner`, `TextSourceRange`, `DOMTextScanner`
  * and `TextSourceGenerator` (the probe from PR #131's review), so a change to either side fails
  * here. Credit to omer681 for the diagnosis.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { load } from './load.mjs'
 
 // --- A linked DOM: what the scanner walks and what the card and the hint bar are built with. ----
 
@@ -222,9 +225,11 @@ class FakeElement extends FakeNode {
 
 globalThis.document = {
   createElement: (tag) => new FakeElement(tag),
-  createTextNode: (value) => new FakeText(value)
+  createTextNode: (value) => new FakeText(value),
+  addEventListener() {}
 }
 globalThis.window ??= {}
+globalThis.window.addEventListener ??= () => {}
 globalThis.addEventListener = () => {}
 globalThis.innerWidth = 1280
 globalThis.innerHeight = 720
@@ -240,6 +245,7 @@ const BY_CLASS = {
   'hook-card-text': { display: 'block' },
   'hook-card-text-ghost': { position: 'absolute', display: 'block' },
   'overlay-hints': { position: 'fixed', display: 'flex' },
+  'overlay-explain': { position: 'fixed', display: 'flex' },
   'ocr-word': { position: 'absolute', display: 'inline-flex' },
   'ocr-word-text': { display: 'block' },
   'ocr-group': { position: 'absolute', display: 'block' }
@@ -276,6 +282,8 @@ const { TextSourceRange } = await import('../extensions/yomitan/js/dom/text-sour
 const { TextSourceGenerator } = await import('../extensions/yomitan/js/dom/text-source-generator.js')
 const { createHookCard } = await import('../ui/hook-card.js')
 const { createOverlayHints } = await import('../ui/overlay-hints.js')
+// Bundled: it imports the TypeScript modules it is built with (explain-screen.ts and the rest).
+const { createOverlayExplain } = await load('overlay-explain.js')
 
 const NO_SCAN = '[data-no-scan], [data-no-scan] *'
 
@@ -324,12 +332,13 @@ const group = (value) => make('div', 'ocr-group', make('span', 'ocr-run', value)
 const textOf = (box) => box.firstChild.firstChild.firstChild
 
 /**
- * overlay.html's body, built as overlay.js builds it: the card, then the hint bar, each shown,
- * then the OCR'd text drawn into `#words`, two bubbles: 猫が食べました。 and 犬が走った。.
+ * overlay.html's body, built as overlay.js builds it: the card, then the hint bar, then the Explain
+ * card, each shown, then the OCR'd text drawn into `#words`, two bubbles: 猫が食べました。 and 犬が走った。.
  * `mode: 'words'` draws word boxes (猫が|食べ|ました。 and 犬が|走った。), `'groups'` one region
  * per bubble, `'none'` nothing (the Text Hooker's card shows the line instead). `cardShown: false`
- * hides the card (OCR'd text is shown), `hintsShown: false` the hint bar (closed by the reader);
- * `card: false, hints: false` leaves the controls out.
+ * hides the card (OCR'd text is shown), `hintsShown: false` the hint bar (closed by the reader),
+ * `explainShown: false` the Explain card (closed, as it is most of the time);
+ * `card: false, hints: false, explain: false` leaves the controls out.
  */
 function overlay({
   mode = 'words',
@@ -337,6 +346,8 @@ function overlay({
   cardShown = true,
   hints = true,
   hintsShown = true,
+  explain = true,
+  explainShown = true,
   menuOpen = false,
   ghost = false,
   example = false
@@ -384,6 +395,21 @@ function overlay({
     const bar = createOverlayHints(body, { onDismiss() {} })
     bar.sync(hintsShown, true)
     result.hints = bar.element
+  }
+  if (explain) {
+    const none = () => null
+    const card = createOverlayExplain(body, {
+      native: {},
+      target: none,
+      language: () => 'ja',
+      area: none,
+      look: () => ({ theme: 'dark', highlight: '', font: '' }),
+      changed() {}
+    })
+    // Shown with an answer in it: Kimochi's own words, never looked up.
+    card.element.hidden = !explainShown
+    card.element.lastChild.append(make('p', '', 'これは説明です。'))
+    result.explain = card.element
   }
   if (mode === 'words') {
     const spec = [
@@ -438,9 +464,12 @@ function sentence(node, offset, length, layoutAwareScan) {
 const BOTH = [true, false]
 
 test("Kimochi's unscanned controls come before every text that is looked up", () => {
-  const { body, card, hints } = overlay()
+  const { body, card, hints, explain } = overlay()
   const elements = body.childNodes.filter((n) => n.nodeType === 1)
-  assert.deepEqual(elements.slice(0, 3), [hints, card, elements.find((n) => n.id === 'words')])
+  assert.deepEqual(elements.slice(0, 4), [explain, hints, card, elements.find((n) => n.id === 'words')])
+  // Nothing after the OCR'd text is kept from lookups.
+  const words = elements.findIndex((n) => n.id === 'words')
+  for (const element of elements.slice(words)) assert.ok(!element.hasAttribute('data-no-scan'), element.nodeName)
   // In the card, the line is last: the bar, the buttons, the corner and the menu are before it.
   assert.ok(card.lastChild.classes.has('hook-card-text'))
   for (const child of card.childNodes.slice(0, -1)) assert.ok(child.hasAttribute('data-no-scan'))
@@ -452,23 +481,31 @@ test("Kimochi's unscanned controls come before every text that is looked up", ()
 })
 
 test('the last word of a line is read whole, with Layout-aware scan on or off', () => {
-  // OCR'd text, the card hidden, the hint bar shown or closed: the page's last line runs out of text.
-  for (const [mode, hintsShown] of [
-    ['words', true],
-    ['words', false],
-    ['groups', true],
-    ['groups', false]
+  // OCR'd text, the card hidden, the hint bar shown or closed, the Explain card open or closed:
+  // the page's last line runs out of text.
+  for (const [mode, hintsShown, explainShown] of [
+    ['words', true, false],
+    ['words', false, false],
+    ['words', false, true],
+    ['groups', true, false],
+    ['groups', false, false],
+    ['groups', true, true]
   ]) {
-    const last = overlay({ mode, cardShown: false, hintsShown }).texts.at(-1)
+    const last = overlay({ mode, cardShown: false, hintsShown, explainShown }).texts.at(-1)
     const from = mode === 'words' ? 0 : 2
     for (const layoutAwareScan of BOTH) {
-      const at = `${mode}, hints ${hintsShown}, layoutAwareScan ${layoutAwareScan}`
+      const at = `${mode}, hints ${hintsShown}, explain ${explainShown}, layoutAwareScan ${layoutAwareScan}`
       assert.equal(lookup(last, from, layoutAwareScan).trimEnd(), '走った。', at)
       assert.equal(lookup(last, from + 1, layoutAwareScan).trimEnd(), 'った。', at)
     }
   }
   // The Text Hooker: the card's line, with and without the hint bar, and with OCR'd text too.
-  for (const shape of [{ mode: 'none' }, { mode: 'none', hints: false }, { mode: 'groups' }]) {
+  for (const shape of [
+    { mode: 'none' },
+    { mode: 'none', hints: false },
+    { mode: 'none', explainShown: false },
+    { mode: 'groups' }
+  ]) {
     const { cardText } = overlay(shape)
     for (const layoutAwareScan of BOTH) {
       const at = JSON.stringify({ ...shape, layoutAwareScan })
@@ -508,11 +545,13 @@ test('a lookup never runs from one bubble or word box into the next (Layout-awar
 })
 
 test('text inside a data-no-scan control still reads nothing', () => {
-  const { menuLabel, hints } = overlay({ menuOpen: true })
+  const { menuLabel, hints, explain } = overlay({ menuOpen: true })
   const hintText = hints.firstChild.firstChild
+  const answer = explain.lastChild.lastChild.firstChild
   for (const layoutAwareScan of BOTH) {
     assert.equal(lookup(menuLabel, 0, layoutAwareScan), '')
     assert.equal(lookup(hintText, 0, layoutAwareScan), '')
+    assert.equal(lookup(answer, 0, layoutAwareScan), '')
   }
   // An example card (no line yet) is not looked up either.
   const example = overlay({ example: true })
@@ -530,7 +569,7 @@ test("Anki sentences are what they are without Kimochi's controls on the page", 
   ]
   for (const [mode, line, offset, length, expected] of cases) {
     const at = `${mode} line ${line}`
-    for (const shape of [{ menuOpen: true }, { card: false, hints: false }])
+    for (const shape of [{ menuOpen: true }, { card: false, hints: false, explain: false }])
       assert.equal(sentence(overlay({ mode, ...shape }).texts[line], offset, length, true), expected, at)
   }
   // The card's own line is its own sentence.

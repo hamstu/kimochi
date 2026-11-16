@@ -623,11 +623,104 @@ All names live in one list, `actions::ACTIONS`, which the command-contract test 
 and compares against the names the frontend actually calls, so a button cannot ship
 against an action that does not exist.
 
-**Commands** — `triggerScan`, `toggleOverlay`, `setCropArea`, `setAnkiCropArea`, `playAudio`,
-`selectAndScan`. Bindable to a shortcut or a gamepad button. Rust performs the native
-part Electron performed: restoring the overlay for `triggerScan`, `setCropArea`,
-`setAnkiCropArea`, `playAudio` and `selectAndScan`, toggling it for `toggleOverlay`, and focusing it for
-`selectAndScan`.
+**Commands** — `triggerScan`, `openControllerMenu`, `explainText`, `explainSentence`,
+`toggleOverlay`, `setCropArea`, `setAnkiCropArea`, `playAudio`, `selectAndScan`. The first four
+(`HOTKEY_ACTIONS`) are bindable to a shortcut or a gamepad button: Scan (Shift+F8, ⌘⇧8 on macOS),
+the controller menu (Shift+F9, ⌘⇧Space), Explain (Alt+X) and Explain sentence (Ctrl+Alt+X; the
+two have no gamepad chord, and Settings lists them under AI). Rust performs the native
+part Electron performed: restoring the overlay for `triggerScan`, `openControllerMenu`,
+`explainText`, `explainSentence`, `setCropArea`, `setAnkiCropArea`, `playAudio` and `selectAndScan`, toggling it for
+`toggleOverlay`, and focusing it for `selectAndScan`.
+
+`explainText` is the overlay's Explain (`ui/overlay-explain.js`): it explains the text on screen
+(the scan's groups, or the Text Hooker's line) with the Log's Explain provider, model and prompt
+(`superTexthooker`), the Log's newest lines before it (`log_recent`) as its scene, and streams
+the answer into a card in the overlay text's own look, right under the text (over it when there
+is no room below, beside it for tall vertical text; `placeExplanation` in `ui/explain-screen.ts`),
+with a notch on it; pressed again it closes the card. A word highlighted when it is asked for
+(the selection a dictionary lookup made, an extension engine's match, or the word read along is
+on) narrows it to the section that word is in, and a `FOCUS:` instruction after the prompt asks
+for that word (or the grammar it is part of) first. Text read with OCR is given as one run where
+it wraps on screen (`sectionText` in `ui/log-sections.js`, as Read along shows it), here and in the
+Log's own Explain; a hooked line keeps the game's breaks. The game menu (the radial) has the same
+Explain, which holds the controller while the card is open: B closes it and the right stick
+scrolls it. The card takes the mouse, Shift or not. A click anywhere else closes it, as it closes
+a dictionary pop-up: the overlay takes that click (`onFreeClick`, not with Look up on hover), or,
+where the click goes through to the game, native's count of clicks outside the overlay's regions
+(`view.dismiss`) closes it on the way. It closes too when the line it was put by goes (the game
+behind another window, whose text the overlay hides, or on to its next line, which is no longer
+among the screen's sections even where a box of it stays, such as a "。"; logged as
+`overlay-explain-text-gone`), and words under it neither light nor look up (the pointer feed
+counts the card as off the text, and the renderer ignores moves over `data-no-scan` surfaces).
+While the card or a pop-up is up the overlay takes the mouse everywhere for the next click, so the
+window gets mouse moves over the words with no key held; the renderer lights words from them only
+as the pointer feed would (`canLight`: Shift's gate open, or click-through off). Shift's gate behaves
+as it does for the dictionary pop-up: still sticky while the pointer stays on the text.
+
+`explainSentence` is the same with no word to start from: the section the word pointed at is in
+(everything on screen with none), explained as a whole, with no `FOCUS:` instruction. Its key
+has no Shift, the default lookup key, so Shift held to read and Alt+X is still Explain's. A press
+the Windows keyboard guard swallowed matches as pressed before it matches without the lookup key
+(`fire_swallowed`), so a shortcut with the lookup key in it wins over one without.
+Explain's shortcuts are ordinary ones, registered like Scan's: pressed with no text on screen,
+the card says there is nothing to explain yet. The game menu's Explain works everywhere too (on
+GNOME in the controller host's own window, `ui/gnome-controller-host.js`, given the screen's text,
+language and look with each `snapshot`; the Shell extension's controller lease takes an `explain`
+mode, at the menu's size). Hiding the overlay (`overlayVisible` off) closes the Explain card.
+
+**Escape clears the overlay.** While a pop-up or the Explain card is open, wherever the pointer
+is, Escape is the overlay's: native dispatches `dismissOverlay` (emit-only), and the overlay
+closes its pop-ups, puts out lit text and closes the Explain card (logged as `overlay-dismissed`).
+With nothing open Escape is the game's. The overlay reports the card with `explain_card_open`
+(`({open}) -> ()`, `hotkeys::set_explain_open`) and pop-ups with `overlay_popup_open` (`({open})
+-> ()`, `hotkeys::set_popup_open`, checked on the region loop); native takes Escape as a global
+shortcut only while either holds. On Windows the keyboard guard holds keys back from the game with
+the pointer on the text, and hands Escape on through `fire_swallowed` (below). Not while the region
+editor or the controller menu owns Escape: theirs comes first (the controller menu's closes the
+card it opened). Off Windows it shares the editor's and the menu's Escape registration
+(`sync_keys`). Wayland's portal takes no Escape: there Escape stays the game's.
+
+**Explain again, and answers kept.** The Explain shortcut with the card open explains anew when
+a word is highlighted that the card is not about (another word, or the same text elsewhere in the
+line: `press` in `ui/overlay-explain.js` compares the line, the word and the text drawn around
+it); otherwise it closes the card. The word, whether the card is open or not, is the word box the
+pointer is on, Shift or not (`wordToExplain` in `ui/overlay.js`), unless the pointer is on the
+highlighted word (a lookup's match can be longer than one box) or the controller is reading
+along; with the pointer on no word, the highlighted one, or none. Finished answers are kept in the overlay for the session (the
+last 200), by the line, the word and where it is in the line, the language, and the provider,
+model, effort, tier and prompt: asking the same again shows the kept answer at once with no
+`explain_run` (logged as `overlay-explain-replayed`). Failed or stopped answers are not kept.
+
+**Selecting and copying the explanation.** The card's text selects with the mouse: a drag, a
+double click for a word, a triple click for a paragraph. On Windows the mouse guard replays the
+press into the page as an untrusted event, from which a browser starts no selection, so the card
+selects for itself (`selectable` in `ui/overlay-explain.js`; real presses select as usual).
+While text is selected in the card the overlay says so (`explain_selection` `({selected}) -> ()`,
+`hotkeys::set_explain_selected`; closing the card clears it), and native registers
+`CommandOrControl+C` as a global shortcut for as long as it is (`sync_copy_key`, not while the
+region editor or the controller menu owns the keys); on Windows the same press swallowed by the
+keyboard guard over the overlay's text arrives through `fire_swallowed`. Either dispatches
+`copyExplanation` (emit-only), and the overlay sends what is selected in the card to
+`explain_copy` (`({text}) -> ()`, written with `arboard`, logged as `overlay-explain-copied`):
+the overlay never has the keyboard. With nothing selected in the card, Ctrl+C is the game's. The
+overlay's Escape and copy key are taken only if no shortcut of the reader's is on the same keys,
+and only its own registration is let go (`sync_owned`; off Windows, the region editor's and the
+controller menu's keys too, `KEYS_OWNED` in `sync_keys`); re-registering the shortcuts
+(`hotkeys::apply`) puts the reader's first. On Windows a press swallowed with the lookup key held
+counts without it too (Shift+Escape is Escape).
+
+**Shortcuts pressed over the overlay's text (Windows).** With the pointer on the overlay's text or
+pop-up and the source in front, the keyboard guard (`platform/windows/mouseguard.rs`) swallows
+each key press so it does not also reach the game, which also keeps Windows from matching it
+against the registered shortcuts. The guard names such a press as an accelerator
+(`pressed_accelerator`: every key Settings records a shortcut on:
+letters, digits, the numpad's digits, F1–F24, Space, Enter, the arrows, Home, End, Page Up
+and Down, Insert, Pause, Scroll Lock and the punctuation keys, with the modifiers held, swallowed
+ones included) and `hotkeys::fire_swallowed` fires the live shortcut it
+is, logged as `shortcut-under-pointer`. Held for reading, the lookup key (`overlayLookupKey`) may
+be part of the press: a press also counts without it, so X with Shift held over a word is X.
+Not while the region editor or the controller menu owns the keys, nor while shortcuts are
+suspended.
 
 **Controller menu items** — `menuScan`, `menuReadAlong`, `menuAutoOcr`, `menuTextHooker`,
 `menuRecentText`, `menuKimochi`, `menuSettings`, `menuPause`, `menuPauseScan`,
@@ -1293,6 +1386,16 @@ settings show a price estimate after the Prompt heading, for the model and tier 
 (`explainPrice`, `priceText` in `ui/explain-settings.ts`): a typical explanation (about 500 tokens in
 and 120 out, measured on the Explain prompt) at the prices in `OPENAI_PRICES`, read from OpenAI's
 pricing page; a model not listed there has no estimate.
+
+**One explanation at a time.** `explain_run` (`({requestId, provider, model, effort, tier, prompt}) -> ()`)
+supersedes whatever run is in progress, in any window: the superseded run gets
+`explain:error` "Stopped: another explanation started." under its own requestId, so the Log and
+the overlay never wait on a run the other replaced. A run that finished (done, failed or stopped)
+is no longer the one in progress (`finish`), so a later run does not tell it it was stopped, and
+neither window lets an error replace an answer it already has. `explain_cancel` (`({requestId?}) -> ()`)
+cancels only that run while it is still the one in progress (no `requestId`: whatever runs). Each
+overlay window's requestIds start above 2^40, in a block of its own, so no two windows take each
+other's events.
 
 **Effort.** `explain_run` (`({requestId, provider, model, effort, tier, prompt}) -> ()`) takes
 `effort` (null: the model's own default), how hard the model thinks before it answers:

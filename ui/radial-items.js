@@ -49,6 +49,12 @@ export const RADIAL_ITEMS = [
     when: 'hooker'
   },
   {
+    id: 'explain',
+    label: 'Explain',
+    hotkey: 'menuExplain',
+    description: 'Explain the text on screen with AI.'
+  },
+  {
     id: 'history',
     label: 'Recent text',
     hotkey: 'menuRecentText',
