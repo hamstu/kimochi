@@ -139,6 +139,7 @@ impl<'a> Core<'a> {
             mechanism: plan.mechanism.clone(),
             at: wall_ms(),
             guard: self.pid,
+            boot: super::journal::boot_id(),
         };
         if let Err(e) = self.journal.write(&entry) {
             return Reply::Failed { id, error: PauseError::new(format!("journal: {e}")) };
@@ -198,6 +199,7 @@ impl<'a> Core<'a> {
                     mechanism: held.suspended.mechanism.clone(),
                     at: wall_ms(),
                     guard: self.pid,
+                    boot: super::journal::boot_id(),
                 };
                 let _ = self.journal.write(&entry);
             }

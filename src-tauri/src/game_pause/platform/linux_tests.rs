@@ -476,6 +476,7 @@ fn a_journal_left_by_a_crash_resumes_the_game() {
         mechanism: MECHANISM.into(),
         at: 1,
         guard: 1,
+        boot: crate::game_pause::journal::boot_id(),
     };
     journal.write(&entry).unwrap();
     // The guard and the app are gone; a new start recovers.

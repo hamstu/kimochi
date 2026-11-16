@@ -9,6 +9,13 @@ use std::sync::{
 };
 
 static LEASE: Mutex<Option<Lease>> = Mutex::new(None);
+/// Steam may be stopped: from the first heartbeat of a lease until its watchdog has exited (it
+/// resumes Steam on the way out). Game pause resumes the game only after this is false.
+static STEAM_HELD: AtomicBool = AtomicBool::new(false);
+/// Whether Kimochi may still have Steam's client stopped (game pause's resume order).
+pub fn stopped() -> bool {
+    STEAM_HELD.load(Ordering::SeqCst)
+}
 pub(super) static STOP: AtomicBool = AtomicBool::new(false);
 const FLAG: &str = "--gamescope-input-watchdog";
 /// The longest Steam stays stopped in one go while Kimochi has the controller.
@@ -75,8 +82,12 @@ impl Drop for Lease {
         }
         // Reap without blocking GTK. Never kill the independent resume watchdog.
         let pid = self.child.id();
-        std::thread::spawn(move || unsafe {
-            libc::waitpid(pid as i32, std::ptr::null_mut(), 0);
+        std::thread::spawn(move || {
+            unsafe { libc::waitpid(pid as i32, std::ptr::null_mut(), 0) };
+            // The watchdog resumed Steam before it exited.
+            if LEASE.lock().map(|lease| lease.is_none()).unwrap_or(true) {
+                STEAM_HELD.store(false, Ordering::SeqCst);
+            }
         });
     }
 }
@@ -91,9 +102,12 @@ pub fn update(active: bool) -> Result<(), String> {
         return Err("Steam input watchdog expired; close and reopen controller navigation".into());
     }
     if lease.is_none() {
+        // Stop order: the game first (game pause), then Steam's controller reader.
+        crate::game_pause::app::settle(std::time::Duration::from_millis(300));
         let (pid, token) = steam().ok_or("Steam input: no same-user Steam process found")?;
         *lease = Some(spawn_lease(&[&pid.to_string(), &token, &std::process::id().to_string()])?);
     }
+    STEAM_HELD.store(true, Ordering::SeqCst);
     lease
         .as_mut()
         .and_then(|lease| lease.pipe.as_mut())

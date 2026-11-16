@@ -138,6 +138,22 @@ pub fn front_window() -> Option<FrontWindow> {
     Some(FrontWindow { window: readable.then(|| window_source_id(active, Some(pid))), pid })
 }
 
+/// The host process id of the client that created `window`, from the X server's own record of the
+/// client's socket (X-Resource), not the window's `_NET_WM_PID`, which a sandboxed (Flatpak) client
+/// sets to a pid of its own namespace. `None` without X-Resource or for a remote client.
+pub fn window_host_pid(window: Window) -> Option<u32> {
+    use x11rb::protocol::res::{ClientIdMask, ClientIdSpec, ConnectionExt as _};
+    let d = desktop()?;
+    let spec = ClientIdSpec { client: window, mask: ClientIdMask::LOCAL_CLIENT_PID };
+    let reply = d.conn.res_query_client_ids(&[spec]).ok()?.reply().ok()?;
+    reply
+        .ids
+        .iter()
+        .find(|id| u32::from(id.spec.mask) & u32::from(ClientIdMask::LOCAL_CLIENT_PID) != 0)
+        .and_then(|id| id.value.first().copied())
+        .filter(|pid| *pid > 0)
+}
+
 pub fn frontmost_pid() -> Option<u32> {
     let d = desktop()?;
     d.pid(d.active_window()?)

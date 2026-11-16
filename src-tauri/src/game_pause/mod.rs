@@ -11,7 +11,7 @@
 //! - `platform`: the per-OS backends.
 pub mod app;
 pub mod backend;
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod e2e_tests;
 pub mod guard;
 pub mod journal;

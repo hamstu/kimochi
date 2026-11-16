@@ -29,9 +29,17 @@ struct Shared {
     /// The processes of the pause in effect (from the suspend request until the resume is
     /// confirmed).
     pids: Vec<u32>,
+    phase: Phase,
+    /// The last `Input::Barrier` handled.
+    barrier: u64,
 }
-static SHARED: Mutex<Shared> = Mutex::new(Shared { status: None, spans: Vec::new(), pids: Vec::new() });
-static RESUMED: Condvar = Condvar::new();
+static SHARED: Mutex<Shared> =
+    Mutex::new(Shared { status: None, spans: Vec::new(), pids: Vec::new(), phase: Phase::Idle, barrier: 0 });
+/// Notified after every turn of the game pause thread.
+static CHANGED: Condvar = Condvar::new();
+// Gaming Mode's ordering (Linux) is the only user of the barrier so far.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+static NEXT_BARRIER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 static TX: OnceLock<Mutex<Sender<Input>>> = OnceLock::new();
 
 /// Hands `input` to the manager thread. A no-op before [`start`].
@@ -53,8 +61,8 @@ pub fn paused() -> bool {
 
 /// Whether `pid` is part of the pause in effect: nothing may wait on it (Accessibility,
 /// synchronous window messages) or bring it to the front.
-// Read by macOS's Accessibility and activation paths today; Windows' foreground gating will too.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+// Read by the macOS and Linux activation paths; Windows' foreground gating will too.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 pub fn holds_pid(pid: u32) -> bool {
     SHARED.lock().unwrap_or_else(|p| p.into_inner()).pids.contains(&pid)
 }
@@ -89,8 +97,52 @@ pub fn wait_until_resumed(timeout: Duration) -> bool {
         if left.is_zero() {
             return false;
         }
-        shared = RESUMED.wait_timeout(shared, left).unwrap_or_else(|p| p.into_inner()).0;
+        shared = CHANGED.wait_timeout(shared, left).unwrap_or_else(|p| p.into_inner()).0;
     }
+}
+
+/// Waits (at most `timeout`) until every input sent before this call has been handled and no
+/// suspend is in flight: the game is paused, or a pause was not wanted or refused. For what must
+/// happen after the game stops (Gaming Mode stops Steam's controller reader only then). Returns
+/// whether it settled in time. A no-op before [`start`].
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn settle(timeout: Duration) -> bool {
+    if TX.get().is_none() {
+        return true;
+    }
+    let id = NEXT_BARRIER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    send(Input::Barrier(id));
+    let deadline = Instant::now() + timeout;
+    let mut shared = SHARED.lock().unwrap_or_else(|p| p.into_inner());
+    loop {
+        if shared.barrier >= id && shared.phase != Phase::Pausing {
+            return true;
+        }
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return false;
+        }
+        shared = CHANGED.wait_timeout(shared, left).unwrap_or_else(|p| p.into_inner()).0;
+    }
+}
+
+/// Before anything that waits synchronously on a helper living beside the game (the text hook
+/// helper inside a Wine prefix needs the prefix's wineserver, which a pause stops): wait for the
+/// game to run again, at most `limit`, logging the deferral. False when it is still paused; the
+/// caller then skips (or fails) and says so.
+pub fn defer_while_paused(what: &str, limit: Duration) -> bool {
+    if !paused() {
+        return true;
+    }
+    let began = Instant::now();
+    let resumed = wait_until_resumed(limit);
+    crate::debug_report::record_now(json!({
+        "check": "game-pause",
+        "deferred": what,
+        "waitedMs": began.elapsed().as_millis() as u64,
+        "resumed": resumed,
+    }));
+    resumed
 }
 
 struct AppCx {
@@ -100,15 +152,21 @@ struct AppCx {
 impl Context for AppCx {
     fn game(&self) -> GameRef {
         let selection = self.app.try_state::<crate::state::Shared>().and_then(|s| s.selection.lock().ok()?.clone());
-        let ours = std::process::id();
-        // While the menu has activation, the game is the app it will hand back to.
-        let frontmost =
-            crate::platform::frontmost_pid().filter(|pid| *pid != ours).or_else(crate::gamepad::returning_to);
         #[cfg(target_os = "linux")]
-        let steam = crate::platform::gamescope::focused_app_id();
+        {
+            // No frontmost fallback: Linux's frontmost pid is the window's own `_NET_WM_PID` claim,
+            // not a host pid to trust.
+            let steam = crate::platform::gamescope::focused_app_id();
+            super::target::game_ref(selection.as_deref(), None, steam, &crate::platform::x11_window_host_pid)
+        }
         #[cfg(not(target_os = "linux"))]
-        let steam = None;
-        super::target::game_ref(selection.as_deref(), frontmost, steam)
+        {
+            let ours = std::process::id();
+            // While the menu has activation, the game is the app it will hand back to.
+            let frontmost =
+                crate::platform::frontmost_pid().filter(|pid| *pid != ours).or_else(crate::gamepad::returning_to);
+            super::target::game_ref(selection.as_deref(), frontmost, None, &|_| None)
+        }
     }
     fn inputs_held(&self) -> bool {
         #[cfg(target_os = "macos")]
@@ -116,6 +174,13 @@ impl Context for AppCx {
         #[cfg(not(target_os = "macos"))]
         let keys = false;
         crate::gamepad::any_button_held() || keys || crate::gamepad::lookup_held()
+    }
+    fn resume_blocked(&self) -> bool {
+        // Gaming Mode: Steam runs again before the game (stop order game, Steam; resume reverse).
+        #[cfg(target_os = "linux")]
+        return crate::platform::steam_input::stopped();
+        #[cfg(not(target_os = "linux"))]
+        false
     }
 }
 
@@ -154,6 +219,7 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                     Err(RecvTimeoutError::Disconnected) => break,
                 },
             };
+            let barrier = if let Input::Barrier(id) = input { Some(id) } else { None };
             if matches!(&input, Input::ForceResume(why) if why == QUIT) {
                 quitting = Some(Instant::now());
             }
@@ -176,8 +242,16 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                     Effect::Log { verbose, value } => log(&app, verbose, value),
                 }
             }
-            SHARED.lock().unwrap_or_else(|p| p.into_inner()).pids = machine.paused_pids();
+            {
+                let mut shared = SHARED.lock().unwrap_or_else(|p| p.into_inner());
+                shared.pids = machine.paused_pids();
+                shared.phase = machine.phase();
+                if let Some(id) = barrier {
+                    shared.barrier = shared.barrier.max(id);
+                }
+            }
             publish_spans(&app, machine.spans());
+            CHANGED.notify_all();
         }
     });
     if let Err(e) = spawned {
@@ -247,12 +321,8 @@ fn publish_spans(app: &tauri::AppHandle, spans: Vec<PauseSpan>) {
             }
         }
     }
-    let open = spans.last().is_some_and(|s| s.end_ms.is_none());
     shared.spans = spans;
     drop(shared);
-    if !open {
-        RESUMED.notify_all();
-    }
     for span in events {
         let _ = app.emit(EVENT_SPAN, span);
     }
