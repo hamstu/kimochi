@@ -1,0 +1,254 @@
+/*
+ * Explain on the overlay (overlay-explain.js): a card right under the line it explains, or over or
+ * beside it (`data-side`), with a notch on the line (`data-notch`, at `--explain-caret`). It is the overlay
+ * text's own card (overlay-text.css: `data-ocr-theme` light or dark, `--ocr-card`, `--ocr-ink`,
+ * `--ocr-card-line`, `--ocr-card-shadow`), with the highlight colour (`--ocr-hl-rgb`) for its marks,
+ * as a hovered word's card is, set in Figtree with the language being read in its own fonts
+ * (`--kimochi-text-font`). Placed by script (`placeExplanation`).
+ */
+.overlay-explain {
+  --explain-hl: rgb(var(--ocr-hl-rgb, 62, 99, 221));
+  --explain-dim: color-mix(in srgb, var(--ocr-ink) 62%, transparent);
+  --explain-faint: color-mix(in srgb, var(--ocr-ink) 8%, transparent);
+  /* The overlay text's own stack (overlay-text.css). */
+  --explain-text-font: var(
+    --kimochi-text-font,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Noto Sans CJK JP',
+    'Yu Gothic',
+    'Meiryo',
+    sans-serif
+  );
+  position: fixed;
+  z-index: 2147483100;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  border-radius: 10px;
+  color: var(--ocr-ink);
+  background: var(--ocr-card);
+  box-shadow:
+    inset 0 0 0 1px var(--ocr-card-line),
+    var(--ocr-card-shadow);
+  font:
+    430 14px/1.55 'Figtree Variable',
+    'Figtree',
+    system-ui,
+    sans-serif;
+  pointer-events: auto;
+  animation: overlay-explain-in var(--ocr-fade, 180ms) ease-out;
+}
+.overlay-explain[hidden] {
+  display: none;
+}
+.overlay-explain[data-side='above'] {
+  animation-name: overlay-explain-in-above;
+}
+.overlay-explain:is([data-side='right'], [data-side='left']) {
+  animation-name: overlay-explain-fade;
+}
+
+/* The notch: a corner of the card turned to the line, on the word (or the line's middle). */
+.overlay-explain[data-notch]::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--ocr-card);
+  /* Its two outlined sides are the ones turned to the text. */
+  box-shadow: inset 1px 1px 0 0 var(--ocr-card-line);
+}
+.overlay-explain[data-notch]:is([data-side='below'], [data-side='above'])::before {
+  left: calc(var(--explain-caret, 50%) - 6px);
+}
+.overlay-explain[data-notch]:is([data-side='right'], [data-side='left'])::before {
+  top: calc(var(--explain-caret, 50%) - 6px);
+}
+.overlay-explain[data-notch][data-side='below']::before {
+  top: -6px;
+  transform: rotate(45deg);
+}
+.overlay-explain[data-notch][data-side='above']::before {
+  bottom: -6px;
+  transform: rotate(225deg);
+}
+.overlay-explain[data-notch][data-side='right']::before {
+  left: -6px;
+  transform: rotate(-45deg);
+}
+.overlay-explain[data-notch][data-side='left']::before {
+  right: -6px;
+  transform: rotate(135deg);
+}
+
+.overlay-explain-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 0 14px;
+}
+.overlay-explain-icon {
+  display: grid;
+  color: var(--explain-hl);
+}
+.overlay-explain-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+/* The highlighted word, explained first: marked as the overlay marks text it can look up. */
+.overlay-explain-word {
+  padding: 0 7px;
+  border-radius: 6px;
+  font: 500 15px/1.6 var(--explain-text-font);
+  background: rgba(var(--ocr-hl-rgb, 62, 99, 221), 0.18);
+  box-shadow: inset 0 0 0 1px rgba(var(--ocr-hl-rgb, 62, 99, 221), 0.45);
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.overlay-explain-word[hidden] {
+  display: none;
+}
+.overlay-explain-provider {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+  font-size: 12px;
+  color: var(--explain-dim);
+}
+.overlay-explain-close,
+.overlay-explain-refresh {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--explain-dim);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.overlay-explain-close:is(:hover, [data-hover]),
+.overlay-explain-refresh:not(:disabled):is(:hover, [data-hover]) {
+  color: var(--ocr-ink);
+  background: var(--explain-faint);
+}
+/* As the Log's: turning while the answer is asked for and written, and not to be pressed then. */
+.overlay-explain-refresh:disabled {
+  cursor: default;
+}
+.overlay-explain:is([data-status='loading'], [data-status='streaming']) .overlay-explain-refresh svg {
+  animation: overlay-explain-spin 900ms linear infinite;
+}
+
+.overlay-explain-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 2px 14px 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  user-select: text;
+  scrollbar-width: thin;
+}
+.overlay-explain-body :is(p, ul, ol) {
+  margin: 8px 0 0;
+}
+.overlay-explain-body :is(ul, ol) {
+  padding-left: 20px;
+}
+.overlay-explain-body li + li {
+  margin-top: 3px;
+}
+.overlay-explain-body :is(h3, h4, h5, h6) {
+  margin: 12px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+/* The fragments discussed, in the language's own fonts and the highlight colour. */
+.overlay-explain-body strong {
+  font-family: var(--explain-text-font);
+  font-weight: 600;
+  color: color-mix(in srgb, var(--explain-hl) 55%, var(--ocr-ink));
+}
+.overlay-explain-body code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--explain-faint);
+  font-size: 0.92em;
+}
+.overlay-explain-body pre {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--explain-faint);
+  overflow-x: auto;
+}
+.overlay-explain-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.overlay-explain-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--explain-dim);
+}
+.overlay-explain-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--explain-faint);
+  border-top-color: var(--explain-hl);
+  animation: overlay-explain-spin 800ms linear infinite;
+}
+.overlay-explain-error {
+  color: var(--explain-dim);
+  white-space: pre-wrap;
+}
+
+@keyframes overlay-explain-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes overlay-explain-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes overlay-explain-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes overlay-explain-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay-explain {
+    animation: none;
+  }
+  .overlay-explain-spinner,
+  .overlay-explain:is([data-status='loading'], [data-status='streaming']) .overlay-explain-refresh svg {
+    animation-duration: 2400ms;
+  }
+}

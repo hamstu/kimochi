@@ -105,7 +105,10 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
       </SettingsSection>
 
       <SettingsSection title="Explain with AI">
-        <SettingsRow label="Provider, model and prompt" description={`${explainSummary}. Also on the E key.`}>
+        <SettingsRow
+          label="Provider, model and prompt"
+          description={`${explainSummary}. On X in the Log, and the Explain shortcut over the game.`}
+        >
           <Button size="sm" onClick={() => setExplainOpen(true)}>
             Configure…
           </Button>

@@ -11,15 +11,19 @@ use tauri::{Emitter, Manager};
 /// frontend actually calls, so a button cannot ship against an action that does not
 /// exist.
 pub const ACTIONS: &[&str] = &[
-    // Commands. Only `triggerScan`, `openControllerMenu` and the menu's items are bindable; the
-    // rest are still reached from the tray, the panels and the overlay's radial menu.
+    // Commands. Only `triggerScan`, `openControllerMenu`, `explainText`, `explainSentence` and the
+    // menu's items are bindable; the rest are still reached from the tray, the panels and the
+    // overlay's radial menu.
     "triggerScan",
     "openControllerMenu",
+    "explainText",
+    "explainSentence",
     // The controller menu's items, each run directly by its own shortcut (`MENU_ITEM_ACTIONS`).
     "menuScan",
     "menuReadAlong",
     "menuAutoOcr",
     "menuTextHooker",
+    "menuExplain",
     "menuRecentText",
     "menuKimochi",
     "menuSettings",
@@ -43,6 +47,12 @@ pub const ACTIONS: &[&str] = &[
     "hoverSourceOn",
     "hoverSourceOff",
     "hoverSourceDismiss",
+    // Escape with a pop-up or the Explain card open: the overlay clears its pop-ups, lit text and
+    // card (`hotkeys::dismiss_overlay`). Emit-only.
+    "dismissOverlay",
+    // Ctrl+C over the overlay with the Explain card open: the overlay copies what is selected in
+    // the card (`hotkeys::fire_swallowed`). Emit-only.
+    "copyExplanation",
 ];
 
 /// The subset that can be bound to a shortcut or a gamepad button. The order also breaks
@@ -50,10 +60,13 @@ pub const ACTIONS: &[&str] = &[
 pub const HOTKEY_ACTIONS: &[&str] = &[
     "triggerScan",
     "openControllerMenu",
+    "explainText",
+    "explainSentence",
     "menuScan",
     "menuReadAlong",
     "menuAutoOcr",
     "menuTextHooker",
+    "menuExplain",
     "menuRecentText",
     "menuKimochi",
     "menuSettings",
@@ -70,6 +83,7 @@ pub const MENU_ITEM_ACTIONS: &[(&str, &str, &str)] = &[
     ("menuReadAlong", "Read along", "Step through the text word by word with the dictionary"),
     ("menuAutoOcr", "Auto OCR", "Turn automatic scanning on or off"),
     ("menuTextHooker", "Text Hooker", "The hooked text and the card's settings"),
+    ("menuExplain", "Explain", "Explain the text on screen with AI"),
     ("menuRecentText", "Recent text", "Lines read earlier, to read along with again"),
     ("menuKimochi", "Kimochi", "Open Kimochi's window"),
     ("menuSettings", "Settings", "Open Kimochi's settings"),
@@ -90,6 +104,8 @@ pub fn is_menu_item(name: &str) -> bool {
 const RESTORES_OVERLAY: &[&str] = &[
     "triggerScan",
     "openControllerMenu",
+    "explainText",
+    "explainSentence",
     "setCropArea",
     "setAnkiCropArea",
     "playAudio",
@@ -99,6 +115,7 @@ const RESTORES_OVERLAY: &[&str] = &[
     "menuReadAlong",
     "menuAutoOcr",
     "menuTextHooker",
+    "menuExplain",
     "menuRecentText",
     "menuKimochi",
     "menuSettings",
@@ -185,6 +202,9 @@ mod tests {
             assert!(HOTKEY_ACTIONS.contains(name), "{name} must be bindable");
             assert!(RESTORES_OVERLAY.contains(name), "{name} acts in the overlay");
         }
+        // So is Explain's panel.
+        assert!(RESTORES_OVERLAY.contains(&"explainText"));
+        assert!(RESTORES_OVERLAY.contains(&"explainSentence"));
     }
 
     #[test]

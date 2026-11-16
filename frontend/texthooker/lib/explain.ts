@@ -86,7 +86,8 @@ function ensureListeners(): Promise<void> {
       if (getActiveSession().id === originSession) void setLineExplanation(state.line.id, e.payload.text)
     })
     await listen<ExplainEvent>('explain:error', (e) => {
-      if (e.payload.requestId !== activeRequestId || !state) return
+      // A finished answer stays: nothing that comes after it (another run taking over) replaces it.
+      if (e.payload.requestId !== activeRequestId || !state || state.status === 'done') return
       setState({ ...state, status: 'error', text: e.payload.text })
     })
   })()
@@ -106,7 +107,7 @@ export function buildExplainPrompt(line: Line, template: string): string {
 async function runExplain(line: Line): Promise<void> {
   const settings = getSettings()
   const prompt = buildExplainPrompt(line, settings.explainPrompt)
-  // Provider, model and effort as the settings choose them (ui/explain-settings.ts).
+  // Provider, model, effort and tier as the overlay reads them too (ui/explain-settings.ts).
   const { provider, model, effort, tier } = explainSettings(settings)
 
   const requestId = ++requestCounter
@@ -154,7 +155,9 @@ export function regenerateExplain(): void {
 
 /** Close the modal and cancel any in-flight CLI run. */
 export function closeExplain(): void {
+  const requestId = activeRequestId
   activeRequestId = 0
   setState(null)
-  void invoke('explain_cancel').catch(() => {})
+  // Only this window's run: an explanation the overlay asked for meanwhile keeps going.
+  if (requestId) void invoke('explain_cancel', { requestId }).catch(() => {})
 }

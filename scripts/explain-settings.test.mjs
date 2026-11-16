@@ -17,7 +17,8 @@ test("the provider and model are the Log's, with its defaults", () => {
     model: null,
     effort: null,
     tier: null,
-    prompt: undefined
+    prompt: undefined,
+    focusPrompt: undefined
   })
   assert.equal(model({ explainProvider: 'claude' }), 'opus')
   assert.equal(model({ explainProvider: 'claude', explainClaudeModel: ' sonnet ' }), 'sonnet')
@@ -147,7 +148,8 @@ test('OpenAI reads its own model and effort, with its default model named', () =
     model: null,
     effort: 'none',
     tier: 'fast',
-    prompt: undefined
+    prompt: undefined,
+    focusPrompt: undefined
   })
   assert.equal(openai({ explainOpenaiEffort: '' }).effort, null)
   const chosen = openai({

@@ -133,13 +133,22 @@ function LookupKeyRow(): ReactNode {
  * editor shows the same bindings.
  */
 const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu', 'menuPause', 'menuPauseScan', 'menuPauseReadAlong']
+/** The AI section's, last on the page. */
+const AI_ORDER: HotkeyName[] = ['explainText', 'explainSentence']
 
-export function ShortcutsSections(): ReactNode {
+/**
+ * The shortcut sections: the action shortcuts first, then `children` (the page's other sections),
+ * then the AI shortcuts last. One component for both, so they edit one set of bindings.
+ */
+export function ShortcutsSections({ children }: { children?: ReactNode }): ReactNode {
   const [hotkeys, , hotkeyFailures] = useHotkeys()
   const capabilities = useCapabilities()
   const keyPlatform = keyPlatformOf(capabilities)
 
-  const entries = ORDER.filter((name) => hotkeys[name]).map((name) => [name, hotkeys[name]] as const)
+  const entriesOf = (order: HotkeyName[]) =>
+    order.filter((name) => hotkeys[name]).map((name) => [name, hotkeys[name]] as const)
+  const entries = entriesOf(ORDER)
+  const aiEntries = entriesOf(AI_ORDER)
 
   return (
     <>
@@ -173,6 +182,14 @@ export function ShortcutsSections(): ReactNode {
         <LookupKeyRow />
         <HoverLookupRow />
       </SettingsSection>
+      {children}
+      {aiEntries.length > 0 && (
+        <SettingsSection title="AI" description="Explain the text on the overlay with AI, over your game.">
+          {aiEntries.map(([name]) => (
+            <HotkeyRow key={name} name={name} />
+          ))}
+        </SettingsSection>
+      )}
     </>
   )
 }

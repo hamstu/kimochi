@@ -1,7 +1,7 @@
 /**
  * The Explain settings as the Log stores them (`superTexthooker`): the provider, its model, how hard
- * it thinks (effort) and, for OpenAI, the service tier and a price estimate. Read here rather than
- * in each window, so Explain asks the same way wherever it is asked for.
+ * it thinks (effort) and, for OpenAI, the service tier and a price estimate. The Log's Explain and
+ * the overlay's both read them here, so Explain asks the same way wherever it is asked for.
  */
 export type ExplainProvider = 'codex' | 'claude' | 'kimochi' | 'openai'
 
@@ -17,6 +17,9 @@ export interface ExplainSettings {
   /** OpenAI's service tier (`default`, `fast` or `ultrafast`); null for the other providers. */
   tier: string | null
   prompt: unknown
+  /** The instruction added for a highlighted word (`focusInstruction` in ui/explain-screen.ts);
+      empty or unset: the default. */
+  focusPrompt: unknown
 }
 
 export type OpenaiTier = 'default' | 'fast' | 'ultrafast'
@@ -174,7 +177,7 @@ export function explainSettings(stored: unknown): ExplainSettings {
   const provider = PROVIDERS.includes(s.explainProvider as ExplainProvider)
     ? (s.explainProvider as ExplainProvider)
     : 'codex'
-  const prompts = { prompt: s.explainPrompt }
+  const prompts = { prompt: s.explainPrompt, focusPrompt: s.explainFocusPrompt }
   if (provider === 'kimochi') return { provider, model: null, effort: null, tier: null, ...prompts }
   const keys = STORED[provider]
   const model = typeof s[keys.model] === 'string' ? (s[keys.model] as string) : keys.fallback

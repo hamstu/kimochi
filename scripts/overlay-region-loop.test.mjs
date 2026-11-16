@@ -50,6 +50,9 @@ function fixture() {
       }
     },
     hints: { sync: (shown) => hints.push(shown), place() {}, rects: () => [] },
+    // The Explain card, closed: it follows the source each tick and takes no mouse.
+    explain: { place() {}, rects: () => [], shown: false },
+    syncEscapeKey() {},
     reading: new ReadingHold(),
     readingHold: false,
     syncScanHold: () => holds.push(context.readingHold),

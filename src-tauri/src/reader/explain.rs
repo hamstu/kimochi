@@ -163,11 +163,32 @@ async fn kill_own(request_id: u64) {
     }
 }
 
+/// Cancel the run in progress. With `request_id`, only while that run is still the one in
+/// progress: the Log and the overlay each cancel their own, and neither stops the other's.
 #[tauri::command]
-pub async fn explain_cancel() -> Result<(), String> {
-    ACTIVE_REQUEST.store(0, Ordering::SeqCst);
+pub async fn explain_cancel(request_id: Option<u64>) -> Result<(), String> {
+    match request_id {
+        Some(id) => {
+            if ACTIVE_REQUEST.compare_exchange(id, 0, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                return Ok(());
+            }
+        }
+        None => ACTIVE_REQUEST.store(0, Ordering::SeqCst),
+    }
     kill_current().await;
     Ok(())
+}
+
+/// What a run hears when another one takes its place.
+const SUPERSEDED: &str = "Stopped: another explanation started.";
+
+/// Make `request_id` the run in progress. One runs at a time, for every window: a run that
+/// another window was still waiting on is told it was stopped, so it does not wait forever.
+fn take_over(app: &AppHandle, request_id: u64) {
+    let previous = ACTIVE_REQUEST.swap(request_id, Ordering::SeqCst);
+    if previous != 0 && previous != request_id {
+        emit(app, "explain:error", previous, SUPERSEDED.to_string());
+    }
 }
 
 #[tauri::command]
@@ -176,17 +197,36 @@ pub async fn explain_run(
     request_id: u64,
     provider: String,
     model: Option<String>,
-    // How hard the model thinks (`claude --effort`, Codex's `model_reasoning_effort`, OpenAI's
-    // `reasoning_effort`); none: its default.
     effort: Option<String>,
-    // OpenAI's service tier (`default`, `fast` or `ultrafast`); the CLI providers have none.
+    // OpenAI's service tier (`default` or `fast`); the CLI providers have none.
+    tier: Option<String>,
+    prompt: String,
+) -> Result<(), String> {
+    let result = run(app, request_id, provider, model, effort, tier, prompt).await;
+    finish(request_id);
+    result
+}
+
+/// A run is over (done, failed or stopped): it is no longer the one in progress, so the next run
+/// does not tell it it was stopped (`take_over`), which would replace its finished answer with
+/// that error. Only if it still is: a newer run that took over keeps its place.
+fn finish(request_id: u64) {
+    let _ = ACTIVE_REQUEST.compare_exchange(request_id, 0, Ordering::SeqCst, Ordering::SeqCst);
+}
+
+async fn run(
+    app: AppHandle,
+    request_id: u64,
+    provider: String,
+    model: Option<String>,
+    effort: Option<String>,
     tier: Option<String>,
     prompt: String,
 ) -> Result<(), String> {
     if provider == "kimochi" {
         // Kimochi cloud streams over HTTP instead of a CLI. Taking over as the active run stops a
         // superseded run (CLI or HTTP) from emitting; a CLI still running is killed.
-        ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
+        take_over(&app, request_id);
         kill_current().await;
         return crate::cloud::explain(app, request_id, prompt, move || {
             ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id
@@ -196,7 +236,7 @@ pub async fn explain_run(
     if provider == "openai" {
         // OpenAI's API streams over HTTP with the reader's key, as Kimochi cloud does.
         let (model, effort, tier) = openai_choice(model.as_deref(), effort.as_deref(), tier.as_deref())?;
-        ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
+        take_over(&app, request_id);
         kill_current().await;
         return crate::reader::openai::explain(app, request_id, model, effort, tier, prompt, move || {
             ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id
@@ -208,7 +248,7 @@ pub async fn explain_run(
 
     // Take over as the active run; the previous CLI (if any) is killed when
     // we claim the child slot below.
-    ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
+    take_over(&app, request_id);
 
     // The prompt is fed on stdin, which is closed afterwards so the CLI starts.
     // Neutral cwd: keeps claude from loading a project's CLAUDE.md/hooks and

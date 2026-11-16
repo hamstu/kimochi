@@ -67,6 +67,7 @@ import { annotationGroups, fullWidth, hookAnnotations, readSpan, splitSpeaker } 
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
 import { glyphGeometry, OWN_PITCH_GLYPHS } from './hook-glyphs.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
+import { createOverlayExplain, textTarget, wordAtPoint, wordInRange } from './overlay-explain.js'
 import { hookSettings, withLegacyShowCard } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
@@ -510,6 +511,112 @@ const hints = createOverlayHints(document.body, {
 })
 
 /**
+ * The drawn scan as the Log has it, a section per group (`publishOcrResult` logs these same
+ * groups), or the Text Hooker's line; null without text. Read along's full-screen dictionary and
+ * Explain both read it.
+ */
+function screenSections() {
+  if (hookMode()) return hook.line ? [hook.line] : null
+  return state.geometry && state.annotations.length
+    ? logSections(scanGroups(state.annotations, setting('textOverlayGrouping') ?? {}))
+    : null
+}
+
+/**
+ * The word the reader has highlighted, for Explain to start from: the word read along is on (the
+ * controller's outline), or the text a dictionary lookup matched (the selection Yomitan makes, or
+ * an extension engine's match), in the scan's text or on the Text Hooker's card; or null.
+ */
+function highlightedWord() {
+  const reading = controller?.focusedWord?.()
+  if (reading) return wordInRange(reading.range) ?? { text: reading.text, rect: reading.rect, box: null }
+  const matched = extensionHosted ? extensionHost()?.matchedRange?.() : null
+  if (matched) {
+    const range = document.createRange()
+    range.setStart(matched.startContainer, matched.startOffset)
+    range.setEnd(matched.endContainer, matched.endOffset)
+    return wordInRange(range)
+  }
+  const selection = window.getSelection()
+  return selection?.rangeCount ? wordInRange(selection.getRangeAt(0)) : null
+}
+
+/** Where the pointer is over the overlay (overlay coordinates), from the pointer feed; or null. */
+let pointerAt = null
+
+/** The word the pointer is on in the scan's text, Shift or not (`wordAtPoint`); or null. */
+function wordAtPointer() {
+  return pointerAt ? wordAtPoint(pointerAt.x, pointerAt.y, languageNow()) : null
+}
+
+/**
+ * The word Explain starts from: the one the pointer is on, Shift or not, if it is not the
+ * highlighted one (moved on to another word without Shift, its lookup not made), else the
+ * highlighted one; null for the whole text.
+ */
+function wordToExplain() {
+  const lit = highlightedWord()
+  // Reading along with the controller, its outline is the word, wherever the mouse was left.
+  if (controller?.focusedWord?.()) return lit
+  const pointed = wordAtPointer()
+  if (!pointed) return lit
+  const on = (rect) =>
+    rect &&
+    pointerAt.x >= rect.left &&
+    pointerAt.x <= rect.right &&
+    pointerAt.y >= rect.top &&
+    pointerAt.y <= rect.bottom
+  return lit && on(lit.rect) ? lit : pointed
+}
+
+/**
+ * What Explain explains and where its answer goes (`textTarget`): the highlighted word's line, or
+ * everything on screen, anchored to where it is drawn. The Text Hooker's line is on its card.
+ */
+function explainTarget(word) {
+  // Kept there only while the line explained is still on screen (new text can keep a box of the old).
+  const target = textTarget(screenSections() ?? [], wordsContainer, word, screenSections)
+  if (!hookMode()) return target
+  // The card, only while it still shows the line explained: on the next line the explanation goes.
+  const line = hook.line
+  return { ...target, anchor: () => (hook.line === line ? (hook.card?.rects()[0] ?? null) : null) }
+}
+
+/** The overlay text's look (Settings → Overlay → Overlay appearance), for Explain's card. */
+function explainLook() {
+  const theme = wordsContainer.dataset.ocrTheme === 'light' ? 'light' : 'dark'
+  return {
+    theme,
+    highlight: wordsContainer.style.getPropertyValue('--ocr-hl-rgb'),
+    font: wordsContainer.style.getPropertyValue('--kimochi-text-font')
+  }
+}
+
+// Explain: the text on screen explained by AI (the Explain shortcut, or the game menu's Explain).
+const explain = createOverlayExplain(document.body, {
+  native,
+  target: (whole) => {
+    // The word the pointer is on or the highlighted one, before its pop-up goes: the answer takes
+    // the pop-up's place.
+    const target = explainTarget(wordToExplain())
+    if (target.word) dismissPopup()
+    // The whole sentence: the line that word is in, with no word to start from.
+    return whole ? { ...target, word: null, focus: null } : target
+  },
+  language: () => languageNow(),
+  // Null while detached (`sourceArea`).
+  area: () => sourceArea(),
+  look: () => explainLook(),
+  changed: () => void publishRegions(),
+  // Closed with its × (or the shortcut) while the game menu held it open: the controller goes back
+  // to the game too.
+  closed: () => {
+    if (controller?.mode === 'explain') void controller.close()
+  },
+  log: (record) => log(record)
+})
+
+/**
  * Gaming Mode's hint names the buttons that open the game menu (the radial), as the main
  * window's Gaming Mode notice does; there is no Shift there.
  */
@@ -761,6 +868,10 @@ const hoverPreview = new HoverPreview({
 })
 
 const renderer = new TextOverlayRenderer(wordsContainer, {
+  // Words light from the mouse only as they do from the pointer feed: with Shift's gate open, or
+  // with click-through off. While a pop-up or the Explain card is up the overlay takes the mouse
+  // everywhere (the next click is theirs), and the window's own moves must not light words then.
+  canLight: () => !clickThrough() || gateOpen || hoverLookup(),
   // Keep cloud requests from disrupting lookup, while local observations still
   // notice when the game removes the words underneath the pointer. Touching the text with the
   // mouse also takes word mode back from the controller.
@@ -969,14 +1080,9 @@ controller = createController({
   popupShowing: () => enginePopupShowing(),
   // The drawn scan as the Log has it, a section per group (`publishOcrResult` logs these same
   // groups), for the full-screen dictionary; null without boxes to group.
-  sections: () =>
-    hookMode()
-      ? hook.line
-        ? [hook.line]
-        : null
-      : state.geometry && state.annotations.length
-        ? logSections(scanGroups(state.annotations, setting('textOverlayGrouping') ?? {}))
-        : null,
+  sections: () => screenSections(),
+  // The game menu's Explain: the panel, which B closes and the right stick scrolls.
+  explain,
   log: (record) => log(record),
   modeChanged: (mode) => holdForController(mode !== 'idle'),
   // Read along as the full-screen dictionary (Settings → Overlay → Game Mode): with the Yomitan API, its
@@ -2280,6 +2386,8 @@ function onHookLine(payload) {
   setOcrAnnotations(state.rawAnnotations ?? [])
   syncHookCard()
   controller?.hookChanged?.()
+  // An explanation of the line before goes now, not at the next tick (`explainTarget`).
+  explain.place()
 }
 
 /**
@@ -3196,6 +3304,33 @@ async function onAction(name) {
       return openController()
     case 'playAudio':
       return playLatest()
+    // Explain the text on screen, or close the explanation that is open. From the game menu
+    // instead, the menu's own Explain (controller.js) holds the controller while it is open.
+    // Escape with a pop-up or the Explain card open: clear what the overlay shows (native takes
+    // Escape only then; hotkeys::dismiss_overlay).
+    case 'dismissOverlay':
+      log({ check: 'overlay-dismissed' })
+      explain.hide()
+      dismissPopup()
+      void native.optional('hide_popover')
+      window.getSelection()?.removeAllRanges()
+      renderer.clearPointer()
+      return void publishRegions()
+    // Ctrl+C over the overlay with the Explain card open: what is selected in it is copied.
+    case 'copyExplanation':
+      return explain.copy()
+    // Explain the sentence: the line pointed at (or everything on screen), with no word to start from.
+    case 'explainText':
+    case 'explainSentence': {
+      // Reads the highlighted word at once, before reading along (and its outline) is closed.
+      const showing = explain.press(name === 'explainSentence')
+      // Closed: the controller (reading along, say) stays as it is.
+      if (showing === false) return
+      // Not the game menu's Explain: closing that closes the card, and this press asked for another
+      // word in it, so the menu keeps holding the card (B still closes it).
+      if (controller.mode !== 'idle' && controller.mode !== 'explain') await controller.close()
+      return showing
+    }
     // The controller reads these back from the shared view, so this window owns
     // the flip. Native must pass these names through without touching the flag,
     // or the switch would toggle twice and appear dead.
@@ -5200,6 +5335,8 @@ function hitRects(readWordRects = null) {
   if (menu) add(menu, false)
   // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
   for (const rect of hints.rects()) add(rect, false)
+  // Explain's panel, to be scrolled, selected from and closed, Shift or not.
+  for (const rect of explain.rects()) add(rect, false)
   // A pop-up is open: the whole overlay takes the next click, so clicking away closes the pop-up
   // without the click reaching the game (`onFreeClick`). On GNOME, Yomitan's pop-up is a window
   // of its own (ui/popup-host.js), which this one may be stacked above: everything but it. Not with
@@ -5207,7 +5344,8 @@ function hitRects(readWordRects = null) {
   // clicks that advance the game, so the click goes to the game and closes the pop-up on the way
   // (native's dismiss).
   const remote = remoteReadingPopup && gnomeOverlay?.shared ? remoteReadingRects : null
-  const shown = popupShown() || remote !== null
+  // The Explain card is a pop-up in this: a click away closes it too.
+  const shown = popupShown() || remote !== null || explain.shown
   if (!shown) freeClickTaken = false
   catching =
     gated &&
@@ -5350,8 +5488,9 @@ function syncMatchOutline() {
 setInterval(syncMatchOutline, 100)
 
 /**
- * The free click: with a pop-up open, a click anywhere on the overlay that is not on the pop-up,
- * the card's menu, the hint bar or the controller closes the pop-up and goes no further: not to
+ * The free click: with a pop-up or the Explain card open, a click anywhere on the overlay that is
+ * not on the pop-up, the Explain card, the Text Hooker card's menu, the hint bar or the controller
+ * closes the pop-up and the Explain card and goes no further: not to
  * the game (the overlay took it, `catching`), nor to a word under it (a lookup). The game keeps
  * the keyboard throughout; the next click goes through to it. With Shift's gate open, clicks are
  * the words' and the card's as usual.
@@ -5364,7 +5503,7 @@ function onFreeClick(event) {
   // A card clear of the game takes the mouse as if the key were held: its clicks are its own.
   if (target?.closest('.hook-card') && hookCardClear()) return
   const popupHost = extensionHost()?.descriptor?.popupSelector
-  if (target?.closest('.hook-card-menu, .overlay-hints, #controller, .pages, iframe')) return
+  if (target?.closest('.hook-card-menu, .overlay-hints, .overlay-explain, #controller, .pages, iframe')) return
   if (popupHost && target?.closest(popupHost)) return
   event.preventDefault()
   event.stopImmediatePropagation()
@@ -5373,11 +5512,13 @@ function onFreeClick(event) {
   freeClickTaken = true
   log({ check: 'overlay-free-click' })
   dismissPopup()
+  explain.hide()
   window.getSelection()?.removeAllRanges()
   renderer.clearPointer()
   void publishRegions()
 }
 document.addEventListener('pointerdown', onFreeClick, true)
+
 for (const type of ['mousedown', 'mouseup', 'pointerup', 'click']) {
   document.addEventListener(
     type,
@@ -5440,10 +5581,11 @@ async function processView(view) {
   }
   handling = true
   try {
-    // A native click outside any interactive region dismisses the popup.
+    // A native click outside any interactive region dismisses the popup, and the Explain card.
     if (state.dismiss !== view.dismiss) {
       state.dismiss = view.dismiss
       dismissPopup()
+      explain.hide()
     }
 
     if (view.revision !== state.revision) {
@@ -5489,6 +5631,12 @@ async function processView(view) {
     const autoChanged = flags.autoOcrEnabled !== state.flags.autoOcrEnabled
     state.flags = flags
     if (autoChanged) syncAutoScanner()
+    // The overlay hidden (its window, not its text): the Explain card goes with it, giving Escape
+    // and the copy key back to the game.
+    if (!flags.overlayVisible) {
+      explain.hide()
+      syncEscapeKey()
+    }
     syncOverlayText()
     document.body.classList.toggle('debug', flags.debugOverlayVisible)
 
@@ -5722,6 +5870,21 @@ async function publishRegions(readWordRects = null) {
   }
 }
 
+/** Whether a pop-up was last open, as told to native (`overlay_popup_open`). */
+let popupOpenForEscape = false
+
+/**
+ * Escape clears the overlay while a pop-up is open, wherever the pointer is (the Explain card says
+ * so itself, `explain_card_open`); with nothing open it is the game's. Checked on the region loop.
+ */
+function syncEscapeKey() {
+  // A hidden overlay shows no pop-up to clear.
+  const open = state.flags.overlayVisible !== false && popupShown()
+  if (open === popupOpenForEscape) return
+  popupOpenForEscape = open
+  void native.invoke('overlay_popup_open', { open }).catch(() => {})
+}
+
 function startRegionLoop() {
   setInterval(() => {
     void refreshLayerPointer()
@@ -5732,6 +5895,9 @@ function startRegionLoop() {
     const readWordRects = () => (wordRects ??= renderer.hitRects({ x: 0, y: 0 }))
     syncReadingHold(readWordRects)
     syncHints(readWordRects)
+    // Explain's panel follows the source as it moves.
+    explain.place()
+    syncEscapeKey()
     void publishRegions(readWordRects)
   }, 100)
 }
@@ -6349,7 +6515,11 @@ await native.listen('pointer', ({ payload }) => {
   // Look up on hover lights the word under the pointer as the lookup key would: the reader is
   // looking words up just by pointing. Clicks still go to the game (native's regions follow the key).
   const armed = !clickThrough('words') || gateOpen || hoverLookup()
-  if (local) hints.pointer(local.x, local.y)
+  pointerAt = payload.over === false ? null : local
+  if (local) {
+    hints.pointer(local.x, local.y)
+    explain.pointer(local.x, local.y)
+  }
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
   // The card clear of the game is the reader's to click without the key (`hookCardClear`).
   const cardArmed = !clickThrough('card') || gateOpen || hookCardClear()
@@ -6369,10 +6539,14 @@ await native.listen('pointer', ({ payload }) => {
     const inside = payload.over !== false && local
     hoveredPopupFrame = trackPopupHover(hoveredPopupFrame, livePopups, inside ? local.x : null, inside ? local.y : null)
   }
-  if (payload.over === false || !local || !armed) {
+  // On the Explain card: the words under it are covered. None lights, and none is looked up.
+  const onCard =
+    Boolean(local) &&
+    explain.rects().some((r) => local.x >= r.left && local.x <= r.right && local.y >= r.top && local.y <= r.bottom)
+  if (payload.over === false || !local || !armed || onCard) {
     renderer.clearPointer()
     syncReadingHold()
-    if (payload.over === false || !local) return
+    if (payload.over === false || !local || onCard) return
   } else renderer.setPointer(local.x, local.y)
   syncReadingHold()
   controller.pointer(local.x, local.y)
@@ -6558,7 +6732,9 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
               radialMenuColor: setting('radialMenuColor'),
               radialMenuBase: setting('radialMenuBase'),
               appearance: setting('appearance')
-            }
+            },
+            // For the menu's Explain, which the host shows in its own window.
+            explain: { sections: screenSections() ?? [], language: languageNow(), look: explainLook() }
           }
           break
         case 'scan':

@@ -4,6 +4,7 @@ import { Button, Dialog, DialogContent, Input, Select, SettingsRow, Textarea } f
 import { updateSettings } from '@texthooker/lib/settings'
 import { defaultExplainPrompt, explainTemplate, isDefaultExplainPrompt } from '@ui/explain-prompt'
 import type { ExplainProvider, Settings } from '@texthooker/lib/types'
+import { DEFAULT_FOCUS_PROMPT } from '@ui/explain-screen'
 import {
   EXPLAIN_EFFORTS,
   OPENAI_DEFAULT_MODEL,
@@ -46,6 +47,9 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
   const shown = explainTemplate(settings.explainPrompt, language.code)
   const fallback = defaultExplainPrompt(language.code)
   const [promptDraft, setPromptDraft] = useState(shown)
+  // The instruction for a highlighted word: the default shown when none of the reader's own is kept.
+  const focusShown = settings.explainFocusPrompt.trim() ? settings.explainFocusPrompt : DEFAULT_FOCUS_PROMPT
+  const [focusDraft, setFocusDraft] = useState(focusShown)
   const [codexModelDraft, setCodexModelDraft] = useState(settings.explainCodexModel)
   const [openaiModelDraft, setOpenaiModelDraft] = useState(settings.explainOpenaiModel)
   // A model typed in rather than chosen from the list (shown with its field).
@@ -55,6 +59,7 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
   useEffect(() => {
     if (open) {
       setPromptDraft(shown)
+      setFocusDraft(focusShown)
       setCodexModelDraft(settings.explainCodexModel)
       setOpenaiModelDraft(settings.explainOpenaiModel)
       setOtherModel(!listedOpenaiModel(settings.explainOpenaiModel))
@@ -86,6 +91,13 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
     if (next !== settings.explainPrompt) {
       void updateSettings({ explainPrompt: next })
     }
+  }
+
+  const saveFocus = () => {
+    // The default (or nothing) is stored as empty, so it keeps following the default.
+    const next = !focusDraft.trim() || focusDraft === DEFAULT_FOCUS_PROMPT ? '' : focusDraft
+    if (!focusDraft.trim()) setFocusDraft(DEFAULT_FOCUS_PROMPT)
+    if (next !== settings.explainFocusPrompt) void updateSettings({ explainFocusPrompt: next })
   }
 
   return (
@@ -298,6 +310,34 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
             {language.name}), <span className="k-mono">{'{{context}}'}</span> with the previous lines and{' '}
             <span className="k-mono">{'{{sentence}}'}</span> with the line being explained. Cached explanations keep
             their old text; use Regenerate in the Explain dialog after editing.
+          </p>
+
+          <div className="explain-prompt-head">
+            <label className="k-settings-row-label" htmlFor="explain-focus-prompt">
+              Prompt for a highlighted word
+            </label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFocusDraft(DEFAULT_FOCUS_PROMPT)}
+              disabled={focusDraft === DEFAULT_FOCUS_PROMPT}
+            >
+              Reset to default
+            </Button>
+          </div>
+          <Textarea
+            id="explain-focus-prompt"
+            mono
+            className="explain-focus-prompt"
+            value={focusDraft}
+            onChange={(e) => setFocusDraft(e.target.value)}
+            onBlur={saveFocus}
+            spellCheck={false}
+          />
+          <p className="k-description">
+            Added after the prompt when you explain over your game while pointing at a word (Alt+X).{' '}
+            <span className="k-mono">{'{{word}}'}</span> is replaced with that word. Where the word is found in the
+            sentence, it is marked there as <span className="k-mono">{'<TO EXPLAIN>…</TO EXPLAIN>'}</span>.
           </p>
         </div>
       </DialogContent>
