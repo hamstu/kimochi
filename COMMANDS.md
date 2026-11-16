@@ -2309,6 +2309,53 @@ announced; when it is unset (a fresh install, or the first build that has the se
 set silently, and when it differs from `currentVersion` the dialog opens and the setting is
 updated.
 
+## App location (macOS)
+
+`src-tauri/src/app_location.rs`. Run from anywhere but `/Applications` or `~/Applications`
+(Downloads, which macOS *translocates* to a random read-only path; a disk image; any other
+folder), Kimochi is missing from the Screen Recording and System Audio Recording lists in System
+Settings and from Spotlight, and the updater cannot replace it. The panels offer to move it.
+
+| Command | Signature |
+| --- | --- |
+| `app_location` | `() -> AppLocation` — where the running bundle is. Elsewhere than macOS, and in a binary outside a `.app` (`tauri dev`), `needsMove` is false |
+| `app_move_to_applications` | `() -> ()` — moves (from a disk image or a read-only folder: copies) the bundle to `destination`, relaunches from there and quits about 300 ms after replying. Rejects with a sentence for the dialog, or `cancelled` when the administrator prompt was dismissed |
+| `app_location_dismiss` | `() -> AppLocation` — "Not now" for this run: `dismissed` is set and `app-location` is emitted, so no other window offers the move again until the next launch |
+
+```ts
+AppLocation = {
+  needsMove,      // outside an Applications folder, or translocated
+  path,           // the bundle where the user put it (a translocated path resolved to its original)
+  translocated,   // macOS is running a translocated copy of `path`
+  copyOnly,       // `path` is under /Volumes or not writable: copied, the original left alone
+  diskImage,      // `path` is on a mounted disk image, ejected after the move
+  destination,    // /Applications/<Name>.app
+  replaces,       // something is already at `destination`; it goes to the Trash
+  needsAdmin,     // /Applications (or the copy there) is not the user's: osascript asks for a password
+  dismissed       // "Not now" was pressed this run
+}
+```
+
+Emits `app-location` with an `AppLocation` after `app_location_dismiss`.
+
+**The move** follows LetsMove: a translocated path is resolved with Security's
+`SecTranslocateIsTranslocatedURL` / `SecTranslocateCreateOriginalPathForURL` (looked up with
+`dlsym`; `/AppTranslocation/` in the path is the fallback test); an existing copy at the
+destination goes to the Trash (`NSFileManager trashItemAtURL`); `ditto` copies the bundle, which
+keeps its signature, symlinks and extended attributes; `xattr -dr com.apple.quarantine` clears
+the quarantine from the copy so it is not translocated again. Without write access the same steps
+run once through `osascript … with administrator privileges` (the destination is checked to be
+exactly `/Applications/<Name>.app` before its `rm -rf`). The original then goes to the Trash
+unless it was only copied. A detached `/bin/sh` waits for this process to end, `open`s the new
+copy and, for a disk image, `hdiutil detach`es it; the process stops the platform's threads and
+quits as `app_quit` does. Each attempt is recorded as `app-move` in `evidence.jsonl`.
+
+**In the panels** (`frontend/components/MoveToApplicationsDialog.tsx`, in the main and onboarding
+windows): the dialog opens first, in What's new's look. The main window holds What's new back
+until the location is known, and for the whole run while the move is offered, without recording
+`lastSeenVersion`, so What's new opens on the next launch from Applications. When the move fails
+the dialog shows why and the steps to drag Kimochi to Applications by hand, with Quit Kimochi.
+
 ## Command line
 
 The `kimochi` command (`src-tauri/src/cli/`; the user's guide is

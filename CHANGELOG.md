@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Controllers on Windows:** an Xbox controller (or one that works like it) is now read with XInput automatically, so its buttons register even when Windows listed it but never passed on a press, and while a game is in front. The "Read controllers with XInput" switch is gone.
 - Performance fixes and improvements, with more reliable setup, source selection, translations, audio playback and keyboard navigation.
 
+- **Mac: Kimochi offers to move itself to Applications.** Opened straight from Downloads or the disk image, Kimochi was missing from Screen Recording and System Audio Recording in System Settings, and from Spotlight. It now says so when it starts and moves itself to your Applications folder and reopens with one click, or explains how to drag it there yourself.
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.
 - **Text Hooker card:** moved off the game window, the card now takes clicks without holding the lookup key, instead of letting them through and disappearing. Over the game it stays click-through as before.
 - **Text Hooker on Linux:** hooking a Wine game now explains why it failed, such as a 32-bit Wine prefix, instead of saying the game is not running.
