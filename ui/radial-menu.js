@@ -230,19 +230,15 @@ export class RadialMenu {
     svg.append(disc)
     ring.append(svg)
 
-    // The marker: a bright bar filling the track, from the hub's edge to the chosen segment's,
-    // with a notch pointing out into it. It
-    // turns every frame the stick moves, so it is its own layer: rotating it repaints nothing
-    // else, the blurred glass behind it included.
+    // The marker: a bright bar filling the track, from the hub's edge to the chosen segment's and
+    // between its sides, with a notch pointing out into it. It turns every frame the stick moves,
+    // so it is its own layer: rotating it repaints nothing else, the blurred glass included.
     const pointer = document.createElement('div')
     pointer.className = 'cm-pointer'
     pointer.style.setProperty('--cm-pointer-size', `${INNER * 2}px`)
-    const reach = Math.min(span / 2 - 5, 24)
-    const [ax, ay] = polar(-reach, TRACK)
-    const [bx, by] = polar(reach, TRACK)
     pointer.innerHTML = `<svg viewBox="${-INNER} ${-INNER} ${INNER * 2} ${INNER * 2}" aria-hidden="true">
-      <path class="cm-marker-arc" stroke-width="${INNER - HUB}" d="M${ax} ${ay}A${TRACK} ${TRACK} 0 0 1 ${bx} ${by}"/>
-      <path class="cm-marker-notch" d="M-7 ${-INNER + 0.5}L0 ${-INNER - 6}L7 ${-INNER + 0.5}Z"/>
+      <path class="cm-marker-arc" fill-rule="evenodd" d="${sectorPath(-span / 2, span / 2, INNER, HUB)}"/>
+      <path class="cm-marker-notch" d="M-11 ${-INNER + 1}L0 ${-INNER - 11}L11 ${-INNER + 1}Z"/>
     </svg>`
     ring.append(pointer)
     this.pointer = pointer

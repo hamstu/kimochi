@@ -537,8 +537,7 @@
   filter: drop-shadow(0 0 6px rgba(var(--cm-ring-rgb), 0.7));
 }
 [data-cm-variant='halo'] .cm-marker-arc {
-  fill: none;
-  stroke: var(--cm-ring-bright);
+  fill: var(--cm-ring-bright);
 }
 [data-cm-variant='halo'] .cm-marker-notch {
   fill: var(--cm-ring-bright);
