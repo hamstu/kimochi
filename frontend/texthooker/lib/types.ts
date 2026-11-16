@@ -56,7 +56,7 @@ export interface Line {
 }
 
 /** "kimochi" streams from Kimochi cloud (needs a signed-in account); the others run a local CLI. */
-export type ExplainProvider = 'codex' | 'claude' | 'kimochi'
+export type ExplainProvider = 'codex' | 'claude' | 'kimochi' | 'openai'
 
 export type ThemePref = 'dark' | 'light' | 'system'
 export type ResolvedTheme = 'dark' | 'light'
@@ -163,6 +163,16 @@ export interface Settings {
   explainClaudeEffort: string
   /** Codex's reasoning effort (`codex exec -c model_reasoning_effort=…`); empty = the CLI's (config.toml). */
   explainCodexEffort: string
+  /** OpenAI API model for Explain (src-tauri/src/reader/openai.rs); empty = its default, gpt-6-luna. */
+  explainOpenaiModel: string
+  /** OpenAI's `reasoning_effort` (reasoning models only); empty = the model's own. Defaults to
+      none: gpt-6-luna began writing in about 1.1 s at none, after 5–6 s of thinking otherwise. */
+  explainOpenaiEffort: string
+  /** OpenAI's service tier: "fast" (the default: twice the price, about half the wait), "default"
+      (normal) or "ultrafast" (the models that take it, ui/explain-settings.ts ULTRAFAST_MODELS). */
+  explainOpenaiTier: string
+  /** The reader's OpenAI API key, for Explain. Private by its name: read natively, never synced. */
+  openaiApiKey: string
   /** Prompt template; {{language}}, {{context}} and {{sentence}} are substituted. A default
       (explainPrompt.ts) follows the language; anything else is sent as written. */
   explainPrompt: string
@@ -238,6 +248,10 @@ export const SETTINGS_DEFAULTS: Settings = {
   explainCodexModel: '',
   explainClaudeEffort: '',
   explainCodexEffort: '',
+  explainOpenaiModel: '',
+  explainOpenaiEffort: 'none',
+  explainOpenaiTier: 'fast',
+  openaiApiKey: '',
   explainPrompt: DEFAULT_EXPLAIN_PROMPT
 }
 

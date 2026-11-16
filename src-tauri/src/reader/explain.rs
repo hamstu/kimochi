@@ -1,6 +1,7 @@
 // explain.rs — run a local LLM CLI (codex or claude) to explain a sentence,
 // streaming output back to the frontend as events. Provider "kimochi" streams
-// from Kimochi cloud instead (`cloud::explain`), with the same events.
+// from Kimochi cloud instead (`cloud::explain`), and "openai" from OpenAI's API
+// with the reader's key (`reader::openai`), with the same events.
 //
 // Commands are spawned through `platform::run_cli`, which on macOS goes through
 // `zsh -ilc` so the user's interactive shell PATH applies (fnm/nvm shims and
@@ -121,6 +122,31 @@ fn cli_args(provider: &str, model: Option<&str>, effort: Option<&str>) -> Result
     }
 }
 
+/// The OpenAI model and effort to ask for, checked as the CLIs' are: a model name of the safe
+/// characters (none: the default), an effort Chat Completions takes (none: the model's own).
+fn openai_choice(model: Option<&str>, effort: Option<&str>, tier: Option<&str>) -> Result<OpenaiChoice, String> {
+    let model = model.map(str::trim).filter(|m| !m.is_empty());
+    if let Some(model) = model {
+        validate_model(model)?;
+    }
+    let effort = effort.map(str::trim).filter(|e| !e.is_empty());
+    if let Some(effort) = effort {
+        if !crate::reader::openai::EFFORTS.contains(&effort) {
+            return Err(format!("invalid: openai does not take the effort \"{effort}\""));
+        }
+    }
+    let tier = tier.map(str::trim).filter(|t| !t.is_empty());
+    if let Some(tier) = tier {
+        if !crate::reader::openai::TIERS.contains(&tier) {
+            return Err(format!("invalid: openai has no service tier \"{tier}\""));
+        }
+    }
+    Ok((model.map(String::from), effort.map(String::from), tier.map(String::from)))
+}
+
+/// An OpenAI request's model, effort and service tier, each None for OpenAI's own.
+type OpenaiChoice = (Option<String>, Option<String>, Option<String>);
+
 async fn kill_current() {
     let mut guard = CHILD.lock().await;
     if let Some((_, child)) = guard.take() {
@@ -150,8 +176,11 @@ pub async fn explain_run(
     request_id: u64,
     provider: String,
     model: Option<String>,
-    // How hard the CLI thinks (`claude --effort`, Codex's `model_reasoning_effort`); none: its default.
+    // How hard the model thinks (`claude --effort`, Codex's `model_reasoning_effort`, OpenAI's
+    // `reasoning_effort`); none: its default.
     effort: Option<String>,
+    // OpenAI's service tier (`default`, `fast` or `ultrafast`); the CLI providers have none.
+    tier: Option<String>,
     prompt: String,
 ) -> Result<(), String> {
     if provider == "kimochi" {
@@ -160,6 +189,16 @@ pub async fn explain_run(
         ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
         kill_current().await;
         return crate::cloud::explain(app, request_id, prompt, move || {
+            ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id
+        })
+        .await;
+    }
+    if provider == "openai" {
+        // OpenAI's API streams over HTTP with the reader's key, as Kimochi cloud does.
+        let (model, effort, tier) = openai_choice(model.as_deref(), effort.as_deref(), tier.as_deref())?;
+        ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
+        kill_current().await;
+        return crate::reader::openai::explain(app, request_id, model, effort, tier, prompt, move || {
             ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id
         })
         .await;
@@ -368,5 +407,20 @@ mod tests {
         assert!(cli_args("claude", None, Some("none")).unwrap_err().starts_with("invalid:"));
         assert!(cli_args("codex", None, Some("low; rm -rf ~")).is_err());
         assert!(cli_args("claude", Some("opus'; x"), None).is_err());
+    }
+
+    #[test]
+    fn openai_takes_a_safe_model_and_its_own_efforts_and_tiers() {
+        assert_eq!(openai_choice(None, None, None).unwrap(), (None, None, None));
+        assert_eq!(
+            openai_choice(Some(" gpt-6-luna "), Some("none"), Some("fast")).unwrap(),
+            (Some("gpt-6-luna".into()), Some("none".into()), Some("fast".into()))
+        );
+        assert_eq!(openai_choice(None, None, Some("default")).unwrap().2.as_deref(), Some("default"));
+        assert!(openai_choice(None, Some("ultra"), None).unwrap_err().starts_with("invalid:"));
+        assert_eq!(openai_choice(None, Some("max"), None).unwrap().1.as_deref(), Some("max"));
+        assert_eq!(openai_choice(None, None, Some("ultrafast")).unwrap().2.as_deref(), Some("ultrafast"));
+        assert!(openai_choice(None, None, Some("priority")).unwrap_err().starts_with("invalid:"));
+        assert!(openai_choice(Some("gpt 5; x"), None, None).is_err());
     }
 }

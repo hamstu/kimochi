@@ -1265,14 +1265,45 @@ not_configured`, `429`, and anything else with its status.
 `explain:error`, including for the server's trailing `[error: …]` line), with the same
 requestId and the same cancel and supersede rules as the CLI providers.
 
-**Effort.** `explain_run` (`({requestId, provider, model, effort, prompt}) -> ()`) takes `effort`
-(null: the CLI's own default), how hard the CLI thinks before it answers:
-`claude --effort <low|medium|high|xhigh|max>`, or `codex exec -c model_reasoning_effort=<none|
-minimal|low|medium|high|xhigh|max>` (over the user's `config.toml`; Codex passes it on to OpenAI as
-it is, which model takes which varies, and OpenAI's refusal names the ones it takes). Any other value, like a model name with
+**Explain via OpenAI's API.** `explain_run` with `provider: 'openai'` POSTs the prompt as the one
+user message to `https://api.openai.com/v1/chat/completions` (`stream: true`; `reasoning_effort`
+when an effort is chosen) with the reader's key, `superTexthooker.openaiApiKey`, which native
+reads from the settings (the request never carries it; private by its name, so it never syncs).
+`model` null is `gpt-6-luna` (`reader/openai.rs` `DEFAULT_MODEL`). The Explain settings offer the
+models with a known price by name (`OPENAI_MODELS` in `ui/explain-settings.ts`: gpt-6-luna,
+recommended, then gpt-6.1-terra, gpt-6-sol, gpt-6.1-sol and gpt-6-astra) and Other… for any name
+typed in (`explainOpenaiModel` holds either). The settings' effort
+defaults to `none` (`explainOpenaiEffort`): on the Explain prompt it began writing after about
+1.1 s at `none`, after 5–6 s at its own default or `low`. The streamed deltas are
+emitted as `explain:chunk`, then `explain:done`, with the same requestId and the same cancel
+and supersede rules as the CLI providers. One HTTP client is kept, so its connection is reused.
+No key: an error naming where to add one. A refusal is worded by status (401 the key, 404 the
+model, 429 the key's limit; a 400 naming `reasoning_effort` says to change the effort); an
+`error` in the stream ends the run with it.
+
+`tier` is OpenAI's `service_tier`: `fast` (Fast, formerly `priority`, which OpenAI still takes and
+reports as `fast`), `default` (Normal) or `ultrafast`; any other is refused with `invalid:`. The
+settings keep it as `explainOpenaiTier`, Fast by default and listed as recommended: twice
+Normal's price, and gpt-6-luna at effort `none` began writing after 0.5–0.7 s and finished in
+about 1 s on Fast, 0.9–1.7 s and about 2.3 s on Normal. Ultrafast (six times Normal) is offered
+only for the models OpenAI's pricing page lists it for (`ULTRAFAST_MODELS`: gpt-6-astra,
+gpt-6.1-sol); a stored Ultrafast with another model is asked for as Fast. Its API name was not
+confirmed against a live request; a 400 naming `service_tier` says to change the tier. The Explain
+settings show a price estimate after the Prompt heading, for the model and tier chosen
+(`explainPrice`, `priceText` in `ui/explain-settings.ts`): a typical explanation (about 500 tokens in
+and 120 out, measured on the Explain prompt) at the prices in `OPENAI_PRICES`, read from OpenAI's
+pricing page; a model not listed there has no estimate.
+
+**Effort.** `explain_run` (`({requestId, provider, model, effort, tier, prompt}) -> ()`) takes
+`effort` (null: the model's own default), how hard the model thinks before it answers:
+`claude --effort <low|medium|high|xhigh|max>`, or OpenAI's `reasoning_effort` (`none|minimal|low|
+medium|high|xhigh|max`; `none` is no thinking at all) through the API or through `codex exec -c
+model_reasoning_effort=<…>` (over the user's `config.toml`; Codex passes it on to OpenAI as it is).
+Which efforts a model takes varies (gpt-6-astra: `low` to `max`; a model that is not a reasoning
+model may refuse any), and OpenAI's refusal names the ones it takes. Any other value, like a model name with
 characters outside `[A-Za-z0-9._-]`, is refused with `invalid:` before anything runs. The Log's
-Explain settings store it per CLI (`superTexthooker.explainClaudeEffort`, `explainCodexEffort`;
-`''` is the default), read with the provider and model by `explainSettings` in
+Explain settings store it per provider (`superTexthooker.explainClaudeEffort`, `explainCodexEffort`,
+`explainOpenaiEffort`; `''` is the default), read with the provider and model by `explainSettings` in
 `ui/explain-settings.ts`. A model that thinks first shows nothing until it has: Claude Haiku at the
 default took 5–8 s to its first words on the Explain prompt, 1.6 s at `low`.
 

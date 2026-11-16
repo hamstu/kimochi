@@ -105,6 +105,13 @@
   justify-content: space-between;
   gap: var(--k-space-2);
 }
+/* OpenAI's price estimate, right after the bold Prompt label; Reset stays at the end. */
+.explain-prompt-price {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--k-text-xs);
+  color: var(--k-text-2);
+}
 
 /* Command output inside a callout. */
 .texthooker-pre {

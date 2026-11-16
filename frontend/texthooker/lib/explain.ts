@@ -107,7 +107,7 @@ async function runExplain(line: Line): Promise<void> {
   const settings = getSettings()
   const prompt = buildExplainPrompt(line, settings.explainPrompt)
   // Provider, model and effort as the settings choose them (ui/explain-settings.ts).
-  const { provider, model, effort } = explainSettings(settings)
+  const { provider, model, effort, tier } = explainSettings(settings)
 
   const requestId = ++requestCounter
   activeRequestId = requestId
@@ -121,6 +121,7 @@ async function runExplain(line: Line): Promise<void> {
       provider,
       model,
       effort,
+      tier,
       prompt
     })
   } catch (err) {
