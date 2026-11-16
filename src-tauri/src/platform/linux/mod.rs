@@ -285,6 +285,20 @@ pub fn x11_window_host_pid(xid: u32) -> Option<u32> {
     x11::window_host_pid(xid)
 }
 
+/// Game pause: whether window source `id` is still open as the process it names, so the pid of a
+/// game that closed (soon free for another process) is never planned. A minimised window counts.
+pub fn game_window_open(id: &SourceId) -> bool {
+    match id.platform() {
+        kimochi_capture::Platform::X11 => on_x11() && x11::window_open(id),
+        kimochi_capture::Platform::Wayland => native::window_open(id),
+        kimochi_capture::Platform::Gamescope => {
+            let id = id.to_string();
+            kimochi_capture::linux_gamescope::sources().iter().any(|s| s.id == id)
+        }
+        _ => false,
+    }
+}
+
 pub fn frontmost_pid() -> Option<u32> {
     if on_x11() {
         x11::frontmost_pid()

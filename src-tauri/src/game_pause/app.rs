@@ -154,7 +154,12 @@ impl Context for AppCx {
         #[cfg(target_os = "linux")]
         {
             let steam = crate::platform::gamescope::focused_app_id();
-            super::target::game_ref(selection.as_deref(), steam, &crate::platform::x11_window_host_pid, &|_| true)
+            super::target::game_ref(
+                selection.as_deref(),
+                steam,
+                &crate::platform::x11_window_host_pid,
+                &crate::platform::game_window_open,
+            )
         }
         // Only a selected window names the game: with a display (or nothing) selected, the app in
         // front could be anything (a browser, a call), and is never paused. The window must still
