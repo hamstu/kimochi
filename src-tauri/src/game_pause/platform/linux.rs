@@ -459,7 +459,7 @@ pub fn plan_in(table: &Table, game: &GameRef, me: &Me) -> Result<Plan, Refusal> 
             Some("exited".into())
         } else if p.stopped() {
             Some("already stopped by something else".into())
-        } else if p.is_wineserver() && !STOP_WINESERVER {
+        } else if p.is_wineserver() && !stop_wineserver() {
             Some("Wine server (left running)".into())
         } else {
             denied(&p.comm, p.exe_name().as_deref())
@@ -492,6 +492,13 @@ pub fn plan_in(table: &Table, game: &GameRef, me: &Me) -> Result<Plan, Refusal> 
 /// Wine process stopped for good; leaving it running would let it serve other programs of the
 /// same prefix. See docs/game-pause/linux-notes.md (not in the repository) for the test results.
 const STOP_WINESERVER: bool = true;
+
+/// [`STOP_WINESERVER`], unless `KIMOCHI_PAUSE_KEEP_WINESERVER=1` is set in the environment of the
+/// process that plans (the app) and of the guard (whose second pass plans again): for comparing
+/// both ways on a real Wine game without another build.
+fn stop_wineserver() -> bool {
+    STOP_WINESERVER && !matches!(std::env::var("KIMOCHI_PAUSE_KEEP_WINESERVER").as_deref(), Ok("1"))
+}
 
 // ---- /proc ----
 
