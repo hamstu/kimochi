@@ -4,8 +4,9 @@
 //! prefix*: started with the game's own Wine build and its prefix's environment, they talk to
 //! the game's wineserver and so see the game as an ordinary Windows process they can inject
 //! into and open named pipes with. Proton's games run inside the Steam Linux Runtime container,
-//! but the prefix, the Proton build and the wineserver's socket (under `/tmp/.wine-<uid>`) are
-//! all reachable from outside it, so nothing has to enter the container.
+//! usually the prefix, Proton build and wineserver socket are reachable outside it. NixOS's
+//! Steam wrapper gives games a private `/tmp`; helpers join its user and mount namespaces with
+//! `nsenter --preserve-credentials`, retaining the user's uid/gid and the existing Wine session.
 //!
 //! A game in a Flatpak sandbox (Bottles, Lutris, Heroic or Steam from Flathub) is different: the
 //! sandbox has its own `/tmp`, where the game's wineserver listens, and sees little of the home
@@ -37,6 +38,8 @@ pub struct Wine {
     /// For a game in a Flatpak sandbox, its process's (Linux) id: programs are run inside the
     /// sandbox through it, and the paths above are as the sandbox sees them.
     pub flatpak: Option<u32>,
+    /// A non-Flatpak game with a private Wine socket, in an unprivileged user/mount namespace.
+    pub namespace: Option<u32>,
 }
 
 /// `path` as a process sees it, as Kimochi can open it: through `/proc/<pid>/root`.
@@ -297,10 +300,29 @@ mod imp {
         if !is_wine_loader(&loader) {
             return Err("Text Hooker reads Windows games running through Proton or Wine; this is a Linux app.".into());
         }
+        let environ = environ(pid).ok_or("this process cannot be inspected")?;
+        let var = |k: &str| environ.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
+        let prefix = var("WINEPREFIX")
+            .map(PathBuf::from)
+            .or_else(|| var("HOME").map(|h| Path::new(&h).join(".wine")))
+            .ok_or("Kimochi cannot find this game's Wine prefix.")?;
         // In a Flatpak sandbox the paths below are the sandbox's (the Wine build may be one only
         // it has, under /app), so they are looked at through the game's own root.
         let flatpak = Path::new(&format!("/proc/{pid}/root/.flatpak-info")).is_file().then_some(pid);
-        let outside = |p: &Path| match flatpak {
+        let namespace = if flatpak.is_none() && !server_reachable(pid, &prefix) {
+            if !private_user_namespace(pid) {
+                return Err("This game runs in a sandbox Kimochi cannot reach its Wine through.".into());
+            }
+            if !std::env::var_os("PATH")
+                .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join("nsenter").is_file()))
+            {
+                return Err("This game's private Wine session needs nsenter (util-linux) to use Text hooking.".into());
+            }
+            Some(pid)
+        } else {
+            None
+        };
+        let outside = |p: &Path| match flatpak.or(namespace) {
             Some(pid) => in_root(pid, p),
             None => p.to_path_buf(),
         };
@@ -308,13 +330,9 @@ mod imp {
             .into_iter()
             .find(|p| outside(p).is_file())
             .ok_or("Kimochi cannot find the Wine this game runs on.")?;
-        let environ = environ(pid).ok_or("this process cannot be inspected")?;
-        let var = |k: &str| environ.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
-        let prefix = var("WINEPREFIX")
-            .map(PathBuf::from)
-            .or_else(|| var("HOME").map(|h| Path::new(&h).join(".wine")))
-            .filter(|p| outside(&p.join("dosdevices")).is_dir())
-            .ok_or("Kimochi cannot find this game's Wine prefix.")?;
+        if !outside(&prefix.join("dosdevices")).is_dir() {
+            return Err("Kimochi cannot find this game's Wine prefix.".into());
+        }
         let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).map_err(|_| "this process cannot be inspected")?;
         let image = String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default()).trim().to_string();
         if !image.to_ascii_lowercase().ends_with(".exe") {
@@ -340,9 +358,6 @@ mod imp {
                 prefix.display()
             ));
         }
-        if flatpak.is_none() && !server_reachable(pid, &prefix) {
-            return Err("This game runs in a sandbox Kimochi cannot reach its Wine through.".into());
-        }
         let bits = std::fs::File::open(outside(&exe))
             .ok()
             .and_then(|f| {
@@ -354,7 +369,15 @@ mod imp {
             })
             .unwrap_or(64);
         let env = shared_env(&environ, |p| outside(p).exists());
-        Ok(Target { pid, exe, bits, wine: Some(Wine { binary, prefix, env, image, flatpak }) })
+        Ok(Target { pid, exe, bits, wine: Some(Wine { binary, prefix, env, image, flatpak, namespace }) })
+    }
+
+    fn private_user_namespace(pid: u32) -> bool {
+        ["user", "mnt"].iter().all(|name| {
+            let target = std::fs::read_link(format!("/proc/{pid}/ns/{name}"));
+            let own = std::fs::read_link(format!("/proc/self/ns/{name}"));
+            matches!((target, own), (Ok(target), Ok(own)) if target != own)
+        })
     }
 
     /// Whether a Wine started here reaches the game's wineserver, rather than starting a second
@@ -394,7 +417,7 @@ mod imp {
     /// does not see it, a copy in the game's prefix, made once per content.
     pub fn reachable_dir(wine: &Wine, dir: &Path) -> Result<PathBuf, String> {
         use std::os::unix::fs::MetadataExt;
-        let Some(pid) = wine.flatpak else { return Ok(dir.to_path_buf()) };
+        let Some(pid) = wine.flatpak.or(wine.namespace) else { return Ok(dir.to_path_buf()) };
         let outside = |p: &Path| in_root(pid, p);
         let ours = std::fs::metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         if std::fs::metadata(outside(dir)).is_ok_and(|m| m.dev() == ours.dev() && m.ino() == ours.ino()) {
@@ -460,6 +483,7 @@ mod imp {
     pub fn command(wine: &Wine, program: &Path) -> Command {
         let mut command = Command::new(match wine.flatpak {
             Some(_) => Path::new("flatpak"),
+            None if wine.namespace.is_some() => Path::new("nsenter"),
             None => wine.binary.as_path(),
         });
         command.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD");
@@ -476,6 +500,13 @@ mod imp {
                 command.arg(&wine.binary);
             }
             None => {
+                if let Some(pid) = wine.namespace {
+                    command.args(["--target", &pid.to_string(), "--user", "--mount", "--preserve-credentials", "--"]);
+                    command.arg(&wine.binary);
+                }
+                for key in PROCESS_ONLY {
+                    command.env_remove(key);
+                }
                 command
                     .env("WINEPREFIX", &wine.prefix)
                     .env("WINEDEBUG", "-all")
@@ -498,6 +529,9 @@ mod imp {
             .spawn()
             .map_err(|e| match wine.flatpak {
                 Some(_) => format!("could not reach into the game's Flatpak sandbox (flatpak enter): {e}"),
+                None if wine.namespace.is_some() => {
+                    format!("could not enter the game's private Wine session (nsenter): {e}")
+                }
                 None => format!("could not start Wine ({}): {e}", wine.binary.display()),
             })?;
         let mut stdout = child.stdout.take().ok_or("no output from Wine")?;

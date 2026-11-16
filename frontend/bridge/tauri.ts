@@ -218,6 +218,8 @@ export const sourceLiveThumbnail = (sourceId: string): Promise<{ url: string | n
 /** What native tracks about the chosen window (`source-bounds`), or null for a display. */
 export interface SourceWindowState {
   sourceId: string
+  /** Native Wayland: whether the compositor reports this window's position. */
+  geometryAvailable?: boolean
   /** It fills its display: a full-screen app, or a borderless full-screen window. */
   fullscreen: boolean
   onScreen: boolean

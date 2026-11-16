@@ -75,7 +75,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 account and synced), `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
-`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
+`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `controllerMenuItems` (absent: the default menu; the controller menu's item ids in order, clockwise from the top, from `RADIAL_ITEMS` in `ui/radial-items.js`; unknown ids are dropped and an empty list is the default menu), `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
 `meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll),
 `overlayHoverLookup` (false: resting the pointer on an overlay word looks it up with no key
 held; never on Wayland or in Gaming Mode; a machine key, never synced; see `pointer` below),
@@ -603,6 +603,13 @@ against an action that does not exist.
 part Electron performed: restoring the overlay for `triggerScan`, `setCropArea`,
 `setAnkiCropArea`, `playAudio` and `selectAndScan`, toggling it for `toggleOverlay`, and focusing it for
 `selectAndScan`.
+
+**Controller menu items** — `menuScan`, `menuReadAlong`, `menuAutoOcr`, `menuTextHooker`,
+`menuRecentText`, `menuKimochi`, `menuSettings` (`actions::MENU_ITEM_ACTIONS`). Bindable, and
+unbound by default (an empty `accelerator` registers nothing). Rust restores the overlay; the
+overlay runs that item of the radial menu without opening it (`controller.runItem`; on GNOME it
+sends `gnome-controller-open` `{item, request}` to the controller host, which answers
+`gnome-controller-item-taken` `{request}`).
 
 **View toggles** — `toggleAutoOcr`, `toggleTextOverlay`, `toggleDebugOverlay`. Pure
 pass-throughs: Rust does **not** flip these flags. The overlay owns the state and writes
@@ -1979,8 +1986,12 @@ There the sidecar runs inside the sandbox (`flatpak enter <game pid> env … <wi
 the hooker's folder are copied into the prefix
 (`drive_c/users/<user>/AppData/Local/kimochi-texthook/<name>-<content hash>/`), each copy made
 once per content. The game's paths (its Wine, prefix and image) are the sandbox's, read through
-`/proc/<pid>/root`. Any other game whose wineserver Kimochi cannot reach is not hookable, rather
-than a second wineserver being started on its prefix. On X11 a window's process is the one the X
+`/proc/<pid>/root`. A non-Flatpak game with a private Wine socket in a separate user/mount
+namespace (NixOS Steam) uses `nsenter --target <pid> --user --mount --preserve-credentials --
+<wine> …`, keeping the reader's uid/gid. Its helper files use the same reachability/staging path;
+util-linux's `nsenter` must be on PATH (included by the Nix package wrapper). Other unreachable
+Wine sessions remain unhookable, rather than starting a second wineserver on their prefix.
+On X11 a window's process is the one the X
 server reports for its client (XRes), else `_NET_WM_PID`, which a sandboxed client sets to its id
 inside the sandbox.
 
@@ -2322,6 +2333,53 @@ announced; when it is unset (a fresh install, or the first build that has the se
 set silently, and when it differs from `currentVersion` the dialog opens and the setting is
 updated.
 
+## App location (macOS)
+
+`src-tauri/src/app_location.rs`. Run from anywhere but `/Applications` or `~/Applications`
+(Downloads, which macOS *translocates* to a random read-only path; a disk image; any other
+folder), Kimochi is missing from the Screen Recording and System Audio Recording lists in System
+Settings and from Spotlight, and the updater cannot replace it. The panels offer to move it.
+
+| Command | Signature |
+| --- | --- |
+| `app_location` | `() -> AppLocation` — where the running bundle is. Elsewhere than macOS, and in a binary outside a `.app` (`tauri dev`), `needsMove` is false |
+| `app_move_to_applications` | `() -> ()` — moves (from a disk image or a read-only folder: copies) the bundle to `destination`, relaunches from there and quits about 300 ms after replying. Rejects with a sentence for the dialog, or `cancelled` when the administrator prompt was dismissed |
+| `app_location_dismiss` | `() -> AppLocation` — "Not now" for this run: `dismissed` is set and `app-location` is emitted, so no other window offers the move again until the next launch |
+
+```ts
+AppLocation = {
+  needsMove,      // outside an Applications folder, or translocated
+  path,           // the bundle where the user put it (a translocated path resolved to its original)
+  translocated,   // macOS is running a translocated copy of `path`
+  copyOnly,       // `path` is under /Volumes or not writable: copied, the original left alone
+  diskImage,      // `path` is on a mounted disk image, ejected after the move
+  destination,    // /Applications/<Name>.app
+  replaces,       // something is already at `destination`; it goes to the Trash
+  needsAdmin,     // /Applications (or the copy there) is not the user's: osascript asks for a password
+  dismissed       // "Not now" was pressed this run
+}
+```
+
+Emits `app-location` with an `AppLocation` after `app_location_dismiss`.
+
+**The move** follows LetsMove: a translocated path is resolved with Security's
+`SecTranslocateIsTranslocatedURL` / `SecTranslocateCreateOriginalPathForURL` (looked up with
+`dlsym`; `/AppTranslocation/` in the path is the fallback test); an existing copy at the
+destination goes to the Trash (`NSFileManager trashItemAtURL`); `ditto` copies the bundle, which
+keeps its signature, symlinks and extended attributes; `xattr -dr com.apple.quarantine` clears
+the quarantine from the copy so it is not translocated again. Without write access the same steps
+run once through `osascript … with administrator privileges` (the destination is checked to be
+exactly `/Applications/<Name>.app` before its `rm -rf`). The original then goes to the Trash
+unless it was only copied. A detached `/bin/sh` waits for this process to end, `open`s the new
+copy and, for a disk image, `hdiutil detach`es it; the process stops the platform's threads and
+quits as `app_quit` does. Each attempt is recorded as `app-move` in `evidence.jsonl`.
+
+**In the panels** (`frontend/components/MoveToApplicationsDialog.tsx`, in the main and onboarding
+windows): the dialog opens first, in What's new's look. The main window holds What's new back
+until the location is known, and for the whole run while the move is offered, without recording
+`lastSeenVersion`, so What's new opens on the next launch from Applications. When the move fails
+the dialog shows why and the steps to drag Kimochi to Applications by hand, with Quit Kimochi.
+
 ## Command line
 
 The `kimochi` command (`src-tauri/src/cli/`; the user's guide is
@@ -2437,18 +2495,26 @@ Where the compositor has its own capture API, `platform_backend()` returns captu
 `NativeCapture` (`capture-core/src/linux_native/`) instead of the ScreenCast portal:
 `capabilities.session.captureBackend` is `native-mutter` (GNOME, through Kimochi's Shell extension
 and `org.gnome.Mutter.ScreenCast`), `native-kwin` (KDE Plasma 6, `zkde_screencast_unstable_v1` and
-`org_kde_plasma_window_management`) or `native-ext` (Hyprland, Sway ≥1.12, COSMIC:
+`org_kde_plasma_window_management`), `native-niri` (Niri JSON IPC and its Mutter-compatible
+ScreenCast API), or `native-ext` (Hyprland, Sway ≥1.12, COSMIC:
 `ext-image-copy-capture` with `ext-foreign-toplevel-list`, plus Hyprland's or Sway's IPC for
 geometry). Then `capture.pickerRequired` is false, `sources.catalog`, `thumbnails`, `icons`,
-`followWindowBounds`, `foregroundTracking`, `activateWindow` and `nativeWindows` are true, and
+`foregroundTracking`, `activateWindow` and `nativeWindows` are true, and
 `capture.isolatedWindows` says a window's stream holds that window alone.
+
+`sources.followWindowBounds` is conservative on Niri: older builds omit tiled window
+positions, while current unstable builds supply them. Native `source_window_state`/`source-bounds` includes `geometryAvailable` for the
+selected window; the sidebar uses this per-window answer (floating windows may have geometry
+when tiled ones do not). Missing geometry produces a hidden window state, never guessed bounds.
+XWayland-satellite PIDs are resolved through unique title and WM_CLASS matches on X11; ambiguous
+windows have no hook PID. X11 coordinates are not used for Wayland overlay placement.
 
 Source ids are `wayland:window:{handle}:{pid}` and `wayland:display:{connector}` (the handle is the
 compositor's own window id: Mutter's, KWin's uuid, or the ext identifier). `source_catalog`,
 `source_thumbnail`, `source_icon`, `source_window_state` and `activate_source` answer for them as
 on X11; `linux_window_geometry`'s link dialog and **Relink window overlay…** exist only for portal
 sources. A minimised window, or one on another workspace, captures as `unavailable` (`gone: hidden:`);
-a closed one as `stale_source`. `KIMOCHI_WAYLAND_CAPTURE=portal|mutter|kwin|ext` forces a choice.
+a closed one as `stale_source`. `KIMOCHI_WAYLAND_CAPTURE=portal|mutter|kwin|ext|niri` forces a choice.
 On GNOME, `gnome_overlay` `track` takes `{operation: "bind", sourceId}` for a native window (the
 Shell's overlay then follows it by id) and the extension's `Windows` method lists and activates
 windows; startup updates an older extension in place (`gnome::refresh_for_native`). On Plasma ≤6.7
@@ -2506,6 +2572,9 @@ one from `platform/linux/shift.rs` and the pointer from `tracking::pointer()`; w
 - **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired. Hyprland fires
   only bindings its config names, so Kimochi binds them itself while it runs (below); until a press
   arrives, `overlay.lookupOnHover` is true and the overlay's text looks up on hover, as on KDE.
+- **Niri:** without a modifier feed, `overlay.lookupOnHover` enables the same automatic hover
+  fallback. The overlay treats this as hover mode even when `overlayHoverLookup` is false:
+  no full-display popup click catcher, so leaving the words and popup can trigger dismissal.
 
 **Hyprland binds** (`platform/linux/hyprland_binds.rs`). Hyprland's GlobalShortcuts portal
 registers `dev.kimochi.app.*` but ignores `preferred_trigger`. After `BindShortcuts`, Kimochi adds a

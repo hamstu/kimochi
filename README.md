@@ -58,6 +58,73 @@ Download the app from [kimochiapp.com](https://kimochiapp.com). Builds are publi
 
 ## Building from source
 
+### NixOS / Nix on Linux
+
+From the repository root, run:
+
+```sh
+nix run .
+```
+
+This builds the release application in the Nix sandbox and runs the installed executable.
+The package includes its frontend, OCR runtime, Screen AI worker and (on x86_64) the
+Wine/Proton text and voice hook helpers. It needs no writable checkout, npm, development
+server or compiler at runtime. The first build downloads the pinned build dependencies and
+can take some time. Dictionary engines and OCR models are downloaded by the app on demand.
+
+`nix build .#kimochi` produces the package under `result/`; `nix run .#kimochi` and
+`nix run .` both run that same package.
+`nix flake check` also verifies resource discovery by querying the installed app in a
+temporary virtual desktop.
+
+To install it through a NixOS flake, add this repository as an input and select its package
+for your system:
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.kimochi.url = "github:hamstu/kimochi";
+
+  outputs = { nixpkgs, kimochi, ... }: {
+    nixosConfigurations.my-host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        ({ pkgs, ... }: {
+          environment.systemPackages = [
+            kimochi.packages.${pkgs.stdenv.hostPlatform.system}.kimochi
+          ];
+        })
+      ];
+    };
+  };
+}
+```
+
+The same package works in Home Manager's `home.packages`. To build from a local checkout,
+use an input such as `path:/home/you/src/kimochi`.
+
+For an interactive development environment instead:
+
+```sh
+nix develop
+npm ci
+npm run dev
+```
+
+The flake supports `x86_64-linux` and `aarch64-linux`. On x86_64 it includes both MinGW
+compilers and Windows Rust targets for the Wine/Proton text and voice hook helpers.
+Use your existing Wine/Proton installation to run games. On Wayland, your desktop needs
+working PipeWire and an appropriate ScreenCast portal; these are host services, not started
+by the flake. Native overlays also depend on your compositor's support (see the
+[Linux notes](src-tauri/src/platform/linux/DEPS.md)).
+
+If flakes are not enabled, add `--extra-experimental-features 'nix-command flakes'` to the
+`nix` command. A flake in a Git checkout sees only tracked files, so `git add` new files before
+`nix run .` or `nix build`.
+
+### Other source builds
+
 You need Node 22+ and stable Rust, plus per OS:
 
 - **macOS 14+**: the Xcode Command Line Tools. Run the bundle rather than the bare executable,

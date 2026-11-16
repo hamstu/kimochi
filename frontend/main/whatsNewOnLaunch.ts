@@ -23,13 +23,17 @@ let decidedFor: string | null = null
  * What's new once and record it; the same → nothing. The running version comes from the update
  * status, which arrives asynchronously (and never on a backend without self-updates).
  *
+ * `hold` keeps the decision back, without recording anything: while it is not yet known where the
+ * app runs from, and for the whole run when the "Move to Applications" offer comes first
+ * (MoveToApplicationsDialog.tsx). What's new then opens on the next launch, from Applications.
+ *
  * `?whatsnew=1` (the browser preview) opens the dialog on load.
  */
-export function useWhatsNewOnLaunch(): [boolean, (open: boolean) => void] {
+export function useWhatsNewOnLaunch(hold = false): [boolean, (open: boolean) => void] {
   const [open, setOpen] = useState(() => new URLSearchParams(location.search).get('whatsnew') === '1')
   const currentVersion = useUpdateStatus()?.currentVersion ?? null
   useEffect(() => {
-    if (!currentVersion || decidedFor === currentVersion) return
+    if (hold || !currentVersion || decidedFor === currentVersion) return
     decidedFor = currentVersion
     // No cleanup that cancels: under StrictMode the first run's cleanup comes before the second
     // run, which the guard skips, so cancelling would lose the decision. setOpen on a component
@@ -42,6 +46,6 @@ export function useWhatsNewOnLaunch(): [boolean, (open: boolean) => void] {
         return setSetting(LAST_SEEN, currentVersion)
       })
       .catch((error) => console.error('[whats-new] lastSeenVersion:', error))
-  }, [currentVersion])
+  }, [currentVersion, hold])
   return [open, setOpen]
 }

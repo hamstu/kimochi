@@ -185,8 +185,23 @@ output-local with a layer-shell overlay, which follows the window's output. Veri
   captures at scale 1 on scaled outputs (wlroots), so text there gets fewer pixels; Sway 1.11 has
   no window capture source and falls back to the portal.
 
-Not covered: COSMIC, niri (it answers Mutter's ScreenCast API but has no Kimochi extension, so it
-uses the portal), GNOME 47+ (the extension still declares 46 only), multi-monitor GNOME (the Shell
+- Niri unstable 2026-10-15 (`45739bc`, xwayland-satellite 0.8.3): live inventory and isolated
+  Fate/stay night window capture verified on two 1080p outputs at scale 1; the real Wine PID is
+  recovered through X11 (Niri reports satellite's PID). First capture ~109 ms, second ~50 ms in
+  the debug probe. That older build omits tiled positions. With a local compositor patch, live tiled
+  coordinates were verified and the reader confirmed window selection, text hooking and
+  overlay operation. Current Niri unstable supplies these positions directly and needs no
+  patch; older builds without positions retain capture but hide the window-following overlay. Window activation, fractional scaling and the full
+  move/workspace/monitor matrix remain unverified.
+
+NixOS Steam gives Wine a private `/tmp`. `text_hook/wine.rs` detects a private Wine socket
+and distinct user/mount namespaces, then launches helpers through util-linux's `nsenter
+--user --mount --preserve-credentials`. It retains the reader's uid/gid, uses the game's Wine
+and prefix, and stages helpers where the game can see them. Install util-linux so `nsenter` is on PATH. Live Fate/stay night acceptance verifies target resolution and helper process listing;
+the reader also confirmed successful text hooking through the sidebar. Flatpak keeps its existing `flatpak
+enter` path. Containers without a joinable user namespace remain unsupported.
+
+Not covered: COSMIC, GNOME 47+ (the extension still declares 46 only), multi-monitor GNOME (the Shell
 overlay supports one monitor, as before).
 
 ### KDE Plasma window geometry (2026-11-09)

@@ -104,3 +104,8 @@
 .whats-new-notes strong {
   font-weight: var(--k-weight-semibold);
 }
+
+/* Move to Applications (components/MoveToApplicationsDialog.tsx) wears the same dialog. */
+.move-to-apps .k-callout {
+  margin: var(--k-space-3) 0;
+}

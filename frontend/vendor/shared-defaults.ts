@@ -1,10 +1,11 @@
 /**
  * ADAPTED from `src/shared/defaults.ts` in the Electron app.
- * Deltas: only Scan and the controller menu remain bindable (the radial menu reaches the
- * rest), and gamepad bindings are chords (`gamepadButtons`). Must match `default_hotkeys` and
+ * Deltas: only Scan, the controller menu and the menu's items (unbound by default) remain
+ * bindable (the radial menu reaches the rest), and gamepad bindings are chords (`gamepadButtons`). Must match `default_hotkeys` and
  * `merged_hotkeys` in `src-tauri/src/settings.rs`, which is what the app actually loads.
  */
 import { HotkeysSettings, HotkeyOverrides } from './shared-types'
+import { RADIAL_ITEMS } from '@ui/radial-items.js'
 
 /** Shift+F8/F9 on Windows and Linux (Ctrl makes visual novels skip text, #16); ⌘⇧8/⌘⇧Space on macOS. */
 const MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
@@ -18,14 +19,21 @@ export const DEFAULT_HOTKEYS: HotkeysSettings = {
     gamepadButtons: []
   },
   openControllerMenu: {
-    name: 'Controller menu',
+    name: 'Radial menu',
     accelerator: MAC ? 'CommandOrControl+Shift+Space' : 'Shift+F9',
     description: 'Open the radial menu over the game',
     enabled: true,
     // LS + RS: both stick clicks, which few games use together. A placeholder until the native
     // hotkeys load: on a Steam Deck the native default is the R4 back grip (settings.rs).
     gamepadButtons: [10, 11]
-  }
+  },
+  // The controller menu's items, each run without the menu by its own keys or buttons.
+  ...Object.fromEntries(
+    RADIAL_ITEMS.map((item) => [
+      item.hotkey,
+      { name: item.label, accelerator: '', description: item.description, enabled: true, gamepadButtons: [] }
+    ])
+  )
 }
 
 /** A binding's chord: `gamepadButtons` when present (even null), else the legacy single button. */

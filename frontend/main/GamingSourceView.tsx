@@ -87,10 +87,10 @@ export function GamingNextSteps({ sourceName }: { sourceName: string | null }): 
                 <Kbd>{name}</Kbd>
               </span>
             ))}{' '}
-            for the game menu, then Scan.
+            for the radial menu, then Scan.
           </>
         ) : (
-          <>Choose a button for the game menu in Settings → Shortcuts &amp; Controls.</>
+          <>Choose a button for the radial menu in Settings → Shortcuts &amp; Controls.</>
         )}
       </Step>
     </ol>

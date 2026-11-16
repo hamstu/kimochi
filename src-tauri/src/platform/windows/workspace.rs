@@ -17,9 +17,9 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Power::RegisterSuspendResumeNotification;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, RegisterClassExW, DEVICE_NOTIFY_WINDOW_HANDLE, EVENT_SYSTEM_FOREGROUND,
-    HWND_MESSAGE, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND, PBT_APMSUSPEND, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WINEVENT_OUTOFCONTEXT, WM_POWERBROADCAST, WNDCLASSEXW,
+    CreateWindowExW, DefWindowProcW, GetForegroundWindow, RegisterClassExW, DEVICE_NOTIFY_WINDOW_HANDLE,
+    EVENT_SYSTEM_FOREGROUND, HWND_MESSAGE, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND, PBT_APMSUSPEND,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WINEVENT_OUTOFCONTEXT, WM_POWERBROADCAST, WNDCLASSEXW,
 };
 
 struct Handlers {
@@ -146,6 +146,14 @@ unsafe extern "system" fn activate_proc(
     _time: u32,
 ) {
     if event != EVENT_SYSTEM_FOREGROUND || hwnd.is_invalid() {
+        return;
+    }
+    // Out-of-context events arrive queued, and not always in order: the Alt+Tab switcher's window
+    // (Explorer's) can be reported just after the app it switched to. Reported anyway, Explorer
+    // looked frontmost while the reader was back in their app, and a screen source's text, which
+    // shows only while the app it was read from is in front, went and stayed gone. Only the window
+    // still in front counts.
+    if unsafe { GetForegroundWindow() } != hwnd {
         return;
     }
     // Per window, before the per-process filter: switching desktops within one app counts.

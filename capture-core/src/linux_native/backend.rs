@@ -52,7 +52,7 @@ impl Feed {
 
 /// One compositor family's capture API. See the table in `mod.rs`.
 pub trait Driver: Send + Sync {
-    /// `mutter`, `kwin` or `ext`.
+    /// `mutter`, `kwin`, `ext` or `niri`.
     fn name(&self) -> &'static str;
     /// Windows and outputs now.
     fn inventory(&self) -> Result<Inventory>;
@@ -131,10 +131,16 @@ fn with_insets(mut inv: Inventory) -> Inventory {
 /// The order to try drivers in: the session's own first, then the rest (niri, for one, answers
 /// Mutter's API; a GNOME session never has the ext protocols).
 fn order(desktop: &str) -> Vec<(&'static str, Probe)> {
-    let all: [(&'static str, Probe); 3] =
-        [("mutter", super::mutter::probe), ("kwin", super::kwin::probe), ("ext", super::ext::probe)];
+    let all: [(&'static str, Probe); 4] = [
+        ("mutter", super::mutter::probe),
+        ("kwin", super::kwin::probe),
+        ("ext", super::ext::probe),
+        ("niri", super::niri::probe),
+    ];
     let desktop = desktop.to_ascii_lowercase();
-    let first = if desktop.contains("gnome") || desktop.contains("unity") {
+    let first = if desktop.contains("niri") {
+        "niri"
+    } else if desktop.contains("gnome") || desktop.contains("unity") {
         "mutter"
     } else if desktop.contains("kde") {
         "kwin"
@@ -147,7 +153,7 @@ fn order(desktop: &str) -> Vec<(&'static str, Probe)> {
 }
 
 /// Choose the driver for this session, once. `KIMOCHI_WAYLAND_CAPTURE` forces one (`mutter`,
-/// `kwin`, `ext`) or turns native capture off (`portal`). Returns the driver's name.
+/// `kwin`, `ext`, `niri`) or turns native capture off (`portal`). Returns the driver's name.
 pub fn init() -> Option<&'static str> {
     REGISTRY
         .get_or_init(|| {
@@ -156,7 +162,11 @@ pub fn init() -> Option<&'static str> {
             if forced.as_deref() == Some("portal") || !crate::wayland_session_now() {
                 return Registry { driver: None, report };
             }
-            let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+            let desktop = if std::env::var_os("NIRI_SOCKET").is_some_and(|s| !s.is_empty()) {
+                "niri".to_owned()
+            } else {
+                std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default()
+            };
             for (name, probe) in order(&desktop) {
                 if forced.as_deref().is_some_and(|f| f != name) {
                     continue;
@@ -468,6 +478,7 @@ impl CaptureBackend for NativeCapture {
                 Some("mutter") => "native-mutter",
                 Some("kwin") => "native-kwin",
                 Some("ext") => "native-ext",
+                Some("niri") => "native-niri",
                 _ => "native",
             },
             enumeration: true,
@@ -526,10 +537,11 @@ mod tests {
     #[test]
     fn the_session_driver_is_tried_first() {
         let names = |d: &str| order(d).into_iter().map(|(n, _)| n).collect::<Vec<_>>();
-        assert_eq!(names("GNOME"), ["mutter", "kwin", "ext"]);
-        assert_eq!(names("ubuntu:GNOME"), ["mutter", "kwin", "ext"]);
-        assert_eq!(names("KDE"), ["kwin", "mutter", "ext"]);
-        assert_eq!(names("Hyprland"), ["ext", "mutter", "kwin"]);
-        assert_eq!(names(""), ["ext", "mutter", "kwin"]);
+        assert_eq!(names("GNOME"), ["mutter", "kwin", "ext", "niri"]);
+        assert_eq!(names("ubuntu:GNOME"), ["mutter", "kwin", "ext", "niri"]);
+        assert_eq!(names("KDE"), ["kwin", "mutter", "ext", "niri"]);
+        assert_eq!(names("Hyprland"), ["ext", "mutter", "kwin", "niri"]);
+        assert_eq!(names(""), ["ext", "mutter", "kwin", "niri"]);
+        assert_eq!(names("niri"), ["niri", "mutter", "kwin", "ext"]);
     }
 }

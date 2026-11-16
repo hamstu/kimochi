@@ -8,7 +8,7 @@
 //! cargo run --example native_probe -- activate <id|title>
 //! ```
 //!
-//! `KIMOCHI_WAYLAND_CAPTURE=mutter|kwin|ext` forces a driver. A `<title>` picks the first source
+//! `KIMOCHI_WAYLAND_CAPTURE=mutter|kwin|ext|niri` forces a driver. A `<title>` picks the first source
 //! whose name contains it.
 #[cfg(target_os = "linux")]
 fn main() {

@@ -1,0 +1,108 @@
+/*
+ * Settings → Shortcuts & Controls → Radial menu: the overlay's own ring (ui/controller.css and
+ * controller-variants.css, the Halo look) drawn on a stage the overlay's size and scaled into a
+ * well, and the rows of actions under it.
+ */
+.radial-preview {
+  --radial-scale: 0.58;
+  /* SNAP_MS in RadialMenuSection.tsx. */
+  --radial-snap: 180ms;
+  position: relative;
+  height: calc(620px * var(--radial-scale));
+  overflow: hidden;
+  border-bottom: 1px solid var(--k-line);
+  background: radial-gradient(circle at 30% 20%, var(--k-accent-soft), transparent 60%), var(--k-sunken);
+}
+.radial-preview-stage {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%) scale(var(--radial-scale));
+  transform-origin: top center;
+}
+/* Redrawn on every change: no entrance each time, and no dimmed game behind it. */
+.radial-preview .cm-ring,
+.radial-preview .cm-item,
+.radial-preview .cm-vignette {
+  animation: none;
+}
+.radial-preview .cm-vignette {
+  display: none;
+}
+.radial-preview .cm-wedge {
+  cursor: grab;
+}
+/* Dragging: the item follows the pointer round the orbit, and the one it reaches slides into the
+   place it left; let go, it settles into its own. */
+.radial-preview .cm-item {
+  transition:
+    color 0.14s ease,
+    transform var(--radial-snap) var(--k-ease-out);
+}
+.radial-preview .cm-item[data-dragging] {
+  z-index: 1;
+  transition: color 0.14s ease;
+}
+.radial-preview[data-dragging],
+.radial-preview[data-dragging] .cm-wedge {
+  cursor: grabbing;
+}
+.radial-preview-source {
+  position: absolute;
+  top: var(--k-space-2);
+  left: var(--k-space-2);
+}
+.radial-preview-hint {
+  position: absolute;
+  left: var(--k-space-3);
+  bottom: var(--k-space-2);
+  margin: 0;
+  font-size: var(--k-text-xs);
+  color: var(--k-text-3);
+  pointer-events: none;
+}
+
+.radial-row {
+  transition: background-color var(--k-fast);
+}
+.radial-row + .radial-row {
+  border-top: 1px solid var(--k-line);
+}
+.radial-row[data-selected] {
+  background: var(--k-accent-soft);
+}
+/* The rows' own borders come from the group; inside a wrapper they would double up. */
+.radial-row > .k-settings-row {
+  border: 0;
+}
+.radial-row-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--k-text-2);
+}
+.radial-row[data-outside] .radial-row-icon {
+  opacity: 0.6;
+}
+.radial-row-shortcut,
+.radial-row-actions {
+  display: inline-flex;
+  align-items: center;
+}
+.radial-row-actions {
+  gap: var(--k-space-0-5);
+}
+.radial-row-only {
+  display: inline-flex;
+  margin-left: var(--k-space-1);
+  vertical-align: -0.125em;
+  color: var(--k-text-3);
+  border-radius: var(--k-radius-sm);
+}
+.radial-row-only svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.radial-row-only:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}

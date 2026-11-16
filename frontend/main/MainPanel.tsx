@@ -41,6 +41,8 @@ import { LogActionsProvider } from './LogActionsProvider'
 import { engineSwitchRecord, registerMainRoute } from './engineSwitch'
 import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
 import { WhatsNewDialog } from './WhatsNewDialog'
+import { MoveToApplicationsDialog } from '../components/MoveToApplicationsDialog'
+import { useAppLocation } from '../bridge/appLocation'
 import { HelpDialog } from './HelpDialog'
 import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
@@ -164,8 +166,11 @@ export default function MainPanel(): JSX.Element {
   )
   const settingsScroll = useRef<HTMLDivElement>(null)
   const { props: controller, error, dismissError } = useController()
+  // Outside Applications (macOS) the move is offered first, and What's new waits for a launch
+  // from there; until the location is known, it waits too.
+  const appLocation = useAppLocation()
   // What's new opens on its own once, on the first launch of a new version.
-  const [whatsNew, setWhatsNew] = useWhatsNewOnLaunch()
+  const [whatsNew, setWhatsNew] = useWhatsNewOnLaunch(!appLocation || appLocation.needsMove)
   const [help, setHelp] = useState(false)
 
   const setView = (next: MainView): void => {
@@ -380,6 +385,7 @@ export default function MainPanel(): JSX.Element {
           </div>
         </div>
         <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
+        <MoveToApplicationsDialog location={appLocation} />
         {!inDemo() && <HelpDialog open={help} onOpenChange={setHelp} />}
         <BootReady label="log" />
         <PreloadViews />

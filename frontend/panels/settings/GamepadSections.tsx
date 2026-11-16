@@ -26,9 +26,9 @@ const BUTTON_GROUPS: {
   rows: { key: keyof ControllerButtons; label: string; description: string }[]
 }[] = [
   {
-    title: 'Controller menu',
+    title: 'Radial menu buttons',
     description:
-      'Buttons used while the controller menu or the dictionary is open. The D-pad moves between items and words.',
+      'Buttons used while the radial menu or the dictionary is open. The D-pad moves between items and words.',
     rows: [
       {
         key: 'confirm',

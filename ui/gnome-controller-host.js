@@ -132,7 +132,9 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     dictionary: () => (action, params) => rpc('dictionary', { apiAction: action, params }),
     popupType: () => 'builtin',
     buttons: () => settings.controllerButtons,
+    menuItems: () => settings.controllerMenuItems,
     appearance: () => settings.appearance,
+    ringColor: () => settings.overlayStyle?.color,
     lookupRange: async (range) => {
       const unit = range.startContainer.parentElement.parentElement
       const match = unit.indices.find((entry) => entry.offset >= range.startOffset)
@@ -150,12 +152,20 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     }
   })
   await event.listen('gnome-controller-closed', () => void controller.close())
-  await event.listen('gnome-controller-open', async () => {
+  // With `item`, a menu item's own shortcut: run it without the menu. The overlay sends until the
+  // host holds or says it took the request, so each request runs once.
+  const taken = new Set()
+  await event.listen('gnome-controller-open', async ({ payload } = {}) => {
+    if (payload?.request) {
+      if (taken.has(payload.request)) return
+      taken.add(payload.request)
+      void emit('gnome-controller-item-taken', { request: payload.request })
+    }
     if (opening || controller.mode !== 'idle') return
     opening = true
     try {
       await refresh()
-      await controller.toggle()
+      await (payload?.item ? controller.runItem(payload.item) : controller.toggle())
     } catch (error) {
       await endLease()
       void core.invoke('report', { value: { check: 'gnome-controller-open-failed', error: String(error) } })

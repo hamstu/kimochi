@@ -195,7 +195,16 @@ export interface DisplayInfo {
 }
 
 /** The bindable actions; `HOTKEY_ACTIONS` in `src-tauri/src/actions.rs`. */
-export type HotkeyName = 'triggerScan' | 'openControllerMenu'
+export type HotkeyName =
+  | 'triggerScan'
+  | 'openControllerMenu'
+  | 'menuScan'
+  | 'menuReadAlong'
+  | 'menuAutoOcr'
+  | 'menuTextHooker'
+  | 'menuRecentText'
+  | 'menuKimochi'
+  | 'menuSettings'
 
 /** Declared once in the shared schema module; re-exported here for convenience. */
 export type { OcrMode } from '@ui/settings'

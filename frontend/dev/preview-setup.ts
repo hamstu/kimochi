@@ -60,6 +60,9 @@
  *                    add ?update=available for the offered release's notes on top)
  *   ?whatsnew=update main window: the first launch after an update (`lastSeenVersion` is an older
  *                    version), so What's new opens on its own once the update status arrives
+ *   ?movetoapps=<state>  main and onboarding windows: Kimochi is outside Applications, so "Move
+ *                    Kimochi to Applications" opens first (What's new waits): downloads, dmg,
+ *                    replace, admin, fail (preview-app-location.ts)
  *
  * Reader pop-up (reader-popup.html):
  *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
@@ -125,6 +128,7 @@ import { MODEL_HANDLERS, modelControl, onModelSettingSet } from './preview-model
 import { installPreviewControl } from './preview-control'
 import { EXTENSION_HANDLERS, extensionControl, startSeededDownloads } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
+import { APP_LOCATION_HANDLERS } from './preview-app-location'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 import { STEAM_HANDLERS } from './preview-steam'
@@ -969,6 +973,7 @@ const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
   ...EXTENSION_HANDLERS,
   ...UPDATE_HANDLERS,
+  ...APP_LOCATION_HANDLERS,
   ...YOMITAN_API_HANDLERS,
   ...ACCOUNT_HANDLERS,
   ...STEAM_HANDLERS,

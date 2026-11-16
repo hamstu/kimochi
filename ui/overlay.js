@@ -14,6 +14,7 @@ import {
 import { createAnki } from './game-dictionary-anki.js'
 import { audioUrl } from './game-dictionary.js'
 import { createController } from './controller.js'
+import { radialItemForHotkey, RADIAL_MENU_SETTING } from './radial-items.js'
 import { padButtons, startRegionPad } from './region-pad.js'
 import { buttonName } from './controller-input.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
@@ -135,7 +136,7 @@ function clickThrough() {
  */
 function hoverLookup() {
   return hoverLookupApplies(
-    { gamescope: nativeGamescope, wayland: waylandSession },
+    { gamescope: nativeGamescope, wayland: waylandSession, lookupOnHover },
     native.getSetting('overlayHoverLookup')
   )
 }
@@ -792,7 +793,9 @@ controller = createController({
   segment: (text) => (extensionHosted ? (extensionHost()?.segment?.(text) ?? null) : null),
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
   buttons: () => setting('controllerButtons'),
+  menuItems: () => setting(RADIAL_MENU_SETTING),
   appearance: () => setting('appearance'),
+  ringColor: () => setting('overlayStyle')?.color,
   // Gaming Mode reads the Deck's own controller. Paused Steam lets it fall back to its keyboard
   // and mouse "lizard" mode, whose arrow keys would move the outline a second time.
   padOnly: () => window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope,
@@ -2521,26 +2524,7 @@ async function onAction(name) {
         void native.setSetting(HINTS_DISMISSED, true)
         syncHints()
       }
-      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && controller.mode === 'idle') {
-        // A never-mapped Gamescope overlay has a zero-sized WebKit viewport.
-        // Native bounds are logical pixels and available immediately after mapping.
-        await native.panel('overlay', 'show')
-        const panel = await native.panel('overlay', 'inspect')
-        if (panel.bounds?.width > 0 && panel.bounds?.height > 0) {
-          gamescopeMenuCenter = { x: panel.bounds.width / 2, y: panel.bounds.height / 2 }
-        }
-      }
-      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay) {
-        if (controllerHold) return window.__TAURI__.event.emit('gnome-controller-toggle')
-        await native.panel('controller-host', 'show_inactive')
-        // The lazy WebKit host acknowledges opening through the shared hold flag.
-        for (let attempt = 0; attempt < 20 && !controllerHold; attempt++) {
-          await window.__TAURI__.event.emit('gnome-controller-open')
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
-        return
-      }
-      return controller.toggle()
+      return openController()
     case 'playAudio':
       return playLatest()
     // The controller reads these back from the shared view, so this window owns
@@ -2589,10 +2573,52 @@ async function onAction(name) {
       else hoverPreview.stop()
       return drawHover()
     }
-    default:
+    default: {
+      // A controller menu item's own shortcut (ui/radial-items.js): run it without the menu.
+      const item = radialItemForHotkey(name)
+      if (item) return openController(item.id)
       // Everything else native has already applied before emitting.
       return undefined
+    }
   }
+}
+
+/** GNOME controller host requests it has taken (`gnome-controller-item-taken`). */
+const gnomeItemsDone = new Set()
+if (window.__KIMOCHI_PLATFORM__?.os === 'linux')
+  void native.listen('gnome-controller-item-taken', ({ payload }) => {
+    if (payload?.request) gnomeItemsDone.add(payload.request)
+  })
+
+/**
+ * Open the controller menu (or close what the controller has open), or with `item` run that
+ * menu item directly. Gamescope's overlay and GNOME's controller host need readying first.
+ */
+async function openController(item) {
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && controller.mode === 'idle') {
+    // A never-mapped Gamescope overlay has a zero-sized WebKit viewport.
+    // Native bounds are logical pixels and available immediately after mapping.
+    await native.panel('overlay', 'show')
+    const panel = await native.panel('overlay', 'inspect')
+    if (panel.bounds?.width > 0 && panel.bounds?.height > 0) {
+      gamescopeMenuCenter = { x: panel.bounds.width / 2, y: panel.bounds.height / 2 }
+    }
+  }
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay) {
+    if (controllerHold) return window.__TAURI__.event.emit('gnome-controller-toggle')
+    await native.panel('controller-host', 'show_inactive')
+    // The lazy WebKit host acknowledges opening through the shared hold flag; an item that opens
+    // no mode of its own (Auto OCR) never holds, so the host acknowledges the request instead and
+    // runs each request once, however often it is sent.
+    const request = item ? crypto.randomUUID() : undefined
+    for (let attempt = 0; attempt < 20 && !controllerHold && !gnomeItemsDone.has(request); attempt++) {
+      await window.__TAURI__.event.emit('gnome-controller-open', item ? { item, request } : undefined)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    gnomeItemsDone.delete(request)
+    return
+  }
+  return item ? controller.runItem(item) : controller.toggle()
 }
 
 /** When a controller was last reported connected (the native `gamepad` state), for the editor. */
@@ -5595,7 +5621,12 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
             autoOcr: Boolean(state.flags.autoOcrEnabled),
             autoAvailable: !isQuickShot(),
             scanId: state.appliedScanId,
-            settings: { controllerButtons: setting('controllerButtons'), appearance: setting('appearance') }
+            settings: {
+              controllerButtons: setting('controllerButtons'),
+              controllerMenuItems: setting(RADIAL_MENU_SETTING),
+              overlayStyle: setting('overlayStyle'),
+              appearance: setting('appearance')
+            }
           }
           break
         case 'scan':
