@@ -14,7 +14,7 @@ import { createAnki } from './game-dictionary-anki.js'
 import { audioUrl } from './game-dictionary.js'
 import { createController } from './controller.js'
 import { padButtons, startRegionPad } from './region-pad.js'
-import { buttonName } from './controller-input.js'
+import { buttonName, pageMenuKey } from './controller-input.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
 import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
@@ -5271,16 +5271,20 @@ for (const type of [
 // ignored the keyboard. They arrive here instead: hand them to the controller as the hook
 // would have, and keep them from the page, as the hook keeps them from the game. While a game
 // is in front the hook still takes them, and this page never sees them.
-const MENU_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', ' '])
+// (`pageMenuKey`: never a field being typed in, nor while the region editor has the keys.)
 for (const type of ['keydown', 'keyup']) {
   window.addEventListener(
     type,
     (event) => {
-      if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || !event.isTrusted || !MENU_KEYS.has(event.key)) return
-      if (!controller || controller.mode === 'idle') return
+      const payload = pageMenuKey(event, {
+        os: window.__KIMOCHI_PLATFORM__?.os,
+        mode: controller?.mode,
+        regionSelecting: state.regionSelecting
+      })
+      if (!payload) return
       event.stopImmediatePropagation()
       event.preventDefault()
-      controller.key({ key: event.key, type })
+      controller.key(payload)
     },
     { capture: true }
   )

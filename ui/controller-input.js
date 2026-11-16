@@ -268,3 +268,29 @@ export class ControllerInput {
 }
 
 export default { ControllerInput, BUTTON, BUTTON_NAMES, buttonName, stickDirection }
+
+/** The controller menu's keys, by DOM `key` (Space is `' '`). */
+const MENU_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', ' '])
+
+/** Whether the element an event started on takes typing (a text field, a select, editable content). */
+function editable(event) {
+  const target = event.composedPath?.()[0] ?? event.target
+  if (!target || typeof target !== 'object') return false
+  if (target.isContentEditable) return true
+  const tag = String(target.tagName ?? '').toUpperCase()
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
+
+/**
+ * Windows: a key the overlay page received itself that belongs to the open controller menu, as a
+ * `controller-key` payload, or null when the page keeps it. With a Kimochi window in front Windows
+ * does not call Kimochi's low-level keyboard hook, so the menu's keys arrive as page events.
+ * Only the reader's own keys (`isTrusted`; the region editor's relayed keys are synthetic), only
+ * while the menu is open and the region editor is not, and never from a field being typed in.
+ */
+export function pageMenuKey(event, { os, mode, regionSelecting = false }) {
+  if (os !== 'windows' || !event?.isTrusted || !MENU_KEYS.has(event.key)) return null
+  if (!mode || mode === 'idle' || regionSelecting || editable(event)) return null
+  if (event.type !== 'keydown' && event.type !== 'keyup') return null
+  return { key: event.key, type: event.type }
+}
