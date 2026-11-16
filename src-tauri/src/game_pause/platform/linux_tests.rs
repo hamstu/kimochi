@@ -686,3 +686,24 @@ fn a_paused_native_pipewire_game_does_not_silence_other_apps() {
     assert!(silence < 300, "the other app went quiet for {silence} ms");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Prints the real plan (or refusal) as JSON, for driving the guard by hand on a real game:
+/// `KIMOCHI_PAUSE_PLAN_PID` (the window's process) and/or `KIMOCHI_PAUSE_PLAN_APP` (Steam app id,
+/// as Gaming Mode names it). Read-only.
+#[test]
+#[ignore]
+fn print_plan() {
+    let var = |name: &str| std::env::var(name).ok().and_then(|v| v.parse::<u32>().ok());
+    let game = GameRef {
+        pid: var("KIMOCHI_PAUSE_PLAN_PID"),
+        steam_app_id: var("KIMOCHI_PAUSE_PLAN_APP"),
+        ..Default::default()
+    };
+    if game.pid.is_none() && game.steam_app_id.is_none() {
+        return;
+    }
+    match backend().plan(&game) {
+        Ok(plan) => println!("PLAN {}", serde_json::to_string(&plan).unwrap()),
+        Err(refusal) => println!("REFUSAL {}", serde_json::to_string(&refusal).unwrap()),
+    }
+}
