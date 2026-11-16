@@ -61,8 +61,6 @@ pub fn paused() -> bool {
 
 /// Whether `pid` is part of the pause in effect: nothing may wait on it (Accessibility,
 /// synchronous window messages) or bring it to the front.
-// Read by the macOS and Linux activation paths; Windows' foreground gating will too.
-#[cfg_attr(target_os = "windows", allow(dead_code))]
 pub fn holds_pid(pid: u32) -> bool {
     SHARED.lock().unwrap_or_else(|p| p.into_inner()).pids.contains(&pid)
 }

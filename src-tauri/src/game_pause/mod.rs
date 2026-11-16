@@ -11,6 +11,8 @@
 //! - `platform`: the per-OS backends.
 pub mod app;
 pub mod backend;
+// The real-guard end-to-end test needs /bin/sh, mkfifo and kill(2). Windows has its own harness
+// (a script in the Windows backend's notes): there a killed guard undoes the pause by itself.
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod e2e_tests;
 pub mod guard;

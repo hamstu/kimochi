@@ -466,6 +466,12 @@ fn launch(
         Ok(Err(e)) => return Err(e),
         Err(_) => return Err("the hook helper did not start".into()),
     }
+    // Attaching injects into the game and waits for it there: never into a paused game.
+    if targets.iter().any(|t| crate::game_pause::app::holds_pid(t.pid))
+        && !crate::game_pause::app::resume_before_activating("attaching the text hook")
+    {
+        return Err("busy: the game is paused".into());
+    }
     let mut session = hook.lock();
     for target in targets {
         send(&mut session, json!({ "cmd": "attach", "pid": target.pid, "bits": target.bits }))?;
@@ -1371,6 +1377,11 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
     // Injection runs inside the game (and, under Wine, through its Wine server): not while paused.
     if !crate::game_pause::app::defer_while_paused("voice hook injection", Duration::from_secs(60)) {
         return Err("The game stayed paused; the voice hook will be tried again later.".into());
+    }
+    if crate::game_pause::app::holds_pid(target.pid)
+        && !crate::game_pause::app::resume_before_activating("injecting the voice hook")
+    {
+        return Err("The game is paused; the voice hook will be tried again later.".into());
     }
     let helper = hookd_path(app)?.with_file_name(if target.bits == 32 {
         "kimochi-hookd-x86.exe"

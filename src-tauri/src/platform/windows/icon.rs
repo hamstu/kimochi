@@ -71,6 +71,11 @@ fn pid_for_name(name: &str) -> Option<u32> {
 }
 
 fn window_icon(hwnd: HWND) -> Option<HICON> {
+    // WM_GETICON is answered by the game's own thread: a paused game would hold it the whole
+    // timeout. The class and executable icons below send it nothing.
+    if crate::game_pause::app::holds_pid(window_pid(hwnd)) {
+        return None;
+    }
     let mut result = 0usize;
     let answered = unsafe {
         SendMessageTimeoutW(

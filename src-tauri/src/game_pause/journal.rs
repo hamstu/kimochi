@@ -129,6 +129,8 @@ impl Journal {
             let outcome = match backend.identity(member.pid) {
                 None => "gone".to_string(),
                 Some(now) if !member.same_process(&now) => "reused".to_string(),
+                // Ran already (someone resumed it, or it never stopped): nothing to continue.
+                Some(_) if backend.stopped(member) == Some(false) => "already running".to_string(),
                 Some(_) => {
                     live.push(member.clone());
                     continue;
@@ -188,6 +190,18 @@ mod tests {
         assert_eq!(outcome(11), "reused");
         assert_eq!(outcome(12), "gone");
         assert!(journal.read().is_none());
+    }
+
+    #[test]
+    fn a_process_already_running_is_reported_as_such() {
+        let fake = Fake::new();
+        fake.spawn(10, 100, None);
+        let journal = tmp("running");
+        let id = ProcIdentity { pid: 10, start: 100, exe: "game".into() };
+        journal.write(&Entry { members: vec![id], boot: boot_id(), ..Default::default() }).unwrap();
+        let out = journal.recover(&fake, None);
+        assert_eq!(out[0].outcome, "already running");
+        assert!(!fake.calls().iter().any(|c| c.starts_with("cont")), "nothing to continue");
     }
 
     #[test]
