@@ -543,10 +543,19 @@
   fill: var(--cm-ring-bright);
 }
 [data-cm-variant='halo'] .cm-icon {
-  width: 60px;
-  height: 60px;
+  width: 84px;
+  height: 84px;
   background: none;
   box-shadow: none;
+}
+/* A detail (Auto OCR's state) sits off the larger icon's top right. */
+[data-cm-variant='halo'] .cm-detail {
+  left: calc(50% + 28px);
+}
+[data-cm-variant='halo'] .cm-icon svg {
+  width: 72px;
+  height: 72px;
+  stroke-width: 1.4;
 }
 /* Icons rest in a greyed tint of the ring's colour; the chosen one grows, bright white. */
 [data-cm-variant='halo'] .cm-item {
@@ -557,7 +566,7 @@
 }
 [data-cm-variant='halo'] .cm-item.cm-selected .cm-icon {
   color: #fff;
-  transform: scale(1.28);
+  transform: scale(1.15);
   filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.35));
 }
 [data-cm-variant='halo'] .cm-item[data-lit] .cm-icon::after {
