@@ -8,6 +8,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **Controllers on Windows:** an Xbox controller (or one that works like it) is now read with XInput automatically, so its buttons register even when Windows listed it but never passed on a press, and while a game is in front. The "Read controllers with XInput" switch is gone.
 - Performance fixes and improvements, with more reliable setup, source selection, translations, audio playback and keyboard navigation.
 
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.

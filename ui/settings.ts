@@ -258,8 +258,6 @@ export interface Settings {
     enabled: boolean
     preferredGamepadIndex?: number
     lookupButton?: number | null
-    /** Windows only: read controllers through XInput (`gamepad_xinput.rs`). */
-    xinput?: boolean
   }
   controllerButtons: ControllerButtons
   gameModeSettings: GameModeSettings
