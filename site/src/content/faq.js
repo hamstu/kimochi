@@ -102,11 +102,12 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. With Text hooking, Kimochi can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. owocr’s output works too.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined. With Text hooking, Kimochi can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. Turn on Audio hooking too and the card gets the game’s own voice line, without the music or sound effects. When a line’s voice can’t be hooked, or for any other source, Kimochi records it from your speakers instead. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. owocr’s output works too.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
       { href: docsUrl('/reading/text-hooker/'), label: 'Text hooking' },
+      { href: '/linux-steam-deck-text-hooker', label: 'Text hooking on Linux and Steam Deck' },
       { href: docsUrl('/reading/texthookers/'), label: 'Texthookers' }
     ]
   },

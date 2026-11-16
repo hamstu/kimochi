@@ -63,7 +63,7 @@ function VoiceChip({ uid }: { uid: string | undefined }) {
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
-          void toggleLineAudio(uid)
+          void toggleLineAudio(uid).catch((error) => console.warn('sentence playback failed', error))
         }}
       >
         <Volume2 aria-hidden />

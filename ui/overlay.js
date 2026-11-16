@@ -97,7 +97,7 @@ import {
   resolveHostEngine,
   resolveOverlayCardAppearance
 } from './settings.js'
-import { exceptRects, popupHitRects } from './regions.js'
+import { clearOfGame, exceptRects, popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
 import { openAppLane } from './app-lane.js'
@@ -446,7 +446,7 @@ async function syncGamingHints() {
 }
 
 /** Show the hint bar while there is text to point at and nothing else is using the overlay. */
-function syncHints() {
+function syncHints(readWordRects = null) {
   const shown =
     shiftGated &&
     native.getSetting(HINTS_DISMISSED) !== true &&
@@ -454,7 +454,7 @@ function syncHints() {
     !state.dictionaryOpen &&
     (controller?.mode ?? 'idle') === 'idle' &&
     Boolean(state.origin) &&
-    (renderer.hitRects(state.origin).length > 0 || (hook.card?.rects().length ?? 0) > 0)
+    ((readWordRects?.() ?? renderer.hitRects(state.origin)).length > 0 || (hook.card?.rects().length ?? 0) > 0)
   hints.sync(shown, clickThrough(), native.getSetting('overlayLookupKey') ?? 'shift', hoverLookup())
   if (shown) hints.place(hintArea())
 }
@@ -959,7 +959,7 @@ function syncScanHold() {
   if (controllerHold || readingHold) scanner.pause()
   else if (scanner.isPaused) scanner.resume()
 }
-function syncReadingHold() {
+function syncReadingHold(readWordRects = null) {
   if (layerPointerExit) {
     window.__linuxLayerPointerInside = !layerPointerExit.outside()
     if (layerPointerExit.outside()) renderer.clearPointer()
@@ -971,7 +971,7 @@ function syncReadingHold() {
     [...livePopups].some((popup) => popup.isVisibleSync?.())
   const enabled = overlayTextOn() && !state.regionSelecting
   if (!enabled) reading.reset()
-  const next = enabled && reading.update(renderer.mouse, renderer.hitRects({ x: 0, y: 0 }), popup)
+  const next = enabled && reading.update(renderer.mouse, readWordRects?.() ?? renderer.hitRects({ x: 0, y: 0 }), popup)
   if (next === readingHold) return
   readingHold = next
   syncScanHold()
@@ -4348,15 +4348,26 @@ const popupRects = () => popupHitRects(livePopups, state.origin)
  * reading, and a lookup no longer needs it (see `feedScanner`). What is marked
  * is this window's own interface — the dictionary page and the extension frames
  * — which a reader has deliberately opened and has to be able to type into.
+ *
+ * `readWordRects`, when supplied, samples words in overlay-local coordinates for this tick.
  */
-function hitRects() {
+function hitRects(readWordRects = null) {
   if (waylandDisabled && (!gnomeOverlay?.shared || state.regionSelecting)) return []
   if (!state.origin) return []
   // Selecting a region needs every event on the display, not just the parts of
   // it that happen to have text under them.
   if (state.regionSelecting || hook.card?.dragging()) return [{ ...state.origin, focus: false }]
   const gated = clickThrough()
-  const rects = renderer.hitRects(state.origin).map((rect) => ({ ...rect, shift: gated }))
+  const wordRects = readWordRects?.() ?? null
+  const rects =
+    wordRects === null
+      ? renderer.hitRects(state.origin).map((rect) => ({ ...rect, shift: gated }))
+      : wordRects.map((rect) => ({
+          ...rect,
+          x: state.origin.x + rect.x,
+          y: state.origin.y + rect.y,
+          shift: gated
+        }))
   const add = (rect, focus, shift = false) => {
     if (rect.width > 0 && rect.height > 0) {
       rects.push({
@@ -4383,10 +4394,11 @@ function hitRects() {
   if (extensionPopupRect) add(extensionPopupRect, true)
   for (const rect of controller.hitRects()) add(rect, false)
   // The Text Hooker's card and its menu: its text is looked up, its controls pressed. The card,
-  // like the words, is Shift-only (it sits over the game); its menu, once Shift and a click have
-  // opened it, takes the mouse until it closes.
+  // like the words, is Shift-only while any of it is over the game; moved clear of the game it
+  // covers nothing there, so it takes the mouse like any window (`hookCardClear`, #187). Its menu,
+  // once opened, takes the mouse until it closes.
   const [card, menu] = hook.card?.rects() ?? []
-  if (card) add(card, false, gated)
+  if (card) add(card, false, gated && !hookCardClear())
   if (menu) add(menu, false)
   // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
   for (const rect of hints.rects()) add(rect, false)
@@ -4410,6 +4422,21 @@ function hitRects() {
     for (const rect of exceptRects(whole, remote ?? [])) rects.push({ ...rect, focus: false, shift: false })
   }
   return rects
+}
+
+/**
+ * Whether the Text Hooker's card is clear of the game window (`clearOfGame`), so it takes the mouse
+ * with no lookup key held (#187). Read afresh wherever it matters (the region loop republishes
+ * every 100 ms, the pointer feed asks at each sample), so it follows the card being dragged and
+ * the game window moving or resizing. False while either rectangle is unknown: click-through, as
+ * before.
+ */
+function hookCardClear() {
+  const [card] = hook.card?.rects() ?? []
+  const origin = state.origin
+  if (!card || !origin) return false
+  const game = state.sourceBounds ?? state.info?.source_bounds ?? null
+  return clearOfGame({ x: origin.x + card.left, y: origin.y + card.top, width: card.width, height: card.height }, game)
 }
 
 /** Whether a point (overlay coordinates) is on a dictionary pop-up in this window. */
@@ -4437,6 +4464,8 @@ function onFreeClick(event) {
   swallowClick = false
   if (!catching || gateOpen) return
   const target = event.target instanceof Element ? event.target : null
+  // A card clear of the game takes the mouse as if the key were held: its clicks are its own.
+  if (target?.closest('.hook-card') && hookCardClear()) return
   const popupHost = extensionHost()?.descriptor?.popupSelector
   if (target?.closest('.hook-card-menu, .overlay-hints, #controller, .pages, iframe')) return
   if (popupHost && target?.closest(popupHost)) return
@@ -4768,7 +4797,7 @@ let publishedSignature = null
 let publishedAt = 0
 const REPUBLISH_MS = 1000
 
-async function publishRegions() {
+async function publishRegions(readWordRects = null) {
   if (publishing) {
     // Coalesce: the next publish must reflect the DOM as it is when it runs, not
     // queue a stale snapshot behind the one in flight.
@@ -4779,7 +4808,10 @@ async function publishRegions() {
   try {
     do {
       republish = false
-      const rects = hitRects()
+      const rects = hitRects(readWordRects)
+      // This sample belongs only to the synchronous part of this tick. A request coalesced
+      // while setRegions is in flight must read the DOM again after that await.
+      readWordRects = null
       const signature = JSON.stringify([rects, state.flags.overlayVisible, state.regionSelecting])
       if (signature === publishedSignature && performance.now() - publishedAt < REPUBLISH_MS) continue
       await native.setRegions(rects)
@@ -4796,9 +4828,14 @@ async function publishRegions() {
 function startRegionLoop() {
   setInterval(() => {
     void refreshLayerPointer()
-    syncReadingHold()
-    syncHints()
-    void publishRegions()
+    // These consumers run synchronously before publishRegions awaits native. Sample words
+    // only if needed, once in local coordinates, and discard at the end of the tick. Popup,
+    // hint and controller rectangles are still read after their own updates as before.
+    let wordRects = null
+    const readWordRects = () => (wordRects ??= renderer.hitRects({ x: 0, y: 0 }))
+    syncReadingHold(readWordRects)
+    syncHints(readWordRects)
+    void publishRegions(readWordRects)
   }, 100)
 }
 
@@ -5374,7 +5411,9 @@ await native.listen('pointer', ({ payload }) => {
   const armed = !clickThrough() || gateOpen
   if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
-  if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), armed)) return
+  // The card clear of the game is the reader's to click without the key (`hookCardClear`).
+  const cardArmed = armed || hookCardClear()
+  if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), cardArmed)) return
   checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
   // Yomitan's popups hear the pointer enter and leave them, for "Hide popup on cursor exit" (#95).
   // Not while the controller reads: the resting mouse is not the reader's.

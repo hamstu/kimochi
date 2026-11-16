@@ -1,7 +1,7 @@
 /**
  * The main window: a resizable sidebar (source and session pickers, Settings at its foot) and the
- * current view: the Log, the Notebook or the session's Anki cards, switched by tabs across the
- * top, or Settings. The title
+ * current view: the Log, the Notebook, the session's Anki cards or Stats, switched by tabs across
+ * the top, or Settings. The title
  * bar carries the sidebar toggle and the app's name.
  *
  * Steam Deck Gaming Mode has no sidebar, mini mode or sidebar toggle: the window is a full-screen
@@ -55,6 +55,7 @@ import { preloadAllSettingsPagesWhenIdle } from '../panels/settings/settingsPage
 
 const LazyNotebook = lazy(() => loadView('notebook'))
 const LazyAnkiCards = lazy(() => loadView('anki'))
+const LazyStats = lazy(() => loadView('stats'))
 
 // Preloaded after the first content (see lazyViews), a view renders at once; `lazy` alone would
 // still suspend for a tick on its first show (the choice is made once per mount). The fallback is for a view opened before its chunk
@@ -66,6 +67,10 @@ function Notebook(props: ComponentProps<typeof LazyNotebook>): JSX.Element {
 function AnkiCards(): JSX.Element {
   const [Ready] = useState(() => loadedView('anki'))
   return Ready ? <Ready /> : <LazyAnkiCards />
+}
+function Stats(): JSX.Element {
+  const [Ready] = useState(() => loadedView('stats'))
+  return Ready ? <Ready /> : <LazyStats />
 }
 
 /**
@@ -103,7 +108,7 @@ const gamingAtBoot = (): boolean =>
 
 function initialView(): MainView {
   const view = new URLSearchParams(location.search).get('view')
-  if (view === 'notebook' || view === 'anki' || view === 'settings') return view
+  if (view === 'notebook' || view === 'anki' || view === 'stats' || view === 'settings') return view
   if (view === 'source' && gamingAtBoot()) return view
   // Reloaded by a dictionary-engine switch made in Settings: open on that page, not the Log.
   const switched = engineSwitchRecord()?.view
@@ -247,13 +252,14 @@ export default function MainPanel(): JSX.Element {
     return () => void pending.then((stop) => stop())
   }, [setSidebar, changeMini, gaming])
 
-  // ⌘1, ⌘2, ⌘3 and ⌘, switch views (Ctrl+1, Ctrl+2, Ctrl+3 and Ctrl+, off macOS).
+  // ⌘1 to ⌘4 and ⌘, switch views (Ctrl+1 to Ctrl+4 and Ctrl+, off macOS).
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (!isPrimaryModifier(event, capabilities)) return
       if (event.key === '1') setView('log')
       else if (event.key === '2') setView('notebook')
       else if (event.key === '3') setView('anki')
+      else if (event.key === '4') setView('stats')
       else if (event.key === ',') setView('settings')
       else return
       event.preventDefault()
@@ -356,6 +362,11 @@ export default function MainPanel(): JSX.Element {
               {view === 'anki' && (
                 <Suspense fallback={<ViewLoading />}>
                   <AnkiCards />
+                </Suspense>
+              )}
+              {view === 'stats' && (
+                <Suspense fallback={<ViewLoading />}>
+                  <Stats />
                 </Suspense>
               )}
               {view === 'settings' && (

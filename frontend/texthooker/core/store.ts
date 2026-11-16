@@ -5,6 +5,7 @@ import { currentLinesPath, getManifest } from './sessions'
 import { writesPaused } from './profile'
 import { forgetLines, reportLine } from '../lib/sentenceAudio'
 import { NOTE_MAX_LENGTH, isNote, type Line, type LineSource } from '../lib/types'
+import { historyAdd, historyDelete, historyEdit } from './history'
 
 const DIR = BaseDirectory.AppLocalData
 const DEBOUNCE_MS = 2000
@@ -89,6 +90,17 @@ function activeSessionId(): string {
     return getManifest().activeId
   } catch {
     return ''
+  }
+}
+
+/** The open session, as the reading history records it. */
+function activeSession(): { id: string; name: string } | null {
+  try {
+    const manifest = getManifest()
+    const session = manifest.sessions.find((s) => s.id === manifest.activeId)
+    return session ? { id: session.id, name: session.name } : null
+  } catch {
+    return null
   }
 }
 
@@ -236,6 +248,7 @@ export function appendLine(opts: { ocr?: Line['ocr']; text: string; source: Line
   }
   emit({ type: 'append', line })
   if (!isNote(line)) reportLine(line)
+  historyAdd(line, activeSession())
   scheduleSave()
   return line
 }
@@ -262,6 +275,7 @@ export function replaceLastLineText(text: string): Line | null {
   lines[idx] = updated
   emit({ type: 'update', line: updated })
   reportLine(updated)
+  historyEdit(updated, activeSession())
   scheduleSave()
   return updated
 }
@@ -297,13 +311,30 @@ export function setLineText(id: number, text: string) {
   lines[idx] = updated
   emit({ type: 'update', line: updated })
   if (!isNote(updated)) reportLine(updated)
+  historyEdit(updated, activeSession())
   scheduleSave()
 }
 
 /** Cache a translation on a line and (by default) switch the row to it. */
-export function setLineTranslation(id: number, translation: string, show = true) {
+export function setLineTranslation(
+  id: number,
+  translation: string,
+  show = true,
+  expected?: { sessionId: string; uid?: string; text: string; ts: number }
+) {
   const idx = lines.findIndex((l) => l.id === id)
   if (idx === -1) return
+  // Recheck at the writer: the UI snapshot can become stale while its bridge
+  // request is queued behind a session switch or an edit.
+  const current = lines[idx]
+  if (
+    expected &&
+    (activeSessionId() !== expected.sessionId ||
+      current.uid !== expected.uid ||
+      current.text !== expected.text ||
+      current.ts !== expected.ts)
+  )
+    return
   const updated: Line = { ...lines[idx], translation, showTranslation: show }
   lines[idx] = updated
   emit({ type: 'update', line: updated })
@@ -334,6 +365,7 @@ export function deleteLine(id: number) {
   if (idx === -1) return
   const removed = lines.splice(idx, 1)
   rememberDeleted(removed)
+  for (const line of removed) historyDelete(line)
   forgetLines(removed)
   emit({ type: 'remove', id })
   scheduleSave()

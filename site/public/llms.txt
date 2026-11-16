@@ -10,6 +10,7 @@ Kimochi is not the "Kimochi" emotions journal, the "Kimochi" AI companion app or
 - [FAQ](https://kimochiapp.com/faq): short answers about languages, platforms, price, privacy, OCR engines, dictionaries, Anki
 - [Compare](https://kimochiapp.com/compare): when to pick Kimochi, GameSentenceMiner, owocr or YomiNinja
 - [Install on Linux](https://kimochiapp.com/download/linux): Steam Deck, Ubuntu and Debian, other distributions
+- [Text hooking on Linux and Steam Deck](https://kimochiapp.com/linux-steam-deck-text-hooker): hooking Windows games run through Proton or Wine (Steam, Lutris, Bottles, Heroic) with LunaHook, with Textractor as its fallback, including in Steam Deck Gaming Mode; a Textractor alternative with no Wine-prefix setup
 - [Privacy](https://kimochiapp.com/privacy): exactly what leaves your computer, feature by feature
 - [Terms](https://kimochiapp.com/terms)
 - [Documentation](https://docs.kimochiapp.com/): installing on each platform, OCR engines, the overlay, dictionaries, the Log and Notebook, Anki, controllers, Kimochi Cloud, settings, shortcuts and troubleshooting

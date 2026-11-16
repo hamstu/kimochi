@@ -258,8 +258,6 @@ export interface Settings {
     enabled: boolean
     preferredGamepadIndex?: number
     lookupButton?: number | null
-    /** Windows only: read controllers through XInput (`gamepad_xinput.rs`). */
-    xinput?: boolean
   }
   controllerButtons: ControllerButtons
   gameModeSettings: GameModeSettings
@@ -576,7 +574,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     requirements: 'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/yomidevs/yomitan',
-    version: '26.10.22.0',
+    version: '26.11.2.0',
     runs: 'local',
     optionsPage: 'settings.html'
   },
@@ -589,13 +587,14 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Recommended dictionaries on first run',
       'Anki mining through AnkiConnect'
     ],
-    requirements: 'Downloaded when you choose it (about 5 MB). Needs at least one dictionary.',
+    requirements: 'Downloaded when you choose it (about 7 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/bee-san/hachidori',
-    version: '0.3.0',
+    version: '0.5.2',
     runs: 'local',
     optionsPage: 'settings.html',
-    // 0.3.0 looks up Japanese text only; its language profiles arrive in 0.5.0.
+    // Japanese only in Kimochi: since 0.5.0 Hachidori reads other languages too, but behind its
+    // experimental "Multiple languages" switch (off by default), which Kimochi does not drive yet.
     languages: ['ja']
   },
   tenten: {
@@ -607,7 +606,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Downloaded when you choose it (about 18 MB), then fetches its full dictionaries in the background. No Anki mining.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/birchill/10ten-ja-reader',
-    version: '1.28.0',
+    version: '1.29.0',
     runs: 'local',
     optionsPage: 'options.html',
     languages: ['ja']
@@ -747,12 +746,12 @@ export interface EngineSwitchRecord {
   /** The engine just chosen, for "Now using …". */
   engine: DictionaryEngine
   /** The main window's view to reopen: Settings for a switch made there, else the Log, Notebook or
-   * Anki tab the sidebar's dictionary picker was used from. */
-  view: 'settings' | 'source' | 'log' | 'notebook' | 'anki'
+   * Anki or Stats tab the sidebar's dictionary picker was used from. */
+  view: 'settings' | 'source' | 'log' | 'notebook' | 'anki' | 'stats'
   /** The Settings page (`settingsActiveTab`), so the first frame is that page, not the default. */
   tab: string
   /** Where Back from Settings returns to. */
-  back: 'source' | 'log' | 'notebook' | 'anki'
+  back: 'source' | 'log' | 'notebook' | 'anki' | 'stats'
   /** The Settings page's scroll offset, in CSS pixels. */
   scrollTop: number
   /** `Date.now()` when the switch was made. */
@@ -776,7 +775,15 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
   const record = value as Record<string, unknown>
   const { engine, view, tab, back, scrollTop, at } = record
   if (typeof engine !== 'string' || !Object.hasOwn(DICTIONARY_ENGINES, engine)) return null
-  if (view !== 'settings' && view !== 'source' && view !== 'log' && view !== 'notebook' && view !== 'anki') return null
+  if (
+    view !== 'settings' &&
+    view !== 'source' &&
+    view !== 'log' &&
+    view !== 'notebook' &&
+    view !== 'anki' &&
+    view !== 'stats'
+  )
+    return null
   if (typeof tab !== 'string' || !tab) return null
   if (typeof at !== 'number' || !Number.isFinite(at)) return null
   // A clock that stepped back a little still counts; a record from the future does not.
@@ -785,7 +792,7 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
     engine: engine as DictionaryEngine,
     view,
     tab,
-    back: back === 'source' || back === 'notebook' || back === 'anki' ? back : 'log',
+    back: back === 'source' || back === 'notebook' || back === 'anki' || back === 'stats' ? back : 'log',
     scrollTop: typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 0 ? scrollTop : 0,
     at
   }

@@ -3,7 +3,8 @@
 //! `ui/hook-games.ts` describes them.
 //!
 //! Always: markup some engines leave in their text (`<b>…</b>`, `{漢字/かんじ}` ruby, Ren'Py's
-//! `{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`) is taken out, keeping the text it marks up; and a
+//! `{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`, `漢字《かんじ》` when it holds a reading) is taken
+//! out, keeping the text it marks up; and a
 //! line far longer than a game says at once (a backlog opened, a skip through a scene, sent as
 //! one) is dropped. Per game: script codes taken out (unless turned off), repeated characters
 //! undone (`ここここ` → `こ`), and the reader's own find-and-replace rules; and whether a line the
@@ -167,30 +168,42 @@ impl GameConfig {
     }
 }
 
+/// What a markup rule puts in place of its match.
+#[derive(Clone, Copy)]
+enum To {
+    /// The replacement, with `$1` for the text the markup marks up.
+    Text(&'static str),
+    /// `漢字《…》` without a `｜`: the kanji when the brackets hold a reading ([`is_reading`]),
+    /// else the match as it is.
+    KanjiReading,
+}
+
 /// The markup rules, each with whether it is a ruby rule (taken out only for a language with ruby).
-fn rules() -> &'static [(Regex, &'static str, bool)] {
-    static RULES: OnceLock<Vec<(Regex, &'static str, bool)>> = OnceLock::new();
+fn rules() -> &'static [(Regex, To, bool)] {
+    static RULES: OnceLock<Vec<(Regex, To, bool)>> = OnceLock::new();
     RULES.get_or_init(|| {
         [
             // Ruby readings in HTML, then any tag.
-            (r"(?is)<(rt|rp)>.*?</(rt|rp)>", "", false),
-            (r"</?[A-Za-z][A-Za-z0-9_-]*(?:[\s=][^<>]*)?/?>", "", false),
+            (r"(?is)<(rt|rp)>.*?</(rt|rp)>", To::Text(""), false),
+            (r"</?[A-Za-z][A-Za-z0-9_-]*(?:[\s=][^<>]*)?/?>", To::Text(""), false),
             // {漢字/かんじ} and {漢字:かんじ}.
-            (r"\{([^{}/:]+)[/:][^{}]*\}", "$1", true),
+            (r"\{([^{}/:]+)[/:][^{}]*\}", To::Text("$1"), true),
             // [漢字/かんじ] (CatSystem; `[オレ/・・]` puts emphasis dots over the word).
-            (r"\[([^\[\]/]+)/[^\[\]]*\]", "$1", true),
+            (r"\[([^\[\]/]+)/[^\[\]]*\]", To::Text("$1"), true),
             // Ren'Py's text tags: {w}, {p=1.0}, {i}…{/i}, {color=#fff}.
-            (r"\{/?[a-z]+(?:=[^{}]*)?\}", "", false),
+            (r"\{/?[a-z]+(?:=[^{}]*)?\}", To::Text(""), false),
             // Tyrano's line and page breaks, and its ruby tag (the base text follows it).
-            (r#"\[(?:r|l|p|cm|er|resetfont|ruby\s+text="?[^\]"]*"?)\]"#, "", false),
-            // ｜漢字《かんじ》 and 漢字《かんじ》.
-            (r"[|｜]([^|｜《》]+)《[^《》]*》", "$1", true),
-            (r"(\p{Han}+)《[^《》]*》", "$1", true),
+            (r#"\[(?:r|l|p|cm|er|resetfont|ruby\s+text="?[^\]"]*"?)\]"#, To::Text(""), false),
+            // ｜漢字《かんじ》: the `｜` says it is ruby, whatever the brackets hold.
+            (r"[|｜]([^|｜《》]+)《[^《》]*》", To::Text("$1"), true),
+            // 漢字《かんじ》: ruby only when the brackets hold a reading; `浮遊都市《ノーヴァス・アイテル》`
+            // is a name the game shows (#186).
+            (r"(\p{Han}+)《([^《》]*)》", To::KanjiReading, true),
             // A speaker as CatSystem2 sends one shown under another name (`ゆかり＠？？？「…」`):
             // the name shown.
-            (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", "$1", false),
+            (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", To::Text("$1"), false),
             // A line break written out (`\n`) in the script's text: Unity CatSystem.
-            (r"(?:\\n)+([^A-Za-z\\]|$)", "\n$1", false),
+            (r"(?:\\n)+([^A-Za-z\\]|$)", To::Text("\n$1"), false),
         ]
         .into_iter()
         .map(|(pattern, to, ruby)| (Regex::new(pattern).expect("markup rule"), to, ruby))
@@ -204,10 +217,30 @@ pub fn strip_markup(text: &str, ruby: bool) -> String {
     let mut line = text.to_string();
     for (rule, to, is_ruby) in rules() {
         if (ruby || !is_ruby) && rule.is_match(&line) {
-            line = rule.replace_all(&line, *to).into_owned();
+            line = match to {
+                To::Text(to) => rule.replace_all(&line, *to).into_owned(),
+                To::KanjiReading => rule
+                    .replace_all(&line, |caps: &regex::Captures| {
+                        if is_reading(&caps[2], caps[1].chars().count()) {
+                            caps[1].to_string()
+                        } else {
+                            caps[0].to_string()
+                        }
+                    })
+                    .into_owned(),
+            };
         }
     }
     line
+}
+
+/// Whether `text`, in `《》` right after `kanji` kanji with no `｜` before them, is their reading:
+/// hiragana only (with `ー` and the iteration marks), no more than five to a kanji
+/// (`承《うけたまわ》る`). Katakana (`本気《マジ》`, a gikun the game may as well show inline), a
+/// name with `・`, or a gloss longer than a reading is text the game shows, and is kept.
+fn is_reading(text: &str, kanji: usize) -> bool {
+    let count = text.chars().count();
+    count > 0 && count <= 5 * kanji && text.chars().all(|c| matches!(c, 'ぁ'..='ゖ' | 'ゝ' | 'ゞ' | 'ー'))
 }
 
 /// The line without the script codes some engines put in the text they draw: names of assets,
@@ -340,6 +373,22 @@ mod tests {
         assert_eq!(strip_markup("待って{w}ください{p=1.0}", true), "待ってください");
         assert_eq!(strip_markup("[ruby text=\"かんじ\"]漢字[r]次", true), "漢字次");
         assert_eq!(strip_markup("｜東京《とうきょう》へ行く。漢字《かんじ》", true), "東京へ行く。漢字");
+        // 《…》 after kanji is a reading only when it reads like one (#186): a name or a gloss in
+        // 《》 is text the game shows.
+        assert_eq!(strip_markup("浮遊都市《ノーヴァス・アイテル》。", true), "浮遊都市《ノーヴァス・アイテル》。");
+        assert_eq!(strip_markup("本気《マジ》で言ってる", true), "本気《マジ》で言ってる");
+        assert_eq!(strip_markup("魔法《まほう》と剣《けん》", true), "魔法と剣");
+        assert_eq!(strip_markup("承《うけたまわ》る", true), "承る");
+        assert_eq!(
+            strip_markup("彼《かれ》はそう言った、と書いてあるのだがな", true),
+            "彼はそう言った、と書いてあるのだがな"
+        );
+        assert_eq!(
+            strip_markup("剣《これはとても長い説明のための文です》", true),
+            "剣《これはとても長い説明のための文です》"
+        );
+        assert_eq!(strip_markup("｜浮遊都市《ノーヴァス・アイテル》", true), "浮遊都市");
+        assert_eq!(strip_markup("浮遊都市《ノーヴァス・アイテル》", false), "浮遊都市《ノーヴァス・アイテル》");
         // Japanese brackets are text, not markup.
         assert_eq!(strip_markup("〈彼〉は【アキ】「……」", true), "〈彼〉は【アキ】「……」");
         assert_eq!(strip_markup("a < b > c", true), "a < b > c");

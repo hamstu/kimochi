@@ -11,7 +11,7 @@
  * this one included) lands back on the same step. The bar holds Back on the left with the step
  * dots, and the step's own actions on the right (`StepActions`).
  */
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { ChevronLeft, ExternalLink } from 'lucide-react'
 import { Button, Callout, StatusDot } from '@kit'
@@ -193,8 +193,7 @@ function useFlow(pathname: string): {
     '/dictionary-settings': '/dictionaries',
     // A skipped engine has no setup step to go back to.
     [STEAM_ROUTE]: dictionaryReady === false ? '/engine' : '/dictionaries',
-    '/done': steam ? STEAM_ROUTE : dictionaryReady === false ? '/engine' : '/dictionaries',
-    '/main': '/done'
+    '/done': steam ? STEAM_ROUTE : dictionaryReady === false ? '/engine' : '/dictionaries'
   }
   return { steps, captureRoute, accessibilityRoute, borderRoute, gnomeRoute, back: BACK[pathname] ?? null }
 }
@@ -444,21 +443,45 @@ function CompleteOnboarding(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    completeOnboarding().catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)))
+    let active = true
+    void completeOnboarding().catch((caught: unknown) => {
+      if (active) setError(caught instanceof Error ? caught.message : String(caught))
+    })
+    return () => {
+      active = false
+    }
   }, [attempt])
-  if (!error) return <></>
   return (
-    <Step title="Setup could not be saved" lede={error}>
+    <Step title={error ? 'Couldn’t finish setup' : 'Opening Kimochi…'}>
+      {error ? (
+        <Callout tone="danger">{error}</Callout>
+      ) : (
+        <p className={style.status} role="status">
+          Saving your setup and opening the main window…
+        </p>
+      )}
       <StepActions>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setError(null)
-            setAttempt((n) => n + 1)
-          }}
-        >
-          Try again
-        </Button>
+        {error && (
+          <Button key="back" variant="ghost" asChild>
+            <Link to="/done">Back to setup</Link>
+          </Button>
+        )}
+        {(error || attempt > 0) && (
+          <Button
+            key="retry"
+            variant="primary"
+            // Retain keyboard focus while retrying; activation is ignored until it fails.
+            aria-disabled={!error}
+            aria-busy={!error}
+            onClick={() => {
+              if (!error) return
+              setError(null)
+              setAttempt((n) => n + 1)
+            }}
+          >
+            {error ? 'Try again' : 'Trying again…'}
+          </Button>
+        )}
       </StepActions>
     </Step>
   )
@@ -486,7 +509,19 @@ export default function WelcomeApp(): JSX.Element {
   const afterAccessibility = borderRoute ?? afterBorder
   const afterCapture = accessibilityRoute ?? afterAccessibility
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
+
+  // Routes replace the step, but keep the scrolling surface and footer. Start each step at
+  // its heading so keyboard and screen-reader users do not remain on a removed action (or Back).
+  // Only navigation does this: download progress and other updates must not steal focus.
+  useLayoutEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    const page = pageRef.current
+    const heading = page?.querySelector<HTMLElement>('[data-welcome-heading]')
+    ;(heading ?? page)?.focus({ preventScroll: true })
+  }, [pathname])
 
   // Closing the guide only hides its window, so reopening it (Settings → General) would otherwise
   // land on whatever step it was closed at. A hidden → visible transition starts over from the
@@ -515,8 +550,8 @@ export default function WelcomeApp(): JSX.Element {
   return (
     <StepActionsSlot.Provider value={slot}>
       <div className={style.window}>
-        <div className={style.content} data-step={STEP_OF[pathname] ?? 'other'}>
-          <div key={pathname} className={style.page}>
+        <div ref={contentRef} className={style.content} data-step={STEP_OF[pathname] ?? 'other'}>
+          <div key={pathname} ref={pageRef} className={style.page} tabIndex={-1} aria-label="Setup step">
             <Routes>
               <Route index element={<IntroStep next="/language" />} />
               <Route

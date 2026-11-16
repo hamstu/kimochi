@@ -10,6 +10,7 @@ import * as stats from './core/stats'
 import * as presets from './core/presets'
 import * as replacements from './core/replacements'
 import { ingestText, preparedText } from './core/ingest'
+import { flushHistory, setHistorySource } from './core/history'
 import { loadSettings, getSettings } from './lib/settings'
 import { loadLanguage } from './core/language'
 import { acceptSnapshot, type ReaderSnapshot } from './bridge'
@@ -110,10 +111,20 @@ async function flush(): Promise<void> {
   await store.flushLines()
   await notebook.flushNotebook()
   await stats.flushStats()
+  await flushHistory()
+}
+/** What the reading history records as the next lines' source: the window and the hooked game. */
+function followHistorySource(): void {
+  setHistorySource({
+    window: currentSource?.name,
+    app: currentSource?.appName,
+    exe: hookedExe ?? undefined
+  })
 }
 async function selectSource(source: SourceName | null, force = false): Promise<void> {
   if (!force && sourceKey(source) === sourceKey(currentSource)) return
   currentSource = source
+  followHistorySource()
   // A hooked game keeps its own session, whatever its window is called now.
   if (getSettings().inputSource === 'hook' && linkedGame) return
   if (
@@ -418,9 +429,11 @@ export function startHost(): Promise<void> {
         if (phase !== 'hooked' || !exe) {
           linkedGame = null
           hookedExe = null
+          followHistorySource()
           return
         }
         hookedExe = exe
+        followHistorySource()
         if (linkedGame === gameKey(exe)) return
         void enqueue(async () => {
           if (await linkHookedGame(exe)) broadcast()

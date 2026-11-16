@@ -902,7 +902,11 @@ export class TextOverlayRenderer {
     return [...this.container.children]
       .filter((element) => {
         if (this.leaving.has(element)) return false
-        return shownForHits(getComputedStyle(element), element.getAnimations?.() ?? [])
+        const style = getComputedStyle(element)
+        // Only a zero-opacity entrance needs the animation exception (unmapped Wayland
+        // surfaces). Asking every visible word for animations forces browser animation/style
+        // work on each hit-region poll, even after all entrance animations have finished.
+        return shownForHits(style, style.opacity === '0' ? (element.getAnimations?.() ?? []) : [])
       })
       .map((element) => element.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0)

@@ -1377,6 +1377,10 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
+.k-settings-tabbed-scroll:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
 .k-settings-tabs {
   display: flex;
   flex: none;

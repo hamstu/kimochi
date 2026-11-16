@@ -30,10 +30,13 @@ export const ENGINES = {
     hubObserves: (message) => message?.target === 'hachidori-setup-events',
     contentScripts: hachidoriManifest.content_scripts[0].js,
     contentCss: hachidoriManifest.content_scripts[0].css ?? [],
-    // content.js `HOST_TAG`: a zero-sized fixed anchor whose open shadow root holds one
+    // content.js `HOST_TAG`: a zero-sized fixed anchor whose shadow root (kept open) holds one
     // `.gsm-hoshidicts-popup` per popup level, hidden with the `hidden` attribute.
     popupSelector: 'hachidori-host',
     popupParts: '.gsm-hoshidicts-popup:not([hidden])',
+    // Since 0.5 its root is attached closed (against Dark Reader); the host keeps it open, since
+    // everything above reads it through `host.shadowRoot` (content.js `installOpenPopupRoot`).
+    openPopupRoot: true,
     // The pointer events its scanner listens for, in the order to dispatch them: content.js
     // `document.addEventListener("mousemove", onMouseMove, …)` (≈ line 4288) and nothing else, so a
     // synthetic pointer feed (the overlay's native pointer, lookupRange's fallback) must send

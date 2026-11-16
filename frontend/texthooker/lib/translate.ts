@@ -9,7 +9,7 @@ import { loadAccount } from '../../bridge/account'
 import { nativeError } from '../../bridge/tauri'
 import { currentLanguage } from '../core/language'
 import { getSettings } from './settings'
-import { setLineTranslation, setLineTranslationVisible } from './store'
+import { setLineTranslation, setLineTranslationVisible, snapshotLines } from './store'
 import { translationErrorMessage } from './translateLanguage'
 import type { Line } from './types'
 
@@ -19,8 +19,8 @@ import type { Line } from './types'
 
 export type TranslateStatus = { state: 'loading' } | { state: 'error'; message: string }
 
-const statuses = new Map<number, TranslateStatus>()
-const errorTimers = new Map<number, ReturnType<typeof setTimeout>>()
+const statuses = new Map<string, TranslateStatus>()
+const errorTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const subs = new Set<() => void>()
 
 const ERROR_AUTOCLEAR_MS = 5000
@@ -35,7 +35,11 @@ function notify() {
   }
 }
 
-function setStatus(id: number, status: TranslateStatus | null) {
+function statusKey(sessionId: string, lineId: number): string {
+  return JSON.stringify([sessionId, lineId])
+}
+
+function setStatus(id: string, status: TranslateStatus | null) {
   const timer = errorTimers.get(id)
   if (timer) {
     clearTimeout(timer)
@@ -64,7 +68,7 @@ function setStatus(id: number, status: TranslateStatus | null) {
 /** For useSyncExternalStore. The returned object is referentially stable
     until the status actually changes. */
 export function getTranslateStatus(id: number): TranslateStatus | null {
-  return statuses.get(id) ?? null
+  return statuses.get(statusKey(getActiveSession().id, id)) ?? null
 }
 
 export function subscribeTranslateStatus(fn: () => void): () => void {
@@ -78,16 +82,31 @@ export function subscribeTranslateStatus(fn: () => void): () => void {
     request — afterwards the cached copy on the Line is reused. Never rejects:
     failures surface as a transient inline error status on the line. */
 export async function showTranslation(line: Line): Promise<void> {
+  const sessionId = getActiveSession().id
+  const key = statusKey(sessionId, line.id)
+  const { id, uid, text, ts } = line
+  // Line numbers are local to each session. Keep the request tied to both its
+  // originating session and the exact line text, including across account lookup.
+  const stillCurrent = () =>
+    getActiveSession().id === sessionId &&
+    snapshotLines().some(
+      (current) => current.id === id && current.uid === uid && current.ts === ts && current.text === text
+    )
+  if (!stillCurrent()) return
   if (line.translation) {
     setLineTranslationVisible(line.id, true)
     return
   }
-  if (statuses.get(line.id)?.state === 'loading') return // already in flight
-  setStatus(line.id, { state: 'loading' })
+  if (statuses.get(key)?.state === 'loading') return // already in flight
+  setStatus(key, { state: 'loading' })
   try {
     const settings = getSettings()
     const apiKey = settings.deeplApiKey.trim()
     const { cloud } = await loadAccount()
+    if (!stillCurrent()) {
+      setStatus(key, null)
+      return
+    }
     const route = translationRoute(settings.translationProvider, apiKey, cloud)
     if (!route)
       throw new Error(
@@ -95,21 +114,24 @@ export async function showTranslation(line: Line): Promise<void> {
           ? 'Translating with Kimochi cloud needs Kimochi Cloud (Settings → Account)'
           : 'Set a DeepL API key in Settings → Translation & AI'
       )
-    const sessionId = getActiveSession().id
     const translated =
       route === 'kimochi'
-        ? await invoke<string>('cloud_translate', { text: line.text }).catch((error: unknown) => {
+        ? await invoke<string>('cloud_translate', { text }).catch((error: unknown) => {
             throw new Error(nativeError(error).message)
           })
-        : await invoke<string>('deepl_translate', { text: line.text, apiKey }).catch((error: unknown) => {
+        : await invoke<string>('deepl_translate', { text, apiKey }).catch((error: unknown) => {
             throw new Error(nativeError(error).message)
           })
-    setStatus(line.id, null)
-    if (getActiveSession().id === sessionId) await setLineTranslation(line.id, translated, true)
+    setStatus(key, null)
+    if (stillCurrent()) await setLineTranslation(id, translated, true, { sessionId, uid, text, ts })
   } catch (err) {
+    if (!stillCurrent()) {
+      setStatus(key, null)
+      return
+    }
     console.warn('translate failed', err)
     const message = translationErrorMessage(err instanceof Error ? err.message : String(err), currentLanguage())
-    setStatus(line.id, { state: 'error', message })
+    setStatus(key, { state: 'error', message })
   }
 }
 

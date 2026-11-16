@@ -1948,7 +1948,7 @@ mod tests {
             ids.sort();
             ids
         });
-        assert_eq!(engines["yomitan"].pin.version, "26.10.22.0");
+        assert_eq!(engines["yomitan"].pin.version, "26.11.2.0");
         assert_eq!(engines["yomitan"].files.len(), 422);
         assert!(engines["yomitan"].files.contains_key("js/comm/api.js"));
         for engine in engines.values() {

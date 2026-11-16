@@ -3,14 +3,14 @@
   "name": "Yomitan",
   "upstream": "https://github.com/yomidevs/yomitan",
   "license": "GPL-3.0-or-later",
-  "version": "26.10.22.0",
-  "tag": "26.10.22.0",
-  "commit": "d3c54c10264673eca0d66b970ef74cd5c8b048e3",
-  "released": "2026-10-22",
+  "version": "26.11.2.0",
+  "tag": "26.11.2.0",
+  "commit": "ac1d839f9fe4d7f852381b693bba2b159b5c943a",
+  "released": "2026-11-03",
   "asset": {
-    "url": "https://github.com/yomidevs/yomitan/releases/download/26.10.22.0/yomitan-chrome.zip",
-    "sha256": "83bbb0761c3bb55a64f1ab12afbbd338a3741c59daaeda2b3d7e7024fc4f4c65",
-    "size": 15392420
+    "url": "https://github.com/yomidevs/yomitan/releases/download/26.11.2.0/yomitan-chrome.zip",
+    "sha256": "6f7e9c4df5df63a6cf093039a82cc3a4338cda011e6b2c32b5f28148c266ce51",
+    "size": 15392611
   },
   "unpack": {}
 }

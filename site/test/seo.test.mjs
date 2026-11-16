@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { NOT_FOUND, ROUTES, canonicalUrl, headTags, jsonLd, outputFile, routeMeta, sitemapXml } from '../src/lib/seo.js'
 import { FAQ, HOME_FAQ_COUNT } from '../src/content/faq.js'
+import { LINUX_HOOKER_FAQ } from '../src/content/linuxHooker.js'
 
 test('every route has a unique title and description', () => {
   const all = [...ROUTES, NOT_FOUND]
@@ -67,6 +68,18 @@ test('JSON-LD: app on home, FAQPage from every question on /faq, nothing on shel
   assert.equal(app.applicationCategory, 'EducationalApplication')
   assert.equal(app.offers[0].price, '0')
   assert.equal(jsonLd(routeMeta('/account')), null)
+})
+
+test('JSON-LD: the Linux text hooking page carries its own FAQPage', () => {
+  const faq = jsonLd(routeMeta('/linux-steam-deck-text-hooker'))['@graph'].find((n) => n['@type'] === 'FAQPage')
+  assert.equal(faq.url, 'https://kimochiapp.com/linux-steam-deck-text-hooker')
+  assert.equal(faq['@id'], 'https://kimochiapp.com/linux-steam-deck-text-hooker#faq')
+  assert.deepEqual(
+    faq.mainEntity.map((q) => q.name),
+    LINUX_HOOKER_FAQ.map((q) => q.q)
+  )
+  const main = jsonLd(routeMeta('/faq'))['@graph'].find((n) => n['@type'] === 'FAQPage')
+  assert.equal(main.url, 'https://kimochiapp.com/faq')
 })
 
 test('JSON-LD in a script element cannot close it', () => {

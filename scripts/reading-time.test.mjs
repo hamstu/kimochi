@@ -35,7 +35,7 @@ const built = await build({
             export const inProfile = (p) => p;
             export const exists = async () => false, mkdir = async () => {}, readTextFile = async () => '';
             export const writeTextFile = async () => {};
-            export const getSettings = () => ({ afkThresholdSec: env.afkSec });
+            export const getSettings = () => ({ afkThresholdSec: env.afkSec, skipFastLines: env.skipFast });
             export const onSettingsChange = () => () => {};`
         }))
       }
@@ -44,8 +44,8 @@ const built = await build({
 })
 const source = built.outputFiles[0].text
 
-async function freshStats() {
-  globalThis[ENV_KEY] = { afkSec: AFK_SEC }
+async function freshStats(skipFast = true) {
+  globalThis[ENV_KEY] = { afkSec: AFK_SEC, skipFast }
   return import(`data:text/javascript;base64,${Buffer.from(`${source}\n//${crypto.randomUUID()}`).toString('base64')}`)
 }
 
@@ -141,9 +141,61 @@ async function clientStats(snapshot, age) {
 test('a window ticking a copy of the footer stops where the Log would', async () => {
   const stats = await freshStats()
   readFor(stats, 2 * MIN)
-  assert.equal(stats.snapshotStats().runningLeftMs, AFK_SEC * SEC)
+  // A 10-character line before the pace is known may count 3 s a character.
+  assert.equal(stats.snapshotStats().runningLeftMs, 30 * SEC)
   const later = await clientStats({ stats: stats.snapshotStats(), running: stats.isRunning() }, 60 * MIN)
-  assert.equal(later.elapsedMs, 2 * MIN + AFK_SEC * SEC)
+  assert.equal(later.elapsedMs, 2 * MIN + 30 * SEC)
   const soon = await clientStats({ stats: stats.snapshotStats(), running: stats.isRunning() }, 10 * SEC)
   assert.equal(soon.elapsedMs, 2 * MIN + 10 * SEC)
+})
+
+test('a short line after a long break counts seconds, not the whole idle limit', async () => {
+  const stats = await freshStats()
+  stats.recordLine(2)
+  mock.timers.tick(10 * MIN)
+  assert.equal(stats.isRunning(), false)
+  assert.equal(stats.snapshotStats().elapsedMs, 6 * SEC, '2 characters at 3 s each')
+})
+
+test('once the pace is known, a line may count 2.5 times what a line its length takes', async () => {
+  const stats = await freshStats()
+  // Ten characters every 10 s: one character a second.
+  for (let i = 0; i < 6; i++) {
+    stats.recordLine(10)
+    mock.timers.tick(10 * SEC)
+  }
+  stats.recordLine(10)
+  assert.equal(stats.snapshotStats().runningLeftMs, 25 * SEC)
+})
+
+test('three fast long lines in a row were skipped: no characters, lines or time', async () => {
+  const stats = await freshStats()
+  stats.recordLine(20)
+  mock.timers.tick(300)
+  stats.recordLine(20)
+  assert.equal(stats.snapshotStats().stats.totalLines, 2, 'two quick lines are still reading')
+  mock.timers.tick(300)
+  stats.recordLine(20)
+  mock.timers.tick(300)
+  stats.recordLine(20)
+  let { stats: totals, elapsedMs } = stats.snapshotStats()
+  assert.equal(totals.totalLines, 0)
+  assert.equal(totals.totalChars, 0)
+  assert.equal(stats.isRunning(), false)
+  mock.timers.tick(10 * SEC)
+  stats.recordLine(20)
+  ;({ stats: totals } = stats.snapshotStats())
+  assert.equal(totals.totalLines, 1, 'reading again counts again')
+  assert.equal(totals.totalChars, 20)
+  assert.ok(elapsedMs < SEC, 'the skipped lines kept next to no time')
+})
+
+test('with Ignore skipped lines off, fast lines count like any other', async () => {
+  const stats = await freshStats(false)
+  for (let i = 0; i < 4; i++) {
+    stats.recordLine(20)
+    mock.timers.tick(300)
+  }
+  assert.equal(stats.snapshotStats().stats.totalLines, 4)
+  assert.equal(stats.snapshotStats().stats.totalChars, 80)
 })

@@ -6,7 +6,9 @@
 //! `lines` (`<sid>/<uid>`, one per line, keyed by a uid that is unique across computers),
 //! `notebook` (`<sid>/<entryId>`, images as content-addressed blobs), `anki` (`<sid>/<noteId>`,
 //! the cards made in the session, `anki_cards`), `presets` (by name),
-//! `stats` (one per computer, never merged), `conflicts` (the losing side of a concurrent edit).
+//! `stats` (one per computer, never merged), `history` (the reading history in chunks,
+//! `reading_history`: each written only by the computer that read the lines, never merged),
+//! `conflicts` (the losing side of a concurrent edit).
 //!
 //! **State** (`<profile>/sync/state.json`): the server cursor, and for every record the server
 //! `rev` and content hash this computer last agreed with (the *shadow*). A record whose local hash
@@ -553,6 +555,9 @@ pub fn scan(dir: &Path, prefs: &Value, device_id: &str, device_name: &str, cache
         data.insert("deviceName".into(), json!(device_name));
         local.records.insert(key("stats", device_id), Value::Object(data));
     }
+    for (id, chunk) in crate::reading_history::sync_records(dir, device_id) {
+        local.records.insert(key("history", &id), chunk);
+    }
     if let Some(conflicts) = load_conflicts(dir) {
         local.conflicts_ok = true;
         for (id, data) in conflicts {
@@ -614,6 +619,8 @@ pub struct Writes {
     pub anki: BTreeMap<String, BTreeMap<String, Option<Value>>>,
     pub presets: BTreeMap<String, Option<Value>>,
     pub conflicts: BTreeMap<String, Option<Value>>,
+    /// Other computers' reading-history chunks.
+    pub history: BTreeMap<String, Option<Value>>,
 }
 
 impl Writes {
@@ -625,6 +632,7 @@ impl Writes {
             && self.anki.is_empty()
             && self.presets.is_empty()
             && self.conflicts.is_empty()
+            && self.history.is_empty()
     }
 
     fn needs_host(&self) -> bool {
@@ -674,6 +682,9 @@ impl Writes {
             }
             "conflicts" => {
                 self.conflicts.insert(id, data);
+            }
+            "history" => {
+                self.history.insert(id, data);
             }
             _ => {}
         }
@@ -998,6 +1009,9 @@ pub fn apply_writes(
         changed.presets = true;
     }
 
+    for (id, data) in &writes.history {
+        crate::reading_history::write_synced(dir, id, data.as_ref())?;
+    }
     if !writes.conflicts.is_empty() {
         let mut conflicts = load_conflicts(dir).unwrap_or_default();
         for (id, data) in &writes.conflicts {
@@ -1058,6 +1072,7 @@ fn describe(k: &str) -> String {
         "anki" => format!("Anki card {id}"),
         "presets" => format!("preset \"{id}\""),
         "stats" => format!("reading stats of {id}"),
+        "history" => format!("reading history {id}"),
         "conflicts" => format!("conflict copy {id}"),
         _ => format!("{collection} {id}"),
     }
@@ -1122,7 +1137,7 @@ fn conflict_copy(
     winner_stamp: &str,
 ) {
     let (collection, id) = split_key(k);
-    if collection == "conflicts" || collection == "stats" {
+    if collection == "conflicts" || collection == "stats" || collection == "history" {
         return;
     }
     let conflict_id = format!("{collection}/{id}@{loser_stamp}");
@@ -1163,12 +1178,15 @@ fn merge_remote(ctx: &mut Ctx, local: &mut Local, remote: &[RemoteRecord], repor
                 || profile::is_machine_key(&path[0])
                 || profile::PROFILE_LOCAL_KEYS.contains(&path[0].as_str())
         };
-        if foreign_pref || !HOST_COLLECTIONS.iter().chain(&["prefs", "stats", "conflicts"]).any(|c| *c == collection) {
+        if foreign_pref
+            || !HOST_COLLECTIONS.iter().chain(&["prefs", "stats", "history", "conflicts"]).any(|c| *c == collection)
+        {
             // A setting this computer keeps to itself, or a collection this version does not know.
             ctx.state.shadow.insert(k.to_string(), (r.rev, if r.deleted { TOMB.into() } else { hash(&r.data) }));
             continue;
         }
-        if collection == "stats" && r.id == ctx.device_id {
+        let own_history = collection == "history" && r.id.split('/').next() == Some(ctx.device_id);
+        if (collection == "stats" && r.id == ctx.device_id) || own_history {
             ctx.state.shadow.insert(k.to_string(), (r.rev, if r.deleted { TOMB.into() } else { hash(&r.data) }));
             continue;
         }
@@ -1188,6 +1206,17 @@ fn merge_remote(ctx: &mut Ctx, local: &mut Local, remote: &[RemoteRecord], repor
         if collection == "stats" {
             // Another computer's reading totals: kept on the server, not merged into ours.
             ctx.state.shadow.insert(k.to_string(), (r.rev, remote_hash));
+            continue;
+        }
+        if collection == "history" {
+            // Another computer's lines read: only it writes them, so its version is the version.
+            let nothing_to_drop = r.deleted && here == Side::Absent;
+            if here_hash.as_deref() != Some(remote_hash.as_str()) && !nothing_to_drop {
+                writes.put(local, k, if r.deleted { None } else { Some(r.data.clone()) });
+                report.applied += 1;
+            }
+            ctx.state.shadow.insert(k.to_string(), (r.rev, remote_hash));
+            ctx.state.pending.remove(k);
             continue;
         }
         if !changed_here || here_hash.as_deref() == Some(remote_hash.as_str()) {
@@ -1386,6 +1415,9 @@ pub fn outgoing(ctx: &mut Ctx, local: &Local) -> Vec<PushRecord> {
         let (collection, id) = split_key(&k);
         let (collection, id) = (collection.to_string(), id.to_string());
         if collection == "stats" && id != ctx.device_id {
+            continue;
+        }
+        if collection == "history" && id.split('/').next() != Some(ctx.device_id) {
             continue;
         }
         let record = match side(local, &k) {
@@ -1741,6 +1773,47 @@ pub mod tests {
 
     fn line(id: u64, uid: &str, text: &str, ts: u64) -> Value {
         json!({ "id": id, "uid": uid, "text": text, "source": "ocr", "ts": ts })
+    }
+
+    #[test]
+    fn the_reading_history_travels_and_each_computer_writes_only_its_own() {
+        use crate::reading_history::{append, lines, Event};
+        let read = |uid: &str, at: u64, text: &str| Event {
+            op: "add".into(),
+            uid: uid.into(),
+            at,
+            ts: Some(at),
+            text: Some(text.into()),
+            session: Some("s1".into()),
+            ..Default::default()
+        };
+        let texts = |device: &Device| lines(&device.dir).into_iter().map(|l| l.text).collect::<Vec<_>>();
+        let server = MemServer::default();
+        let mut a = Device::new("A", "history");
+        let mut b = Device::new("B", "history");
+        append(&a.dir, vec![read("u1", 1_000, "一"), read("u2", 2_000, "二")]).unwrap();
+        a.sync(&server);
+        b.sync(&server);
+        assert_eq!(texts(&b), ["一", "二"]);
+        // B deletes a line A read, and reads one of its own.
+        let delete = Event { op: "delete".into(), uid: "u1".into(), at: 3_000, ..Default::default() };
+        append(&b.dir, vec![delete, read("u3", 4_000, "三")]).unwrap();
+        b.sync(&server);
+        a.sync(&server);
+        assert_eq!(texts(&a), ["二", "三"]);
+        assert_eq!(texts(&b), ["二", "三"]);
+        for ((collection, id), record) in server.records.borrow().iter() {
+            if collection == "history" {
+                assert_eq!(id.split('/').next(), Some(record.device_id.as_str()), "{id} written by its own computer");
+            }
+        }
+        // Nothing new: nothing pushed. A new line: only its hour's last chunk.
+        assert_eq!(a.sync(&server).pushed, 0);
+        append(&a.dir, vec![read("u4", 5_000, "四")]).unwrap();
+        assert_eq!(a.sync(&server).pushed, 1);
+        b.sync(&server);
+        assert_eq!(texts(&b), ["二", "三", "四"]);
+        assert!(b.dir.join("reading-history/devices/A").is_dir(), "kept apart from B's own files");
     }
 
     #[test]
