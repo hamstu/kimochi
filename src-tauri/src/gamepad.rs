@@ -847,8 +847,20 @@ fn pending_return() -> std::sync::MutexGuard<'static, Option<(u32, Instant)>> {
 }
 
 fn reactivate(app: &tauri::AppHandle, pid: u32) {
-    let _ = app.run_on_main_thread(move || {
-        let _ = crate::platform::activate_process(pid);
+    let app = app.clone();
+    // A paused game is resumed before it is activated, never after: activating a stopped app
+    // waits on it (macOS Accessibility, Windows' foreground hand-off).
+    std::thread::spawn(move || {
+        if !crate::game_pause::app::resume_before_activating("handing focus back to the game") {
+            log(
+                &app,
+                json!({ "check": "controller-nav", "handBack": "skipped: the game is still paused", "pid": pid }),
+            );
+            return;
+        }
+        let _ = app.run_on_main_thread(move || {
+            let _ = crate::platform::activate_process(pid);
+        });
     });
 }
 
@@ -868,6 +880,16 @@ fn hand_back_when_released(app: &tauri::AppHandle) {
     }
     *pending = None;
     reactivate(app, pid);
+}
+
+/// Whether any controller button was down at the last poll (game pause waits for it to come up).
+pub fn any_button_held() -> bool {
+    BUTTONS_HELD.load(Ordering::SeqCst)
+}
+
+/// The application controller navigation will hand focus back to (the game, while the menu has it).
+pub fn returning_to() -> Option<u32> {
+    *NAV_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub fn navigating() -> bool {
@@ -933,12 +955,18 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 if let Some(overlay) = overlay {
                     let _ = crate::platform::promote_to_key(&overlay);
                 }
+                // Only now, with the overlay in front: activation must never wait on a game that is
+                // already suspended (Windows' foreground hand-off talks to its input thread).
+                crate::game_pause::send(crate::game_pause::Input::Hold(crate::game_pause::Reason::Navigation));
                 #[cfg(target_os = "macos")]
                 {
                     let service = handle.state::<Shared>().inner().clone();
                     crate::record(&handle, &service, json!({ "check": "controller-nav-focus", "activation": crate::platform::last_self_activation() }));
                 }
             });
+        }
+        if !take_focus {
+            crate::game_pause::send(crate::game_pause::Input::Hold(crate::game_pause::Reason::Navigation));
         }
         let previous = *remembered;
         // Never with NAV_RETURN held: from a background thread, registering waits for the
@@ -954,6 +982,7 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
     }
     let previous = remembered.take();
     drop(remembered);
+    crate::game_pause::send(crate::game_pause::Input::Release(crate::game_pause::Reason::Navigation));
     if was {
         let _ = crate::hotkeys::set_nav_keys(app, false);
     }

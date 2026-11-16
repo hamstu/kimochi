@@ -40,9 +40,14 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
         .checked(crate::compact::active())
         .build(app)
         .map_err(e)?;
-    let menu = MenuBuilder::new(app)
+    let mut menu = MenuBuilder::new(app)
         .item(&MenuItemBuilder::with_id("tray-show", "Open Kimochi").build(app).map_err(e)?)
-        .item(&mini)
+        .item(&mini);
+    // The escape hatch of "Pause the game while reading": reachable even with every window gone.
+    if crate::game_pause::capability().supported {
+        menu = menu.item(&MenuItemBuilder::with_id("tray-resume-game", "Resume Paused Game").build(app).map_err(e)?);
+    }
+    let menu = menu
         .separator()
         .item(&MenuItemBuilder::with_id("tray-settings", "Settings…").build(app).map_err(e)?)
         .item(&MenuItemBuilder::with_id("tray-about", "About Kimochi").build(app).map_err(e)?)
@@ -75,6 +80,11 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
 fn act(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
     if id == "tray-quit" {
         app.exit(0);
+        return Ok(());
+    }
+    if id == "tray-resume-game" {
+        let app = app.clone();
+        std::thread::spawn(move || crate::game_pause::app::resume_all(&app));
         return Ok(());
     }
     let service = app.try_state::<Shared>().ok_or("native: not ready")?;

@@ -118,8 +118,13 @@ pub struct Matched {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
 }
+/// Maps a capture's Unix-ms times to the clock lines and `now` are given in (the app's game
+/// clock, which leaves out the time the game was paused). Without one, times are taken as they are.
+pub type Clock = std::sync::Arc<dyn Fn(f64) -> f64 + Send + Sync>;
 /// One session, reset when the selected game changes. Capture discovery is supplied by the app.
 pub struct Hooked {
+    /// See [`Clock`].
+    pub clock: Option<Clock>,
     feeds: BTreeMap<PathBuf, feed::Feed>,
     lines: Vec<Line>,
     used: BTreeSet<(PathBuf, u64)>,
@@ -145,6 +150,7 @@ pub struct Hooked {
 impl Default for Hooked {
     fn default() -> Self {
         Self {
+            clock: None,
             max_wait_ms: 15_000.0,
             speech: None,
             trusted: false,
@@ -381,6 +387,7 @@ impl Hooked {
     }
     pub fn tick(&mut self, now: f64) -> Vec<Matched> {
         for f in self.feeds.values_mut() {
+            f.clock = self.clock.clone();
             if let Err(e) = f.poll(now) {
                 self.report.error = Some(e);
             }

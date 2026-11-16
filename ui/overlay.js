@@ -663,6 +663,8 @@ const renderer = new TextOverlayRenderer(wordsContainer, {
   onLookupStart: () => {
     holdAutoScan()
     controller?.mouseUsed()
+    lookupStartedAt = performance.now()
+    beatGamePause()
   }
 })
 
@@ -947,6 +949,10 @@ setInterval(() => void checkThrottled(), 4000)
  */
 let controllerHold = false
 let readingHold = false
+/** Game pause (`beatGamePause`): when the last lookup started, and whether a hold was sent. */
+let lookupStartedAt = -Infinity
+const LOOKUP_GRACE_MS = 1200
+let gamePauseHeld = false
 let layerPointerExit = null
 let hyprlandPointer = false
 let layerPointerPolling = false
@@ -959,16 +965,21 @@ function syncScanHold() {
   if (controllerHold || readingHold) scanner.pause()
   else if (scanner.isPaused) scanner.resume()
 }
+/** Whether a dictionary pop-up for the overlay's text is up, in any of its hosts. */
+function readingPopupShown() {
+  return (
+    remoteReadingPopup ||
+    apiReadingPopup ||
+    Boolean(extensionPopupRect) ||
+    [...livePopups].some((popup) => popup.isVisibleSync?.())
+  )
+}
 function syncReadingHold(readWordRects = null) {
   if (layerPointerExit) {
     window.__linuxLayerPointerInside = !layerPointerExit.outside()
     if (layerPointerExit.outside()) renderer.clearPointer()
   }
-  const popup =
-    remoteReadingPopup ||
-    apiReadingPopup ||
-    Boolean(extensionPopupRect) ||
-    [...livePopups].some((popup) => popup.isVisibleSync?.())
+  const popup = readingPopupShown()
   const enabled = overlayTextOn() && !state.regionSelecting
   if (!enabled) reading.reset()
   const next = enabled && reading.update(renderer.mouse, readWordRects?.() ?? renderer.hitRects({ x: 0, y: 0 }), popup)
@@ -976,16 +987,44 @@ function syncReadingHold(readWordRects = null) {
   readingHold = next
   syncScanHold()
   log({ check: 'auto-scan-reading-hold', hold: next })
+  beatGamePause()
 }
 /** The Yomitan API's pop-up for a word opened or closed (`installApiLookup`). */
 function apiPopupVisible(visible) {
   apiReadingPopup = visible
   syncReadingHold()
 }
+/**
+ * "Pause the game while reading" (Settings → Overlay): what the overlay is busy with, beaten to
+ * native every 500 ms. The beat is the proof the overlay is alive: if this page stops, the holds
+ * lapse and the game runs again. A lookup holds from its start until its pop-up is gone (a lookup
+ * that finds nothing holds for a moment only).
+ */
+function gamePauseReasons() {
+  const reasons = []
+  if (readingPopupShown() || performance.now() - lookupStartedAt < LOOKUP_GRACE_MS) reasons.push('lookup')
+  if (controller && controller.mode !== 'idle') reasons.push('navigation')
+  if (state.regionSelecting) reasons.push('regionEditor')
+  return reasons
+}
+function beatGamePause() {
+  if (!setting('pauseGameWhileReading')) {
+    if (gamePauseHeld) void native.gamePauseBeat([])
+    gamePauseHeld = false
+    return
+  }
+  const reasons = gamePauseReasons()
+  if (reasons.length === 0 && !gamePauseHeld) return
+  gamePauseHeld = reasons.length > 0
+  void native.gamePauseBeat(reasons)
+}
+setInterval(beatGamePause, 500)
+
 function holdForController(hold) {
   if (hold === controllerHold) return
   controllerHold = hold
   syncScanHold()
+  beatGamePause()
   log({ check: 'auto-scan-controller-hold', hold, running: scanner.isRunning })
 }
 

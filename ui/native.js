@@ -248,6 +248,12 @@ export const regionKeys = (on) => optional('region_keys', { on })
  * game gets its focus back.
  */
 export const controllerNav = (active) => invoke('controller_nav', { active })
+/**
+ * "Pause the game while reading": the reasons the overlay holds the game paused right now
+ * (`lookup`, `navigation`, `regionEditor`). Sent every 500 ms while any is held and once with
+ * none when they end; native resumes the game when these beats stop (game_pause/manager.rs).
+ */
+export const gamePauseBeat = (reasons) => optional('game_pause_beat', { reasons })
 /** Every action's shortcut and gamepad binding, defaults merged with the user's. */
 export const hotkeysLoad = () => optional('hotkeys_load', undefined, null)
 export const setRegions = (rects) => invoke('regions', { rects })
