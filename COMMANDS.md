@@ -75,7 +75,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 account and synced), `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
-`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
+`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `controllerMenuItems` (absent: the default menu; the controller menu's item ids in order, clockwise from the top, from `RADIAL_ITEMS` in `ui/radial-items.js`; unknown ids are dropped and an empty list is the default menu), `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
 `meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll),
 `overlayHoverLookup` (false: resting the pointer on an overlay word looks it up with no key
 held; never on Wayland or in Gaming Mode; a machine key, never synced; see `pointer` below),
@@ -603,6 +603,13 @@ against an action that does not exist.
 part Electron performed: restoring the overlay for `triggerScan`, `setCropArea`,
 `setAnkiCropArea`, `playAudio` and `selectAndScan`, toggling it for `toggleOverlay`, and focusing it for
 `selectAndScan`.
+
+**Controller menu items** — `menuScan`, `menuReadAlong`, `menuAutoOcr`, `menuTextHooker`,
+`menuRecentText`, `menuKimochi`, `menuSettings` (`actions::MENU_ITEM_ACTIONS`). Bindable, and
+unbound by default (an empty `accelerator` registers nothing). Rust restores the overlay; the
+overlay runs that item of the radial menu without opening it (`controller.runItem`; on GNOME it
+sends `gnome-controller-open` `{item, request}` to the controller host, which answers
+`gnome-controller-item-taken` `{request}`).
 
 **View toggles** — `toggleAutoOcr`, `toggleTextOverlay`, `toggleDebugOverlay`. Pure
 pass-throughs: Rust does **not** flip these flags. The overlay owns the state and writes

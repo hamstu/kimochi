@@ -142,6 +142,10 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
             failed.push(json!({"name": name, "accelerator": null, "error": "no accelerator"}));
             continue;
         };
+        // No keys: a menu item with only a controller chord, or none yet. Nothing to register.
+        if accelerator.is_empty() && actions::is_menu_item(&name) {
+            continue;
+        }
         // Mouse buttons are caught by the platform's input hook, not registered as shortcuts.
         if let Some(button) = MouseButton::parse(accelerator) {
             if buttons.iter().any(|(_, bound)| *bound == button) {

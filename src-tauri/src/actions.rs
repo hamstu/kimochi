@@ -11,10 +11,18 @@ use tauri::{Emitter, Manager};
 /// frontend actually calls, so a button cannot ship against an action that does not
 /// exist.
 pub const ACTIONS: &[&str] = &[
-    // Commands. Only `triggerScan` and `openControllerMenu` are bindable now; the rest are
-    // still reached from the tray, the panels and the overlay's radial menu.
+    // Commands. Only `triggerScan`, `openControllerMenu` and the menu's items are bindable; the
+    // rest are still reached from the tray, the panels and the overlay's radial menu.
     "triggerScan",
     "openControllerMenu",
+    // The controller menu's items, each run directly by its own shortcut (`MENU_ITEM_ACTIONS`).
+    "menuScan",
+    "menuReadAlong",
+    "menuAutoOcr",
+    "menuTextHooker",
+    "menuRecentText",
+    "menuKimochi",
+    "menuSettings",
     "toggleOverlay",
     "setCropArea",
     "setAnkiCropArea",
@@ -36,14 +44,56 @@ pub const ACTIONS: &[&str] = &[
 
 /// The subset that can be bound to a shortcut or a gamepad button. The order also breaks
 /// ties between gamepad chords of the same size: the earlier action wins.
-pub const HOTKEY_ACTIONS: &[&str] = &["triggerScan", "openControllerMenu"];
+pub const HOTKEY_ACTIONS: &[&str] = &[
+    "triggerScan",
+    "openControllerMenu",
+    "menuScan",
+    "menuReadAlong",
+    "menuAutoOcr",
+    "menuTextHooker",
+    "menuRecentText",
+    "menuKimochi",
+    "menuSettings",
+];
+
+/// The controller menu's items, by action, with the name and description Settings shows: each
+/// runs that item without opening the menu (the overlay's `controller.runItem`). Unbound by
+/// default. Mirrored by `RADIAL_ITEMS` in ui/radial-items.js.
+pub const MENU_ITEM_ACTIONS: &[(&str, &str, &str)] = &[
+    ("menuScan", "Scan", "Scan the game, then read along with the new text"),
+    ("menuReadAlong", "Read along", "Step through the text word by word with the dictionary"),
+    ("menuAutoOcr", "Auto OCR", "Turn automatic scanning on or off"),
+    ("menuTextHooker", "Text Hooker", "The hooked text and the card's settings"),
+    ("menuRecentText", "Recent text", "Lines read earlier, to read along with again"),
+    ("menuKimochi", "Kimochi", "Open Kimochi's window"),
+    ("menuSettings", "Settings", "Open Kimochi's settings"),
+];
+
+/// Whether `name` is a controller menu item's own action.
+pub fn is_menu_item(name: &str) -> bool {
+    MENU_ITEM_ACTIONS.iter().any(|(action, _, _)| *action == name)
+}
 
 /// Commands that bring the overlay back if it is hidden, so a shortcut never appears
 /// to do nothing. Deliberately excludes the toggles and the hover affordances: forcing
 /// the overlay open because the pointer crossed the controller's Source button would be
 /// a worse bug than the one this behaviour fixes.
-const RESTORES_OVERLAY: &[&str] =
-    &["triggerScan", "openControllerMenu", "setCropArea", "setAnkiCropArea", "playAudio", "selectAndScan"];
+const RESTORES_OVERLAY: &[&str] = &[
+    "triggerScan",
+    "openControllerMenu",
+    "setCropArea",
+    "setAnkiCropArea",
+    "playAudio",
+    "selectAndScan",
+    // The menu's items act in the overlay, as the menu does.
+    "menuScan",
+    "menuReadAlong",
+    "menuAutoOcr",
+    "menuTextHooker",
+    "menuRecentText",
+    "menuKimochi",
+    "menuSettings",
+];
 
 pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
     #[cfg(target_os = "linux")]
@@ -119,6 +169,10 @@ mod tests {
         }
         // The controller menu lives in the overlay, so opening it must show the overlay.
         assert!(RESTORES_OVERLAY.contains(&"openControllerMenu"));
+        for (name, _, _) in MENU_ITEM_ACTIONS {
+            assert!(HOTKEY_ACTIONS.contains(name), "{name} must be bindable");
+            assert!(RESTORES_OVERLAY.contains(name), "{name} acts in the overlay");
+        }
     }
 
     #[test]

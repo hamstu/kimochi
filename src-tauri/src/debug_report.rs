@@ -59,6 +59,7 @@ const SETTINGS: &[&str] = &[
     "gamepadSettings",
     "hotkeys",
     "controllerButtons",
+    "controllerMenuItems",
     "serverSettings.mode",
     "interfaceScale",
     "appearance",

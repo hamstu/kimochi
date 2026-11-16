@@ -29,6 +29,7 @@
  */
 import { ControllerInput, buttonName } from './controller-input.js'
 import { RadialMenu, ICONS } from './radial-menu.js'
+import { effectiveRadialMenu, radialItemsFor } from './radial-items.js'
 import {
   WordCursor,
   characterUnits,
@@ -127,6 +128,7 @@ export function scrollSpeed(y) {
  *   `setAutoAlign`, `textSize(step)`, `setOpacity`, `setLook`, `steer(box)` → box, `release(commit)`
  * @param {() => ((action: string, params: object) => Promise<any>)|null} context.dictionary Yomitan's backend API, once ready
  * @param {() => object} context.buttons the command buttons from settings (`controllerButtons`)
+ * @param {() => unknown} [context.menuItems] the reader's menu (`controllerMenuItems`, ui/radial-items.js)
  * @param {() => string} context.popupType `yomitanSettings.popupType`: only `custom-api` (the Yomitan
  *   API pop-up) is told apart; `builtin` (Yomitan), `hachidori` and `tenten` all look up by range
  * @param {(range: Range) => Promise<boolean>} context.lookupRange open the dictionary engine's popup
@@ -312,14 +314,17 @@ export function createController(context) {
     }
   }
 
-  function menuItems() {
-    const status = context.status()
+  /**
+   * Every action the menu can show, as it stands now, keyed by id; the reader's menu
+   * (`controllerMenuItems`, ui/radial-items.js) picks which and in what order.
+   */
+  function menuCatalog(status) {
     // With the Text Hooker as the source the text comes from the game: nothing to scan, and no
     // Auto OCR to turn on or off. Read along reads the hooked line.
     const hooked = Boolean(status.hooked)
-    return [
-      ...(hooked ? [] : [{ id: 'scan', label: 'Scan', icon: ICONS.scan, enabled: true }]),
-      {
+    return {
+      scan: { id: 'scan', label: 'Scan', icon: ICONS.scan, enabled: !hooked, unavailable: 'Not with the Text Hooker' },
+      dictionary: {
         id: 'dictionary',
         label: 'Read along',
         icon: ICONS.dictionary,
@@ -327,53 +332,78 @@ export function createController(context) {
         lit: status.hasText,
         unavailable: hooked ? 'No line yet' : 'Scan first'
       },
-      ...(hooked
-        ? []
-        : [
-            {
-              id: 'auto',
-              label: 'Auto OCR',
-              icon: ICONS.auto,
-              enabled: status.autoAvailable,
-              detail: status.autoOcr ? 'On' : 'Off',
-              unavailable: 'Not in Quick Shot'
-            }
-          ])
-    ]
-      .concat(
-        hooked && context.card
-          ? [
-              {
-                id: 'card',
-                label: 'Text Hooker',
-                icon: ICONS.card,
-                enabled: true,
-                detail: context.card.state().shown ? undefined : 'Card hidden'
-              }
-            ]
-          : []
-      )
-      .concat([
-        {
-          id: 'history',
-          label: 'Recent text',
-          icon: ICONS.history,
-          enabled: typeof context.history === 'function',
-          unavailable: 'Open recent text in Kimochi'
-        },
-        {
-          id: 'controls',
-          label: 'Kimochi',
-          icon: ICONS.app,
-          enabled: true
-        },
-        {
-          id: 'ocr-settings',
-          label: hooked ? 'App settings' : 'OCR settings',
-          icon: ICONS.settings,
-          enabled: true
-        }
-      ])
+      auto: {
+        id: 'auto',
+        label: 'Auto OCR',
+        icon: ICONS.auto,
+        enabled: !hooked && status.autoAvailable,
+        detail: hooked ? undefined : status.autoOcr ? 'On' : 'Off',
+        unavailable: hooked ? 'Not with the Text Hooker' : 'Not in Quick Shot'
+      },
+      card: {
+        id: 'card',
+        label: 'Text Hooker',
+        icon: ICONS.card,
+        enabled: hooked && Boolean(context.card),
+        detail: hooked && context.card && !context.card.state().shown ? 'Card hidden' : undefined,
+        unavailable: 'Only with the Text Hooker'
+      },
+      history: {
+        id: 'history',
+        label: 'Recent text',
+        icon: ICONS.history,
+        enabled: typeof context.history === 'function',
+        unavailable: 'Open recent text in Kimochi'
+      },
+      controls: { id: 'controls', label: 'Kimochi', icon: ICONS.app, enabled: true },
+      'ocr-settings': {
+        id: 'ocr-settings',
+        label: hooked ? 'App settings' : 'OCR settings',
+        icon: ICONS.settings,
+        enabled: true
+      }
+    }
+  }
+
+  function menuItems() {
+    const status = context.status()
+    const catalog = menuCatalog(status)
+    // Without the card's panel here (GNOME's controller host) the Text Hooker item has nothing to open.
+    const configured = effectiveRadialMenu(context.menuItems?.()).filter((id) => id !== 'card' || context.card)
+    // Items that only apply to the other kind of source are left out; a menu of nothing but those
+    // shows them all, unavailable, rather than an empty ring.
+    return radialItemsFor(configured, Boolean(status.hooked)).map(({ id, inapplicable }) =>
+      inapplicable ? { ...catalog[id], enabled: false, lit: false } : catalog[id]
+    )
+  }
+
+  /**
+   * Run a menu item without the menu: its shortcut (`hotkeys.menu…`). Pressed again while its
+   * own mode is open, it closes it, as the menu button does; pressed while another mode is open,
+   * that one closes first. Read along with no text yet scans first, as Scan does.
+   */
+  async function runItem(id) {
+    if (mode !== 'idle') {
+      const own = { dictionary: ['words', 'dictionary'], history: ['history'], card: ['card', 'place'] }[id] ?? []
+      const was = mode
+      await close()
+      if (own.includes(was)) return
+    }
+    const status = context.status()
+    let item = menuCatalog(status)[id]
+    if (id === 'dictionary' && item && !item.enabled && !status.hooked) item = menuCatalog(status).scan
+    if (!item?.enabled) {
+      context.log({ check: 'controller-item-unavailable', id, reason: item?.unavailable ?? 'unknown' })
+      return
+    }
+    input = 'pad'
+    applyAppearance()
+    controls.setButtons(context.buttons())
+    // These open a mode of their own, which takes the controller from the game; the rest act and
+    // leave it alone (Scan takes it once its text is in).
+    if (item.id === 'dictionary' || item.id === 'history' || item.id === 'card') await setNav(true)
+    context.log({ check: 'controller-item-direct', id: item.id })
+    return choose(item.id)
   }
 
   async function openHistory() {
@@ -1811,6 +1841,8 @@ export function createController(context) {
     toggle(how = 'pad') {
       return mode === 'idle' ? openMenu(how) : close()
     },
+    /** Run a menu item directly, without the menu: its own shortcut (see `runItem`). */
+    runItem,
     /** Open recent text directly, sharing the radial menu's navigation ownership. */
     async recentText() {
       if (typeof context.history !== 'function') return

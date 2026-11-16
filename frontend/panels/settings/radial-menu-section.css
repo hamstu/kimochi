@@ -1,0 +1,67 @@
+/*
+ * Settings → Shortcuts & Controls → Radial menu: the overlay's own ring (ui/controller.css and
+ * controller-variants.css, the Halo look) drawn on a stage the overlay's size and scaled into a
+ * well, and the rows of actions under it.
+ */
+.radial-preview {
+  --radial-scale: 0.58;
+  position: relative;
+  height: calc(620px * var(--radial-scale));
+  overflow: hidden;
+  border-bottom: 1px solid var(--k-line);
+  background: radial-gradient(circle at 30% 20%, var(--k-accent-soft), transparent 60%), var(--k-sunken);
+}
+.radial-preview-stage {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%) scale(var(--radial-scale));
+  transform-origin: top center;
+}
+/* Redrawn on every change: no entrance each time, and no dimmed game behind it. */
+.radial-preview .cm-ring,
+.radial-preview .cm-item,
+.radial-preview .cm-vignette {
+  animation: none;
+}
+.radial-preview .cm-vignette {
+  display: none;
+}
+.radial-preview .cm-wedge {
+  cursor: pointer;
+}
+.radial-preview-note {
+  margin: 0;
+  padding: var(--k-space-2) var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+}
+
+.radial-row {
+  transition: background-color var(--k-fast);
+}
+.radial-row + .radial-row {
+  border-top: 1px solid var(--k-line);
+}
+.radial-row[data-selected] {
+  background: var(--k-accent-soft);
+}
+/* The rows' own borders come from the group; inside a wrapper they would double up. */
+.radial-row > .k-settings-row {
+  border: 0;
+}
+.radial-row-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--k-text-2);
+}
+.radial-row[data-outside] .radial-row-icon {
+  opacity: 0.6;
+}
+.radial-row-shortcut,
+.radial-row-actions {
+  display: inline-flex;
+  align-items: center;
+}
+.radial-row-actions {
+  gap: var(--k-space-0-5);
+}

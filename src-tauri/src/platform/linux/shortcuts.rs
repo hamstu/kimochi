@@ -312,10 +312,18 @@ fn bind(app: &tauri::AppHandle, definitions: serde_json::Map<String, Value>, gen
         let Some(accelerator) = definition["accelerator"].as_str() else {
             continue;
         };
+        // A menu item with no keys is not offered to the portal: it would list every item.
+        if accelerator.is_empty() && actions::is_menu_item(&name) {
+            continue;
+        }
         let description = match name.as_str() {
             "triggerScan" => "Scan text",
             "openControllerMenu" => "Open Kimochi controls",
-            _ => &name,
+            _ => actions::MENU_ITEM_ACTIONS
+                .iter()
+                .find(|(action, _, _)| *action == name)
+                .map(|(_, label, _)| *label)
+                .unwrap_or(name.as_str()),
         };
         let mut data = Dict::new();
         data.insert("description".into(), text(description));

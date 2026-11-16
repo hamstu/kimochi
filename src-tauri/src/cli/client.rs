@@ -231,7 +231,8 @@ Usage: kimochi action <name>
 
 Fire an action as a shortcut, the tray or a button would: triggerScan, toggleOverlay,
 setCropArea, setAnkiCropArea, playAudio, selectAndScan, openControllerMenu, toggleAutoOcr,
-toggleTextOverlay, toggleDebugOverlay.",
+toggleTextOverlay, toggleDebugOverlay, and the controller menu's items run without the menu:
+menuScan, menuReadAlong, menuAutoOcr, menuTextHooker, menuRecentText, menuKimochi, menuSettings.",
         "watch" => "\
 Usage: kimochi watch [<event>...]
 

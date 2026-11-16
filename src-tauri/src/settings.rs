@@ -492,8 +492,9 @@ fn merge(target: &mut Value, source: Value) {
     }
 }
 
-/// The default hotkeys. Electron shipped five; only Scan and the controller menu remain
-/// bindable, since the menu now reaches the others. Mirrored by `DEFAULT_HOTKEYS` in
+/// The default hotkeys. Electron shipped five; Scan and the controller menu remain bindable,
+/// with the menu's items (unbound until given keys or buttons in Settings → Radial menu), since
+/// the menu now reaches the others. Mirrored by `DEFAULT_HOTKEYS` in
 /// `frontend/vendor/shared-defaults.ts`.
 ///
 /// `gamepadButtons` is a chord of W3C standard button indices that must all be held; the
@@ -553,6 +554,19 @@ fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
             "gamepadButtons": menu_chord
         }),
     );
+    // The menu's items, each runnable without the menu once given keys or buttons.
+    for (action, name, description) in crate::actions::MENU_ITEM_ACTIONS {
+        hotkeys.insert(
+            (*action).into(),
+            json!({
+                "name": name,
+                "accelerator": "",
+                "description": description,
+                "enabled": true,
+                "gamepadButtons": []
+            }),
+        );
+    }
     hotkeys
 }
 
@@ -830,6 +844,26 @@ mod tests {
     }
 
     #[test]
+    fn menu_items_are_bindable_and_unbound_by_default() {
+        let s = store();
+        let merged = merged_hotkeys(&s);
+        for (action, name, _) in crate::actions::MENU_ITEM_ACTIONS {
+            assert_eq!(merged[*action]["name"], *name);
+            assert_eq!(merged[*action]["accelerator"], "");
+            assert_eq!(merged[*action]["gamepadButtons"], json!([]));
+        }
+        // An unbound item takes no button from the lookup button's default.
+        assert_eq!(free_lookup_button(DECK_LOOKUP_BUTTON, &default_hotkeys_for(true)), Some(DECK_LOOKUP_BUTTON));
+        // A binding is kept, keys and chord, as for any shortcut.
+        s.doc.lock().unwrap()["hotkeys"] =
+            json!({"menuReadAlong": {"accelerator": "Shift+F10", "gamepadButtons": [5, 4]}});
+        let merged = merged_hotkeys(&s);
+        assert_eq!(merged["menuReadAlong"]["accelerator"], "Shift+F10");
+        assert_eq!(merged["menuReadAlong"]["gamepadButtons"], json!([4, 5]));
+        assert_eq!(merged["menuReadAlong"]["enabled"], true);
+    }
+
+    #[test]
     fn hotkey_overrides_apply_per_field() {
         let s = store();
         s.doc.lock().unwrap()["hotkeys"] = json!({"triggerScan": {"accelerator": "Alt+1", "enabled": false}});
@@ -847,8 +881,13 @@ mod tests {
         let s = store();
         s.doc.lock().unwrap()["hotkeys"] = json!({"playAudio": {"accelerator": "Alt+7", "gamepadButton": 2}});
         let merged = merged_hotkeys(&s);
-        let names: Vec<&String> = merged.keys().collect();
-        assert_eq!(names, ["openControllerMenu", "triggerScan"]);
+        assert!(!merged.contains_key("playAudio"));
+        // What is bindable: Scan, the controller menu and the menu's items.
+        let mut names: Vec<&str> = merged.keys().map(String::as_str).collect();
+        let mut bindable = crate::actions::HOTKEY_ACTIONS.to_vec();
+        names.sort_unstable();
+        bindable.sort_unstable();
+        assert_eq!(names, bindable);
     }
 
     #[test]
