@@ -19,6 +19,9 @@
 // too: after an app update it keeps serving a user's download of one of those, verified against
 // that map, until the new release has downloaded (src-tauri/src/extension_store.rs). Beside them sit exact copies of the few files the build and the tests need without the
 // tree (`<id>.manifest.json`, and any `fixtures` the pin names), each checked against the hash map.
+// A pin that names a `languages` file (Hachidori's language registry) also gets
+// `<id>.languages.json`: the codes that file defines, with the file's hash, so the app knows which
+// languages the release reads without the tree and without a hand-kept list (`languageRecord`).
 // Only those records are committed: `extensions/<id>/` itself is gitignored (upstream bytes that
 // would otherwise live in history for ever) and is refilled from the pinned release by
 // `--if-missing`, which CI runs before `npm ci`. Nothing in the tree is ever post-processed:
@@ -32,6 +35,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import vm from 'node:vm'
 import zlib from 'node:zlib'
 
 export const root = fileURLToPath(new URL('../', import.meta.url))
@@ -190,8 +194,26 @@ export async function loadSource(id, dir = extensionsDir) {
     if (!new RegExp(`^${id}\\.[a-z0-9.-]+\\.json$`).test(to))
       throw Error(`${id}.source.json: fixture ${from} must be copied to ${id}.<name>.json`)
   }
+  if (source.languages !== undefined) safeEntryPath(source.languages)
   return source
 }
+
+/**
+ * The language codes a release's registry defines (`source.languages`, Hachidori's
+ * `vendor/languages/registry.js`, which sets `globalThis.HDLanguages = {codes, get}`), as
+ * `<id>.languages.json` holds them: `{file, sha256, codes}`. The registry is upstream's generated
+ * data (one pack per language); it runs in an empty context with nothing but its own global.
+ */
+export function languageRecord(file, bytes) {
+  const context = vm.createContext({})
+  vm.runInContext(bytes.toString('utf8'), context, { filename: file, timeout: 1000 })
+  const codes = context.HDLanguages?.codes
+  if (!Array.isArray(codes) || codes.length === 0 || !codes.every((code) => typeof code === 'string'))
+    throw Error(`${file} defines no language codes (HDLanguages.codes)`)
+  return { file, sha256: sha256(bytes), codes: [...codes] }
+}
+
+const languagesName = (source) => `${source.id}.languages.json`
 
 /**
  * `{path in the tree: record file name}` for the files kept beside the pin as exact copies: the
@@ -204,6 +226,10 @@ export async function writeRecordCopies(source, tree, dir = extensionsDir) {
   for (const [from, to] of Object.entries(recordCopies(source))) {
     await writeFile(path.join(dir, to), await readFile(path.join(tree, ...from.split('/'))))
   }
+  if (source.languages) {
+    const record = languageRecord(source.languages, await readFile(path.join(tree, ...source.languages.split('/'))))
+    await writeFile(path.join(dir, languagesName(source)), JSON.stringify(record, null, 2) + '\n')
+  }
 }
 
 /** Problems with the record copies: each must hash to its entry in `<id>.sha256.json`. */
@@ -215,6 +241,23 @@ export async function checkRecordCopies(id, dir = extensionsDir) {
     const bytes = await readFile(path.join(dir, to)).catch(() => null)
     if (!bytes) problems.push(`missing: ${to}`)
     else if (hashes[from] !== sha256(bytes)) problems.push(`${to} is not the release's ${from}`)
+  }
+  if (source.languages) {
+    const name = languagesName(source)
+    const record = await readFile(path.join(dir, name), 'utf8').then(JSON.parse, () => null)
+    if (!record) problems.push(`missing: ${name}`)
+    else if (record.file !== source.languages || hashes[source.languages] !== record.sha256)
+      problems.push(`${name} was not made from the release's ${source.languages}`)
+    else {
+      // With the tree at hand, the codes are what the registry defines (the hash says the file is
+      // the release's; this says the list was read from it, not edited).
+      const bytes = await readFile(path.join(dir, id, ...source.languages.split('/'))).catch(() => null)
+      if (bytes && sha256(bytes) === record.sha256) {
+        const codes = languageRecord(source.languages, bytes).codes
+        if (JSON.stringify(codes) !== JSON.stringify(record.codes))
+          problems.push(`${name} does not list the codes ${source.languages} defines`)
+      }
+    }
   }
   return problems
 }

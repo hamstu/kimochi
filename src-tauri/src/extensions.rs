@@ -72,9 +72,9 @@ pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
 /// (`startApiEngine` in ui/overlay.js), so nothing has to be downloaded for it.
 ///
 /// The choice is this computer's while the language is the account's, so an engine that cannot
-/// read the language (Hachidori and 10ten read Japanese only) stands for Yomitan while it is
-/// another, without the setting being rewritten ([`for_language`]; `effectiveDictionaryEngine`
-/// in ui/settings.ts is the same rule).
+/// read the language (10ten reads Japanese only; Hachidori the languages it has packs for) stands
+/// for Yomitan while it is another, without the setting being rewritten ([`for_language`];
+/// `effectiveDictionaryEngine` in ui/settings.ts is the same rule).
 pub fn selected_engine(settings: &Settings) -> String {
     for_language(&chosen_engine(settings), &crate::language::current(settings).code)
 }
@@ -85,17 +85,48 @@ pub fn chosen_engine(settings: &Settings) -> String {
     engine_for(settings.get_path(&["yomitanSettings", "popupType"]).ok().flatten().as_ref())
 }
 
-/// The languages an extension engine reads: Japanese alone for both (10ten; Hachidori's other
-/// languages, since 0.5.0, sit behind its experimental "Multiple languages" switch, off by default).
-const JAPANESE_ONLY: &[&str] = &["hachidori", "tenten"];
+/// The language codes Hachidori's pinned release has packs for, as read from the release itself
+/// (`extensions/hachidori.languages.json`, written from its language registry by
+/// scripts/sync-extension.mjs; ui/hachidori-languages.ts reads the same file).
+fn hachidori_packs() -> &'static [String] {
+    static PACKS: OnceLock<Vec<String>> = OnceLock::new();
+    PACKS.get_or_init(|| {
+        let record: Value = serde_json::from_str(include_str!("../../extensions/hachidori.languages.json"))
+            .expect("extensions/hachidori.languages.json is JSON");
+        record["codes"]
+            .as_array()
+            .map(|codes| codes.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .unwrap_or_default()
+    })
+}
+
+/// Hachidori's language for a Kimochi code (`hachidoriLanguage` in ui/hachidori-languages.ts):
+/// Chinese, simplified or traditional, is its one `zh`; every other code is its own.
+fn hachidori_language(language: &str) -> &str {
+    match language {
+        "zh-Hans" | "zh-Hant" => "zh",
+        other => other,
+    }
+}
+
+/// Whether an extension engine reads `language` (a Kimochi code): 10ten Japanese alone, Hachidori
+/// the languages its release has packs for (Kimochi turns on its "Multiple languages" switch and
+/// picks the language's profile, ui/hachidori-languages.ts). Yomitan and none read every one.
+pub fn reads_language(engine: &str, language: &str) -> bool {
+    match engine {
+        "tenten" => language == "ja",
+        "hachidori" => hachidori_packs().iter().any(|code| code == hachidori_language(language)),
+        _ => true,
+    }
+}
 
 /// `engine` (a host engine) for `language` (a code): Yomitan in place of an engine that cannot
 /// read it.
 pub fn for_language(engine: &str, language: &str) -> String {
-    if JAPANESE_ONLY.contains(&engine) && language != "ja" {
-        "yomitan".into()
-    } else {
+    if reads_language(engine, language) {
         engine.into()
+    } else {
+        "yomitan".into()
     }
 }
 
@@ -866,12 +897,19 @@ mod tests {
     }
 
     #[test]
-    fn japanese_only_engines_stand_for_yomitan_in_another_language() {
+    fn engines_stand_for_yomitan_in_a_language_they_cannot_read() {
         for engine in ["yomitan", "hachidori", "tenten", NONE] {
             assert_eq!(for_language(engine, "ja"), engine);
         }
-        assert_eq!(for_language("hachidori", "en"), "yomitan");
+        // Hachidori reads the languages its release has packs for; Chinese is one pack there.
+        for language in ["en", "ko", "zh-Hans", "zh-Hant", "es", "ru"] {
+            assert_eq!(for_language("hachidori", language), "hachidori", "{language}");
+        }
+        assert!(hachidori_packs().iter().any(|code| code == "ja"));
+        assert_eq!(for_language("hachidori", "yue"), "yomitan");
+        assert_eq!(for_language("hachidori", "th"), "yomitan");
         assert_eq!(for_language("tenten", "zh-Hans"), "yomitan");
+        assert_eq!(for_language("tenten", "en"), "yomitan");
         assert_eq!(for_language("yomitan", "ko"), "yomitan");
         // The Yomitan API reads whatever the browser's Yomitan does.
         assert_eq!(for_language(NONE, "en"), NONE);

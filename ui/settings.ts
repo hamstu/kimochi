@@ -16,6 +16,7 @@ import type { OcrGroup } from './ocr-result.js'
 import { DEFAULT_AUTO_OCR_SETTINGS, migrateAutoScanSettings, type AutoScanSettings } from './autoscan.js'
 import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 import { DEFAULT_LANGUAGE, LANGUAGE_CODES, languageOf } from './languages.js'
+import { HACHIDORI_READS } from './hachidori-languages.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
@@ -593,9 +594,10 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     version: '0.5.2',
     runs: 'local',
     optionsPage: 'settings.html',
-    // Japanese only in Kimochi: since 0.5.0 Hachidori reads other languages too, but behind its
-    // experimental "Multiple languages" switch (off by default), which Kimochi does not drive yet.
-    languages: ['ja']
+    // The languages its pinned release has packs for (ui/hachidori-languages.ts reads them from
+    // the release); Kimochi turns on its "Multiple languages" switch and picks the language's
+    // profile for anything but Japanese.
+    languages: HACHIDORI_READS
   },
   tenten: {
     name: '10ten',
@@ -656,19 +658,38 @@ export function dictionaryEngineReads(engine: DictionaryEngine, language: unknow
 /**
  * The engine lookups use for the stored choice and the language being learned. The choice is a
  * per-computer setting and the language is per account, so an engine that cannot read the
- * language (10ten, Hachidori: Japanese only) is not rewritten: it stands for Yomitan while the
- * language is another, and comes back with Japanese. Native resolves the same way
- * (`extensions::selected_engine`).
+ * language (10ten: Japanese only; Hachidori: the languages it has packs for) is not rewritten: it
+ * stands for Yomitan while the language is another, and comes back with one it reads. Native
+ * resolves the same way (`extensions::selected_engine`).
  */
 export function effectiveDictionaryEngine(engine: DictionaryEngine, language: unknown): DictionaryEngine {
   return dictionaryEngineReads(engine, language) ? engine : 'yomitan'
 }
 
-/** Why an engine cannot be chosen for `language` ("10ten reads Japanese only."), or null. */
+/** The languages an engine reads, by name, when it reads one or two ("Japanese"); else null. */
+function fewLanguages(engine: DictionaryEngine): string | null {
+  const languages = DICTIONARY_ENGINES[engine].languages ?? []
+  return languages.length > 0 && languages.length <= 2
+    ? languages.map((code) => languageOf(code).name).join(' and ')
+    : null
+}
+
+/**
+ * Why an engine cannot be chosen for `language`, or null: "10ten reads Japanese only." for an
+ * engine with one or two languages, "Hachidori doesn’t read Cantonese." for one with many.
+ */
 export function dictionaryEngineLanguageReason(engine: DictionaryEngine, language: unknown): string | null {
   if (dictionaryEngineReads(engine, language)) return null
-  const names = (DICTIONARY_ENGINES[engine].languages ?? []).map((code) => languageOf(code).name)
-  return `${DICTIONARY_ENGINES[engine].name} reads ${names.join(' and ')} only.`
+  const few = fewLanguages(engine)
+  const name = DICTIONARY_ENGINES[engine].name
+  return few ? `${name} reads ${few} only.` : `${name} doesn’t read ${languageOf(language).name}.`
+}
+
+/** The same, as a row's short hint: "Japanese only", or "No Cantonese". Null when it reads it. */
+export function dictionaryEngineLanguageHint(engine: DictionaryEngine, language: unknown): string | null {
+  if (dictionaryEngineReads(engine, language)) return null
+  const few = fewLanguages(engine)
+  return few ? `${few} only` : `No ${languageOf(language).name}`
 }
 
 /** How an engine is stored in `yomitanSettings.popupType`. */

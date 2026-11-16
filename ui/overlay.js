@@ -1,6 +1,7 @@
 import './install-pointer-dedupe.js'
 import { createDictionarySetup } from './setup-dictionaries.js'
 import { followYomitanProfiles } from './yomitan-profiles.js'
+import { followHachidoriLanguage } from './hachidori-languages.js'
 import { aDictionaryFor } from './sample-words.js'
 import {
   apiTokenize,
@@ -3981,6 +3982,9 @@ async function startExtensionEngine() {
   if (!result?.ready) throw Error(result?.error ?? `${hostedEngine} did not start`)
   applyReadiness(await native.invoke('dictionary_runtime_status', { engine: hostedEngine }))
   log({ check: 'ext-engine-host-ready', engine: hostedEngine })
+  // Hachidori looks words up in the language being learned, through its profile for it
+  // (ui/hachidori-languages.ts), as Yomitan does through its profiles.
+  if (hostedEngine === 'hachidori' && host.extension) followHachidoriLanguage({ port: host.extension, native })
 }
 
 /**

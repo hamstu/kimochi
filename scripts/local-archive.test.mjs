@@ -13,7 +13,9 @@ test('a settings-owned ZIP is read locally and rebuilt by the offscreen upload p
     blobUrl: 'blob:hachidori://localhost/page-only',
     fileName: 'fixture.zip',
     requestId: 'import-1',
-    importDecision: decision
+    importDecision: decision,
+    // The language Hachidori's settings import into (its edited profile).
+    profileId: 'zh'
   }
   assert.equal(isLocalZipImport(message), true)
   const reply = await importLocalZip(
@@ -37,6 +39,7 @@ test('a settings-owned ZIP is read locally and rebuilt by the offscreen upload p
         assert.deepEqual(Buffer.concat(parts), Buffer.from(bytes))
         assert.equal(value.importDecision, decision)
         assert.equal(value.requestId, 'import-1')
+        assert.equal(value.profileId, 'zh', 'the dictionary joins the profile the page named')
         return { type: 'hd_import_result', requestId: value.requestId, ok: true }
       }
       return { ok: true }

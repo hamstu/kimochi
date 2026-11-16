@@ -1,0 +1,32 @@
+{
+  "file": "vendor/languages/registry.js",
+  "sha256": "ff81598452b78eec99e5a1a54eaf5c5995dab4a1699dfa095efa7f8ace73ec97",
+  "codes": [
+    "aii",
+    "ar",
+    "de",
+    "el",
+    "en",
+    "eo",
+    "es",
+    "eu",
+    "fr",
+    "ga",
+    "grc",
+    "it",
+    "ja",
+    "ka",
+    "ko",
+    "la",
+    "pt",
+    "ru",
+    "sga",
+    "sh",
+    "sq",
+    "tl",
+    "uk",
+    "vi",
+    "yi",
+    "zh"
+  ]
+}

@@ -12,5 +12,6 @@
     "sha256": "e984e263de235529a2b7a94edbb16b5a14cbe073053635729dd5339dfe0a5571",
     "size": 7069808
   },
-  "unpack": {}
+  "unpack": {},
+  "languages": "vendor/languages/registry.js"
 }

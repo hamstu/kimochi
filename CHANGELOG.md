@@ -15,6 +15,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Skipping doesn't count.** Lines that fly by faster than you could read them (three or more long lines under a second apart) add no characters, lines or time. Turn this off in Settings → Log → **Ignore skipped lines**.
 - **Choose when your day starts** (Settings → Log → **Day starts at**, 4 am by default), so late-night reading counts toward the day it began. Reading speed shows once you've read 5 lines.
 - **Controllers on Windows:** an Xbox controller (or one that works like it) is now read with XInput automatically, so its buttons register even when Windows listed it but never passed on a press, and while a game is in front. The "Read controllers with XInput" switch is gone.
+- **Hachidori in other languages.** Hachidori can now be your dictionary for every language it reads, such as Chinese, Korean, English, Spanish or Russian, not just Japanese. Each language gets its own dictionaries and settings in Hachidori, and Kimochi switches to the right one with your account's language. Import a dictionary for the language in Hachidori's settings. Languages Hachidori doesn't read (such as Cantonese or Thai) still use Yomitan.
 - Performance fixes and improvements, with more reliable setup, source selection, translations, audio playback and keyboard navigation.
 
 - Text Hooker: a name or a note a game shows in 《》 after kanji, such as 浮遊都市《ノーヴァス・アイテル》, is no longer cut from the line. Only a reading in hiragana (漢字《かんじ》) is still taken out as ruby.

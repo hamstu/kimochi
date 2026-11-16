@@ -13,9 +13,9 @@ import apiDark from '../../../../../frontend/assets/dictionary-previews/custom-a
 
 Kimochi looks words up with a **pop-up dictionary engine**. Choose one in the sidebar's
 **Dictionary** menu or in **Settings → Dictionary**; Kimochi downloads it from its official release
-the first time. Yomitan and the Yomitan API work with any language; Hachidori and 10ten read
-Japanese only, and can't be chosen while you're learning another language (see
-[Dictionaries by language](/language/support/#dictionaries)).
+the first time. Yomitan and the Yomitan API work with any language; Hachidori reads Japanese and
+about twenty other languages, and 10ten Japanese only. An engine can't be chosen while you're
+learning a language it doesn't read (see [Dictionaries by language](/language/support/#dictionaries)).
 
 <Screenshot id="dictionary-picker" alt="The sidebar's Dictionary menu: Yomitan, Hachidori, 10ten and Yomitan API." width={720} />
 
@@ -53,15 +53,18 @@ See [A dictionary profile for each account](/language/support/#a-dictionary-prof
 
 ## Hachidori
 
-:::note[Japanese only]
-Hachidori reads Japanese only. In another language it can't be chosen, and Yomitan looks words up
-in its place.
+:::note[Other languages]
+Hachidori reads Japanese, Korean, Chinese and about twenty other languages, each with its own
+dictionaries and settings; Kimochi switches it to your account's language. In a language it doesn't
+read, it can't be chosen, and Yomitan looks words up in its place. See
+[Dictionaries by language](/language/support/#dictionaries).
 :::
 
 <Screenshot src={{ light: hachidoriLight, dark: hachidoriDark }} alt="Hachidori's pop-up over a line of game dialogue." width={560} />
 
-Hachidori offers a set of recommended dictionaries the first time its settings open, and imports
-Yomitan dictionaries and MDict files you already have.
+Hachidori offers a set of recommended (Japanese) dictionaries the first time its settings open,
+and imports Yomitan dictionaries and MDict files you already have, into the language its settings
+show.
 Open its settings with **Open Hachidori settings**; you can drop dictionary files onto its import
 area and drag its dictionaries to reorder them.
 

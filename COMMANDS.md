@@ -895,14 +895,27 @@ a window running a dead host. `dictionary_engine_effective` answers `selected` (
 host engine for the language being learned), `chosen` (the setting's host engine as stored),
 `effective`, and `ready` per engine.
 
-**The engine follows the language.** Hachidori (whose other languages, since 0.5.0, need its
-experimental "Multiple languages" switch) and 10ten read Japanese only (`DICTIONARY_ENGINES[…].languages` in `ui/settings.ts`). `yomitanSettings` is this
-computer's while `language` is the account's, so the stored choice is never rewritten: while
-`language` is not `ja`, a stored `hachidori` or `tenten` stands for Yomitan
-(`extensions::selected_engine`, `effectiveDictionaryEngine`), and Settings → Dictionary shows
-the two disabled with the reason. A `language` write (Settings, Sync, an account switch) moves
+**The engine follows the language.** 10ten reads Japanese only; Hachidori reads the languages its
+pinned release has language packs for (`extensions/hachidori.languages.json`, read from the
+release's `vendor/languages/registry.js` by `scripts/sync-extension.mjs`; Chinese, simplified or
+traditional, is its one `zh`), `DICTIONARY_ENGINES[…].languages` in `ui/settings.ts` and
+`extensions::reads_language`. `yomitanSettings` is this computer's while `language` is the
+account's, so the stored choice is never rewritten: while `language` is one an engine cannot read,
+a stored `hachidori` or `tenten` stands for Yomitan (`extensions::selected_engine`,
+`effectiveDictionaryEngine`), and Settings → Dictionary shows it disabled with the reason. A `language` write (Settings, Sync, an account switch) moves
 the reader windows when that changes the effective engine, as a finished download does
 (`dictionary-engine-follow`). A launch only ever downloads the stored choice (`chosen`).
+
+**Hachidori follows the language** (`ui/hachidori-languages.ts`). Hachidori keeps a profile per
+language (its own dictionaries, settings and Anki templates). When Hachidori starts in the overlay,
+when `language` changes and after an account switch, the overlay brings its lookups to the
+language's profile with Hachidori's own requests: `hd_profile_add` (a copy of the settings in
+use) when it has none, `hd_options_write` to turn on its experimental "Multiple languages" switch,
+and `hd_language_selection_write`. Dictionaries are never installed or removed; Hachidori's
+settings open on the profile lookups use, and import into it. Japanese on a Hachidori that never
+had another language writes nothing. Reports: `hachidori-language` `{language, profile}`,
+`hachidori-language-step`, `hachidori-language-failed` (retried a few times while the engine
+starts).
 
 **Yomitan profiles follow the account** (Built-in Yomitan only; `ui/yomitan-profiles.ts`).
 `yomitanProfiles` (machine key, unset until written) is
@@ -2357,7 +2370,7 @@ executable detached elsewhere) and waits for `ping`.
 | Method | Params | Result |
 | --- | --- | --- |
 | `ping` | — | `{version, pid}` |
-| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, dictionaryChosen?, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}`. `dictionary` is the pop-up engine in use (`yomitanSettings.popupType`: `builtin`, `custom-api`, `hachidori`, `tenten`); Hachidori and 10ten read Japanese only, so in another language it is `builtin` and `dictionaryChosen` is the stored choice |
+| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, dictionaryChosen?, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}`. `dictionary` is the pop-up engine in use (`yomitanSettings.popupType`: `builtin`, `custom-api`, `hachidori`, `tenten`); in a language the stored engine cannot read (10ten: Japanese only; Hachidori: its language packs) it is `builtin` and `dictionaryChosen` is the stored choice |
 | `settings.get` | `{key?}` | the value (defaults merged), or every setting |
 | `settings.set` | `{key, value}` | the stored value; through `apply_setting`, as `settings_set` |
 | `action` / `actions` | `{name}` / — | `actions::dispatch`; `ACTIONS` |
