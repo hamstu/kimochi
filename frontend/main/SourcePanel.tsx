@@ -128,6 +128,7 @@ import type { ControllerWiring } from '../panels/useController'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { keepShape } from '@ui/preview-shape'
 import { useLanguage } from '../bridge/useLanguage'
+import { refusalText, useGamePauseNotice } from '../bridge/gamePause'
 
 type Controller = ControllerWiring['props']
 /** The texthooker's inputs, with OCR split into a chosen window or screen and Quick Shot. */
@@ -930,6 +931,7 @@ export function SourcePanel({
     chooseRef.current('ocr')
   }, [systemPick.seq])
   const { state } = useViewState()
+  const [gamePauseNotice, dismissGamePauseNotice] = useGamePauseNotice()
   const browser = useBrowserBridge()
   const [websocketUrl, setWebsocketUrl] = useState(() => getSettings().websocketUrl)
   useEffect(() => onSettingsChange((next) => setWebsocketUrl(next.websocketUrl)), [])
@@ -1405,6 +1407,19 @@ export function SourcePanel({
       </Callout>
     ) : null
 
+  // A game that could not be paused ("Pause the game while reading"): said once per game.
+  const gamePauseNoticeView = gamePauseNotice ? (
+    <Callout tone="neutral" className="src-notice">
+      <span>
+        <strong>{gamePauseNotice.title ?? 'This game'} keeps running while you read.</strong>{' '}
+        {refusalText(gamePauseNotice.kind)}
+      </span>
+      <button type="button" className="k-link src-notice-link" onClick={dismissGamePauseNotice}>
+        OK
+      </button>
+    </Callout>
+  ) : null
+
   const placement = useHookPlacement(mode === 'hook' ? hook.exe : null)
   const overlayUnavailable =
     capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
@@ -1492,6 +1507,7 @@ export function SourcePanel({
             {overlayRow}
           </div>
           {gameModeNotice}
+          {gamePauseNoticeView}
           {untrackedNotice}
           {overlayUnavailable && !isGamingMode(capabilities) && <GnomeExtensionNotice />}
         </div>
@@ -1514,6 +1530,7 @@ export function SourcePanel({
             {overlayRow}
           </div>
           {gameModeNotice}
+          {gamePauseNoticeView}
           {untrackedNotice}
           {overlayUnavailable && !isGamingMode(capabilities) && <GnomeExtensionNotice />}
         </div>

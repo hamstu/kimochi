@@ -22,3 +22,4 @@ pub mod target;
 pub use app::{paused, send, spans_since, wait_until_resumed, EVENT_NOTICE, EVENT_SPAN, EVENT_STATUS, SETTING};
 #[allow(unused_imports)]
 pub use manager::{Input, PauseSpan, Reason};
+pub use platform::capability;
