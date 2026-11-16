@@ -40,10 +40,16 @@ React), built for macOS first, with Windows and Linux builds.
 - **Pop-up dictionaries**: Yomitan, Hachidori or 10ten (the last two for Japanese), downloaded on
   demand from their upstream releases, hash-checked and run unmodified, with your own dictionaries;
   or the Yomitan API, which looks words up through the Yomitan already in your browser.
+- **Text hooking**: reads a Windows game's text straight from the game (LunaHook, with Textractor
+  as a fallback), on Windows and, through Proton or Wine, on Linux and the Steam Deck.
+- **Audio hooking and sentence audio**: Anki cards get the line's voice. With Audio hooking on, it
+  is the game's own voice line, without music or sound effects (hooked games on Windows, and
+  through Proton or Wine on Linux and the Steam Deck); otherwise, or when a line can't be hooked,
+  it is recorded from your speakers.
 - **Reading log**: a built-in texthooker with sessions, reading stats, a notebook and VNDB
   import; clipboard and WebSocket texthookers work too.
-- **Controller-friendly**: a radial menu and gamepad navigation, including Steam Deck Gaming Mode
-  (experimental).
+- **Controller-friendly**: a radial menu and gamepad navigation, including Steam Deck Gaming Mode,
+  where Kimochi runs beside your game with a layout made for the Deck.
 
 ## Install
 
@@ -101,7 +107,7 @@ Windows (`scripts/sign-windows.mjs`); setting the same variables locally does th
 | --- | --- |
 | `src-tauri/` | The native app: windows, settings, capture, OCR, input, tray, updater and the texthooker server. Its command interface is documented in [COMMANDS.md](COMMANDS.md). |
 | `capture-core/` | Screen and window capture (ScreenCaptureKit, Windows Graphics Capture, PipeWire). |
-| `speech-core/` | Sentence audio: finds each line's voice in recorded system audio ([README](speech-core/README.md)). |
+| `speech-core/` | Sentence audio: finds each line's voice in recorded system audio, the fallback when Audio hooking can't take it from the game ([README](speech-core/README.md)). |
 | `frontend/` | The React windows: controller, settings, log/texthooker, notebook, welcome. Built from the kit in [frontend/kit](frontend/kit/README.md). |
 | `ui/` | The always-present overlay: scanning, change detection, OCR backends and the boxes drawn over the game. |
 | `host/` | The extension host that runs the downloaded dictionary engines unmodified. |

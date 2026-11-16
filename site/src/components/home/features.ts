@@ -24,7 +24,7 @@ export interface Feature {
   docs?: string
   /**
    * A chip beside the title: `cloud` marks a Kimochi Cloud (paid) feature in the accent; `windows`
-   * ("Windows games") and `deck` are quiet grey chips for a feature made for that platform.
+   * ("Windows games, also on Linux & Steam Deck") and `deck` are quiet grey chips for a feature made for that platform.
    */
   tag?: 'cloud' | 'windows' | 'deck'
   /** A link on this site instead of the docs link, e.g. to the plans. */

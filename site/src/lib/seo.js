@@ -343,7 +343,10 @@ export function headTags(route) {
   return lines.join('\n    ')
 }
 
-/** sitemap.xml for every indexable route. */
+/**
+ * sitemap.xml for every indexable route. Only this host's URLs: the docs' own sitemap
+ * (docs.kimochiapp.com/sitemap.xml) is named in public/robots.txt instead.
+ */
 export function sitemapXml(routes = ROUTES) {
   const urls = routes
     .filter((r) => r.index)
