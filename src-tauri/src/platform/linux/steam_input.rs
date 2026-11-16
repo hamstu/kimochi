@@ -92,6 +92,11 @@ impl Drop for Lease {
     }
 }
 pub fn update(active: bool) -> Result<(), String> {
+    // Stop order: the game first (game pause), then Steam's controller reader. Waited for before
+    // the lease lock is taken, so nothing else waits behind it.
+    if active && LEASE.lock().map(|lease| lease.is_none()).unwrap_or(false) {
+        crate::game_pause::app::settle(std::time::Duration::from_millis(300));
+    }
     let mut lease = LEASE.lock().map_err(|_| "Steam input lease lock poisoned")?;
     if !active {
         *lease = None;
@@ -102,8 +107,6 @@ pub fn update(active: bool) -> Result<(), String> {
         return Err("Steam input watchdog expired; close and reopen controller navigation".into());
     }
     if lease.is_none() {
-        // Stop order: the game first (game pause), then Steam's controller reader.
-        crate::game_pause::app::settle(std::time::Duration::from_millis(300));
         let (pid, token) = steam().ok_or("Steam input: no same-user Steam process found")?;
         *lease = Some(spawn_lease(&[&pid.to_string(), &token, &std::process::id().to_string()])?);
     }

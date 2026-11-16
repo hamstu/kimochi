@@ -47,6 +47,11 @@ pub struct PauseSpan {
 pub trait PauseSpans: Send + Sync {
     /// Every pause that ended after `since_ms` or still lasts, oldest first.
     fn spans_since(&self, since_ms: f64) -> Vec<PauseSpan>;
+    /// Whether a pause may come at all (the setting is on). While not, and none has come, the
+    /// recording passes straight through, untouched.
+    fn may_pause(&self) -> bool {
+        true
+    }
 }
 
 /// No pauses: the game is never paused (the setting is off, or there is no pausing on this OS).
@@ -55,6 +60,9 @@ pub struct NoPauses;
 impl PauseSpans for NoPauses {
     fn spans_since(&self, _since_ms: f64) -> Vec<PauseSpan> {
         Vec::new()
+    }
+    fn may_pause(&self) -> bool {
+        false
     }
 }
 
@@ -75,11 +83,13 @@ pub struct GameClock {
     /// Time cut by pauses forgotten (past `KEEP_CUTS`), all before `folded_until`.
     folded: f64,
     folded_until: f64,
+    /// A pause may come (`PauseSpans::may_pause`): the splicer holds audio back for its guard.
+    armed: bool,
 }
 
 impl Default for GameClock {
     fn default() -> Self {
-        Self { cuts: Vec::new(), folded: 0.0, folded_until: f64::NEG_INFINITY }
+        Self { cuts: Vec::new(), folded: 0.0, folded_until: f64::NEG_INFINITY, armed: false }
     }
 }
 
@@ -125,8 +135,14 @@ impl GameClock {
 
     /// Bring the clock up to date with `source`.
     pub fn sync(&mut self, source: &dyn PauseSpans) {
+        self.armed = source.may_pause();
         let spans = source.spans_since(self.since_ms());
         self.update(&spans);
+    }
+
+    /// Whether a pause may come (set by `sync`; tests set it directly).
+    pub fn set_armed(&mut self, armed: bool) {
+        self.armed = armed;
     }
 
     /// The cuts merged where they overlap, in order: `(from, to)`.
@@ -149,7 +165,13 @@ impl GameClock {
 
     /// Game time at wall-clock `wall_ms`: inside a pause, the moment it started.
     pub fn game_ms(&self, wall_ms: f64) -> f64 {
-        let mut cut = if wall_ms <= self.folded_until { 0.0 } else { self.folded };
+        // Before `folded_until` the forgotten pauses can no longer be told apart: all of them count,
+        // which keeps game time from going back across that point (it is only a little early for
+        // times that old, long out of any recording).
+        if wall_ms <= self.folded_until {
+            return wall_ms - self.folded;
+        }
+        let mut cut = self.folded;
         for (from, to) in self.merged() {
             if wall_ms <= from {
                 break;
@@ -178,12 +200,18 @@ impl GameClock {
                 None => return from,
             }
         }
-        game_ms + cut + if game_ms > self.folded_until - self.folded { self.folded } else { 0.0 }
+        game_ms + cut + self.folded
     }
 
     /// Whether `wall_ms` falls in a cut (a pause or its guards).
     pub fn paused_at(&self, wall_ms: f64) -> bool {
         self.merged().any(|(from, to)| wall_ms >= from && to.is_none_or(|t| wall_ms < t))
+    }
+
+    /// Whether no pause has come and none may: game time is wall time, exactly, and the splicer
+    /// passes audio straight through.
+    pub fn never_paused(&self) -> bool {
+        !self.armed && self.cuts.is_empty() && self.folded_until == f64::NEG_INFINITY
     }
 
     /// Whether the game is paused now (a pause has no end yet).
@@ -231,6 +259,13 @@ impl Splicer {
     /// `ring` stamped with game time, but for the newest `HOLD_MS`, kept back until more comes.
     pub fn push(&mut self, clock: &GameClock, ring: &mut AudioRing, wall_ms: f64, rate: u32, samples: &[f32]) {
         if samples.is_empty() || rate == 0 || !wall_ms.is_finite() {
+            return;
+        }
+        // Never paused (the setting off, or no pause yet): straight to the ring with the capture's
+        // own stamps, nothing held back, exactly as without a splicer.
+        if clock.never_paused() && self.held.is_empty() {
+            self.rate = rate;
+            ring.push(wall_ms, rate, samples);
             return;
         }
         if rate != self.rate || (!self.held.is_empty() && (wall_ms - self.held_end()).abs() > CONTIGUOUS_MS) {
@@ -443,16 +478,76 @@ mod tests {
     }
 
     #[test]
-    fn with_no_pauses_the_ring_gets_everything_but_the_newest_bit() {
+    fn never_paused_is_a_strict_pass_through() {
+        // With the setting off nothing is ever paused: the ring must get exactly what it got
+        // without a splicer, chunk by chunk, with the capture's own stamps (irregular ones too).
         let clock = clock(&[]);
+        let (mut splicer, mut spliced, mut direct) =
+            (Splicer::new(), AudioRing::new(RATE, 60.0), AudioRing::new(RATE, 60.0));
+        let chunks: Vec<(f64, Vec<f32>)> = (0..200)
+            .map(|i| {
+                // Jittered stamps (as a real capture's), a gap, and a rate-independent sample pattern.
+                let wall = 1_000.0 + i as f64 * 10.0 + (i % 3) as f64 * 0.37 + if i > 120 { 55.0 } else { 0.0 };
+                (wall, (0..10).map(|k| ((i * 10 + k) as f32).sin()).collect())
+            })
+            .collect();
+        for (wall, samples) in &chunks {
+            splicer.push(&clock, &mut spliced, *wall, RATE, samples);
+            direct.push(*wall, RATE, samples);
+            assert_eq!(spliced.end_ms(), direct.end_ms(), "nothing held back");
+        }
+        assert_eq!(spliced.start_ms(), direct.start_ms());
+        assert_eq!((spliced.first_index(), spliced.end_index()), (direct.first_index(), direct.end_index()));
+        let (a, b) = (spliced.read_from(spliced.first_index()), direct.read_from(direct.first_index()));
+        assert_eq!(a.0, b.0);
+        assert!(a.1.iter().zip(&b.1).all(|(x, y)| x.to_bits() == y.to_bits()), "bit-identical samples");
+        for index in (direct.first_index()..direct.end_index()).step_by(97) {
+            assert_eq!(spliced.wall_ms_at(index).map(f64::to_bits), direct.wall_ms_at(index).map(f64::to_bits));
+        }
+        // Game time is wall time, exactly.
+        assert_eq!(clock.game_ms(1_234.5678).to_bits(), 1_234.5678f64.to_bits());
+    }
+
+    #[test]
+    fn armed_the_ring_gets_everything_but_the_newest_bit() {
+        let mut clock = clock(&[]);
+        clock.set_armed(true);
         let (mut splicer, mut ring) = (Splicer::new(), AudioRing::new(RATE, 60.0));
         feed(&mut splicer, &clock, &mut ring, 1_000.0, 2_000.0);
-        assert_eq!(ring.start_ms(), Some(1_000.0));
         assert_eq!(ring.end_ms(), Some(2_000.0 - HOLD_MS));
         splicer.flush(&clock, &mut ring);
-        assert_eq!(ring.end_ms(), Some(2_000.0));
         let clip = ring.snapshot(1_000.0, 2_000.0).unwrap();
         assert!(clip.samples.iter().enumerate().all(|(i, &s)| s == 1_000.0 + i as f32), "untouched");
+    }
+
+    #[test]
+    fn after_the_first_pause_the_ring_gets_everything_but_the_newest_bit() {
+        let clock = clock(&[span(500.0, Some(600.0))]);
+        let (mut splicer, mut ring) = (Splicer::new(), AudioRing::new(RATE, 60.0));
+        feed(&mut splicer, &clock, &mut ring, 1_000.0, 2_000.0);
+        assert_eq!(ring.end_ms(), Some(clock.game_ms(2_000.0 - HOLD_MS)));
+        splicer.flush(&clock, &mut ring);
+        assert_eq!(ring.end_ms(), Some(clock.game_ms(2_000.0)));
+    }
+
+    #[test]
+    fn game_time_never_goes_back_after_forgotten_pauses() {
+        let mut clock = GameClock::new();
+        let spans: Vec<PauseSpan> =
+            (0..KEEP_CUTS + 50).map(|i| span(i as f64 * 1_000.0, Some(i as f64 * 1_000.0 + 100.0))).collect();
+        clock.update(&spans);
+        assert!(clock.folded_until.is_finite());
+        let mut previous = f64::NEG_INFINITY;
+        let mut wall = clock.folded_until - 5_000.0;
+        while wall < clock.folded_until + 5_000.0 {
+            let game = clock.game_ms(wall);
+            assert!(game >= previous, "game time went back at wall {wall}: {previous} -> {game}");
+            previous = game;
+            wall += 7.0;
+        }
+        // And the inverse still lands where it should after the folded part.
+        let late = (KEEP_CUTS + 60) as f64 * 1_000.0;
+        assert!((clock.wall_ms(clock.game_ms(late)) - late).abs() < 1e-6);
     }
 
     /// A recording with a pause: what played before, the pause (a looping buffer, `-1`), what played after.
@@ -513,8 +608,9 @@ mod tests {
 
     #[test]
     fn a_pause_that_opens_after_audio_arrived_still_cuts_its_guard() {
-        // The pause becomes known only after the audio just before it was pushed.
+        // The pause becomes known only after the audio just before it was pushed (the setting on).
         let mut clock = GameClock::new();
+        clock.set_armed(true);
         let (mut splicer, mut ring) = (Splicer::new(), AudioRing::new(RATE, 60.0));
         feed(&mut splicer, &clock, &mut ring, 0.0, 1_000.0);
         clock.update(&[span(1_000.0, None)]);

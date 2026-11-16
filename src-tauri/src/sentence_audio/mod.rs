@@ -266,6 +266,9 @@ impl PauseSpans for GamePauses {
             .map(|s| kimochi_capture::audio::PauseSpan { start_ms: s.start_ms, end_ms: s.end_ms })
             .collect()
     }
+    fn may_pause(&self) -> bool {
+        crate::game_pause::app::enabled_now()
+    }
 }
 
 /// The game clock (`kimochi_capture::audio::pause`): Unix ms with the game's pauses left out.

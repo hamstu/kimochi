@@ -220,8 +220,7 @@ fn the_denylist_matches_names_not_games() {
     ] {
         assert!(denied(name, None).is_some(), "{name}");
     }
-    for name in
-        ["steam.exe", "Game.exe", "gnome-mines", "python3", "wineserver", "game.x86_64", "steamtinkerlaunch-game"]
+    for name in ["steam.exe", "Game.exe", "puzzle-game", "python3", "wineserver", "game.x86_64", "steamy-launcher-game"]
     {
         assert!(denied(name, None).is_none(), "{name}");
     }

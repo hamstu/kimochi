@@ -1,8 +1,8 @@
 //! Audio around a pause on Linux. A game that talks to PipeWire directly (its own client and
-//! stream nodes, as SDL3 or recent OpenAL Soft do) holds up the whole graph while it is stopped:
+//! stream nodes, as some newer audio libraries do) holds up the whole graph while it is stopped:
 //! the driver waits for its node every cycle, so every other app on the same output goes silent
 //! (or loops its last buffer on hardware) until the game runs again. Games that go through the
-//! PulseAudio protocol (Wine/Proton, SDL2 by default) are not affected: `pipewire-pulse` is the
+//! PulseAudio protocol (Wine/Proton, most audio libraries by default) are not affected: `pipewire-pulse` is the
 //! PipeWire client there and keeps running.
 //!
 //! So before the game stops, each of its playback streams is moved ("parked") to a null sink of its

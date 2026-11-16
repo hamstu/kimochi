@@ -221,8 +221,17 @@ pub fn return_to_game(app: &tauri::AppHandle) {
 /// Hand input back to Steam and show `target` (a running app ID), or the game.
 pub fn return_to(app: &tauri::AppHandle, target: Option<u32>) {
     // Input goes back to the game only once it runs: a stopped game would get it replayed later.
-    if !crate::game_pause::app::resume_before_activating("returning to the game") {
-        eprintln!("Gamescope return: the game is still paused; not handing it input");
+    // The wait for the resume happens off the caller's thread (often the main thread), then the
+    // return runs again with the game running.
+    if crate::game_pause::paused() {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if crate::game_pause::app::resume_before_activating("returning to the game") {
+                return_to(&app, target);
+            } else {
+                eprintln!("Gamescope return: the game is still paused; not handing it input");
+            }
+        });
         return;
     }
     if !managed() {

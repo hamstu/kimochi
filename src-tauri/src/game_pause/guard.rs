@@ -31,7 +31,7 @@ pub const REFRESH_EVERY: Duration = Duration::from_millis(1000);
 pub enum Request {
     /// Stop the plan's processes. A pause already held is resumed first.
     Suspend { id: u64, plan: Plan },
-    /// Resume what is held (no-op when nothing is).
+    /// Resume what is held. Always answered with `Resumed` (with `count` 0 when nothing was held).
     Resume { id: u64, reason: String },
     /// The reader is still busy: keep holding.
     Beat,
@@ -62,6 +62,12 @@ pub enum Reply {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         results: Vec<super::backend::PidResult>,
     },
+    /// A resume that had failed was tried again: `error` is `None` once those processes run.
+    Retried {
+        count: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<PauseError>,
+    },
     /// The backend's `refresh` changed or failed (verbose).
     Refreshed {
         count: usize,
@@ -75,11 +81,20 @@ struct Held {
     since: Instant,
 }
 
+/// The first wait before a failed resume is tried again; it doubles up to `RETRY_MAX`.
+const RETRY_FIRST: Duration = Duration::from_millis(1000);
+const RETRY_MAX: Duration = Duration::from_secs(30);
+
 /// The guard's logic without its I/O, driven by tests with a fake clock.
 pub struct Core<'a> {
     backend: &'a dyn Backend,
     journal: Journal,
     held: Option<Held>,
+    /// Processes a resume failed to continue: retried with backoff, and kept in the journal (with
+    /// whatever a later pause adds) until they run.
+    stuck: Option<Suspended>,
+    next_retry: Instant,
+    retry_wait: Duration,
     last_beat: Instant,
     last_refresh: Instant,
     heartbeat_loss: Duration,
@@ -90,12 +105,24 @@ fn wall_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
+/// `extra`'s members not already in `into`, appended.
+fn merge(into: &mut Suspended, extra: &Suspended) {
+    for member in &extra.members {
+        if !into.members.iter().any(|m| m.pid == member.pid && m.start == member.start) {
+            into.members.push(member.clone());
+        }
+    }
+}
+
 impl<'a> Core<'a> {
     pub fn new(backend: &'a dyn Backend, journal: Journal, now: Instant) -> Self {
         Core {
             backend,
             journal,
             held: None,
+            stuck: None,
+            next_retry: now,
+            retry_wait: RETRY_FIRST,
             last_beat: now,
             last_refresh: now,
             heartbeat_loss: HEARTBEAT_LOSS,
@@ -106,6 +133,10 @@ impl<'a> Core<'a> {
     pub fn holding(&self) -> bool {
         self.held.is_some()
     }
+    #[cfg(test)]
+    pub fn stuck(&self) -> usize {
+        self.stuck.as_ref().map_or(0, |s| s.members.len())
+    }
 
     /// Resumes orphans of an earlier run, then says it is ready.
     pub fn start(&mut self) -> Reply {
@@ -113,11 +144,26 @@ impl<'a> Core<'a> {
         Reply::Ready { pid: self.pid, backend: self.backend.name().into(), recovered }
     }
 
+    /// The app is alive now. `serve` calls it after every request is handled, so a slow request
+    /// (a suspend that parks audio first) never counts against the heartbeat.
+    pub fn touch(&mut self, now: Instant) {
+        self.last_beat = now;
+    }
+
     pub fn handle(&mut self, request: Request, now: Instant) -> Vec<Reply> {
         self.last_beat = now;
         match request {
             Request::Beat => Vec::new(),
-            Request::Resume { id, reason } => self.release(Some(id), &reason, now).into_iter().collect(),
+            Request::Resume { id, reason } => vec![self.release(Some(id), &reason, now).unwrap_or(Reply::Resumed {
+                // Nothing held (a suspend that failed, or a resume already done): still answered,
+                // so the app never waits for a reply that will not come.
+                id: Some(id),
+                reason,
+                count: 0,
+                held_ms: 0,
+                error: None,
+                results: Vec::new(),
+            })],
             Request::Quit => self.release(None, "quit", now).into_iter().collect(),
             Request::Suspend { id, plan } => {
                 let mut out: Vec<Reply> = self.release(None, "replaced", now).into_iter().collect();
@@ -127,11 +173,38 @@ impl<'a> Core<'a> {
         }
     }
 
+    /// The journal entry for what may be stopped now: the pause held (or `pending`, a plan about
+    /// to be suspended) and every process a resume failed on. Cleared when there is none.
+    fn persist(&self, pending: Option<&Suspended>) -> std::io::Result<()> {
+        let mut all = match (pending, &self.held) {
+            (Some(p), _) => p.clone(),
+            (None, Some(held)) => held.suspended.clone(),
+            (None, None) => match &self.stuck {
+                Some(stuck) => stuck.clone(),
+                None => {
+                    self.journal.clear();
+                    return Ok(());
+                }
+            },
+        };
+        if let Some(stuck) = &self.stuck {
+            merge(&mut all, stuck);
+        }
+        self.journal.write(&Entry {
+            game: all.game,
+            members: all.members,
+            mechanism: all.mechanism,
+            at: wall_ms(),
+            guard: self.pid,
+            boot: super::journal::boot_id(),
+        })
+    }
+
     fn suspend(&mut self, id: u64, plan: Plan, now: Instant) -> Reply {
         // The whole plan goes in the journal first: a crash halfway through still names every
-        // process that might be stopped.
-        // Processes already stopped by someone else are left out: recovery must never continue them.
-        let mut entry = Entry {
+        // process that might be stopped. Processes already stopped by someone else are left out:
+        // recovery must never continue them.
+        let pending = Suspended {
             game: plan.game.clone(),
             members: plan
                 .members
@@ -140,26 +213,22 @@ impl<'a> Core<'a> {
                 .map(|m| m.id.clone())
                 .collect(),
             mechanism: plan.mechanism.clone(),
-            at: wall_ms(),
-            guard: self.pid,
-            boot: super::journal::boot_id(),
+            results: Vec::new(),
         };
-        if let Err(e) = self.journal.write(&entry) {
+        if let Err(e) = self.persist(Some(&pending)) {
             return Reply::Failed { id, error: PauseError::new(format!("journal: {e}")) };
         }
         let started = Instant::now();
         match self.backend.suspend(&plan) {
             Ok(suspended) => {
-                entry.members = suspended.members.clone();
-                if self.journal.write(&entry).is_err() {
-                    // The plan entry is still there and still covers everything stopped.
-                }
                 self.held = Some(Held { suspended: suspended.clone(), since: now });
+                // The plan entry is still there and still covers everything stopped if this fails.
+                let _ = self.persist(None);
                 self.last_refresh = now;
                 Reply::Suspended { id, suspended, micros: started.elapsed().as_micros() as u64 }
             }
             Err(error) => {
-                self.journal.clear();
+                let _ = self.persist(None);
                 Reply::Failed { id, error }
             }
         }
@@ -171,10 +240,17 @@ impl<'a> Core<'a> {
             Ok(results) => (results, None),
             Err(error) => (Vec::new(), Some(error)),
         };
-        // A failed resume keeps the journal so the next start retries the ones still matching.
-        if error.is_none() {
-            self.journal.clear();
+        if error.is_some() {
+            // Kept, retried, and still named in the journal until they run (resume is idempotent and
+            // skips any pid that is another process now).
+            match &mut self.stuck {
+                Some(stuck) => merge(stuck, &held.suspended),
+                None => self.stuck = Some(held.suspended.clone()),
+            }
+            self.retry_wait = RETRY_FIRST;
+            self.next_retry = now + RETRY_FIRST;
         }
+        let _ = self.persist(None);
         Some(Reply::Resumed {
             id,
             reason: reason.into(),
@@ -185,51 +261,78 @@ impl<'a> Core<'a> {
         })
     }
 
-    /// Heartbeat loss and the periodic refresh. Call often (every ~100 ms).
+    /// Heartbeat loss, the periodic refresh, and retries of a failed resume. Call often (~100 ms).
     pub fn tick(&mut self, now: Instant) -> Vec<Reply> {
+        let mut out = Vec::new();
+        if self.stuck.is_some() && now >= self.next_retry {
+            if let Some(stuck) = self.stuck.take() {
+                match self.backend.resume(&stuck) {
+                    Ok(()) => {
+                        let _ = self.persist(None);
+                        out.push(Reply::Retried { count: stuck.members.len(), error: None });
+                    }
+                    Err(error) => {
+                        self.stuck = Some(stuck.clone());
+                        self.retry_wait = (self.retry_wait * 2).min(RETRY_MAX);
+                        self.next_retry = now + self.retry_wait;
+                        out.push(Reply::Retried { count: stuck.members.len(), error: Some(error) });
+                    }
+                }
+            }
+        }
         if self.held.is_none() {
-            return Vec::new();
+            return out;
         }
         if now.saturating_duration_since(self.last_beat) >= self.heartbeat_loss {
-            return self.release(None, "heartbeat", now).into_iter().collect();
+            out.extend(self.release(None, "heartbeat", now));
+            return out;
         }
         if now.saturating_duration_since(self.last_refresh) >= REFRESH_EVERY {
             self.last_refresh = now;
-            let Some(held) = self.held.as_mut() else { return Vec::new() };
+            let Some(held) = self.held.as_mut() else { return out };
             let before = held.suspended.members.len();
             let result = self.backend.refresh(&mut held.suspended);
             let after = held.suspended.members.len();
             if after != before {
-                let entry = Entry {
-                    game: held.suspended.game.clone(),
-                    members: held.suspended.members.clone(),
-                    mechanism: held.suspended.mechanism.clone(),
-                    at: wall_ms(),
-                    guard: self.pid,
-                    boot: super::journal::boot_id(),
-                };
-                let _ = self.journal.write(&entry);
+                let _ = self.persist(None);
             }
             if after != before || result.is_err() {
-                return vec![Reply::Refreshed { count: after, error: result.err() }];
+                out.push(Reply::Refreshed { count: after, error: result.err() });
             }
         }
-        Vec::new()
+        out
     }
 
     /// Resumes on the way out (EOF, signal).
     pub fn shutdown(&mut self, reason: &str, now: Instant) -> Option<Reply> {
-        self.release(None, reason, now)
+        let reply = self.release(None, reason, now);
+        // One more try for anything a resume failed on; what still fails stays in the journal.
+        if let Some(stuck) = self.stuck.take() {
+            if self.backend.resume(&stuck).is_err() {
+                self.stuck = Some(stuck);
+            }
+            let _ = self.persist(None);
+        }
+        reply
     }
 }
 
 impl Drop for Core<'_> {
     fn drop(&mut self) {
         if let Some(held) = self.held.take() {
-            if self.backend.resume(&held.suspended).is_ok() {
-                self.journal.clear();
+            if self.backend.resume(&held.suspended).is_err() {
+                match &mut self.stuck {
+                    Some(stuck) => merge(stuck, &held.suspended),
+                    None => self.stuck = Some(held.suspended),
+                }
             }
         }
+        if let Some(stuck) = self.stuck.take() {
+            if self.backend.resume(&stuck).is_err() {
+                self.stuck = Some(stuck);
+            }
+        }
+        let _ = self.persist(None);
     }
 }
 
@@ -274,6 +377,8 @@ pub fn serve(backend: &dyn Backend, journal: Journal, input: impl BufRead + Send
                 for reply in core.handle(request, Instant::now()) {
                     say(&reply);
                 }
+                // The app was alive when it sent this, however long handling it took.
+                core.touch(Instant::now());
             }
             Ok(None) => core.handle(Request::Beat, Instant::now()).into_iter().for_each(|r| say(&r)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
@@ -381,6 +486,23 @@ impl Client {
             })
             .map_err(|e| e.to_string())?;
         Ok(Client { child: Some(child), stdin })
+    }
+
+    /// How the guard ended: waits up to `wait` for it (and reaps it), else "still running".
+    pub fn reap(&mut self, wait: Duration) -> String {
+        let deadline = Instant::now() + wait;
+        let Some(child) = self.child.as_mut() else { return "unknown".into() };
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    self.child = None;
+                    return status.to_string();
+                }
+                Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+                Ok(None) => return "still running".into(),
+                Err(e) => return format!("unknown: {e}"),
+            }
+        }
     }
 
     /// Whether the guard process has exited.

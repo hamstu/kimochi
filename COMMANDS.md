@@ -2409,7 +2409,10 @@ released.
 `game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`): every 500 ms while any
 reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
 the overlay is alive. A beat refreshes the listed reasons and releases `lookup` and
-`regionEditor` when absent.
+`regionEditor` when absent. A pop-up in the `popup-host` window counts for `lookup` only while
+that window keeps sending `overlay-reading-popup-alive` to the overlay (every second while a
+reading pop-up is up; heard within 3 s). Only a selected window names the game: with a display
+source (or nothing) selected, a pause is refused as `noPid` (Gaming Mode uses Steam's app id).
 
 Events:
 - `game-pause` — `Status {enabled, phase: "idle"|"pausing"|"paused"|"resuming", holds, game?,
@@ -2426,7 +2429,10 @@ Events:
 **Guard.** Every pause is owned by a separate process, the app binary run as
 `--game-pause-guard <journal path>` (its own session on Unix, no window on Windows), spoken to in
 JSON lines on stdin/stdout: requests `{op:"suspend", id, plan}`, `{op:"resume", id, reason}`,
-`{op:"beat"}`, `{op:"quit"}`; replies `{event:"ready"|"suspended"|"failed"|"resumed"|"refreshed", …}`.
+`{op:"beat"}`, `{op:"quit"}`; replies `{event:"ready"|"suspended"|"failed"|"resumed"|"retried"|"refreshed", …}`.
+Every `resume` is answered (`count: 0` when nothing was held). A resume that fails is retried by the
+guard with backoff (`retried`) and its processes stay in the journal until they run. The app
+recovers the journal itself when its guard exits without resuming.
 It resumes on `resume`/`quit`, 3 s without a request while paused, stdin EOF (the app died),
 SIGTERM/SIGINT/SIGHUP, and a panic. Before it stops anything it writes the plan to
 `game-pause-journal.json` in the app data folder; the app and every new guard resume what that

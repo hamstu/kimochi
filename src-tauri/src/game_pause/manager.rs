@@ -228,6 +228,10 @@ impl Machine {
         pids
     }
 
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
     pub fn phase(&self) -> Phase {
         self.phase
     }
@@ -355,6 +359,12 @@ impl Machine {
         }
         if self.last_beat_sent.is_some_and(|at| now.saturating_duration_since(at) < BEAT_EVERY) {
             return;
+        }
+        // A gap in the beats while paused (the overlay slow or stalled), for the verbose log.
+        if let Some(gap) = self.last_beat_sent.map(|at| now.saturating_duration_since(at)) {
+            if self.phase == Phase::Paused && gap >= HOLD_STALE / 2 {
+                self.log_verbose(out, json!({ "heartbeatGapMs": gap.as_millis() as u64 }));
+            }
         }
         self.last_beat_sent = Some(now);
         out.push(Effect::Send(Request::Beat));
@@ -531,7 +541,12 @@ impl Machine {
                 if by_guard {
                     value["by"] = json!("guard");
                 }
-                self.log(out, value);
+                // A resume that found nothing held (its suspend had failed) is only an answer.
+                if count == 0 && error.is_none() {
+                    self.log_verbose(out, value);
+                } else {
+                    self.log(out, value);
+                }
                 self.end_span(now);
                 self.current = None;
                 self.phase = Phase::Idle;
@@ -541,6 +556,13 @@ impl Machine {
                     self.suppressed = true;
                     self.holds.clear();
                 }
+            }
+            Reply::Retried { count, error } => {
+                let mut value = json!({ "retriedResume": count, "running": error.is_none() });
+                if let Some(error) = error {
+                    value["error"] = json!(error.to_string());
+                }
+                self.log(out, value);
             }
             Reply::Refreshed { count, error } => {
                 if let Some(c) = self.current.as_mut() {
@@ -972,6 +994,97 @@ mod tests {
         Core::new(&fake, j, Instant::now()).start();
         assert!(!fake.stopped(100));
         assert!(fake.stopped(101), "someone else's stop is left alone");
+    }
+
+    #[test]
+    fn a_failed_suspend_raced_by_a_release_does_not_leave_the_manager_resuming() {
+        // Review finding: the guard answered nothing to the resume of a failed suspend, so the
+        // manager stayed in Resuming and never paused again.
+        let mut rig = Rig::new("stuck-resuming");
+        rig.fake.state.lock().unwrap().fail_suspend.insert(102);
+        rig.hold_replies = true;
+        rig.input(Input::Beat(vec![Reason::Lookup]));
+        assert_eq!(rig.machine.phase(), Phase::Pausing);
+        rig.input(Input::Beat(vec![]));
+        assert_eq!(rig.machine.phase(), Phase::Resuming);
+        rig.deliver();
+        assert_eq!(rig.machine.phase(), Phase::Idle, "{:?}", rig.machine.status());
+        // And pausing works again.
+        rig.fake.state.lock().unwrap().fail_suspend.clear();
+        rig.input(Input::Beat(vec![Reason::Lookup]));
+        assert!(rig.stopped());
+        rig.input(Input::Beat(vec![]));
+        assert!(!rig.stopped());
+    }
+
+    #[test]
+    fn a_resume_of_nothing_is_still_answered() {
+        let fake = Fake::new();
+        let mut core = Core::new(&fake, journal("answer"), Instant::now());
+        let replies = core.handle(Request::Resume { id: 9, reason: "released".into() }, Instant::now());
+        assert!(matches!(&replies[..], [Reply::Resumed { id: Some(9), count: 0, .. }]), "{replies:?}");
+    }
+
+    #[test]
+    fn a_failed_resume_is_retried_and_stays_in_the_journal() {
+        // Review finding: a failed resume was never retried, and the next suspend overwrote the
+        // journal entry that named the processes left stopped.
+        let fake = Fake::new();
+        fake.spawn(100, 1, None);
+        fake.spawn(101, 2, Some(100));
+        fake.spawn(200, 3, None);
+        let j = journal("retry");
+        let t0 = Instant::now();
+        let mut core = Core::new(&fake, j.clone(), t0);
+        let plan = fake.plan(&GameRef { pid: Some(100), ..Default::default() }).unwrap();
+        core.handle(Request::Suspend { id: 1, plan }, t0);
+        fake.state.lock().unwrap().fail_resume.insert(101);
+        let replies = core.handle(Request::Resume { id: 2, reason: "released".into() }, t0);
+        assert!(matches!(&replies[..], [Reply::Resumed { error: Some(_), .. }]));
+        assert!(fake.stopped(101));
+        assert_eq!(core.stuck(), 2);
+        let named =
+            |j: &Journal| j.read().map(|e| e.members.iter().map(|m| m.pid).collect::<Vec<_>>()).unwrap_or_default();
+        assert!(named(&j).contains(&101), "the stuck process stays in the journal");
+        // Another game is paused meanwhile: its entry keeps the stuck one too.
+        let other = fake.plan(&GameRef { pid: Some(200), ..Default::default() }).unwrap();
+        core.handle(Request::Suspend { id: 3, plan: other }, t0);
+        let pids = named(&j);
+        assert!(pids.contains(&200) && pids.contains(&101), "{pids:?}");
+        // Retried with backoff: still failing at 1 s, running once the cause is gone.
+        let replies = core.tick(t0 + Duration::from_millis(1100));
+        assert!(replies.iter().any(|r| matches!(r, Reply::Retried { error: Some(_), .. })), "{replies:?}");
+        fake.state.lock().unwrap().fail_resume.clear();
+        core.touch(t0 + Duration::from_millis(2500));
+        assert!(core.tick(t0 + Duration::from_millis(2600)).is_empty(), "backoff: not yet");
+        core.touch(t0 + Duration::from_millis(3200));
+        let replies = core.tick(t0 + Duration::from_millis(3300));
+        assert!(replies.iter().any(|r| matches!(r, Reply::Retried { error: None, .. })), "{replies:?}");
+        assert!(!fake.stopped(101));
+        assert_eq!(core.stuck(), 0);
+        assert_eq!(named(&j), [200], "only the pause still held");
+        core.handle(Request::Resume { id: 4, reason: "released".into() }, t0 + Duration::from_millis(3400));
+        assert!(!fake.any_stopped());
+        assert!(j.read().is_none());
+    }
+
+    #[test]
+    fn a_slow_suspend_does_not_count_as_a_lost_heartbeat() {
+        // Review finding: the heartbeat was stamped before a slow suspend (audio parking), so the
+        // tick right after resumed the game as "heartbeat".
+        let fake = Fake::new();
+        fake.spawn(100, 1, None);
+        let t0 = Instant::now();
+        let plan = fake.plan(&GameRef { pid: Some(100), ..Default::default() }).unwrap();
+        let mut core = Core::new(&fake, journal("slow"), t0);
+        core.handle(Request::Suspend { id: 1, plan }, t0);
+        // The suspend took 3.5 s; `serve` stamps the heartbeat when it is done.
+        core.touch(t0 + Duration::from_millis(3500));
+        assert!(core.tick(t0 + Duration::from_millis(3600)).is_empty());
+        assert!(core.holding());
+        // A real loss still resumes.
+        let replies = core.tick(t0 + Duration::from_millis(6600));
+        assert!(matches!(&replies[..], [Reply::Resumed { id: None, reason, .. }] if reason == "heartbeat"));
     }
 
     #[test]

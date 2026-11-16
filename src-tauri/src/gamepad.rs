@@ -847,9 +847,15 @@ fn pending_return() -> std::sync::MutexGuard<'static, Option<(u32, Instant)>> {
 }
 
 fn reactivate(app: &tauri::AppHandle, pid: u32) {
+    if !crate::game_pause::paused() {
+        let _ = app.run_on_main_thread(move || {
+            let _ = crate::platform::activate_process(pid);
+        });
+        return;
+    }
     let app = app.clone();
     // A paused game is resumed before it is activated, never after: activating a stopped app
-    // waits on it (macOS Accessibility, Windows' foreground hand-off).
+    // waits on it (macOS Accessibility, Windows' foreground hand-off). Off the main thread.
     std::thread::spawn(move || {
         if !crate::game_pause::app::resume_before_activating("handing focus back to the game") {
             log(
@@ -892,6 +898,44 @@ pub fn returning_to() -> Option<u32> {
     *NAV_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Orders game pause's navigation hold against navigation ending. The hold is sent from the main
+/// thread once Kimochi has activation (`set_navigation`), so a close handled before that turn must
+/// win: each open gets a generation, and its hold is sent only while that open is still the
+/// current one. Both run under one lock, so a hold can never arrive after its release.
+pub(crate) struct NavPauseGate(Mutex<(u64, bool)>);
+
+impl NavPauseGate {
+    pub(crate) const fn new() -> Self {
+        NavPauseGate(Mutex::new((0, false)))
+    }
+    fn lock(&self) -> std::sync::MutexGuard<'_, (u64, bool)> {
+        self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+    /// Navigation opened: the generation its hold must carry.
+    pub(crate) fn open(&self) -> u64 {
+        let mut state = self.lock();
+        state.0 += 1;
+        state.1 = true;
+        state.0
+    }
+    /// Sends the hold (`send`) if navigation is still the open of `generation`.
+    pub(crate) fn take(&self, generation: u64, send: impl FnOnce()) {
+        let state = self.lock();
+        if state.1 && state.0 == generation {
+            send();
+        }
+    }
+    /// Navigation ended: sends the release (`send`); holds of earlier opens are dropped.
+    pub(crate) fn close(&self, send: impl FnOnce()) {
+        let mut state = self.lock();
+        state.0 += 1;
+        state.1 = false;
+        send();
+    }
+}
+
+static NAV_PAUSE: NavPauseGate = NavPauseGate::new();
+
 pub fn navigating() -> bool {
     NAV.load(Ordering::SeqCst)
 }
@@ -912,6 +956,8 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
     let mut remembered = NAV_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let was = NAV.swap(active, Ordering::SeqCst);
     if active {
+        // Game pause's hold for this open (sent once Kimochi has activation, below).
+        let generation = NAV_PAUSE.open();
         // Reopened before the game got its focus back: it is still the one to return to.
         if let Some((pid, _)) = pending_return().take() {
             remembered.get_or_insert(pid);
@@ -957,7 +1003,9 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 }
                 // Only now, with the overlay in front: activation must never wait on a game that is
                 // already suspended (Windows' foreground hand-off talks to its input thread).
-                crate::game_pause::send(crate::game_pause::Input::Hold(crate::game_pause::Reason::Navigation));
+                NAV_PAUSE.take(generation, || {
+                    crate::game_pause::send(crate::game_pause::Input::Hold(crate::game_pause::Reason::Navigation))
+                });
                 #[cfg(target_os = "macos")]
                 {
                     let service = handle.state::<Shared>().inner().clone();
@@ -966,7 +1014,9 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
             });
         }
         if !take_focus {
-            crate::game_pause::send(crate::game_pause::Input::Hold(crate::game_pause::Reason::Navigation));
+            NAV_PAUSE.take(generation, || {
+                crate::game_pause::send(crate::game_pause::Input::Hold(crate::game_pause::Reason::Navigation))
+            });
         }
         let previous = *remembered;
         // Never with NAV_RETURN held: from a background thread, registering waits for the
@@ -982,7 +1032,8 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
     }
     let previous = remembered.take();
     drop(remembered);
-    crate::game_pause::send(crate::game_pause::Input::Release(crate::game_pause::Reason::Navigation));
+    NAV_PAUSE
+        .close(|| crate::game_pause::send(crate::game_pause::Input::Release(crate::game_pause::Reason::Navigation)));
     if was {
         let _ = crate::hotkeys::set_nav_keys(app, false);
     }
@@ -1191,6 +1242,25 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_navigation_hold_never_lands_after_its_release() {
+        use super::NavPauseGate;
+        let gate = NavPauseGate::new();
+        let sent = std::cell::RefCell::new(Vec::new());
+        // Open, then closed before the main thread got to send the hold: no hold at all.
+        let first = gate.open();
+        gate.close(|| sent.borrow_mut().push("release"));
+        gate.take(first, || sent.borrow_mut().push("hold"));
+        assert_eq!(*sent.borrow(), ["release"]);
+        // Opened again quickly: only the newest open's hold counts.
+        let second = gate.open();
+        let third = gate.open();
+        gate.take(second, || sent.borrow_mut().push("stale hold"));
+        gate.take(third, || sent.borrow_mut().push("hold"));
+        gate.close(|| sent.borrow_mut().push("release"));
+        assert_eq!(*sent.borrow(), ["release", "hold", "release"]);
+    }
+
     #[test]
     fn a_controller_menu_session_counts_presses_and_names_each_controller_once() {
         let mut session = super::NavSession::start();

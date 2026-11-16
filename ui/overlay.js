@@ -952,6 +952,9 @@ let readingHold = false
 /** Game pause (`beatGamePause`): when the last lookup started, and whether a hold was sent. */
 let lookupStartedAt = -Infinity
 const LOOKUP_GRACE_MS = 1200
+/** When the pop-up host last said its pop-up is up (`overlay-reading-popup-alive`). */
+let remotePopupAliveAt = -Infinity
+const REMOTE_POPUP_ALIVE_MS = 3000
 let gamePauseHeld = false
 let layerPointerExit = null
 let hyprlandPointer = false
@@ -1002,7 +1005,13 @@ function apiPopupVisible(visible) {
  */
 function gamePauseReasons() {
   const reasons = []
-  if (readingPopupShown() || performance.now() - lookupStartedAt < LOOKUP_GRACE_MS) reasons.push('lookup')
+  const now = performance.now()
+  // The pop-up host's pop-up counts only while that window keeps saying so: a host that crashed or
+  // reloaded after "visible" must not hold the game paused.
+  const remoteAlive = remoteReadingPopup && now - remotePopupAliveAt < REMOTE_POPUP_ALIVE_MS
+  const localPopup =
+    apiReadingPopup || Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
+  if (remoteAlive || localPopup || now - lookupStartedAt < LOOKUP_GRACE_MS) reasons.push('lookup')
   if (controller && controller.mode !== 'idle') reasons.push('navigation')
   if (state.regionSelecting) reasons.push('regionEditor')
   return reasons
@@ -5515,8 +5524,12 @@ await native.listen('pointer', ({ payload }) => {
   noteScanFeed(payload, init !== null)
 })
 
+await native.listen('overlay-reading-popup-alive', () => {
+  remotePopupAliveAt = performance.now()
+})
 await native.listen('overlay-reading-popup', ({ payload }) => {
   remoteReadingPopup = payload?.visible === true
+  if (remoteReadingPopup) remotePopupAliveAt = performance.now()
   remoteReadingRects = remoteReadingPopup && Array.isArray(payload.rects) ? payload.rects : []
   syncReadingHold()
   void publishRegions()

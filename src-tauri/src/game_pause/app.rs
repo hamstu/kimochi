@@ -105,7 +105,8 @@ pub fn wait_until_resumed(timeout: Duration) -> bool {
 /// whether it settled in time. A no-op before [`start`].
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn settle(timeout: Duration) -> bool {
-    if TX.get().is_none() {
+    // Off: nothing pauses, so nothing to wait for (and no round trip).
+    if TX.get().is_none() || !ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
         return true;
     }
     let id = NEXT_BARRIER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -152,19 +153,13 @@ impl Context for AppCx {
         let selection = self.app.try_state::<crate::state::Shared>().and_then(|s| s.selection.lock().ok()?.clone());
         #[cfg(target_os = "linux")]
         {
-            // No frontmost fallback: Linux's frontmost pid is the window's own `_NET_WM_PID` claim,
-            // not a host pid to trust.
             let steam = crate::platform::gamescope::focused_app_id();
-            super::target::game_ref(selection.as_deref(), None, steam, &crate::platform::x11_window_host_pid)
+            super::target::game_ref(selection.as_deref(), steam, &crate::platform::x11_window_host_pid)
         }
+        // Only a selected window names the game: with a display (or nothing) selected, the app in
+        // front could be anything (a browser, a call), and is never paused.
         #[cfg(not(target_os = "linux"))]
-        {
-            let ours = std::process::id();
-            // While the menu has activation, the game is the app it will hand back to.
-            let frontmost =
-                crate::platform::frontmost_pid().filter(|pid| *pid != ours).or_else(crate::gamepad::returning_to);
-            super::target::game_ref(selection.as_deref(), frontmost, None, &|_| None)
-        }
+        super::target::game_ref(selection.as_deref(), None, &|_| None)
     }
     fn inputs_held(&self) -> bool {
         #[cfg(target_os = "macos")]
@@ -193,11 +188,8 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
     let journal = app.path().app_data_dir().ok().map(|dir| Journal::in_dir(&dir));
     let spawned = std::thread::Builder::new().name("game-pause".into()).spawn(move || {
         let backend = super::platform::backend();
-        if let Some(journal) = &journal {
-            for r in journal.recover(backend.as_ref(), None) {
-                log(&app, false, json!({ "check": "game-pause", "recovered": r.pid, "exe": r.exe, "outcome": r.outcome, "since": r.since, "by": "app" }));
-            }
-        }
+        recover_orphans(&app, &journal, backend.as_ref(), None, "app start");
+        let mut last_orphan_check = Instant::now();
         let cx = AppCx { app: app.clone() };
         let mut machine = Machine::new(*EPOCH, kimochi_capture::audio::now_ms);
         let mut client: Option<Client> = None;
@@ -218,6 +210,7 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                 },
             };
             let barrier = if let Input::Barrier(id) = input { Some(id) } else { None };
+            let guard_gone = matches!(input, Input::GuardGone);
             if matches!(&input, Input::ForceResume(why) if why == QUIT) {
                 quitting = Some(Instant::now());
             }
@@ -240,6 +233,22 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                     Effect::Log { verbose, value } => log(&app, verbose, value),
                 }
             }
+            if guard_gone {
+                // The guard is gone, resumed or not (killed, crashed): say how it ended, and resume
+                // whatever its journal still names at once rather than at the next pause.
+                let status = client.take().map(|mut c| c.reap(Duration::from_millis(500)));
+                log(&app, false, json!({ "check": "game-pause", "guard": "exited", "status": status }));
+                recover_orphans(&app, &journal, backend.as_ref(), None, "guard gone");
+            }
+            // An orphaned journal (an older guard that died, or a resume that failed in it): resumed
+            // once no guard of ours or of an earlier run is alive to do it.
+            if last_orphan_check.elapsed() >= ORPHAN_CHECK_EVERY {
+                last_orphan_check = Instant::now();
+                if client.as_mut().is_none_or(|c| c.exited()) {
+                    recover_orphans(&app, &journal, backend.as_ref(), None, "orphan check");
+                }
+            }
+            ENABLED.store(machine.enabled(), std::sync::atomic::Ordering::Relaxed);
             {
                 let mut shared = SHARED.lock().unwrap_or_else(|p| p.into_inner());
                 shared.pids = machine.paused_pids();
@@ -254,6 +263,55 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
     });
     if let Err(e) = spawned {
         eprintln!("game pause: could not start its thread: {e}");
+    }
+}
+
+/// How often the game pause thread looks for an orphaned journal while it has no guard.
+const ORPHAN_CHECK_EVERY: Duration = Duration::from_secs(2);
+/// Guard stderr lines logged at the normal level per guard; later ones are verbose only.
+const STDERR_NORMAL_LINES: usize = 50;
+/// The guard the app talks to now; replies and exits of earlier ones are ignored.
+static GUARD_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// The setting, as the game pause thread last applied it.
+static ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the setting is on, as the game pause thread last applied it (cheap, any thread).
+pub fn enabled_now() -> bool {
+    ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether `pid` is a guard process (Kimochi's own executable) that is still running.
+fn guard_alive(backend: &dyn super::backend::Backend, pid: u32) -> bool {
+    let name = |path: &str| std::path::Path::new(path).file_name().map(|n| n.to_owned());
+    let ours = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_owned()));
+    pid != std::process::id()
+        && backend.identity(pid).is_some_and(|id| ours.is_some() && name(id.exe.trim_end_matches(" (deleted)")) == ours)
+}
+
+/// Resumes what the journal names unless a guard that can still do it is alive (`live`, or the one
+/// that wrote the entry), and logs each process.
+fn recover_orphans(
+    app: &tauri::AppHandle,
+    journal: &Option<Journal>,
+    backend: &dyn super::backend::Backend,
+    live: Option<u32>,
+    by: &str,
+) {
+    let Some(journal) = journal else { return };
+    if !journal.path().exists() {
+        return;
+    }
+    if let Some(entry) = journal.read() {
+        if live == Some(entry.guard) || guard_alive(backend, entry.guard) {
+            return;
+        }
+    }
+    for r in journal.recover(backend, None) {
+        log(
+            app,
+            false,
+            json!({ "check": "game-pause", "recovered": r.pid, "exe": r.exe, "outcome": r.outcome, "since": r.since, "by": by }),
+        );
     }
 }
 
@@ -286,17 +344,32 @@ fn deliver(
         let journal = journal.as_ref().ok_or("no app data folder for the journal")?;
         let replies = tx.clone();
         let gone = tx.clone();
+        // Each guard's replies and exit count only while it is the current one: a late exit of an
+        // earlier guard must not end the pause a new one holds.
+        let generation = GUARD_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        let current = move || GUARD_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation;
+        let lines = std::sync::atomic::AtomicUsize::new(0);
         *client = Some(Client::spawn(
             journal.path(),
             move |reply| {
-                let _ = replies.send(Input::Guard(reply));
+                if current() {
+                    let _ = replies.send(Input::Guard(reply));
+                }
             },
             move || {
-                let _ = gone.send(Input::GuardGone);
+                if current() {
+                    let _ = gone.send(Input::GuardGone);
+                }
             },
-            |line| {
+            move |line| {
                 eprintln!("game pause guard: {line}");
-                crate::debug_report::trace_now(json!({ "check": "game-pause", "guardStderr": line }));
+                let value = json!({ "check": "game-pause", "guardStderr": line });
+                // Panics and missing tools belong in a normal log; a chatty backend only so far.
+                if lines.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < STDERR_NORMAL_LINES {
+                    crate::debug_report::record_now(value);
+                } else {
+                    crate::debug_report::trace_now(value);
+                }
             },
         )?);
     }
@@ -374,8 +447,9 @@ pub fn game_pause_beat(reasons: Vec<String>) {
 /// The escape hatch ("Resume paused game", Settings and the tray): resume everything now,
 /// including whatever the journal names from an earlier run.
 #[tauri::command]
-pub fn game_pause_resume_all(app: tauri::AppHandle) -> Value {
-    resume_all(&app)
+pub async fn game_pause_resume_all(app: tauri::AppHandle) -> Value {
+    // Waits for the resume and the journal: never on the main thread.
+    tauri::async_runtime::spawn_blocking(move || resume_all(&app)).await.unwrap_or(Value::Null)
 }
 
 pub fn resume_all(app: &tauri::AppHandle) -> Value {

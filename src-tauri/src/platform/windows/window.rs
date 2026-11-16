@@ -433,6 +433,11 @@ pub fn promote_to_key(w: &tauri::WebviewWindow) -> Result<bool, String> {
 /// foreground right. Detached immediately: an attached queue shares key state and would
 /// stall us if that thread hung.
 fn force_foreground(target: HWND) -> bool {
+    // A paused game is never the target (callers resume it first): `foreground_ready` would wait
+    // out its timeout on a window that cannot answer.
+    if crate::game_pause::app::holds_pid(window_pid(target)) {
+        return false;
+    }
     unsafe {
         // Lets whichever process we hand the foreground to keep it (activate_process).
         let _ = AllowSetForegroundWindow(ASFW_ANY);
@@ -441,6 +446,13 @@ fn force_foreground(target: HWND) -> bool {
             return true;
         }
         let foreground = GetForegroundWindow();
+        // Never share an input queue with a paused game's thread: with the queues attached, taking
+        // the foreground deactivates the game's window synchronously, and a suspended thread never
+        // answers. Without the attach the request may only flash the taskbar button; a click on
+        // Kimochi's own window (which grants the foreground) still works.
+        if !foreground.is_invalid() && crate::game_pause::app::holds_pid(window_pid(foreground)) {
+            return foreground_ready(target);
+        }
         let theirs = if foreground.is_invalid() { 0 } else { GetWindowThreadProcessId(foreground, None) };
         let ours = GetCurrentThreadId();
         // Without a shared queue, handing the foreground back from one of our own windows

@@ -221,6 +221,16 @@ function hideWindow() {
 }
 
 let readingPopupSignature = null
+/**
+ * While a pop-up for the overlay's text is up, this window says it is still alive once a second
+ * (`overlay-reading-popup-alive`): the overlay holds the game paused for it ("Pause the game while
+ * reading") only while it hears that, so a pop-up host that dies mid-lookup never keeps the game
+ * stopped.
+ */
+setInterval(() => {
+  if (readingPopupSignature === null || readingPopupSignature === '[]') return
+  void window.__TAURI__.event.emitTo('overlay', 'overlay-reading-popup-alive', {}).catch(() => {})
+}, 1000)
 async function relayout() {
   const visible = [...placed].filter(([popup]) => popup.isVisibleSync())
   const readingVisible = visible.some(([popup]) => popupSources.get(popup) === 'desktop')

@@ -9,17 +9,17 @@
 //!   and nothing when the server cannot say;
 //! - a Wayland window named by the compositor (GNOME's extension, KWin) carries the host pid the
 //!   compositor read from the client's socket;
-//! - Gamescope sources carry Steam's app id as well, which the Linux backend prefers.
+//! - Gamescope sources carry Steam's app id as well, which the Linux backend prefers;
+//! - a display source (or none) names no game: never the app that happens to be in front.
 use super::backend::GameRef;
 use kimochi_capture::{Platform, SourceId};
 
 /// The game for the current selection. `selection` is the selected source id string (if any),
-/// `frontmost` the frontmost window's pid, used only without a window selection (callers pass
-/// `None` where it is not a trustworthy host pid), `steam_app_id` Gamescope's focused app in Gaming
-/// Mode, and `x11_host_pid` the X server's pid for an X11 window id.
+/// `steam_app_id` Gamescope's focused app in Gaming Mode, and `x11_host_pid` the X server's pid for
+/// an X11 window id. Without a window selection there is no pid: the app in front could be anything
+/// (a browser, a call), and is never paused.
 pub fn game_ref(
     selection: Option<&str>,
-    frontmost: Option<u32>,
     steam_app_id: Option<u32>,
     x11_host_pid: &dyn Fn(u32) -> Option<u32>,
 ) -> GameRef {
@@ -35,8 +35,8 @@ pub fn game_ref(
             };
             (pid, window)
         }
-        // A display, or nothing selected: the window in front.
-        _ => (frontmost, None),
+        // A display, or nothing selected.
+        _ => (None, None),
     };
     GameRef { pid, source: selection.map(str::to_owned), window, steam_app_id, title: None }
 }
@@ -52,19 +52,21 @@ mod tests {
     #[test]
     fn untrusted_pids_are_left_out() {
         // A portal window never has a pid, and nothing falls back to the frontmost for it.
-        assert_eq!(game_ref(Some("portal:window:57"), Some(9), None, &none).pid, None);
+        assert_eq!(game_ref(Some("portal:window:57"), None, &none).pid, None);
         // X11: the X server's pid, never the window's claim (a Flatpak sandbox pid here).
         let xres = |xid: u32| (xid == 4_194_311).then_some(31_337);
-        assert_eq!(game_ref(Some("x11:window:4194311:2"), None, None, &xres).pid, Some(31_337));
-        assert_eq!(game_ref(Some("x11:window:4194311:2"), None, None, &none).pid, None);
+        assert_eq!(game_ref(Some("x11:window:4194311:2"), None, &xres).pid, Some(31_337));
+        assert_eq!(game_ref(Some("x11:window:4194311:2"), None, &none).pid, None);
         // Gamescope's 0 means unknown.
-        assert_eq!(game_ref(Some("gamescope:window:1234:0"), None, Some(1234), &none).pid, None);
+        assert_eq!(game_ref(Some("gamescope:window:1234:0"), Some(1234), &none).pid, None);
     }
 
     #[test]
-    fn trusted_pids_and_the_frontmost_fallback() {
-        assert_eq!(game_ref(Some("macos:window:88:4242"), Some(9), None, &none).pid, Some(4242));
-        assert_eq!(game_ref(Some("windows:window:131234:777"), None, None, &none).pid, Some(777));
-        assert_eq!(game_ref(None, Some(9), None, &none).pid, Some(9));
+    fn trusted_pids_and_no_frontmost_fallback() {
+        assert_eq!(game_ref(Some("macos:window:88:4242"), None, &none).pid, Some(4242));
+        assert_eq!(game_ref(Some("windows:window:131234:777"), None, &none).pid, Some(777));
+        // A display source or no selection: never whatever app is in front.
+        assert_eq!(game_ref(Some("macos:display:1"), None, &none).pid, None);
+        assert_eq!(game_ref(None, None, &none).pid, None);
     }
 }
