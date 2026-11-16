@@ -14,14 +14,13 @@ import { docsUrl } from '../lib/docs.js'
 export function LinuxTextHooker() {
   return (
     <Prose
-      title="Text hooking on Linux and Steam Deck, without the Wine-prefix fiddling"
-      lede="Textractor and LunaTranslator are Windows programs, so on Linux you normally have to run them inside the game’s own Wine or Proton prefix. Kimochi runs LunaHook (falling back to Textractor) inside the game’s Proton or Wine prefix for you. Pick the game’s window and turn on Text hooking."
+      title="Text hooking on Linux and Steam Deck"
+      lede="Textractor and LunaTranslator are Windows-only programs, so on Linux you normally have to run them inside the game’s own Wine or Proton prefix yourself. Kimochi runs them for you. 💪"
       page={LINUX_HOOKER_PATH}
     >
       <p>
-        Kimochi is a free, open-source app for reading games in Japanese. Text hooking reads a game&rsquo;s text from
-        inside the game instead of off the screen, so lines arrive exactly as the game wrote them, with no OCR misreads.
-        Look up any word in Yomitan (or Hachidori or 10ten) and add it to Anki.{' '}
+        Kimochi is a free, open-source app for reading games in Japanese (and other languages!). Text hooking means
+        using another program to read a game&rsquo;s text from inside the game instead of off the screen.{' '}
         <Link to="/download/linux">Install Kimochi on Linux or Steam Deck</Link>.
       </p>
 
