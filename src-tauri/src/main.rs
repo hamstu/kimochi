@@ -231,6 +231,9 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     if key == "appearance" {
         apply_appearance(app, Some(value));
     }
+    if key == game_pause::SETTING {
+        game_pause::send(game_pause::Input::SetEnabled(value.as_bool().unwrap_or(false)));
+    }
     if key == settings::EXCLUDE_FROM_CAPTURE {
         apply_capture_exclusion(app, settings);
     }
@@ -890,6 +893,7 @@ fn snapshot(state: State<Shared>) -> Value {
 fn select_source(state: State<Shared>, id: String) {
     let mut selection = state.selection.lock().unwrap();
     if selection.as_ref() != Some(&id) {
+        game_pause::send(game_pause::Input::ForceResume("the selection changed".into()));
         let mut v = state.view.lock().unwrap();
         v.scan = None;
         v.regions.clear();
@@ -981,7 +985,12 @@ fn view_flags(state: State<Shared>, flags: HashMap<String, bool>) {
             "autoOcrEnabled" => v.auto_ocr = value,
             "textOverlayVisible" => v.text_overlay_visible = value,
             "debugOverlayVisible" => v.debug_overlay_visible = value,
-            "overlayVisible" => v.overlay_visible = value,
+            "overlayVisible" => {
+                v.overlay_visible = value;
+                if !value {
+                    game_pause::send(game_pause::Input::ForceResume("the overlay was hidden".into()));
+                }
+            }
             "overlayThrottled" => v.overlay_throttled = value,
             _ => {}
         }
@@ -1214,6 +1223,11 @@ async fn linux_window_geometry(
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
+    game_pause::send(if on {
+        game_pause::Input::Hold(game_pause::Reason::RegionEditor)
+    } else {
+        game_pause::Input::Release(game_pause::Reason::RegionEditor)
+    });
     #[cfg(target_os = "windows")]
     crate::compact::crop(&app, on)?;
     #[cfg(target_os = "linux")]
@@ -3416,6 +3430,10 @@ fn main() {
         extension_fetch,
         region_keys,
         controller_nav,
+        game_pause::app::game_pause_status,
+        game_pause::app::game_pause_beat,
+        game_pause::app::game_pause_resume_all,
+        game_pause::app::game_pause_spans,
         panel_controller_input,
         return_to_game,
         hotkeys_load,
@@ -3532,6 +3550,8 @@ fn main() {
                 record_panics(evidence);
             }
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
+            // Resumes whatever an earlier run left paused, then follows the setting.
+            game_pause::app::start(&handle, game_pause::app::enabled(&store));
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
             // Before anything asks whether a local engine's models are ready.
@@ -3756,6 +3776,8 @@ fn main() {
                     eprintln!("kimochi: {running} text observer(s) still reading at exit");
                 }
                 model_store::shutdown(app);
+                // The game runs again before Kimochi goes (its guard would do it a moment later).
+                game_pause::app::shutdown();
                 text_hook::shutdown();
                 cli::server::stop();
                 extension_store::shutdown(app);
@@ -4884,6 +4906,13 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
             // Controller mode's keys are global; switching to any other app ends it.
             let source_pid = watched.as_ref().and_then(SourceId::pid);
             gamepad::release_if_elsewhere(&handle, platform::frontmost_pid(), source_pid);
+            #[cfg(target_os = "linux")]
+            let elsewhere_counts = !platform::gamescope::active();
+            #[cfg(not(target_os = "linux"))]
+            let elsewhere_counts = true;
+            if elsewhere_counts {
+                game_pause::app::frontmost_changed(platform::frontmost_pid().filter(|pid| Some(*pid) != source_pid));
+            }
             // Woken early when one of Kimochi's windows moves, resizes, hides or takes
             // focus, or the overlay's text moves, so covering and uncovering the text
             // answer at once.

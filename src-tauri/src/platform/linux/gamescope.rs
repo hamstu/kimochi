@@ -557,3 +557,11 @@ mod input_tests {
         assert_eq!(owner, None);
     }
 }
+
+/// The Steam app id of the game Gamescope shows in front, in Gaming Mode (game pause's target).
+pub fn focused_app_id() -> Option<u32> {
+    if !active() {
+        return None;
+    }
+    super::gamescope_handoff::game_id()
+}

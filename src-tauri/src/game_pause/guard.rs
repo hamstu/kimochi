@@ -99,10 +99,7 @@ impl<'a> Core<'a> {
             pid: std::process::id(),
         }
     }
-    pub fn with_heartbeat_loss(mut self, loss: Duration) -> Self {
-        self.heartbeat_loss = loss;
-        self
-    }
+    #[cfg(test)]
     pub fn holding(&self) -> bool {
         self.held.is_some()
     }
@@ -313,7 +310,11 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn spawn(journal: &std::path::Path, on_reply: impl Fn(Reply) + Send + 'static) -> Result<Client, String> {
+    pub fn spawn(
+        journal: &std::path::Path,
+        on_reply: impl Fn(Reply) + Send + 'static,
+        on_gone: impl FnOnce() + Send + 'static,
+    ) -> Result<Client, String> {
         use std::process::{Command, Stdio};
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let mut command = Command::new(exe);
@@ -348,13 +349,10 @@ impl Client {
                         on_reply(reply);
                     }
                 }
+                on_gone();
             })
             .map_err(|e| e.to_string())?;
         Ok(Client { child: Some(child), stdin })
-    }
-
-    pub fn pid(&self) -> u32 {
-        self.child.as_ref().map_or(0, |c| c.id())
     }
 
     /// Whether the guard process has exited.
