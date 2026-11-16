@@ -729,6 +729,11 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
 /// Kimochi is normally the foreground app when this is asked for (the reader just
 /// clicked it), which is what lets Windows honour the request.
 pub fn activate_process(pid: u32) -> Result<(), String> {
+    // Never a paused game (callers resume it first, `game_pause::app::resume_before_activating`):
+    // Windows never marks a frozen window hung, so the foreground hand-off would wait on it.
+    if crate::game_pause::app::holds_pid(pid) {
+        return Err("busy: the game is paused".into());
+    }
     let Some(target) = main_window_of(pid) else {
         return Err(if super::process_image_path(pid).is_none() && process_windows(pid).is_empty() {
             "gone: that application is no longer running".into()
@@ -753,6 +758,9 @@ pub fn activate_process(pid: u32) -> Result<(), String> {
 /// desktop is activated there, and Windows switches to that desktop. Falls back to the process
 /// when the window is gone.
 pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<Value, String> {
+    if id.pid().is_some_and(crate::game_pause::app::holds_pid) {
+        return Err("busy: the game is paused".into());
+    }
     let Some(target) = super::sources::resolve(id) else {
         return match id.pid().filter(|pid| *pid > 0) {
             Some(pid) => activate_process(pid).map(|()| json!({ "fallback": true })),

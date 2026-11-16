@@ -412,6 +412,10 @@ fn launch(
     dir: &std::path::Path,
     targets: &[process::Target],
 ) -> Result<(), String> {
+    // The helper waits on the game's Wine server, which a game pause stops: never while paused.
+    if !crate::game_pause::app::defer_while_paused("text hook helper start", Duration::from_secs(30)) {
+        return Err("busy: the game is paused".into());
+    }
     let exe = hookd_path(&hook.app)?;
     let mut command = Command::new(&exe);
     command.arg(engine).arg("--dir").arg(dir);
@@ -461,6 +465,12 @@ fn launch(
         Ok(Ok(())) => {}
         Ok(Err(e)) => return Err(e),
         Err(_) => return Err("the hook helper did not start".into()),
+    }
+    // Attaching injects into the game and waits for it there: never into a paused game.
+    if targets.iter().any(|t| crate::game_pause::app::holds_pid(t.pid))
+        && !crate::game_pause::app::resume_before_activating("attaching the text hook")
+    {
+        return Err("busy: the game is paused".into());
     }
     let mut session = hook.lock();
     for target in targets {
@@ -1089,6 +1099,10 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     #[cfg(target_os = "linux")]
     let helper = hookd_path(&hook.app);
     let found = tauri::async_runtime::spawn_blocking(move || {
+        // Listing a Wine game's processes asks a helper inside its prefix: not while paused.
+        if !crate::game_pause::app::defer_while_paused("text hook process listing", Duration::from_secs(30)) {
+            return Err("The game is paused; try again once it runs.".into());
+        }
         let found = process::game_processes(pid);
         if found.is_empty() {
             return Err(process::target(pid).err().unwrap_or_else(|| "This app cannot be hooked.".into()));
@@ -1360,6 +1374,15 @@ pub fn refresh_voice_hook() {
 /// Injects the voice hook DLL into `target`, from a staged copy (so a rebuild or an update can
 /// replace the app's own while the game runs). Loading it into a game that has it is harmless.
 fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<(), String> {
+    // Injection runs inside the game (and, under Wine, through its Wine server): not while paused.
+    if !crate::game_pause::app::defer_while_paused("voice hook injection", Duration::from_secs(60)) {
+        return Err("The game stayed paused; the voice hook will be tried again later.".into());
+    }
+    if crate::game_pause::app::holds_pid(target.pid)
+        && !crate::game_pause::app::resume_before_activating("injecting the voice hook")
+    {
+        return Err("The game is paused; the voice hook will be tried again later.".into());
+    }
     let helper = hookd_path(app)?.with_file_name(if target.bits == 32 {
         "kimochi-hookd-x86.exe"
     } else {

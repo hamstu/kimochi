@@ -276,6 +276,15 @@ pub fn frontmost_app() -> Option<String> {
     }
 }
 
+/// Game pause: the host pid of X11 window `xid`'s client (X-Resource), or `None` when the X
+/// server cannot say (then the window's own pid is not trusted).
+pub fn x11_window_host_pid(xid: u32) -> Option<u32> {
+    if !on_x11() {
+        return None;
+    }
+    x11::window_host_pid(xid)
+}
+
 pub fn frontmost_pid() -> Option<u32> {
     if on_x11() {
         x11::frontmost_pid()

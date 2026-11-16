@@ -19,6 +19,19 @@ pub struct Entry {
     pub at: u64,
     /// The guard process that owns it.
     pub guard: u32,
+    /// The boot it was written in, where process start times count from boot (Linux's
+    /// `boot_id`). An entry from another boot names nothing that still runs: it is dropped.
+    /// macOS and Windows start times are absolute (since the epoch, FILETIME), so `None` there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot: Option<String>,
+}
+
+/// This boot, where process start times are relative to it (Linux); `None` elsewhere.
+pub fn boot_id() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    return std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok().map(|id| id.trim().to_owned());
+    #[cfg(not(target_os = "linux"))]
+    None
 }
 
 impl Entry {
@@ -97,12 +110,27 @@ impl Journal {
         if skip_guard.is_some_and(|guard| guard == entry.guard) {
             return Vec::new();
         }
+        if entry.boot.is_some() && entry.boot != boot_id() {
+            self.clear();
+            return entry
+                .members
+                .iter()
+                .map(|m| Recovered {
+                    pid: m.pid,
+                    exe: m.exe.clone(),
+                    outcome: "stale: another boot".into(),
+                    since: entry.at,
+                })
+                .collect();
+        }
         let mut out = Vec::new();
         let mut live = Vec::new();
         for member in &entry.members {
             let outcome = match backend.identity(member.pid) {
                 None => "gone".to_string(),
                 Some(now) if !member.same_process(&now) => "reused".to_string(),
+                // Ran already (someone resumed it, or it never stopped): nothing to continue.
+                Some(_) if backend.stopped(member) == Some(false) => "already running".to_string(),
                 Some(_) => {
                     live.push(member.clone());
                     continue;
@@ -146,7 +174,9 @@ mod tests {
         let plan = fake.plan(&GameRef { pid: Some(10), ..Default::default() }).unwrap();
         let s = fake.suspend(&plan).unwrap();
         let journal = tmp("reuse");
-        journal.write(&Entry { game: s.game, members: s.members, mechanism: s.mechanism, at: 1, guard: 999 }).unwrap();
+        journal
+            .write(&Entry { game: s.game, members: s.members, mechanism: s.mechanism, at: 1, guard: 999, boot: None })
+            .unwrap();
         // 11 exited and its pid now names another (stopped by someone else) process; 12 is gone.
         fake.exit(11);
         fake.spawn(11, 555, None);
@@ -159,6 +189,32 @@ mod tests {
         assert_eq!(outcome(10), "resumed");
         assert_eq!(outcome(11), "reused");
         assert_eq!(outcome(12), "gone");
+        assert!(journal.read().is_none());
+    }
+
+    #[test]
+    fn a_process_already_running_is_reported_as_such() {
+        let fake = Fake::new();
+        fake.spawn(10, 100, None);
+        let journal = tmp("running");
+        let id = ProcIdentity { pid: 10, start: 100, exe: "game".into() };
+        journal.write(&Entry { members: vec![id], boot: boot_id(), ..Default::default() }).unwrap();
+        let out = journal.recover(&fake, None);
+        assert_eq!(out[0].outcome, "already running");
+        assert!(!fake.calls().iter().any(|c| c.starts_with("cont")), "nothing to continue");
+    }
+
+    #[test]
+    fn an_entry_from_another_boot_is_dropped_untouched() {
+        let fake = Fake::new();
+        fake.spawn(10, 100, None);
+        fake.state.lock().unwrap().procs.get_mut(&10).unwrap().stopped = true;
+        let journal = tmp("boot");
+        let id = ProcIdentity { pid: 10, start: 100, exe: "game".into() };
+        journal.write(&Entry { members: vec![id], boot: Some("another-boot".into()), ..Default::default() }).unwrap();
+        let out = journal.recover(&fake, None);
+        assert_eq!(out[0].outcome, "stale: another boot");
+        assert!(fake.stopped(10), "nothing is continued");
         assert!(journal.read().is_none());
     }
 

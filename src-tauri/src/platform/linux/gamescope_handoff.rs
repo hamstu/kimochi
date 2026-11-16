@@ -205,7 +205,10 @@ pub(super) fn start() {
         let mut steam_ui = false;
         loop {
             let current_order = root.values(root.root, b"GAMESCOPECTRL_BASELAYER_APPID");
-            if current_order != order {
+            // A paused game is never given the base layer or focus (game pause): both wait until it
+            // runs again, and are retried then.
+            let game_paused = crate::game_pause::paused();
+            if current_order != order && !game_paused {
                 let focusable = root.values(root.root, b"GAMESCOPE_FOCUSABLE_APPS").unwrap_or_default();
                 let returned = RETURNED.load(Ordering::SeqCst);
                 match steer(
@@ -232,7 +235,7 @@ pub(super) fn start() {
                 LAST_GAME.store(id, Ordering::SeqCst);
             }
             let current = target(&root, &mut links);
-            if current != previous {
+            if current != previous && !game_paused {
                 if let Some(next) = &current {
                     let link = &links[&next.display];
                     let result = link.timestamp().and_then(|timestamp| {

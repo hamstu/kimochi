@@ -330,6 +330,11 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
 
 /// Bring a window source to the front: the window itself on X11, else its process.
 pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<serde_json::Value, String> {
+    // Never a paused game (callers resume it first, `game_pause::app::resume_before_activating`):
+    // GNOME offers Force Quit over a stopped window, and clicks on it replay on resume.
+    if id.pid().is_some_and(crate::game_pause::app::holds_pid) {
+        return Err("busy: the game is paused".into());
+    }
     // A native Wayland window is raised by the compositor that named it.
     if id.platform() == kimochi_capture::Platform::Wayland {
         return super::native::activate(id);
@@ -347,6 +352,9 @@ pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<serde_json::Val
 
 /// Activate another process's frontmost window (returning focus to the game).
 pub fn activate_process(pid: u32) -> Result<(), String> {
+    if crate::game_pause::app::holds_pid(pid) {
+        return Err("busy: the game is paused".into());
+    }
     match session().backend {
         Backend::Wayland => Err("unsupported on Wayland: other applications' windows cannot be activated".into()),
         Backend::X11 => {

@@ -78,6 +78,10 @@ pub enum Input {
     GuardGone,
     /// Called every ~100 ms.
     Tick,
+    /// Changes nothing: the app thread marks it handled (`app::settle`), so a caller knows every
+    /// input sent before it has been.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Barrier(u64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,6 +162,11 @@ pub trait Context {
     fn game(&self) -> GameRef;
     /// Whether a key or button that drove the overlay is still down.
     fn inputs_held(&self) -> bool;
+    /// Whether something that must run again before the game is still stopped (Gaming Mode:
+    /// Steam's controller reader). The game resumes after it, within the same bounded wait.
+    fn resume_blocked(&self) -> bool {
+        false
+    }
 }
 
 struct Current {
@@ -306,6 +315,7 @@ impl Machine {
                     self.holds.clear();
                 }
             }
+            Input::Barrier(_) => {}
             Input::Tick => {
                 let stale: Vec<Reason> = self
                     .holds
@@ -388,7 +398,7 @@ impl Machine {
             Phase::Paused => {
                 let since = *self.released_at.get_or_insert(now);
                 let waited = now.saturating_duration_since(since);
-                if cx.inputs_held() && waited < RELEASE_WAIT {
+                if (cx.inputs_held() || cx.resume_blocked()) && waited < RELEASE_WAIT {
                     return;
                 }
                 if waited > Duration::ZERO {

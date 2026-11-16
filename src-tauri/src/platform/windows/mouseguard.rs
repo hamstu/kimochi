@@ -294,7 +294,21 @@ fn update_hover_focus(app: &tauri::AppHandle) {
                     }
                 } else if let Some((source, owner)) = previous.take() {
                     if foreground.0 as usize == owner {
-                        super::window::restore_input_focus(HWND(source as *mut _));
+                        let pid = super::window_pid(HWND(source as *mut _));
+                        if crate::game_pause::app::holds_pid(pid) {
+                            // A paused game runs again before it gets the keyboard back (the hand-off
+                            // waits on its input thread); off the main thread, as the wait may be long.
+                            let later = handle.clone();
+                            std::thread::spawn(move || {
+                                if crate::game_pause::app::resume_before_activating("hover lease ended") {
+                                    let _ = later.run_on_main_thread(move || {
+                                        super::window::restore_input_focus(HWND(source as *mut _));
+                                    });
+                                }
+                            });
+                        } else {
+                            super::window::restore_input_focus(HWND(source as *mut _));
+                        }
                     }
                 }
                 HOVER_LEASE.store(previous.is_some(), Ordering::Relaxed);
