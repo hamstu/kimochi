@@ -4,6 +4,11 @@ mod boot;
 mod browser_bridge;
 mod cli;
 mod evidence;
+// Interim wiring until the shared game_pause module lands; replaced by game_pause/mod.rs.
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+#[path = "game_pause/platform/macos.rs"]
+mod game_pause_macos;
 mod reader;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
