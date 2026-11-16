@@ -794,6 +794,7 @@ controller = createController({
   buttons: () => setting('controllerButtons'),
   menuItems: () => setting(RADIAL_MENU_SETTING),
   appearance: () => setting('appearance'),
+  ringColor: () => setting('overlayStyle')?.color,
   // Gaming Mode reads the Deck's own controller. Paused Steam lets it fall back to its keyboard
   // and mouse "lizard" mode, whose arrow keys would move the outline a second time.
   padOnly: () => window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope,
@@ -5619,6 +5620,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
             settings: {
               controllerButtons: setting('controllerButtons'),
               controllerMenuItems: setting(RADIAL_MENU_SETTING),
+              overlayStyle: setting('overlayStyle'),
               appearance: setting('appearance')
             }
           }

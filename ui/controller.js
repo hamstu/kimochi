@@ -195,6 +195,14 @@ export function createController(context) {
           ? 'light'
           : 'dark'
     if (host.dataset) host.dataset.cmTheme = theme
+    // The radial menu in the overlay's highlight colour (Settings → Overlay).
+    const hex = context.ringColor?.()
+    const ring =
+      typeof hex === 'string' && /^#[0-9a-f]{6}$/i.test(hex)
+        ? [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(', ')
+        : null
+    if (ring) host.style?.setProperty?.('--cm-ring-rgb', ring)
+    else host.style?.removeProperty?.('--cm-ring-rgb')
   }
   /** How the mode was opened, so the hints name the right buttons. */
   let input = 'pad'

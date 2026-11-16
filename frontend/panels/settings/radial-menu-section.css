@@ -43,20 +43,6 @@
   z-index: 1;
   transition: color 0.14s ease;
 }
-/* Each spoke goes with its item: the dragged one's turns with it about the ring's centre (the
-   SVG's origin), and settles with it. */
-.radial-preview .cm-spoke {
-  transform-origin: 0 0;
-  transition:
-    stroke 0.14s ease,
-    stroke-width 0.14s ease,
-    transform var(--radial-snap) var(--k-ease-out);
-}
-.radial-preview .cm-spoke[data-dragging] {
-  transition:
-    stroke 0.14s ease,
-    stroke-width 0.14s ease;
-}
 .radial-preview[data-dragging],
 .radial-preview[data-dragging] .cm-wedge {
   cursor: grabbing;
