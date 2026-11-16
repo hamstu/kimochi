@@ -517,7 +517,10 @@ impl Machine {
                 }
                 self.failed(out, &current.game, error);
             }
-            Reply::Resumed { id, reason, count, held_ms, error } => {
+            Reply::Resumed { id, reason, count, held_ms, error, results } => {
+                if !results.is_empty() {
+                    self.log_verbose(out, json!({ "resumeResults": results }));
+                }
                 let game = self.current.as_ref().map(|c| c.game.key());
                 let by_guard = id.is_none();
                 let mut value = json!({ "resumed": game, "processes": count, "heldMs": held_ms, "reason": reason });

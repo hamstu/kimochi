@@ -58,6 +58,9 @@ pub enum Reply {
         held_ms: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<PauseError>,
+        /// Per-process results and notes (`Backend::resume_with_results`), for the verbose log.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        results: Vec<super::backend::PidResult>,
     },
     /// The backend's `refresh` changed or failed (verbose).
     Refreshed {
@@ -164,7 +167,10 @@ impl<'a> Core<'a> {
 
     fn release(&mut self, id: Option<u64>, reason: &str, now: Instant) -> Option<Reply> {
         let held = self.held.take()?;
-        let error = self.backend.resume(&held.suspended).err();
+        let (results, error) = match self.backend.resume_with_results(&held.suspended) {
+            Ok(results) => (results, None),
+            Err(error) => (Vec::new(), Some(error)),
+        };
         // A failed resume keeps the journal so the next start retries the ones still matching.
         if error.is_none() {
             self.journal.clear();
@@ -175,6 +181,7 @@ impl<'a> Core<'a> {
             count: held.suspended.members.len(),
             held_ms: now.saturating_duration_since(held.since).as_millis() as u64,
             error,
+            results,
         })
     }
 
@@ -322,11 +329,12 @@ impl Client {
         journal: &std::path::Path,
         on_reply: impl Fn(Reply) + Send + 'static,
         on_gone: impl FnOnce() + Send + 'static,
+        on_stderr: impl Fn(String) + Send + 'static,
     ) -> Result<Client, String> {
         use std::process::{Command, Stdio};
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let mut command = Command::new(exe);
-        command.arg(FLAG).arg(journal).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
+        command.arg(FLAG).arg(journal).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         #[cfg(unix)]
         unsafe {
             use std::os::unix::process::CommandExt;
@@ -348,6 +356,18 @@ impl Client {
         let mut child = command.spawn().map_err(|e| format!("game pause guard: {e}"))?;
         let stdin = child.stdin.take();
         let stdout = child.stdout.take().ok_or("game pause guard: no stdout")?;
+        // What the backend says on the guard's stderr (notes, warnings) goes to the app's log.
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::Builder::new()
+                .name("game-pause-guard-stderr".into())
+                .spawn(move || {
+                    for line in std::io::BufReader::new(stderr).lines() {
+                        let Ok(line) = line else { break };
+                        on_stderr(line);
+                    }
+                })
+                .map_err(|e| e.to_string())?;
+        }
         std::thread::Builder::new()
             .name("game-pause-guard".into())
             .spawn(move || {

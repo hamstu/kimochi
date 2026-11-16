@@ -294,6 +294,10 @@ fn deliver(
             move || {
                 let _ = gone.send(Input::GuardGone);
             },
+            |line| {
+                eprintln!("game pause guard: {line}");
+                crate::debug_report::trace_now(json!({ "check": "game-pause", "guardStderr": line }));
+            },
         )?);
     }
     client.as_mut().ok_or("no guard")?.send(request)

@@ -239,6 +239,13 @@ pub trait Backend: Send + Sync {
     /// Returns an error listing what failed after trying all of them.
     fn resume(&self, suspended: &Suspended) -> Result<(), PauseError>;
 
+    /// [`Backend::resume`] with what happened to each process (and any notes, such as audio
+    /// restored), for the verbose log. Default: `resume` with no per-process results; a backend
+    /// with something to say overrides this and has `resume` call it.
+    fn resume_with_results(&self, suspended: &Suspended) -> Result<Vec<PidResult>, PauseError> {
+        self.resume(suspended).map(|()| Vec::new())
+    }
+
     /// The identity of `pid` now, or `None` when it is gone or cannot be read.
     fn identity(&self, pid: u32) -> Option<ProcIdentity>;
 
