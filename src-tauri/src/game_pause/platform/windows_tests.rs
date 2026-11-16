@@ -432,6 +432,7 @@ fn journal_recovery_resumes_an_orphaned_nt_suspend() {
             mechanism: suspended.mechanism.clone(),
             at: 1,
             guard: 1,
+            boot: super::super::super::journal::boot_id(),
         })
         .unwrap();
     // The guard dies without resuming: NtSuspendProcess freezes stay.
