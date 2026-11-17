@@ -576,7 +576,8 @@ function wordToExplain() {
 function explainTarget(word) {
   // Kept there only while the line explained is still on screen (new text can keep a box of the old).
   const target = textTarget(screenSections() ?? [], wordsContainer, word, screenSections)
-  if (!hookMode()) return target
+  // The scan's text was read with OCR; the Text Hooker's comes from the game as it is.
+  if (!hookMode()) return { ...target, ocr: true }
   // The card, only while it still shows the line explained: on the next line the explanation goes.
   const line = hook.line
   return { ...target, anchor: () => (hook.line === line ? (hook.card?.rects()[0] ?? null) : null) }
@@ -6734,7 +6735,12 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
               appearance: setting('appearance')
             },
             // For the menu's Explain, which the host shows in its own window.
-            explain: { sections: screenSections() ?? [], language: languageNow(), look: explainLook() }
+            explain: {
+              sections: screenSections() ?? [],
+              language: languageNow(),
+              look: explainLook(),
+              ocr: !hookMode()
+            }
           }
           break
         case 'scan':

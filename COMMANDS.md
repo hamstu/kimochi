@@ -640,7 +640,9 @@ is no room below, beside it for tall vertical text; `placeExplanation` in `ui/ex
 with a notch on it; pressed again it closes the card. A word highlighted when it is asked for
 (the selection a dictionary lookup made, an extension engine's match, or the word read along is
 on) narrows it to the section that word is in, and a `FOCUS:` instruction after the prompt asks
-for that word (or the grammar it is part of) first. The game menu (the radial) has the same
+for that word (or the grammar it is part of) first. Text the overlay read with OCR (not the Text
+Hooker's line) gets `OCR_NOTE` after the prompt too, before any `FOCUS:`: it may hold small
+misreadings, to be explained as the text most likely is. The game menu (the radial) has the same
 Explain, which holds the controller while the card is open: B closes it and the right stick
 scrolls it. The card takes the mouse, Shift or not. A click anywhere else closes it, as it closes
 a dictionary pop-up: the overlay takes that click (`onFreeClick`, not with Look up on hover), or,

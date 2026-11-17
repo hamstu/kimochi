@@ -113,7 +113,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     target: () => {
       const reading = controller?.focusedWord?.()
       const word = reading ? (wordInRange(reading.range) ?? { text: reading.text, rect: null, box: null }) : null
-      return textTarget(explaining.sections, words, word)
+      return { ...textTarget(explaining.sections, words, word), ocr: explaining.ocr !== false }
     },
     language: () => explaining.language,
     area: () => null,

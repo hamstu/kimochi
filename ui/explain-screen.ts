@@ -26,6 +26,8 @@ export interface ExplainRequest {
   word: string | null
   /** Where in `sentence` the word is (its first character), or null when not found or none. */
   at: number | null
+  /** Whether the sentence was read with OCR (not hooked from the game), so the prompt says so. */
+  ocr: boolean
   prompt: string
 }
 
@@ -312,16 +314,26 @@ export function markWord(sentence: string, index: number, length: number): strin
 }
 
 /**
+ * What goes after the prompt when the text was read from the screen with OCR rather than hooked
+ * from the game: it can hold small misreadings, which the explanation should see past rather than
+ * explain as written.
+ */
+export const OCR_NOTE =
+  'NOTE: The target sentence was read from the screen with OCR, so it may contain minor recognition errors, such as a wrong, missing or extra character. Where something looks misread, explain the text it most likely is, and say briefly what you read it as.'
+
+/**
  * The request for the text on screen (`sections`), or null when there is none. The Log has the
  * screen's own text too, usually as its newest lines: those are the sentence, not its scene, so
- * any line that is one of the sections is left out of the context.
+ * any line that is one of the sections is left out of the context. `ocr`: the text was read with
+ * OCR, not hooked from the game (`OCR_NOTE`).
  */
 export function explainRequest(
   sections: readonly unknown[] | null | undefined,
   recent: readonly RecentLine[] | null | undefined,
   stored: unknown,
   language: unknown,
-  word?: string | Focus | null
+  word?: string | Focus | null,
+  { ocr = false }: { ocr?: boolean } = {}
 ): ExplainRequest | null {
   const shown = (sections ?? []).map(clean).filter(Boolean)
   if (!shown.length) return null
@@ -336,8 +348,12 @@ export function explainRequest(
   const { prompt: template, focusPrompt } = explainSettings(stored)
   const asked = typeof word === 'string' ? { text: word } : word
   const focus = clean(asked?.text)
+  // After the prompt and before any word's instruction, as the word's is: a prompt of the reader's
+  // own gets it too.
+  const note = ocr ? `\n\n${OCR_NOTE}` : ''
   if (!focus) {
-    return { sentence, context, word: null, at: null, prompt: explainPromptFor(template, language, context, sentence) }
+    const prompt = `${explainPromptFor(template, language, context, sentence)}${note}`
+    return { sentence, context, word: null, at: null, ocr, prompt }
   }
   // The highlighted one marked where it is in the sentence, so a word whose text occurs more than
   // once there ("de" in "fiesta del fin de semana") is not taken for another.
@@ -349,6 +365,7 @@ export function explainRequest(
     context,
     word: focus,
     at: at < 0 ? null : at,
-    prompt: `${prompt}\n\n${focusInstruction(focus, focusPrompt)}`
+    ocr,
+    prompt: `${prompt}${note}\n\n${focusInstruction(focus, focusPrompt)}`
   }
 }

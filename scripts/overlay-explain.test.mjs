@@ -105,6 +105,23 @@ test('a highlighted word is explained first, after whatever prompt is used', () 
   assert.match(screen.explainRequest(['s'], [], blank, 'ja', 'w').prompt, /FOCUS: .*"w"/)
 })
 
+test('text read with OCR says it may hold misreadings; hooked text does not', () => {
+  // What separates the prompt's parts.
+  const gap = '\n\n'
+  const hooked = screen.explainRequest(['一緒に散歩しませんか？'], [], {}, 'ja')
+  assert.equal(hooked.ocr, false)
+  assert.ok(!hooked.prompt.includes(screen.OCR_NOTE))
+  const read = screen.explainRequest(['一緒に散歩しませんか？'], [], {}, 'ja', null, { ocr: true })
+  assert.equal(read.ocr, true)
+  assert.ok(read.prompt.endsWith(gap + screen.OCR_NOTE))
+  // With a word, the note comes after the prompt and before the word's instruction.
+  const word = screen.explainRequest(['一緒に散歩しませんか？'], [], {}, 'ja', 'ませんか', { ocr: true })
+  assert.ok(word.prompt.includes(gap + screen.OCR_NOTE + gap + 'FOCUS: '))
+  // The reader's own prompt gets it too.
+  const own = screen.explainRequest(['s'], [], { explainPrompt: 'Explain {{sentence}}' }, 'ja', null, { ocr: true })
+  assert.equal(own.prompt, 'Explain s' + gap + screen.OCR_NOTE)
+})
+
 test('the highlighted word is marked where it is in the sentence', () => {
   const line = 'En la fiesta del fin de semana pasado'
   // "de" is also the start of "del": what is drawn after it picks the right one.

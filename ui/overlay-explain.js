@@ -88,7 +88,7 @@ export function markdownNodes(markdown) {
 /**
  * @typedef {{x: number, y: number, width: number, height: number}} Box
  * @typedef {{text: string, before: string, after: string}} Focus
- * @typedef {{sections: string[], word: string | null, focus: Focus | null, wordRect: Box | null, anchor: () => Box | null}} Target
+ * @typedef {{sections: string[], word: string | null, focus: Focus | null, wordRect: Box | null, anchor: () => Box | null, ocr?: boolean}} Target
  * @typedef {{text: string, rect: Box, box: Element | null, before?: string, after?: string}} Word
  */
 
@@ -225,6 +225,7 @@ function answerKey(request, settings, language) {
     request.word,
     request.at,
     request.context,
+    request.ocr,
     language,
     provider,
     model,
@@ -496,7 +497,9 @@ export function createOverlayExplain(parent, context) {
       Array.isArray(recent) ? recent : [],
       stored,
       language,
-      asked.focus ?? asked.word
+      asked.focus ?? asked.word,
+      // Read with OCR (not hooked from the game): the AI is told it may hold small misreadings.
+      { ocr: Boolean(asked.ocr) }
     )
     const settings = explainSettings(stored)
     const key = request ? answerKey(request, settings, language) : null
