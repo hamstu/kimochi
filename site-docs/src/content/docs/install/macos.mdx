@@ -56,8 +56,9 @@ switch, with a link to [Apple's guide to turning it off](https://support.apple.c
 
 ## Uninstalling
 
-Quit Kimochi and move it from Applications to the Bin. To remove your data as well, delete these
-folders (in Finder, **Go → Go to Folder…** and paste each path):
+Quit Kimochi and move it from Applications to the Bin. That keeps your data, so installing again
+picks up where you left off. To remove your data as well, so the next install starts fresh with the
+welcome guide, delete these folders (in Finder, **Go → Go to Folder…** and paste each path):
 
 | Folder | What's in it |
 | --- | --- |
@@ -65,3 +66,6 @@ folders (in Finder, **Go → Go to Folder…** and paste each path):
 | `~/Library/WebKit/dev.kimochi.app/` | The dictionaries you imported (the app's web storage) |
 | `~/Library/Caches/dev.kimochi.app/` | Caches |
 | `~/Library/HTTPStorages/dev.kimochi.app/` | Web cookies and storage for sign-in |
+
+If you added the `kimochi` command (Settings → Command line), remove it from there before
+uninstalling, or delete `/usr/local/bin/kimochi`.

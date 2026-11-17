@@ -41,7 +41,25 @@ The hooker (LunaHook, about 6 MB) downloads the first time. See [Text hooking](/
 
 ## Uninstalling
 
-Uninstall Kimochi from **Settings → Apps → Installed apps** like any other app. The uninstaller
-asks whether to **Delete the application data** too; tick it to remove your settings, Log,
-dictionaries and downloaded engines from `%APPDATA%\dev.kimochi.app` and
-`%LOCALAPPDATA%\dev.kimochi.app`.
+Uninstall Kimochi from **Settings → Apps → Installed apps** like any other app. The uninstaller's
+first page has a box, **Also remove my Kimochi settings and data**, which starts unticked:
+
+- **Left unticked**, your settings, Log, sessions, dictionaries and downloaded engines stay on your
+  PC, and installing Kimochi again picks up where you left off.
+- **Ticked**, Kimochi removes them too, so the next install starts fresh with the welcome guide. It
+  deletes:
+
+  | What | Where |
+  | --- | --- |
+  | Settings, the Log, sessions, stats and the Notebook | `%APPDATA%\dev.kimochi.app` |
+  | Downloaded engines and models, imported dictionaries, screenshots, text hooking files, logs and the `kimochi` command | `%LOCALAPPDATA%\dev.kimochi.app` |
+  | Sentence audio captures | `%LOCALAPPDATA%\kimochi-voicehook` |
+
+  It also takes the `kimochi` command off your PATH and unregisters the
+  [Yomitan API](/lookups/dictionaries/#yomitan-api) helper if Kimochi installed it for your
+  browsers. You are signed out on this PC; what Kimochi Cloud synced stays in your account (see
+  [Managing your account](/cloud/#managing-your-account)).
+
+Updates never remove anything, and neither does a silent uninstall (`uninstall.exe /S`). To remove
+the data after uninstalling with the box unticked, quit Kimochi and delete the folders in the
+table (paste each path into File Explorer's address bar).

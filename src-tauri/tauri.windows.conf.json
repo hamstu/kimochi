@@ -15,7 +15,12 @@
       },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English", "Japanese"]
+        "languages": ["English", "Japanese"],
+        "customLanguageFiles": {
+          "English": "nsis/English.nsh",
+          "Japanese": "nsis/Japanese.nsh"
+        },
+        "installerHooks": "nsis/hooks.nsh"
       },
       "signCommand": {
         "cmd": "node",

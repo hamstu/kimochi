@@ -151,13 +151,18 @@ Kimochi updates itself when a new version comes out.
   curl -fsSL https://kimochiapp.com/install.sh | sh -s -- --uninstall
   ```
 
-  Your settings and dictionaries are kept. To delete them too:
-
-  ```sh
-  rm -rf ~/.local/share/dev.kimochi.app ~/.config/dev.kimochi.app ~/.cache/dev.kimochi.app
-  ```
-
 - **.deb**: `sudo apt remove kimochi`
+
+Either way your settings, Log and dictionaries are kept, so installing again picks up where you left
+off. To delete them too, so the next install starts fresh with the welcome guide, quit Kimochi and
+run:
+
+```sh
+rm -rf ~/.local/share/dev.kimochi.app ~/.config/dev.kimochi.app ~/.cache/dev.kimochi.app ~/.local/share/kimochi-voicehook
+```
+
+If you added the `kimochi` command (Settings → Command line), remove it from there before
+uninstalling, or delete `~/.local/bin/kimochi`.
 
 ## If Kimochi won't start
 
