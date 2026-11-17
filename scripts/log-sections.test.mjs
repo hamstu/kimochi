@@ -138,3 +138,20 @@ test('a section is one run: Japanese runs straight on across a break, Latin keep
   assert.equal(sectionText(''), '')
   assert.deepEqual(readingSections([{ text: '\n\n' }, { text: 'は\nい' }]), ['はい'])
 })
+
+test('a word a line broke with a hyphen is one word in the Log and Read along, where the language is written in Latin', () => {
+  const lines = [...wordsOnLine(['No', 'sabía', 'que', 'esta-'], 100), ...wordsOnLine(['ba', 'aquí.'], 140)]
+  const spanish = { ...GROUPING, language: 'es' }
+  const result = scan(lines)
+  const published = logGroups(result, spanish)
+  assert.deepEqual(
+    published.map((group) => group.text),
+    ['No sabía que estaba aquí.']
+  )
+  assert.deepEqual(readingSections(scanGroups(result.textAnnotations, spanish)), ['No sabía que estaba aquí.'])
+  // In Japanese (no language set) the break stays, as before.
+  assert.deepEqual(
+    logGroups(result, GROUPING).map((group) => group.text),
+    ['Nosabíaqueesta-\nbaaquí.']
+  )
+})

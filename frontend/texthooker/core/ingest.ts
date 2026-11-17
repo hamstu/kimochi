@@ -10,6 +10,7 @@ import { getSettings } from '@texthooker/lib/settings'
 import { applyReplacements } from './replacements'
 import { recordCharDelta, recordLine } from './stats'
 import { dropsText, japaneseFilterOf } from '@ui/japanese-text'
+import { joinBrokenWords } from '@ui/script-text'
 import { currentLanguage, currentLanguageInfo } from './language'
 import { countWords } from './wordCount'
 import { countChars } from './charCount'
@@ -42,7 +43,7 @@ function activeSession(): string {
 
 /** Steps 1–4 below: the text a line would be stored with, or null when nothing is left. */
 export function preparedText(text: string): string | null {
-  const value = text.replace(/\r\n?/g, '\n').trim()
+  const value = joinBrokenWords(text.replace(/\r\n?/g, '\n'), currentLanguage()).trim()
   if (!value) return null
   return applyReplacements(value).text.trim() || null
 }
@@ -52,7 +53,8 @@ export function preparedText(text: string): string | null {
  * processing pipeline and (optionally) triggers a background tokenize.
  *
  * Pipeline order (matches plan):
- *   1. normalize line endings
+ *   1. normalize line endings; put back together each word a line broke with a hyphen, in a
+ *      language written in the Latin alphabet (ui/script-text.ts `joinBrokenWords`)
  *   2. trim
  *   3. applyReplacements
  *   4. trim again

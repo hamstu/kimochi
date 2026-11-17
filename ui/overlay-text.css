@@ -365,6 +365,15 @@
 .ocr-word-current[data-ext]::after {
   content: attr(data-ext);
 }
+/* The hyphen a line broke a word with (`esta-` over `ba`, render.js `hyphenElement`), drawn
+   as pseudo-element content for the same reason: a scanner reading on from the line reads
+   `estaba`, the word, not `esta-ba`. A box showing the whole word (`data-ext`) has no break. */
+.ocr-hyphen::after {
+  content: attr(data-hyphen);
+}
+.ocr-word-current[data-ext] .ocr-hyphen::after {
+  content: none;
+}
 /* Hidden, not transparent: a hidden box takes no pointer events and leaves the
    click-through regions (`hitRects`), which the extended box over it now covers. */
 .ocr-word[data-consumed] {

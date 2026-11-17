@@ -11,7 +11,7 @@ import {
   type Surface
 } from './annotations.js'
 import { languageOf } from './languages.js'
-import { joiner } from './script-text.js'
+import { joinBrokenWords, joiner } from './script-text.js'
 export type Orientation = 'horizontal' | 'vertical'
 /** A piece of a line (a word, or a character) with its own box, in capture pixels. */
 export interface Segment {
@@ -334,12 +334,16 @@ export function logGroups(
   result: Pick<OcrResult, 'groups' | 'geometry' | 'textAnnotations'>,
   grouping: Partial<GroupingSettings> = {}
 ): OcrGroup[] {
-  if (result.geometry && !(result.textAnnotations ?? []).some((a) => a.granularity === 'block'))
-    return logicalGroups(
-      visibleAnnotations(result.textAnnotations ?? [], grouping as GroupingSettings),
-      grouping.language
-    ).groups
-  return result.groups ?? []
+  const groups =
+    result.geometry && !(result.textAnnotations ?? []).some((a) => a.granularity === 'block')
+      ? logicalGroups(visibleAnnotations(result.textAnnotations ?? [], grouping as GroupingSettings), grouping.language)
+          .groups
+      : (result.groups ?? [])
+  // A word a line broke with a hyphen is one word in the Log and Read along (`joinBrokenWords`).
+  return groups.map((group) => {
+    const text = joinBrokenWords(group.text, grouping.language)
+    return text === group.text ? group : { ...group, text }
+  })
 }
 
 /**
