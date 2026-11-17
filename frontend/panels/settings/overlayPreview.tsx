@@ -2,6 +2,7 @@
  * What the overlay previews in Settings → Overlay share (OverlayLook.tsx, TextHookerCardSection.tsx):
  * the line they show, in the language being read, and what Blend's preview sits on.
  */
+import { lookupKeyLabel } from '@ui/lookup-key'
 import { useMemo, type ReactNode } from 'react'
 import { useLanguage } from '../../bridge/useLanguage'
 import { sampleFor } from '@ui/language-samples'
@@ -42,10 +43,7 @@ export function usePreviewLine(): PreviewLine {
 export const previewWord = (word: string | number, shape: PreviewLine['shape']): ReactNode =>
   typeof word === 'string' ? word : <GlyphBlocks length={word} shape={shape} />
 
-/** The overlay's lookup key (`overlayLookupKey`) as this platform's keyboards name it, as Shortcuts & Controls does. */
+/** The overlay's lookup key (`overlayLookupKey`) as this platform names it, as Shortcuts & Controls does. */
 export function lookupKeyName(key: string | undefined, mac: boolean): string {
-  if (key === 'ctrl') return mac ? '⌃ Control' : 'Ctrl'
-  if (key === 'alt') return mac ? '⌥ Option' : 'Alt'
-  if (key === 'meta') return mac ? '⌘ Command' : 'Super'
-  return mac ? '⇧ Shift' : 'Shift'
+  return lookupKeyLabel(key, mac)
 }

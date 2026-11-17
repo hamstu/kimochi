@@ -69,6 +69,40 @@ pub fn cursor() -> Option<PointerSample> {
     })
 }
 
+/// Whether the lookup button (`overlayLookupKey` naming one) is held. XInput 2 reports every
+/// button of the client pointer (back and forward are buttons 8 and 9, beyond the core mask);
+/// without it, the core mask still has the middle button. Read only, never grabbed: the click
+/// also reaches the window under the pointer.
+pub fn lookup_button_down(button: crate::mouse_buttons::Button) -> bool {
+    let Some(d) = desktop() else { return false };
+    let number = rules::x_button_number(button);
+    if let Some(device) = xi2_pointer(d) {
+        use x11rb::protocol::xinput::ConnectionExt as _;
+        if let Some(reply) = d.conn.xinput_xi_query_pointer(d.root, device).ok().and_then(|c| c.reply().ok()) {
+            return rules::xi_button_held(&reply.buttons, number);
+        }
+    }
+    number == 2
+        && d.conn
+            .query_pointer(d.root)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|reply| u16::from(reply.mask) & rules::BUTTON2_MASK != 0)
+}
+
+/// The client pointer's device id once XInput 2 has been agreed on; `None` without it.
+fn xi2_pointer(d: &Desktop) -> Option<u16> {
+    static DEVICE: OnceLock<Option<u16>> = OnceLock::new();
+    *DEVICE.get_or_init(|| {
+        use x11rb::protocol::xinput::ConnectionExt as _;
+        let version = d.conn.xinput_xi_query_version(2, 0).ok()?.reply().ok()?;
+        if version.major_version < 2 {
+            return None;
+        }
+        Some(d.conn.xinput_xi_get_client_pointer(x11rb::NONE).ok()?.reply().ok()?.deviceid)
+    })
+}
+
 // ---------------------------------------------------------------- displays
 
 pub fn monitors() -> Vec<Monitor> {

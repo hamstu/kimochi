@@ -7,6 +7,7 @@
  * `window` (the `pointer` listener in overlay.js), the feed every dictionary engine scans from;
  * real events arrive too while the pointer is over a word. Both are read here.
  */
+import { lookupButtonsBit } from './lookup-key.js'
 import { createScanner } from './scan-text.js'
 import { desktopPointOf } from './desktop-point.js'
 import { languageOf } from './languages.js'
@@ -84,7 +85,8 @@ export function popupAudio(reader) {
 
 /**
  * The pointer event property for a lookup key (`overlayLookupKey`: "shift", "ctrl", "alt" or
- * "meta"); anything else is Shift, as native reads it (`Modifiers::holds`).
+ * "meta"); anything else is Shift, as native reads it (`Modifiers::holds`), and so is a mouse
+ * button (native sends one held as Shift, ui/lookup-key.ts).
  * @param {unknown} key
  */
 export function lookupKeyProperty(key) {
@@ -215,7 +217,9 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     'pointermove',
     (event) => {
       if (!apiMode()) return
-      if (event[lookupKeyProperty(lookupKey)]) scanner.scan(pointOf(event))
+      // A lookup button held over the overlay is in the real event's `buttons`, not its keys.
+      if (event[lookupKeyProperty(lookupKey)] || event.buttons & lookupButtonsBit(lookupKey))
+        scanner.scan(pointOf(event))
       else scanner.stop()
     },
     true

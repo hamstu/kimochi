@@ -1,6 +1,6 @@
 /** Settings → Shortcuts & Controls, first half: global keyboard shortcuts and their gamepad chords. */
 import { useCallback, type ReactNode } from 'react'
-import { Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
+import { Badge, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { useSetting } from '../../bridge/useSetting'
 import { showSettingsTab } from './showSettingsTab'
@@ -10,30 +10,45 @@ import { gamepadChord } from '../../vendor/shared-defaults'
 import { formatAccelerator, isMouseAccelerator, keyPlatformOf } from './accelerator'
 import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
 import { ShortcutRecorder } from './ShortcutRecorder'
+import { LookupKeyRecorder } from './LookupKeyRecorder'
+import {
+  effectiveLookupKey,
+  isLookupButton,
+  lookupKeyWord,
+  lookupModifier,
+  type LookupButtonSupport
+} from '@ui/lookup-key'
 
-/** `overlayLookupKey` as the platform's keyboards name it; Command only on a Mac. */
-function lookupKeyOptions(mac: boolean): { value: string; label: string }[] {
-  return [
-    { value: 'shift', label: mac ? '⇧ Shift' : 'Shift' },
-    { value: 'ctrl', label: mac ? '⌃ Control' : 'Ctrl' },
-    { value: 'alt', label: mac ? '⌥ Option' : 'Alt' },
-    ...(mac ? [{ value: 'meta', label: '⌘ Command' }] : [])
-  ]
+/** Where the lookup key's click goes, when it is a mouse button (`keys.lookupButtons`). */
+const BUTTON_NOTES: Partial<Record<LookupButtonSupport, ReactNode>> = {
+  needsAccessibility: (
+    <>
+      Its click also reaches the game. Allow Accessibility in{' '}
+      <button type="button" className="k-link" onClick={() => showSettingsTab('sources')}>
+        Sources
+      </button>{' '}
+      to keep clicks on the overlay&rsquo;s text from the game.
+    </>
+  ),
+  passthrough: 'On Linux its click also reaches the game, so pick a button the game doesn’t use.'
 }
 
 /**
- * The key held to look up through the overlay (`overlayLookupKey`). With click-through on, words
- * let clicks through to the game until it is held (native's lookup gate, main.rs); off, they take
- * the mouse anyway and the key does nothing, so the row fades and points at the switch. Only
- * modifiers: the pointer poll reads those globally. On Wayland only KDE Plasma's source reads them
- * all (Hyprland relays Shift alone), so elsewhere there no row.
+ * The key held to look up through the overlay (`overlayLookupKey`): a modifier, or a mouse button
+ * (middle, back, forward; #204) where native can read one (`keys.lookupButtons`). With
+ * click-through on, words let clicks through to the game until it is held (native's lookup gate,
+ * main.rs); off, they take the mouse anyway and the key does nothing, so the row fades and points
+ * at the switch. On Wayland only KDE Plasma's source reads every modifier (Hyprland relays Shift
+ * alone), so elsewhere there is no row.
  */
 function LookupKeyRow(): ReactNode {
   const capabilities = useCapabilities()
   const mac = capabilities.os === 'macos'
-  const [key, setKey] = useSetting<string>('overlayLookupKey', 'shift')
+  const support = capabilities.keys.lookupButtons ?? 'unsupported'
+  const [stored, setKey] = useSetting<string>('overlayLookupKey', 'shift')
   const [clickThrough] = useSetting<boolean>('overlayClickThrough', true)
   const [hover] = useSetting<boolean>('overlayHoverLookup', false)
+  const [hotkeys] = useHotkeys()
   // Wayland: only where the pointer poll reads every modifier (KDE Plasma, through XWayland).
   if (
     capabilities.os === 'linux' &&
@@ -41,19 +56,28 @@ function LookupKeyRow(): ReactNode {
     capabilities.overlay.shiftSource !== 'xwayland'
   )
     return null
-  const options = lookupKeyOptions(mac)
-  const chosen = options.find((option) => option.value === key) ?? options[0]
+  const key = effectiveLookupKey(stored, support)
+  const button = isLookupButton(key)
+  // A shortcut on the same button does not fire while it is the lookup key (native reads the
+  // lookup key first).
+  const shared = button
+    ? Object.values(hotkeys)
+        .filter((hotkey) => hotkey.enabled !== false && hotkey.accelerator?.toLowerCase() === key.toLowerCase())
+        .map((hotkey) => hotkey.name)
+    : []
+  const note = button ? BUTTON_NOTES[support] : undefined
   return (
     <>
       <SettingsRow
         label="Lookup key"
         disabled={!clickThrough}
+        badge={shared.length > 0 ? <Badge tone="warn">Same as {shared.join(', ')}</Badge> : undefined}
         description={
           clickThrough ? (
             hover ? (
               'Hold to click text on the overlay, or to look a word up at once.'
             ) : (
-              'Hold to look up words on the overlay.'
+              `Hold to look up words on the overlay. A key${support === 'unsupported' ? '' : ' or a mouse button'}.`
             )
           ) : (
             <>
@@ -66,19 +90,32 @@ function LookupKeyRow(): ReactNode {
           )
         }
       >
-        <Select
-          aria-label="Lookup key"
-          value={chosen.value}
+        <LookupKeyRecorder
+          value={key}
+          onChange={(next) => void setKey(next)}
+          mac={mac}
+          support={support}
           disabled={!clickThrough}
-          onValueChange={(value) => void setKey(value)}
-          options={options}
         />
       </SettingsRow>
-      {clickThrough && chosen.value !== 'shift' && (
+      {clickThrough && shared.length > 0 && (
         <div className="settings-note">
           <Callout tone="warn">
-            Your dictionary looks words up with Shift by default. Set its lookup key to{' '}
-            {chosen.label.replace(/^\S+ /, '')} as well, in its own settings.
+            {shared.join(', ')} {shared.length === 1 ? 'is' : 'are'} set to the same button and won&rsquo;t run while
+            it&rsquo;s the lookup key.
+          </Callout>
+        </div>
+      )}
+      {clickThrough && note && (
+        <div className="settings-note">
+          <Callout tone="neutral">{note}</Callout>
+        </div>
+      )}
+      {clickThrough && lookupModifier(key) !== 'shift' && (
+        <div className="settings-note">
+          <Callout tone="warn">
+            Your dictionary looks words up with Shift by default. Set its lookup key to {lookupKeyWord(key, mac)} as
+            well, in its own settings.
           </Callout>
         </div>
       )}

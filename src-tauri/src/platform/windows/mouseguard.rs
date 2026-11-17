@@ -81,6 +81,8 @@ struct Hook {
     buttons: SyncSender<u8>,
     /// Bound-button presses swallowed and not yet released (`mouse_buttons::step`).
     buttons_owned: u8,
+    /// Lookup-button presses swallowed and not yet released (`mouse_buttons::lookup_step`).
+    lookup_owned: u8,
 }
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }
 static TARGETS: Mutex<Vec<Target>> = Mutex::new(Vec::new());
@@ -364,6 +366,7 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                     swapped: GetSystemMetrics(SM_SWAPBUTTON) != 0,
                     buttons,
                     buttons_owned: 0,
+                    lookup_owned: 0,
                 })
             });
             let module = GetModuleHandleW(None).ok().map(|m| HINSTANCE(m.0));
@@ -641,7 +644,7 @@ pub fn sync_mouse_buttons(_app: &tauri::AppHandle, wanted: bool) -> Result<(), S
     Ok(())
 }
 
-/// Middle, back and forward against the bound buttons. With nothing bound and nothing owned
+/// Middle, back and forward against the lookup button and the bound buttons. With nothing bound and nothing owned
 /// this is a match on the message and two loads; when a button fires, one `try_send`.
 /// True when the event is swallowed.
 fn bound_button(message: u32, info: &MSLLHOOKSTRUCT) -> bool {
@@ -662,6 +665,12 @@ fn bound_button(message: u32, info: &MSLLHOOKSTRUCT) -> bool {
     HOOK.with(|state| {
         let mut state = state.borrow_mut();
         let Some(hook) = state.as_mut() else { return false };
+        // The lookup key first: a button that is both stays the lookup key (Settings warns).
+        match mouse_buttons::lookup_transition(&mut hook.lookup_owned, button, down, injected) {
+            Some(Step::Swallow) => return true,
+            Some(_) => return false,
+            None => {}
+        }
         match mouse_buttons::step(&mut hook.buttons_owned, mouse_buttons::armed(), button, down, injected) {
             Step::Pass => false,
             Step::Swallow => true,

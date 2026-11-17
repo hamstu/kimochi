@@ -35,7 +35,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LBUTTON, VK_LWIN, VK_MENU, VK_RBUTTON, VK_RWIN, VK_SHIFT,
+    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LBUTTON, VK_LWIN, VK_MBUTTON, VK_MENU, VK_RBUTTON, VK_RWIN, VK_SHIFT,
+    VK_XBUTTON1, VK_XBUTTON2,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetSystemMetrics, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
@@ -126,6 +127,24 @@ pub fn cursor() -> Option<PointerSample> {
             meta: held(VK_LWIN) || held(VK_RWIN),
         },
     })
+}
+
+/// Whether the lookup button (`overlayLookupKey` naming one) is held. A press the mouse guard
+/// swallowed never reaches `GetAsyncKeyState`, so the guard's own record counts as well.
+pub fn lookup_button_down(button: crate::mouse_buttons::Button) -> bool {
+    use crate::mouse_buttons::Button;
+    let vk = match button {
+        Button::Middle => VK_MBUTTON,
+        Button::Back => VK_XBUTTON1,
+        Button::Forward => VK_XBUTTON2,
+    };
+    crate::mouse_buttons::lookup_swallowed() || (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0
+}
+
+/// Whether a mouse button can be the lookup key here, and what happens to its click: the mouse
+/// guard runs for the app's lifetime and keeps it from the game over Kimochi's text.
+pub fn lookup_buttons() -> &'static str {
+    "consumed"
 }
 
 /// The pointer devices Windows knows (`GetPointerDevices`): pens, touchscreens, touchpads and
@@ -379,7 +398,7 @@ pub fn capabilities() -> Value {
         "osVersion": os_version(),
         "arch": std::env::consts::ARCH,
         "session": null,
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Win", "mouseButtons": "available"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Win", "mouseButtons": "available", "lookupButtons": "consumed"},
         "capture": {
             "authorization": "granted",
             "canOpenSettings": false,

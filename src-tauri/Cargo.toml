@@ -112,7 +112,7 @@ mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4f
 # X11 desktop queries (platform/linux), logind sleep/wake over D-Bus, and the GTK
 # main-loop hop for callbacks. All already in the lock file via tauri/arboard.
 # `res` (X-Resource): a window's real host pid for game pause, never a sandbox's `_NET_WM_PID`.
-x11rb = { version = "0.13", features = ["randr", "shape", "res"] }
+x11rb = { version = "0.13", features = ["randr", "shape", "res", "xinput"] }
 zbus = "5.9"
 glib = "0.18"
 raw-window-handle = "0.6"

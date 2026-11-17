@@ -4540,6 +4540,9 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut gate = state::ShiftGate::default();
         // `overlayLookupKey`, re-read now and then rather than every tick.
         let mut lookup_key = String::from("shift");
+        // The mouse button it names, if it names one (#204): held, it is what the dictionary
+        // hears as the lookup key, and Shift no longer is.
+        let mut lookup_button: Option<mouse_buttons::Button> = None;
         // `overlayHoverLookup`, read with it: the overlay's words are looked up with no key held
         // once the pointer rests on them (`state::HoverIntent`). Lookups only: the gate, and so
         // whether the words take the mouse from the game, still follows the lookup key alone.
@@ -4573,6 +4576,14 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 if !platform::lookup_keys_readable() {
                     lookup_key = String::from("shift");
                 }
+                // A button where none can be read (Wayland, or a choice synced from another
+                // machine) is Shift, as Settings says there.
+                lookup_button = mouse_buttons::lookup_button(&lookup_key);
+                if lookup_button.is_some() && platform::lookup_buttons() == "unsupported" {
+                    lookup_button = None;
+                    lookup_key = String::from("shift");
+                }
+                mouse_buttons::set_lookup(&handle, lookup_button);
                 hover_lookup = service.settings.get_or("overlayHoverLookup", false);
                 // Wayland: positions are read only while the lookup key is held
                 // (`platform::pointer_demand`), so there is no resting pointer to go on.
@@ -4581,8 +4592,14 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     hover_lookup = false;
                 }
             }
+            // A mouse button chosen as the lookup key is carried as Shift (`Modifiers::holds` reads
+            // any button as Shift), so the gate, the scan, the hook card and the pop-ups all follow
+            // it exactly as they follow a key; Shift itself is then just Shift, for the game.
             // A controller's lookup button stands in for the lookup key (`gamepad::lookup_held`).
             let sample = platform::desktop_cursor().map(|mut sample| {
+                if let Some(button) = lookup_button {
+                    sample.modifiers.shift = platform::lookup_button_down(button);
+                }
                 if gamepad::lookup_held() {
                     sample.modifiers.hold(&lookup_key);
                 }
@@ -4610,6 +4627,13 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                             (label != OVERLAY || v.overlay_visible)
                                 && rects.iter().any(|r| r.shift && r.contains(s.x, s.y))
                         });
+                        // A lookup button's press here is kept from the game (`mouse_buttons::lookup_step`):
+                        // over the words, the hook card, or any of Kimochi's pop-ups.
+                        if lookup_button.is_some() {
+                            mouse_buttons::set_over_own(v.regions.iter().any(|(label, rects)| {
+                                (label != OVERLAY || v.overlay_visible) && rects.iter().any(|r| r.contains(s.x, s.y))
+                            }));
+                        }
                         gate.update(key_held(&s.modifiers), s.down, over, Instant::now())
                     }
                 };

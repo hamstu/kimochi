@@ -76,7 +76,10 @@ account and synced), `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `controllerMenuItems` (absent: the default menu; the controller menu's item ids in order, clockwise from the top, from `RADIAL_ITEMS` in `ui/radial-items.js`; unknown ids are dropped and an empty list is the default menu), `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
-`meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll),
+`meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll; or a mouse
+button, `MouseMiddle`, `MouseBack` or `MouseForward`, where `keys.lookupButtons` allows one: the
+cursor poll sends it held as `shift` in every sample, and real Shift is then not the lookup key;
+where buttons cannot be read it is Shift),
 `overlayHoverLookup` (false: resting the pointer on an overlay word looks it up with no key
 held; never on Wayland or in Gaming Mode; a machine key, never synced; see `pointer` below),
 `scannedTextFontSize` (14),
@@ -644,6 +647,20 @@ Accessibility is already allowed (Kimochi never asks for it for this). Linux has
 button cannot fire, it is reported in `failed` with the reason, and `platform_capabilities`
 `keys.mouseButtons` (`available`, `needsAccessibility`, `unsupported`) tells Settings whether to
 record one.
+
+**A mouse button as the lookup key** (`overlayLookupKey` = `MouseMiddle`, `MouseBack`,
+`MouseForward`; #204). The cursor poll reads whether it is held (`platform::lookup_button_down`:
+`GetAsyncKeyState` on Windows, `CGEventSourceButtonState` on the HID state on macOS, XInput 2's
+`XIQueryPointer` on X11, with the core mask's middle button as the fallback) and carries it as
+Shift, so the gate, the scan, hover, the hook card and the pop-ups follow it unchanged. The same
+hooks as the bound buttons decide its clicks (`mouse_buttons::lookup_step`): a press over
+Kimochi's own text (the overlay's words, the hook card, a pop-up; `set_over_own`, written by the
+poll) is swallowed with its release, any other press passes, and injected input always passes.
+The lookup key is read before the shortcut bindings, so a button that is both is the lookup key.
+`platform_capabilities` `keys.lookupButtons` says what happens: `consumed` (Windows; macOS with
+Accessibility, the tap installed for it), `needsAccessibility` (macOS without: read, never
+swallowed), `passthrough` (X11 and the Steam Deck: read without a grab, the click also reaches the
+game), `unsupported` (Wayland, and older backends: a button chosen elsewhere is Shift).
 
 **Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
 `triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`), set in Settings → Shortcuts &

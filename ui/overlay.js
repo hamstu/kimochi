@@ -44,6 +44,7 @@ import { PopupLeave } from './popup-leave.js'
 
 import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
 import { hoverLookupApplies, scanPointerInit, withHoverKey } from './scan-input.js'
+import { effectiveLookupKey, isLookupButton, lookupButtonsBit } from './lookup-key.js'
 import { groupTextAnnotations, visibleAnnotations } from './annotations.js'
 import { japaneseFilterOf } from './japanese-text.js'
 import { isJapanese, languageOf } from './languages.js'
@@ -486,7 +487,12 @@ function syncHints(readWordRects = null) {
     Boolean(state.origin) &&
     ((wordsSeen() && (readWordRects?.() ?? renderer.hitRects(state.origin)).length > 0) ||
       (hookCardSeen() && (hook.card?.rects().length ?? 0) > 0))
-  hints.sync(shown, clickThrough(), native.getSetting('overlayLookupKey') ?? 'shift', hoverLookup())
+  hints.sync(
+    shown,
+    clickThrough(),
+    effectiveLookupKey(native.getSetting('overlayLookupKey'), lookupButtonSupport),
+    hoverLookup()
+  )
   if (shown) hints.place(hintArea())
 }
 
@@ -511,6 +517,9 @@ function hintArea() {
 
 /** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
 let ocrEngines = {}
+/** Whether a mouse button can be the lookup key here (`keys.lookupButtons`, ui/lookup-key.ts). */
+let lookupButtonSupport = 'unsupported'
+
 /** The engine that watches the screen for Auto OCR (`ui/watcher.ts`). */
 const autoWatcher = () =>
   resolveWatcher(ocrModeNow(), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto', languageNow())
@@ -5075,6 +5084,7 @@ await native.listen('frontmost-app', ({ payload }) =>
 await native.watchCapabilities(async (caps) => {
   // An engine downloaded or verified can change which one watches.
   ocrEngines = caps.ocrEngines ?? {}
+  lookupButtonSupport = caps.keys?.lookupButtons ?? 'unsupported'
   syncAutoScanner()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   void syncGamingHints()
@@ -5459,18 +5469,27 @@ window.addEventListener(
 
 /** Whether the native feed's last sample said the pointer rests (`hover`, `state::HoverIntent`). */
 let feedHover = false
+/** Whether the feed's last sample held the lookup key while it is a mouse button (#204). */
+let feedLookupButton = false
 /**
  * Hover lookup, where the overlay has the mouse itself (click-through off, or the words while the
  * gate is open): its real moves carry no key, and 10ten closes a key-opened pop-up on a move
  * without its key, so gliding along a line would flicker between the feed's keyed moves and these.
  * While the feed says the pointer rests, a real move goes on with the lookup key held instead,
  * as the feed's own samples do (`withHoverKey`: not over a pop-up, not with a button down).
+ *
+ * A mouse button as the lookup key (`feedLookupButton`) has the same trouble with every real move
+ * while it is held: the move carries the button, not Shift, which native sends for it. Those go on
+ * keyed too, over a pop-up as well (a nested lookup, as with Shift), with the button left out.
  */
 function rekeyForHover(event) {
-  if (!feedHover || !hoverLookup() || controller.drivesLookups) return
-  const property = lookupKeyProperty(native.getSetting('overlayLookupKey'))
-  if (event[property] || event.buttons !== 0) return
-  if (overPopupAt({ x: event.clientX, y: event.clientY })) return
+  if (controller.drivesLookups) return
+  const key = native.getSetting('overlayLookupKey')
+  const button = feedLookupButton && isLookupButton(key)
+  if (!button && (!feedHover || !hoverLookup())) return
+  const property = lookupKeyProperty(key)
+  if (event[property] || (event.buttons & ~lookupButtonsBit(button ? key : null)) !== 0) return
+  if (!button && overPopupAt({ x: event.clientX, y: event.clientY })) return
   event.stopImmediatePropagation()
   const init = {
     bubbles: true,
@@ -5550,6 +5569,7 @@ await native.listen('pointer', ({ payload }) => {
   // Without click-through, text lights up on hover as it always has.
   gateOpen = Boolean(payload.gate ?? payload.shift)
   feedHover = payload.hover === true
+  feedLookupButton = payload.shift === true && isLookupButton(native.getSetting('overlayLookupKey'))
   // A card shown only with the lookup key comes and goes with it (and stays while its pop-up is up).
   if (hookCardOnKey()) {
     const up = gateOpen || hookPopupOpen()

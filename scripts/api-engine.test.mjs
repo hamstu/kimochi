@@ -76,6 +76,7 @@ test("the API lookup waits for the overlay's lookup key, not always Shift", asyn
   assert.equal(lookupKeyProperty('meta'), 'metaKey')
   assert.equal(lookupKeyProperty(undefined), 'shiftKey', 'unset is Shift')
   assert.equal(lookupKeyProperty('hyper'), 'shiftKey', 'an unknown key is Shift, as native reads it')
+  assert.equal(lookupKeyProperty('MouseMiddle'), 'shiftKey', 'a lookup button is sent held as Shift')
 })
 
 test('the overlay starts the Yomitan API on its own, as a ready dictionary', async () => {

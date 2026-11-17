@@ -67,6 +67,7 @@ import { WithReaderSettings } from './ReaderSettingsProvider'
 import { HookCardPreview } from './HookCardPreview'
 import { HookCardLookRow } from './CardLook'
 import { lookupKeyName } from './overlayPreview'
+import { useLookupKey } from '../../bridge/useLookupKey'
 import {
   HOOK_CARD_SECTION,
   SESSIONS_SECTION,
@@ -765,7 +766,7 @@ function ShowCardRow({
   badge: ReactNode
   onChange: (next: HookCardShow) => void
 }): ReactNode {
-  const [lookupKey] = useSetting<string>('overlayLookupKey', 'shift')
+  const lookupKey = useLookupKey()
   const { os } = useCapabilities()
   const key = lookupKeyName(lookupKey, os === 'macos')
   const descriptions: Record<HookCardShow, string> = {

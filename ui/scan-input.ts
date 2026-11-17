@@ -16,6 +16,8 @@
  * exactly as it does in a browser, with no window having taken anything.
  */
 
+import { lookupModifier, type LookupModifier } from './lookup-key.js'
+
 /** One sample from the native cursor poll; see `spawn_cursor_poll` in `main.rs`. */
 export interface PointerSample {
   /** Desktop points. */
@@ -142,7 +144,7 @@ export function hoverLookupApplies(
 }
 
 /** The lookup keys `overlayLookupKey` names, as a sample carries them. */
-export type LookupKey = 'shift' | 'ctrl' | 'alt' | 'meta'
+export type LookupKey = LookupModifier
 
 /**
  * Hover lookup (`overlayHoverLookup`): the sample as the dictionary should hear it.
@@ -164,6 +166,7 @@ export function withHoverKey<T extends PointerSample & { hover?: boolean }>(
   // a keyed press would read nothing and its release would reopen what the click just closed.
   // Native already stops `hover` while a button is down and until the pointer moves after it.
   if (!enabled || sample.hover !== true || sample.down || overPopup) return sample
-  const held: LookupKey = key === 'ctrl' || key === 'alt' || key === 'meta' ? key : 'shift'
+  // A mouse button as the lookup key is heard as Shift, as native sends it held (ui/lookup-key.ts).
+  const held: LookupKey = lookupModifier(key)
   return { ...sample, [held]: true }
 }

@@ -7,7 +7,12 @@
 //! the press to a channel; `fire`, which may lock and dispatch, runs on a delivery thread.
 //!
 //! With nothing bound the hooks see an empty mask and pass every event on untouched.
-use std::sync::atomic::{AtomicU8, Ordering};
+//!
+//! A button can also be the overlay's lookup key (`overlayLookupKey` naming one, #204): held, it
+//! does what holding Shift does. The same hooks see it (`lookup_step`): a press over Kimochi's own
+//! text is kept from the application under the pointer, any other press reaches it as usual, and
+//! the cursor poll reads whether it is held (`platform::lookup_button_down`).
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -90,6 +95,9 @@ pub fn step(owned: &mut u8, armed: u8, button: Button, down: bool, injected: boo
 /// The buttons with a live binding. Zero while nothing is bound and while shortcuts are
 /// suspended for recording, so a bound button can be recorded again.
 static ARMED: AtomicU8 = AtomicU8::new(0);
+/// The buttons bound as shortcuts (armed or suspended), so the lookup key knows whether the
+/// platform hook is still wanted without it.
+static BOUND: AtomicU8 = AtomicU8::new(0);
 /// The action bound to each button, read only off the hook thread.
 static ACTIONS: Mutex<[Option<String>; 3]> = Mutex::new([None, None, None]);
 
@@ -115,9 +123,121 @@ pub fn bind(app: &tauri::AppHandle, bindings: &[(String, Button)]) -> Result<(),
     }
     disarm();
     *ACTIONS.lock().unwrap_or_else(|p| p.into_inner()) = actions;
-    crate::platform::sync_mouse_buttons(app, mask != 0)?;
+    BOUND.store(mask, Ordering::Relaxed);
+    // The hook stays while the lookup key is a button, even with no shortcut bound to one.
+    let lookup = lookup() != 0 && cfg!(any(target_os = "windows", target_os = "macos"));
+    let synced = crate::platform::sync_mouse_buttons(app, mask != 0 || lookup);
+    if mask != 0 {
+        synced?;
+    }
     ARMED.store(mask, Ordering::Relaxed);
     Ok(())
+}
+
+/// The button that is the overlay's lookup key, as its bit (`Button::bit`), or 0 while the
+/// lookup key is a keyboard modifier. Set from `overlayLookupKey` by the cursor poll.
+static LOOKUP: AtomicU8 = AtomicU8::new(0);
+/// Whether the pointer is over Kimochi's own text (the overlay's words, the hook card, a
+/// dictionary pop-up), so a lookup press there is kept from the application underneath.
+/// Written by the cursor poll every tick, read by the hooks.
+static OVER_OWN: AtomicBool = AtomicBool::new(false);
+/// A lookup press a hook swallowed, not yet released: the system's own button state does not
+/// see it (Windows), so the cursor poll reads it here.
+static LOOKUP_SWALLOWED: AtomicBool = AtomicBool::new(false);
+
+/// The overlay's lookup key (`overlayLookupKey`) when it names a mouse button.
+pub fn lookup_button(key: &str) -> Option<Button> {
+    Button::parse(key)
+}
+
+/// Make `button` the lookup key (or none). Called by the cursor poll when the setting changes.
+/// The platform hook is installed for it if it can be (macOS: a tap, with Accessibility); if it
+/// cannot, the button still looks up, read from the system's button state, and its click also
+/// reaches the application under the pointer.
+pub fn set_lookup(app: &tauri::AppHandle, button: Option<Button>) {
+    let bit = button.map_or(0, Button::bit);
+    let previous = LOOKUP.swap(bit, Ordering::Relaxed);
+    if bit == 0 {
+        if previous != 0 && BOUND.load(Ordering::Relaxed) == 0 {
+            // Nothing left for a hook to catch (only macOS's tap actually goes).
+            let _ = crate::platform::sync_mouse_buttons(app, false);
+            LOOKUP_SWALLOWED.store(false, Ordering::Relaxed);
+        }
+        return;
+    }
+    // Again on every call (the poll re-reads the setting every quarter second), so a tap refused
+    // for want of Accessibility starts once it is allowed. Cheap while it runs.
+    if cfg!(any(target_os = "windows", target_os = "macos")) {
+        let _ = crate::platform::sync_mouse_buttons(app, true);
+    }
+}
+
+/// The lookup button's bit, or 0; what a hook reads.
+pub fn lookup() -> u8 {
+    LOOKUP.load(Ordering::Relaxed)
+}
+
+pub fn set_over_own(over: bool) {
+    OVER_OWN.store(over, Ordering::Relaxed);
+}
+
+/// Whether a lookup press is being held that a hook kept from the system.
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
+pub fn lookup_swallowed() -> bool {
+    LOOKUP_SWALLOWED.load(Ordering::Relaxed)
+}
+
+/// One transition of the lookup button (`lookup`, a bit) against the hook's swallowed presses
+/// (`owned`, updated in place). `None` when `button` is not the lookup button (the shortcut
+/// bindings decide then). Pure but for `LOOKUP_SWALLOWED`, which follows `owned`.
+///
+/// - A press over Kimochi's own text (`over_own`) is swallowed: the game never sees the click
+///   that asked for a lookup. Anywhere else it passes, so the button keeps working in every
+///   other application (a middle click in a browser still opens a link in a new tab).
+/// - A release is swallowed exactly when its press was, even if the lookup key changed since.
+/// - Injected input (a remapper, a macro) is never swallowed; it still counts as held, read from
+///   the system's button state, since that is how many mouse utilities send side buttons.
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
+pub fn lookup_step(
+    owned: &mut u8,
+    lookup: u8,
+    over_own: bool,
+    button: Button,
+    down: bool,
+    injected: bool,
+) -> Option<Step> {
+    let bit = button.bit();
+    let step = if down {
+        if lookup & bit == 0 {
+            return None;
+        }
+        if over_own && !injected {
+            *owned |= bit;
+            Step::Swallow
+        } else {
+            *owned &= !bit;
+            Step::Pass
+        }
+    } else if *owned & bit != 0 {
+        *owned &= !bit;
+        Step::Swallow
+    } else if lookup & bit != 0 {
+        Step::Pass
+    } else {
+        return None;
+    };
+    LOOKUP_SWALLOWED.store(*owned & lookup != 0, Ordering::Relaxed);
+    Some(step)
+}
+
+/// `lookup_step` with the live lookup button and pointer: what a hook calls.
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
+pub fn lookup_transition(owned: &mut u8, button: Button, down: bool, injected: bool) -> Option<Step> {
+    let lookup = lookup();
+    if lookup == 0 && *owned == 0 {
+        return None;
+    }
+    lookup_step(owned, lookup, OVER_OWN.load(Ordering::Relaxed), button, down, injected)
 }
 
 /// Run the action bound to a swallowed press. Called on a delivery thread, never the hook's.
@@ -204,6 +324,52 @@ mod tests {
         assert_eq!(step(&mut owned, armed, Button::Forward, true, false), Step::Fire);
         assert_eq!(step(&mut owned, armed, Button::Forward, false, true), Step::Pass);
         assert_eq!(step(&mut owned, armed, Button::Forward, false, false), Step::Swallow);
+    }
+
+    #[test]
+    fn the_lookup_button_is_kept_from_the_game_only_over_kimochis_text() {
+        let lookup = Button::Middle.bit();
+        let mut owned = 0;
+        // Over the overlay's words: press and release both swallowed.
+        assert_eq!(lookup_step(&mut owned, lookup, true, Button::Middle, true, false), Some(Step::Swallow));
+        assert_eq!(lookup_step(&mut owned, lookup, false, Button::Middle, false, false), Some(Step::Swallow));
+        assert_eq!(owned, 0);
+        // Anywhere else: the application under the pointer gets its middle click.
+        assert_eq!(lookup_step(&mut owned, lookup, false, Button::Middle, true, false), Some(Step::Pass));
+        // Moving onto the words while held does not eat a release whose press went through.
+        assert_eq!(lookup_step(&mut owned, lookup, true, Button::Middle, false, false), Some(Step::Pass));
+        // Other buttons are left to the shortcut bindings.
+        assert_eq!(lookup_step(&mut owned, lookup, true, Button::Back, true, false), None);
+        assert_eq!(lookup_step(&mut owned, lookup, true, Button::Back, false, false), None);
+    }
+
+    #[test]
+    fn a_lookup_release_follows_its_press_when_the_key_changes_in_between() {
+        let mut owned = 0;
+        assert_eq!(lookup_step(&mut owned, Button::Back.bit(), true, Button::Back, true, false), Some(Step::Swallow));
+        // The lookup key went back to Shift while the button was held: its release is still eaten.
+        assert_eq!(lookup_step(&mut owned, 0, true, Button::Back, false, false), Some(Step::Swallow));
+        assert_eq!(owned, 0);
+        assert_eq!(lookup_step(&mut owned, 0, true, Button::Back, true, false), None);
+    }
+
+    #[test]
+    fn injected_lookup_presses_are_never_swallowed() {
+        let mut owned = 0;
+        let lookup = Button::Forward.bit();
+        assert_eq!(lookup_step(&mut owned, lookup, true, Button::Forward, true, true), Some(Step::Pass));
+        assert_eq!(lookup_step(&mut owned, lookup, true, Button::Forward, false, true), Some(Step::Pass));
+        assert_eq!(owned, 0);
+    }
+
+    #[test]
+    fn a_lookup_key_names_a_button_or_a_modifier() {
+        assert_eq!(lookup_button("MouseMiddle"), Some(Button::Middle));
+        assert_eq!(lookup_button("MouseBack"), Some(Button::Back));
+        assert_eq!(lookup_button("MouseForward"), Some(Button::Forward));
+        for key in ["shift", "ctrl", "alt", "meta", ""] {
+            assert_eq!(lookup_button(key), None, "{key}");
+        }
     }
 
     #[test]

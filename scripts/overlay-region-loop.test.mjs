@@ -72,6 +72,8 @@ function fixture() {
     HINTS_DISMISSED: 'overlayHintsDismissed',
     clickThrough: () => true,
     hoverLookup: () => false,
+    effectiveLookupKey: (key) => key ?? 'shift',
+    lookupButtonSupport: 'unsupported',
     hintArea: () => null,
     document: { querySelectorAll: () => [] },
     popupRects: () => [],

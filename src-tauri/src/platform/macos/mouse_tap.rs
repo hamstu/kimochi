@@ -1,6 +1,6 @@
 //! Bound mouse buttons (`mouse_buttons`) on macOS: an active `CGEventTap` that sees only
 //! other-mouse presses and releases (middle, back, forward; never left or right, never moves or
-//! drags). It exists only while a button is bound, on a thread of its own.
+//! drags). It exists only while a button is bound or is the lookup key, on a thread of its own.
 //!
 //! An active tap (one that can swallow events) needs Accessibility. Kimochi never asks for it
 //! here: without it the binding is reported as failed and Settings explains why.
@@ -71,9 +71,19 @@ thread_local! {
     static TAP: Cell<CFMachPortRef> = const { Cell::new(std::ptr::null_mut()) };
     /// Presses swallowed and not yet released (`mouse_buttons::step`).
     static OWNED: Cell<u8> = const { Cell::new(0) };
+    /// Lookup presses swallowed and not yet released (`mouse_buttons::lookup_step`).
+    static LOOKUP_OWNED: Cell<u8> = const { Cell::new(0) };
 }
 
 /// macOS numbers the other buttons from 2: middle, then back (3) and forward (4).
+pub(super) fn button_number(button: Button) -> u32 {
+    match button {
+        Button::Middle => 2,
+        Button::Back => 3,
+        Button::Forward => 4,
+    }
+}
+
 fn button(number: i64) -> Option<Button> {
     match number {
         2 => Some(Button::Middle),
@@ -100,6 +110,15 @@ extern "C" fn callback(_proxy: CGEventTapProxy, kind: u32, event: CGEventRef, _i
         return event;
     };
     let injected = unsafe { CGEventGetIntegerValueField(event, SOURCE_STATE_ID) } != HID_SYSTEM_STATE;
+    // The lookup key first: a button that is both stays the lookup key (Settings warns).
+    let mut lookup_owned = LOOKUP_OWNED.get();
+    let lookup = mouse_buttons::lookup_transition(&mut lookup_owned, button, down, injected);
+    LOOKUP_OWNED.set(lookup_owned);
+    match lookup {
+        Some(Step::Swallow) => return std::ptr::null_mut(),
+        Some(_) => return event,
+        None => {}
+    }
     let mut owned = OWNED.get();
     let step = mouse_buttons::step(&mut owned, mouse_buttons::armed(), button, down, injected);
     OWNED.set(owned);
@@ -117,7 +136,7 @@ extern "C" fn callback(_proxy: CGEventTapProxy, kind: u32, event: CGEventRef, _i
     }
 }
 
-/// Install the tap when a button is bound (`wanted`) and remove it when none is.
+/// Install the tap when a button is bound or is the lookup key (`wanted`), and remove it when none is.
 pub fn sync(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
     let mut running = RUNNING.lock().unwrap_or_else(|p| p.into_inner());
     if !wanted {

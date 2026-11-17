@@ -9,6 +9,8 @@
  * key labels and the OS name for a backend that cannot say.
  */
 
+import type { LookupButtonSupport } from './lookup-key.js'
+
 export type PlatformOs = 'macos' | 'windows' | 'linux'
 export type OcrEngineKey =
   | 'googlelens'
@@ -77,6 +79,11 @@ export interface PlatformCapabilities {
      * `unsupported` elsewhere. Absent from older backends, which could not.
      */
     mouseButtons: 'available' | 'needsAccessibility' | 'unsupported'
+    /**
+     * Whether a mouse button can be the overlay's lookup key, and what its click does
+     * (`LookupButtonSupport` in ui/lookup-key.ts). Absent from older backends, which could not.
+     */
+    lookupButtons?: LookupButtonSupport
   }
   capture: {
     authorization: CaptureAuthorization
@@ -149,7 +156,13 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
   osVersion: '',
   arch: '',
   session: null,
-  keys: { primaryModifier: 'meta', labels: 'symbols', superName: 'Command', mouseButtons: 'unsupported' },
+  keys: {
+    primaryModifier: 'meta',
+    labels: 'symbols',
+    superName: 'Command',
+    mouseButtons: 'unsupported',
+    lookupButtons: 'unsupported'
+  },
   capture: {
     authorization: 'denied',
     canOpenSettings: true,
@@ -211,7 +224,8 @@ export function fallbackCapabilities(
       primaryModifier: 'ctrl',
       labels: 'words',
       superName: windows ? 'Win' : 'Super',
-      mouseButtons: 'unsupported'
+      mouseButtons: 'unsupported',
+      lookupButtons: 'unsupported'
     },
     // Native leaves Live Text out here, so the macOS default would stand and Auto OCR would
     // pick it as the watcher for Google Lens or Manga OCR (ui/watcher.ts).

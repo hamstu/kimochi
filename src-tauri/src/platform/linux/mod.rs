@@ -138,6 +138,23 @@ pub fn lookup_keys_readable() -> bool {
     on_x11() || wayland_pointer_feed() != Some(shift::Source::Portal)
 }
 
+/// Whether the lookup button (`overlayLookupKey` naming one) is held: X11 reads it with the
+/// pointer (`x11::lookup_button_down`). Wayland has no global button state to read.
+pub fn lookup_button_down(button: crate::mouse_buttons::Button) -> bool {
+    on_x11() && x11::lookup_button_down(button)
+}
+
+/// Whether a mouse button can be the lookup key here: on X11 (and the Steam Deck, gamescope
+/// included), read without a grab, so its click also reaches the game; not on Wayland, where no
+/// application may read buttons pressed over another's window.
+pub fn lookup_buttons() -> &'static str {
+    if on_x11() {
+        "passthrough"
+    } else {
+        "unsupported"
+    }
+}
+
 /// Whether the feed's Shift needs relaying to the overlay's `linux-dictionary-modifier` listeners
 /// (the portal source already sends its own edges).
 pub fn relays_shift() -> bool {
@@ -410,7 +427,7 @@ pub fn capabilities() -> Value {
             "nativeGnomeShell": gnome,
             "xwayland": s.xwayland || gamescope::active(),
         },
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported", "lookupButtons": lookup_buttons()},
         "capture": {
             "authorization": if !portal { "granted" } else { "promptOnSelect" },
             "canOpenSettings": false,

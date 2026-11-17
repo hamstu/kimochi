@@ -28,8 +28,9 @@ const make = (tag, className, text) => {
 }
 
 /**
- * A lookup key (`overlayLookupKey`: "shift", "ctrl", "alt", "meta") as this platform's keyboards
- * label it.
+ * A lookup key (`overlayLookupKey`: "shift", "ctrl", "alt", "meta", or a mouse button) as this
+ * platform labels it. The same as `lookupKeyLabel` in ui/lookup-key.ts (this file is loaded
+ * unbundled by tests; scripts/lookup-key.test.mjs checks they agree).
  * @param {string} [key]
  */
 export function lookupKeyLabel(key = 'shift') {
@@ -37,6 +38,9 @@ export function lookupKeyLabel(key = 'shift') {
   if (key === 'ctrl') return mac ? '⌃ Control' : 'Ctrl'
   if (key === 'alt') return mac ? '⌥ Option' : 'Alt'
   if (key === 'meta') return mac ? '⌘ Command' : 'Super'
+  if (key === 'MouseMiddle') return 'Middle Mouse'
+  if (key === 'MouseBack') return 'Mouse Back'
+  if (key === 'MouseForward') return 'Mouse Forward'
   return mac ? '⇧ Shift' : 'Shift'
 }
 

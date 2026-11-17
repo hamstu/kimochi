@@ -130,6 +130,15 @@ pub fn accessibility_status() -> Option<bool> {
     None
 }
 
+/// No mouse button can be the lookup key on this platform.
+pub fn lookup_button_down(_button: crate::mouse_buttons::Button) -> bool {
+    false
+}
+
+pub fn lookup_buttons() -> &'static str {
+    "unsupported"
+}
+
 /// Mouse buttons as action shortcuts (`mouse_buttons`) are not available on this platform.
 pub fn sync_mouse_buttons(_app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
     if wanted {
