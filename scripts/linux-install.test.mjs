@@ -40,7 +40,9 @@ override=$FAKE_WEB/status/$(printf '%s' "\${url#*://}" | tr '/' '_')
 exit 0
 `
 
-function release(tag, names) {
+const MIRROR = 'https://downloads.kimochiapp.com/app'
+
+function release(tag, names, base = `https://github.com/${REPO}/releases/download`) {
   return JSON.stringify(
     {
       tag_name: tag,
@@ -50,7 +52,7 @@ function release(tag, names) {
       assets: names.map((name) => ({
         name,
         size: 14,
-        browser_download_url: `https://github.com/${REPO}/releases/download/${tag}/${name}`
+        browser_download_url: `${base}/${tag}/${name}`
       }))
     },
     null,
@@ -104,7 +106,26 @@ async function fixture(t) {
     })
   const requests = async () =>
     (await readFile(path.join(web, 'requests.log'), 'utf8').catch(() => '')).trim().split('\n')
-  return { dir, data, web, publish, put, status, run, requests, appimage: path.join(data, 'kimochi/Kimochi.AppImage') }
+  // The download mirror's release.json and copies (scripts/download-mirror.mjs `release`).
+  const mirror = async (tag, names, { files = true } = {}) => {
+    await put(`${MIRROR}/release.json`, release(tag, names, MIRROR))
+    if (!files) return
+    for (const [i, name] of names.entries()) {
+      await put(`${MIRROR}/${tag}/${name}`, Buffer.concat([APPIMAGE, Buffer.from(`mirror ${name}`), Buffer.from([i])]))
+    }
+  }
+  return {
+    dir,
+    data,
+    web,
+    publish,
+    mirror,
+    put,
+    status,
+    run,
+    requests,
+    appimage: path.join(data, 'kimochi/Kimochi.AppImage')
+  }
 }
 
 const exists = (file) =>
@@ -152,6 +173,50 @@ test("installs the tagged release's generic AppImage for the CPU, with menu entr
   // Never left behind: the staging directory.
   assert.deepEqual(await readdir(path.join(f.data, 'kimochi')), ['Kimochi.AppImage'])
 })
+
+test('the download mirror comes first: its release document and its copy, no GitHub API call', posix, async (t) => {
+  const f = await fixture(t)
+  await f.publish('v1.2.0', names('1.2.0'))
+  await f.mirror('v1.2.0', names('1.2.0'))
+  const result = f.run(['--no-launch'])
+  assert.equal(result.status, 0, result.stderr)
+  assert.ok((await readFile(f.appimage)).includes(Buffer.from('mirror Kimochi_1.2.0_amd64.AppImage')))
+  const asked = await f.requests()
+  assert.ok(asked.includes(`${MIRROR}/release.json`))
+  assert.ok(asked.includes(`${MIRROR}/v1.2.0/Kimochi_1.2.0_amd64.AppImage`))
+  assert.ok(!asked.some((url) => url.startsWith('https://api.github.com/')), asked.join('\n'))
+})
+
+test('a download the mirror fails is taken from the same GitHub release', posix, async (t) => {
+  const f = await fixture(t)
+  await f.publish('v1.2.0', names('1.2.0'))
+  await f.mirror('v1.2.0', names('1.2.0'), { files: false })
+  const result = f.run(['--no-launch'])
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stderr, /download mirror answered 404; downloading from GitHub instead/)
+  assert.ok((await readFile(f.appimage)).includes(Buffer.from('Kimochi_1.2.0_amd64.AppImage')))
+  assert.ok(
+    (await f.requests()).includes(`https://github.com/${REPO}/releases/download/v1.2.0/Kimochi_1.2.0_amd64.AppImage`)
+  )
+})
+
+test(
+  'without the mirror (KIMOCHI_INSTALL_MIRROR=off, or no release.json) GitHub is used as before',
+  posix,
+  async (t) => {
+    const f = await fixture(t)
+    await f.publish('v1.2.0', names('1.2.0'))
+    await f.mirror('v1.2.0', names('1.2.0'))
+    const off = f.run(['--no-launch'], { KIMOCHI_INSTALL_MIRROR: 'off' })
+    assert.equal(off.status, 0, off.stderr)
+    assert.ok(!(await f.requests()).some((url) => url.startsWith(MIRROR)))
+    const g = await fixture(t)
+    await g.publish('v1.2.0', names('1.2.0'))
+    const missing = g.run(['--no-launch'])
+    assert.equal(missing.status, 0, missing.stderr)
+    assert.ok((await g.requests()).includes(`https://api.github.com/repos/${REPO}/releases/latest`))
+  }
+)
 
 test('picks the aarch64 build on ARM64', posix, async (t) => {
   const f = await fixture(t)

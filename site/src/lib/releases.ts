@@ -10,7 +10,14 @@ export const REPO = 'hamstu/kimochi'
 export const RELEASES_URL = `https://github.com/${REPO}/releases`
 const API = `https://api.github.com/repos/${REPO}/releases`
 const LATEST_API = `${API}/latest`
-const CACHE_KEY = 'kimochi-site-release-v3'
+/**
+ * Kimochi's download mirror (downloads.kimochiapp.com, Cloudflare R2): the newest published
+ * release in GitHub's release-document shape, with every asset on the mirror. CI writes it once
+ * the release is published and copied (scripts/download-mirror.mjs `release`). No rate limit, and
+ * it works where GitHub is blocked; GitHub's API is the fallback.
+ */
+export const MIRROR_RELEASE = 'https://downloads.kimochiapp.com/app/release.json'
+const CACHE_KEY = 'kimochi-site-release-v4'
 const CACHE_MS = 10 * 60 * 1000
 
 export interface Release {
@@ -59,7 +66,9 @@ function writeCache(release: Release): void {
 async function fetchRelease(url: string, signal?: AbortSignal): Promise<GitHubRelease> {
   let res: Response
   try {
-    res = await fetch(url, { headers: { Accept: 'application/vnd.github+json' }, signal })
+    // The mirror is a plain static file: no custom header, so no CORS preflight.
+    const headers = url === MIRROR_RELEASE ? undefined : { Accept: 'application/vnd.github+json' }
+    res = await fetch(url, { headers, signal })
   } catch (err) {
     if ((err as Error).name === 'AbortError') throw err
     throw new ReleaseFetchError('network')
@@ -75,16 +84,33 @@ export function versionLabel(release: Release): string {
   return release.tag
 }
 
+/** Whether a release document is usable: a tag and at least one asset with a URL. */
+function usable(data: GitHubRelease): boolean {
+  return (
+    typeof data?.tag_name === 'string' &&
+    Array.isArray(data.assets) &&
+    data.assets.some((a) => typeof a?.browser_download_url === 'string')
+  )
+}
+
 /**
- * The release to offer: the latest published tagged release (`/releases/latest`; it never
- * returns drafts or prereleases). Unauthenticated: 60 requests/hour per IP, so the result is
- * cached in sessionStorage for 10 min. Throws ReleaseFetchError; callers fall back to
- * RELEASES_URL.
+ * The release to offer: the latest published tagged release, from the download mirror first
+ * (MIRROR_RELEASE), else GitHub's `/releases/latest` (it never returns drafts or prereleases).
+ * GitHub's API is unauthenticated (60 requests/hour per IP), so the result is cached in
+ * sessionStorage for 10 min. Throws ReleaseFetchError (GitHub's) when neither answers; callers
+ * fall back to RELEASES_URL.
  */
 export async function fetchLatestRelease(signal?: AbortSignal): Promise<Release> {
   const cached = readCache()
   if (cached) return cached
-  const data = await fetchRelease(LATEST_API, signal)
+  let data: GitHubRelease | null = null
+  try {
+    const mirrored = await fetchRelease(MIRROR_RELEASE, signal)
+    if (usable(mirrored)) data = mirrored
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err
+  }
+  data ??= await fetchRelease(LATEST_API, signal)
   const release: Release = {
     tag: data.tag_name,
     name: data.name || data.tag_name,

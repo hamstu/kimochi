@@ -676,9 +676,11 @@ jobs:
   # The published release copied to Kimochi's download mirror (downloads.kimochiapp.com, an R2
   # bucket; DOWNLOADS_MIRROR.md), which installed apps ask first: every asset under
   # `app/<tag>/`, then `app/latest.json` naming those copies (the signatures are unchanged), only
-  # once each one answers. Strictly additive: it runs after the release is published, never fails
-  # the run (`continue-on-error`), and is skipped without the R2 secrets. The apps then simply
-  # find the update on GitHub, which they ask second. Re-run this job alone to retry.
+  # once each one answers, and `app/release.json` (read by the website's download button and
+  # site/public/install.sh before GitHub's API). Strictly additive: it runs after the release is
+  # published, never fails the run (`continue-on-error`), and is skipped without the R2 secrets.
+  # The apps then simply find the update on GitHub, which they ask second. Re-run this job alone
+  # to retry.
   mirror:
     name: Copy the release to the download mirror
     needs: [plan, manifest]
@@ -717,10 +719,11 @@ jobs:
           rm -rf ../mirror && mkdir -p ../mirror/assets
           gh release download "$RELEASE" --dir ../mirror/assets
           mv ../mirror/assets/latest.json ../mirror/github-latest.json
+          gh release view "$RELEASE" --json tagName,name,url,publishedAt > ../mirror/github-release.json
           node scripts/updater-artifacts.mjs mirror --manifest ../mirror/github-latest.json \
             --base "https://downloads.kimochiapp.com/app/$RELEASE" --out ../mirror/latest.json
           node scripts/download-mirror.mjs release --backend s3 --tag "$RELEASE" \
-            --dir ../mirror/assets --manifest ../mirror/latest.json
+            --dir ../mirror/assets --manifest ../mirror/latest.json --github ../mirror/github-release.json
           echo "Mirrored to https://downloads.kimochiapp.com/app/$RELEASE/" >> "$GITHUB_STEP_SUMMARY"
 
   # GITHUB_TOKEN publication does not trigger release-event workflows.

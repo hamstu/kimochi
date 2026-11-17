@@ -17,10 +17,15 @@
 //       With --prune, deletes what the retention policy no longer keeps (see `retention`).
 //
 //   node scripts/download-mirror.mjs release --tag vX.Y.Z --dir <assets> --manifest <latest.json>
+//       [--github <gh release view --json tagName,name,url,publishedAt>]
 //       [--backend …]
 //       The app's own release: uploads every file in --dir to `app/<tag>/`, checks that each URL
 //       the mirror's manifest names now answers with the right size, and only then uploads the
-//       manifest as `app/latest.json` (the endpoint the app asks first).
+//       manifest as `app/latest.json` (the endpoint the app asks first). Then `app/release.json`
+//       (and `app/<tag>/release.json`): the release in the shape of GitHub's release document
+//       (`tag_name`, `name`, `html_url`, `published_at`, `assets[].{name, size,
+//       browser_download_url}`), with the mirror's URLs, for the website's download button and
+//       site/public/install.sh, which read it before GitHub's API.
 //
 // Backends: `s3` (CI) is R2's S3 API through the AWS CLI, with R2_ACCESS_KEY_ID and
 // R2_SECRET_ACCESS_KEY (an R2 API token scoped to the bucket) and R2_ACCOUNT_ID; `wrangler` is
@@ -559,6 +564,28 @@ async function sync(options) {
   }
 }
 
+/**
+ * The mirror's `release.json`: GitHub's release document, trimmed to what the website and the
+ * Linux installer read, with each asset on the mirror. `github` is `gh release view --json
+ * tagName,name,url,publishedAt` (or null); `files` are `{name, size}` of the uploaded assets.
+ */
+export function releaseDocument(tag, files, github = null) {
+  if (github && github.tagName !== tag) throw new Error(`release metadata is for ${github.tagName}, not ${tag}`)
+  return {
+    tag_name: tag,
+    name: github?.name || `Kimochi ${tag}`,
+    html_url: github?.url || `https://github.com/hamstu/kimochi/releases/tag/${tag}`,
+    published_at: github?.publishedAt ?? null,
+    assets: files
+      .filter((f) => f.name !== 'latest.json' && f.name !== 'release.json')
+      .map((f) => ({
+        name: f.name,
+        size: f.size,
+        browser_download_url: `${MIRROR}/app/${tag}/${encodeURIComponent(f.name)}`
+      }))
+  }
+}
+
 async function release(options) {
   for (const name of ['tag', 'dir', 'manifest']) if (!options[name]) throw new Error(`--${name} is required`)
   if (!/^v\d+\.\d+\.\d+$/.test(options.tag)) throw new Error(`not a release tag: ${options.tag}`)
@@ -592,6 +619,18 @@ async function release(options) {
     cacheControl: MANIFEST_CACHE
   })
   console.log(`published ${MIRROR}/app/latest.json (${manifest.version})`)
+  // The website's and the Linux installer's view of the release; every asset is already up.
+  const github = options.github ? parse(await readFile(options.github, 'utf8'), options.github) : null
+  const files = await Promise.all(
+    names.map(async (name) => ({ name, size: (await stat(path.join(options.dir, name))).size }))
+  )
+  const document = JSON.stringify(releaseDocument(options.tag, files, github), null, 2) + '\n'
+  await putBytes(store, `${prefix}/release.json`, document, {
+    contentType: 'application/json',
+    cacheControl: IMMUTABLE
+  })
+  await putBytes(store, 'app/release.json', document, { contentType: 'application/json', cacheControl: MANIFEST_CACHE })
+  console.log(`published ${MIRROR}/app/release.json (${options.tag})`)
 }
 
 function args(argv) {

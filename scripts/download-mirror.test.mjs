@@ -2,7 +2,15 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { fileName, MIRRORED_HOSTS, mirrorPath, pinnedFiles, retention, worktree } from './download-mirror.mjs'
+import {
+  fileName,
+  MIRRORED_HOSTS,
+  mirrorPath,
+  pinnedFiles,
+  releaseDocument,
+  retention,
+  worktree
+} from './download-mirror.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const HASH = '69753a221e8cf472cf1a7e17ff51133c471511638934ef4414a102e9d4c0252d'
@@ -111,4 +119,44 @@ test('the sync workflow runs when a pin changes', async () => {
   const job = ci.slice(ci.indexOf('\n  mirror:'), ci.indexOf('\n  announce:'))
   assert.match(job, /continue-on-error: true/, 'the mirror never fails a release')
   assert.match(job, /needs: \[plan, manifest\]/, 'after the release is published')
+})
+
+test("the mirror's release.json is GitHub's release document with the mirror's URLs", async () => {
+  const files = [
+    { name: 'Kimochi_1.2.0_x64-setup.exe', size: 10 },
+    { name: 'Kimochi_1.2.0_aarch64.app.zip', size: 20 },
+    { name: 'latest.json', size: 1 }
+  ]
+  const github = {
+    tagName: 'v1.2.0',
+    name: 'Kimochi v1.2.0',
+    url: 'https://github.com/hamstu/kimochi/releases/tag/v1.2.0',
+    publishedAt: '2026-11-20T00:00:00Z'
+  }
+  assert.deepEqual(releaseDocument('v1.2.0', files, github), {
+    tag_name: 'v1.2.0',
+    name: 'Kimochi v1.2.0',
+    html_url: 'https://github.com/hamstu/kimochi/releases/tag/v1.2.0',
+    published_at: '2026-11-20T00:00:00Z',
+    assets: [
+      {
+        name: 'Kimochi_1.2.0_x64-setup.exe',
+        size: 10,
+        browser_download_url: 'https://downloads.kimochiapp.com/app/v1.2.0/Kimochi_1.2.0_x64-setup.exe'
+      },
+      {
+        name: 'Kimochi_1.2.0_aarch64.app.zip',
+        size: 20,
+        browser_download_url: 'https://downloads.kimochiapp.com/app/v1.2.0/Kimochi_1.2.0_aarch64.app.zip'
+      }
+    ]
+  })
+  assert.throws(() => releaseDocument('v1.2.0', files, { ...github, tagName: 'v1.1.0' }), /not v1.2.0/)
+  // The website and the Linux installer read it from the same place.
+  const site = await readFile(`${root}site/src/lib/releases.ts`, 'utf8')
+  assert.match(site, /MIRROR_RELEASE = 'https:\/\/downloads\.kimochiapp\.com\/app\/release\.json'/)
+  const installer = await readFile(`${root}site/public/install.sh`, 'utf8')
+  assert.match(installer, /KIMOCHI_INSTALL_MIRROR:-https:\/\/downloads\.kimochiapp\.com\/app\}/)
+  const ci = await readFile(`${root}.github/workflows/ci.yml`, 'utf8')
+  assert.match(ci, /--github \.\.\/mirror\/github-release\.json/)
 })

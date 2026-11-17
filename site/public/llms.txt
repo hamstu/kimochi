@@ -19,3 +19,4 @@ Kimochi is not the "Kimochi" emotions journal, the "Kimochi" AI companion app or
 
 - [Discord](https://discord.gg/vdMge6TBZQ): help, feedback, feature ideas and release news, with the developer
 - [GitHub](https://github.com/hamstu/kimochi): source code (GPL-3.0), releases and issues
+- Downloads: the installers, updates and the files the app downloads later come from https://downloads.kimochiapp.com (Kimochi's own server), with GitHub as the fallback

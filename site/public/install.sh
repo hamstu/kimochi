@@ -21,8 +21,13 @@
 #   --no-launch                 KIMOCHI_NO_LAUNCH=1: do not start Kimochi afterwards
 #   --appimage <file>           KIMOCHI_APPIMAGE=<file>: install this AppImage, no download
 #   --help
+# Downloads come from Kimochi's download mirror (downloads.kimochiapp.com) first, with GitHub as
+# the fallback: the release is looked up in the mirror's release.json, else GitHub's API, and a
+# download that fails on the mirror is tried again from the same GitHub release.
+#
 # For testing and mirrors: KIMOCHI_INSTALL_REPO (owner/name), KIMOCHI_INSTALL_API (releases API
-# base), KIMOCHI_INSTALL_RAW (raw file base), KIMOCHI_INSTALL_ARCH (overrides `uname -m`).
+# base), KIMOCHI_INSTALL_MIRROR (the mirror's release directory, or "off"), KIMOCHI_INSTALL_RAW
+# (raw file base), KIMOCHI_INSTALL_ARCH (overrides `uname -m`).
 #
 # The whole script is one function called on the last line, so a download cut short runs nothing.
 
@@ -31,6 +36,7 @@ kimochi_install() {
 
   repo=${KIMOCHI_INSTALL_REPO:-hamstu/kimochi}
   api=${KIMOCHI_INSTALL_API:-https://api.github.com/repos/$repo/releases}
+  mirror=${KIMOCHI_INSTALL_MIRROR:-https://downloads.kimochiapp.com/app}
   raw=${KIMOCHI_INSTALL_RAW:-https://raw.githubusercontent.com/$repo}
   releases_page="https://github.com/$repo/releases"
   no_launch=${KIMOCHI_NO_LAUNCH:-0}
@@ -142,9 +148,23 @@ json_strings() {
   tr ',{}' '\n\n\n' <"$2" | sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
 
-# The latest tagged release's document in $1 (/releases/latest never returns a pre-release).
+# The latest tagged release's document in $1: the mirror's copy (the same shape as GitHub's, with
+# the mirror's URLs), else GitHub's /releases/latest (never a pre-release).
 fetch_release() {
+  if [ "$mirror" != off ] && fetch "$mirror/release.json" "$1" >/dev/null &&
+    [ -n "$(json_strings tag_name "$1" | head -n 1)" ]; then
+    return 0
+  fi
   status=$(fetch "$api/latest" "$1") || release_error "$status"
+}
+
+# The GitHub copy of a mirror download URL ($mirror/<tag>/<file>), or nothing for any other URL.
+github_url() {
+  case "$1" in
+    "$mirror"/v*/*)
+      _rest=${1#"$mirror"/}
+      printf 'https://github.com/%s/releases/download/%s\n' "$repo" "$_rest" ;;
+  esac
 }
 
 release_error() {
@@ -159,7 +179,7 @@ release_error() {
 # The AppImage asset for this CPU from a release document: a generic build, never the "-arch"
 # (Arch Linux runner) variant, matching the website's choice (site/src/lib/assets.js).
 pick_asset() {
-  json_strings browser_download_url "$1" | grep '/releases/download/' | while IFS= read -r url; do
+  json_strings browser_download_url "$1" | grep -E '/releases/download/|/app/v[^/]*/' | while IFS= read -r url; do
     name=${url##*/}
     case "$name" in *.AppImage | *.appimage) ;; *) continue ;; esac
     lower=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
@@ -260,7 +280,13 @@ install() {
     [ -n "$url" ] || die "The ${tag:-latest} release has no AppImage for $arch. See $releases_page"
     step "Downloading Kimochi $tag for $arch"
     say "    $url"
-    status=$(fetch "$url" "$download" progress) || die "The download failed (HTTP $status). Try again, or see $releases_page"
+    if ! status=$(fetch "$url" "$download" progress); then
+      fallback=$(github_url "$url")
+      [ -n "$fallback" ] || die "The download failed (HTTP $status). Try again, or see $releases_page"
+      warn "the download mirror answered $status; downloading from GitHub instead"
+      say "    $fallback"
+      status=$(fetch "$fallback" "$download" progress) || die "The download failed (HTTP $status). Try again, or see $releases_page"
+    fi
   fi
 
   is_appimage "$download" || die "Expected a Kimochi AppImage (ELF with AppImage marker); the downloaded file is not one."

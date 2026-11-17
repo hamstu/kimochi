@@ -94,18 +94,20 @@ export function Privacy() {
         voice and text, not by who asked) so the same line is not generated twice for anyone.
       </p>
 
-      <h3>Model downloads</h3>
+      <h3>Downloads and updates</h3>
       <p>
-        On-device OCR models are not bundled. The first time you select MeikiOCR or Manga OCR, Kimochi downloads the
-        model files from Hugging Face (and its supporting files from GitHub). Those hosts see an ordinary download
-        request from your IP address. Nothing about your captures is sent.
+        Kimochi&rsquo;s installers, its updates and the files it downloads later (on-device OCR and speech models, the
+        dictionary engines, the text hookers) come from Kimochi&rsquo;s own download server, downloads.kimochiapp.com
+        (Cloudflare R2), with the original host as the fallback: Hugging Face for the models and GitHub for the rest.
+        Whichever answers sees an ordinary download request from your IP address, and nothing about your captures is
+        sent. Every file is checked against the fingerprint Kimochi expects before it is used.
       </p>
 
       <h3>Dictionary downloads</h3>
       <p>
-        If you download a recommended dictionary from inside Kimochi, the file comes from its publisher&rsquo;s host,
-        for example Jitendex from GitHub or a frequency list from jiten.moe. Dictionaries you import from a file involve
-        no network at all.
+        If you download a recommended dictionary from inside Kimochi, the file comes from Kimochi&rsquo;s download
+        server or its publisher&rsquo;s host, for example Jitendex from downloads.kimochiapp.com (GitHub as the
+        fallback) or a frequency list from jiten.moe. Dictionaries you import from a file involve no network at all.
       </p>
 
       <h3>Anki</h3>
