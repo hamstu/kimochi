@@ -125,6 +125,38 @@ iframe.yomitan-popup[data-theme=dark] {
 `
 
 /**
+ * Draw `popup`'s frame, and so all of it, at `percent` (`dictionaryPopupOpacity`, 25–100; 100 or
+ * anything else is fully opaque). Inline and important, so Yomitan's own and the reader's custom
+ * outer CSS keep it; Yomitan never sets the frame's opacity.
+ */
+export function paintPopupOpacity(popup, percent) {
+  const frame = popup?._frame
+  if (frame?.tagName !== 'IFRAME') return
+  if (Number.isFinite(percent) && percent < 100) {
+    frame.style.setProperty('opacity', String(Math.max(25, Math.round(percent)) / 100), 'important')
+  } else frame.style.removeProperty('opacity')
+}
+
+/** Keep every popup this realm has shown at `dictionaryPopupOpacity`, now and as it changes. */
+function followPopupOpacity(styled) {
+  const tauri = globalThis.__TAURI__
+  if (!tauri) return
+  const apply = (value) => {
+    styled.opacity = value
+    for (const popup of styled.popups) paintPopupOpacity(popup, value)
+  }
+  tauri.core
+    .invoke('settings_get', { key: 'dictionaryPopupOpacity' })
+    .then(apply)
+    .catch(() => {})
+  tauri.event
+    .listen('settings:changed', ({ payload }) => {
+      if (payload?.key === 'dictionaryPopupOpacity') apply(payload.value)
+    })
+    .catch(() => {})
+}
+
+/**
  * The theme a lookup asked the popup's content to take: Yomitan's frontend measures the scanned
  * page's ground (`TextScanner` → `pageTheme`) and the `Display` inside the popup resolves its
  * `site` theme against it. Null when the lookup carries none.
@@ -161,6 +193,8 @@ export function followTheme(popup, theme) {
  * Kimochi's appearance), handed to the content too. `ThemeController#siteTheme` is Yomitan's own
  * override; nothing in Yomitan is modified.
  *
+ * Opacity: every popup shown follows `dictionaryPopupOpacity` ({@link paintPopupOpacity}).
+ *
  * Idempotent per `Popup` class; a later call may still supply the fallback.
  *
  * @param {Function} Popup Yomitan's `Popup` class (js/app/popup.js)
@@ -172,8 +206,9 @@ export function stylePopupFrames(Popup, { fallbackTheme } = {}) {
     if (fallbackTheme) existing.fallbackTheme = fallbackTheme
     return
   }
-  const styled = { fallbackTheme: fallbackTheme ?? null }
+  const styled = { fallbackTheme: fallbackTheme ?? null, opacity: 100, popups: new Set() }
   Popup.prototype[STYLED] = styled
+  followPopupOpacity(styled)
 
   const inject = Popup.prototype._injectPopupOuterStylesheet
   if (typeof inject === 'function') {
@@ -193,6 +228,8 @@ export function stylePopupFrames(Popup, { fallbackTheme } = {}) {
   const showContent = Popup.prototype.showContent
   if (typeof showContent === 'function') {
     Popup.prototype.showContent = function (details, displayDetails, ...rest) {
+      styled.popups.add(this)
+      paintPopupOpacity(this, styled.opacity)
       if (displayDetails) {
         const theme = pageThemeOf(displayDetails) ?? styled.fallbackTheme?.() ?? null
         if (theme) {

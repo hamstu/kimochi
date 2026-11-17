@@ -8,6 +8,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **See the game through the dictionary pop-up.** Settings → Overlay → Overlay appearance has a new **Dictionary pop-up opacity** slider, for every dictionary (Yomitan, Hachidori, 10ten and the Yomitan API), and its preview shows the pop-up. Lower it to fade the whole pop-up, text and buttons included, so your game shows through it. It starts at 85% and goes from 25% to 100%; set it to 100% for a solid pop-up, as before.
 - **A tidier Text Hooker page.** Settings → Text Hooker has a column of your games beside the settings, with **Defaults** at the top: click one to change its settings, rename it or delete it, with no page to go back from. **Card** comes first and takes in **Show card**, now set per game, so you can turn the card off for one game only. A game’s page shows its session’s reading time and lines, with **Manage sessions** to jump to Log & Sessions.
 - **Transparent hover cards.** Settings → Overlay → Overlay appearance → **Hover card appearance** (until now **Cards**) has a new **Transparent** choice: pointing at a word no longer turns it into a card, not even while you hold the lookup key, but it still looks it up. The highlight is separate: set **Highlight opacity** to **Off** too and nothing at all is drawn over your game, so the dictionary pop-up is the only thing you see.
 - **A clearer Overlay appearance.** The opacity slider has a scale (Off to 100), and the previews have a faint dotted grid behind them.

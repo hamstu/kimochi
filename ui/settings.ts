@@ -106,6 +106,11 @@ export function highlightStrength(opacity: number): number {
   return Math.round((Math.min(100, Math.max(0, opacity)) / DEFAULT_OVERLAY_STYLE.opacity) * 1000) / 1000
 }
 
+/** A stored `dictionaryPopupOpacity` made whole: a whole percent, 25 to 100, else the default, 85. */
+export function popupOpacityOf(stored: unknown): number {
+  return typeof stored === 'number' && Number.isFinite(stored) ? Math.min(100, Math.max(25, Math.round(stored))) : 85
+}
+
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
 
 /** `#rrggbb` as "r, g, b" for an `rgba(var(--x), a)` colour, or null for anything else. */
@@ -292,6 +297,8 @@ export interface Settings {
   textOverlayGrouping: GroupingSettings
   /** How the overlay's highlights and cards look; see `OverlayStyleSettings`. */
   overlayStyle: OverlayStyleSettings
+  /** How opaque every engine's dictionary pop-up is drawn, 25 to 100; see `popupOpacityOf`. */
+  dictionaryPopupOpacity: number
   autoOCRSettings: AutoScanSettings
   autoScanSettings: {
     enabled: boolean
@@ -396,6 +403,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   pauseGameWhileReading: false,
   textOverlayGrouping: DEFAULT_GROUPING,
   overlayStyle: DEFAULT_OVERLAY_STYLE,
+  dictionaryPopupOpacity: 85,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,
   autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {
@@ -937,6 +945,7 @@ function migrated<K extends keyof Settings>(key: K, stored: unknown): Settings[K
   if (key === 'autoOCRSettings') return migrateAutoScanSettings(stored) as Settings[K]
   // A colour or appearance this build does not know reads as the default, not as a broken look.
   if (key === 'overlayStyle') return overlayStyleOf(stored) as Settings[K]
+  if (key === 'dictionaryPopupOpacity') return popupOpacityOf(stored) as Settings[K]
   if (key === 'yomitanSettings') {
     // A popupType written by a newer build (an engine this one does not ship) reads as Yomitan
     // rather than leaving every window guessing.

@@ -6,7 +6,8 @@
  * blended, the same as Kimochi, or transparent, no card at all, only the dictionary pop-up (the
  * highlight is separate and stays). The preview is drawn with the overlay's own elements and
  * stylesheet (ui/overlay-text.css) and follows every control as it moves, so what is shown is what
- * is drawn; pointing at a word in it turns that word into its card.
+ * is drawn; pointing at a word in it turns that word into its card, with the dictionary pop-up over
+ * it at its own opacity (`dictionaryPopupOpacity`, the fourth control, for every engine).
  *
  * The stored setting is `overlayStyle` (ui/settings.ts `OverlayStyleSettings`); the overlay reads
  * it live (overlay.js `applyOverlayStyle`).
@@ -21,6 +22,7 @@ import {
   hexToRgbTriplet,
   highlightStrength,
   overlayStyleOf,
+  popupOpacityOf,
   type OverlayStyleSettings,
   type ResolvedCardAppearance
 } from '@ui/settings'
@@ -44,6 +46,7 @@ function Preview({
   strength,
   line,
   lit = line.lit,
+  popupOpacity,
   onPoint
 }: {
   theme: ResolvedCardAppearance
@@ -52,6 +55,8 @@ function Preview({
   line: PreviewLine
   /** The hovered word, or null for every box at rest. */
   lit?: number | null
+  /** The dictionary pop-up over the hovered word is drawn at this opacity (25–100). */
+  popupOpacity: number
   /** The pointer came onto a word (its index), or left the line (null). */
   onPoint?: (index: number | null) => void
 }): ReactNode {
@@ -87,6 +92,13 @@ function Preview({
                 <span className="ocr-word-current">{previewWord(word, line.shape)}</span>
               </span>
             </span>
+            {index === lit && (
+              <span className="overlay-look-popup" style={{ opacity: popupOpacity / 100 }}>
+                <span className="overlay-look-popup-term">{previewWord(word, line.shape)}</span>
+                <span className="overlay-look-popup-gloss" />
+                <span className="overlay-look-popup-gloss" data-short="" />
+              </span>
+            )}
           </span>
         ))}
       </span>
@@ -115,6 +127,8 @@ export function OverlayLook(): ReactNode {
   const [opacityDraft, setOpacityDraft] = useState<number | null>(null)
   const opacity = opacityDraft ?? look.opacity
   const strength = highlightStrength(opacity)
+  const [storedPopupOpacity, setPopupOpacity] = useSetting<number>('dictionaryPopupOpacity', 85)
+  const popupOpacity = popupOpacityOf(storedPopupOpacity)
 
   useEffect(() => {
     if (draft === null) return
@@ -149,7 +163,15 @@ export function OverlayLook(): ReactNode {
   return (
     <div className="overlay-look">
       <div className="overlay-look-stage">
-        <Preview theme={cardTheme} colorRgb={colorRgb} strength={strength} line={line} lit={lit} onPoint={setPointed} />
+        <Preview
+          theme={cardTheme}
+          colorRgb={colorRgb}
+          strength={strength}
+          line={line}
+          lit={lit}
+          popupOpacity={popupOpacity}
+          onPoint={setPointed}
+        />
       </div>
       <div className="overlay-look-controls">
         <div className="overlay-look-control">
@@ -217,25 +239,46 @@ export function OverlayLook(): ReactNode {
           />
         </div>
       </div>
+      <div className="overlay-look-popup-control">
+        <span className="overlay-look-label">Dictionary pop-up opacity</span>
+        <div className="overlay-look-opacity-control">
+          <Slider
+            aria-label="Dictionary pop-up opacity"
+            valueText={(value) => `${value}%`}
+            value={[popupOpacity]}
+            onValueChange={(values) => void setPopupOpacity(values[0])}
+            min={25}
+            max={100}
+            step={5}
+          />
+          <OpacityScale value={popupOpacity} min={25} onChoose={(value) => void setPopupOpacity(value)} />
+        </div>
+      </div>
     </div>
   )
 }
 
-/** Steps of the scale under the opacity slider: a tick each 5%, a number each 25%. */
-const SCALE_TICKS = Array.from({ length: 21 }, (_, index) => index * 5)
-
 /**
- * Under the opacity slider: its scale, a tick each step and a number each quarter (0 is Off). The
- * numbers are buttons that set it there, as a step slider's names are.
+ * Under an opacity slider: its scale from `min` to 100, a tick each 5% and a number each quarter
+ * (0 is Off). The numbers are buttons that set it there, as a step slider's names are.
  */
-function OpacityScale({ value, onChoose }: { value: number; onChoose: (value: number) => void }): ReactNode {
+function OpacityScale({
+  value,
+  min = 0,
+  onChoose
+}: {
+  value: number
+  min?: number
+  onChoose: (value: number) => void
+}): ReactNode {
+  const ticks = Array.from({ length: (100 - min) / 5 + 1 }, (_, index) => min + index * 5)
   // Radix keeps the thumb inside the track, so its centre runs from half a thumb in at each end
   // (the thumb is 0.875rem, .k-slider-thumb).
-  const at = (step: number): string => `calc(0.4375rem + (100% - 0.875rem) * ${step / 100})`
+  const at = (step: number): string => `calc(0.4375rem + (100% - 0.875rem) * ${(step - min) / (100 - min)})`
   return (
     <div className="overlay-look-scale">
       <div className="overlay-look-ticks" aria-hidden>
-        {SCALE_TICKS.map((step) => (
+        {ticks.map((step) => (
           <span
             key={step}
             className="overlay-look-tick"
@@ -246,19 +289,21 @@ function OpacityScale({ value, onChoose }: { value: number; onChoose: (value: nu
         ))}
       </div>
       <div className="overlay-look-numbers">
-        {SCALE_TICKS.filter((step) => step % 25 === 0).map((step) => (
-          <button
-            key={step}
-            type="button"
-            tabIndex={-1}
-            className="overlay-look-number"
-            data-selected={step === value || undefined}
-            style={{ left: at(step) }}
-            onClick={() => onChoose(step)}
-          >
-            {step === 0 ? 'Off' : step}
-          </button>
-        ))}
+        {ticks
+          .filter((step) => step % 25 === 0)
+          .map((step) => (
+            <button
+              key={step}
+              type="button"
+              tabIndex={-1}
+              className="overlay-look-number"
+              data-selected={step === value || undefined}
+              style={{ left: at(step) }}
+              onClick={() => onChoose(step)}
+            >
+              {step === 0 ? 'Off' : step}
+            </button>
+          ))}
       </div>
     </div>
   )
