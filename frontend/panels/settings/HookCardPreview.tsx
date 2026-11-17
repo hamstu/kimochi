@@ -23,6 +23,8 @@ import { useCapabilities } from '../../bridge/capabilities'
 import { usePrefs } from '../../kit/appearance-state'
 import { lookupKeyName, PREVIEW_SURFACE, previewWord, usePreviewLine } from './overlayPreview'
 import { TransparentMark } from './CardLook'
+import { useLookupKey } from '../../bridge/useLookupKey'
+import { isLookupButton, lookupButtonFromEvent, lookupButtonsBit, lookupModifier, type LookupKey } from '@ui/lookup-key'
 import { GridField } from '../../components/GridField'
 import '@ui/overlay-text.css'
 import '@ui/hook-card.css'
@@ -47,7 +49,6 @@ const MENU_ROOM_PX = 110
 const KEY_PROPERTY = { shift: 'shiftKey', ctrl: 'ctrlKey', alt: 'altKey', meta: 'metaKey' } as const
 /** The `KeyboardEvent.key` of a lookup key. */
 const KEY_NAME = { shift: 'Shift', ctrl: 'Control', alt: 'Alt', meta: 'Meta' } as const
-type LookupKey = keyof typeof KEY_PROPERTY
 
 export interface HookCardActions {
   /** The card was dragged: Auto align off. */
@@ -66,27 +67,44 @@ function stepTextSize(size: number, step: number): number {
   return HOOK_TEXT_SIZES[Math.min(HOOK_TEXT_SIZES.length - 1, Math.max(0, nearest + step))]
 }
 
-/** Whether the lookup key is down, from the keyboard and from each pointer event's modifiers. */
+/**
+ * Whether the lookup key is down, from the keyboard and from each pointer event's modifiers, or,
+ * for a mouse button (#204), from that button's presses and each pointer event's `buttons`.
+ */
 function useKeyHeld(key: LookupKey): [boolean, (event: PointerEvent) => void] {
   const [held, setHeld] = useState(false)
+  const button = isLookupButton(key)
   useEffect(() => {
+    const press = (event: MouseEvent): void => {
+      if (button && lookupButtonFromEvent(event.button) === key) setHeld(event.type === 'mousedown')
+    }
     const down = (event: KeyboardEvent): void => {
-      if (event.key === KEY_NAME[key]) setHeld(true)
+      if (!button && event.key === KEY_NAME[lookupModifier(key)]) setHeld(true)
     }
     const up = (event: KeyboardEvent): void => {
-      if (event.key === KEY_NAME[key]) setHeld(false)
+      if (!button && event.key === KEY_NAME[lookupModifier(key)]) setHeld(false)
     }
     const away = (): void => setHeld(false)
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
+    window.addEventListener('mousedown', press)
+    window.addEventListener('mouseup', press)
     window.addEventListener('blur', away)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
+      window.removeEventListener('mousedown', press)
+      window.removeEventListener('mouseup', press)
       window.removeEventListener('blur', away)
     }
-  }, [key])
-  return [held, (event) => setHeld(Boolean(event[KEY_PROPERTY[key]]))]
+  }, [key, button])
+  return [
+    held,
+    (event) =>
+      setHeld(
+        button ? (event.buttons & lookupButtonsBit(key)) !== 0 : Boolean(event[KEY_PROPERTY[lookupModifier(key)]])
+      )
+  ]
 }
 
 export function HookCardPreview({
@@ -104,13 +122,12 @@ export function HookCardPreview({
   actions?: HookCardActions
 }): ReactNode {
   const [stored] = useSetting<OverlayStyleSettings>('overlayStyle', DEFAULT_OVERLAY_STYLE)
-  const [storedKey] = useSetting<string>('overlayLookupKey', 'shift')
   const [clickThrough] = useSetting<boolean>('overlayClickThrough', true)
   const { os } = useCapabilities()
   const { resolved } = usePrefs()
   const [language] = useLanguage()
   const line = usePreviewLine()
-  const key: LookupKey = storedKey && storedKey in KEY_PROPERTY ? (storedKey as LookupKey) : 'shift'
+  const key = useLookupKey()
   const [held, track] = useKeyHeld(key)
   // As over a game: with click-through, the card takes the mouse only while the key is held.
   const armed = Boolean(actions) && (clickThrough === false || held)
@@ -164,7 +181,8 @@ export function HookCardPreview({
   const startDrag =
     (kind: 'move' | 'resize') =>
     (event: PointerEvent<HTMLSpanElement>): void => {
-      if (!armed || !card.current || !scene.current) return
+      // The primary button drags; a mouse button held as the lookup key only arms the card.
+      if (!armed || event.button !== 0 || !card.current || !scene.current) return
       event.preventDefault()
       event.stopPropagation()
       const area = scene.current.getBoundingClientRect()
@@ -244,6 +262,10 @@ export function HookCardPreview({
         style={{ '--hook-preview-font': `${fontPx}px` } as CSSProperties}
         onPointerMove={actions ? track : undefined}
         onPointerDown={actions ? track : undefined}
+        // A lookup button pressed here would start autoscroll (middle) or navigate (back, forward).
+        onMouseDown={
+          actions && isLookupButton(key) ? (event) => event.button !== 0 && event.preventDefault() : undefined
+        }
       >
         <GridField />
         {/* The game's dialogue box and its own line, which an aligned card covers. */}

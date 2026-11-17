@@ -131,7 +131,8 @@ pub struct Modifiers {
 
 impl Modifiers {
     /// Whether the overlay's lookup key (`overlayLookupKey`: "shift", "ctrl", "alt" or "meta")
-    /// is held. Anything else is Shift, the default.
+    /// is held. Anything else is Shift, the default, and so is a mouse button ("MouseMiddle"…):
+    /// the cursor poll carries one held as Shift.
     pub fn holds(&self, key: &str) -> bool {
         match key {
             "ctrl" => self.ctrl,
@@ -1045,7 +1046,7 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "os": std::env::consts::OS,
         "osVersion": "",
         "arch": std::env::consts::ARCH,
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported", "lookupButtons": "unsupported"},
         "capture": {
             "authorization": "unsupported",
             "canOpenSettings": false,

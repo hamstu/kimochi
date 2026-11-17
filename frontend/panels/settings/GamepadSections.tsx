@@ -3,6 +3,9 @@
  * the buttons Game Mode uses (the controller menu and Read along), pick the primary controller,
  * test it.
  */
+import { lookupKeyWord } from '@ui/lookup-key'
+import { useLookupKey } from '../../bridge/useLookupKey'
+import { useCapabilities } from '../../bridge/capabilities'
 import type { ReactNode } from 'react'
 import { Badge, Button, Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
 import type { AutoScanSettings, GamepadDevice, GamepadSettings } from '../../vendor/shared-types'
@@ -89,9 +92,6 @@ function sharedWith(buttons: ControllerButtons, key: keyof ControllerButtons): s
   return sharedButtonActions(buttons, key).map((other) => ROW_LABELS[other])
 }
 
-/** `overlayLookupKey` by name, for saying which key the lookup button stands in for. */
-const LOOKUP_KEY_NAMES: Record<string, string> = { shift: 'Shift', ctrl: 'Ctrl', alt: 'Alt', meta: 'Command' }
-
 /**
  * `gamepadSettings.lookupButton`: held, it stands in for the lookup key (native reads it with the
  * pointer, `gamepad::lookup_held`), so a reader with only a controller looks words up by holding it
@@ -100,9 +100,10 @@ const LOOKUP_KEY_NAMES: Record<string, string> = { shift: 'Shift', ctrl: 'Ctrl',
  */
 function LookupButtonRow({ disabled }: { disabled: boolean }): ReactNode {
   const [settings, setSettings] = useSetting<GamepadSettings>('gamepadSettings', { enabled: true })
-  const [key] = useSetting<string>('overlayLookupKey', 'shift')
+  const key = useLookupKey()
+  const { os } = useCapabilities()
   const [hotkeys] = useHotkeys()
-  const name = LOOKUP_KEY_NAMES[key] ?? 'Shift'
+  const name = lookupKeyWord(key, os === 'macos')
   const button = settings.lookupButton ?? undefined
   // A shortcut whose controller chord uses the button fires as well when it is pressed to look up.
   const shared =

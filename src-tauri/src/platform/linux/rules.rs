@@ -122,6 +122,24 @@ pub const MOD4_MASK: u16 = 1 << 6;
 /// Logical button 1. X applies the pointer mapping (left-handed swap) before
 /// reporting, so this is the *primary* button whichever physical one it is.
 pub const BUTTON1_MASK: u16 = 1 << 8;
+/// Logical button 2, the middle button.
+pub const BUTTON2_MASK: u16 = 1 << 9;
+
+/// X's number for a lookup button: middle is 2, back and forward 8 and 9.
+pub fn x_button_number(button: crate::mouse_buttons::Button) -> u32 {
+    use crate::mouse_buttons::Button;
+    match button {
+        Button::Middle => 2,
+        Button::Back => 8,
+        Button::Forward => 9,
+    }
+}
+
+/// Whether button `number` is set in an XInput 2 button mask (`XIQueryPointer`'s `buttons`,
+/// 32-bit words, bit n for button n).
+pub fn xi_button_held(mask: &[u32], number: u32) -> bool {
+    mask.get((number / 32) as usize).is_some_and(|word| word & (1 << (number % 32)) != 0)
+}
 
 /// What a `QueryPointer` mask says is held.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -422,6 +440,17 @@ mod tests {
         assert_eq!(compositor_name(None, false, false, false), None);
         assert_eq!(compositor_name(Some(""), false, false, false), None);
         assert_eq!(compositor_name(Some("ubuntu"), false, false, false).as_deref(), Some("ubuntu"));
+    }
+
+    #[test]
+    fn lookup_buttons_read_from_an_xi2_button_mask() {
+        use crate::mouse_buttons::Button;
+        assert!(xi_button_held(&[1 << 2], x_button_number(Button::Middle)));
+        assert!(xi_button_held(&[(1 << 8) | (1 << 9)], x_button_number(Button::Forward)));
+        assert!(!xi_button_held(&[1 << 8], x_button_number(Button::Forward)));
+        assert!(xi_button_held(&[1 << 8], x_button_number(Button::Back)));
+        assert!(!xi_button_held(&[], 2));
+        assert!(xi_button_held(&[0, 1], 32));
     }
 
     #[test]

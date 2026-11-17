@@ -1296,6 +1296,24 @@ pub fn sync_mouse_buttons(app: &tauri::AppHandle, wanted: bool) -> Result<(), St
     mouse_tap::sync(app, wanted)
 }
 
+/// Whether the lookup button (`overlayLookupKey` naming one) is held. The hardware's state needs
+/// no grant and sees a press the tap swallowed too; the tap's own record backs it up.
+pub fn lookup_button_down(button: crate::mouse_buttons::Button) -> bool {
+    const HID_SYSTEM_STATE: i32 = 1; // kCGEventSourceStateHIDSystemState
+    crate::mouse_buttons::lookup_swallowed()
+        || unsafe { CGEventSourceButtonState(HID_SYSTEM_STATE, mouse_tap::button_number(button)) }
+}
+
+/// Whether a mouse button can be the lookup key here, and what happens to its click: on macOS
+/// always, kept from the game over Kimochi's text once Accessibility allows the tap.
+pub fn lookup_buttons() -> &'static str {
+    if focus::trusted() {
+        "consumed"
+    } else {
+        "needsAccessibility"
+    }
+}
+
 // ---------------------------------------------------------------- system links
 
 fn open_url(url: &str) -> Result<(), String> {
@@ -1363,6 +1381,7 @@ pub fn capabilities() -> Value {
             "primaryModifier": "meta", "labels": "symbols", "superName": "Command",
             // An active event tap needs Accessibility; Kimochi does not ask for it on this account.
             "mouseButtons": if focus::trusted() { "available" } else { "needsAccessibility" },
+            "lookupButtons": lookup_buttons(),
         },
         "capture": {
             "canOpenSettings": true,

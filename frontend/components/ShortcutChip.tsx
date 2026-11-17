@@ -9,10 +9,11 @@
  * reachable by Tab and each has its own label.
  */
 import { type ReactNode, type Ref } from 'react'
-import { Gamepad2, Keyboard, X } from 'lucide-react'
+import { Gamepad2, Keyboard, Mouse, X } from 'lucide-react'
 
 export interface ShortcutChipProps {
-  kind: 'keys' | 'pad'
+  /** `mouse`: a mouse button (the lookup key can be one), drawn like `keys`. */
+  kind: 'keys' | 'pad' | 'mouse'
   /** `empty` reads "Set"; `recording` is outlined in the accent while it waits for input. */
   state: 'empty' | 'set' | 'recording'
   /** What it shows: key caps, button names, or a prompt while recording. */
@@ -41,7 +42,7 @@ export function ShortcutChip({
   title,
   buttonRef
 }: ShortcutChipProps): ReactNode {
-  const Icon = kind === 'pad' ? Gamepad2 : Keyboard
+  const Icon = kind === 'pad' ? Gamepad2 : kind === 'mouse' ? Mouse : Keyboard
   return (
     <span
       className="shortcut-chip"
