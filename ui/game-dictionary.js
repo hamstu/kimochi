@@ -23,6 +23,8 @@
  * controller's surfaces can restyle it too.
  */
 
+import { padGlyphHtml } from './pad-layout.js'
+
 /** How far one press of up or down scrolls the entry, in points. */
 const SCROLL_STEP = 120
 /** How much text a pop-up lookup starts from the lit word: as word-nav.js's `SCAN_LENGTH`. */
@@ -321,7 +323,7 @@ const escapeHtml = (text) =>
 /** One hint on the bar: its key or button, and what it does; nothing for an unbound button. */
 function hint(glyph, label, { tone = '', action = '' } = {}) {
   if (!glyph) return ''
-  const kbd = `<kbd class="cm-glyph${tone ? ` cm-${tone}` : ''}">${escapeHtml(glyph)}</kbd>`
+  const kbd = `<kbd class="cm-glyph${tone ? ` cm-${tone}` : ''}">${padGlyphHtml(glyph)}</kbd>`
   return action
     ? `<button type="button" class="cm-hint gd-hint" data-action="${action}">${kbd}<span>${escapeHtml(label)}</span></button>`
     : `<span class="cm-hint gd-hint">${kbd}<span>${escapeHtml(label)}</span></span>`

@@ -34,6 +34,7 @@ import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { useCapabilities } from '../../bridge/capabilities'
 import { getButtonName } from '../../bridge/useGamepad'
+import { usePadLayout } from '../../bridge/usePadLayout'
 import { usePrefs } from '../../kit/appearance-state'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { gamepadChord } from '../../vendor/shared-defaults'
@@ -196,7 +197,7 @@ function RadialPreview({
         label,
         icon: ITEM_ICONS[item.id] ?? '',
         enabled,
-        detail: details[item.id],
+        shortcut: details[item.id],
         unavailable: ONLY_WHEN[item.when ?? '']
       })),
       'pad',
@@ -334,6 +335,7 @@ export function RadialMenuSection(): ReactNode {
   const [hotkeys, setHotkeys] = useHotkeys()
   const capabilities = useCapabilities()
   const keyPlatform = keyPlatformOf(capabilities)
+  const padLayout = usePadLayout()
   const menu = useMemo(() => effectiveRadialMenu(stored), [stored])
   const [selected, setSelected] = useState<string | null>(null)
   const [source, setSource] = useState<PreviewSource>('ocr')
@@ -378,13 +380,13 @@ export function RadialMenuSection(): ReactNode {
       const chord = gamepadChord(binding)
       result[item.id] =
         chord.length > 0
-          ? chord.map(getButtonName).join(' + ')
+          ? chord.map((button) => getButtonName(button, padLayout)).join(' + ')
           : binding.accelerator
             ? formatAccelerator(binding.accelerator, keyPlatform)
             : undefined
     }
     return result
-  }, [hotkeys, keyPlatform])
+  }, [hotkeys, keyPlatform, padLayout])
 
   const open = selected ? RADIAL_ITEMS.find((item) => item.id === selected) : undefined
 

@@ -22,6 +22,9 @@
  * shows and the `on…` hooks for a press.
  */
 
+import { BUTTON, buttonName } from './controller-input.js'
+import { padGlyphHtml } from './pad-layout.js'
+
 /**
  * How long after opening the panel takes no press: the press that chose it in the menu must not
  * also press the row the panel opens on.
@@ -230,8 +233,8 @@ export class ControllerCard {
     this.hints.innerHTML =
       '<span class="cm-hint"><kbd class="cm-glyph">✥</kbd>Choose</span>' +
       '<span class="cm-hint"><kbd class="cm-glyph">◀ ▶</kbd>Change</span>' +
-      '<span class="cm-hint"><kbd class="cm-glyph cm-confirm">A</kbd>Select</span>' +
-      '<span class="cm-hint"><kbd class="cm-glyph cm-cancel">B</kbd>Close</span>'
+      `<span class="cm-hint"><kbd class="cm-glyph cm-confirm">${padGlyphHtml(buttonName(BUTTON.south))}</kbd>Select</span>` +
+      `<span class="cm-hint"><kbd class="cm-glyph cm-cancel">${padGlyphHtml(buttonName(BUTTON.east))}</kbd>Close</span>`
     this.list.replaceChildren(
       ...rows.map((row, index) => {
         const element = make('button', 'cm-history-entry cm-card-row')
@@ -287,8 +290,8 @@ export class ControllerCard {
     this.close.textContent = 'Back'
     this.hints.innerHTML =
       '<span class="cm-hint"><kbd class="cm-glyph">✥</kbd>Choose</span>' +
-      '<span class="cm-hint"><kbd class="cm-glyph cm-confirm">A</kbd>Use this text</span>' +
-      '<span class="cm-hint"><kbd class="cm-glyph cm-cancel">B</kbd>Back</span>'
+      `<span class="cm-hint"><kbd class="cm-glyph cm-confirm">${padGlyphHtml(buttonName(BUTTON.south))}</kbd>Use this text</span>` +
+      `<span class="cm-hint"><kbd class="cm-glyph cm-cancel">${padGlyphHtml(buttonName(BUTTON.east))}</kbd>Back</span>`
     this.list.replaceChildren(
       ...choices.map((choice, index) => {
         const element = make('button', 'cm-history-entry cm-card-row cm-card-choice')

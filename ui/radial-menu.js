@@ -9,6 +9,8 @@
  * caller's business.
  */
 
+import { padGlyphHtml } from './pad-layout.js'
+
 const SVG = 'http://www.w3.org/2000/svg'
 /**
  * The ring's geometry (the Halo design, styled by controller-variants.css): the empty hub, the
@@ -156,7 +158,7 @@ export class RadialMenu {
 
   /**
    * @param {{x: number, y: number}} center where to draw, in overlay coordinates
-   * @param {{id: string, label: string, icon: string, enabled: boolean, detail?: string, lit?: boolean}[]} items
+   * @param {{id: string, label: string, icon: string, enabled: boolean, detail?: string, shortcut?: string, lit?: boolean}[]} items
    * @param {'pad'|'keys'} input which button closes it (the hub's name says)
    * @param {number} [initial] the item to start on, so A alone chooses it; nothing when -1
    */
@@ -258,11 +260,25 @@ export class RadialMenu {
       if (item.detail) {
         const detail = document.createElement('span')
         detail.className = 'cm-detail'
-        detail.textContent = item.detail
+        detail.innerHTML = padGlyphHtml(item.detail)
         label.append(detail)
       }
       ring.append(label)
       return label
+    })
+    // Each item's own shortcut (Settings' preview), on the rim at the middle of its segment, half
+    // over the line, so it reads as the segment's; the chosen segment's moves out with it.
+    this.shortcuts = items.map((item, index) => {
+      if (!item.shortcut) return null
+      const [x, y] = polar(index * span, OUTER)
+      const [lx, ly] = polar(index * span, OUTER + LIFT)
+      const chip = document.createElement('div')
+      chip.className = 'cm-shortcut'
+      for (const [name, value] of Object.entries({ x, y, lx, ly })) chip.style.setProperty(`--${name}`, `${value}px`)
+      chip.style.setProperty('--i', String(index))
+      chip.innerHTML = padGlyphHtml(item.shortcut)
+      ring.append(chip)
+      return chip
     })
 
     // The hub: empty, the game showing through; clicking it closes the menu.
@@ -400,6 +416,7 @@ export class RadialMenu {
     })
     // The chosen item's name shows under its icon (controller-variants.css), or why it can't be
     // chosen now.
+    this.shortcuts.forEach((chip, index) => chip?.classList.toggle('cm-selected', index === this.selected))
     this.labels.forEach((label, index) => {
       label.classList.toggle('cm-selected', index === this.selected)
       const item = this.items[index]

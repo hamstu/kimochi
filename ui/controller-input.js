@@ -25,6 +25,8 @@
  * Pure apart from the timers it is given, so it can be driven from a test.
  */
 
+import { padButtonNames, padLayout } from './pad-layout.js'
+
 /** Standard (W3C) button indices, as native reports them. */
 export const BUTTON = {
   south: 0,
@@ -56,40 +58,24 @@ export const DEFAULT_BUTTONS = {
   showControls: BUTTON.view
 }
 
-/**
- * What each standard button is called on screen, with Xbox-style face letters (the Deck's); the
- * same names as Settings (frontend/bridge/useGamepad.ts), with arrows for the D-pad.
- */
-export const BUTTON_NAMES = [
-  'A',
-  'B',
-  'X',
-  'Y',
-  'LB',
-  'RB',
-  'LT',
-  'RT',
-  'View',
-  'Menu',
-  'LS',
-  'RS',
-  '▲',
-  '▼',
-  '◀',
-  '▶',
-  'Home',
-  // The Steam Deck's own: back grips and trackpad clicks (src-tauri/src/platform/linux/deck_input.rs).
-  'L4',
-  'R4',
-  'L5',
-  'R5',
-  'Left pad',
-  'Right pad'
-]
+/** The D-pad, drawn as arrows on screen (Settings spells the directions out). */
+const DPAD_GLYPHS = { 12: '▲', 13: '▼', 14: '◀', 15: '▶' }
 
-/** A button's on-screen name, or null for none. */
-export function buttonName(button) {
-  return Number.isInteger(button) ? (BUTTON_NAMES[button] ?? `Button ${button}`) : null
+/**
+ * What each standard button is called on screen, in the active controller's layout (ui/pad-layout.js):
+ * Xbox-style face letters (the Deck's) unless a PlayStation pad is in use; the same names as
+ * Settings (frontend/bridge/useGamepad.ts), with arrows for the D-pad.
+ */
+export function buttonNames(layout = padLayout()) {
+  return padButtonNames(layout).map((name, index) => DPAD_GLYPHS[index] ?? name)
+}
+
+/** Xbox-style names, for anything that needs them whatever the controller. */
+export const BUTTON_NAMES = buttonNames('xbox')
+
+/** A button's on-screen name in the active controller's layout, or null for none. */
+export function buttonName(button, layout = padLayout()) {
+  return Number.isInteger(button) ? (buttonNames(layout)[button] ?? `Button ${button}`) : null
 }
 
 const DPAD = {
@@ -267,7 +253,7 @@ export class ControllerInput {
   }
 }
 
-export default { ControllerInput, BUTTON, BUTTON_NAMES, buttonName, stickDirection }
+export default { ControllerInput, BUTTON, BUTTON_NAMES, buttonName, buttonNames, stickDirection }
 
 /** The controller menu's keys, by DOM `key` (Space is `' '`). */
 const MENU_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', ' '])

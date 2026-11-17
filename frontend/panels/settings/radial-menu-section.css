@@ -233,3 +233,8 @@
 .radial-panel-remove:not(:disabled) {
   color: var(--red-11, var(--k-text));
 }
+
+/* While an item is dragged round, the shortcuts (which stay at their slots) step aside. */
+.radial-preview[data-dragging] .cm-shortcut {
+  opacity: 0;
+}

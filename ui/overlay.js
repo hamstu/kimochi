@@ -17,6 +17,7 @@ import { createController } from './controller.js'
 import { radialItemForHotkey, RADIAL_MENU_SETTING } from './radial-items.js'
 import { padButtons, startRegionPad } from './region-pad.js'
 import { buttonName, pageMenuKey } from './controller-input.js'
+import { activePadLayout, setPadLayout } from './pad-layout.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
 import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
@@ -2708,6 +2709,8 @@ async function openController(item) {
 let gamepadSeenAt = 0
 void native.listen('gamepad', ({ payload }) => {
   if (payload?.activeGamepadIndex != null) gamepadSeenAt = Date.now()
+  // Hints name the buttons the way the pad in hand prints them (✕ ○ on a PlayStation pad).
+  setPadLayout(activePadLayout(payload))
 })
 /** A controller is connected now: the region editor offers its controls. */
 const gamepadConnected = () => Date.now() - gamepadSeenAt < 10000

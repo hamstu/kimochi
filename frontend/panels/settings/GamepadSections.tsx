@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import { Badge, Button, Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
 import type { AutoScanSettings, GamepadDevice, GamepadSettings } from '../../vendor/shared-types'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
+import { PadText } from '../../components/PadText'
 import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { gamepadChord } from '../../vendor/shared-defaults'
@@ -343,7 +344,7 @@ export function GamepadSections(): ReactNode {
           <div className="gamepad-test" role="group" aria-label="Button test">
             {gamepadState.buttonStates.map((pressed, index) => (
               <span key={index} className="gamepad-key" data-pressed={pressed ? '' : undefined}>
-                {getButtonName(index)}
+                <PadText text={getButtonName(index)} />
               </span>
             ))}
           </div>

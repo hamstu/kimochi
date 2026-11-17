@@ -28,6 +28,7 @@ import {
   offsetInNodes
 } from '../ui/word-nav.js'
 import { itemAt, itemFor } from '../ui/radial-menu.js'
+import { activePadLayout, padGlyphHtml, padLayout, padLayoutOf, setPadLayout } from '../ui/pad-layout.js'
 import { scrollSpeed, pointerSpeed, characterAt } from '../ui/controller.js'
 
 /** Timers that only fire when the test says so. */
@@ -104,6 +105,70 @@ test('buttons are named the way the Deck and an Xbox pad print them', () => {
   assert.equal(buttonName(BUTTON.west), 'X')
   assert.equal(buttonName(BUTTON.view), 'View')
   assert.equal(buttonName(null), null)
+})
+
+test("a PlayStation pad is known by Sony's vendor ID or its name, and named as it prints its buttons", () => {
+  assert.equal(padLayoutOf({ id: 'Xbox Wireless Controller', vendor: '045e' }), 'xbox')
+  assert.equal(padLayoutOf({ id: 'Steam Deck', vendor: '28de' }), 'xbox')
+  assert.equal(padLayoutOf({ id: 'DualSense Wireless Controller' }), 'dualsense')
+  assert.equal(padLayoutOf({ id: 'PS4 Controller' }), 'dualshock')
+  // gilrs's name can be the generic one; the vendor and product IDs still tell.
+  assert.equal(padLayoutOf({ id: 'Wireless Controller', vendor: '054c', product: '09cc' }), 'dualshock')
+  assert.equal(padLayoutOf({ id: 'Wireless Controller', vendor: '054C', product: '0ce6' }), 'dualsense')
+  // The browser's id carries them in its text.
+  assert.equal(padLayoutOf({ id: 'Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 05c4)' }), 'dualshock')
+  assert.equal(padLayoutOf(null), 'xbox')
+
+  assert.equal(buttonName(BUTTON.south, 'dualsense'), '✕')
+  assert.equal(buttonName(BUTTON.east, 'dualsense'), '○')
+  assert.equal(buttonName(BUTTON.west, 'dualsense'), '□')
+  assert.equal(buttonName(BUTTON.north, 'dualsense'), '△')
+  assert.equal(buttonName(BUTTON.lb, 'dualsense'), 'L1')
+  assert.equal(buttonName(BUTTON.rt, 'dualsense'), 'R2')
+  assert.equal(buttonName(BUTTON.view, 'dualsense'), 'Create')
+  assert.equal(buttonName(BUTTON.view, 'dualshock'), 'Share')
+  assert.equal(buttonName(BUTTON.start, 'dualshock'), 'Options')
+  assert.equal(buttonName(BUTTON.up, 'dualsense'), '▲')
+})
+
+test('PlayStation symbols are drawn, all four on one square, and other names stay text', () => {
+  for (const [symbol, label] of [
+    ['✕', 'Cross'],
+    ['○', 'Circle'],
+    ['□', 'Square'],
+    ['△', 'Triangle']
+  ]) {
+    const html = padGlyphHtml(symbol)
+    assert.match(html, new RegExp(`^<span [^>]*><svg [^>]*aria-label="${label}"[^>]*viewBox="0 0 24 24"`))
+    assert.doesNotMatch(html, new RegExp(symbol))
+  }
+  assert.equal(padGlyphHtml('A'), 'A')
+  assert.equal(padGlyphHtml('<b>'), '&lt;b&gt;')
+  // Mixed text keeps its spaces in one run, with the symbol drawn in place.
+  const chord = padGlyphHtml('L1 + ✕')
+  assert.match(chord, /^<span style="[^"]*white-space:pre[^"]*">L1 \+ <svg [^>]*aria-label="Cross"/)
+})
+
+test('the active controller in the gamepad state sets the names every hint uses', () => {
+  const state = {
+    gamepads: [
+      { index: 0, id: 'Xbox Wireless Controller', vendor: '045e' },
+      { index: 1, id: 'DualSense Wireless Controller', vendor: '054c' }
+    ],
+    activeGamepadIndex: 1
+  }
+  try {
+    assert.equal(activePadLayout(state), 'dualsense')
+    setPadLayout(activePadLayout(state))
+    assert.equal(buttonName(BUTTON.south), '✕')
+    // No controller active keeps the last layout rather than flipping back mid-session.
+    setPadLayout(activePadLayout({ ...state, activeGamepadIndex: null }))
+    assert.equal(padLayout(), 'dualsense')
+    setPadLayout(activePadLayout({ ...state, activeGamepadIndex: 0 }))
+    assert.equal(buttonName(BUTTON.south), 'A')
+  } finally {
+    setPadLayout('xbox')
+  }
 })
 
 test('a held D-pad direction repeats after a pause, and stops when released', () => {

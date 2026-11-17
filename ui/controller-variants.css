@@ -711,3 +711,47 @@
 [data-cm-variant] .cm-card-check {
   color: var(--cm-accent-text);
 }
+
+/* An item's shortcut (Settings' preview of the radial menu): a chip on the rim at the middle of
+   its segment, half over the line, raised like the rest of the menu. */
+[data-cm-variant] .cm-shortcut {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 46px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--cm-text);
+  background: var(--cm-raised);
+  box-shadow:
+    inset 0 0 0 1.5px var(--cm-line-strong),
+    0 6px 18px rgb(0 0 0 / 0.5),
+    0 2px 4px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  transform: translate(-50%, -50%) translate(var(--x), var(--y));
+  animation: cm-item-in 0.36s cubic-bezier(0.16, 1.2, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 40ms + 70ms);
+}
+[data-cm-variant] .cm-shortcut.cm-selected {
+  transform: translate(-50%, -50%) translate(var(--lx), var(--ly));
+  box-shadow:
+    inset 0 0 0 2px var(--cm-ring-bright),
+    0 6px 18px rgb(0 0 0 / 0.5),
+    0 2px 4px rgb(0 0 0 / 0.35);
+}
+[data-cm-variant][data-cm-theme='light'] .cm-shortcut {
+  box-shadow:
+    inset 0 0 0 1.5px var(--cm-line-strong),
+    0 6px 18px rgb(15 17 26 / 0.2),
+    0 2px 4px rgb(15 17 26 / 0.14);
+}

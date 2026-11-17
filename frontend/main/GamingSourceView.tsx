@@ -16,6 +16,8 @@ import { Check } from 'lucide-react'
 import { Kbd } from '@kit'
 import { useHotkeys } from '../bridge/useHotkeys'
 import { getButtonName } from '../bridge/useGamepad'
+import { usePadLayout } from '../bridge/usePadLayout'
+import { PadText } from '../components/PadText'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { DictionaryPicker, OcrModel } from './MainSidebar'
@@ -32,11 +34,12 @@ export function SteamButton(): JSX.Element {
 /** The buttons that open the game menu, as their names, or none when it has no button. */
 function useMenuButtons(): string[] {
   const [hotkeys] = useHotkeys()
+  usePadLayout()
   const binding = hotkeys.openControllerMenu
   if (binding?.enabled === false) return []
   const buttons =
     binding?.gamepadButtons ?? (Number.isInteger(binding?.gamepadButton) ? [binding.gamepadButton as number] : [])
-  return buttons.map(getButtonName)
+  return buttons.map((button) => getButtonName(button))
 }
 
 function Step({
@@ -84,7 +87,9 @@ export function GamingNextSteps({ sourceName }: { sourceName: string | null }): 
             {menu.map((name, index) => (
               <span key={name}>
                 {index > 0 && ' + '}
-                <Kbd>{name}</Kbd>
+                <Kbd>
+                  <PadText text={name} />
+                </Kbd>
               </span>
             ))}{' '}
             for the radial menu, then Scan.

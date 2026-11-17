@@ -1,5 +1,6 @@
 /**
- * A keyboard shortcut shown as key caps; click to record a new one. While recording, the next key
+ * A keyboard shortcut shown as key caps (ShortcutChip, beside its controller twin); click to record a
+ * new one, or its × to clear it. While recording, the next key
  * combination with a modifier (or a key that can stand alone: a function key, Insert, Pause or
  * Scroll Lock, `standsAlone` in accelerator.ts) is saved, Escape cancels and Backspace / Delete
  * clears the shortcut. Where native can catch them (`keys.mouseButtons`), a middle, back or
@@ -8,7 +9,8 @@
  * in use is captured instead of firing; leaving the window ends it.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Kbd } from '@kit'
+import { Kbd } from '@kit'
+import { ShortcutChip } from '../../components/ShortcutChip'
 import {
   acceleratorCaps,
   acceleratorFromEvent,
@@ -144,39 +146,36 @@ export function ShortcutRecorder({
 
   const caps = value ? acceleratorCaps(value, platform) : []
 
-  if (!recording && caps.length === 0) {
-    return (
-      <Button size="sm" aria-label={`Set ${label} shortcut`} onClick={() => setRecording(true)}>
-        Set shortcut
-      </Button>
-    )
-  }
-
   return (
-    <button
-      ref={buttonRef}
-      type="button"
-      className="shortcut-recorder"
-      data-recording={recording ? '' : undefined}
-      aria-label={
+    <ShortcutChip
+      kind="keys"
+      state={recording ? 'recording' : caps.length > 0 ? 'set' : 'empty'}
+      buttonRef={buttonRef}
+      label={
         recording
           ? `Recording ${label} shortcut. Press keys${mouseButtons === 'available' ? ' or a mouse button' : ''}, Escape to cancel, Delete to clear.`
-          : `${label} shortcut: ${formatAccelerator(value, platform)}. Click to change.`
+          : caps.length > 0
+            ? `${label} shortcut: ${formatAccelerator(value, platform)}. Click to change.`
+            : `Set ${label} shortcut`
       }
-      onClick={() => {
+      onPress={() => {
         setHeld([])
         setRecording((on) => !on)
       }}
+      onClear={caps.length > 0 && !recording ? () => onChange('') : undefined}
+      clearLabel={`Clear ${label} shortcut`}
     >
       {recording ? (
         held.length > 0 ? (
           held.map((cap) => <Kbd key={cap}>{cap}</Kbd>)
         ) : (
-          <span className="shortcut-recorder-prompt">{notice ?? 'Press keys…'}</span>
+          <span className="shortcut-chip-prompt">{notice ?? 'Press keys…'}</span>
         )
-      ) : (
+      ) : caps.length > 0 ? (
         caps.map((cap, index) => <Kbd key={`${cap}-${index}`}>{cap}</Kbd>)
+      ) : (
+        'Set'
       )}
-    </button>
+    </ShortcutChip>
   )
 }

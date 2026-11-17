@@ -16,39 +16,23 @@ import type { GamepadDevice, GamepadSettings, GamepadState } from './types'
 import { useSetting } from './useSetting'
 import { onEvent } from './tauri'
 import { axesAwayFromRest } from './gamepadRest'
+import { activePadLayout, padButtonNames, padLayout, setPadLayout, type PadLayout } from '../../ui/pad-layout.js'
 
-export const GAMEPAD_BUTTON_NAMES: string[] = [
-  'A',
-  'B',
-  'X',
-  'Y',
-  'LB',
-  'RB',
-  'LT',
-  'RT',
-  // Delta: View and Menu, as the Steam Deck and Xbox pads print them (and as the overlay's hints
-  // name them, ui/controller-input.js BUTTON_NAMES), so "Back" only ever means the action.
-  'View',
-  'Menu',
-  'LS',
-  'RS',
-  'Up',
-  'Down',
-  'Left',
-  'Right',
-  'Home',
-  // Delta: what only the Steam Deck has, read from its own controller (deck_input.rs): the back
-  // grips (upper L4 and R4, lower L5 and R5) and the trackpad clicks.
-  'L4',
-  'R4',
-  'L5',
-  'R5',
-  'Left pad',
-  'Right pad'
-]
+/**
+ * Delta: the names follow the active controller (ui/pad-layout.js): Xbox-style, as the Steam Deck
+ * prints them, with View and Menu so "Back" only ever means the action (as the overlay's hints name
+ * them, ui/controller-input.js), unless a PlayStation pad is in use (✕ ○ □ △, L1/R1, Options…).
+ * The Deck's own back grips and trackpad clicks follow the standard 17 (deck_input.rs).
+ */
+export const GAMEPAD_BUTTON_NAMES: string[] = padButtonNames('xbox')
 
-export function getButtonName(index: number): string {
-  return GAMEPAD_BUTTON_NAMES[index] || `Button ${index}`
+const NAMES_BY_LAYOUT = new Map<PadLayout, string[]>()
+
+/** A standard button's name, in the active controller's layout (`usePadLayout` re-renders on a change). */
+export function getButtonName(index: number, layout: PadLayout = padLayout()): string {
+  let names = NAMES_BY_LAYOUT.get(layout)
+  if (!names) NAMES_BY_LAYOUT.set(layout, (names = padButtonNames(layout)))
+  return names[index] || `Button ${index}`
 }
 
 interface UseGamepadOptions {
@@ -153,6 +137,7 @@ export function useGamepad(options: UseGamepadOptions = {}): UseGamepadReturn {
         buttonStates: payload.buttonStates ?? [],
         axisStates: payload.axisStates ?? []
       }
+      setPadLayout(activePadLayout(next))
       setState(next)
       emitEdges(next)
     })
@@ -196,6 +181,7 @@ export function useGamepad(options: UseGamepadOptions = {}): UseGamepadReturn {
         buttonStates: active ? active.buttons.map((button) => button.pressed) : [],
         axisStates: active ? [...active.axes] : []
       }
+      setPadLayout(activePadLayout(next))
       setState(next)
       if (devices.length > 0) setSource('browser')
       emitEdges(next)

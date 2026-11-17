@@ -12,41 +12,146 @@
   width: 4.5rem;
   text-align: right;
 }
-/* Shortcut key caps; click to record a new combination. The hover fill hugs the caps with the
-   same inset on every side: the inset is whatever the control height leaves around a cap, and
-   there is no minimum width (it would pad only the left of a short combination). */
-.shortcut-recorder {
-  --shortcut-inset: calc((var(--k-control-h-sm) - 1.125rem) / 2);
+/* A shortcut, keyboard or controller (frontend/components/ShortcutChip.tsx): one framed control
+   with a darker cap on the left holding a keyboard or gamepad icon, the keys or buttons, and a
+   faint × at the right end once something is set. The two kinds look the same side by side. */
+.shortcut-chip {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  justify-content: center;
-  gap: var(--k-space-0-5);
-  height: var(--k-control-h-sm);
-  padding: var(--shortcut-inset);
-  border: 0;
+  height: var(--k-control-h);
   border-radius: var(--k-radius-md);
-  background: transparent;
-  color: var(--k-text-2);
-  font: inherit;
-  cursor: default;
-  transition: background-color var(--k-fast);
+  background: var(--k-field);
+  box-shadow:
+    inset 0 0 0 1px var(--k-line-strong),
+    0 1px 1px rgb(0 0 0 / 0.04);
+  color: var(--k-text);
+  overflow: hidden;
+  transition:
+    background-color var(--k-fast),
+    box-shadow var(--k-fast);
 }
-.shortcut-recorder:hover {
-  background: var(--k-hover);
+.dark .shortcut-chip {
+  background: var(--gray-a3);
+  box-shadow: inset 0 0 0 1px var(--gray-a5);
 }
-.shortcut-recorder:focus-visible {
+.shortcut-chip:has(.shortcut-chip-main:hover:not(:disabled)) {
+  background: var(--gray-3);
+}
+.dark .shortcut-chip:has(.shortcut-chip-main:hover:not(:disabled)) {
+  background: var(--gray-a4);
+}
+.shortcut-chip:has(:focus-visible) {
   outline: 2px solid var(--k-focus);
   outline-offset: 1px;
 }
-.shortcut-recorder[data-recording] {
-  min-width: 5.5rem;
-  padding: 0 var(--k-space-1-5);
-  box-shadow: inset 0 0 0 1px var(--k-accent);
+.shortcut-chip-main {
+  display: inline-flex;
+  align-items: stretch;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
   background: transparent;
-}
-.shortcut-recorder-prompt {
+  color: inherit;
+  font: inherit;
   font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+  white-space: nowrap;
+  cursor: default;
+}
+.shortcut-chip-main:focus-visible {
+  outline: none;
+}
+.shortcut-chip-main:active:not(:disabled) .shortcut-chip-value {
+  transform: scale(0.97);
+}
+/* The left cap: what kind of shortcut this is. */
+.shortcut-chip-kind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  border-right: 1px solid var(--k-line-strong);
+  background: var(--gray-a3);
+  color: var(--k-text-3);
+}
+.dark .shortcut-chip-kind {
+  border-right-color: var(--gray-a5);
+  background: rgb(0 0 0 / 0.22);
+}
+.shortcut-chip-kind svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.shortcut-chip-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--k-space-2);
+  transition: transform var(--k-fast);
+}
+.shortcut-chip[data-clearable] .shortcut-chip-value {
+  padding-right: var(--k-space-1);
+}
+.shortcut-chip[data-state='empty'] .shortcut-chip-value {
+  color: var(--k-text-2);
+}
+/* Waiting for input: outlined in the accent, the prompt and the icon in it too. */
+.shortcut-chip[data-state='recording'],
+.dark .shortcut-chip[data-state='recording'] {
+  box-shadow: inset 0 0 0 1px var(--k-accent);
+}
+.shortcut-chip[data-state='recording'] .shortcut-chip-kind {
   color: var(--k-accent-text);
+}
+.shortcut-chip-prompt {
+  color: var(--k-accent-text);
+}
+/* Can't be changed now (no controller, gamepad support off): dimmed, but a set one still clears. */
+.shortcut-chip-main:disabled {
+  opacity: 0.5;
+}
+/* The ×: faint until pointed at, a small button inside the chip's right end. */
+.shortcut-chip-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.1875rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text-3);
+  opacity: 0.6;
+  cursor: default;
+  transition:
+    opacity var(--k-fast),
+    background-color var(--k-fast),
+    color var(--k-fast);
+}
+.shortcut-chip-clear:hover {
+  opacity: 1;
+  color: var(--k-text);
+  background: var(--k-hover);
+}
+.shortcut-chip-clear:focus-visible {
+  outline: none;
+  opacity: 1;
+}
+.shortcut-chip-clear svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+/* Key caps sized to sit inside the chip: the UI face (Figtree has no slashed zero), the platform
+   symbols legible, a little shorter than the kit's cap. */
+.shortcut-chip .k-kbd {
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
 }
 .shortcut-row .k-settings-row-control {
   flex-shrink: 1;
@@ -162,27 +267,6 @@
   color: var(--k-text-2);
   font-size: var(--k-text-xs);
   overflow-wrap: anywhere;
-}
-
-/* The gamepad capture control: a button with an optional clear button. */
-.gamepad-capture {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--k-space-0-5);
-}
-.gamepad-capture .k-button[data-assigned] {
-  color: var(--k-text);
-}
-.gamepad-capture .k-button[data-capturing] {
-  box-shadow: inset 0 0 0 1px var(--k-accent);
-  color: var(--k-accent-text);
-}
-/* The kit cap inherits the UA monospace face from <kbd>; shortcut caps use the UI face (Figtree
-   has no slashed zero) with the platform symbols at a legible size. */
-.shortcut-recorder .k-kbd {
-  justify-content: center;
-  font-family: var(--k-font-ui);
-  font-size: var(--k-text-sm);
 }
 
 /* A choice-card group as the first thing in a settings group (Dictionary → Pop-up). */

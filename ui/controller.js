@@ -27,7 +27,8 @@
  * the word moves into the pop-up (`layer`): the D-pad then moves between its buttons, A presses
  * one, B comes back to the text. View shows every control.
  */
-import { ControllerInput, buttonName } from './controller-input.js'
+import { BUTTON, ControllerInput, buttonName } from './controller-input.js'
+import { padGlyphHtml } from './pad-layout.js'
 import { RadialMenu, ICONS } from './radial-menu.js'
 import { effectiveRadialMenu, radialItemsFor } from './radial-items.js'
 import {
@@ -789,7 +790,7 @@ export function createController(context) {
       `<span class="cm-hint"><kbd class="cm-glyph">L</kbd>Move</span>` +
       `<span class="cm-hint"><kbd class="cm-glyph">R</kbd>Resize</span>` +
       `<span class="cm-hint"><kbd class="cm-glyph">✥</kbd>Nudge</span>` +
-      `<span class="cm-hint"><kbd class="cm-glyph cm-confirm">A</kbd>Done</span>`
+      `<span class="cm-hint"><kbd class="cm-glyph cm-confirm">${padGlyphHtml(buttonName(BUTTON.south))}</kbd>Done</span>`
     host.append(place.bar)
     context.log({ check: 'controller-card-place', active: true })
   }
@@ -1568,7 +1569,7 @@ export function createController(context) {
   /** One hint: its key or button, and what it does; nothing for an unbound button. */
   function hint(glyph, label, tone = '') {
     if (!glyph) return ''
-    return `<span class="cm-hint"><kbd class="cm-glyph${tone ? ` cm-${tone}` : ''}">${escapeHtml(glyph)}</kbd>${escapeHtml(label)}</span>`
+    return `<span class="cm-hint"><kbd class="cm-glyph${tone ? ` cm-${tone}` : ''}">${padGlyphHtml(glyph)}</kbd>${escapeHtml(label)}</span>`
   }
 
   /** The directions, the way the current text runs: along it for the next stop, across for the next line. */
@@ -1650,7 +1651,7 @@ export function createController(context) {
     const pair = (a, b) => [glyphOf(a), glyphOf(b)].filter(Boolean).join(' ')
     const row = (glyph, label, detail) =>
       glyph
-        ? `<li><kbd class="cm-glyph">${escapeHtml(glyph)}</kbd><span><b>${escapeHtml(label)}</b>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</span></li>`
+        ? `<li><kbd class="cm-glyph">${padGlyphHtml(glyph)}</kbd><span><b>${escapeHtml(label)}</b>${detail ? `<small>${padGlyphHtml(detail)}</small>` : ''}</span></li>`
         : ''
     const popupButtons = context.popupFocusable?.()
     const reading = [

@@ -10,14 +10,15 @@
  * single button index, which is what the auto-scan trigger stores.
  */
 import { useState, useEffect, useCallback, useRef, type JSX } from 'react'
-import { Gamepad2, X } from 'lucide-react'
-import { Button, IconButton } from '@kit'
+import { ShortcutChip } from './ShortcutChip'
 import { useGamepad, getButtonName } from '../bridge/useGamepad'
+import { usePadLayout } from '../bridge/usePadLayout'
+import { PadText } from './PadText'
 import { useSuspendHotkeys } from '../bridge/useHotkeys'
 
 interface CommonProps {
   disabled?: boolean
-  /** '1' is the small control size; '2' and '3' the default. */
+  /** Kept for callers; every size draws the same ShortcutChip now. */
   size?: '1' | '2' | '3'
 }
 
@@ -38,7 +39,7 @@ type GamepadButtonCaptureProps = SingleProps | ChordProps
 
 /** "LS + RS", using the standard button names. */
 function formatChord(buttons: number[]): string {
-  return buttons.map(getButtonName).join(' + ')
+  return buttons.map((button) => getButtonName(button)).join(' + ')
 }
 
 function commit(props: GamepadButtonCaptureProps, buttons: number[]): void {
@@ -47,14 +48,14 @@ function commit(props: GamepadButtonCaptureProps, buttons: number[]): void {
 }
 
 export function GamepadButtonCapture(props: GamepadButtonCaptureProps): JSX.Element {
-  const { disabled = false, size = '2' } = props
+  const { disabled = false } = props
   const [capturing, setCapturing] = useState(false)
+  usePadLayout()
   // The combination so far, for display; the refs are what the gamepad callbacks read, since
   // a press and a release can both arrive before the next render.
   const [collected, setCollected] = useState<number[]>([])
   const collectedRef = useRef<number[]>([])
   const heldRef = useRef<Set<number>>(new Set())
-  const buttonSize = size === '1' ? 'sm' : 'md'
 
   const handleButtonPress = useCallback(
     (buttonIndex: number) => {
@@ -128,20 +129,24 @@ export function GamepadButtonCapture(props: GamepadButtonCaptureProps): JSX.Elem
     }
   }
 
-  const handleClear = (e: React.MouseEvent): void => {
-    e.stopPropagation()
-    commit(props, [])
-  }
+  const clear = (): void => commit(props, [])
+  const clearLabel = props.chord ? 'Clear gamepad buttons' : 'Clear gamepad button'
 
   if (capturing) {
     const prompt = props.chord ? 'Press a combination…' : 'Press a button…'
     return (
-      <span className="gamepad-capture">
-        <Button size={buttonSize} data-capturing="" onClick={() => setCapturing(false)}>
-          <Gamepad2 />
-          {collected.length > 0 ? `${formatChord(collected)}…` : prompt}
-        </Button>
-      </span>
+      <ShortcutChip
+        kind="pad"
+        state="recording"
+        label={`${prompt} Escape to cancel.`}
+        onPress={() => setCapturing(false)}
+      >
+        {collected.length > 0 ? (
+          <PadText text={`${formatChord(collected)}…`} />
+        ) : (
+          <span className="shortcut-chip-prompt">{prompt}</span>
+        )}
+      </ShortcutChip>
     )
   }
 
@@ -151,49 +156,40 @@ export function GamepadButtonCapture(props: GamepadButtonCaptureProps): JSX.Elem
     const showAssigned = assigned.length > 0
     const reason = !settings.enabled ? 'Gamepad support is off' : 'No gamepad connected'
     return (
-      <span className="gamepad-capture">
-        <Button size={buttonSize} disabled title={showAssigned ? reason : undefined}>
-          <Gamepad2 />
-          {showAssigned ? formatChord(assigned) : !settings.enabled ? 'Disabled' : 'No gamepad'}
-        </Button>
-        {showAssigned && (
-          <IconButton
-            label={props.chord ? 'Clear gamepad buttons' : 'Clear gamepad button'}
-            size="sm"
-            onClick={handleClear}
-          >
-            <X />
-          </IconButton>
-        )}
-      </span>
+      <ShortcutChip
+        kind="pad"
+        state={showAssigned ? 'set' : 'empty'}
+        disabled
+        title={reason}
+        label={showAssigned ? `Gamepad: ${formatChord(assigned)}. ${reason}.` : reason}
+        onPress={() => undefined}
+        onClear={showAssigned ? clear : undefined}
+        clearLabel={clearLabel}
+      >
+        {showAssigned ? <PadText text={formatChord(assigned)} /> : !settings.enabled ? 'Disabled' : 'No gamepad'}
+      </ShortcutChip>
     )
   }
 
   if (assigned.length > 0) {
     return (
-      <span className="gamepad-capture">
-        <Button size={buttonSize} data-assigned="" onClick={handleStartCapture}>
-          <Gamepad2 />
-          {formatChord(assigned)}
-        </Button>
-        <IconButton
-          label={props.chord ? 'Clear gamepad buttons' : 'Clear gamepad button'}
-          size="sm"
-          onClick={handleClear}
-        >
-          <X />
-        </IconButton>
-      </span>
+      <ShortcutChip
+        kind="pad"
+        state="set"
+        label={`Gamepad: ${formatChord(assigned)}. Click to change.`}
+        onPress={handleStartCapture}
+        onClear={clear}
+        clearLabel={clearLabel}
+      >
+        <PadText text={formatChord(assigned)} />
+      </ShortcutChip>
     )
   }
 
   return (
-    <span className="gamepad-capture">
-      <Button size={buttonSize} onClick={handleStartCapture} disabled={disabled}>
-        <Gamepad2 />
-        Set
-      </Button>
-    </span>
+    <ShortcutChip kind="pad" state="empty" label="Set gamepad button" onPress={handleStartCapture} disabled={disabled}>
+      Set
+    </ShortcutChip>
   )
 }
 

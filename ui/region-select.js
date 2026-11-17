@@ -80,6 +80,8 @@
  * once the run ends).
  */
 
+import { padGlyphHtml } from './pad-layout.js'
+
 const Z_INDEX_OVERLAY = 6000
 
 /** How long a drag's own pointer must be silent before `dragAt` samples move the box. */
@@ -1398,7 +1400,7 @@ export class RegionSelect {
         boxShadow: `inset 0 0 0 1px ${theme.keyEdge}, inset 0 -1.5px 0 ${theme.keyEdge}`,
         font: `700 12px/1 ${UI}`
       })
-      element.textContent = name
+      element.innerHTML = padGlyphHtml(name)
       return element
     }
     const barStart = document.createElement('span')
