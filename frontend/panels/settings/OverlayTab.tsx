@@ -16,6 +16,7 @@ import { SmallTextFilter } from './SmallTextFilter'
 import { GameModeSection } from './GameModeSection'
 import { TextHookerCardSection } from './TextHookerCardSection'
 import { GamePauseRow } from './GamePauseRow'
+import { HoverLookupRow } from './HoverLookupRow'
 
 export function OverlayTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
@@ -84,6 +85,7 @@ export function OverlayTab(): ReactNode {
             onCheckedChange={(checked) => void setClickThrough(checked)}
           />
         </SettingsRow>
+        <HoverLookupRow />
         <SettingsRow
           label="Exclude overlay from screen recording"
           controlId="ocr-exclude-capture"
