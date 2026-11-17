@@ -60,6 +60,9 @@ pub struct GameConfig {
     pub ruby: bool,
     /// The language spaces its words: rows joined back up have a space between them.
     pub spaces: bool,
+    /// The language is written in the Latin alphabet: a word a row broke with a hyphen is put
+    /// back together ([`word_break`]).
+    pub latin: bool,
     /// The longest line shown at once ([`max_line_chars`]).
     pub max_chars: usize,
     /// Sentences end, and speech opens and closes, as Japanese's do alone ([`continues_in`]).
@@ -77,6 +80,7 @@ impl Default for GameConfig {
             strip_codes: true,
             ruby: true,
             spaces: false,
+            latin: false,
             max_chars: MAX_LINE_CHARS,
             japanese: true,
             hook_codes: Vec::new(),
@@ -139,6 +143,7 @@ impl GameConfig {
             strip_codes,
             ruby: language.ruby,
             spaces: language.spaces,
+            latin: language.is_latin(),
             max_chars: max_line_chars(language),
             japanese: language.is_japanese(),
             hook_codes,
@@ -160,12 +165,83 @@ impl GameConfig {
                 rule.find.replace_all(&line, NoExpand(&rule.replace)).into_owned()
             };
         }
+        let line = if self.latin { join_broken_words(&line) } else { line };
         let line = line.trim();
         if line.is_empty() || line.chars().count() > self.max_chars {
             return None;
         }
         Some(line.to_string())
     }
+
+    /// Two rows of one line run together: a word the first broke with a hyphen goes on whole
+    /// ([`word_break`]); else a space between them where the language spaces its words.
+    pub fn join_rows(&self, before: &str, after: &str) -> String {
+        let mut joined = before.to_string();
+        match self.latin.then(|| word_break(before, after)).flatten() {
+            Some(split) => join_word(&mut joined, split, after),
+            None => {
+                if self.spaces {
+                    joined.push(' ');
+                }
+                joined.push_str(after);
+            }
+        }
+        joined
+    }
+}
+
+/// How a word broken across two rows with a hyphen goes back together ([`word_break`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WordBreak {
+    /// The hyphen was only where the row broke: `esta-` `ba` is `estaba`.
+    Drop,
+    /// The word has a hyphen of its own: `Baden-` `Württemberg` is `Baden-Württemberg`.
+    Keep,
+}
+
+/// A word broken across two rows with a hyphen, in a language written in the Latin alphabet (the
+/// caller's to know), as `ui/script-text.ts` `wordBreak` has it: `before` ends in a hyphen
+/// straight after a letter, and `after` starts with a letter. The hyphen goes unless `after`
+/// starts with a capital.
+fn word_break(before: &str, after: &str) -> Option<WordBreak> {
+    let mut end = before.trim_end().chars().rev();
+    let hyphen = end.next()?;
+    let letter = end.next()?;
+    let first = after.trim_start().chars().next()?;
+    if !matches!(hyphen, '-' | '\u{2010}' | '\u{ad}') || !letter.is_alphabetic() || !first.is_alphabetic() {
+        return None;
+    }
+    Some(if first.is_uppercase() { WordBreak::Keep } else { WordBreak::Drop })
+}
+
+/// `after` run on to `joined`, which ends in a word it broke ([`word_break`]).
+fn join_word(joined: &mut String, split: WordBreak, after: &str) {
+    joined.truncate(joined.trim_end().len());
+    if split == WordBreak::Drop {
+        joined.pop();
+    }
+    joined.push_str(after.trim_start());
+}
+
+/// A line with its line breaks as the game had them, with each word a break split with a hyphen
+/// put back together ([`word_break`]): `esta-\nba` is `estaba`. Other breaks stay.
+fn join_broken_words(text: &str) -> String {
+    let mut rows = text.split('\n');
+    let first = rows.next().unwrap_or_default();
+    let mut joined = first.to_string();
+    // The text so far ends as the row before it does: that row is the one to test.
+    let mut previous = first;
+    for row in rows {
+        match word_break(previous, row) {
+            Some(split) => join_word(&mut joined, split, row),
+            None => {
+                joined.push('\n');
+                joined.push_str(row);
+            }
+        }
+        previous = row;
+    }
+    joined
 }
 
 /// What a markup rule puts in place of its match.
@@ -562,5 +638,28 @@ mod tests {
         // Japanese as before: a closing ” is not an end there.
         assert!(continues("彼は“はい”", "と言った。"));
         assert_eq!(continues_in("彼は“はい”", "と言った。", true), continues("彼は“はい”", "と言った。"));
+    }
+
+    #[test]
+    fn a_word_a_row_broke_with_a_hyphen_goes_back_together() {
+        let es = GameConfig::from_settings(&Value::Null, &Value::Null, crate::language::get("es"));
+        assert!(es.latin);
+        assert_eq!(es.join_rows("No sabía que esta-", "ba aquí."), "No sabía que estaba aquí.");
+        assert_eq!(es.join_rows("Vivo en Baden-", "Württemberg."), "Vivo en Baden-Württemberg.");
+        // A dash after a space, or a row ending in a number: two words.
+        assert_eq!(es.join_rows("Espera -", "no."), "Espera - no.");
+        assert_eq!(es.join_rows("Página 3-", "cuatro"), "Página 3- cuatro");
+        assert_eq!(
+            es.clean("No sabía que esta-\nba aquí.\nY tú-\n¿qué?").as_deref(),
+            Some("No sabía que estaba aquí.\nY tú-\n¿qué?")
+        );
+        // The last row's hyphen is left alone.
+        assert_eq!(es.clean("Un, dos, tres-").as_deref(), Some("Un, dos, tres-"));
+        // Not in other alphabets.
+        let ru = GameConfig::from_settings(&Value::Null, &Value::Null, crate::language::get("ru"));
+        assert_eq!(ru.join_rows("Это бы-", "ло"), "Это бы- ло");
+        assert_eq!(ru.clean("Это бы-\nло").as_deref(), Some("Это бы-\nло"));
+        let ja = GameConfig::from_settings(&Value::Null, &Value::Null, ja());
+        assert_eq!(ja.join_rows("ソフト-", "ウェア"), "ソフト-ウェア");
     }
 }

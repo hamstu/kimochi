@@ -800,3 +800,32 @@ test('line blocks: the vendored scanner reads a wrapped word whole from its firs
   const second = find(root.childNodes[1], 'ocr-word-current').childNodes[0]
   assert.equal(new DOMTextScanner(second, 5, false, true).seek(16).content, '防ぐ')
 })
+
+test('line blocks: in Spanish, a word a line broke with a hyphen reads whole, the hyphen drawn but not read', () => {
+  const host = element()
+  const renderer = new TextOverlayRenderer(host)
+  renderer.render({
+    ...view([line('No sabía que esta-', 0, 0, 240), line('ba aquí.', 0, 40, 110)]),
+    grouping: { enabled: false, filterSmallText: false, language: 'es' }
+  })
+  const root = toDom({
+    ...element('div'),
+    className: 'words',
+    style: { position: 'absolute' },
+    children: host.children
+  })
+  const current = root.childNodes
+    .map((box) => find(box, 'ocr-word-current'))
+    .find((node) => node?.childNodes[0]?.nodeValue?.startsWith('No'))
+  const text = current.childNodes[0]
+  assert.equal(text.nodeValue, 'No sabía que esta')
+  // The hyphen is still drawn, by a pseudo-element (overlay-text.css), never as text.
+  const hyphen = find(current, 'ocr-hyphen')
+  assert.equal(hyphen.childNodes.length, 0)
+  assert.match(overlayHtml, /\.ocr-hyphen::after \{\s*content: attr\(data-hyphen\);/)
+  assert.equal(new DOMTextScanner(text, 13, false, true).seek(6).content, 'estaba')
+  // Without the language set (Japanese), the line is as it was.
+  const plain = element()
+  new TextOverlayRenderer(plain).render(view([line('No sabía que esta-', 0, 0, 240), line('ba aquí.', 0, 40, 110)]))
+  assert.equal(lookaheadOf(plain, 'No sabía que esta-'), 'ba aquí.')
+})

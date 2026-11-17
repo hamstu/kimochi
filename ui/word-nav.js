@@ -265,11 +265,12 @@ export function offsetInNodes(nodes, node, offset) {
 /**
  * What goes between two boxes' texts read on from one into the next: nothing in Japanese, where a
  * word OCR split in two runs straight on; a space in a language that spaces its words, unless one
- * side has it already, since two boxes there are two words (or two lines).
+ * side has it already, since two boxes there are two words (or two lines), or the first ends in a
+ * word its line broke with a hyphen (`joinsNext`: render.js marks it `ocr-joins-next`).
  */
 function joinerOf(before, after, words) {
-  if (!words.spaces || !before || !after) return ''
-  return /\s$/u.test(before) || /^\s/u.test(after) ? '' : ' '
+  if (!words.spaces || !before.text || !after.text || before.joinsNext) return ''
+  return /\s$/u.test(before.text) || /^\s/u.test(after.text) ? '' : ' '
 }
 
 /**
@@ -278,7 +279,7 @@ function joinerOf(before, after, words) {
  * text it covers is no stop of its own. In a language that spaces its words (`words`, Japanese
  * unless given) the boxes are read on with a space between them (`joinerOf`).
  *
- * @param {{text: string}[]} units in reading order
+ * @param {{text: string, joinsNext?: boolean}[]} units in reading order
  * @param {(text: string) => Promise<{start: number, end: number, text: string, word: boolean}[]>} split
  * @param {{spaces: boolean}} [words]
  */
@@ -289,7 +290,7 @@ export async function segmentAcross(units, split, words = JAPANESE_WORDS) {
     let lead = 0
     for (let next = index + 1; next < units.length && text.length < SCAN_LENGTH; next++) {
       if (!runsOnInto(units[next - 1], units[next])) break
-      const joiner = joinerOf(units[next - 1].text, units[next].text, words)
+      const joiner = joinerOf(units[next - 1], units[next], words)
       if (next === index + 1) lead = joiner.length
       text += joiner + units[next].text
     }

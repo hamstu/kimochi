@@ -15,7 +15,7 @@ import { JAPANESE_WORDS, readingUnits, segmentAcross, segmentText, tokensFromSeg
 import { gnomeWordCells } from '../ui/gnome-word-cells.js'
 
 const { dropsText, japaneseFilterOf, mostlyNonJapanese } = await load('japanese-text.ts')
-const { hasLanguageScript, joiner } = await load('script-text.ts')
+const { hasLanguageScript, joinBrokenWords, joiner, wordBreak } = await load('script-text.ts')
 const { visibleAnnotations, buildFilteredText, groupTextAnnotations } = await load('annotations.ts')
 const { inferOrientations, logicalGroups, normalizeOcrResult } = await load('ocr-result.ts')
 const { SceneMemory, decorationOnly, inLanguage } = await load('scene.ts')
@@ -281,6 +281,55 @@ test('a hooked line broken over rows keeps a space at each break in a spaced lan
   // Japanese as ever: the break is nothing, and the space before a line starts it.
   assert.deepEqual(splitAcrossLines('one\ntwo three four five', ocr), ['onetwo', ' three four', ' five'])
   assert.deepEqual(splitAcrossLines('ああ、いい。うう', ['ああ', 'いいうう'], false), ['ああ、', 'いい。うう'])
+})
+
+test('a word a line broke with a hyphen is one word in a language written in the Latin alphabet', () => {
+  assert.equal(wordBreak('No sabía que esta-', 'ba aquí.', 'es'), 'drop')
+  assert.equal(wordBreak(`esta${String.fromCodePoint(0x2010)}  `, '  ba', 'es'), 'drop')
+  // A capital after the break: the word has a hyphen of its own.
+  assert.equal(wordBreak('Vivo en Baden-', 'Württemberg.', 'de'), 'keep')
+  // A dash after a space, a number before the hyphen, or no letter after the break: two words.
+  assert.equal(wordBreak('Espera -', 'no.', 'es'), null)
+  assert.equal(wordBreak('Página 3-', 'cuatro', 'es'), null)
+  assert.equal(wordBreak('Un, dos, tres-', '¿qué?', 'es'), null)
+  // Other alphabets, and Japanese, as before.
+  assert.equal(wordBreak('Это бы-', 'ло', 'ru'), null)
+  assert.equal(wordBreak('ソフト-', 'ウェア'), null)
+
+  assert.equal(
+    joinBrokenWords('No sabía que esta-\nba aquí.\nY tú-\n¿qué?\nBaden-\nWürttemberg', 'es'),
+    'No sabía que estaba aquí.\nY tú-\n¿qué?\nBaden-Württemberg'
+  )
+  // The last line's hyphen is left alone.
+  assert.equal(joinBrokenWords('uno, dos, tres-', 'es'), 'uno, dos, tres-')
+  assert.equal(joinBrokenWords('Это бы-\nло', 'ru'), 'Это бы-\nло')
+})
+
+test('the overlay reads on through a word a line broke: no space, and no hyphen', async () => {
+  // Word boxes: `esta-` ends one line and `ba` starts the next.
+  const boxes = [
+    { text: 'que', x: 0, y: 0, width: 40, height: 20 },
+    { text: 'esta-', x: 50, y: 0, width: 50, height: 20 },
+    { text: 'ba', x: 0, y: 30, width: 20, height: 20 },
+    { text: 'aquí', x: 30, y: 30, width: 40, height: 20 }
+  ]
+  const next = [1, 2, 3, -1]
+  assert.deepEqual(lookaheadTexts(boxes, next, 10, 'es'), [' estaba aquí', 'ba aquí', ' aquí', ''])
+  // On the same line the hyphen is the word's own, and the boxes are two words.
+  const sameLine = boxes.map((box) => ({ ...box, y: 0 }))
+  assert.deepEqual(lookaheadTexts(sameLine, next, 10, 'es')[1], ' ba aquí')
+  // The box's text as a lookup reads it (render.js `scanText`) still takes in the next line's half.
+  const chain = ['que', 'esta', 'ba', 'aquí'].map((text, i) => ({ text, next: next[i] }))
+  assert.deepEqual(selectionExtension('estaba', 1, chain, true), { extension: 'ba', consumed: [2] })
+
+  // Read along's word cursor reads a unit marked as running on (`ocr-joins-next`) into the next.
+  const words = wordsOf('es')
+  const split = async (text) => tokensFromSegmenter(text, Intl.Segmenter, words)
+  const units = await segmentAcross([{ text: 'que esta', joinsNext: true }, { text: 'ba aquí' }], split, words)
+  assert.deepEqual(
+    units.map((u) => u.tokens.filter((t) => t.word).map((t) => t.text)),
+    [['que', 'estaba'], ['aquí']]
+  )
 })
 
 // --- 5. vertical text ------------------------------------------------------------------------

@@ -233,8 +233,9 @@ impl Hook {
         let piece_chars = text.chars().count();
         if !carries_on && config.join_lines && recent {
             if let Some(before) = session.last_line.as_deref() {
-                // A language that spaces its words has a space between the rows (they come trimmed).
-                let joined = if config.spaces { format!("{before} {text}") } else { format!("{before}{text}") };
+                // A language that spaces its words has a space between the rows (they come trimmed),
+                // unless a row broke a word with a hyphen.
+                let joined = config.join_rows(before, &text);
                 if clean::continues_in(before, &text, config.japanese)
                     && !before.ends_with(&text)
                     && joined.chars().count() <= config.max_chars
