@@ -2068,7 +2068,7 @@ types both and resolves a game's settings (its own value, else the default, else
 game's record holds what the reader changed for it and what was learned about it:
 
 ```ts
-HookSettings = { autoHook: true, flushMs: 300, repeats: 'auto' | 'off' | 2 | 3 | 4,
+HookSettings = { autoHook: true, flushMs: 100, repeats: 'auto' | 'off' | 2 | 3 | 4,
                  joinLines: true, stripCodes: true,
                  speakerNames: true, autoAlign: true, opacity: 1, textSize: 0.034 }
 textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
@@ -2079,7 +2079,10 @@ textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
 }
 ```
 
-`flushMs` is LunaHook's `--flush-ms`, read when the sidecar starts. Each hooked line is cleaned
+`flushMs` (the Line delay, 100 ms unless the reader chose another) is LunaHook's `--flush-ms`,
+how long a thread's text may pause before LunaHook hands it over as a line; it is passed when the
+sidecar starts, and a change to the hooked game's value (or the default it follows) is sent to a
+running sidecar with `flush`, so it applies at once. Each hooked line is cleaned
 natively before it is sent (`text_hook/clean.rs`): markup engines leave in their text is taken
 out, keeping the text it marks up (HTML-like tags, `<rt>` readings, `{漢字/かんじ}`, Ren'Py's
 `{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`; the ruby forms `{a/b}`, `[a/b]` and `《》` only for a
@@ -2239,6 +2242,10 @@ Cantonese, 1251 Cyrillic, 874 Thai, 1250/1252/1253/1254/1257/1258 for Latin and 
 comes through Unicode hooks; ASCII reads alike in every code page). Absent, it is 932, so an app
 from before languages gets what it always did; an older sidecar ignores the argument. Textractor's
 CLI always decodes Shift-JIS.
+`--flush-ms` is LunaHook's flush delay, the game's Line delay: how long a thread's text may pause
+before it is handed over as a line (absent, 100 ms, LunaHook's own default). A sidecar that takes
+it reports it in `ready` as `flushMs`, and takes a new value with `flush` while it runs.
+Textractor's CLI keeps Textractor's own (500 ms); Line delay doesn't reach it.
 `kimochi-hookd-{x64,x86}.exe inject --pid N --dll <path>` injects one DLL
 (`CreateRemoteThread(LoadLibraryW)`); the x64 sidecar runs the x86 build for 32-bit games.
 `kimochi-hookd-x64.exe processes` writes one `process` event per running process
@@ -2252,11 +2259,12 @@ it in a Wine game's prefix to learn the game's id there.
 | `insert` | `pid`, `code` (an H-code) |
 | `pchooks` | `pid` |
 | `codepage` | `codepage` (decode ANSI text with this code page from the next line; sent when the language changes, and only to a sidecar whose `ready` carried `codepage`) |
+| `flush` | `ms` (LunaHook's flush delay from now on; sent when the hooked game's Line delay changes, and only to a sidecar whose `ready` carried `flushMs`) |
 | `quit` | |
 
 | Event | Fields |
 | --- | --- |
-| `ready` | `engine`, `version`, `codepage?` (LunaHook: the code page in use; its presence means `codepage` is understood) |
+| `ready` | `engine`, `version`, `codepage?` (LunaHook: the code page in use; its presence means `codepage` is understood), `flushMs?` (LunaHook: the flush delay in use; its presence means `flush` is understood) |
 | `connected` / `disconnected` | `pid` |
 | `attached` | `pid`, `bits`, `reused?` |
 | `attach_error` | `pid`, `text` |

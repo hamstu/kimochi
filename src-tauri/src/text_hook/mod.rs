@@ -138,6 +138,9 @@ struct Session {
     /// The code page the helper decodes ANSI text with, when it can be changed while it runs (a
     /// LunaHook helper whose `ready` said so); None for Textractor and an older helper.
     code_page: Option<u32>,
+    /// The Line delay the helper waits with, when it can be changed while it runs (a LunaHook
+    /// helper whose `ready` said so); None for Textractor and an older helper.
+    flush_ms: Option<u32>,
 }
 
 struct Hook {
@@ -498,6 +501,7 @@ fn read_events(
         match event["event"].as_str().unwrap_or_default() {
             "ready" => {
                 session.code_page = event["codepage"].as_u64().and_then(|c| u32::try_from(c).ok());
+                session.flush_ms = event["flushMs"].as_u64().and_then(|ms| u32::try_from(ms).ok());
                 let _ = ready.send(Ok(()));
             }
             "error" => {
@@ -1321,6 +1325,18 @@ pub fn language_changed() {
         && send(&mut session, json!({ "cmd": "codepage", "codepage": page })).is_ok()
     {
         session.code_page = Some(page);
+    }
+}
+
+/// The Text Hooker's settings changed: a running LunaHook helper waits with the hooked game's
+/// Line delay from now on, rather than from the next time the game is hooked.
+pub fn settings_changed() {
+    let Some(hook) = hook() else { return };
+    let mut session = hook.lock();
+    let Some(current) = session.flush_ms else { return };
+    let wanted = hook.config(&session).flush_ms;
+    if wanted != current && send(&mut session, json!({ "cmd": "flush", "ms": wanted })).is_ok() {
+        session.flush_ms = Some(wanted);
     }
 }
 

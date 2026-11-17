@@ -28,7 +28,12 @@ pub fn max_line_chars(language: &Language) -> usize {
         3 * MAX_LINE_CHARS
     }
 }
-const DEFAULT_FLUSH_MS: u32 = 300;
+/// How long a thread's text may pause before LunaHook hands it over as a line (`flushMs`, the
+/// Line delay). Short enough that a line shows as soon as the game sets it; long enough that a
+/// line typed out a character at a time at an ordinary text speed comes whole. One that pauses for
+/// longer (a slow text speed, a dramatic "……") still comes right: the next piece carries it on and
+/// replaces it (`pick::typewriter_lines_after`).
+pub const DEFAULT_FLUSH_MS: u32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repeats {
@@ -477,7 +482,7 @@ mod tests {
         assert_eq!(config.repeats, Repeats::Fixed(2));
         assert_eq!(config.hook_codes, vec!["HS-4@1234".to_string()]);
         let none = GameConfig::from_settings(&Value::Null, &Value::Null, ja());
-        assert_eq!((none.flush_ms, none.repeats), (300, Repeats::Auto));
+        assert_eq!((none.flush_ms, none.repeats), (DEFAULT_FLUSH_MS, Repeats::Auto));
     }
 
     #[test]
