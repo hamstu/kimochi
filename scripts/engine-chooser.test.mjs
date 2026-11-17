@@ -151,3 +151,29 @@ test('every engine has a picture, and every picture file exists', async () => {
   const notice = await read('NOTICE')
   assert.ok(notice.includes('frontend/assets/engine-icons'), 'NOTICE does not list the engine icons')
 })
+
+test('a switch waiting for its download says the download goes on, and what looks words up meanwhile', async () => {
+  const { pendingSwitchLine } = await load('engine-chooser.ts')
+  const line = pendingSwitchLine('Hachidori', 'Built-in Yomitan')
+  assert.match(line, /^Hachidori keeps downloading in the background/)
+  assert.match(line, /Built-in Yomitan looks words up until then\.$/)
+  const first = pendingSwitchLine('Built-in Yomitan', null)
+  assert.match(first, /starts using it once it’s ready/)
+  assert.doesNotMatch(first, /until then/, 'a first run has no engine to fall back on')
+})
+
+test('the sidebar asks for the reader only when a waiting download stopped', async () => {
+  const { pendingSwitchNotice } = await load('engine-chooser.ts')
+  assert.deepEqual(pendingSwitchNotice('10ten', 'failed'), {
+    tone: 'danger',
+    text: '10ten download failed.',
+    action: 'retry'
+  })
+  assert.deepEqual(pendingSwitchNotice('10ten', 'paused'), {
+    tone: 'warn',
+    text: '10ten download paused.',
+    action: 'resume'
+  })
+  for (const state of ['downloading', 'verifying', 'ready', 'absent', null])
+    assert.equal(pendingSwitchNotice('10ten', state), null, String(state))
+})

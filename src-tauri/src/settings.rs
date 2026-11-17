@@ -60,6 +60,9 @@ pub fn defaults() -> Value {
             "webSocketUrl": "ws://localhost:6677"
         },
         "yomitanSettings": { "popupType": "builtin", "customApiUrl": "", "prefetchScreen": false },
+        // A dictionary engine waiting for its download before it is switched to ("Use when
+        // downloaded"): `dictionary_switch.rs`.
+        "dictionaryEnginePending": null,
         // An object, not a flat scalar: `useSetting<ServerSettings>('serverSettings')`.
         "serverSettings": { "mode": "cloud" },
         "textOverlayGrouping": {

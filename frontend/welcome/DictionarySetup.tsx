@@ -21,6 +21,10 @@ import { StepActions } from './StepActions'
 import { STEAM_ROUTE } from './steamRoute'
 import { DictionaryReadiness } from '../components/DictionaryReadiness'
 import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
+import { usePendingSwitch } from '../bridge/dictionarySwitch'
+import { useExtensionControls, type ExtensionControls } from '../bridge/extensions'
+import { downloadEngineFor } from '@ui/extension-download'
+import { ModelDownload } from '../panels/settings/ModelDownload'
 import style from './WelcomeApp.module.css'
 
 type Job = {
@@ -60,9 +64,45 @@ const NEXT = STEAM_ROUTE
  */
 export default function DictionarySetup(): JSX.Element {
   const [engine] = useDictionaryEngine()
+  // The engine chosen on the step before may still be downloading in the background ("Use when
+  // downloaded"): its setup needs it running, so this step waits for it, or is passed.
+  const pending = usePendingSwitch()
+  const target = pending ?? engine
+  const download = useExtensionControls(downloadEngineFor(target))
+  if (download.status && download.status.state !== 'ready')
+    return <WaitingForEngine engine={target} controls={download} />
   if (engine === 'yomitan') return <YomitanSetup />
   if (engine === 'custom-api') return <YomitanApiSetup />
   return <OtherEngineSetup engine={engine} />
+}
+
+/**
+ * The chosen engine is still downloading: its progress, and Continue. Native switches to it once
+ * it is ready, which reloads this window onto this step, now with the engine's setup.
+ */
+function WaitingForEngine({
+  engine,
+  controls
+}: {
+  engine: DictionaryEngine
+  controls: ExtensionControls
+}): JSX.Element {
+  const navigate = useNavigate()
+  const name = DICTIONARY_ENGINES[engine].name
+  return (
+    <Step
+      title={`Set up ${name}`}
+      lede={`${name} isn’t downloaded yet. Its setup appears here as soon as it’s ready, or you can carry on now and set it up later in Settings → Dictionary.`}
+    >
+      {/* Continue is this step's one primary action. */}
+      <ModelDownload controls={controls} emphasis={false} label="Download" />
+      <StepActions>
+        <Button variant="primary" onClick={() => void navigate(NEXT)}>
+          Continue
+        </Button>
+      </StepActions>
+    </Step>
+  )
 }
 
 type OtherEngine = Exclude<DictionaryEngine, 'yomitan' | 'custom-api'>

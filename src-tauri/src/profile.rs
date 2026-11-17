@@ -57,6 +57,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "texthookerIngestedHistory",
     "accountLinkServer",
     "yomitanSettings",
+    // The engine waiting for its download: this computer's download, like the engine.
+    "dictionaryEnginePending",
     // Which Built-in Yomitan profile each account uses: this computer's Yomitan, like the engine.
     "yomitanProfiles",
     "accountBackup",

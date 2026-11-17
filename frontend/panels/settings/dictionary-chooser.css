@@ -102,3 +102,18 @@
 .dictionary-detail-intro .dictionary-preview {
   max-width: none;
 }
+
+/* "Keep using …" in the note about a switch waiting for its download: a link in the sentence. */
+.dictionary-pending-note button.k-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--k-accent-text);
+}
+.dictionary-pending-note button.k-link:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+  border-radius: var(--k-radius-sm);
+}

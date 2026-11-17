@@ -126,7 +126,7 @@ import {
 } from './demo-data'
 import { MODEL_HANDLERS, modelControl, onModelSettingSet } from './preview-models'
 import { installPreviewControl } from './preview-control'
-import { EXTENSION_HANDLERS, extensionControl, startSeededDownloads } from './preview-extensions'
+import { EXTENSION_HANDLERS, extensionControl, startSeededDownloads, watchExtensions } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
 import { APP_LOCATION_HANDLERS } from './preview-app-location'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
@@ -982,6 +982,23 @@ const cliCommand = (installed: boolean): Record<string, unknown> => ({
 let gnomeInstalled = false
 let cliInstalled = false
 
+/** The last switch the pending-switch mock made. */
+let lastSwitch: { engine: string; at: number } | null = null
+
+function switchPending(engine: string): void {
+  const yomitan = (settings.yomitanSettings as Record<string, unknown> | undefined) ?? {}
+  publish('yomitanSettings', { ...yomitan, popupType: engine === 'yomitan' ? 'builtin' : engine })
+  publish('dictionaryEnginePending', null)
+  lastSwitch = { engine, at: Date.now() }
+  void emit('dictionary-switch', lastSwitch)
+}
+
+watchExtensions((status) => {
+  if (settings.dictionaryEnginePending !== status.engine) return
+  if (status.state === 'ready') switchPending(status.engine)
+  else if (status.state === 'absent') publish('dictionaryEnginePending', null)
+})
+
 const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
   ...EXTENSION_HANDLERS,
@@ -1005,6 +1022,19 @@ const HANDLERS: Record<string, Handler> = {
     return null
   },
   settings_all: () => ({ ...settings }),
+  // The pending dictionary switch (dictionary_switch.rs): recorded, its download started, and
+  // made once the download is ready (`watchExtensions` below).
+  dictionary_switch_state: () => ({ pending: settings.dictionaryEnginePending ?? null, switched: lastSwitch }),
+  dictionary_switch_queue: (a) => {
+    const engine = typeof a?.engine === 'string' ? a.engine : null
+    publish('dictionaryEnginePending', engine)
+    if (engine) {
+      const status = EXTENSION_HANDLERS.extension_status({ engine }) as { state?: string } | undefined
+      if (status?.state === 'ready') switchPending(engine)
+      else EXTENSION_HANDLERS.extension_download_start({ engine })
+    }
+    return { pending: settings.dictionaryEnginePending ?? null, switched: lastSwitch }
+  },
   reader_settings_patch: (a) => {
     const current = (settings.superTexthooker as Record<string, unknown>) ?? {}
     publish('superTexthooker', { ...current, ...((a?.patch as object) ?? {}) })

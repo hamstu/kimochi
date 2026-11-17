@@ -13,6 +13,7 @@ import { useEffect, useState, type JSX } from 'react'
 import { ArrowLeft, Globe, Settings } from 'lucide-react'
 import {
   Badge,
+  Callout,
   ConfirmDialog,
   ResizeHandle,
   Row,
@@ -35,8 +36,9 @@ import { DICTIONARY_ENGINES, dictionaryEngineLanguageReason, type DictionaryEngi
 import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
-import { useExtensionStatus } from '../bridge/extensions'
+import { extensionAction, useExtensionStatus } from '../bridge/extensions'
 import { downloadEngineFor } from '@ui/extension-download'
+import { pendingSwitchNotice } from '@ui/engine-chooser'
 import { percent } from '@ui/model-download'
 import { settingsNavFor } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
@@ -177,7 +179,11 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
               ? 'Verifying…'
               : pendingDownload?.state === 'ready'
                 ? 'Switching…'
-                : 'Waiting…',
+                : pendingDownload?.state === 'failed'
+                  ? 'Failed'
+                  : pendingDownload?.state === 'paused'
+                    ? 'Paused'
+                    : 'Waiting…',
           title: `${DICTIONARY_ENGINES[pending].name} is used once it has downloaded`
         }
     : reloading === 'self'
@@ -197,11 +203,31 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
             }
           : null
   const busy = useSteadyProgress(raw, shownEngine)
+  const pendingNeeds = pending ? downloadEngineFor(pending) : null
+  // A waiting download that stopped (offline, or paused) needs the reader; native makes the
+  // switch on its own once it is ready, whatever window is open.
+  const stopped = pending ? pendingSwitchNotice(DICTIONARY_ENGINES[pending].name, pendingDownload?.state ?? null) : null
+  const settingsAction = {
+    action: readiness.download && readiness.download !== 'ready' ? 'Download in Settings' : 'Open dictionary settings',
+    onAction: onOpenSettings
+  }
   const notice = applyError
-    ? { tone: 'danger' as const, text: 'Couldn’t switch dictionary.', title: applyError }
-    : !busy && readiness.view.show && readiness.view.notice
-      ? { tone: 'warn' as const, text: readiness.view.notice, title: readiness.view.text }
-      : null
+    ? { tone: 'danger' as const, text: 'Couldn’t switch dictionary.', title: applyError, ...settingsAction }
+    : stopped && pendingNeeds
+      ? {
+          tone: stopped.tone,
+          text: stopped.text,
+          title: pendingDownload?.message ?? `${DICTIONARY_ENGINES[pending!].name} is used once it has downloaded`,
+          action: stopped.action === 'retry' ? 'Retry' : 'Resume',
+          onAction: () => {
+            extensionAction(pendingNeeds, stopped.action).catch(() => undefined)
+          }
+        }
+      : !busy && readiness.view.show && readiness.view.notice
+        ? { tone: 'warn' as const, text: readiness.view.notice, title: readiness.view.text, ...settingsAction }
+        : null
+  // Just switched (here, or by native once a download was ready): said once, quietly.
+  const switched = !notice && !busy && dictionary.switchedTo === active ? active : null
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">
@@ -233,16 +259,14 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
           </SelectContent>
         </SelectRoot>
         {notice && (
-          <SidebarNotice
-            tone={notice.tone}
-            action={
-              readiness.download && readiness.download !== 'ready' ? 'Download in Settings' : 'Open dictionary settings'
-            }
-            onAction={onOpenSettings}
-            title={notice.title}
-          >
+          <SidebarNotice tone={notice.tone} action={notice.action} onAction={notice.onAction} title={notice.title}>
             {notice.text}
           </SidebarNotice>
+        )}
+        {switched && (
+          <Callout tone="ok" className="src-notice sb-notice">
+            Now using {DICTIONARY_ENGINES[switched].name}.
+          </Callout>
         )}
       </div>
       <ConfirmDialog

@@ -22,6 +22,7 @@ mod compact;
 mod cover;
 mod debug_report;
 mod dictionary_runtime;
+mod dictionary_switch;
 mod download_mirror;
 mod engine_probe;
 mod extension_store;
@@ -3310,6 +3311,8 @@ fn main() {
     let commands: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
         dictionary_engine_apply,
         dictionary_engine_effective,
+        dictionary_switch::dictionary_switch_state,
+        dictionary_switch::dictionary_switch_queue,
         dictionary_runtime_status,
         yomitan_profiles,
         extension_window_ensure,
@@ -3590,7 +3593,11 @@ fn main() {
                             record(&reporter, &service, value);
                         }
                     },
-                    |app, _, _| follow_effective_engine(app),
+                    |app, id, _| {
+                        // A switch waiting for this download is made first, so the windows move once.
+                        dictionary_switch::on_download_change(app, id);
+                        follow_effective_engine(app)
+                    },
                     follow_engine_update,
                 )
                 .map_err(std::io::Error::other)?
@@ -3677,6 +3684,10 @@ fn main() {
                 );
             }
             {
+                // A switch that was waiting for its download when the app quit ("Use when
+                // downloaded"): its download carries on, or the switch is made if it finished
+                // (before the windows' engine is worked out, so they are built for it).
+                let pending = dictionary_switch::resume_at_launch(&handle, &service);
                 // The windows are built below for the effective engine.
                 let selected = extensions::selected_engine(&store);
                 let effective = extensions::dictionary_engine(&store);
@@ -3688,7 +3699,11 @@ fn main() {
                 // touched; lookups come back when it is ready. A first run chooses in onboarding.
                 // The choice itself, not the engine it stands for in another language: a launch
                 // never downloads an engine the user did not choose.
-                let started = onboarded && extension_store::ensure_selected(&handle, &extensions::chosen_engine(&store));
+                // Before setup is complete, only a download the user started there and a quit
+                // paused (onboarding's engine step lets them carry on while it downloads).
+                let chosen = extensions::chosen_engine(&store);
+                let paused = extension_store::status(&handle, &chosen).is_some_and(|status| status.state == "paused");
+                let started = (onboarded || paused) && extension_store::ensure_selected(&handle, &chosen);
                 // Engines the user downloaded that this build pins anew update in the background;
                 // the selected one keeps working on its earlier release until the new one is
                 // verified. Nothing is downloaded that was never downloaded.
@@ -3699,6 +3714,7 @@ fn main() {
                     "effective": effective,
                     "downloading": started,
                     "updating": updating,
+                    "pending": pending,
                     "store": engine_store.root().display().to_string(),
                 });
                 eprintln!("kimochi: {value}");
