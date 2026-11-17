@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDictionarySetup } from '../ui/setup-dictionaries.js'
+import { createDictionarySetup, fetchFromSources } from '../ui/setup-dictionaries.js'
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 function harness({
   existing = [],
@@ -274,4 +274,35 @@ test('catalog hands back the latest job, so a reopened guide resumes its progres
   assert.equal(after.job.id, id)
   assert.equal(after.job.stage, 'failed')
   assert.equal(await slow.handle({ command: 'active' }), null)
+})
+
+test('a dictionary downloads from the mirror first and falls back to upstream', async () => {
+  const entry = { title: 'Jitendex', mirror: 'https://downloads.kimochiapp.com/j.zip', url: 'https://github.com/j.zip' }
+  const asked = []
+  const warnings = []
+  const answer = (map) => async (url) => {
+    asked.push(url)
+    const value = map[url]
+    if (value instanceof Error) throw value
+    return { ok: value === 200, status: value }
+  }
+  assert.equal((await fetchFromSources(answer({ [entry.mirror]: 200 }), entry, (w) => warnings.push(w))).status, 200)
+  assert.deepEqual(asked, [entry.mirror])
+  asked.length = 0
+  const fallback = await fetchFromSources(answer({ [entry.mirror]: 404, [entry.url]: 200 }), entry, (w) =>
+    warnings.push(w)
+  )
+  assert.equal(fallback.status, 200)
+  assert.deepEqual(asked, [entry.mirror, entry.url])
+  assert.match(warnings.at(-1), /downloads\.kimochiapp\.com answered HTTP 404/)
+  const thrown = await fetchFromSources(
+    answer({ [entry.mirror]: new Error('offline'), [entry.url]: 503 }),
+    entry,
+    () => {}
+  )
+  assert.equal(thrown.status, 503, 'the last source answers, whatever it says')
+  await assert.rejects(
+    fetchFromSources(answer({ [entry.url]: new Error('blocked') }), { ...entry, mirror: undefined }),
+    /blocked/
+  )
 })

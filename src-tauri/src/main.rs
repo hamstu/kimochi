@@ -22,6 +22,7 @@ mod compact;
 mod cover;
 mod debug_report;
 mod dictionary_runtime;
+mod download_mirror;
 mod engine_probe;
 mod extension_store;
 mod extensions;
@@ -3567,6 +3568,15 @@ fn main() {
             game_pause::app::start(&handle, game_pause::app::enabled(&store));
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
+            // Before the first download: the mirror's fallbacks go to the log.
+            {
+                let reporter = handle.clone();
+                download_mirror::set_report(move |value| {
+                    if let Some(service) = reporter.try_state::<Shared>() {
+                        record(&reporter, &service, value);
+                    }
+                });
+            }
             // Before anything asks whether a local engine's models are ready.
             model_store::install(&handle).map_err(std::io::Error::other)?;
             text_hook::install(&handle);

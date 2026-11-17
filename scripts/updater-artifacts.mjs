@@ -21,6 +21,12 @@
 //       not `v<version>` (the app compares versions, not tags: a release whose version was not
 //       bumped would never be offered).
 //
+//   node scripts/updater-artifacts.mjs mirror --manifest <latest.json> --base <https://…/app/vX.Y.Z> --out <file>
+//       The same document with every bundle URL moved from the GitHub release to the mirror's copy
+//       of it (`downloads.kimochiapp.com/app/<tag>/<file>`; signatures unchanged, since the bytes
+//       are the same). CI uploads it as the mirror's `app/latest.json`, the endpoint the app asks
+//       first (DOWNLOADS_MIRROR.md).
+//
 // Both are dependency-free (node built-ins only) so CI's manifest job needs no `npm ci`.
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -120,6 +126,25 @@ export function manifest({ version, tag, repo, notes, date, sidecars }) {
   const document = { version, pub_date: date ?? new Date().toISOString(), platforms }
   if (notes) document.notes = notes
   return document
+}
+
+/**
+ * `document` (a GitHub `latest.json`) with each platform's URL on `base` instead: the same file
+ * name under the mirror's release directory. Refuses a URL that is not a GitHub release asset of
+ * the document's own version, so a stray URL never reaches the mirror's manifest.
+ */
+export function rebase(document, base) {
+  if (!/^https:\/\/[^/]+\/app\/v[\w.+-]+$/.test(base)) throw new Error(`not a mirror release directory: ${base}`)
+  const tag = `v${document.version}`
+  if (!base.endsWith(`/${tag}`)) throw new Error(`${base} is not the directory of ${tag}`)
+  const platforms = {}
+  for (const [key, entry] of Object.entries(document.platforms ?? {})) {
+    const m = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/download\/([^/]+)\/([^/]+)$/.exec(entry.url)
+    if (!m || m[1] !== tag) throw new Error(`${key}: not an asset of the ${tag} GitHub release: ${entry.url}`)
+    platforms[key] = { ...entry, url: `${base}/${m[2]}` }
+  }
+  if (Object.keys(platforms).length === 0) throw new Error('the manifest names no platforms')
+  return { ...document, platforms }
 }
 
 // ---------------------------------------------------------------------------- command line
@@ -225,12 +250,25 @@ async function compose(options) {
   console.log(`${options.out}: ${Object.keys(document.platforms).join(', ')}`)
 }
 
+async function mirror(options) {
+  for (const name of ['manifest', 'base', 'out']) {
+    if (!options[name]) throw new Error(`--${name} is required`)
+  }
+  const document = rebase(JSON.parse(await readFile(options.manifest, 'utf8')), options.base.replace(/\/+$/, ''))
+  await writeFile(options.out, JSON.stringify(document, null, 2) + '\n')
+  console.log(
+    `${options.out}: ${Object.values(document.platforms)
+      .map((p) => p.url)
+      .join(', ')}`
+  )
+}
+
 const invoked = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (invoked) {
   const [command, ...rest] = process.argv.slice(2)
-  const run = { sign, manifest: compose }[command]
+  const run = { sign, manifest: compose, mirror }[command]
   if (!run) {
-    console.error('Usage: node scripts/updater-artifacts.mjs <sign|manifest> [--option value ...]')
+    console.error('Usage: node scripts/updater-artifacts.mjs <sign|manifest|mirror> [--option value ...]')
     process.exit(2)
   }
   run(args(rest)).catch((error) => {

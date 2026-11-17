@@ -25,6 +25,11 @@ hours, and shows a notice in the sidebar when a new version is out. You start th
 choose when to restart. You can also check from
 **Settings → About → Updates**.
 
+Updates and the files Kimochi downloads later (dictionary engines, OCR models, the text hookers)
+come from Kimochi's own download server, downloads.kimochiapp.com, with GitHub and Hugging Face as
+the fallback. If GitHub is slow or blocked where you are, they still arrive; either way every file
+is checked against the fingerprint Kimochi expects before it is used.
+
 <Screenshot id="update-notice" alt="The sidebar's update notice: Kimochi 0.2.0 is available, with a Download button." width={272} />
 
 <Screenshot id="settings-updates" alt="Settings, About, Updates: the current version, What's new and a Download button for the new version." width={760} />

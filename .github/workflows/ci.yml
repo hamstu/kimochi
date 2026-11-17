@@ -673,6 +673,56 @@ jobs:
           gh release edit "$RELEASE" --draft=false --latest
           echo "Published $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
 
+  # The published release copied to Kimochi's download mirror (downloads.kimochiapp.com, an R2
+  # bucket; DOWNLOADS_MIRROR.md), which installed apps ask first: every asset under
+  # `app/<tag>/`, then `app/latest.json` naming those copies (the signatures are unchanged), only
+  # once each one answers. Strictly additive: it runs after the release is published, never fails
+  # the run (`continue-on-error`), and is skipped without the R2 secrets. The apps then simply
+  # find the update on GitHub, which they ask second. Re-run this job alone to retry.
+  mirror:
+    name: Copy the release to the download mirror
+    needs: [plan, manifest]
+    if: needs.plan.outputs.mode == 'release'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+    steps:
+      - name: Check for the R2 secrets
+        id: secrets
+        run: |
+          if [[ -n "$R2_ACCESS_KEY_ID" && -n "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY are not set; the release is not copied to the download mirror (DOWNLOADS_MIRROR.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Upload the release and its manifest
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE: ${{ needs.plan.outputs.release }}
+        run: |
+          set -euo pipefail
+          rm -rf ../mirror && mkdir -p ../mirror/assets
+          gh release download "$RELEASE" --dir ../mirror/assets
+          mv ../mirror/assets/latest.json ../mirror/github-latest.json
+          node scripts/updater-artifacts.mjs mirror --manifest ../mirror/github-latest.json \
+            --base "https://downloads.kimochiapp.com/app/$RELEASE" --out ../mirror/latest.json
+          node scripts/download-mirror.mjs release --backend s3 --tag "$RELEASE" \
+            --dir ../mirror/assets --manifest ../mirror/latest.json
+          echo "Mirrored to https://downloads.kimochiapp.com/app/$RELEASE/" >> "$GITHUB_STEP_SUMMARY"
+
   # GITHUB_TOKEN publication does not trigger release-event workflows.
   announce:
     name: Announce release on Discord

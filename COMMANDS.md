@@ -2285,14 +2285,20 @@ it in a Wine game's prefix to learn the game's id there.
 
 ## App updates
 
-Kimochi updates itself from the project's GitHub Releases through `tauri-plugin-updater`
-(`src-tauri/src/updater.rs`). The endpoint, `plugins.updater.endpoints` in `tauri.conf.json`, is
-the *latest* release's `latest.json`, which GitHub resolves to the newest published,
-non-prerelease release: pre-releases and the draft a `v*` tag creates are
-never offered, so only a release someone published by hand is. CI signs each platform's bundle
-with the minisign key whose public half is `plugins.updater.pubkey`, and composes `latest.json`
-(`scripts/updater-artifacts.mjs`, the `manifest` job in `ci.yml`); the app verifies the
-signature before anything is installed. The user starts every download and every restart.
+Kimochi updates itself from its download mirror and the project's GitHub Releases through
+`tauri-plugin-updater` (`src-tauri/src/updater.rs`). `plugins.updater.endpoints` in
+`tauri.conf.json` lists two manifests, asked one at a time: the mirror's
+`https://downloads.kimochiapp.com/app/latest.json` (whose bundle URLs are the mirror's copies,
+`app/v<version>/<file>`), then the *latest* GitHub release's `latest.json`, which GitHub resolves
+to the newest published, non-prerelease release: pre-releases and the draft a `v*` tag creates are
+never offered, so only a release someone published by hand is. The first offer wins; "no update"
+or a failure from the mirror still asks GitHub. A bundle download that fails on the mirror is
+retried once from the same GitHub release. CI signs each platform's bundle with the minisign key
+whose public half is `plugins.updater.pubkey`, composes `latest.json`
+(`scripts/updater-artifacts.mjs`, the `manifest` job in `ci.yml`) and, once the release is
+published, copies it to the mirror (the `mirror` job, which never fails a release); the app
+verifies the signature before anything is installed, wherever the bundle came from. The user starts
+every download and every restart.
 
 Every command answers with the `UpdateStatus` after acting:
 

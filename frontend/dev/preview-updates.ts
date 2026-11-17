@@ -122,7 +122,7 @@ let current: UpdateStatus = (() => {
       return offered({
         state: 'failed',
         stage: 'download',
-        message: 'Could not reach GitHub. Check your connection and try again.'
+        message: 'Could not reach the update server. Check your connection and try again.'
       })
     default:
       return status({})

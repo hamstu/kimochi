@@ -229,7 +229,10 @@ test("What's new points at the tagged release", () => {
 
 test('the configured endpoint, the settings link and the release script agree on the repository', async () => {
   const config = JSON.parse(await readFile(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'))
-  const [endpoint] = config.plugins.updater.endpoints
+  const [mirror, endpoint] = config.plugins.updater.endpoints
+  // The mirror first (downloads.kimochiapp.com, DOWNLOADS_MIRROR.md), GitHub second.
+  assert.equal(mirror, 'https://downloads.kimochiapp.com/app/latest.json')
+  assert.equal(config.plugins.updater.endpoints.length, 2)
   const repo = endpoint.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/latest\/download\/latest\.json$/)?.[1]
   assert.ok(repo, `the endpoint must be the latest release's latest.json: ${endpoint}`)
   assert.ok(config.plugins.updater.pubkey.length > 40, 'the minisign public key is set')

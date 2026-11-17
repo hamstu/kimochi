@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { manifest, plan, platformKeys } from './updater-artifacts.mjs'
+import { manifest, plan, platformKeys, rebase } from './updater-artifacts.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 
@@ -148,6 +148,22 @@ test('a manifest refuses a release that would never be offered or could not be v
   assert.throws(() => manifest({ ...ok, sidecars: [{ platform: 'darwin-aarch64', asset: 'x' }] }), /incomplete sidecar/)
   assert.throws(() => manifest({ ...ok, sidecars: [sidecars[0], sidecars[0]] }), /two sidecars/)
   assert.throws(() => manifest({ ...ok, repo: 'https://github.com/a/b' }), /owner\/name/)
+})
+
+test("the mirror's latest.json names the mirror's copies, signatures unchanged", () => {
+  const github = manifest({ version: '0.2.0', tag: 'v0.2.0', repo: 'hamstu/kimochi', sidecars, date: 'd' })
+  const base = 'https://downloads.kimochiapp.com/app/v0.2.0'
+  const mirrored = rebase(github, base)
+  assert.deepEqual(Object.keys(mirrored.platforms), Object.keys(github.platforms))
+  for (const [key, entry] of Object.entries(mirrored.platforms)) {
+    assert.equal(entry.signature, github.platforms[key].signature)
+    assert.equal(entry.url, `${base}/${github.platforms[key].url.split('/').pop()}`)
+  }
+  assert.equal(mirrored.version, '0.2.0')
+  assert.throws(() => rebase(github, 'https://downloads.kimochiapp.com/app/v0.1.0'), /not the directory of v0.2.0/)
+  assert.throws(() => rebase(github, 'http://downloads.kimochiapp.com/app/v0.2.0'), /not a mirror release directory/)
+  const stray = { ...github, platforms: { x: { url: 'https://example.com/v0.2.0/x', signature: 's' } } }
+  assert.throws(() => rebase(stray, base), /not an asset of the v0.2.0 GitHub release/)
 })
 
 test('CI signs in release mode and composes the manifest after every bundle', async () => {

@@ -2,7 +2,8 @@
 // Builds the Text Hooker download manifest (src-tauri/texthook-manifest.json) and the mirror
 // package from pinned upstream releases. Neither hooker is ever bundled with Kimochi: the app
 // downloads exactly the files listed in the manifest, checks each one's size and SHA-256, and
-// tries each file's sources in order (the upstream GitHub release first, then our mirror).
+// tries each file's sources (our mirror first, then the upstream GitHub release: download_mirror.rs
+// orders them).
 //
 // A GitHub source is the upstream release zip plus the entry inside it; the app reads only that
 // entry with HTTP range requests, so it fetches a few MB rather than the whole 66 MB release. A
@@ -11,14 +12,14 @@
 //   node scripts/texthook-package.mjs [--out <dir>] [--cache <dir>] [--check]
 //
 // --check rebuilds in memory and fails if the committed manifest differs (pins unchanged).
-// Upload: copy <out>/texthook/ to the mirror's bucket root as is (nothing is uploaded here).
+// Upload: .github/workflows/download-mirror.yml copies each file to the mirror (DOWNLOADS_MIRROR.md).
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { readZip, root } from './sync-extension.mjs'
 
-/** Where the mirror serves `texthook/<engine>/<version>/<file>`. Not live yet (2026-11). */
+/** Where the mirror serves `texthook/<engine>/<version>/<file>` (live since 2026-11-17). */
 export const MIRROR = 'https://downloads.kimochiapp.com/texthook'
 
 /**

@@ -31,9 +31,9 @@ Kimochi has **no analytics, telemetry, crash reporting or advertising**, and acc
 | **Translation and explanations** (Kimochi Cloud) | The line, and the lines before it for explanations | Kimochi's server, then DeepL or an AI provider (Anthropic or OpenAI) through Cloudflare AI Gateway, which keeps request logs tagged with your account id. |
 | **Translation with your DeepL key** | The line | DeepL, with your key. |
 | **Explain with Codex CLI or Claude CLI** | The prompt | Whatever that tool on your computer sends. |
-| **Model downloads** (PaddleOCR, MeikiOCR, Manga OCR, the speech model for sentence audio) | A download request | Hugging Face and GitHub, the first time you choose the engine or turn the feature on. |
-| **Text hooking download** (Windows and Linux) | A download request | GitHub (LunaHook's and Textractor's official releases), or Kimochi's copy on downloads.kimochiapp.com, the first time you hook a game. Hooked text stays on your computer. |
-| **Dictionary engine and dictionary downloads** | A download request | The publisher's host, such as GitHub or data.10ten.life. Importing a file uses no network. |
+| **Model downloads** (PaddleOCR, MeikiOCR, Manga OCR, the speech model for sentence audio) | A download request | Kimochi's copy on downloads.kimochiapp.com, or Hugging Face and GitHub when that fails, the first time you choose the engine or turn the feature on. |
+| **Text hooking download** (Windows and Linux) | A download request | Kimochi's copy on downloads.kimochiapp.com, or GitHub (LunaHook's and Textractor's official releases) when that fails, the first time you hook a game. Hooked text stays on your computer. |
+| **Dictionary engine and dictionary downloads** | A download request | Kimochi's copy on downloads.kimochiapp.com for the dictionary engines and Jitendex, or the publisher's host (GitHub) when that fails. Dictionaries an engine fetches itself come from its publisher, such as data.10ten.life. Importing a file uses no network. |
 | **VNDB import** | Your search | VNDB's API. |
 | **Anki** | Cards | AnkiConnect on this computer. |
 | **Clipboard and WebSocket** | — | Stay on your computer or network. |
