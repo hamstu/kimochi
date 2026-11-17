@@ -3,8 +3,8 @@
  * Loaded by overlay.html, by the dev stage (frontend/dev/stage/stage.ts) and by Settings → OCR &
  * Overlay's look previews, which are built of the same elements, so the preview is the overlay.
  *
- * The renderer sets three things on its container (`#words`): `data-ocr-theme`, light, dark or
- * blend, for the cards; `--ocr-hl-rgb`, the highlight colour as "r, g, b"; and `--ocr-hl-strength`, how
+ * The renderer sets three things on its container (`#words`): `data-ocr-theme`, light, dark,
+ * blend or transparent, for the cards; `--ocr-hl-rgb`, the highlight colour as "r, g, b"; and `--ocr-hl-strength`, how
  * strong the highlight is, 1 at the default opacity (all three from Settings → Overlay → Overlay appearance).
  * For a language other than Japanese it also sets `lang` and `--kimochi-text-font`, the language's
  * fonts (language-style.ts), which the text below is drawn in; Japanese leaves both unset, so its
@@ -59,6 +59,39 @@
 [data-ocr-theme='blend'] .ocr-word[data-surface='dark'],
 [data-ocr-theme='blend'] .ocr-group[data-surface='dark'] {
   color: #1c2024;
+}
+
+/* Transparent: nothing of the overlay is seen, at rest, hovered or with the lookup key held; only
+   the dictionary pop-up shows. The boxes stay exactly as they are otherwise, so pointing at a word
+   and looking it up work as before: never `opacity: 0` or `visibility: hidden` on a box, which
+   takes it out of the click-through regions (hit-visible.js) and out of a dictionary's scan.
+   The text keeps the faintest ink rather than none, since a scanner may skip fully transparent
+   text (Yomitan's `DOMTextScanner.isStyleVisible` accepts it only while selectable); one part in a
+   hundred over a game is not visible. Selection and the engines' own match marks go too. */
+[data-ocr-theme='transparent'] {
+  --ocr-ink: rgb(0 0 0 / 0.01);
+}
+[data-ocr-theme='transparent'] :is(.ocr-word, .ocr-group)::before,
+[data-ocr-theme='transparent'] :is(.ocr-word, .ocr-group)::after {
+  display: none;
+}
+[data-ocr-theme='transparent'] :is(.ocr-word, .ocr-group) {
+  text-shadow: none !important;
+  animation: none;
+}
+[data-ocr-theme='transparent'] :is(.ocr-word, .ocr-word-current, .ocr-group)::selection,
+[data-ocr-theme='transparent'] .ocr-run::selection {
+  background: transparent;
+  color: var(--ocr-ink);
+}
+[data-ocr-theme='transparent'] ::highlight(gsm-hoshidicts-match),
+[data-ocr-theme='transparent'] ::highlight(tenten-selection),
+[data-ocr-theme='transparent'] ::highlight(tenten-selection-blue) {
+  color: var(--ocr-ink) !important;
+  background-color: transparent !important;
+}
+[data-ocr-theme='transparent'] .ocr-word-current[data-ext]::after {
+  color: var(--ocr-ink);
 }
 
 @keyframes ocr-appear {

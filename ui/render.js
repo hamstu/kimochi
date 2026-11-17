@@ -777,7 +777,7 @@ export class TextOverlayRenderer {
 
   /**
    * The look (Settings → Overlay → Overlay appearance): the highlight colour, `#rrggbb`, and
-   * the cards' appearance, light, dark or blend. Set on the container, where overlay-text.css reads
+   * the cards' appearance, light, dark, blend or transparent (nothing drawn). Set on the container, where overlay-text.css reads
    * them; everything drawn, or still to be drawn, follows.
    */
   setStyle({ color, theme, opacity }) {
@@ -787,7 +787,8 @@ export class TextOverlayRenderer {
     const rgb = hexToRgbTriplet(color)
     if (rgb) this.container.style.setProperty('--ocr-hl-rgb', rgb)
     else this.container.style.removeProperty('--ocr-hl-rgb')
-    if (theme === 'light' || theme === 'dark' || theme === 'blend') this.container.dataset.ocrTheme = theme
+    if (theme === 'light' || theme === 'dark' || theme === 'blend' || theme === 'transparent')
+      this.container.dataset.ocrTheme = theme
     else delete this.container.dataset.ocrTheme
   }
 

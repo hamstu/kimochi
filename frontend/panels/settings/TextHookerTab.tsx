@@ -58,6 +58,7 @@ import {
 import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { HookCardPreview } from './HookCardPreview'
+import { HookCardLookRow } from './CardLook'
 import { lookupKeyName } from './overlayPreview'
 import { HOOK_CARD_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
 import { showSettingsTab } from './showSettingsTab'
@@ -263,6 +264,7 @@ function HookSettingsSections({
           opacity={value.opacity}
           actions={cardActions}
         />
+        <HookCardLookRow shared={scope.kind !== 'defaults'} />
         <SettingsRow
           label="Auto align"
           controlId={id('align')}

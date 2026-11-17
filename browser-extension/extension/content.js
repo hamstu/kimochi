@@ -777,7 +777,8 @@
 
   /** The cards' appearance, as the overlay resolves it (`resolveOverlayCardAppearance`). */
   function theme(appearance) {
-    if (appearance === 'light' || appearance === 'dark' || appearance === 'blend') return appearance
+    if (appearance === 'light' || appearance === 'dark' || appearance === 'blend' || appearance === 'transparent')
+      return appearance
     const app = settings?.appearance
     if (app === 'light' || app === 'dark') return app
     return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'

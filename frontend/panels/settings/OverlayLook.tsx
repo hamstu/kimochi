@@ -2,7 +2,9 @@
  * Settings → Overlay → Overlay appearance: one large live preview, then three controls side by side
  * (one under another in a narrow window): the colour of the highlight over hoverable text, how
  * opaque it is (a slider), and (a dropdown) whether the card a hovered word turns into (and the grouped overlay's regions)
- * is light, dark, blended or the same as Kimochi. The preview is drawn with the overlay's own
+ * is light, dark, blended, the same as Kimochi, or transparent: nothing drawn at all, only the
+ * dictionary pop-up (the preview then says so, and the highlight's controls rest, having nothing to
+ * colour). The preview is drawn with the overlay's own
  * elements and stylesheet (ui/overlay-text.css) and follows every control as it moves, so what is
  * shown is what is drawn; pointing at a word in it turns that word into its card.
  *
@@ -11,33 +13,23 @@
  */
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
-import { Blend, Check, Monitor, Moon, Pipette, Sun } from 'lucide-react'
-import { Select, Slider, cn } from '@kit'
+import { Check, Pipette } from 'lucide-react'
+import { Slider, cn } from '@kit'
 import {
   DEFAULT_OVERLAY_STYLE,
   OVERLAY_HIGHLIGHT_PRESETS,
   hexToRgbTriplet,
   highlightStrength,
   overlayStyleOf,
-  type OverlayCardAppearance,
-  type OverlayStyleSettings
+  type OverlayStyleSettings,
+  type ResolvedCardAppearance
 } from '@ui/settings'
 import { useSetting } from '../../bridge/useSetting'
 import { usePrefs } from '../../kit/appearance-state'
 import { PREVIEW_SURFACE, previewWord, usePreviewLine, type PreviewLine } from './overlayPreview'
+import { CardLookSelect, TransparentMark, TransparentNote } from './CardLook'
 import '@ui/overlay-text.css'
 import './overlay-look.css'
-
-const CARD_CHOICES: readonly {
-  value: OverlayCardAppearance
-  label: string
-  icon: ReactNode
-}[] = [
-  { value: 'app', label: 'Same as Kimochi', icon: <Monitor /> },
-  { value: 'light', label: 'Light', icon: <Sun /> },
-  { value: 'dark', label: 'Dark', icon: <Moon /> },
-  { value: 'blend', label: 'Blend', icon: <Blend /> }
-]
 
 /**
  * One preview: the overlay's word boxes over a line of game text, as render.js and
@@ -53,7 +45,7 @@ function Preview({
   lit = line.lit,
   onPoint
 }: {
-  theme: 'light' | 'dark' | 'blend'
+  theme: ResolvedCardAppearance
   colorRgb: string
   strength: number
   line: PreviewLine
@@ -96,6 +88,7 @@ function Preview({
           </span>
         ))}
       </span>
+      {theme === 'transparent' && <TransparentMark>Nothing drawn over the game</TransparentMark>}
     </span>
   )
 }
@@ -144,6 +137,7 @@ export function OverlayLook(): ReactNode {
   }
 
   const cardTheme = look.appearance === 'app' ? resolved : look.appearance
+  const transparent = look.appearance === 'transparent'
 
   return (
     <div className="overlay-look">
@@ -157,7 +151,7 @@ export function OverlayLook(): ReactNode {
           onPoint={setPointed}
         />
       </div>
-      <div className="overlay-look-controls">
+      <div className="overlay-look-controls" data-transparent={transparent ? '' : undefined}>
         <div className="overlay-look-control">
           <span className="overlay-look-label" id={`${id}-colour`}>
             Highlight colour
@@ -215,23 +209,12 @@ export function OverlayLook(): ReactNode {
         </div>
         <div className="overlay-look-control">
           <span className="overlay-look-label">Cards</span>
-          <Select
-            aria-label="Cards"
-            className="overlay-look-card-select"
+          <CardLookSelect
+            label="Cards"
             value={look.appearance}
-            onValueChange={(value) => {
-              if (value !== look.appearance) void setStored({ ...look, appearance: value })
-            }}
-            options={CARD_CHOICES.map((choice) => ({
-              value: choice.value,
-              label: (
-                <span className="overlay-look-card-option">
-                  {choice.icon}
-                  {choice.label}
-                </span>
-              )
-            }))}
+            onChange={(appearance) => void setStored({ ...look, appearance })}
           />
+          {transparent && <TransparentNote what="No highlights, cards or text, even with the lookup key held." />}
         </div>
       </div>
     </div>

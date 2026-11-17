@@ -69,6 +69,32 @@
 .hook-card[data-ocr-theme='blend'][data-surface='dark'] {
   --ocr-ink: #16181d;
 }
+/* Transparent: the card is not seen at all, nor are its controls, even with the lookup key held;
+   only the dictionary pop-up shows. Its text stays where it is to be pointed at and looked up, in
+   the faintest ink rather than none (a dictionary's scanner may skip fully transparent text; see
+   overlay-text.css). Its bar, buttons and corner are taken out (`display: none`, which
+   hook-card.js `inside` reads), not merely unseen, so nothing invisible takes a click; Settings → Text Hooker and the game menu's Card panel still set what
+   they do. Placing it with the sticks (`data-steering`) still shows its outline. */
+.hook-card[data-ocr-theme='transparent'] {
+  --ocr-ink: rgb(0 0 0 / 0.01);
+  text-shadow: none;
+}
+.hook-card[data-ocr-theme='transparent']::before {
+  display: none;
+}
+.hook-card[data-ocr-theme='transparent'] :is(.hook-card-bar, .hook-card-controls, .hook-card-resize, .hook-card-menu) {
+  display: none;
+}
+.hook-card[data-ocr-theme='transparent'] :is(.hook-card-text, .hook-card-text-ghost)::selection {
+  background: transparent;
+  color: var(--ocr-ink);
+}
+.hook-card[data-ocr-theme='transparent'] ::highlight(gsm-hoshidicts-match),
+.hook-card[data-ocr-theme='transparent'] ::highlight(tenten-selection),
+.hook-card[data-ocr-theme='transparent'] ::highlight(tenten-selection-blue) {
+  color: var(--ocr-ink) !important;
+  background-color: transparent !important;
+}
 /* A new line on the last line's box, until a reading places it: one line, fading out at the end,
    never wrapped into a box made for another line. */
 .hook-card[data-pending] .hook-card-text {

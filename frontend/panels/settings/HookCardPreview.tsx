@@ -1,7 +1,7 @@
 /**
  * The Text Hooker's card over a little game, for Settings (Overlay → Text Hooker card, and Text
  * Hooker → Card style for the defaults and each game): the overlay's own card (ui/hook-card.css) in
- * the Cards look (Settings → Overlay appearance), over a scene with the game's dialogue box and its
+ * its own look (`overlayStyle.hookAppearance`; Transparent shows nothing of it, and says so), over a scene with the game's dialogue box and its
  * own line. With Auto align the card sits on the game's line and covers it, as it does over a game;
  * without, it sits where it was dragged and the game's line shows below. Text size is a share of
  * the game's height and the opacity fades the card's background, as on the overlay.
@@ -22,6 +22,7 @@ import { useLanguage } from '../../bridge/useLanguage'
 import { useCapabilities } from '../../bridge/capabilities'
 import { usePrefs } from '../../kit/appearance-state'
 import { lookupKeyName, PREVIEW_SURFACE, previewWord, usePreviewLine } from './overlayPreview'
+import { TransparentMark } from './CardLook'
 import '@ui/overlay-text.css'
 import '@ui/hook-card.css'
 import './overlay-look.css'
@@ -147,7 +148,9 @@ export function HookCardPreview({
   }, [menu])
 
   const look = overlayStyleOf(stored)
-  const theme = look.appearance === 'app' ? resolved : look.appearance
+  const theme = look.hookAppearance === 'app' ? resolved : look.hookAppearance
+  // Nothing of the card is drawn, so it has nothing to drag, resize or press either.
+  const transparent = theme === 'transparent'
   const fontPx = Math.round(textSize * PREVIEW_GAME_HEIGHT)
   const gap = language.spaces ? ' ' : ''
   const text = line.words.map((word, index) => (
@@ -337,7 +340,8 @@ export function HookCardPreview({
             {text}
           </span>
         </span>
-        {actions && (
+        {transparent && <TransparentMark>The card is hidden; its text can still be looked up</TransparentMark>}
+        {actions && !transparent && (
           <span className="hook-preview-hint" aria-hidden={armed}>
             {clickThrough === false ? (
               'Move the card by its top edge, resize it from its corner, or use its buttons'

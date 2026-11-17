@@ -200,7 +200,7 @@ renderer.setStyle({
     ? `#${params.get('highlight')}`
     : SETTINGS_DEFAULTS.overlayStyle.color,
   opacity: Number(params.get('strength') ?? SETTINGS_DEFAULTS.overlayStyle.opacity),
-  theme: ['light', 'dark', 'blend'].includes(params.get('cards') ?? '') ? params.get('cards') : theme
+  theme: ['light', 'dark', 'blend', 'transparent'].includes(params.get('cards') ?? '') ? params.get('cards') : theme
 })
 
 /** Blend reads the frame behind each word (surface.rs); the stage has none, so its words say
@@ -716,7 +716,7 @@ async function hookCard(): Promise<void> {
     onSettings: none
   })
   const cards = params.get('cards')
-  const look = cards === 'light' || cards === 'dark' || cards === 'blend' ? cards : theme
+  const look = cards === 'light' || cards === 'dark' || cards === 'blend' || cards === 'transparent' ? cards : theme
   card.show({
     text: script.lines.map(plainText).join('\n'),
     x: left,

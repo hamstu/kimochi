@@ -66,6 +66,9 @@ function fixture() {
     livePopups: new Set(),
     controller: { mode: 'idle', hitRects: () => [] },
     hook: { card: { rects: () => [], dragging: () => false } },
+    // Transparent (Settings → Overlay appearance; Text Hooker → Card style) draws neither.
+    wordsSeen: () => true,
+    hookCardSeen: () => true,
     HINTS_DISMISSED: 'overlayHintsDismissed',
     clickThrough: () => true,
     hoverLookup: () => false,
@@ -123,6 +126,22 @@ test('one idle tick samples words once for holds, hints and native regions with 
   assert.deepEqual(f.hints, [true, false])
   assert.deepEqual(plain(f.sent.at(-1)), [])
   assert.deepEqual(f.errors, [])
+})
+
+test('the hint bar stays down while what is there to point at is drawn transparent', async () => {
+  const f = fixture()
+  f.context.wordsSeen = () => false
+  f.tick()
+  await settled()
+  assert.deepEqual(f.hints, [false], 'transparent words: nothing on screen to explain')
+  // Still taken by the lookup key: the words are there, only unseen.
+  assert.equal(f.sent.at(-1)[0].shift, true)
+  f.context.hook.card.rects = () => [{ x: 0, y: 0, width: 10, height: 10 }]
+  f.context.syncHints()
+  assert.deepEqual(f.hints, [false, true], 'a card that is drawn brings it back')
+  f.context.hookCardSeen = () => false
+  f.context.syncHints()
+  assert.deepEqual(f.hints, [false, true, false])
 })
 
 test('polling still refreshes geometry every tick and renews unchanged native regions once a second', async () => {

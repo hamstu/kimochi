@@ -10,8 +10,9 @@ test('the card panel steps through values, held at the ends, and looks go round'
   assert.equal(stepValue(levels, 0.4, -1), 0.4)
   assert.equal(stepValue(levels, 0.6, 1), 0.55, 'an unknown value starts from the first')
   assert.equal(nextLook('app', 1), 'light')
-  assert.equal(nextLook('blend', 1), 'app')
-  assert.equal(nextLook('app', -1), 'blend')
+  assert.equal(nextLook('blend', 1), 'transparent')
+  assert.equal(nextLook('transparent', 1), 'app')
+  assert.equal(nextLook('app', -1), 'transparent')
   assert.equal(nextLook('unknown', 1), 'light')
 })
 

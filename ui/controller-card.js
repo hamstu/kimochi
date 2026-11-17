@@ -13,7 +13,7 @@
  *
  * Below it, the card: whether it shows at all, moving and resizing it with the sticks, Auto align,
  * its text size, its background's opacity and its look. Everything is kept where the card's own
- * controls and Settings → Text Hooker keep it (the game's settings; the overlay's look).
+ * controls and Settings → Text Hooker keep it (the game's settings; the card's own look, kept with the overlay's style).
  *
  * The D-pad (or left stick) moves between rows, left and right change a row's value, A switches or
  * opens the selected row (and does nothing on a row with a value to step), B closes. Every change
@@ -28,12 +28,16 @@
  */
 const OPEN_GRACE_MS = 300
 
-/** The card looks the overlay's style offers (`overlayStyle.appearance`), in the order they cycle. */
+/**
+ * The card's looks (its own, `overlayStyle.hookAppearance`; Settings → Text Hooker → Card style),
+ * in the order they cycle. Transparent hides the card; its text can still be read along.
+ */
 export const CARD_LOOKS = [
   { value: 'app', label: 'Like Kimochi' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
-  { value: 'blend', label: 'Blend' }
+  { value: 'blend', label: 'Blend' },
+  { value: 'transparent', label: 'Transparent' }
 ]
 
 /** The next value along `values` from `current`, `step` places on, held at the ends. */
