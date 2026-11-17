@@ -78,6 +78,11 @@ impl Language {
         self.code == JAPANESE
     }
 
+    /// Written in the Latin alphabet: a word a line broke with a hyphen is one word.
+    pub fn is_latin(&self) -> bool {
+        self.scripts.contains(&Script::Latn)
+    }
+
     /// Whether `c` is a letter of one of the language's scripts.
     pub fn has(&self, c: char) -> bool {
         self.scripts.iter().any(|script| script.has(c))

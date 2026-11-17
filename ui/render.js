@@ -25,7 +25,7 @@
 
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
-import { joiner } from './script-text.js'
+import { brokenWordStart, joiner, wordBreak } from './script-text.js'
 import { languageOf } from './languages.js'
 import { layoutParts, characterCells, charsOf, squeezeMargins, wholeWords } from './text-layout.js'
 import { textStyle, textUnits, wordPieces, estimateAdvance, TEXT_FONT_PROPERTY } from './language-style.js'
@@ -259,11 +259,12 @@ function typefacesReady(annotations, done) {
  * which is the box's top-left for horizontal text, and its top-right, where a vertical-rl line
  * starts, for vertical text.
  */
-function runElement(run, origin, vertical, inline, measure) {
+function runElement(run, origin, vertical, inline, measure, split = null) {
   const span = document.createElement('span')
   span.className = 'ocr-run'
   Object.assign(span.style, runStyle(run, origin, vertical, inline))
-  appendRunText(span, run, measure)
+  appendRunText(span, run, measure, split)
+  if (split) span.classList.add('ocr-joins-next')
   return span
 }
 
@@ -274,13 +275,21 @@ function runElement(run, origin, vertical, inline, measure) {
  * "téseraspara", which a word lookup cannot find. A run is a zero-size inline block, so the space
  * moves nothing. It has a span of its own, so the controller's word cursor, which reads each run's
  * own text node (controller.js `readUnits`), never takes it for a line's text. Vertical columns
- * are joined with nothing.
+ * are joined with nothing, and so is a word a line broke with a hyphen (`lineBreak`), whose run
+ * reads straight on into the next line's (`ocr-joins-next`, which the word cursor reads too) with
+ * the hyphen drawn apart from its text (`appendRunText`): within the box, or, for its last run,
+ * into the next box (`last`, `boxBreaks`).
  */
-function appendRuns(parent, runs, origin, vertical, measure) {
+function appendRuns(parent, runs, origin, vertical, measure, last = null) {
   runs.forEach((run, index) => {
-    const element = runElement(run, origin, vertical, true, measure)
     const following = runs[index + 1]
-    const space = following && !vertical ? joiner(run.text, following.text, measure.language) : ''
+    const split = !following
+      ? last
+      : vertical
+        ? null
+        : lineBreak(run.text, run.rect, following.text, following.rect, measure.language)
+    const element = runElement(run, origin, vertical, true, measure, split)
+    const space = following && !vertical && !split ? joiner(run.text, following.text, measure.language) : ''
     if (space) {
       const span = document.createElement('span')
       span.className = 'ocr-joiner'
@@ -289,6 +298,18 @@ function appendRuns(parent, runs, origin, vertical, measure) {
     }
     parent.append(element)
   })
+}
+
+/**
+ * The hyphen a line broke a word with, drawn as before but no longer text: a span whose
+ * pseudo-element draws it (`.ocr-hyphen` in overlay-text.css). Every scanner reads DOM text, so a
+ * lookup from `esta-` reads on into the next line's `ba` and finds `estaba`.
+ */
+function hyphenElement(hyphen) {
+  const span = document.createElement('span')
+  span.className = 'ocr-hyphen'
+  span.dataset.hyphen = hyphen === '\u00ad' ? '-' : hyphen
+  return span
 }
 
 /** Whether a run is drawn as more than its plain text: see `appendRunText`. */
@@ -300,14 +321,21 @@ const placedGlyphs = (run) => Boolean(run.squeeze || run.offsets)
  * and each glyph the engine's boxes moved off the even pitch (`offsets`) moved by a margin before
  * it. A word set between spaces (`wholeWords`) moves as one, and its span holds all of it, not its
  * first letter alone: a scanner walking back to a word's start stops at an element. Plain inline
- * spans, so the text stays one flow for the engines' scanners.
+ * spans, so the text stays one flow for the engines' scanners. A hyphen a line broke a word with
+ * (`split`, `drop`) is drawn apart from the text (`hyphenElement`).
  */
-function appendRunText(element, run, measure) {
-  if (!placedGlyphs(run)) return void element.append(document.createTextNode(run.text))
+function appendRunText(element, run, measure, split = null) {
+  const text = split === 'drop' ? brokenWordStart(run.text, split) : run.text
+  const hyphen = text === run.text ? null : hyphenElement(run.text.trimEnd().at(-1))
+  if (!placedGlyphs(run)) {
+    element.append(document.createTextNode(text))
+    if (hyphen) element.append(hyphen)
+    return
+  }
   // Characters as the layout counted them: a letter and its combining marks are one glyph.
-  const all = charsOf(run.text, measure)
+  const all = charsOf(text, measure)
   // Each whole word's first character index → its last.
-  const words = new Map(wholeWords(run.text, measure))
+  const words = new Map(wholeWords(text, measure))
   let plain = ''
   let previous = 0
   // The last character a span has already drawn: the rest of a moved word is in its span.
@@ -333,6 +361,7 @@ function appendRunText(element, run, measure) {
     element.append(glyph)
   })
   if (plain) element.append(document.createTextNode(plain))
+  if (hyphen) element.append(hyphen)
 }
 
 /**
@@ -412,19 +441,35 @@ function runStyle(run, origin, vertical, inline) {
  */
 function compareReadingOrder(vertical) {
   return (a, b) => {
-    const ax = a.box.x + a.box.width / 2
-    const bx = b.box.x + b.box.width / 2
-    const ay = a.box.y + a.box.height / 2
-    const by = b.box.y + b.box.height / 2
-    const order = vertical
-      ? Math.abs(ax - bx) < Math.min(a.box.width, b.box.width) * 0.7
+    const order = sameLine(a.box, b.box, vertical)
+      ? vertical
         ? a.box.y - b.box.y
-        : bx - ax
-      : Math.abs(ay - by) < Math.min(a.box.height, b.box.height) * 0.7
-        ? a.box.x - b.box.x
+        : a.box.x - b.box.x
+      : vertical
+        ? b.box.x + b.box.width / 2 - (a.box.x + a.box.width / 2)
         : a.box.y - b.box.y
     return order || a.index - b.index
   }
+}
+
+/**
+ * Whether two boxes (x, y, width, height) share a line, or a column when `vertical`: their
+ * centres are within 0.7 of the thinner box's line height (`compareReadingOrder`).
+ */
+function sameLine(a, b, vertical = false) {
+  return vertical
+    ? Math.abs(a.x + a.width / 2 - (b.x + b.width / 2)) < Math.min(a.width, b.width) * 0.7
+    : Math.abs(a.y + a.height / 2 - (b.y + b.height / 2)) < Math.min(a.height, b.height) * 0.7
+}
+
+/**
+ * How horizontal text `before` (in box `from`) runs into `after` (in box `to`, x, y, width,
+ * height) when a line broke a word between them with a hyphen (`wordBreak`): `to` is on another
+ * line. Null otherwise.
+ */
+function lineBreak(before, from, after, to, language) {
+  const split = wordBreak(before, after, language)
+  return split && !sameLine(from, to) ? split : null
 }
 
 /**
@@ -572,17 +617,35 @@ export function continuations(boxes, alone = () => true) {
  * a match at whitespace, so any joiner would cut every split word back in two. A language that
  * spaces its words (`language`, absent: Japanese) is the other way round: two boxes are two
  * words, and joined with nothing a match would run on from one into the next (`can` + `not`),
- * so each box's text follows a space (`joiner`).
+ * so each box's text follows a space (`joiner`), except where a line broke a word with a hyphen
+ * (`boxBreaks`): the next line's half follows with nothing, and the hyphen goes (the box's own
+ * is drawn apart from its text, `appendRunText`).
  */
-export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = LOOKAHEAD, language) {
+export function lookaheadTexts(
+  boxes,
+  next = readingSuccessors(boxes),
+  count = LOOKAHEAD,
+  language,
+  breaks = boxBreaks(boxes, next, language)
+) {
   return boxes.map((box, index) => {
     let text = ''
-    let before = box.text
+    let previous = index
     for (let j = next[index], n = 0; j !== -1 && n < count; j = next[j], n++) {
-      text += joiner(before, boxes[j].text, language) + boxes[j].text
-      before = boxes[j].text
+      const split = breaks[previous]
+      if (split && text) text = brokenWordStart(text, split)
+      text += (split ? '' : joiner(boxes[previous].text, boxes[j].text, language)) + boxes[j].text
+      previous = j
     }
     return text
+  })
+}
+
+/** For each box, how it runs into the box after it (`next`) across a word a line broke (`lineBreak`). */
+export function boxBreaks(boxes, next, language) {
+  return boxes.map((box, index) => {
+    const following = boxes[next[index]]
+    return following && !isVerticalBox(box) ? lineBreak(box.text, box, following.text, following, language) : null
   })
 }
 
@@ -998,6 +1061,7 @@ export class TextOverlayRenderer {
         old = [...available.values()].find(
           (candidate) =>
             candidate.renderText === fresh.renderText &&
+            candidate.renderBreak === fresh.renderBreak &&
             candidate.className === fresh.className &&
             candidate.renderBox &&
             fresh.renderBox &&
@@ -1077,7 +1141,9 @@ export class TextOverlayRenderer {
   renderWords(annotations, info, origin, scanning, bounds, language) {
     const mapped = mapAnnotations(info, annotations, origin, bounds)
     const successors = readingSuccessors(mapped)
-    const ahead = lookaheadTexts(mapped, successors, LOOKAHEAD, language)
+    // How each box runs into the next across a word a line broke with a hyphen (`boxBreaks`).
+    const breaks = boxBreaks(mapped, successors, language)
+    const ahead = lookaheadTexts(mapped, successors, LOOKAHEAD, language, breaks)
     // Whether the lookahead spaces its boxes apart, which a selection running into it crosses.
     this.spaced = languageOf(language).spaces
     const fragment = document.createDocumentFragment()
@@ -1152,15 +1218,19 @@ export class TextOverlayRenderer {
       current.className = 'ocr-word-current'
       // Held still while hovered: the text stays over the source it was read from.
       current.style.textAlign = 'left'
+      // A word the line broke with a hyphen, ending this box, reads on into the next line's box:
+      // no space, and the hyphen drawn apart from the text (`appendRunText`).
+      const split = breaks[index]
       if (single) {
         Object.assign(current.style, runStyle(runs[0], flow, vertical, true), {
           width: `${runs[0].rect.width}px`,
           height: `${runs[0].rect.height}px`
         })
-        if (placedGlyphs(runs[0])) appendRunText(current, runs[0], measure)
+        if (placedGlyphs(runs[0]) || split === 'drop') appendRunText(current, runs[0], measure, split)
         else current.textContent = box.text
+        if (split) current.classList.add('ocr-joins-next')
       } else {
-        appendRuns(current, runs, flow, vertical, measure)
+        appendRuns(current, runs, flow, vertical, measure, split)
       }
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
@@ -1177,9 +1247,12 @@ export class TextOverlayRenderer {
         box.height,
         box.orientation,
         box.groupId,
-        runSignature(runs)
+        runSignature(runs),
+        ...(split ? [split] : [])
       ])
       element.renderText = box.text
+      // Whether the box ends in a word the line broke (`boxBreaks`), drawn apart from its text.
+      element.renderBreak = split
       element.renderBox = { x: box.x, y: box.y, width: box.width, height: box.height }
       this.attachInteraction(element, index)
       this.words.push({
@@ -1188,6 +1261,8 @@ export class TextOverlayRenderer {
         current,
         // How the box's text is laid over the source, for placing its characters (`charRects`).
         runs,
+        // The box's text as a lookup reads it: without the hyphen a line broke a word with.
+        scanText: split ? brokenWordStart(box.text, split) : box.text,
         index,
         // The word after this one in reading order, which is where its lookahead begins.
         next: successors[index],
@@ -1467,7 +1542,7 @@ export class TextOverlayRenderer {
       const host = start?.closest?.('[data-ocr-word-box]') ?? null
       const index = this.words.findIndex((word) => word.element === host)
       if (index !== -1) {
-        const chain = this.words.map((word) => ({ text: word.box.text, next: word.next ?? -1 }))
+        const chain = this.words.map((word) => ({ text: word.scanText, next: word.next ?? -1 }))
         const result = selectionExtension(selected, index, chain, this.spaced)
         if (selected.startsWith(chain[index].text)) {
           next.add(this.words[index].index)
