@@ -30,6 +30,7 @@ const {
   DEFAULT_OVERLAY_STYLE,
   effectiveControllerButtons,
   hexToRgbTriplet,
+  clickThroughLocked,
   hookCardLocksAutoAlign,
   overlayStyleOf,
   highlightStrength,
@@ -183,6 +184,12 @@ test('overlay look: the default, the Rust store, and what a stored style reads a
   assert.equal(hookCardLocksAutoAlign({ appearance: 'transparent', hookAppearance: 'dark' }), false)
   assert.equal(hookCardLocksAutoAlign({ appearance: 'transparent' }), false)
   assert.equal(hookCardLocksAutoAlign(undefined), false)
+  // Text drawn Transparent can't be seen, so it never takes a click: each surface by its own look.
+  assert.equal(clickThroughLocked({ appearance: 'transparent', hookAppearance: 'dark' }, 'words'), true)
+  assert.equal(clickThroughLocked({ appearance: 'transparent', hookAppearance: 'dark' }, 'card'), false)
+  assert.equal(clickThroughLocked({ appearance: 'light', hookAppearance: 'transparent' }, 'card'), true)
+  assert.equal(clickThroughLocked({ appearance: 'light', hookAppearance: 'transparent' }, 'words'), false)
+  assert.equal(clickThroughLocked(null, 'words'), false)
   assert.equal(highlightStrength(40), 1)
   assert.equal(highlightStrength(100), 2.5)
   assert.equal(highlightStrength(0), 0)

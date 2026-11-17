@@ -98,6 +98,7 @@ import {
   isOverlayTextVisible,
   nextOverlayToggle,
   overlayTextChange,
+  clickThroughLocked,
   hookCardLocksAutoAlign,
   overlayStyleOf,
   resolveHookCardAppearance,
@@ -129,11 +130,14 @@ let surfaceButtonDown = false
 /** Whether the last move the native feed handed the engine carried Shift. */
 let lastScanShift = false
 /**
- * Whether clicks on the overlay's text and the hook card go to the game unless Shift is held
- * (`overlayClickThrough`, on unless turned off). Off, they take the mouse as before.
+ * Whether clicks on the overlay's text (`words`) or the hook card (`card`) go to the game unless
+ * Shift is held (`overlayClickThrough`, on unless turned off). Off, they take the mouse as before;
+ * drawn Transparent, they always let clicks through (`clickThroughLocked`).
  */
-function clickThrough() {
-  return native.getSetting('overlayClickThrough') !== false
+function clickThrough(surface = 'words') {
+  return (
+    native.getSetting('overlayClickThrough') !== false || clickThroughLocked(native.getSetting('overlayStyle'), surface)
+  )
 }
 /**
  * Whether resting the pointer on a word looks it up with no key held (`overlayHoverLookup`, off
@@ -489,7 +493,7 @@ function syncHints(readWordRects = null) {
       (hookCardSeen() && (hook.card?.rects().length ?? 0) > 0))
   hints.sync(
     shown,
-    clickThrough(),
+    clickThrough(wordsSeen() ? 'words' : 'card'),
     effectiveLookupKey(native.getSetting('overlayLookupKey'), lookupButtonSupport),
     hoverLookup()
   )
@@ -864,9 +868,9 @@ controller = createController({
   },
   lookupTerm,
   apiParse: (text) => apiTokenize(text),
-  // What an extension engine's lookup matched (Hachidori, 10ten); Yomitan's own selection already
-  // widens the overlay's boxes.
-  matchedRange: () => (extensionHosted ? (extensionHost()?.matchedRange?.() ?? null) : null),
+  // What the engine's lookup matched, as it marks it on the page (`matchedRange`: Hachidori's and
+  // 10ten's highlight, Yomitan's selection), for Read along's outline when the lookup didn't say.
+  matchedRange: () => matchedRange(),
   charRects: (element) =>
     renderer.mode === 'words' && element !== hook.card?.element ? renderer.charRects(element) : null,
   // Read along over the Text Hooker's card.
@@ -4170,7 +4174,7 @@ let popupLeaveTimer = null
 function checkPopupLeave(pointer = popupLeavePointer) {
   popupLeavePointer = pointer
   // With click-through, a click away is free (`onFreeClick`), so the pop-up stays until then.
-  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups || clickThrough()) return
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups || clickThrough('words')) return
   const open = Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
   clearTimeout(popupLeaveTimer)
   if (popupLeave.update(performance.now(), pointer, hitRects(), open)) {
@@ -4487,7 +4491,7 @@ function hitRects(readWordRects = null) {
   // Selecting a region needs every event on the display, not just the parts of
   // it that happen to have text under them.
   if (state.regionSelecting || hook.card?.dragging()) return [{ ...state.origin, focus: false }]
-  const gated = clickThrough()
+  const gated = clickThrough('words')
   const wordRects = readWordRects?.() ?? null
   const rects =
     wordRects === null
@@ -4528,7 +4532,7 @@ function hitRects(readWordRects = null) {
   // covers nothing there, so it takes the mouse like any window (`hookCardClear`, #187). Its menu,
   // once opened, takes the mouse until it closes.
   const [card, menu] = hook.card?.rects() ?? []
-  if (card) add(card, false, gated && !hookCardClear())
+  if (card) add(card, false, clickThrough('card') && !hookCardClear())
   if (menu) add(menu, false)
   // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
   for (const rect of hints.rects()) add(rect, false)
@@ -4581,6 +4585,105 @@ function overPopupAt(local) {
 function popupShown() {
   return Boolean(extensionPopupRect) || popupRects().length > 0
 }
+
+/**
+ * What the open pop-up's lookup matched, as the engine marks it on the page: Hachidori's and
+ * 10ten's highlight (the extension host's `matchedRange`), else the selection Yomitan makes of
+ * the text it matched. `{startContainer, startOffset, endContainer, endOffset}`, or null.
+ */
+function matchedRange() {
+  if (extensionHosted) return extensionHost()?.matchedRange?.() ?? null
+  const selection = window.getSelection()
+  if (!selection?.rangeCount || selection.isCollapsed) return null
+  return selection.getRangeAt(0)
+}
+
+/**
+ * `rects` (a range's client rects) as one rectangle per line: those that share most of a row (a
+ * column, in vertical text) are one line, as Read along's outline draws a word over line breaks.
+ */
+function lineRects(rects, vertical) {
+  const lines = []
+  for (const rect of rects) {
+    if (!(rect.width > 0 && rect.height > 0)) continue
+    const [from, to] = vertical ? [rect.left, rect.right] : [rect.top, rect.bottom]
+    const line = lines.find((other) => {
+      const [a, b] = vertical ? [other.left, other.right] : [other.top, other.bottom]
+      return Math.min(to, b) - Math.max(from, a) > 0.5 * Math.min(to - from, b - a)
+    })
+    if (!line) {
+      lines.push({
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom
+      })
+      continue
+    }
+    line.left = Math.min(line.left, rect.left)
+    line.top = Math.min(line.top, rect.top)
+    line.right = Math.max(line.right, rect.right)
+    line.bottom = Math.max(line.bottom, rect.bottom)
+  }
+  return lines
+    .sort((a, b) => (vertical ? b.left - a.left : a.top - b.top))
+    .map((line) => ({
+      left: line.left,
+      top: line.top,
+      width: line.right - line.left,
+      height: line.bottom - line.top
+    }))
+}
+
+/**
+ * Text drawn Transparent shows nothing of what a lookup matched (the engines' own marks are
+ * hidden with it, overlay-text.css), so the match gets Read along's outline, fainter
+ * (`overlayMatchOutline`, on unless turned off): on the overlay's words with Hover card
+ * appearance Transparent, and on the Text Hooker's card with its Card look Transparent. Only while
+ * the pop-up is open and the controller isn't reading (its own outline shows then).
+ */
+let matchOutlined = false
+function syncMatchOutline() {
+  let rects = null
+  let vertical = false
+  const look = overlayStyleOf(setting('overlayStyle'))
+  const hidden = {
+    words: look.appearance === 'transparent',
+    card: look.hookAppearance === 'transparent'
+  }
+  if (
+    (hidden.words || hidden.card) &&
+    native.getSetting('overlayMatchOutline') !== false &&
+    (controller?.mode ?? 'idle') === 'idle' &&
+    popupShown()
+  ) {
+    const match = matchedRange()
+    const node = match?.startContainer
+    const start = node?.nodeType === Node.ELEMENT_NODE ? node : (node?.parentElement ?? null)
+    const surface = !start
+      ? null
+      : hook.card?.element?.contains(start)
+        ? 'card'
+        : wordsContainer.contains(start)
+          ? 'words'
+          : null
+    if (surface && hidden[surface]) {
+      try {
+        const range = document.createRange()
+        range.setStart(match.startContainer, match.startOffset)
+        range.setEnd(match.endContainer, match.endOffset)
+        vertical = getComputedStyle(start).writingMode.startsWith('vertical')
+        rects = lineRects([...range.getClientRects()], vertical)
+      } catch {
+        rects = null
+      }
+    }
+  }
+  if (!rects?.length && !matchOutlined) return
+  matchOutlined = Boolean(rects?.length)
+  controller?.outlineMatch(rects, vertical)
+}
+setInterval(syncMatchOutline, 100)
 
 /**
  * The free click: with a pop-up open, a click anywhere on the overlay that is not on the pop-up,
@@ -5578,11 +5681,11 @@ await native.listen('pointer', ({ payload }) => {
       syncHookCard()
     }
   }
-  const armed = !clickThrough() || gateOpen
+  const armed = !clickThrough('words') || gateOpen
   if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
   // The card clear of the game is the reader's to click without the key (`hookCardClear`).
-  const cardArmed = armed || hookCardClear()
+  const cardArmed = !clickThrough('card') || gateOpen || hookCardClear()
   if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), cardArmed)) return
   checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
   // Yomitan's popups hear the pointer enter and leave them, for "Hide popup on cursor exit" (#95).

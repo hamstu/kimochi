@@ -46,8 +46,9 @@ import {
 import {
   HOOK_DEFAULTS,
   HOOK_SETTING_KEYS,
-  exeTitle,
+  exeFolder,
   gameKey,
+  hookGameName,
   hookSettings,
   overrides,
   updateHookGame,
@@ -118,10 +119,10 @@ function useSessions(): SessionsManifest {
   return manifest
 }
 
-/** A game's name: its session's, else the one it was given, else its exe's. */
+/** A game's name (ui/hook-games.ts `hookGameName`), with its session's. */
 function gameName(key: string, game: HookGame, manifest: SessionsManifest): string {
   const session = game.sessionId ? manifest.sessions.find((s) => s.id === game.sessionId) : undefined
-  return session?.name ?? game.name ?? exeTitle(game.exe ?? key)
+  return hookGameName(key, game, session?.name)
 }
 
 function GameIcon({ exe, large, small }: { exe: string; large?: boolean; small?: boolean }): ReactNode {
@@ -591,7 +592,7 @@ function GamePage({ gameId, game, onDeleted }: { gameId: string; game: HookGame;
     setDraft(null)
     if (!next || next === name) return
     if (session) void renameSession(session.id, next).catch((caught: unknown) => setError(String(caught)))
-    void updateHookGame(exe, (g) => ({ ...g, name: next }))
+    void updateHookGame(exe, (g) => ({ ...g, name: next, named: true }))
   }
   const remove = async (): Promise<void> => {
     setError(null)
@@ -709,6 +710,12 @@ function GamesRail({ open, onOpen }: { open: string | null; onOpen: (key: string
   const [width, setWidth] = useSetting<number>('textHookerListWidth', RAIL_WIDTH.initial)
   const [live, setLive] = useState<number | null>(null)
   const list = Object.entries(games).sort(([, a], [, b]) => (b.hookedAt ?? 0) - (a.hookedAt ?? 0))
+  const named = list.map(([key, game]) => ({
+    key,
+    game,
+    name: gameName(key, game, manifest),
+    exe: game.exe ?? key
+  }))
   return (
     <nav className="th-rail" aria-label="Text Hooker games" style={{ width: live ?? width ?? RAIL_WIDTH.initial }}>
       <div className="th-rail-scroll">
@@ -723,19 +730,30 @@ function GamesRail({ open, onOpen }: { open: string | null; onOpen: (key: string
         </button>
         <div className="th-rail-label">Games</div>
         {list.length === 0 && <p className="th-rail-empty">Games you hook show up here, each with its own settings.</p>}
-        {list.map(([key, game]) => {
-          const name = gameName(key, game, manifest)
+        {named.map(({ key, name, exe }) => {
+          // Games of the same name (two copies, or one engine's exe) show where each one is.
+          const twins = named.filter((other) => other.name.toLowerCase() === name.toLowerCase())
+          const folder =
+            twins.length > 1
+              ? exeFolder(
+                  exe,
+                  twins.map((other) => other.exe)
+                )
+              : null
           return (
             <button
               key={key}
               type="button"
               className="k-row th-rail-row"
               aria-current={open === key ? 'page' : undefined}
-              title={name}
+              title={`${name}\n${exe}`}
               onClick={() => onOpen(key)}
             >
-              <GameIcon exe={game.exe ?? key} small />
-              <span className="k-row-label">{name}</span>
+              <GameIcon exe={exe} small />
+              <span className="k-row-label">
+                {name}
+                {folder && <span className="th-rail-folder">{folder}</span>}
+              </span>
             </button>
           )
         })}

@@ -157,7 +157,17 @@ export function hookCardLocksAutoAlign(style: unknown): boolean {
   return overlayStyleOf(style).hookAppearance === 'transparent'
 }
 
-/** The same for the Text Hooker's card, from its own setting (`hookAppearance`). */
+/**
+ * Whether clicks on the overlay's words (`words`) or the Text Hooker's card (`card`) go through to
+ * the game whatever `overlayClickThrough` says: drawn Transparent, they can't be seen, so taking
+ * the click would swallow it with nothing to show for it. The lookup key still looks them up.
+ */
+export function clickThroughLocked(style: unknown, surface: 'words' | 'card'): boolean {
+  const look = overlayStyleOf(style)
+  return (surface === 'words' ? look.appearance : look.hookAppearance) === 'transparent'
+}
+
+/** `resolveOverlayCardAppearance` for the Text Hooker's card, from its own setting (`hookAppearance`). */
 export function resolveHookCardAppearance(
   style: unknown,
   appearance: Appearance,

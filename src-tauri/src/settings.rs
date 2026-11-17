@@ -77,8 +77,12 @@ pub fn defaults() -> Value {
         // from screen capture where a capture could read it back (`exclude_from_capture`).
         "excludeOverlayFromCapture": true,
         // Clicks on the overlay's text and the hook card go to the game unless Shift is held
-        // (`Region::shift`); off, they take the mouse as before.
+        // (`Region::shift`); off, they take the mouse as before. Text drawn Transparent lets clicks
+        // through whatever this says (ui/settings.ts `clickThroughLocked`).
         "overlayClickThrough": true,
+        // On text drawn Transparent, a faint outline over what the open pop-up's lookup matched
+        // (ui/overlay.js `syncMatchOutline`).
+        "overlayMatchOutline": true,
         // The key held to look up through the overlay while click-through is on: "shift", "ctrl",
         // "alt" or "meta" (macOS only). Only modifiers: the pointer poll reads them globally.
         "overlayLookupKey": "shift",

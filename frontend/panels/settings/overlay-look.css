@@ -49,6 +49,12 @@
     border-left: 1px solid var(--k-line);
   }
 }
+/* Under Hover card appearance, while Transparent: what it does to clicks. */
+.overlay-look-note {
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
 .overlay-look-label {
   font-size: var(--k-text-md);
   line-height: var(--k-leading-md);

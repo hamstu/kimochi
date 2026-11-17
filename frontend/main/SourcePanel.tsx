@@ -83,7 +83,8 @@ import {
   textHookOn,
   updateHookGame,
   useHookDefaults,
-  useHookGames
+  useHookGames,
+  windowGameTitle
 } from './hookGames'
 import { invoke } from '@tauri-apps/api/core'
 import { bestWatcher, resolveWatcher, type WatcherChoice } from '../../ui/watcher'
@@ -1047,6 +1048,18 @@ export function SourcePanel({
     }
   }, [mode, hookAvailable, hookBusy, autoGames, hookSourceId])
   const hookExe = hookTarget?.hookable ? (hookTarget.exe ?? null) : mode === 'hook' ? (hook.exe ?? null) : null
+  // A game's window title is its name in Settings → Text Hooker until the reader names it, kept up
+  // to date while the window is the source (a game Kimochi knows only: hooked before, or now).
+  const titleExe = source?.type === 'window' && hookTarget?.hookable ? (hookTarget.exe ?? null) : null
+  const windowTitle = titleExe ? windowGameTitle(source?.name, source?.appName) : null
+  const knownGame = titleExe ? hookGames[gameKey(titleExe)] : undefined
+  useEffect(() => {
+    if (!titleExe || !windowTitle || !knownGame || knownGame.title === windowTitle) return
+    void updateHookGame(titleExe, (game) => ({
+      ...game,
+      title: windowTitle
+    })).catch(() => {})
+  }, [titleExe, windowTitle, knownGame])
   /**
    * Makes sure the game behind `sourceId` is hooked. A session already on it is kept: one paused
    * while Text hooking was off, or while another source was chosen, carries on as it was.

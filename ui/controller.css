@@ -346,6 +346,12 @@
     height 0.14s cubic-bezier(0.2, 0.9, 0.3, 1);
   animation: cm-word-in 0.22s cubic-bezier(0.16, 1.3, 0.3, 1) both;
 }
+/* What a mouse lookup matched, on text drawn Transparent (controller.js `outlineMatch`): the same
+   outline, fainter, without its glow. */
+#controller .cm-word.cm-word-match {
+  opacity: 0.6;
+  box-shadow: none;
+}
 /* The mouse has taken word mode over: the controller's marks wait, out of sight. */
 .cm-word.cm-word-away,
 .cm-hud.cm-hud-away {

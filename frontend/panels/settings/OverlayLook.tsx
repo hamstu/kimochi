@@ -215,6 +215,9 @@ export function OverlayLook(): ReactNode {
             value={look.appearance}
             onChange={(appearance) => void setStored({ ...look, appearance })}
           />
+          {look.appearance === 'transparent' && (
+            <span className="overlay-look-note">Clicks on scanned text always go through to the game.</span>
+          )}
         </div>
       </div>
     </div>

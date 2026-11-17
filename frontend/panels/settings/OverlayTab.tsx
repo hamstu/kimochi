@@ -10,6 +10,7 @@ import { SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
 import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
 import type { TextOverlayGroupingSettings } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
+import { clickThroughLocked } from '@ui/settings'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
@@ -23,6 +24,11 @@ export function OverlayTab(): ReactNode {
   const gaming = isGamingMode(useCapabilities())
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
+  // Text drawn Transparent always lets clicks through (ui/settings.ts `clickThroughLocked`).
+  const [overlayStyle] = useSetting<unknown>('overlayStyle', null)
+  const locked = clickThroughLocked(overlayStyle, 'words')
+  const cardLocked = clickThroughLocked(overlayStyle, 'card')
+  const [matchOutline, setMatchOutline] = useSetting<boolean>('overlayMatchOutline', true)
   const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>('textOverlayGrouping', {
     enabled: false,
     proximityThreshold: 50,
@@ -72,15 +78,20 @@ export function OverlayTab(): ReactNode {
         <SettingsRow
           label="Click through text to the game"
           controlId="ocr-click-through"
+          disabled={locked}
           description={
-            clickThrough
-              ? 'Clicks on scanned text go to the game. Hold Shift to light up text, look words up and click them.'
-              : 'Scanned text lights up as you hover it and takes your clicks. Hold Shift to look words up.'
+            locked
+              ? 'Always on while Hover card appearance is Transparent: you can’t see the text, so it never takes your clicks. Hold Shift to look words up.'
+              : (clickThrough
+                  ? 'Clicks on scanned text go to the game. Hold Shift to light up text, look words up and click them.'
+                  : 'Scanned text lights up as you hover it and takes your clicks. Hold Shift to look words up.') +
+                (cardLocked ? ' The Text Hooker’s card lets clicks through while its look is Transparent.' : '')
           }
         >
           <Switch
             id="ocr-click-through"
-            checked={clickThrough}
+            checked={clickThrough || locked}
+            disabled={locked}
             onCheckedChange={(checked) => void setClickThrough(checked)}
           />
         </SettingsRow>
@@ -103,6 +114,19 @@ export function OverlayTab(): ReactNode {
         description="How scanned text is marked on your source, and the card it turns into when you hover it."
       >
         <OverlayLook />
+        {(locked || cardLocked) && (
+          <SettingsRow
+            label="Outline the word being looked up"
+            controlId="ocr-match-outline"
+            description="Text drawn Transparent shows nothing of what you look up. With this on, a faint outline marks the word the dictionary matched while its pop-up is open, as Read along does."
+          >
+            <Switch
+              id="ocr-match-outline"
+              checked={matchOutline !== false}
+              onCheckedChange={(checked) => void setMatchOutline(checked)}
+            />
+          </SettingsRow>
+        )}
       </SettingsSection>
 
       <TextHookerCardSection />

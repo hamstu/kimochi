@@ -1,8 +1,17 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
-const { hookCardShow, hookSettings, overrides, textHookOn, withLegacyShowCard, withSetting } =
-  await load('hook-games.ts')
+const {
+  exeFolder,
+  hookCardShow,
+  hookGameName,
+  hookSettings,
+  overrides,
+  textHookOn,
+  windowGameTitle,
+  withLegacyShowCard,
+  withSetting
+} = await load('hook-games.ts')
 
 test('the card shows always, only with the lookup key held, or never; older settings read as before', () => {
   assert.equal(hookCardShow(undefined), 'always', 'shown unless turned off')
@@ -49,4 +58,39 @@ test('Text hooking is the reader switch for a game, and on for a game hooked bef
   assert.equal(textHookOn({ hookedAt: 1 }), true)
   assert.equal(textHookOn({ hookedAt: 1, textHook: false }), false)
   assert.equal(textHookOn({ textHook: true }), true)
+})
+
+test('a game is called what its window is called until the reader names it', () => {
+  const key = String.raw`c:\games\a\siglusengine.exe`
+  const exe = String.raw`C:\Games\A\SiglusEngine.exe`
+  assert.equal(hookGameName(key, { exe }), 'SiglusEngine', 'the exe’s name before anything else is known')
+  assert.equal(hookGameName(key, { exe, title: 'Summer Pockets' }), 'Summer Pockets', 'its window’s title')
+  // A name Kimochi gave it (its session's, when it was linked) gives way to the window's title...
+  assert.equal(hookGameName(key, { exe, name: 'SiglusEngine', title: 'Summer Pockets' }), 'Summer Pockets')
+  // ...but a name the reader gave it never does, and its session's name is the reader's too.
+  assert.equal(
+    hookGameName(key, {
+      exe,
+      name: 'SP',
+      named: true,
+      title: 'Summer Pockets'
+    }),
+    'SP'
+  )
+  assert.equal(
+    hookGameName(key, { exe, name: 'SP', named: true, title: 'Summer Pockets' }, 'SP Reflection'),
+    'SP Reflection'
+  )
+  assert.equal(windowGameTitle('  Summer   Pockets ', 'SiglusEngine'), 'Summer Pockets')
+  assert.equal(windowGameTitle('', 'Summer Pockets'), 'Summer Pockets', 'a window without a title: its app')
+  assert.equal(windowGameTitle(' ', null), null)
+})
+
+test('games of the same name are told apart by the folders their exes are in', () => {
+  const a = String.raw`C:\Games\Summer Pockets\SiglusEngine.exe`
+  const b = String.raw`C:\Games\Rewrite\SiglusEngine.exe`
+  assert.equal(exeFolder(a, [a, b]), 'Summer Pockets')
+  const c = String.raw`D:\Copy\Rewrite\SiglusEngine.exe`
+  assert.equal(exeFolder(b, [a, b, c]), String.raw`Games\Rewrite`, 'as many folders as it takes')
+  assert.equal(exeFolder('/home/me/vn/game.exe', ['/home/me/other/game.exe']), 'vn')
 })

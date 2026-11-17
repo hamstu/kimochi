@@ -82,6 +82,13 @@ export interface HookGame extends Partial<Omit<HookSettings, 'textSize'>> {
   exe?: string
   /** What the game is called when it has no session (its session's name otherwise). */
   name?: string
+  /** `name` is one the reader gave it (renamed in Settings → Text Hooker): nothing replaces it. */
+  named?: boolean
+  /**
+   * What the game's window is called (its title, else its app's name), kept up to date: its name
+   * until the reader gives it one (`hookGameName`).
+   */
+  title?: string
   /** The Log session the game's lines go to. */
   sessionId?: string
   /** When it was first and last hooked (ms since the epoch). */
@@ -221,4 +228,36 @@ export function withoutOverride(game: HookGame, key: keyof HookSettings): HookGa
 export function exeTitle(exe: string): string {
   const file = exe.split(/[\\/]/).pop() ?? exe
   return file.replace(/\.exe$/i, '')
+}
+
+/** A window's title as a game's name, else its app's name, without stray spaces; null if neither. */
+export function windowGameTitle(title: string | null | undefined, appName?: string | null): string | null {
+  const clean = (text: string | null | undefined): string => (text ?? '').replace(/\s+/g, ' ').trim()
+  return clean(title) || clean(appName) || null
+}
+
+/**
+ * What a game is called: its session's name (the session is named after the game's window when
+ * it is first hooked, and renaming one renames the other), else the name the reader gave it, else
+ * its window's title, else the name it was last given, else its exe's file name.
+ */
+export function hookGameName(key: string, game: HookGame, sessionName?: string | null): string {
+  if (sessionName) return sessionName
+  if (game.named && game.name) return game.name
+  return game.title ?? game.name ?? exeTitle(game.exe ?? key)
+}
+
+/**
+ * Where a game's exe is, to tell it from games of the same name: its folder, with as many folders
+ * above it as it takes to differ from `others` (their exe paths).
+ */
+export function exeFolder(exe: string, others: string[]): string {
+  const folders = (path: string): string[] => path.split(/[\\/]/).filter(Boolean).slice(0, -1)
+  const sep = exe.includes('\\') ? '\\' : '/'
+  const tail = (parts: string[], depth: number): string => parts.slice(-depth).join('/').toLowerCase()
+  const own = folders(exe)
+  const rest = others.filter((other) => other.toLowerCase() !== exe.toLowerCase()).map(folders)
+  let depth = 1
+  while (depth < own.length && rest.some((other) => tail(other, depth) === tail(own, depth))) depth++
+  return own.slice(-depth).join(sep)
 }

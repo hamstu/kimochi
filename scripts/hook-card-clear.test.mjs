@@ -65,8 +65,9 @@ test('overlaps is symmetric', () => {
 
 test('the overlay publishes the card gated only while it is over the game', () => {
   const overlay = readFileSync(new URL('../ui/overlay.js', import.meta.url), 'utf8')
-  assert.match(overlay, /if \(card\) add\(card, false, gated && !hookCardClear\(\)\)/)
+  // Gated by the card's own click-through (always on while its look is Transparent).
+  assert.match(overlay, /if \(card\) add\(card, false, clickThrough\('card'\) && !hookCardClear\(\)\)/)
   // The card's own controls light up and take presses without the key while it is clear.
-  assert.match(overlay, /const cardArmed = armed \|\| hookCardClear\(\)/)
+  assert.match(overlay, /const cardArmed = !clickThrough\('card'\) \|\| gateOpen \|\| hookCardClear\(\)/)
   assert.match(overlay, /hook\.card\?\.pointer\(local\.x, local\.y, Boolean\(payload\.down\), cardArmed\)/)
 })

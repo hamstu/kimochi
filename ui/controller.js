@@ -1520,20 +1520,30 @@ export function createController(context) {
       return
     }
     if (historical) history.ensureVisible(range)
-    const rects = wordSegments(word, range)
-    while (segments.length > rects.length) segments.pop().remove()
-    while (segments.length < rects.length) {
-      const segment = document.createElement('div')
-      segment.className = 'cm-word'
-      host.append(segment)
-      segments.push(segment)
-    }
-    highlight = segments[0]
     // Drawn the way this word's own box runs; the keys follow the scan's direction instead.
     const vertical = Boolean(cursor.units[word.unit]?.vertical)
+    segments = placeOutline(segments, wordSegments(word, range), vertical, 'cm-word')
+    highlight = segments[0]
+    for (const segment of segments) segment.classList.toggle('cm-word-away', driver === 'mouse')
+    showHud(null)
+  }
+
+  /**
+   * The outline over `rects` (one per line the word spans, overlay coordinates): `pieces` reused
+   * and moved, so a move glides, with as many more or fewer as it takes. Returns the pieces.
+   */
+  function placeOutline(pieces, rects, vertical, className) {
+    const next = [...pieces]
+    while (next.length > rects.length) next.pop().remove()
+    while (next.length < rects.length) {
+      const segment = document.createElement('div')
+      segment.className = className
+      host.append(segment)
+      next.push(segment)
+    }
     const pad = 3
     rects.forEach((rect, index) => {
-      const segment = segments[index]
+      const segment = next[index]
       Object.assign(segment.style, {
         left: `${rect.left - pad}px`,
         top: `${rect.top - pad}px`,
@@ -1545,9 +1555,26 @@ export function createController(context) {
         webkitMaskImage: fadeFor(index > 0, index < rects.length - 1, vertical)
       })
       segment.classList.toggle('cm-word-vertical', vertical)
-      segment.classList.toggle('cm-word-away', driver === 'mouse')
     })
-    showHud(null)
+    return next
+  }
+
+  /** The outline over a mouse lookup's match (`outlineMatch`), apart from Read along's own. */
+  let matchSegments = []
+
+  /**
+   * Outline what a mouse lookup matched, as Read along outlines its word, over text drawn
+   * Transparent (overlay.js `syncMatchOutline`): `rects` one per line, in overlay coordinates, or
+   * null to take it away. Only while the controller isn't reading: then its own outline shows.
+   */
+  function outlineMatch(rects, vertical = false) {
+    if (!rects?.length || mode !== 'idle') {
+      for (const segment of matchSegments) segment.remove()
+      matchSegments = []
+      return
+    }
+    if (!matchSegments.length) applyAppearance()
+    matchSegments = placeOutline(matchSegments, rects, vertical, 'cm-word cm-word-match')
   }
 
   function fadeFor(continued, continues, vertical) {
@@ -1742,20 +1769,15 @@ export function createController(context) {
       if (result === null) {
         // This engine has no direct lookup (an extension whose hook is missing): as a pointer would.
         await context.lookupRange(ahead ?? range)
-        if (cursor === wordCursor) void fitToMatch(word)
+        void fitToMatch(word)
         return
       }
       if (result.length === 0) return void showHud(`No entry for ${word.text}`)
-      // A word is fitted to the match. A character is where the reader chose to start: the
-      // cursor stays on it, and only the outline grows over what was matched from there.
-      if (cursor === wordCursor && result.length && cursor.fit(result.length)) {
-        context.log({ check: 'controller-fit-match', length: result.length })
-        render()
-      } else if (cursor === charCursor && result.length > 1) {
-        charMatch = { word, length: result.length }
-        context.log({ check: 'controller-fit-match', length: result.length, character: true })
-        render()
-      } else showHud(null)
+      showHud(null)
+      // How much matched isn't known (10ten answering from its cache, Hachidori's answer lost):
+      // what the engine marked on the page says, once its pop-up is drawn.
+      if (result.length === null || result.length === undefined) return void fitToMatch(word)
+      fitOutline(word, result.length)
     } catch (error) {
       context.log({
         check: 'controller-lookup-failed',
@@ -1797,10 +1819,29 @@ export function createController(context) {
   }
 
   /**
-   * Fit the outline to what the dictionary matched. Hachidori and 10ten mark the match on the page
-   * (`context.matchedRange`); when it starts where the word does and is a different length (the
-   * fallback split is a guess: 剣でも for 剣), the word becomes the match. Waits for the popup a
-   * little, since the lookup resolves before the engine has drawn it.
+   * The outline over the `length` characters the dictionary matched from `word`. A word is fitted
+   * to the match (the split is a guess: 剣でも for 剣). A character is where the reader chose to
+   * start (stepping by character, or the free cursor): the cursor stays on it, and only the
+   * outline grows over what was matched from there, as far as the match goes, every engine alike.
+   */
+  function fitOutline(word, length) {
+    if (!length || cursor?.current !== word) return
+    if (cursor === wordCursor) {
+      if (!cursor.fit(length)) return
+      context.log({ check: 'controller-fit-match', length })
+      render()
+    } else if (cursor === charCursor && length > 1) {
+      charMatch = { word, length }
+      context.log({ check: 'controller-fit-match', length, character: true })
+      render()
+    }
+  }
+
+  /**
+   * Fit the outline to what the dictionary marked on the page as matched, when its lookup didn't
+   * say how much (`context.matchedRange`: Hachidori's and 10ten's highlight, Yomitan's selection),
+   * when the mark starts where the word does. Waits for the pop-up a little, since the lookup
+   * resolves before the engine has drawn it.
    */
   async function fitToMatch(word) {
     if (!context.matchedRange) return
@@ -1816,12 +1857,7 @@ export function createController(context) {
       for (let index = word.unit; index < cursor.units.length; index++) {
         const from = index === word.unit ? word.start : 0
         const end = offsetInNodes(nodesOf(cursor.units[index]), match.endContainer, match.endOffset)
-        if (end >= 0) {
-          length += end - from
-          if (cursor.fit(length)) render()
-          context.log({ check: 'controller-fit-match', length })
-          return
-        }
+        if (end >= 0) return fitOutline(word, length + end - from)
         length += cursor.units[index].text.length - from
       }
       return
@@ -1832,6 +1868,7 @@ export function createController(context) {
     get mode() {
       return mode
     },
+    outlineMatch,
     /**
      * True while the scan's text must stay drawn, whatever its usual visibility rules say: word
      * mode steps through it, and the full-screen dictionary reads its words from it (cleared

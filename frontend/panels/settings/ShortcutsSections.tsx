@@ -3,6 +3,7 @@ import { useCallback, type ReactNode } from 'react'
 import { Badge, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { useSetting } from '../../bridge/useSetting'
+import { clickThroughLocked } from '@ui/settings'
 import { showSettingsTab } from './showSettingsTab'
 import type { HotkeyName } from '../../bridge/types'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
@@ -46,7 +47,10 @@ function LookupKeyRow(): ReactNode {
   const mac = capabilities.os === 'macos'
   const support = capabilities.keys.lookupButtons ?? 'unsupported'
   const [stored, setKey] = useSetting<string>('overlayLookupKey', 'shift')
-  const [clickThrough] = useSetting<boolean>('overlayClickThrough', true)
+  const [storedClickThrough] = useSetting<boolean>('overlayClickThrough', true)
+  const [overlayStyle] = useSetting<unknown>('overlayStyle', null)
+  // Text drawn Transparent always lets clicks through (`clickThroughLocked`).
+  const clickThrough = storedClickThrough !== false || clickThroughLocked(overlayStyle, 'words')
   const [hover] = useSetting<boolean>('overlayHoverLookup', false)
   const [hotkeys] = useHotkeys()
   // Wayland: only where the pointer poll reads every modifier (KDE Plasma, through XWayland).

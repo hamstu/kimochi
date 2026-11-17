@@ -133,6 +133,16 @@
   line-height: var(--k-leading-xs);
   letter-spacing: 0.02em;
 }
+/* Where a game is, under its name, when another game has the same name. */
+.th-rail-folder {
+  display: block;
+  overflow: hidden;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .th-rail-empty {
   margin: 0;
   padding: var(--k-space-1) var(--k-space-3) var(--k-space-1) calc(var(--k-space-2) + var(--k-space-3));

@@ -478,6 +478,32 @@ test('by character, the outline covers what the dictionary matched while the cur
   assert.equal(asked.at(-1), 2)
 })
 
+test('by character, an engine that does not say how much it matched is fitted to the match it marks', async (t) => {
+  // 10ten answering from its cache, or Hachidori's answer lost: the length is not known, and the
+  // outline stayed on the one character. The engine's mark on the page says how far it goes.
+  let marked = null
+  const h = controllerHarness(t, async () => [{ id: 'old', text: '時よ過ぎゆけ' }], {
+    lookupText: async ({ range, text }) => {
+      if (text.startsWith('よ過ぎ'))
+        marked = {
+          startContainer: range.node,
+          startOffset: range.start,
+          endContainer: range.node,
+          endOffset: range.start + 3
+        }
+      return { shown: true, length: null }
+    },
+    matchedRange: () => marked
+  })
+  await h.controller.recentText()
+  await h.press(0)
+  await new Promise((resolve) => setImmediate(resolve))
+  await h.press(3) // Y: by character
+  await h.press(15)
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  assert.ok(h.logs.some((record) => record.check === 'controller-fit-match' && record.character && record.length === 3))
+})
+
 test('read along falls back to the pointer-style lookup for an engine without a direct one', async (t) => {
   const h = controllerHarness(t, async () => [{ id: 'old', text: '猫 犬' }], {
     lookupText: async () => null
