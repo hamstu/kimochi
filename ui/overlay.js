@@ -96,6 +96,7 @@ import {
   isOverlayTextVisible,
   nextOverlayToggle,
   overlayTextChange,
+  hookCardLocksAutoAlign,
   overlayStyleOf,
   resolveHookCardAppearance,
   resolveHostEngine,
@@ -374,8 +375,14 @@ const hookMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'h
 const browserMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'browser'
 const hookKey = () => hook.exe?.toLowerCase() ?? null
 const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) || {}
-/** The game's settings, with the defaults (Settings → Text Hooker) where it has none (hook-games.ts). */
-const hookSet = () => hookSettings(setting('textHookerDefaults'), hookGame())
+/**
+ * The game's settings, with the defaults (Settings → Text Hooker) where it has none (hook-games.ts).
+ * A card drawn Transparent is always auto-aligned (`hookCardLocksAutoAlign`).
+ */
+const hookSet = () => {
+  const set = hookSettings(setting('textHookerDefaults'), hookGame())
+  return hookCardLocksAutoAlign(setting('overlayStyle')) ? { ...set, autoAlign: true } : set
+}
 const hookAutoAlign = () => hookSet().autoAlign
 /** The card over the game at all (Settings → Text Hooker → Show the card; the game menu's Card). */
 const hookCardOn = () => hookCardShow(setting('textHookerShowCard')) !== 'never'
@@ -790,7 +797,11 @@ controller = createController({
     // Back on, as in Settings: straight back to where it last found the game's text, the size
     // measured again (a size set by hand goes), and the screen read at once (`realignHookCard`).
     setAutoAlign: (on) =>
-      on ? saveHookGame({ autoAlign: true }, ['text', 'leading']) : saveHookGame({ autoAlign: false }),
+      on
+        ? saveHookGame({ autoAlign: true }, ['text', 'leading'])
+        : hookCardLocksAutoAlign(setting('overlayStyle'))
+          ? undefined
+          : saveHookGame({ autoAlign: false }),
     textSize: (step) => {
       const box = hook.card?.box()
       return box ? onHookCardTextSize(step, box) : undefined

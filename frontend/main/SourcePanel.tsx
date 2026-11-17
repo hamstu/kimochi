@@ -129,6 +129,7 @@ import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { keepShape } from '@ui/preview-shape'
 import { useLanguage } from '../bridge/useLanguage'
 import { refusalText, useGamePauseNotice } from '../bridge/gamePause'
+import { AlignLockMark } from '../components/AlignLockMark'
 
 type Controller = ControllerWiring['props']
 /** The texthooker's inputs, with OCR split into a chosen window or screen and Quick Shot. */
@@ -256,6 +257,7 @@ function SourceRow({
   title,
   info,
   caution,
+  lock,
   settingsLabel,
   sub,
   onToggle,
@@ -269,6 +271,8 @@ function SourceRow({
   info: ReactNode
   /** A catch in this mode: an amber pip on the info mark, and this line in its tooltip. */
   caution?: ReactNode
+  /** Why the switch is held as it is (a mark with its own tooltip), after the info mark. */
+  lock?: ReactNode
   settingsLabel: string
   /** A sub-option of the row above it, indented under it. */
   sub?: boolean
@@ -312,6 +316,7 @@ function SourceRow({
           <Info aria-hidden />
         </button>
       </Tooltip>
+      {lock}
       <span className="src-row-fill" />
       <SwitchMark on={checked} />
       <button
@@ -1562,6 +1567,8 @@ export function SourcePanel({
                 icon={<ScanSearch aria-hidden />}
                 label="Auto align"
                 checked={placement.on}
+                disabled={placement.locked}
+                lock={placement.locked ? <AlignLockMark className="src-lock" /> : undefined}
                 info="Lines the card up with the game's text, found by OCR. Off, drag the card by its top edge and resize it by its corner."
                 settingsLabel="Text Hooker settings"
                 onToggle={placement.toggle}

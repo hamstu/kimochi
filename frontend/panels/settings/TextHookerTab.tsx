@@ -45,6 +45,7 @@ import {
   hookSettings,
   overrides,
   updateHookGame,
+  useHookCardLocksAutoAlign,
   useHookDefaults,
   useHookGames,
   withSetting,
@@ -59,6 +60,7 @@ import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { HookCardPreview } from './HookCardPreview'
 import { HookCardLookRow } from './CardLook'
+import { AlignLockMark } from '../../components/AlignLockMark'
 import { lookupKeyName } from './overlayPreview'
 import { HOOK_CARD_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
 import { showSettingsTab } from './showSettingsTab'
@@ -153,7 +155,10 @@ function HookSettingsSections({
   extra?: Partial<Record<'hooking' | 'text' | 'card', ReactNode>>
 }): ReactNode {
   const [defaults, setDefaults, resetDefault, shipped] = useHookDefaults()
-  const value = scope.kind === 'defaults' ? defaults : hookSettings(defaults, scope.game)
+  // A Transparent card is always auto-aligned: its switch shows on, and cannot be turned off.
+  const alignLocked = useHookCardLocksAutoAlign()
+  const stored = scope.kind === 'defaults' ? defaults : hookSettings(defaults, scope.game)
+  const value = alignLocked ? { ...stored, autoAlign: true } : stored
   const changed = (key: keyof HookSettings): boolean =>
     scope.kind === 'defaults' ? defaults[key] !== shipped[key] : overrides(scope.game, key, defaults)
   const set = <K extends keyof HookSettings>(key: K, next: HookSettings[K]): void => {
@@ -268,10 +273,27 @@ function HookSettingsSections({
         <SettingsRow
           label="Auto align"
           controlId={id('align')}
-          badge={badge('autoAlign')}
-          description="Lines the card up with the game's text and matches its size."
+          badge={
+            <>
+              {alignLocked && <AlignLockMark />}
+              {badge('autoAlign')}
+            </>
+          }
+          description={
+            alignLocked
+              ? 'Always on while the Card look is Transparent.'
+              : "Lines the card up with the game's text and matches its size."
+          }
+          disabled={alignLocked}
         >
-          <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
+          <Switch
+            id={id('align')}
+            // Its label holds the lock's mark too, which is not part of its name.
+            aria-label="Auto align"
+            checked={value.autoAlign}
+            disabled={alignLocked}
+            onCheckedChange={(on) => set('autoAlign', on)}
+          />
         </SettingsRow>
         {/* Auto align sizes the text to the game's own, so the size is chosen only with it off. */}
         {!value.autoAlign && (

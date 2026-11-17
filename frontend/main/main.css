@@ -1165,8 +1165,14 @@ html[data-mini] .main-help {
   position: relative;
   pointer-events: none;
 }
-.src-row-layered[data-disabled] > :not(.src-row-hit, .src-row-cog) {
+.src-row-layered[data-disabled] > :not(.src-row-hit, .src-row-cog, .src-lock) {
   opacity: 0.5;
+}
+/* Why the switch is held (AlignLockMark): a button of its own, like the info mark, at full
+   strength in a row held disabled. */
+.src-row-layered > .src-lock {
+  margin-left: calc(var(--k-space-1) * -1);
+  pointer-events: auto;
 }
 .src-row-label-fit {
   flex: 0 1 auto;

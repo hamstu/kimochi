@@ -10,7 +10,7 @@ import { Button, SettingsRow, SettingsSection } from '@kit'
 import { useCapabilities } from '../../bridge/capabilities'
 import { setSetting } from '../../bridge/settings'
 import { HOOK_CARD_SECTION, requestSettingsSection } from '../../bridge/settingsTarget'
-import { useHookDefaults } from '../../main/hookGames'
+import { useHookCardLocksAutoAlign, useHookDefaults } from '../../main/hookGames'
 import { HookCardPreview } from './HookCardPreview'
 import { HookCardLookRow } from './CardLook'
 import { showSettingsTab } from './showSettingsTab'
@@ -18,6 +18,7 @@ import { showSettingsTab } from './showSettingsTab'
 export function TextHookerCardSection(): ReactNode {
   const { os } = useCapabilities()
   const [defaults] = useHookDefaults()
+  const alignLocked = useHookCardLocksAutoAlign()
   if (os !== 'windows' && os !== 'linux') return null
 
   const open = (): void => {
@@ -29,7 +30,11 @@ export function TextHookerCardSection(): ReactNode {
 
   return (
     <SettingsSection title="Text Hooker card" description="The hooked line, shown over the game.">
-      <HookCardPreview autoAlign={defaults.autoAlign} textSize={defaults.textSize} opacity={defaults.opacity} />
+      <HookCardPreview
+        autoAlign={alignLocked || defaults.autoAlign}
+        textSize={defaults.textSize}
+        opacity={defaults.opacity}
+      />
       <HookCardLookRow />
       <SettingsRow label="Auto align, text size and opacity are set in Text Hooker settings">
         <Button size="sm" onClick={open}>

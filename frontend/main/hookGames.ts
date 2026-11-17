@@ -17,6 +17,7 @@ import {
   type HookGames,
   type HookSettings
 } from '../../ui/hook-games'
+import { hookCardLocksAutoAlign } from '../../ui/settings'
 
 export * from '../../ui/hook-games'
 
@@ -53,6 +54,15 @@ export async function updateHookGame(exe: string, change: (game: HookGame) => Ho
   if (next) games[key] = next
   else delete games[key]
   await setSetting('textHookerGames', games)
+}
+
+/**
+ * Whether the Text Hooker's card is drawn Transparent (Card look), which keeps Auto align on and
+ * its switch locked (ui/settings.ts `hookCardLocksAutoAlign`).
+ */
+export function useHookCardLocksAutoAlign(): boolean {
+  const [style] = useSetting<unknown>('overlayStyle', null)
+  return hookCardLocksAutoAlign(style)
 }
 
 /** The hooked game's settings, with the defaults where it has none of its own. */

@@ -30,6 +30,7 @@ const {
   DEFAULT_OVERLAY_STYLE,
   effectiveControllerButtons,
   hexToRgbTriplet,
+  hookCardLocksAutoAlign,
   overlayStyleOf,
   highlightStrength,
   resolveHookCardAppearance,
@@ -176,6 +177,11 @@ test('overlay look: the default, the Rust store, and what a stored style reads a
     resolveHookCardAppearance({ appearance: 'dark', hookAppearance: 'transparent' }, 'light', false),
     'transparent'
   )
+  // A Transparent card is always auto-aligned; the overlay's own look has no say in it.
+  assert.equal(hookCardLocksAutoAlign({ appearance: 'dark', hookAppearance: 'transparent' }), true)
+  assert.equal(hookCardLocksAutoAlign({ appearance: 'transparent', hookAppearance: 'dark' }), false)
+  assert.equal(hookCardLocksAutoAlign({ appearance: 'transparent' }), false)
+  assert.equal(hookCardLocksAutoAlign(undefined), false)
   assert.equal(highlightStrength(40), 1)
   assert.equal(highlightStrength(100), 2.5)
   assert.equal(highlightStrength(0), 0)

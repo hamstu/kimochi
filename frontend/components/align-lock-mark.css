@@ -1,0 +1,34 @@
+/* AlignLockMark.tsx: an eye beside a locked Auto align switch, whose tooltip says why. */
+.align-lock-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--k-icon-sm) + var(--k-space-1-5));
+  height: calc(var(--k-icon-sm) + var(--k-space-1-5));
+  margin-left: var(--k-space-1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text-3, var(--k-text-2));
+  vertical-align: middle;
+  cursor: default;
+}
+.align-lock-mark svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.align-lock-mark:hover,
+.align-lock-mark[data-state='delayed-open'],
+.align-lock-mark[data-state='instant-open'] {
+  color: var(--k-text);
+}
+.align-lock-mark:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.align-lock-note {
+  max-width: 17rem;
+  margin: 0;
+}

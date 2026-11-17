@@ -148,6 +148,15 @@ export function resolveOverlayCardAppearance(
   return systemDark ? 'dark' : 'light'
 }
 
+/**
+ * Whether the Text Hooker's card is drawn Transparent, which keeps Auto align on whatever its
+ * setting: nothing of the card shows, so only Auto align can put its text over the game's, where
+ * the reader points to look a word up (and the hidden card has no bar or corner to place it by).
+ */
+export function hookCardLocksAutoAlign(style: unknown): boolean {
+  return overlayStyleOf(style).hookAppearance === 'transparent'
+}
+
 /** The same for the Text Hooker's card, from its own setting (`hookAppearance`). */
 export function resolveHookCardAppearance(
   style: unknown,

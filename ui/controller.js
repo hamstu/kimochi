@@ -689,6 +689,7 @@ export function createController(context) {
   function cardRows() {
     const card = context.card.state()
     const look = CARD_LOOKS.find((l) => l.value === card.look) ?? CARD_LOOKS[0]
+    const transparent = card.look === 'transparent'
     const hook = hookSummary(context.card.hook?.())
     return [
       {
@@ -712,14 +713,21 @@ export function createController(context) {
         label: 'Move and resize',
         kind: 'action',
         value: '›',
-        detail: card.autoAlign ? 'Turns Auto align off.' : undefined
+        // A Transparent card stays auto-aligned (ui/settings.ts `hookCardLocksAutoAlign`).
+        enabled: !transparent,
+        detail: transparent ? undefined : card.autoAlign ? 'Turns Auto align off.' : undefined
       },
       {
         id: 'align',
         label: 'Auto align',
         kind: 'toggle',
         on: card.autoAlign,
-        detail: card.autoAlign ? "The card sits on the game's text." : undefined
+        enabled: !transparent,
+        detail: transparent
+          ? "Always on while the card's look is Transparent, so the hidden card stays on the game's text."
+          : card.autoAlign
+            ? "The card sits on the game's text."
+            : undefined
       },
       { id: 'size', label: 'Text size', kind: 'step', value: card.fontPx ? `${Math.round(card.fontPx)} px` : '—' },
       { id: 'opacity', label: 'Background', kind: 'step', value: `${Math.round(card.opacity * 100)}%` },
@@ -740,8 +748,9 @@ export function createController(context) {
   async function cardActivate(id) {
     const card = context.card.state()
     if (id === 'shown') return cardSettled(context.card.setShown(!card.shown))
-    if (id === 'align') return cardSettled(context.card.setAutoAlign(!card.autoAlign))
-    if (id === 'place') return enterPlace()
+    const locked = card.look === 'transparent'
+    if (id === 'align') return locked ? undefined : cardSettled(context.card.setAutoAlign(!card.autoAlign))
+    if (id === 'place') return locked ? undefined : enterPlace()
   }
 
   async function cardChange(id, step) {

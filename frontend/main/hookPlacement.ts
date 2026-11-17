@@ -2,7 +2,7 @@
  * How the Text Hooker's card is placed on the game, per game (`textHookerGames`, read by
  * ui/overlay.js): aligned with the game's text by OCR (Auto align), or where the reader put it.
  */
-import { updateHookGame, useHookDefaults, useHookSettings, withSetting } from './hookGames'
+import { updateHookGame, useHookCardLocksAutoAlign, useHookDefaults, useHookSettings, withSetting } from './hookGames'
 
 /**
  * Auto align for the hooked game: whether it is on, and the switch. Null with no game. The switch
@@ -10,11 +10,17 @@ import { updateHookGame, useHookDefaults, useHookSettings, withSetting } from '.
  * default is no change, so the game follows the default again. The reader's own place for the
  * card is kept apart from Auto align's, so turning it off puts the card back where they left it.
  */
-export function useHookPlacement(exe: string | null | undefined): { on: boolean; toggle: () => void } | null {
-  const { autoAlign: on } = useHookSettings(exe)
+export function useHookPlacement(
+  exe: string | null | undefined
+): { on: boolean; locked: boolean; toggle: () => void } | null {
+  const { autoAlign } = useHookSettings(exe)
   const [defaults] = useHookDefaults()
+  // A Transparent card is always auto-aligned (ui/settings.ts `hookCardLocksAutoAlign`).
+  const locked = useHookCardLocksAutoAlign()
+  const on = locked || autoAlign
   if (!exe) return null
   const toggle = (): void => {
+    if (locked) return
     void updateHookGame(exe, (game) => {
       const next = withSetting(game, 'autoAlign', !on, defaults)
       if (on) return next
@@ -26,5 +32,5 @@ export function useHookPlacement(exe: string | null | undefined): { on: boolean;
       return next
     })
   }
-  return { on, toggle }
+  return { on, locked, toggle }
 }
