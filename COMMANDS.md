@@ -2006,6 +2006,9 @@ inside the sandbox.
 | `texthook_game` | `({exe}) -> {thread: string | null}` — the hook code of the thread remembered for the game |
 | `texthook_game_icon` | `({exe}) -> string | null` — the game's icon as a PNG data URI, saved from its window when it was last hooked (`<app local data>/texthook/icons/`) |
 | `texthook_forget` | `({exe, all}) -> ()` — forgets the thread remembered for the game; with `all`, its icon too |
+| `texthook_db_lookup` | `({exe}) -> HookDbEntry | null` — the hook database's entry for the game at `exe` (whether or not `hookDatabase` is on for it), from the copy on disk |
+| `texthook_db_info` | `() -> {games, revision, updated, origin: 'bundled' | 'downloaded', checkedAt, error}` — the copy of the hook database in use; `checkedAt` (Unix ms) is when a newer one was last looked for, `error` why that failed |
+| `texthook_db_refresh` | `() -> (as texthook_db_info)` — looks for a newer hook database now |
 
 ```ts
 HookStatus = {
@@ -2014,14 +2017,15 @@ HookStatus = {
   sourceId, exe, pids,
   engine: {id: 'luna' | 'textractor', name, version} | null,
   download: {done, total} | null, // bytes, while downloading the hooker
-  selected, selectedBy: 'saved' | 'auto' | 'manual' | null,
+  selected, selectedBy: 'saved' | 'database' | 'auto' | 'manual' | null,
   pickNote,                       // why no thread was chosen automatically yet
   fallback,                       // why the first engine was given up for the one in use
   hookFailures,                   // hook codes the hooker found but could not insert (LunaHook's
                                   // "钩子注入失败 <code>"); with nothing selected, the sidebar
                                   // suggests restarting the game
   unityText,                      // true while the voice hook DLL reads a Unity game's text
-  threads: [{key, name, hookcode, preview, count, japanese, generic, selected}]
+  database,                       // {codes, title, vndb}: the game's hook database entry, while used
+  threads: [{key, name, hookcode, preview, count, japanese, generic, database, selected}]
 }                                 // engine hooks first, then in the order the hooker found them
                                   // (stable: not reordered by new text); `japanese` once any of a
                                   // thread's text has read as the `language` setting (sticky; the
@@ -2045,7 +2049,13 @@ language the menu also wants a space in the text (an asset name or a path has no
 
 **Thread choice.** A thread is selected as soon as it speaks if it matches the one remembered
 for this exe (`<app local data>/texthook/games.json`: `hookcode`, `ctx & 0xFFFF`, `ctx2 & 0xFFFF`).
-Otherwise, 700 ms after new text, the window is captured and read with the local OCR, the lines
+Then the **hook database**'s (below): with nothing remembered for the game when it was hooked, a
+thread whose hook code is one of the game's database codes (compared without case) is selected
+(`selectedBy: 'database'`, logged `texthook-database`) as soon as it speaks, also over a thread
+chosen by the screen meanwhile, never over one chosen by hand; it is not remembered, and while the
+game has database codes neither is a thread chosen by the screen, so the database is consulted
+again next time. `texthook_select(null)` takes a database thread that has spoken before reading
+the screen. Otherwise, 700 ms after new text, the window is captured and read with the local OCR, the lines
 grouped into blocks, and each thread's latest sentence looked for in each block after
 normalising width, punctuation and whitespace (exact containment, never fuzzy). Matches in the
 largest block count double; a block found inside a longer sentence counts only for the share of
@@ -2062,6 +2072,26 @@ thread is selected (`selectedBy: 'auto'`) and remembered, logged as `texthook-re
 `observerEngine`, else the first local engine available (`oneocr`, `ppocr`, `meikiocr`,
 `livetext`).
 
+**Hook database** (`text_hook/hookdb.rs`, #223). Hook codes known to read a game's dialogue:
+`src-tauri/texthook-hookdb.json`, compiled in, and a newer `revision` of it fetched at most once a
+day (on a thread of its own when a game is hooked, or `texthook_db_refresh`) from
+`https://downloads.kimochiapp.com/texthook/hookdb.json`, else the file on GitHub's `main`, into
+`<app local data>/texthook/hookdb.json` (`hookdb.checked` holds when). Nothing waits on the
+network: a lookup reads the copy on disk. LunaTranslator has no such database to mirror (its
+per-game knowledge is LunaHook's engine detection and each user's own remembered hooks).
+
+```ts
+{ format: 1, revision, updated,
+  games: [{ exe,            // the exe's file name, any case
+            dir?, exeSize?, // the exe's folder's name and its size, when the name is not enough
+            codes: string[], title?, vndb?: 'v1234' }] }
+```
+
+An entry matches when everything it gives matches; the most specific wins. An entry without
+codes (a VNDB id alone) is allowed; entries with an unusable code, exe or VNDB id are dropped,
+not the file. With `hookDatabase` on for the game (`HookSettings`, default on), its codes are
+inserted on attach after the game's own `hookCodes`.
+
 **Game settings.** `textHookerDefaults` (`HookSettings`) and each game's record,
 `textHookerGames[<exe path, lowercased>]`, edited in Settings → Text Hooker; `ui/hook-games.ts`
 types both and resolves a game's settings (its own value, else the default, else Kimochi's). A
@@ -2070,10 +2100,13 @@ game's record holds what the reader changed for it and what was learned about it
 ```ts
 HookSettings = { autoHook: true, flushMs: 300, repeats: 'auto' | 'off' | 2 | 3 | 4,
                  joinLines: true, stripCodes: true,
-                 speakerNames: true, autoAlign: true, opacity: 1, textSize: 0.034 }
+                 speakerNames: true, autoAlign: true, opacity: 1, textSize: 0.034,
+                 hookDatabase: true }
 textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
   exe, name, sessionId, addedAt, hookedAt,            // the game, its Log session, when hooked
   hookCodes: string[],                                 // inserted on every attach
+  vndb: {id, title, by: 'database' | 'search' | 'manual'} | null, // null: unlinked by the reader
+  vndbSearchedAt,                                      // VNDB found nothing sure (ms); again after 7 days
   replacements: [{find, replace, regex?, enabled?}],   // applied in order to each line
   text, leading, box, ocrBox, surface, namesApart, nameBox   // the card (below)
 }
@@ -2099,6 +2132,14 @@ with `autoHook` on, trying each window once. With nothing hooked, any such windo
 game hooked, only a window opened since the last look, so a game started later takes over (one
 hook at a time: `texthook_start` stops the session before it). Clearing a Text Hooker source
 pauses it until the app next starts, or until the reader chooses a game to hook from the menu.
+
+**VNDB.** When a game is first linked to its session in a run (`linkHookedGame`), the Log links
+it to VNDB in the background (`frontend/texthooker/lib/vndbLink.ts`, `ui/vndb-link.ts`): the
+hook database's `vndb` if it has one; else `vndb_search_vns` for the window's title, the exe's
+folder and the exe's name (cleaned as LunaTranslator cleans them; generic or short ASCII names
+skipped; at most three searches), taking a result only when one of its titles is the name after
+NFKC, case, spaces and punctuation are set aside. A game linked, or unlinked by the reader, is not
+searched again.
 
 **Sessions.** With **Auto switch sessions** on, a game is tied to a Log session
 (`frontend/texthooker/host.ts` `linkHookedGame`): hooked for the first time, it takes the session

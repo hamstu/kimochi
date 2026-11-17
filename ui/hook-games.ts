@@ -42,6 +42,11 @@ export interface HookSettings {
   textSize: number
   /** When the card is over the game (`hookCardShow`). */
   showCard: HookCardShow
+  /**
+   * Hook codes from Kimochi's hook database are used for the game (text_hook/hookdb.rs): inserted
+   * when it is hooked, and their thread chosen unless one was remembered for the game.
+   */
+  hookDatabase: boolean
 }
 
 export const HOOK_DEFAULTS: HookSettings = {
@@ -54,7 +59,8 @@ export const HOOK_DEFAULTS: HookSettings = {
   autoAlign: true,
   opacity: 1,
   textSize: 0.034,
-  showCard: 'always'
+  showCard: 'always',
+  hookDatabase: true
 }
 
 /**
@@ -76,6 +82,17 @@ export interface HookBox {
   height?: number
 }
 
+/**
+ * The game's VNDB entry (ui/vndb-link.ts): found by the hook database, by searching VNDB for the
+ * game's name when it was first hooked, or chosen by the reader.
+ */
+export interface HookVndbLink {
+  /** `v1234`. */
+  id: string
+  title: string
+  by: 'database' | 'search' | 'manual'
+}
+
 /** One game's record. */
 export interface HookGame extends Partial<Omit<HookSettings, 'textSize'>> {
   /** The exe path as the system spells it, for its icon. */
@@ -92,6 +109,10 @@ export interface HookGame extends Partial<Omit<HookSettings, 'textSize'>> {
    * window is read from inside the game; off, with OCR. Left out, a game hooked before is on.
    */
   textHook?: boolean
+  /** The game's VNDB entry; `null` when the reader unlinked it (it is not looked for again). */
+  vndb?: HookVndbLink | null
+  /** When VNDB was last searched for the game without a confident match (ms since the epoch). */
+  vndbSearchedAt?: number
   /** H-codes inserted each time the game is hooked. */
   hookCodes?: string[]
   replacements?: HookReplacement[]
@@ -162,7 +183,8 @@ export function hookSettings(
     autoAlign: autoAlign ?? base.autoAlign,
     opacity: own.opacity ?? base.opacity,
     textSize: own.text ?? base.textSize,
-    showCard: hookCardShow(own.showCard ?? base.showCard)
+    showCard: hookCardShow(own.showCard ?? base.showCard),
+    hookDatabase: own.hookDatabase ?? base.hookDatabase
   }
 }
 

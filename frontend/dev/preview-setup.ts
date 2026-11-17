@@ -348,6 +348,16 @@ const UNHOOKABLE = EMBED ? null : 'window:107'
  * nothing is hooked until the visitor turns Text hooking on (`texthook_start`).
  */
 const PRESET_HOOKED = !EMBED || params.get('input') === 'hook'
+/** The hook database's copy in the preview. */
+const HOOK_DB_INFO = {
+  games: 1,
+  revision: 1,
+  updated: '2026-11-17',
+  origin: 'bundled',
+  checkedAt: Date.now() - 86_400_000,
+  error: null
+}
+
 const HOOK_STATUS: Record<string, unknown> & { threads: typeof HOOK_THREADS } = {
   supported: true,
   phase: PRESET_HOOKED ? 'hooked' : 'idle',
@@ -385,6 +395,7 @@ const settings: Record<string, unknown> = {
       flushMs: 500,
       opacity: 0.85,
       hookCodes: ['HS-8@4A2F0:Game.exe'],
+      vndb: { id: 'v90001', title: '月夜の港', by: 'database' },
       replacements: [{ find: '^\\s+', replace: '', regex: true }],
       box: { x: 0.1, y: 0.7, width: 0.8 }
     },
@@ -1114,6 +1125,19 @@ const HANDLERS: Record<string, Handler> = {
     ),
   texthook_forget: () => null,
   texthook_insert: () => null,
+  // The hook database (text_hook/hookdb.rs): an entry for the preset game only.
+  texthook_db_lookup: (a) =>
+    /moonlit harbor/i.test(String(a?.exe ?? ''))
+      ? {
+          exe: 'Game.exe',
+          dir: 'Moonlit Harbor',
+          codes: ['HS-8@4A2F0:Game.exe', 'HQ-14*0@2B10C:Game.exe'],
+          title: '月夜の港',
+          vndb: 'v90001'
+        }
+      : null,
+  texthook_db_info: () => HOOK_DB_INFO,
+  texthook_db_refresh: () => ({ ...HOOK_DB_INFO, checkedAt: Date.now() }),
   texthook_start: (a) => {
     // Hooking another window (the site's demo hooks its own game, once its Text hooking switch is
     // turned on): that window's game.
@@ -1397,7 +1421,29 @@ const HANDLERS: Record<string, Handler> = {
   deepl_translate: () => '(Preview) Machine translation would appear here.',
   explain_run: ok,
   explain_cancel: ok,
-  vndb_search_vns: () => ({ results: [], more: false }),
+  vndb_search_vns: (a) => ({
+    results: String(a?.query ?? '').trim()
+      ? [
+          {
+            id: 'v90002',
+            title: 'Paper Lanterns',
+            alttitle: '紙灯籠',
+            titles: [{ lang: 'ja', title: '紙灯籠' }],
+            image: null,
+            released: '2019-08-30'
+          },
+          {
+            id: 'v90003',
+            title: 'Paper Lanterns: Autumn',
+            alttitle: '紙灯籠 秋',
+            titles: [{ lang: 'ja', title: '紙灯籠 秋' }],
+            image: null,
+            released: '2021-10-01'
+          }
+        ]
+      : [],
+    more: false
+  }),
   vndb_characters_by_vn: () => ({ results: [], more: false }),
   vndb_fetch_image: () => ({ base64: '', mime: 'image/png' })
 }

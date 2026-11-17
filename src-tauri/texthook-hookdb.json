@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "revision": 1,
+  "updated": "2026-11-17",
+  "about": "Kimochi's hook database: hook codes known to read each game's dialogue, by its exe (src-tauri/src/text_hook/hookdb.rs). Raise revision with every change; installed copies fetch it at most once a day.",
+  "games": []
+}

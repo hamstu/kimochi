@@ -74,15 +74,27 @@ Linux on ARM64 computers can't hook games.
 ## Choosing the dialogue
 
 A hooked game sends Kimochi several streams of text, called threads: the dialogue, the speaker's
-name, menus and other bits of the engine. Kimochi chooses the dialogue by the thread it
-remembered for the game or, the first time, by reading the game's window with a local OCR engine
-and matching each thread's text against what's on screen.
+name, menus and other bits of the engine. Kimochi chooses the dialogue in this order:
+
+1. **Remembered for this game**: the thread it used last time, or the one you picked.
+2. **From the hook database**: a hook code Kimochi's hook database knows reads this game's
+   dialogue. Kimochi adds the code when the game is hooked and uses its thread as soon as it
+   speaks.
+3. **Matched to the screen**: Kimochi reads the game's window with a local OCR engine and matches
+   each thread's text against what's on screen.
+4. **Chosen by you**, whenever you pick a thread yourself.
+
+The hook database starts small and grows as hook codes are added for more games. Kimochi checks
+for a newer copy at most once a day, in the background; a game never waits for it, and without a
+connection Kimochi uses the copy it has. Turn it off for every game or one game with **Use the
+hook database**.
 
 <Screenshot id="hook-card" alt="The sidebar with a hooked game: the source card, then the Text hooking box with its switch on, the current dialogue line and Audio hooking, then Show overlay with the Auto align switch under it highlighted, Enhance Anki cards, OCR model and Dictionary." width={272} />
 
 With Text hooking on, the box shows the latest line of the chosen thread. Click it to see
-every thread with its latest text, and pick another one if Kimochi got it wrong; your choice is
-remembered for the game. **Choose automatically** goes back to letting Kimochi decide.
+every thread with its latest text (the hook database's is marked **Hook database**), and pick
+another one if Kimochi got it wrong; your choice is remembered for the game. **Choose
+automatically** goes back to letting Kimochi decide, and shows how it chose.
 
 <Screenshot id="hook-thread-menu" alt="The hooked text menu: Choose automatically (Matched to the screen), then three threads, the dialogue, a speaker's name and a menu, each with its latest text and hook name." width={720} />
 
@@ -189,6 +201,8 @@ Under **Defaults**:
 | **Repeated characters** | Undo automatically | For games that send ここここ for こ: **Undo automatically**, **Leave as sent**, or **Each sent twice**, **3 times** or **4 times**. |
 | **Join split lines** | On | For games that send their text a row at a time (SiglusEngine, for one): a row that carries on an unfinished sentence joins the line before it. |
 | **Remove script codes** | On | Takes out asset and label names some engines leave in their text, such as `chr01chr02`. Off by default in languages that separate words with spaces, where ordinary words can look like codes. |
+| **Use the hook database** | On | Adds the hook codes Kimochi's hook database has for a game when it's hooked, and uses their thread unless one is remembered for the game. |
+| **Hook database** | — | How many games it has hook codes for and when it was updated, with **Check for updates**. |
 | **Auto align** | On | Lines the card up with the game's text. Always on while **Card look** is Transparent. |
 | **Text size** | Medium | With Auto align off, the card's text size (Small, Medium, Large or Larger). Shown only then: Auto align matches the game's own. |
 | **Background opacity** | 100% | The card's background, from 100% down to 40%. |
@@ -209,7 +223,9 @@ reset button beside them. It also has what only a game has:
 | Setting | What it does |
 | --- | --- |
 | **Session** | The Log session the game's lines go to, with **Switch to it**. |
-| **Dialogue thread** | The thread remembered for the game. **Forget** makes Kimochi choose again from the screen. |
+| **VNDB** | The game's entry on [VNDB](https://vndb.org): found by the hook database, or by searching VNDB for the game's window title, folder or exe name when it's first hooked (linked only when a title matches exactly). **Find on VNDB** or **Change** to pick it yourself, **Unlink** to leave it unlinked. |
+| **Dialogue thread** | The thread remembered for the game. **Forget** makes Kimochi choose again (from the hook database, else from the screen). |
+| **From the hook database** | The hook codes the hook database has for this game, if any. |
 | **Hook codes** | For a game nothing useful hooks into: a hook code (such as `HS-4@1234:game.exe`, the kind LunaHook and Textractor use) is added every time the game is hooked. |
 | **Replacements** | Find-and-replace rules for this game's lines, applied in order before they're shown. Each can be plain text or a regular expression, and turned off without deleting it. |
 | **Card position** | Where you dragged the card, with **Reset**. Only shown once you have moved it. |

@@ -86,6 +86,9 @@ test('the list of threads marks automatic, or the thread chosen by hand', () => 
     ]
   )
   assert.equal(auto[0].detail, 'Matched to the screen')
+  // The hook database's choice is automatic too: Choose automatically stays current.
+  const known = threadChoices({ selectedBy: 'database', threads })
+  assert.deepEqual([known[0].current, known[0].detail], [true, 'From the hook database'])
   const manual = threadChoices({ selectedBy: 'manual', threads })
   assert.deepEqual(
     manual.map((c) => c.current),

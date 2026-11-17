@@ -17,6 +17,7 @@ import { acceptSnapshot, type ReaderSnapshot } from './bridge'
 import { matchedSession, sourceKey, type SourceName } from './source-sessions'
 import { loadProfileRoot, setWritesPaused } from './core/profile'
 import { gameKey, type HookGames } from '../../ui/hook-games'
+import { autoLinkVndb } from './lib/vndbLink'
 
 /** What a Sync merge changed on disk (`sync_core::Changed`). */
 interface SyncChanged {
@@ -170,6 +171,8 @@ async function linkHookedGame(exe: string): Promise<boolean> {
   game.hookedAt = now
   games[key] = game
   await setSetting('textHookerGames', games)
+  // Its VNDB entry, in the background: never held up by the network (lib/vndbLink.ts).
+  void autoLinkVndb(exe, currentSource?.name).catch((error: unknown) => console.warn('[vndb] link failed', error))
   return true
 }
 interface ScanEntry {

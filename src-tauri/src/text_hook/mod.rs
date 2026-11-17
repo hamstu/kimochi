@@ -17,6 +17,7 @@
 //! On Linux the same Windows helper and hookers hook Windows games running through Proton or
 //! Wine: they run with the game's Wine, in its prefix (`wine.rs`).
 pub mod clean;
+pub mod hookdb;
 pub mod pick;
 pub mod process;
 pub mod store;
@@ -129,6 +130,12 @@ struct Session {
     /// Hooks the hooker found in the game but could not insert (`failed_hook`): the game took the
     /// hook, yet the code its text goes through could not be patched.
     hook_failures: Vec<String>,
+    /// The game's entry in the hook database (`hookdb.rs`), unless the reader turned it off for
+    /// the game: its codes are inserted on attach, and the thread one of them makes is the
+    /// dialogue unless a thread was remembered for the game.
+    db: Option<hookdb::Entry>,
+    /// A thread was remembered for the game when it was hooked: that choice beats the database.
+    remembered_before: bool,
     /// The Unity text requests (`unity.rs`), once the hooker could not hook a Unity game's text.
     unity: Vec<unity::Request>,
     /// When the text being handled was set in the game (Unix ms), for a source that says.
@@ -304,6 +311,7 @@ fn status_of(session: &Session) -> Value {
         "pickNote": session.pick_note,
         "fallback": session.fallback,
         "hookFailures": session.hook_failures,
+        "database": session.db.as_ref().map(|e| json!({ "codes": e.codes, "title": e.title, "vndb": e.vndb })),
         "unityText": !session.unity.is_empty(),
         "threads": threads.iter().map(|t| json!({
             "key": t.key,
@@ -313,6 +321,7 @@ fn status_of(session: &Session) -> Value {
             "count": t.count,
             "japanese": t.japanese,
             "generic": pick::is_generic(&t.hookcode, &t.name),
+            "database": from_database(session.db.as_ref(), &t.hookcode),
             "selected": session.selected.as_deref() == Some(t.key.as_str()),
         })).collect::<Vec<_>>(),
     })
@@ -347,6 +356,41 @@ fn remember(hook: &Hook, exe: &std::path::Path, signature: Option<Signature>) {
     if std::fs::write(&tmp, serde_json::to_vec_pretty(&games).unwrap_or_default()).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
     }
+}
+
+// ---------------------------------------------------------------------------- hook database
+
+/// The codes inserted when the game is hooked: the reader's own, then the database's not among them.
+fn inserted_codes(own: &[String], db: Option<&hookdb::Entry>) -> Vec<String> {
+    let mut codes = own.to_vec();
+    for code in db.map(|e| e.codes.as_slice()).unwrap_or_default() {
+        if !codes.iter().any(|c| hookdb::same_code(c, code)) {
+            codes.push(code.clone());
+        }
+    }
+    codes
+}
+/// Whether a thread with hook code `hookcode` is one the database names for the game.
+fn from_database(db: Option<&hookdb::Entry>, hookcode: &str) -> bool {
+    db.is_some_and(|e| e.codes.iter().any(|code| hookdb::same_code(hookcode, code)))
+}
+fn has_codes(db: Option<&hookdb::Entry>) -> bool {
+    db.is_some_and(|e| !e.codes.is_empty())
+}
+/// Whether the hook database is used for the game at `exe`: its own `hookDatabase`, else the
+/// default's, else on.
+fn database_on(hook: &Hook, exe: &std::path::Path) -> bool {
+    let Some(service) = hook.app.try_state::<Shared>() else { return true };
+    let read = |path: &[&str]| service.settings.get_path(path).ok().flatten().and_then(|v| v.as_bool());
+    read(&["textHookerGames", &game_key(exe), "hookDatabase"])
+        .or_else(|| read(&["textHookerDefaults", "hookDatabase"]))
+        .unwrap_or(true)
+}
+/// The database's entry for the game at `exe`, if it is used for the game.
+fn database_entry(hook: &Hook, exe: &std::path::Path) -> Option<hookdb::Entry> {
+    let root = hook.root().ok()?;
+    hookdb::refresh_if_due(root.clone());
+    database_on(hook, exe).then(|| hookdb::lookup(&root, exe)).flatten()
 }
 
 /// Where a game's icon is kept, taken from its window while it was hooked.
@@ -507,9 +551,10 @@ fn read_events(
             "attached" => {
                 session.phase = "hooked";
                 session.detail = None;
-                // The reader's own hook codes for this game, each time it is hooked.
+                // The reader's own hook codes for this game, each time it is hooked, then the
+                // hook database's.
                 if let Some(pid) = event["pid"].as_u64() {
-                    for code in hook.config(&session).hook_codes {
+                    for code in inserted_codes(&hook.config(&session).hook_codes, session.db.as_ref()) {
                         let _ = send(&mut session, json!({ "cmd": "insert", "pid": pid, "code": code }));
                     }
                 }
@@ -710,7 +755,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         );
         let thread = session.threads.iter().find(|t| t.key == better).cloned();
         if let Some(thread) = thread {
-            if let Some(exe) = session.exe.clone() {
+            if let Some(exe) = session.exe.clone().filter(|_| !has_codes(session.db.as_ref())) {
                 remember(hook, &exe, Some(thread.signature()));
             }
             // The line already sent stays; the next rows of it come from the new thread.
@@ -724,6 +769,25 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         if session.selected.as_deref() != Some(key) {
             return;
         }
+    }
+    // The hook database's thread for this game: taken as soon as it speaks, over one matched to
+    // the screen, though never over one remembered for the game or chosen by hand.
+    if session.selected.as_deref() != Some(key)
+        && matches!(session.selected_by, None | Some("auto"))
+        && !session.remembered_before
+        && from_database(session.db.as_ref(), &session.threads[index].hookcode)
+    {
+        crate::debug_report::trace(
+            &hook.app,
+            json!({ "check": "texthook-database", "from": session.selected, "hookcode": session.threads[index].hookcode }),
+        );
+        if session.last_key == session.selected {
+            session.last_key = Some(key.to_string());
+        }
+        session.selected = Some(key.to_string());
+        session.selected_by = Some("database");
+        session.pick_note = None;
+        hook.publish(session);
     }
     if session.selected.as_deref() == Some(key) {
         crate::debug_report::trace(
@@ -798,7 +862,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
 /// same line, and which is chosen is down to chance.
 fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Option<String> {
     let selected = session.selected.as_deref()?;
-    if session.selected_by == Some("manual") {
+    if matches!(session.selected_by, Some("manual") | Some("database")) {
         return None;
     }
     let chosen = session.threads.iter().find(|t| t.key == selected)?;
@@ -914,10 +978,12 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                         session.selected_by = Some("auto");
                         session.pick_note = None;
                         // A generic thread won only because nothing better showed the line yet:
-                        // the screen is read again next time, not this one taken back.
-                        if let Some(exe) =
-                            session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name))
-                        {
+                        // the screen is read again next time, not this one taken back. Nor is a
+                        // choice made while the database's thread has not spoken yet: next time,
+                        // the database's is waited for again.
+                        if let Some(exe) = session.exe.clone().filter(|_| {
+                            !pick::is_generic(&thread.hookcode, &thread.name) && !has_codes(session.db.as_ref())
+                        }) {
                             remember(hook, &exe, Some(thread.signature()));
                         }
                         hook.line(&mut session, &key, &thread.text, false);
@@ -1150,10 +1216,13 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         }
         stop_child(&mut session);
         let generation = session.generation + 1;
+        let exe = targets.first().map(|t| t.exe.clone());
         *session = Session {
             generation,
             source_id,
-            exe: targets.first().map(|t| t.exe.clone()),
+            db: exe.as_deref().and_then(|exe| database_entry(hook, exe)),
+            remembered_before: exe.as_deref().is_some_and(|exe| remembered(hook, exe).is_some()),
+            exe,
             pids: targets.iter().map(|t| t.pid).collect(),
             targets: targets.clone(),
             phase: "starting",
@@ -1245,6 +1314,21 @@ pub fn texthook_select(key: Option<String>) -> Result<Value, String> {
             if let Some(exe) = &exe {
                 remember(hook, exe, None);
             }
+            session.remembered_before = false;
+            // The hook database's thread, when one has spoken; else the screen is read.
+            let known = session
+                .threads
+                .iter()
+                .find(|t| !t.text.is_empty() && from_database(session.db.as_ref(), &t.hookcode))
+                .cloned();
+            if let Some(thread) = known {
+                session.selected = Some(thread.key.clone());
+                session.selected_by = Some("database");
+                session.pick_note = None;
+                hook.line(&mut session, &thread.key, &thread.text, false);
+                hook.publish(&session);
+                return Ok(status_of(&session));
+            }
             session.pick_pending = true;
             if !session.pick_running {
                 session.pick_running = true;
@@ -1302,6 +1386,29 @@ pub fn texthook_forget(exe: String, all: bool) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The hook database's entry for the game at `exe` (whether or not it is turned on for the game);
+/// null when it has none. Reads the copy on disk, never the network.
+#[tauri::command]
+pub fn texthook_db_lookup(exe: String) -> Result<Option<hookdb::Entry>, String> {
+    let hook = hook().ok_or("text hooking is not available")?;
+    Ok(hookdb::lookup(&hook.root()?, std::path::Path::new(&exe)))
+}
+
+/// Which copy of the hook database is in use: how many games, its revision, where it came from.
+#[tauri::command]
+pub fn texthook_db_info() -> Result<hookdb::Info, String> {
+    let hook = hook().ok_or("text hooking is not available")?;
+    Ok(hookdb::info(&hook.root()?))
+}
+
+/// Looks for a newer hook database now; answers with the copy in use after.
+#[tauri::command]
+pub async fn texthook_db_refresh() -> Result<hookdb::Info, String> {
+    let hook = hook().ok_or("text hooking is not available")?;
+    let root = hook.root()?;
+    tauri::async_runtime::spawn_blocking(move || hookdb::refresh(&root)).await.map_err(|e| e.to_string())?
 }
 
 /// Stops the helper when the app quits, so the game is detached cleanly.
@@ -1435,7 +1542,30 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::failed_hook;
+    use super::{failed_hook, from_database, has_codes, hookdb, inserted_codes};
+
+    #[test]
+    fn the_databases_codes_follow_the_readers_own_and_name_its_thread() {
+        let entry = hookdb::Entry {
+            exe: "game.exe".into(),
+            dir: None,
+            exe_size: None,
+            codes: vec!["HS-8@1A2B:Game.exe".into(), "HQ-14@2B:Game.exe".into()],
+            title: None,
+            vndb: None,
+        };
+        // The reader's own first; a database code they already have is not inserted twice.
+        assert_eq!(
+            inserted_codes(&["hs-8@1a2b:game.exe".into()], Some(&entry)),
+            ["hs-8@1a2b:game.exe", "HQ-14@2B:Game.exe"]
+        );
+        assert_eq!(inserted_codes(&[], None), Vec::<String>::new());
+        assert!(from_database(Some(&entry), "HQ-14@2b:GAME.EXE"));
+        assert!(!from_database(Some(&entry), "HS0@0:gdi32.dll:TextOutW"));
+        assert!(!from_database(None, "HQ-14@2B:Game.exe"));
+        assert!(has_codes(Some(&entry)));
+        assert!(!has_codes(Some(&hookdb::Entry { codes: vec![], vndb: Some("v1".into()), ..entry })));
+    }
 
     #[test]
     fn a_hook_the_hooker_could_not_insert_is_told_apart() {

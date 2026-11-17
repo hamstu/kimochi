@@ -69,6 +69,7 @@ const threadLabel = (thread) => firstLine(thread.preview) || thread.name
 /** How the thread in use was chosen, as the sidebar says it. */
 function howChosen(status) {
   if (status.selectedBy === 'saved') return 'Remembered for this game'
+  if (status.selectedBy === 'database') return 'From the hook database'
   if (status.selectedBy === 'auto') return 'Matched to the screen'
   if (status.selectedBy === 'manual') return 'Chosen by you'
   if (status.pickNote) return 'Nothing matches the screen yet'

@@ -14,7 +14,8 @@
  * hooked game's.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Gamepad2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { ExternalLink, Gamepad2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import {
   Button,
   Callout,
@@ -28,6 +29,7 @@ import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
+  Spinner,
   Switch
 } from '@kit'
 import { deleteSession, getManifest, renameSession, subscribeSessions } from '@texthooker/lib/sessions'
@@ -41,8 +43,16 @@ import {
   texthookGameIcon,
   texthookInsert,
   texthookSelect,
-  useHookStatus
+  texthookDbInfo,
+  texthookDbRefresh,
+  hookDbLookup,
+  useHookStatus,
+  type HookDbEntry,
+  type HookDbInfo
 } from '../../bridge/textHook'
+import { bestJapaneseTitle, searchVndbVns, type VndbVn } from '@texthooker/lib/vndb'
+import { linkFor } from '@texthooker/lib/vndbLink'
+import { vndbUrl } from '../../../ui/vndb-link'
 import {
   HOOK_DEFAULTS,
   HOOK_SETTING_KEYS,
@@ -60,6 +70,7 @@ import {
   type HookGame,
   type HookReplacement,
   type HookSettings,
+  type HookVndbLink,
   type Repeats
 } from '../../main/hookGames'
 import { useCapabilities } from '../../bridge/capabilities'
@@ -279,6 +290,14 @@ function HookSettingsSections({
             onValueChange={(next) => set('flushMs', Number(next))}
             options={FLUSH_OPTIONS}
           />
+        </SettingsRow>
+        <SettingsRow
+          label="Use the hook database"
+          controlId={id('hook-db')}
+          badge={badge('hookDatabase')}
+          description="Hook codes Kimochi knows read a game's dialogue. A thread remembered for the game, or one you choose, still comes first."
+        >
+          <Switch id={id('hook-db')} checked={value.hookDatabase} onCheckedChange={(on) => set('hookDatabase', on)} />
         </SettingsRow>
         {extra?.hooking}
       </SettingsSection>
@@ -502,6 +521,180 @@ function Thread({ exe, hooked }: { exe: string; hooked: boolean }): ReactNode {
   )
 }
 
+/** The hook database's codes for the game, when it has any (text_hook/hookdb.rs). */
+function DatabaseCodes({ exe }: { exe: string }): ReactNode {
+  const [entry, setEntry] = useState<HookDbEntry | null>(null)
+  useEffect(() => {
+    let live = true
+    void hookDbLookup(exe).then(
+      (found) => live && setEntry(found),
+      () => live && setEntry(null)
+    )
+    return () => {
+      live = false
+    }
+  }, [exe])
+  if (!entry?.codes.length) return null
+  return (
+    <SettingsRow
+      stacked
+      label="From the hook database"
+      description="Added each time the game is hooked, while Use the hook database is on."
+    >
+      <div className="th-list">
+        {entry.codes.map((code) => (
+          <div key={code} className="th-list-row">
+            <code className="th-code">{code}</code>
+          </div>
+        ))}
+      </div>
+    </SettingsRow>
+  )
+}
+
+/** Which copy of the hook database is in use, and a look for a newer one. */
+function DatabaseInfo(): ReactNode {
+  const [info, setInfo] = useState<HookDbInfo | null>(null)
+  const [checking, setChecking] = useState(false)
+  useEffect(() => {
+    let live = true
+    void texthookDbInfo().then(
+      (found) => live && setInfo(found),
+      () => undefined
+    )
+    return () => {
+      live = false
+    }
+  }, [])
+  const checked = when(info?.checkedAt ?? undefined)
+  const description = info
+    ? [
+        `Hook codes for ${info.games.toLocaleString()} game${info.games === 1 ? '' : 's'}${info.updated ? `, updated ${info.updated}` : ''}.`,
+        info.error ? `Couldn’t check for a newer one: ${info.error}` : checked ? `Checked ${checked}.` : null
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : 'Hook codes Kimochi knows, by game.'
+  return (
+    <SettingsRow label="Hook database" description={description}>
+      <Button
+        size="sm"
+        disabled={checking}
+        onClick={() => {
+          setChecking(true)
+          void texthookDbRefresh()
+            .then(setInfo, () => undefined)
+            .finally(() => setChecking(false))
+        }}
+      >
+        {checking ? <Spinner label="Checking…" /> : 'Check for updates'}
+      </Button>
+    </SettingsRow>
+  )
+}
+
+const LINKED_BY: Record<HookVndbLink['by'], string> = {
+  database: 'Found by the hook database',
+  search: 'Found by searching VNDB for the game’s name',
+  manual: 'Chosen by you'
+}
+
+/** The game's VNDB entry (ui/vndb-link.ts): shown, opened, changed or unlinked. */
+function VndbRow({ exe, game, name }: { exe: string; game: HookGame; name: string }): ReactNode {
+  const link = game.vndb ?? null
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<VndbVn[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const search = async (text: string): Promise<void> => {
+    if (!text.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      setResults(await searchVndbVns(text))
+    } catch {
+      setError('Couldn’t reach VNDB. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const open = (): void => {
+    setSearching(true)
+    setQuery(name)
+    setResults(null)
+    void search(name)
+  }
+  const choose = (vn: VndbVn): void => {
+    setSearching(false)
+    void updateHookGame(exe, (g) => ({ ...g, vndb: linkFor(vn, 'manual') }))
+  }
+  return (
+    <>
+      <SettingsRow
+        label={link ? <span lang="ja">{link.title}</span> : 'Not linked'}
+        description={
+          link
+            ? `${link.id} · ${LINKED_BY[link.by]}`
+            : game.vndb === null
+              ? 'Unlinked by you.'
+              : 'Kimochi looks the game up on VNDB when it’s hooked, and links it when a title matches its name exactly.'
+        }
+      >
+        {link && (
+          <Button size="sm" variant="ghost" onClick={() => void openUrl(vndbUrl(link.id)).catch(() => undefined)}>
+            <ExternalLink /> VNDB
+          </Button>
+        )}
+        <Button size="sm" onClick={open}>
+          {link ? 'Change' : 'Find on VNDB'}
+        </Button>
+        {link && (
+          <Button size="sm" variant="ghost" onClick={() => void updateHookGame(exe, (g) => ({ ...g, vndb: null }))}>
+            Unlink
+          </Button>
+        )}
+      </SettingsRow>
+      {searching && (
+        <SettingsRow stacked label="Find the game on VNDB">
+          <div className="th-list">
+            <form
+              className="th-list-row"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void search(query)
+              }}
+            >
+              <Input aria-label="VNDB search" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <Button type="submit" size="sm" disabled={busy || !query.trim()}>
+                Search
+              </Button>
+              <IconButton label="Close" size="sm" onClick={() => setSearching(false)}>
+                <X />
+              </IconButton>
+            </form>
+            {busy && <Spinner label="Searching VNDB…" />}
+            {error && <p className="k-description th-error">{error}</p>}
+            {results?.length === 0 && !busy && <p className="k-description">Nothing found. Try another name.</p>}
+            {results?.map((vn) => (
+              <button key={vn.id} type="button" className="k-row th-vndb-result" onClick={() => choose(vn)}>
+                <span className="k-row-label" lang="ja">
+                  {bestJapaneseTitle(vn)}
+                </span>
+                <span className="k-description k-num">
+                  {[vn.title !== bestJapaneseTitle(vn) ? vn.title : null, vn.released?.slice(0, 4), vn.id]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </SettingsRow>
+      )}
+    </>
+  )
+}
+
 /** A session in brief: its reading time and lines (as Log & Sessions counts them), and its age. */
 function SessionStats({
   manifest,
@@ -644,12 +837,17 @@ function GamePage({ gameId, game, onDeleted }: { gameId: string; game: HookGame;
         <SessionRow game={game} manifest={manifest} />
       </SettingsSection>
 
+      <SettingsSection title="VNDB">
+        <VndbRow exe={exe} game={game} name={name} />
+      </SettingsSection>
+
       <HookSettingsSections
         scope={{ kind: 'game', exe, game }}
         extra={{
           hooking: (
             <>
               <Thread exe={exe} hooked={hooked} />
+              <DatabaseCodes exe={exe} />
               <HookCodes exe={exe} game={game} hooked={hooked} />
             </>
           ),
@@ -813,6 +1011,7 @@ export function TextHookerTab(): ReactNode {
                 <HookSettingsSections
                   scope={{ kind: 'defaults' }}
                   extra={{
+                    hooking: <DatabaseInfo />,
                     text: (
                       <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
                         <Button size="sm" onClick={() => showSettingsTab('log')}>

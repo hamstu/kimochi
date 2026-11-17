@@ -27,6 +27,8 @@ export interface HookThread {
   japanese: boolean
   /** One of the generic Windows API hooks rather than an engine hook. */
   generic: boolean
+  /** Its hook code is the hook database's for the game. */
+  database?: boolean
   selected: boolean
 }
 
@@ -42,13 +44,17 @@ export interface HookStatus {
   engine?: { id: string; name: string; version: string } | null
   download?: { done: number; total: number } | null
   selected?: string | null
-  selectedBy?: 'saved' | 'auto' | 'manual' | null
+  /** How the thread in use was chosen: remembered for the game, from the hook database, matched to
+      the screen by OCR, or by the reader. */
+  selectedBy?: 'saved' | 'database' | 'auto' | 'manual' | null
   /** Why no thread has been chosen automatically yet. */
   pickNote?: string | null
   /** Why the first engine was given up for the one in use. */
   fallback?: string | null
   /** Hook codes the hooker found in the game but could not insert. */
   hookFailures?: string[]
+  /** The game's entry in the hook database, while it is used for the game. */
+  database?: { codes: string[]; title?: string | null; vndb?: string | null } | null
   /** Kimochi reads this Unity game's text itself (the hooker's failures then matter less). */
   unityText?: boolean
   threads: HookThread[]
@@ -103,6 +109,21 @@ export const texthookGameIcon = (exe: string): Promise<string | null> =>
 /** What is kept natively for a game: the hook code of the thread remembered for it. */
 export const texthookGame = (exe: string): Promise<{ thread: string | null }> =>
   invoke<{ thread: string | null }>('texthook_game', { exe })
+/** Which copy of the hook database is in use (text_hook/hookdb.rs). */
+export interface HookDbInfo {
+  games: number
+  revision: number
+  updated?: string | null
+  origin: 'bundled' | 'downloaded'
+  /** When a newer copy was last looked for (ms since the epoch), and why that failed. */
+  checkedAt?: number | null
+  error?: string | null
+}
+export const texthookDbInfo = (): Promise<HookDbInfo> => invoke<HookDbInfo>('texthook_db_info')
+/** Looks for a newer hook database now. */
+export const texthookDbRefresh = (): Promise<HookDbInfo> => invoke<HookDbInfo>('texthook_db_refresh')
+export { hookDbLookup, type HookDbEntry } from '../texthooker/lib/vndbLink'
+
 /** Forgets the thread remembered for a game; with `all`, its icon too. */
 export const texthookForget = (exe: string, all: boolean): Promise<void> =>
   invoke<void>('texthook_forget', { exe, all })

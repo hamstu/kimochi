@@ -3,8 +3,8 @@
  * like the OCR model's and the Dictionary's (the box's own switch row is its heading).
  *
  * A hooked game produces several threads (the dialogue, a nameplate, menus, engine noise). The
- * dialogue is chosen automatically, by the thread remembered for this game or by matching each
- * thread's text against what is on screen. The select shows the chosen thread's latest line; its
+ * dialogue is chosen automatically: the thread remembered for this game, else the one Kimochi's
+ * hook database names for it, else by matching each thread's text against what is on screen. The select shows the chosen thread's latest line; its
  * menu lists the live threads with their latest text, so a wrong choice is one click to correct,
  * and that choice is remembered for the game. The menu keeps its rows in place as text arrives
  * (native orders them by when the hooker found them), and lists only threads that have carried
@@ -95,11 +95,13 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
   const how =
     status.selectedBy === 'saved'
       ? 'Remembered for this game'
-      : status.selectedBy === 'auto'
-        ? 'Matched to the screen'
-        : status.pickNote
-          ? 'Nothing matches the screen yet'
-          : undefined
+      : status.selectedBy === 'database'
+        ? 'From the hook database'
+        : status.selectedBy === 'auto'
+          ? 'Matched to the screen'
+          : status.pickNote
+            ? 'Nothing matches the screen yet'
+            : undefined
   return (
     <div className="src-hook">
       {failed && status.detail && (
@@ -164,7 +166,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
                   value={thread.key}
                   className="src-hook-item"
                   data-current={thread.selected ? '' : undefined}
-                  detail={thread.name}
+                  detail={thread.database ? `${thread.name} · Hook database` : thread.name}
                   title={thread.hookcode}
                 >
                   {threadLabel(thread)}
