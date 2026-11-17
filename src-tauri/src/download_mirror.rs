@@ -320,11 +320,10 @@ mod tests {
     }
 
     fn run(fake: &Fake, file: &ModelFile) -> (Result<(), Stop>, Vec<u8>) {
-        let dir = std::env::temp_dir().join(format!(
-            "kimochi-mirror-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-        ));
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("kimochi-mirror-test-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let result = download_file_with(Some(MIRROR), fake, &dir, file, &AtomicU8::new(RUN), &mut |_| {});
         let bytes = std::fs::read(dir.join(&file.name)).unwrap_or_default();
