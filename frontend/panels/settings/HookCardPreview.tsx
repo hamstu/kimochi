@@ -23,6 +23,7 @@ import { useCapabilities } from '../../bridge/capabilities'
 import { usePrefs } from '../../kit/appearance-state'
 import { lookupKeyName, PREVIEW_SURFACE, previewWord, usePreviewLine } from './overlayPreview'
 import { TransparentMark } from './CardLook'
+import { GridField } from '../../components/GridField'
 import '@ui/overlay-text.css'
 import '@ui/hook-card.css'
 import './overlay-look.css'
@@ -244,6 +245,7 @@ export function HookCardPreview({
         onPointerMove={actions ? track : undefined}
         onPointerDown={actions ? track : undefined}
       >
+        <GridField />
         {/* The game's dialogue box and its own line, which an aligned card covers. */}
         <span className="hook-preview-dialogue" aria-hidden>
           <span className="hook-preview-game-text" lang={line.lang}>

@@ -60,7 +60,6 @@ import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { HookCardPreview } from './HookCardPreview'
 import { HookCardLookRow } from './CardLook'
-import { AlignLockMark } from '../../components/AlignLockMark'
 import { lookupKeyName } from './overlayPreview'
 import { HOOK_CARD_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
 import { showSettingsTab } from './showSettingsTab'
@@ -157,6 +156,9 @@ function HookSettingsSections({
   const [defaults, setDefaults, resetDefault, shipped] = useHookDefaults()
   // A Transparent card is always auto-aligned: its switch shows on, and cannot be turned off.
   const alignLocked = useHookCardLocksAutoAlign()
+  // With the card never shown over the game, it has no style to set.
+  const [showCard] = useSetting<boolean | HookCardShow>('textHookerShowCard', true)
+  const cardShown = hookCardShow(showCard) !== 'never'
   const stored = scope.kind === 'defaults' ? defaults : hookSettings(defaults, scope.game)
   const value = alignLocked ? { ...stored, autoAlign: true } : stored
   const changed = (key: keyof HookSettings): boolean =>
@@ -262,60 +264,51 @@ function HookSettingsSections({
         </SettingsRow>
         {extra?.text}
       </SettingsSection>
-      <SettingsSection title="Card style" id={scope.kind === 'defaults' ? HOOK_CARD_SECTION : undefined}>
-        <HookCardPreview
-          autoAlign={value.autoAlign}
-          textSize={value.textSize}
-          opacity={value.opacity}
-          actions={cardActions}
-        />
-        <HookCardLookRow shared={scope.kind !== 'defaults'} />
-        <SettingsRow
-          label="Auto align"
-          controlId={id('align')}
-          badge={
+      {cardShown && (
+        <SettingsSection title="Card style" id={scope.kind === 'defaults' ? HOOK_CARD_SECTION : undefined}>
+          <HookCardPreview
+            autoAlign={value.autoAlign}
+            textSize={value.textSize}
+            opacity={value.opacity}
+            actions={cardActions}
+          />
+          <HookCardLookRow shared={scope.kind !== 'defaults'} />
+          {/* A Transparent card shows nothing to style, and is always auto-aligned (the overlay keeps
+            it over the game's text), so the rest of its style goes until another look is chosen. */}
+          {!alignLocked && (
             <>
-              {alignLocked && <AlignLockMark />}
-              {badge('autoAlign')}
+              <SettingsRow
+                label="Auto align"
+                controlId={id('align')}
+                badge={badge('autoAlign')}
+                description="Lines the card up with the game's text and matches its size."
+              >
+                <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
+              </SettingsRow>
+              {/* Auto align sizes the text to the game's own, so the size is chosen only with it off. */}
+              {!value.autoAlign && (
+                <SettingsRow label="Text size" badge={badge('textSize')}>
+                  <Segmented
+                    aria-label="Text size"
+                    value={textSizeValue(value.textSize)}
+                    onValueChange={(next) => set('textSize', Number(next))}
+                    options={TEXT_SIZES}
+                  />
+                </SettingsRow>
+              )}
+              <SettingsRow label="Background opacity" badge={badge('opacity')}>
+                <Select
+                  aria-label="Background opacity"
+                  value={String(value.opacity)}
+                  onValueChange={(next) => set('opacity', Number(next))}
+                  options={OPACITY_OPTIONS}
+                />
+              </SettingsRow>
+              {extra?.card}
             </>
-          }
-          description={
-            alignLocked
-              ? 'Always on while the Card look is Transparent.'
-              : "Lines the card up with the game's text and matches its size."
-          }
-          disabled={alignLocked}
-        >
-          <Switch
-            id={id('align')}
-            // Its label holds the lock's mark too, which is not part of its name.
-            aria-label="Auto align"
-            checked={value.autoAlign}
-            disabled={alignLocked}
-            onCheckedChange={(on) => set('autoAlign', on)}
-          />
-        </SettingsRow>
-        {/* Auto align sizes the text to the game's own, so the size is chosen only with it off. */}
-        {!value.autoAlign && (
-          <SettingsRow label="Text size" badge={badge('textSize')}>
-            <Segmented
-              aria-label="Text size"
-              value={textSizeValue(value.textSize)}
-              onValueChange={(next) => set('textSize', Number(next))}
-              options={TEXT_SIZES}
-            />
-          </SettingsRow>
-        )}
-        <SettingsRow label="Background opacity" badge={badge('opacity')}>
-          <Select
-            aria-label="Background opacity"
-            value={String(value.opacity)}
-            onValueChange={(next) => set('opacity', Number(next))}
-            options={OPACITY_OPTIONS}
-          />
-        </SettingsRow>
-        {extra?.card}
-      </SettingsSection>
+          )}
+        </SettingsSection>
+      )}
     </>
   )
 }

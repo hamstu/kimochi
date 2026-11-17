@@ -36,6 +36,7 @@ const {
   resolveHookCardAppearance,
   resolveOverlayCardAppearance,
   sharedButtonActions,
+  usableInputSource,
   withDefaults
 } = await import(pathToFileURL(outfile).href)
 process.on('exit', () => {
@@ -201,4 +202,13 @@ test('overlay look: the cards follow Kimochi unless told otherwise', () => {
   assert.equal(resolveOverlayCardAppearance(app, 'system', false), 'light')
   assert.equal(resolveOverlayCardAppearance({ ...app, appearance: 'light' }, 'dark', true), 'light')
   assert.equal(resolveOverlayCardAppearance({ ...app, appearance: 'dark' }, 'light', false), 'dark')
+})
+
+test('a Text Hooker input from another system reads as OCR where games cannot be hooked', () => {
+  assert.equal(usableInputSource('hook', 'macos'), 'ocr')
+  assert.equal(usableInputSource('hook', 'windows'), 'hook')
+  assert.equal(usableInputSource('hook', 'linux'), 'hook')
+  // Unknown system: as stored.
+  assert.equal(usableInputSource('hook', undefined), 'hook')
+  assert.equal(usableInputSource('clipboard', 'macos'), 'clipboard')
 })

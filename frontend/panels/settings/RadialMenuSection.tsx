@@ -6,14 +6,16 @@
  * The preview is the overlay's own ring (ui/radial-menu.js, in the Halo look) drawn in a well, as
  * it looks with an OCR source or while text hooking (the menu at its top left). Dragging an item
  * carries it round the ring, swapping places with each item it reaches, and it snaps into its
- * place when let go; clicking one picks its row below, where its shortcut is set. Every action has
- * a row, in the menu or not, so an action can have a button without taking a place in the menu.
- * The menu always keeps one item, and Reset to default puts the shipped menu back (the shortcuts
- * stay as they are).
+ * place when let go. Clicking one opens its panel beside the ring (the ring springs left to make
+ * room): what it does, where it shows, its shortcut (keys and a controller button or combination)
+ * and Remove from the menu. Add item, at the well's bottom right, puts back an action the menu
+ * doesn't hold. For keyboards and screen readers, each item is also a hidden button that opens its
+ * panel. The menu always keeps one item, and Reset to default puts the shipped menu back (the
+ * shortcuts stay as they are).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
-import { Eye, Plus, X } from 'lucide-react'
-import { Badge, Button, IconButton, Select, SettingsRow, SettingsSection, Tooltip } from '@kit'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { Eye, Plus, Trash2, X } from 'lucide-react'
+import { Badge, Button, IconButton, Menu, MenuContent, MenuItem, MenuTrigger, Select, SettingsSection } from '@kit'
 import { ICONS, ORBIT, RadialMenu } from '@ui/radial-menu.js'
 import {
   RADIAL_ITEMS,
@@ -37,6 +39,7 @@ import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { gamepadChord } from '../../vendor/shared-defaults'
 import { formatAccelerator, keyPlatformOf } from './accelerator'
 import { ShortcutRecorder } from './ShortcutRecorder'
+import { GridField } from '../../components/GridField'
 import '@ui/controller.css'
 import '@ui/controller-variants.css'
 import './radial-menu-section.css'
@@ -77,7 +80,6 @@ const ITEM_ICONS: Record<string, string> = {
 interface RingParts {
   labels: HTMLElement[]
   wedges: Element[]
-  current: HTMLElement
   pointAt: (degrees: number, smoothing?: number) => void
 }
 
@@ -134,7 +136,10 @@ function RadialPreview({
   onSource,
   onPick,
   onSelect,
-  onReorder
+  onReorder,
+  panel,
+  add,
+  reset
 }: {
   items: { item: RadialItem; label: string; enabled: boolean }[]
   selected: string | null
@@ -144,6 +149,12 @@ function RadialPreview({
   onPick: (id: string) => void
   onSelect: (id: string) => void
   onReorder: (ids: string[]) => void
+  /** The open item's panel, beside the ring; the ring moves over for it. */
+  panel: ReactNode
+  /** Add item, at the bottom right. */
+  add: ReactNode
+  /** Reset to default, at the top right. */
+  reset: ReactNode
 }): ReactNode {
   const previewRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -193,12 +204,10 @@ function RadialPreview({
     )
   }, [items, selectedIndex, details])
 
-  /** Light the slot the dragged item is over, and name it in the hub. */
+  /** Light the slot the dragged item is over, its name under its icon. */
   const light = (ring: RingParts, drag: Drag): void => {
     ring.wedges.forEach((wedge, index) => wedge.classList.toggle('cm-selected', index === drag.slot))
     ring.labels.forEach((label) => label.classList.toggle('cm-selected', label === drag.label))
-    ring.current.textContent = drag.label.querySelector('.cm-label')?.textContent ?? ''
-    ring.current.classList.remove('cm-muted')
   }
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
@@ -279,36 +288,43 @@ function RadialPreview({
   }
 
   return (
-    <div
-      ref={previewRef}
-      className="radial-preview"
-      onMouseLeave={() => {
-        if (!dragRef.current) menuRef.current?.select(selectedIndex)
-      }}
-    >
+    <div className="radial-preview-well">
       <div
-        ref={hostRef}
-        className="radial-preview-stage"
-        data-cm-variant="halo"
-        data-cm-theme={resolved}
-        style={{ width: STAGE, height: STAGE, ['--cm-ring-rgb' as string]: ringRgb }}
-        aria-hidden
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      />
-      <div className="radial-preview-source">
-        <Select
-          aria-label="Show the menu as it looks with"
-          size="sm"
-          variant="ghost"
-          value={source}
-          onValueChange={onSource}
-          options={SOURCES}
+        ref={previewRef}
+        className="radial-preview"
+        data-open={panel ? '' : undefined}
+        onMouseLeave={() => {
+          if (!dragRef.current) menuRef.current?.select(selectedIndex)
+        }}
+      >
+        <GridField />
+        <div
+          ref={hostRef}
+          className="radial-preview-stage"
+          data-cm-variant="halo"
+          data-cm-theme={resolved}
+          style={{ width: STAGE, height: STAGE, ['--cm-ring-rgb' as string]: ringRgb }}
+          aria-hidden
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         />
+        <div className="radial-preview-source">
+          <Select
+            aria-label="Show the menu as it looks with"
+            size="sm"
+            variant="ghost"
+            value={source}
+            onValueChange={onSource}
+            options={SOURCES}
+          />
+        </div>
+        <p className="radial-preview-hint">Drag an item to move it. Click one to edit it.</p>
+        <div className="radial-preview-add">{add}</div>
+        {reset}
+        {panel}
       </div>
-      <p className="radial-preview-hint">Drag an item to change its place in the ring.</p>
     </div>
   )
 }
@@ -321,7 +337,6 @@ export function RadialMenuSection(): ReactNode {
   const menu = useMemo(() => effectiveRadialMenu(stored), [stored])
   const [selected, setSelected] = useState<string | null>(null)
   const [source, setSource] = useState<PreviewSource>('ocr')
-  const rows = useRef(new Map<string, HTMLDivElement>())
 
   const inMenu = useMemo(
     () => menu.map((id) => RADIAL_ITEMS.find((item) => item.id === id)).filter((item) => item !== undefined),
@@ -371,113 +386,175 @@ export function RadialMenuSection(): ReactNode {
     return result
   }, [hotkeys, keyPlatform])
 
-  const pick = (id: string): void => {
-    setSelected(id)
-    const row = rows.current.get(id)
-    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    row?.querySelector<HTMLButtonElement>('.radial-row-shortcut button')?.focus({ preventScroll: true })
-  }
+  const open = selected ? RADIAL_ITEMS.find((item) => item.id === selected) : undefined
 
-  const renderRow = (item: RadialItem, member: boolean): ReactNode => {
-    const binding = hotkeys[item.hotkey]
-    const conflicts = hotkeyConflicts(hotkeys, item.hotkey)
-    const clashes = [...new Set([...conflicts.keys, ...conflicts.buttons])]
-    const only = item.when ? ONLY_WHEN[item.when] : undefined
-    return (
-      <div
-        key={item.id}
-        ref={(node) => {
-          if (node) rows.current.set(item.id, node)
-          else rows.current.delete(item.id)
-        }}
-        className="radial-row"
-        data-selected={selected === item.id ? '' : undefined}
-        data-outside={member ? undefined : ''}
-        onFocusCapture={() => setSelected(item.id)}
-        onPointerDown={() => setSelected(item.id)}
-      >
-        <SettingsRow
-          className="shortcut-row"
-          leading={<ItemIcon id={item.id} />}
-          label={item.label}
-          description={item.description}
-          badge={
-            <>
-              {only && (
-                <Tooltip content={only}>
-                  <span className="radial-row-only" tabIndex={0} aria-label={only}>
-                    <Eye aria-hidden />
-                  </span>
-                </Tooltip>
-              )}
-              {clashes.length > 0 && <Badge tone="warn">Same as {clashes.join(', ')}</Badge>}
-            </>
-          }
-        >
-          <span className="radial-row-shortcut">
-            <ShortcutRecorder
-              label={item.label}
-              value={binding?.accelerator ?? ''}
-              onChange={(accelerator) => updateHotkey(item.hotkey, { accelerator })}
-            />
-          </span>
+  // Escape closes the open panel.
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !event.defaultPrevented) setSelected(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected])
+
+  const conflicts = open ? hotkeyConflicts(hotkeys, open.hotkey) : null
+  const panel = open ? (
+    <ItemPanel
+      key={open.id}
+      item={open}
+      label={shown.find(({ item }) => item.id === open.id)?.label ?? open.label}
+      binding={hotkeys[open.hotkey]}
+      clashes={conflicts ? [...new Set([...conflicts.keys, ...conflicts.buttons])] : []}
+      removable={canRemoveRadialItem(menu, open.id)}
+      onHotkey={(patch) => updateHotkey(open.hotkey, patch)}
+      onRemove={() => {
+        save(removeRadialItem(menu, open.id))
+        setSelected(null)
+      }}
+      onClose={() => setSelected(null)}
+    />
+  ) : null
+
+  const add =
+    outside.length > 0 ? (
+      <Menu>
+        <MenuTrigger asChild>
+          <Button size="sm" variant="ghost">
+            <Plus />
+            Add item
+          </Button>
+        </MenuTrigger>
+        <MenuContent align="end">
+          {outside.map((item) => (
+            <MenuItem
+              key={item.id}
+              icon={<ItemIcon id={item.id} />}
+              onSelect={() => {
+                save(addRadialItem(menu, item.id))
+                setSelected(item.id)
+              }}
+            >
+              {item.label}
+            </MenuItem>
+          ))}
+        </MenuContent>
+      </Menu>
+    ) : null
+
+  return (
+    <SettingsSection
+      title="Radial menu"
+      description="The actions in the radial menu, clockwise from the top. Click one to give it a shortcut that runs it without opening the menu."
+    >
+      <RadialPreview
+        items={shown}
+        selected={selected}
+        details={details}
+        source={source}
+        onSource={setSource}
+        onPick={setSelected}
+        // After a drag, an open panel follows the item that moved; a closed one stays closed.
+        onSelect={(id) => setSelected((current) => (current ? id : null))}
+        onReorder={(ids) => save(reorderShownItems(menu, ids))}
+        panel={panel}
+        add={add}
+        reset={
+          // Only once the menu differs from the one Kimochi ships.
+          isDefaultRadialMenu(stored) ? null : (
+            <button type="button" className="radial-preview-reset" onClick={() => void setStored(null)}>
+              Reset to default
+            </button>
+          )
+        }
+      />
+      {/* The ring is drawn for the pointer; these open the same panels from the keyboard. */}
+      <ul className="sr-only">
+        {inMenu.map((item) => (
+          <li key={item.id}>
+            <button type="button" onClick={() => setSelected(item.id)}>
+              {item.label}: shortcut and options
+            </button>
+          </li>
+        ))}
+      </ul>
+    </SettingsSection>
+  )
+}
+
+/**
+ * An item's panel, floating beside the ring: its name and what it does, where it shows, its
+ * shortcut (keys, and a controller button or combination), and Remove from the menu.
+ */
+function ItemPanel({
+  item,
+  label,
+  binding,
+  clashes,
+  removable,
+  onHotkey,
+  onRemove,
+  onClose
+}: {
+  item: RadialItem
+  label: string
+  binding: (Parameters<typeof gamepadChord>[0] & { accelerator?: string }) | undefined
+  clashes: string[]
+  removable: boolean
+  onHotkey: (patch: { accelerator?: string; gamepadButtons?: number[] }) => void
+  onRemove: () => void
+  onClose: () => void
+}): ReactNode {
+  const only = item.when ? ONLY_WHEN[item.when] : undefined
+  const id = useId()
+  return (
+    <section className="radial-panel" aria-labelledby={`${id}-title`}>
+      <header className="radial-panel-head">
+        <ItemIcon id={item.id} />
+        <h3 className="radial-panel-title" id={`${id}-title`}>
+          {label}
+        </h3>
+        <IconButton label="Close" size="sm" onClick={onClose}>
+          <X />
+        </IconButton>
+      </header>
+      <p className="radial-panel-description">{item.description}</p>
+      {only && (
+        <p className="radial-panel-note">
+          <Eye aria-hidden />
+          {only}
+        </p>
+      )}
+      <div className="radial-panel-field">
+        <span className="radial-panel-label">Shortcut</span>
+        <div className="radial-panel-shortcut">
+          <ShortcutRecorder
+            label={label}
+            value={binding?.accelerator ?? ''}
+            onChange={(accelerator) => onHotkey({ accelerator })}
+          />
           <GamepadButtonCapture
             chord
             value={binding ? gamepadChord(binding) : []}
-            onChange={(buttons) => updateHotkey(item.hotkey, { gamepadButtons: buttons })}
+            onChange={(buttons) => onHotkey({ gamepadButtons: buttons })}
             size="1"
           />
-          {member ? (
-            <IconButton
-              label={canRemoveRadialItem(menu, item.id) ? 'Remove from the menu' : 'The menu needs at least one item'}
-              size="sm"
-              disabled={!canRemoveRadialItem(menu, item.id)}
-              onClick={() => save(removeRadialItem(menu, item.id))}
-            >
-              <X />
-            </IconButton>
-          ) : (
-            <Button size="sm" onClick={() => save(addRadialItem(menu, item.id))}>
-              <Plus />
-              Add
-            </Button>
-          )}
-        </SettingsRow>
+        </div>
+        {clashes.length > 0 && <Badge tone="warn">Same as {clashes.join(', ')}</Badge>}
       </div>
-    )
-  }
-
-  return (
-    <>
-      <SettingsSection
-        title="Radial menu"
-        description="The actions in the radial menu, clockwise from the top. Click one to give it a shortcut that runs it without opening the menu."
-        actions={
-          <Button size="sm" disabled={isDefaultRadialMenu(stored)} onClick={() => void setStored(null)}>
-            Reset to default
-          </Button>
-        }
-      >
-        <RadialPreview
-          items={shown}
-          selected={selected}
-          details={details}
-          source={source}
-          onSource={setSource}
-          onPick={pick}
-          onSelect={setSelected}
-          onReorder={(ids) => save(reorderShownItems(menu, ids))}
-        />
-        {inMenu.map((item) => renderRow(item, true))}
-      </SettingsSection>
-      {outside.length > 0 && (
-        <SettingsSection
-          title="Not in the menu"
-          description="Add an action back to the menu, or give it a shortcut on its own."
+      <div className="radial-panel-foot">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="radial-panel-remove"
+          disabled={!removable}
+          title={removable ? undefined : 'The menu needs at least one item'}
+          onClick={onRemove}
         >
-          {outside.map((item) => renderRow(item, false))}
-        </SettingsSection>
-      )}
-    </>
+          <Trash2 />
+          Remove from menu
+        </Button>
+      </div>
+    </section>
   )
 }

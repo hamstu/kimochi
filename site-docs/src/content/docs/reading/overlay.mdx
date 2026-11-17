@@ -83,16 +83,17 @@ in it to see its card:
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Highlight colour** | Indigo | The tint and outline over text you can hover; pick a preset or any colour. |
-| **Highlight opacity** | 40% | How strongly the highlight shows before you point at it. |
-| **Cards** | Same as Kimochi | The card hovered text turns into: **Same as Kimochi** (follows the app's appearance), **Light**, **Dark**, **Blend**, which fills each card with the colours behind that word on your screen and picks light or dark text to match, as if the game drew it, or **Transparent**. |
+| **Highlight opacity** | 40% | How strongly the highlight shows before you point at it, from **Off** (no highlight) to 100%. |
+| **Hover card appearance** | Same as Kimochi | The card hovered text turns into: **Same as Kimochi** (follows the app's appearance), **Light**, **Dark**, **Blend**, which fills each card with the colours behind that word on your screen and picks light or dark text to match, as if the game drew it, or **Transparent** (no card). |
 
 ### Transparent
 
-With **Cards** set to **Transparent**, the overlay draws nothing over your game: no highlights, no
-cards and no text, even while you hold the lookup key. Looking words up works exactly as before
-(hold <kbd>Shift</kbd> and point at a word, or rest the pointer on it with hover lookup on), and the
-dictionary pop-up is the only thing that appears. Use it when you'd rather see the game's own text
-and only want the dictionary.
+With **Hover card appearance** set to **Transparent**, a word you point at doesn't turn into a card,
+even while you hold the lookup key: the game's own text stays in view. Looking words up works exactly
+as before (hold <kbd>Shift</kbd> and point at a word, or rest the pointer on it with hover lookup on),
+and the dictionary pop-up opens as usual. The highlight is separate and still shows; set **Highlight
+opacity** to **Off** as well and nothing at all is drawn over your game, so the dictionary pop-up is
+the only thing that appears.
 
 The [Text Hooker's card](/reading/text-hooker/#the-card-over-the-game) has its own look, set
 separately, so the overlay can be transparent while the card stays visible, or the other way round.

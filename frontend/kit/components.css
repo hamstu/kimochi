@@ -561,6 +561,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* An option drawn as an element (an icon and its label in an inline-flex, say) sits on the line's
+   baseline by default, which makes the line taller than the text and lifts both off the centre;
+   top-aligned, the line is the text's own and the value centres as plain text does. */
+.k-select-trigger > span:first-child > * {
+  vertical-align: top;
+}
 .k-select-trigger-icon {
   flex: none;
   width: var(--k-icon-xs);

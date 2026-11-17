@@ -7,7 +7,9 @@
  */
 import type { ReactNode } from 'react'
 import { Button, SettingsRow, SettingsSection } from '@kit'
+import { hookCardShow, type HookCardShow } from '@ui/hook-games'
 import { useCapabilities } from '../../bridge/capabilities'
+import { useSetting } from '../../bridge/useSetting'
 import { setSetting } from '../../bridge/settings'
 import { HOOK_CARD_SECTION, requestSettingsSection } from '../../bridge/settingsTarget'
 import { useHookCardLocksAutoAlign, useHookDefaults } from '../../main/hookGames'
@@ -19,7 +21,10 @@ export function TextHookerCardSection(): ReactNode {
   const { os } = useCapabilities()
   const [defaults] = useHookDefaults()
   const alignLocked = useHookCardLocksAutoAlign()
+  // With the card never shown over the game (Text Hooker → Card), it has no look to set.
+  const [showCard] = useSetting<boolean | HookCardShow>('textHookerShowCard', true)
   if (os !== 'windows' && os !== 'linux') return null
+  if (hookCardShow(showCard) === 'never') return null
 
   const open = (): void => {
     // The defaults' Card style, not a game's page left open there.
@@ -36,11 +41,14 @@ export function TextHookerCardSection(): ReactNode {
         opacity={defaults.opacity}
       />
       <HookCardLookRow />
-      <SettingsRow label="Auto align, text size and opacity are set in Text Hooker settings">
-        <Button size="sm" onClick={open}>
-          Text Hooker settings
-        </Button>
-      </SettingsRow>
+      {/* A Transparent card has nothing more to set (Text Hooker → Card style hides it too). */}
+      {!alignLocked && (
+        <SettingsRow label="Auto align, text size and opacity are set in Text Hooker settings">
+          <Button size="sm" onClick={open}>
+            Text Hooker settings
+          </Button>
+        </SettingsRow>
+      )}
     </SettingsSection>
   )
 }

@@ -38,6 +38,17 @@ function readStored(key: string): Promise<unknown> {
   return request
 }
 
+/** Tells every listener; one that throws is reported and skipped, never silencing the rest. */
+function notify(key: string, value: unknown): void {
+  for (const listener of listeners) {
+    try {
+      listener(key, value)
+    } catch (error) {
+      console.error(`[settings] a listener for "${key}" failed:`, error)
+    }
+  }
+}
+
 function ensureSubscribed(): void {
   if (subscribed) return
   subscribed = onSettingsChanged((key, value) => {
@@ -45,7 +56,7 @@ function ensureSubscribed(): void {
     // Shaped like a read: a value set elsewhere (another window, `kimochi settings set`) is
     // checked here too, not only when it is loaded.
     const usable = key in SETTINGS_DEFAULTS ? withDefaults(key as keyof Settings, value) : value
-    for (const listener of listeners) listener(key, usable)
+    notify(key, usable)
   }).then(() => undefined)
   subscribed.catch((error) => console.error('[settings] change subscription failed:', error))
 }
@@ -67,7 +78,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   pendingReads.clear()
   // The backend broadcasts to every window including this one, but notifying locally first keeps
   // the writing window responsive if the round trip is slow.
-  for (const listener of listeners) listener(key, value)
+  notify(key, value)
 }
 
 export function onSettingsChange(listener: Listener): () => void {

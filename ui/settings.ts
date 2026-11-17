@@ -1038,3 +1038,17 @@ export function overlayTextChange(was: boolean | null, shown: boolean, busy: boo
   if (was !== false || !shown) return 'idle'
   return busy ? 'scan-pending' : 'scan'
 }
+
+/** Whether this system can hook a game's text: Windows, and Linux (games under Proton or Wine). */
+export function textHookingSupported(os: string | undefined): boolean {
+  return os === 'windows' || os === 'linux'
+}
+
+/**
+ * The Log's input as this system can use it. Settings are an account's, so a Text Hooker input
+ * chosen on a Windows PC reaches a Mac too; there it reads as OCR, while the stored choice stays
+ * for the systems that can hook. An unknown system takes the stored one.
+ */
+export function usableInputSource<T extends string>(stored: T, os: string | undefined): T | 'ocr' {
+  return stored === 'hook' && os !== undefined && !textHookingSupported(os) ? 'ocr' : stored
+}

@@ -100,7 +100,8 @@ import {
   overlayStyleOf,
   resolveHookCardAppearance,
   resolveHostEngine,
-  resolveOverlayCardAppearance
+  resolveOverlayCardAppearance,
+  usableInputSource
 } from './settings.js'
 import { clearOfGame, exceptRects, popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
@@ -367,12 +368,15 @@ const hookExample = () => {
   if (isJapanese(language)) return HOOK_EXAMPLE
   return sampleFor(language)?.sentence ?? 'The game’s text appears here.'
 }
-const hookMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'hook'
+/** The Log's input, as this system can use it (a Text Hooker input synced from Windows is OCR here). */
+const inputNow = () =>
+  usableInputSource(setting('superTexthooker')?.inputSource ?? 'ocr', window.__KIMOCHI_PLATFORM__?.os)
+const hookMode = () => inputNow() === 'hook'
 /**
  * The browser extension is the source (src-tauri/src/browser_bridge.rs): its pictures are read
  * here (`onBrowserScan`) but drawn by the extension over the page, never by this window.
  */
-const browserMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'browser'
+const browserMode = () => inputNow() === 'browser'
 const hookKey = () => hook.exe?.toLowerCase() ?? null
 const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) || {}
 /**
@@ -457,10 +461,15 @@ async function syncGamingHints() {
 }
 
 /**
- * Whether the overlay's words and the Text Hooker's card are drawn at all: with Transparent
- * (Settings → Overlay appearance; Text Hooker → Card style) they are there to point at, unseen.
+ * Whether the overlay's words and the Text Hooker's card are drawn at all. Words show their
+ * highlight unless its opacity is Off, and their hover card unless it is Transparent (Settings →
+ * Overlay appearance); with both gone they are there to point at, unseen. The Text Hooker's card
+ * is unseen when Transparent (Text Hooker → Card style).
  */
-const wordsSeen = () => overlayStyleOf(setting('overlayStyle')).appearance !== 'transparent'
+const wordsSeen = () => {
+  const style = overlayStyleOf(setting('overlayStyle'))
+  return style.appearance !== 'transparent' || style.opacity > 0
+}
 const hookCardSeen = () => overlayStyleOf(setting('overlayStyle')).hookAppearance !== 'transparent'
 
 /**
@@ -630,8 +639,7 @@ function reportOutcome(post, { auto = false } = {}) {
  * sidebar shows Quick Shot only while the input is OCR, so the scan shortcut follows the same
  * rule rather than drawing a region under a Clipboard or WebSocket source.
  */
-const isQuickShot = () =>
-  Boolean(setting('quickShotEnabled')) && (setting('superTexthooker')?.inputSource ?? 'ocr') === 'ocr'
+const isQuickShot = () => Boolean(setting('quickShotEnabled')) && inputNow() === 'ocr'
 
 // ---------------------------------------------------------------------------
 // 1. Rendering
@@ -4990,7 +4998,7 @@ await mirrorDictionaryEngine({ repair: true })
 
 /**
  * The text's look (Settings → Overlay → Overlay appearance): the highlight colour, and whether
- * the cards are light, dark, blended or transparent (nothing drawn); "Same as Kimochi" follows
+ * the cards are light, dark, blended or transparent (no card, the highlight alone); "Same as Kimochi" follows
  * the app's appearance and, for `system`, the OS.
  */
 const systemDark = matchMedia('(prefers-color-scheme: dark)')

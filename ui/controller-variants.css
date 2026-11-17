@@ -459,10 +459,11 @@
 }
 
 /* === Halo ====================================================================
-   Over the base above: the game blurs behind the hub and a frosted donut of
-   segments, clear in the gap between, where a marker slides round a track to
-   the chosen segment. That segment stands proud, outlined and lit from its
-   rim in, all in the overlay's highlight colour. Panels and the hint bar are
+   Over the base above: the game blurs behind a thick frosted donut of
+   segments, clear in the empty hub and the thin track round it, where a
+   marker slides to the chosen segment, whose name shows under its icon.
+   That segment stands proud, outlined and lit from its rim in, all in the
+   overlay's highlight colour. Panels and the hint bar are
    frosted too, with inset rounded rows. */
 [data-cm-variant='halo'] .cm-glass {
   background: radial-gradient(
@@ -474,9 +475,18 @@
   );
   backdrop-filter: blur(16px) saturate(1.3);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
-  mask-image: radial-gradient(circle closest-side, #000 var(--cm-outer), transparent calc(var(--cm-outer) + 0.5px));
+  /* The blur only where the donut is: the hub and the track stay clear, the game sharp there. */
+  mask-image: radial-gradient(
+    circle closest-side,
+    transparent calc(var(--cm-inner) - 0.5px),
+    #000 var(--cm-inner),
+    #000 var(--cm-outer),
+    transparent calc(var(--cm-outer) + 0.5px)
+  );
   -webkit-mask-image: radial-gradient(
     circle closest-side,
+    transparent calc(var(--cm-inner) - 0.5px),
+    #000 var(--cm-inner),
     #000 var(--cm-outer),
     transparent calc(var(--cm-outer) + 0.5px)
   );
@@ -529,10 +539,6 @@
   stroke: rgba(var(--cm-ring-rgb), 0.6);
   stroke-width: 1.5;
 }
-[data-cm-variant='halo'] .cm-disc {
-  fill: rgb(var(--cm-raised-rgb) / 0.88);
-  stroke: none;
-}
 [data-cm-variant='halo'] .cm-pointer svg {
   filter: drop-shadow(0 0 6px rgba(var(--cm-ring-rgb), 0.7));
 }
@@ -543,19 +549,61 @@
   fill: var(--cm-ring-bright);
 }
 [data-cm-variant='halo'] .cm-icon {
-  width: 84px;
-  height: 84px;
+  width: 58px;
+  height: 58px;
   background: none;
   box-shadow: none;
 }
-/* A detail (Auto OCR's state) sits off the larger icon's top right. */
+/* A detail (Auto OCR's state) sits off the icon's top right. */
 [data-cm-variant='halo'] .cm-detail {
-  left: calc(50% + 28px);
+  left: calc(50% + 20px);
 }
 [data-cm-variant='halo'] .cm-icon svg {
-  width: 72px;
-  height: 72px;
-  stroke-width: 1.4;
+  width: 47px;
+  height: 47px;
+  stroke-width: 1.6;
+}
+/* The chosen item's name, just under its icon, without moving the icon off its place. */
+[data-cm-variant='halo'] .cm-label {
+  position: absolute;
+  top: calc(50% + 36px);
+  left: 50%;
+  display: block;
+  max-width: 156px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--cm-text-sm) * 1.3);
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+  opacity: 0;
+  transform: translate(-50%, -3px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.16s ease;
+}
+[data-cm-variant='halo'][data-cm-theme='light'] .cm-label {
+  color: var(--cm-text);
+  text-shadow: none;
+}
+[data-cm-variant='halo'] .cm-item.cm-selected .cm-label {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Chosen, the icon and its name sit together in the middle of the segment, as it looks: moved out
+   along the segment towards its wider end (the orbit is nearer the hub than the segment's centre)
+   and up by half the name's height. They snap there at once (`translate` is not transitioned), and
+   compose with the icon's own scale and the name's own fade. */
+[data-cm-variant='halo'] .cm-item.cm-selected {
+  --cm-shift-x: calc(var(--x) * 0.08);
+  --cm-shift-y: calc(var(--y) * 0.08 - 14px);
+}
+[data-cm-variant='halo'] .cm-item.cm-selected :is(.cm-icon, .cm-label, .cm-detail) {
+  translate: var(--cm-shift-x) var(--cm-shift-y);
+}
+[data-cm-variant='halo'] .cm-item.cm-selected[data-disabled] .cm-label {
+  font-weight: 520;
 }
 /* Icons rest in a greyed tint of the ring's colour; the chosen one grows, bright white. */
 [data-cm-variant='halo'] .cm-item {
@@ -575,24 +623,11 @@
 [data-cm-variant='halo'] .cm-glyph {
   border-radius: 999px;
 }
-/* What is chosen is the hub's focus; Select and Close sit small beneath it. */
-[data-cm-variant='halo'] .cm-current {
-  font-size: var(--cm-text-xl);
-}
-[data-cm-variant='halo'] .cm-center .cm-hints {
-  margin-top: 8px;
-  gap: 8px;
-  opacity: 0.8;
-}
-[data-cm-variant='halo'] .cm-center .cm-hint {
-  gap: 4px;
-  font-size: 12px;
-}
-[data-cm-variant='halo'] .cm-center .cm-glyph {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  font-size: 10px;
+/* The hub: an empty circle the game shows through, which closes the menu when clicked. */
+[data-cm-variant='halo'] .cm-center {
+  width: calc(var(--cm-hub) * 2);
+  height: calc(var(--cm-hub) * 2);
+  border-radius: 50%;
 }
 [data-cm-variant='halo'] .cm-sheet,
 [data-cm-variant='halo'] .cm-history {

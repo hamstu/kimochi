@@ -2,9 +2,8 @@
  * The card looks, as one dropdown for both places that choose one: the overlay's cards (Settings →
  * Overlay → Overlay appearance, `overlayStyle.appearance`) and the Text Hooker's card (Settings →
  * Text Hooker → Card style and Settings → Overlay → Text Hooker card, `overlayStyle.hookAppearance`).
- * The two are separate settings with the same choices. Transparent draws nothing, so it has a line
- * saying what is left (`TransparentNote`), and the previews a mark saying why they look empty
- * (`TransparentMark`).
+ * The two are separate settings with the same choices. Transparent draws no card, so the previews
+ * carry a mark saying why they look empty (`TransparentMark`).
  */
 import type { ReactNode } from 'react'
 import { Blend, EyeOff, Monitor, Moon, Sun } from 'lucide-react'
@@ -60,11 +59,6 @@ export function CardLookSelect({
       }))}
     />
   )
-}
-
-/** What Transparent leaves: the line under a look chosen as Transparent. */
-export function TransparentNote({ what }: { what: string }): ReactNode {
-  return <span className="overlay-look-note">{what} Only the dictionary pop-up shows when you look a word up.</span>
 }
 
 /** Over a preview drawn Transparent, which shows nothing of the overlay: why. */

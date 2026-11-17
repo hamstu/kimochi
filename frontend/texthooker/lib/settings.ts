@@ -4,6 +4,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { getSetting, onSettingsChange as onNativeChange } from '../../bridge/settings'
 import { inputSourceOf } from '../input-source'
 import { resolveYomitanApiUrl } from '../../../ui/yomitan-api-setup'
+import { usableInputSource } from '../../../ui/settings'
+
+/** This system, from the platform script native runs before any page script (unknown: none). */
+const systemOs = (): string | undefined =>
+  (globalThis as { __KIMOCHI_PLATFORM__?: { os?: string } }).__KIMOCHI_PLATFORM__?.os
 import { SETTINGS_DEFAULTS, type Settings } from './types'
 let current: Settings = { ...SETTINGS_DEFAULTS }
 let loaded = false
@@ -29,10 +34,12 @@ const mergeDictionary = async (): Promise<void> => {
 }
 onNativeChange((key, value) => {
   if (key === 'superTexthooker') {
+    // Gone (removed, or another account's settings loaded without it): the defaults.
+    const stored = (value ?? {}) as Partial<Settings>
     current = {
       ...SETTINGS_DEFAULTS,
-      ...(value as Partial<Settings>),
-      inputSource: inputSourceOf(value as Partial<Settings>),
+      ...stored,
+      inputSource: usableInputSource(inputSourceOf(stored), systemOs()),
       alwaysOnTop: current.alwaysOnTop,
       dictionaryMode: current.dictionaryMode,
       yomitanApiUrl: current.yomitanApiUrl
@@ -50,7 +57,8 @@ export function loadSettings(): Promise<Settings> {
       current = {
         ...SETTINGS_DEFAULTS,
         ...saved,
-        inputSource: inputSourceOf(saved)
+        // A Text Hooker input is OCR where games can't be hooked (`usableInputSource`).
+        inputSource: usableInputSource(inputSourceOf(saved), systemOs())
       }
       const pins = await getSetting<Record<string, boolean>>('nativeWindowPinned', {})
       current.alwaysOnTop = pins.log ?? true

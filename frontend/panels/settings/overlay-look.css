@@ -55,14 +55,67 @@
   font-weight: var(--k-weight-medium);
   color: var(--k-text);
 }
-/* The slider alone, across its column. */
+/* The slider across its column, its scale under it. */
 .overlay-look-opacity-control {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   min-height: 1.5rem;
 }
 .overlay-look-opacity-control .k-slider {
-  flex: 1;
+  flex: none;
+}
+/* A tick each 5%, taller each 25% with its number under it (OverlayLook.tsx `OpacityScale`). */
+.overlay-look-scale {
+  position: relative;
+}
+.overlay-look-ticks {
+  position: relative;
+  height: 0.375rem;
+}
+.overlay-look-tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 0.1875rem;
+  margin-left: -0.5px;
+  background: var(--gray-a6);
+}
+.overlay-look-tick[data-major] {
+  height: 0.375rem;
+  background: var(--gray-a8);
+}
+.overlay-look-tick[data-passed] {
+  background: color-mix(in srgb, var(--k-accent) 55%, transparent);
+}
+.overlay-look-numbers {
+  position: relative;
+  height: 1rem;
+  margin-top: 0.125rem;
+}
+.overlay-look-number {
+  position: absolute;
+  top: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--k-text-3);
+  font: inherit;
+  font-size: var(--k-text-xs);
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  cursor: default;
+}
+/* The ends sit inside the column: Off from its left edge, 100 to its right. */
+.overlay-look-number:first-child {
+  transform: translateX(-0.4375rem);
+}
+.overlay-look-number:last-child {
+  transform: translateX(calc(-100% + 0.4375rem));
+}
+.overlay-look-number:hover,
+.overlay-look-number[data-selected] {
+  color: var(--k-text);
 }
 
 /* The card style: a dropdown across its column, each choice with its icon. */
@@ -86,21 +139,6 @@
   min-width: 11rem;
 }
 
-/* Transparent (CardLook.tsx): what is left, under the dropdown. */
-.overlay-look-note {
-  font-size: var(--k-text-sm);
-  line-height: var(--k-leading-sm);
-  color: var(--k-text-2);
-}
-/* With nothing drawn, the highlight's colour and opacity have nothing to colour: they rest, kept
-   for when another look is chosen. */
-.overlay-look-controls[data-transparent] .overlay-look-control:not(:last-child) {
-  opacity: 0.5;
-  transition: opacity var(--k-fast);
-}
-.overlay-look-controls[data-transparent] .overlay-look-control:not(:last-child):is(:hover, :focus-within) {
-  opacity: 1;
-}
 /* Over a preview drawn Transparent, which shows the game alone: why, along its top left. */
 .overlay-look-transparent-mark {
   position: absolute;
@@ -111,9 +149,9 @@
   gap: var(--k-space-1-5);
   padding: 0.125rem 0.5rem 0.125rem 0.375rem;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.1);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
-  color: rgb(255 255 255 / 0.8);
+  background: var(--well-chip);
+  box-shadow: inset 0 0 0 1px var(--well-chip-line);
+  color: var(--well-text);
   font-family: var(--k-font-ui);
   font-size: var(--k-text-xs);
   font-weight: var(--k-weight-medium);
@@ -216,9 +254,7 @@
   height: 4.5rem;
   overflow: hidden;
   border-radius: var(--k-radius-md);
-  background:
-    radial-gradient(ellipse at 20% 0%, rgb(126 142 201 / 0.55), transparent 60%),
-    linear-gradient(160deg, #2a3350, #151a2a 70%);
+  /* The ground and its faint dotted gridlines are the well's (GridField, grid-field.css). */
   isolation: isolate;
 }
 .overlay-look-scene {
@@ -227,7 +263,7 @@
   gap: 0.3125rem;
   padding: 0.375rem 0.625rem;
   border-radius: 0.25rem;
-  background: rgb(6 8 16 / 0.6);
+  background: var(--well-scene);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
   color: #e6e9f1;
   /* The overlay's own face, so a box's text lands over the source's: the language being read's
@@ -293,7 +329,7 @@
   bottom: var(--hook-preview-bottom);
   padding: var(--hook-preview-pad-y) var(--hook-preview-pad-x);
   border-radius: var(--k-radius-sm);
-  background: rgb(6 8 16 / 0.6);
+  background: var(--well-scene);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
 }
 .hook-preview-game-text {
@@ -395,7 +431,7 @@
   display: flex;
   align-items: center;
   gap: var(--k-space-1);
-  color: rgb(255 255 255 / 0.72);
+  color: var(--well-text);
   font-size: var(--k-text-xs);
   line-height: 1.25rem;
   pointer-events: none;
@@ -405,7 +441,7 @@
   opacity: 0.45;
 }
 .hook-preview-hint .k-kbd {
-  color: #fff;
-  background: rgb(255 255 255 / 0.12);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  color: var(--well-text);
+  background: var(--well-chip);
+  box-shadow: inset 0 0 0 1px var(--well-chip-line);
 }

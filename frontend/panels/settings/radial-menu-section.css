@@ -1,24 +1,46 @@
 /*
  * Settings → Shortcuts & Controls → Radial menu: the overlay's own ring (ui/controller.css and
  * controller-variants.css, the Halo look) drawn on a stage the overlay's size and scaled into a
- * well, and the rows of actions under it.
+ * well, with the open item's panel floating beside it and Add item at its bottom right.
  */
 .radial-preview {
   --radial-scale: 0.58;
+  --radial-panel-w: 15.5rem;
   /* SNAP_MS in RadialMenuSection.tsx. */
   --radial-snap: 180ms;
   position: relative;
-  height: calc(620px * var(--radial-scale));
+  height: calc(620px * 0.58);
+  /* Inset in the group like Overlay appearance's preview: a recessed well, its ground, gridlines
+     and edges GridField's (grid-field.css). */
+  margin: var(--k-space-3);
   overflow: hidden;
-  border-bottom: 1px solid var(--k-line);
-  background: radial-gradient(circle at 30% 20%, var(--k-accent-soft), transparent 60%), var(--k-sunken);
+  border-radius: var(--k-radius-md);
+  isolation: isolate;
 }
 .radial-preview-stage {
   position: absolute;
   left: 50%;
-  top: 0;
+  /* Centred in the well and scaled about its centre, so a change of scale keeps the ring where it
+     is: it only ever moves sideways. */
+  top: calc(50% - 310px);
   transform: translateX(-50%) scale(var(--radial-scale));
-  transform-origin: top center;
+  transform-origin: center;
+  /* A little overshoot, so the ring springs into its place. */
+  transition:
+    left 340ms cubic-bezier(0.34, 1.4, 0.5, 1),
+    transform 340ms cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+/* With an item's panel open, the ring moves over to the space left of it, a little smaller. */
+.radial-preview[data-open] {
+  --radial-scale: 0.5;
+}
+.radial-preview[data-open] .radial-preview-stage {
+  left: calc((100% - var(--radial-panel-w) - var(--k-space-3)) / 2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .radial-preview-stage {
+    transition: none;
+  }
 }
 /* Redrawn on every change: no entrance each time, and no dimmed game behind it. */
 .radial-preview .cm-ring,
@@ -62,47 +84,152 @@
   pointer-events: none;
 }
 
-.radial-row {
-  transition: background-color var(--k-fast);
+/* Add item: a menu of the actions the ring doesn't hold, at the well's bottom right. */
+.radial-preview-add {
+  position: absolute;
+  right: var(--k-space-2);
+  bottom: var(--k-space-1-5);
 }
-.radial-row + .radial-row {
-  border-top: 1px solid var(--k-line);
+.radial-preview[data-open] :is(.radial-preview-add, .radial-preview-reset) {
+  display: none;
 }
-.radial-row[data-selected] {
-  background: var(--k-accent-soft);
+/* The hint stays (nothing moves as the panel opens), clear of the panel. */
+.radial-preview[data-open] .radial-preview-hint {
+  right: calc(var(--radial-panel-w) + var(--k-space-3) * 2);
 }
-/* The rows' own borders come from the group; inside a wrapper they would double up. */
-.radial-row > .k-settings-row {
-  border: 0;
+/* Reset to default, at the well's top right: a plain outline, its text the outline's colour. */
+.radial-preview-reset {
+  position: absolute;
+  top: var(--k-space-2);
+  right: var(--k-space-2);
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-2);
+  border: 1px solid var(--k-text-3);
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text-3);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  cursor: default;
+  transition:
+    color var(--k-fast),
+    border-color var(--k-fast);
+}
+.radial-preview-reset:hover {
+  border-color: var(--k-text-2);
+  color: var(--k-text-2);
+}
+.radial-preview-reset:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
 }
 .radial-row-icon {
   width: 1.25rem;
   height: 1.25rem;
   color: var(--k-text-2);
 }
-.radial-row[data-outside] .radial-row-icon {
-  opacity: 0.6;
+
+/* The open item's panel, floating at the well's right, in the menus' raised surface. It fades
+   and slides in as the ring makes room. */
+.radial-panel {
+  position: absolute;
+  /* Centred down the well, as tall as what it holds. */
+  top: var(--k-space-3);
+  right: var(--k-space-3);
+  bottom: var(--k-space-3);
+  height: fit-content;
+  max-height: calc(100% - var(--k-space-3) * 2);
+  margin: auto 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  width: var(--radial-panel-w);
+  padding: var(--k-space-3);
+  overflow-y: auto;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-raised);
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a5);
+  animation: radial-panel-in 240ms 40ms var(--k-ease-out) both;
 }
-.radial-row-shortcut,
-.radial-row-actions {
-  display: inline-flex;
+.dark .radial-panel {
+  box-shadow:
+    var(--k-shadow-pop),
+    inset 0 0 0 1px var(--gray-a6);
+}
+@keyframes radial-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .radial-panel {
+    animation: none;
+  }
+}
+.radial-panel-head {
+  display: flex;
   align-items: center;
+  gap: var(--k-space-2);
 }
-.radial-row-actions {
-  gap: var(--k-space-0-5);
+.radial-panel-head .radial-row-icon {
+  flex: none;
+  color: var(--k-text);
 }
-.radial-row-only {
-  display: inline-flex;
-  margin-left: var(--k-space-1);
-  vertical-align: -0.125em;
+.radial-panel-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-semibold, 600);
+  line-height: var(--k-leading-md);
+  color: var(--k-text);
+}
+.radial-panel-description {
+  margin: 0;
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+.radial-panel-note {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  margin: 0;
+  font-size: var(--k-text-xs);
   color: var(--k-text-3);
-  border-radius: var(--k-radius-sm);
 }
-.radial-row-only svg {
+.radial-panel-note svg {
+  flex: none;
   width: var(--k-icon-sm);
   height: var(--k-icon-sm);
 }
-.radial-row-only:focus-visible {
-  outline: 2px solid var(--k-focus);
-  outline-offset: 1px;
+.radial-panel-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--k-space-1-5);
+  margin-top: var(--k-space-1);
+}
+.radial-panel-label {
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-2);
+}
+.radial-panel-shortcut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-1-5);
+}
+.radial-panel-foot {
+  margin-top: var(--k-space-1);
+  padding-top: var(--k-space-2);
+  border-top: 1px solid var(--k-line);
+}
+.radial-panel-remove:not(:disabled) {
+  color: var(--red-11, var(--k-text));
 }

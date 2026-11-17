@@ -4,24 +4,25 @@
  *
  * Pointed at with the left stick, stepped through with the D-pad or arrow keys, and clicked
  * with the mouse. Items sit at even angles clockwise from the top, so with four items each
- * D-pad direction names one item directly. The chosen item is named in the hub. The menu draws
- * and reports; what an item does is the caller's business.
+ * D-pad direction names one item directly. The chosen item's name shows under its icon; the hub is
+ * left empty, the game showing through it. The menu draws and reports; what an item does is the
+ * caller's business.
  */
 
 const SVG = 'http://www.w3.org/2000/svg'
 /**
- * The ring's geometry (the Halo design, styled by controller-variants.css): the hub naming the
- * chosen item, the track round it (a band from HUB to INNER) that the marker fills as it slides,
- * the donut of segments (from INNER to OUTER) the icons sit in on the orbit, how far the chosen
+ * The ring's geometry (the Halo design, styled by controller-variants.css): the empty hub, the
+ * track round it (a band from HUB to INNER) that the marker fills as it slides, the thick
+ * donut of segments (from INNER to OUTER) the icons sit in on the orbit, how far the chosen
  * segment stands out past the rim, and the size of the whole.
  */
-const HUB = 96
-const INNER = 106
+const HUB = 64
+const INNER = 74
 const TRACK = (HUB + INNER) / 2
-export const ORBIT = 196
-const OUTER = 276
+export const ORBIT = 156
+const OUTER = 238
 const LIFT = 8
-const HALO = 292
+const HALO = 254
 /** How far the stick must lean before it points at an item. */
 export const AIM_THRESHOLD = 0.5
 /** How far past an item's edge the stick may stray before the next item takes over. */
@@ -156,7 +157,7 @@ export class RadialMenu {
   /**
    * @param {{x: number, y: number}} center where to draw, in overlay coordinates
    * @param {{id: string, label: string, icon: string, enabled: boolean, detail?: string, lit?: boolean}[]} items
-   * @param {'pad'|'keys'} input which button names the hints show
+   * @param {'pad'|'keys'} input which button closes it (the hub's name says)
    * @param {number} [initial] the item to start on, so A alone chooses it; nothing when -1
    */
   show(center, items, input = 'pad', initial = -1) {
@@ -178,7 +179,7 @@ export class RadialMenu {
     ring.style.setProperty('--cm-orbit', `${ORBIT}px`)
     ring.style.setProperty('--cm-outer', `${OUTER}px`)
     ring.style.setProperty('--cm-halo', `${HALO}px`)
-    // The glass: the game blurred behind the hub and the donut, clear in the gap between.
+    // The glass: the game blurred behind the donut, clear in the track and the hub.
     const glass = document.createElement('div')
     glass.className = 'cm-glass'
     ring.append(glass)
@@ -198,7 +199,8 @@ export class RadialMenu {
         </radialGradient>
       </defs>
       <circle class="cm-track" r="${TRACK}" stroke-width="${INNER - HUB}"/>
-      <circle class="cm-rim" r="${OUTER}"/>`
+      <circle class="cm-rim" r="${OUTER}"/>
+      <circle class="cm-rim cm-rim-inner" r="${INNER}"/>`
     // The segments of the donut, each an item's, and where the mouse points at it. Each reaches
     // past the rim, unseen, so the chosen one stands out beyond it.
     this.wedges = items.map((item, index) => {
@@ -224,10 +226,6 @@ export class RadialMenu {
             svg.append(spoke)
             return spoke
           })
-    const disc = document.createElementNS(SVG, 'circle')
-    disc.setAttribute('class', 'cm-disc')
-    disc.setAttribute('r', String(HUB))
-    svg.append(disc)
     ring.append(svg)
 
     // The marker: a bright bar filling the track, from the hub's edge to the chosen segment's and
@@ -238,7 +236,7 @@ export class RadialMenu {
     pointer.style.setProperty('--cm-pointer-size', `${INNER * 2}px`)
     pointer.innerHTML = `<svg viewBox="${-INNER} ${-INNER} ${INNER * 2} ${INNER * 2}" aria-hidden="true">
       <path class="cm-marker-arc" fill-rule="evenodd" d="${sectorPath(-span / 2, span / 2, INNER, HUB)}"/>
-      <path class="cm-marker-notch" d="M-11 ${-INNER + 1}L0 ${-INNER - 11}L11 ${-INNER + 1}Z"/>
+      <path class="cm-marker-notch" d="M-12 ${-INNER + 1}L0 ${-INNER - 13}L12 ${-INNER + 1}Z"/>
     </svg>`
     ring.append(pointer)
     this.pointer = pointer
@@ -267,18 +265,10 @@ export class RadialMenu {
       return label
     })
 
+    // The hub: empty, the game showing through; clicking it closes the menu.
     const middle = document.createElement('div')
     middle.className = 'cm-center'
-    middle.innerHTML = `
-      <div class="cm-title">Kimochi</div>
-      <div class="cm-current"></div>
-      <div class="cm-current-detail"></div>
-      <div class="cm-hints">
-        <span class="cm-hint"><kbd class="cm-glyph cm-confirm">${input === 'keys' ? '↵' : 'A'}</kbd>Select</span>
-        <span class="cm-hint"><kbd class="cm-glyph cm-cancel">${input === 'keys' ? 'esc' : 'B'}</kbd>Close</span>
-      </div>`
-    this.current = middle.querySelector('.cm-current')
-    this.currentDetail = middle.querySelector('.cm-current-detail')
+    middle.setAttribute('aria-label', input === 'keys' ? 'Close (esc)' : 'Close (B)')
     ring.append(middle)
 
     // The mouse works too: the overlay passes clicks through except over what it reports as
@@ -408,15 +398,14 @@ export class RadialMenu {
       wedge.classList.toggle('cm-selected', index === this.selected)
       wedge.classList.toggle('cm-disabled', !this.items[index].enabled)
     })
-    this.labels.forEach((label, index) => label.classList.toggle('cm-selected', index === this.selected))
-    const item = this.items[this.selected]
-    this.currentDetail.textContent = item?.enabled ? (item.detail ?? '') : ''
-    this.current.textContent = item
-      ? item.enabled
-        ? item.label
-        : (item.unavailable ?? 'Unavailable')
-      : 'Choose an action'
-    this.current.classList.toggle('cm-muted', !item || !item.enabled)
+    // The chosen item's name shows under its icon (controller-variants.css), or why it can't be
+    // chosen now.
+    this.labels.forEach((label, index) => {
+      label.classList.toggle('cm-selected', index === this.selected)
+      const item = this.items[index]
+      label.querySelector('.cm-label').textContent =
+        index === this.selected && !item.enabled ? (item.unavailable ?? 'Unavailable') : item.label
+    })
     this.pointAtSelected()
   }
 
