@@ -144,21 +144,31 @@ async function clearUiSource(p) {
 async function activateMain() {
   let w = JSON.parse(desktop('windows')).find((w) => w.pid === app && w.title === 'Kimochi')
   assert(w, 'main HWND exists')
-  desktop('show', w.hwnd, 5)
-  if (w.rect.width < 480) {
-    let p = await page('panel.html')
-    try {
-      await click(p, 'button[aria-label="Expand Kimochi"]')
-    } finally {
-      p.close()
-    }
-    await sleep(200)
-    w = JSON.parse(desktop('windows')).find((x) => x.hwnd === w.hwnd)
-  }
-  desktop('focus', w.hwnd)
-  await sleep(100)
-  desktop('mouse', w.rect.x + w.rect.width - 180, w.rect.y + 15, 'click')
+  // SW_RESTORE: SW_SHOW leaves a minimized window minimized.
+  desktop('show', w.hwnd, w.iconic ? 9 : 5)
   await sleep(150)
+  const p = await page('panel.html')
+  try {
+    // Mini mode, at any display scale (its width in physical pixels says nothing at 200%).
+    if (await p.eval(`Boolean(document.querySelector('button[aria-label="Expand Kimochi"]'))`)) {
+      await click(p, 'button[aria-label="Expand Kimochi"]')
+      await sleep(200)
+    }
+    desktop('focus', w.hwnd)
+    await sleep(100)
+    // A click into the window, so its page has the keyboard: on the title bar, where nothing
+    // takes it. Found in the page rather than at a fixed offset, which at 200% landed on
+    // Kimochi's own Minimize button.
+    const at = await p.eval(
+      `(()=>{const s=${SCREEN_SCALE},d=devicePixelRatio,y=14,mid=innerWidth/2;const busy=(e)=>!e||e.closest('button,a,input,select,textarea,[role=button],[role=switch],[role=menuitem],[role=tab]');for(let step=0;step<mid;step+=8)for(const x of [mid-step,mid+step]){if(!busy(document.elementFromPoint(x,y)))return {x:Math.round((screenX*s+x)*d),y:Math.round((screenY*s+y)*d)}}return null})()`
+    )
+    if (at) desktop('mouse', at.x, at.y, 'click')
+    await sleep(150)
+  } finally {
+    p.close()
+  }
+  w = JSON.parse(desktop('windows')).find((x) => x.hwnd === w.hwnd)
+  assert(w && !w.iconic && w.foreground, 'the main window is in front')
 }
 async function chooseSource() {
   await activateMain()
@@ -176,6 +186,20 @@ async function chooseSource() {
     await sleep(350)
     await click(p, '[role="menuitem"]', source === 'window' ? 'Kimochi E2E Fake Game' : 'Display 1')
     await sleep(300)
+    // These scenarios read the window with OCR. A game hooked before (the hook scenario's) comes
+    // back hooked when its window is chosen: Text hooking off, as a reader would turn it off.
+    if (source === 'window') {
+      const textHooking = 'button[aria-label="Text hooking"]'
+      const on = () =>
+        p.eval(`document.querySelector(${JSON.stringify(textHooking)})?.getAttribute('aria-checked')==='true'`)
+      // Whether the game is hookable is asked natively; the switch shows a moment after.
+      await sleep(1500)
+      for (let tries = 0; tries < 3 && (await on()); tries++) {
+        await click(p, textHooking)
+        await sleep(600)
+      }
+      assert(!(await on()), 'the window is read with OCR, not hooked')
+    }
     if (
       await p.eval(
         `document.querySelector('button[aria-label="Show overlay"]')?.getAttribute('aria-checked')==='false'`
@@ -274,7 +298,7 @@ const say = () => command('say ' + freshLine())
 async function chooseThread(text) {
   const p = await page('panel.html')
   try {
-    await click(p, 'button[aria-label="Text thread"]')
+    await click(p, 'button[aria-label="Hooked text"]')
     await sleep(300)
     await click(p, '[role="menuitemradio"]', text)
   } finally {
@@ -282,8 +306,8 @@ async function chooseThread(text) {
   }
 }
 /**
- * Text Hooker: pick the fake game in the real source menu, let it hook, check the dialogue
- * thread is chosen by matching the screen (not the nameplate, HUD or menu threads), that the
+ * Text Hooker: choose the fake game's window in the real source menu and turn Text hooking on
+ * under its card, let it hook, check the dialogue thread is chosen by matching the screen (not the nameplate, HUD or menu threads), that the
  * Log gets exactly the dialogue lines, and that choosing another thread by hand takes effect.
  */
 async function hookScenario() {
@@ -296,24 +320,28 @@ async function hookScenario() {
         await click(p, 'button[aria-label="Choose a source"]')
       else await click(p, 'button.src-card')
       await sleep(150)
-      await click(p, '[role="menuitem"]', 'Text Hooker')
-      // Hookable windows come first; Kimochi's own windows are never offered.
-      const tiles = await until(
-        () =>
-          p.eval(
-            `(()=>{const t=[...document.querySelectorAll('.sg-tile')];return t.some(e=>e.innerText.includes('E2E Fake'))?t.map(e=>({text:e.innerText.replace(/\\s+/g,' '),disabled:e.hasAttribute('data-disabled')})):false})()`
-          ),
+      // A game is hooked from its window: choose the window, then turn Text hooking on under its
+      // card (there is no separate Text Hooker source any more).
+      await click(p, '[role="menuitem"]', 'Window or screen')
+      await sleep(350)
+      await click(p, '[role="menuitem"]', 'Kimochi E2E Fake Game')
+      const textHooking = 'button[aria-label="Text hooking"]'
+      const was = await until(
+        () => p.eval(`document.querySelector(${JSON.stringify(textHooking)})?.getAttribute('aria-checked') ?? false`),
         20000
       )
-      const game = tiles.find((t) => t.text.includes('E2E Fake'))
-      assert(game && !game.disabled, 'the fake game can be hooked')
-      assert(
-        tiles.filter((t) => /^Kimochi\b/.test(t.text)).every((t) => t.disabled),
-        "Kimochi's own windows are not offered"
-      )
-      await click(p, '.sg-tile', 'Kimochi E2E Fake Game')
-      await sleep(300)
-      return { tiles }
+      const on = () =>
+        p.eval(`document.querySelector(${JSON.stringify(textHooking)})?.getAttribute('aria-checked')==='true'`)
+      // The switch's row slides in under the card once the game is known: clicked mid-way, the
+      // click lands on the card above it. Clicked again once it has settled, if it didn't take.
+      for (let tries = 0; tries < 3 && !(await on()); tries++) {
+        await sleep(600)
+        if (await on()) break
+        await click(p, textHooking)
+        await sleep(400)
+      }
+      await until(on, 5000)
+      return { textHookingWas: was }
     } finally {
       p.close()
     }
@@ -394,6 +422,8 @@ async function hookScenario() {
   })
   // --- the card: the hooked line over the game (ui/hook-card.js) ---------------------------------
   const status = await hookStatus()
+  // Pixel tolerances are at 100% (96 dpi): the game's own DPI scales them, as it scales its text.
+  const scale = ((await truth()).dpi || 96) / 96
   const key = status.exe.toLowerCase()
   const games = async () => (await invoke(overlay, 'settings_get', { key: 'textHookerGames' })) ?? {}
   const game = async () => (await games())[key] ?? {}
@@ -469,14 +499,14 @@ async function hookScenario() {
       seen.push({ line, x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size, at: [c.x, c.emTop] })
     }
     for (const s of seen) {
-      assert(Math.abs(s.x) <= 8, `the text starts where the game's does (${s.x.toFixed(1)} px off)`)
-      assert(Math.abs(s.y) <= 8, `the glyphs sit on the game's (${s.y.toFixed(1)} px off)`)
+      assert(Math.abs(s.x) <= 8 * scale, `the text starts where the game's does (${s.x.toFixed(1)} px off)`)
+      assert(Math.abs(s.y) <= 8 * scale, `the glyphs sit on the game's (${s.y.toFixed(1)} px off)`)
       assert(Math.abs(s.font - 1) <= 0.1, `at the game's size (${s.font.toFixed(3)})`)
     }
     const xs = seen.map((s) => s.at[0]),
       ys = seen.map((s) => s.at[1])
     assert(
-      Math.max(...xs) - Math.min(...xs) <= 2 && Math.max(...ys) - Math.min(...ys) <= 2,
+      Math.max(...xs) - Math.min(...xs) <= 2 * scale && Math.max(...ys) - Math.min(...ys) <= 2 * scale,
       'the card does not move between lines'
     )
     return seen
@@ -570,7 +600,10 @@ async function hookScenario() {
     await focusGame()
     await say()
     const next = await shown((await truth()).dialogue)
-    assert(Math.abs(next.x - after.x) <= 2 && Math.abs(next.y - after.y) <= 2, 'the next line stays there')
+    assert(
+      Math.abs(next.x - after.x) <= 2 * scale && Math.abs(next.y - after.y) <= 2 * scale,
+      'the next line stays there'
+    )
     return { trail, box: g.box }
   })
 
@@ -629,7 +662,10 @@ async function hookScenario() {
       Math.abs(c.font / first.size - 1) <= 0.1,
       `the game's text size again, not the reader's (${c.font} vs ${first.size})`
     )
-    assert(Math.abs(c.x - first.x) <= 8 && Math.abs(c.emTop - first.y) <= 8, "and lines up with the game's text again")
+    assert(
+      Math.abs(c.x - first.x) <= 8 * scale && Math.abs(c.emTop - first.y) <= 8 * scale,
+      "and lines up with the game's text again"
+    )
     return { x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size }
   })
 
@@ -819,7 +855,7 @@ try {
         30000
       )
     }
-    desktop('show', g.hwnd, 5)
+    desktop('show', g.hwnd, g.iconic ? 9 : 5)
     const ownedTruth = await until(async () => {
       try {
         const value = await truth()

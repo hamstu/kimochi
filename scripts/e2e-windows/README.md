@@ -86,6 +86,11 @@ quit-series process fails immediately, even with a different run directory; the 
 lease when the first process exits. Use one fake-game run directory at a time. The runner also
 checks that the game's ground-truth HWND matches the actual game before proceeding.
 
+Any display scale works. Points on Kimochi's pages are found in the
+page and converted to physical pixels, never taken as fixed offsets: bringing the main window
+forward restores it if minimized (`show <hwnd> 9`; `5` leaves a minimized window down) and
+clicks an empty part of its title bar, which the page reports.
+
 `source` may be `window` or `display`; `mode` may be `windowed` or `borderless`. The `auto` case
 checks a text change without closing the fake game. The `windows` case additionally moves,
 resizes, minimises, restores and closes it. It is a **window-source** lifecycle assertion:
@@ -140,7 +145,7 @@ afterwards, like the game is left open; Alt+Shift+A (or Q) with the game in fron
 | `keys` | The bound shortcut's key-down never reaches the game; how many pages an (unbound) Ctrl chord would skip, for #16 | #16, #19 |
 | `alt` | A lone Alt on the main window starts no menu loop (`GetGUIThreadInfo`) and WebView2 still answers | #36 |
 | `selfocr` | A display scan draws no overlay text over Kimochi's own main window | #35 |
-| `hook` | Text Hooker: the fake game is offered (Kimochi is not), LunaHook attaches, the dialogue thread is chosen by matching the screen over the nameplate, HUD and menu threads, the Log gets exactly the dialogue lines, and choosing another thread by hand takes effect | — |
+| `hook` | Text Hooker: the fake game's window is chosen and its **Text hooking** switch turned on, LunaHook attaches, the dialogue thread is chosen by matching the screen over the nameplate, HUD and menu threads, the Log gets exactly the dialogue lines, and choosing another thread by hand takes effect | — |
 | `quit.mjs N` | N launch/quit cycles; exit code, timing and leftover HWNDs per PID | #30 |
 
 The fake game's VN behaviour is driven over `command.txt`: `skip off|focused|active` (Ctrl held
