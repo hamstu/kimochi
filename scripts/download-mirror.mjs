@@ -194,7 +194,7 @@ export async function pinnedFiles(tree) {
 /** The `v*` release tags created in the last `months` months, newest first. */
 export function recentReleases(months, now = new Date()) {
   const since = new Date(now)
-  since.setMonth(since.getMonth() - months)
+  since.setUTCMonth(since.getUTCMonth() - months)
   return (
     git('for-each-ref', '--sort=-creatordate', '--format=%(refname:short) %(creatordate:iso-strict)', 'refs/tags/v*') ??
     ''
@@ -330,7 +330,7 @@ export function retention(
   { keepVersions = KEEP_VERSIONS, keepMonths = KEEP_MONTHS, now = new Date() } = {}
 ) {
   const since = new Date(now)
-  since.setMonth(since.getMonth() - keepMonths)
+  since.setUTCMonth(since.getUTCMonth() - keepMonths)
   const pinned = new Set(current.map((e) => e.path))
   const byArtifact = new Map()
   for (const [p, entry] of Object.entries(ledger.entries ?? {})) {

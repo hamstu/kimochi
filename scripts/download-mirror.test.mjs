@@ -86,7 +86,7 @@ test('retention keeps pinned, recent and the newest versions, and never touches 
   // The defaults keep five versions: nothing of x goes; the lone texthook file is its newest.
   assert.deepEqual(retention(ledger, current, { now }), [])
   // Pinned now beats everything.
-  assert.deepEqual(retention(ledger, [{ path: 'files/sha256/a/x.zip' }], { keepVersions: 0, keepMonths: 1, now }), [
+  assert.deepEqual(retention(ledger, [{ path: 'files/sha256/a/x.zip' }], { keepVersions: 0, keepMonths: 0, now }), [
     'data/jitendex/2024.01.01.0/j.zip',
     'data/jitendex/2027.05.01.0/j.zip',
     'files/sha256/b/x.zip',
