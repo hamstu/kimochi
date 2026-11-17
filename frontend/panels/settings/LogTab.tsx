@@ -18,7 +18,7 @@ import { SETTINGS_DEFAULTS, type CardScreenshotSettings, type SentenceAudioSetti
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { useLanguage } from '../../bridge/useLanguage'
-import { ACTIVITY_TICKER_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
+import { ACTIVITY_TICKER_SECTION, SESSIONS_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { NumberField } from './fields'
@@ -277,6 +277,7 @@ function SessionsSection(): ReactNode {
 
   return (
     <SettingsSection
+      id={SESSIONS_SECTION}
       title="Sessions"
       description="Click a name to rename it; drag a handle to reorder. Tick sessions to clear or delete them together."
       actions={

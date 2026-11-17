@@ -13,6 +13,7 @@ import {
   gameKey,
   hookDefaultsFor,
   hookSettings,
+  withLegacyShowCard,
   type HookGame,
   type HookGames,
   type HookSettings
@@ -29,16 +30,20 @@ export function useHookDefaults(): [
   (key: keyof HookSettings) => Promise<void>,
   HookSettings
 ] {
-  const [stored, setStored] = useSetting<Partial<HookSettings>>('textHookerDefaults', {})
+  const [own, setStored] = useSetting<Partial<HookSettings>>('textHookerDefaults', {})
+  const [legacyShowCard] = useSetting<unknown>('textHookerShowCard', null)
   const [language] = useLanguage()
   const shipped = hookDefaultsFor(language)
-  const defaults = { ...shipped, ...(stored ?? {}) }
+  const stored = withLegacyShowCard(own, legacyShowCard)
+  const defaults = { ...shipped, ...stored }
   const reset = (key: keyof HookSettings): Promise<void> => {
-    const next = { ...(stored ?? {}) }
-    delete next[key]
+    const next = { ...stored }
+    // Left out, the card's default would fall back to the global setting it replaced.
+    if (key === 'showCard') next.showCard = shipped.showCard
+    else delete next[key]
     return setStored(next)
   }
-  return [defaults, (change) => setStored({ ...(stored ?? {}), ...change }), reset, shipped]
+  return [defaults, (change) => setStored({ ...stored, ...change }), reset, shipped]
 }
 
 export function useHookGames(): HookGames {

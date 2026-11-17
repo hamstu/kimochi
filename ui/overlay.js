@@ -63,7 +63,7 @@ import { recognize } from './ocr.js'
 import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
-import { hookCardShow, hookSettings } from './hook-games.js'
+import { hookSettings, withLegacyShowCard } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
 import { publishOcrResult, listHistory } from './output.js'
@@ -384,22 +384,21 @@ const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) ||
  * The game's settings, with the defaults (Settings → Text Hooker) where it has none (hook-games.ts).
  * A card drawn Transparent is always auto-aligned (`hookCardLocksAutoAlign`).
  */
+const hookDefaults = () => withLegacyShowCard(setting('textHookerDefaults'), setting('textHookerShowCard'))
 const hookSet = () => {
-  const set = hookSettings(setting('textHookerDefaults'), hookGame())
+  const set = hookSettings(hookDefaults(), hookGame())
   return hookCardLocksAutoAlign(setting('overlayStyle')) ? { ...set, autoAlign: true } : set
 }
 const hookAutoAlign = () => hookSet().autoAlign
-/** The card over the game at all (Settings → Text Hooker → Show the card; the game menu's Card). */
-const hookCardOn = () => hookCardShow(setting('textHookerShowCard')) !== 'never'
+/** The card over the game at all (Settings → Text Hooker → Card, per game; the game menu's Card). */
+const hookCardOn = () => hookSet().showCard !== 'never'
 /**
  * Only while the lookup key is held (Settings → Text Hooker → Show the card): native's gate
  * (`gateOpen`) follows `overlayLookupKey`, and a controller's lookup button. Where the key cannot
  * be read (`shiftGated` false) or in Gaming Mode, there is no key to wait for, so the card stays up.
  */
 const hookCardOnKey = () =>
-  hookCardShow(setting('textHookerShowCard')) === 'hold' &&
-  shiftGated &&
-  !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
+  hookSet().showCard === 'hold' && shiftGated && !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
 /**
  * The lookup key down (the native pointer feed's gate), or a pop-up opened from the card still up:
  * what a card shown only with the key waits for (`hookCardOnKey`).
@@ -802,7 +801,13 @@ controller = createController({
     hook: () => hook.status,
     // A thread by hand (remembered for the game), or `null` to choose automatically again.
     selectThread: (key) => native.invoke('texthook_select', { key }).catch(() => {}),
-    setShown: (on) => native.setSetting('textHookerShowCard', Boolean(on)),
+    // For this game: on is the default's way of showing it (or Always, where the default is
+    // Never); a choice equal to the default is left to follow it.
+    setShown: (on) => {
+      const fallback = hookSettings(hookDefaults(), null).showCard
+      const value = on ? (fallback === 'never' ? 'always' : fallback) : 'never'
+      return value === fallback ? saveHookGame({}, ['showCard']) : saveHookGame({ showCard: value })
+    },
     // Back on, as in Settings: straight back to where it last found the game's text, the size
     // measured again (a size set by hand goes), and the screen read at once (`realignHookCard`).
     setAutoAlign: (on) =>

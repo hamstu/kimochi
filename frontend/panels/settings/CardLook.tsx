@@ -93,7 +93,7 @@ export function HookCardLookRow({ shared }: { shared?: boolean }): ReactNode {
       description={
         look === 'transparent'
           ? 'Nothing of the card shows over the game, even with the lookup key held. Pointing at its text still opens the dictionary pop-up.'
-          : `Separate from the overlay's cards.${shared ? ' The same for every game.' : ''}`
+          : `The card's style and colours.${shared ? ' The same for every game.' : ''}`
       }
     >
       <CardLookSelect label="Card look" className="hook-card-look-select" value={look} onChange={setLook} />

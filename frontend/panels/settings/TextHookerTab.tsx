@@ -1,24 +1,28 @@
 /**
- * Settings → Text Hooker: the defaults every hooked game uses, and each game's own page, where any
- * of them can be changed for that game alone (ui/hook-games.ts holds what they are).
+ * Settings → Text Hooker: the defaults every hooked game uses, and each game's own settings, where
+ * any of them can be changed for that game alone (ui/hook-games.ts holds what they are).
  *
- * The page opens on the games and the defaults. A game's page has its icon and name (its Log
- * session's name: renaming one renames the other), its session, the same settings with the ones it
- * changed marked and a reset beside each, and what only a game has: hook codes, find-and-replace
- * rules, the thread remembered for it and where the card was left. Deleting a game forgets all of
- * that, and its session too when asked.
+ * A resizable column beside Settings' own lists Defaults, then the games hooked so far; the page
+ * shows whichever is chosen, in the same order for both: (a game's session,) the card, hooking and
+ * text. A game's page has its icon and name (its Log session's name: renaming one renames the
+ * other) and Delete at the top, the same settings with the ones it changed marked and a reset
+ * beside each, and what only a game has: hook codes, find-and-replace rules, the thread remembered
+ * for it and where the card was left. Deleting a game forgets all of that, and its session too
+ * when asked.
  *
- * Which page shows is a setting (`textHookerSettingsGame`), so the sidebar's Manage can open the
+ * Which is chosen is a setting (`textHookerSettingsGame`), so the sidebar's Manage can open the
  * hooked game's.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Gamepad2, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { Gamepad2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import {
   Button,
+  Callout,
   Checkbox,
   ConfirmDialog,
   IconButton,
   Input,
+  ResizeHandle,
   Segmented,
   Select,
   SettingsPage,
@@ -26,8 +30,10 @@ import {
   SettingsSection,
   Switch
 } from '@kit'
-import { deleteSession, getManifest, renameSession, subscribeSessions, switchSession } from '@texthooker/lib/sessions'
+import { deleteSession, getManifest, renameSession, subscribeSessions } from '@texthooker/lib/sessions'
 import type { SessionsManifest } from '@texthooker/lib/types'
+import { formatReadingTime } from '@texthooker/lib/sessionSummary'
+import { useSummaries } from '@texthooker/hooks/useSessionSummaries'
 import { useSetting } from '../../bridge/useSetting'
 import {
   texthookForget,
@@ -39,9 +45,9 @@ import {
 } from '../../bridge/textHook'
 import {
   HOOK_DEFAULTS,
+  HOOK_SETTING_KEYS,
   exeTitle,
   gameKey,
-  hookCardShow,
   hookSettings,
   overrides,
   updateHookGame,
@@ -61,7 +67,12 @@ import { WithReaderSettings } from './ReaderSettingsProvider'
 import { HookCardPreview } from './HookCardPreview'
 import { HookCardLookRow } from './CardLook'
 import { lookupKeyName } from './overlayPreview'
-import { HOOK_CARD_SECTION, useSettingsTarget } from '../../bridge/settingsTarget'
+import {
+  HOOK_CARD_SECTION,
+  SESSIONS_SECTION,
+  requestSettingsSection,
+  useSettingsTarget
+} from '../../bridge/settingsTarget'
 import { showSettingsTab } from './showSettingsTab'
 import './text-hooker.css'
 
@@ -112,7 +123,7 @@ function gameName(key: string, game: HookGame, manifest: SessionsManifest): stri
   return session?.name ?? game.name ?? exeTitle(game.exe ?? key)
 }
 
-function GameIcon({ exe, large }: { exe: string; large?: boolean }): ReactNode {
+function GameIcon({ exe, large, small }: { exe: string; large?: boolean; small?: boolean }): ReactNode {
   const [icon, setIcon] = useState<string | null>(null)
   useEffect(() => {
     let live = true
@@ -125,7 +136,7 @@ function GameIcon({ exe, large }: { exe: string; large?: boolean }): ReactNode {
     }
   }, [exe])
   return (
-    <span className="th-icon" data-large={large || undefined} aria-hidden>
+    <span className="th-icon" data-large={large || undefined} data-small={small || undefined} aria-hidden>
       {icon ? <img src={icon} alt="" /> : <Gamepad2 />}
     </span>
   )
@@ -153,16 +164,11 @@ function HookSettingsSections({
   scope: Scope
   extra?: Partial<Record<'hooking' | 'text' | 'card', ReactNode>>
 }): ReactNode {
-  const [defaults, setDefaults, resetDefault, shipped] = useHookDefaults()
+  const [defaults, setDefaults] = useHookDefaults()
   // A Transparent card is always auto-aligned: its switch shows on, and cannot be turned off.
   const alignLocked = useHookCardLocksAutoAlign()
-  // With the card never shown over the game, it has no style to set.
-  const [showCard] = useSetting<boolean | HookCardShow>('textHookerShowCard', true)
-  const cardShown = hookCardShow(showCard) !== 'never'
   const stored = scope.kind === 'defaults' ? defaults : hookSettings(defaults, scope.game)
   const value = alignLocked ? { ...stored, autoAlign: true } : stored
-  const changed = (key: keyof HookSettings): boolean =>
-    scope.kind === 'defaults' ? defaults[key] !== shipped[key] : overrides(scope.game, key, defaults)
   const set = <K extends keyof HookSettings>(key: K, next: HookSettings[K]): void => {
     if (scope.kind === 'defaults') void setDefaults({ [key]: next })
     else
@@ -192,16 +198,67 @@ function HookSettingsSections({
     onTextSize: (textSize: number) => setMany({ textSize, autoAlign: false }),
     onOpacity: (opacity: number) => set('opacity', opacity)
   }
-  const reset = (key: keyof HookSettings): void => {
-    if (scope.kind === 'defaults') void resetDefault(key)
-    else void updateHookGame(scope.exe, (game) => withoutOverride(game, key))
-  }
-  const badge = (key: keyof HookSettings): ReactNode => (changed(key) ? <Changed onReset={() => reset(key)} /> : null)
+  // A game's setting that differs from the default is marked, with the way back to it. The
+  // defaults are just the defaults: nothing to compare them with.
+  const badge = (key: keyof HookSettings): ReactNode =>
+    scope.kind === 'game' && overrides(scope.game, key, defaults) ? (
+      <Changed onReset={() => void updateHookGame(scope.exe, (game) => withoutOverride(game, key))} />
+    ) : null
   const id = (key: string): string => `th-${scope.kind}-${key}`
   // Opened at Card style from Settings → Overlay (rendered once the reader's settings are in).
   useSettingsTarget()
+  const cardShown = value.showCard !== 'never'
   return (
     <>
+      <SettingsSection title="Card" id={scope.kind === 'defaults' ? HOOK_CARD_SECTION : undefined}>
+        <ShowCardRow value={value.showCard} badge={badge('showCard')} onChange={(next) => set('showCard', next)} />
+        {/* Never shown: no card to preview or style, until it is shown again. */}
+        {cardShown && (
+          <>
+            <HookCardPreview
+              autoAlign={value.autoAlign}
+              textSize={value.textSize}
+              opacity={value.opacity}
+              actions={cardActions}
+            />
+            <HookCardLookRow shared={scope.kind !== 'defaults'} />
+          </>
+        )}
+        {/* A Transparent card shows nothing to style, and is always auto-aligned (the overlay keeps
+            it over the game's text), so the rest of its style goes until another look is chosen. */}
+        {cardShown && !alignLocked && (
+          <>
+            <SettingsRow
+              label="Auto align"
+              controlId={id('align')}
+              badge={badge('autoAlign')}
+              description="Finds the game's text with OCR as it changes, and keeps the card lined up with it at its size."
+            >
+              <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
+            </SettingsRow>
+            {/* Auto align sizes the text to the game's own, so the size is chosen only with it off. */}
+            {!value.autoAlign && (
+              <SettingsRow label="Text size" badge={badge('textSize')}>
+                <Segmented
+                  aria-label="Text size"
+                  value={textSizeValue(value.textSize)}
+                  onValueChange={(next) => set('textSize', Number(next))}
+                  options={TEXT_SIZES}
+                />
+              </SettingsRow>
+            )}
+            <SettingsRow label="Background opacity" badge={badge('opacity')}>
+              <Select
+                aria-label="Background opacity"
+                value={String(value.opacity)}
+                onValueChange={(next) => set('opacity', Number(next))}
+                options={OPACITY_OPTIONS}
+              />
+            </SettingsRow>
+            {extra?.card}
+          </>
+        )}
+      </SettingsSection>
       <SettingsSection title="Hooking">
         <SettingsRow
           label="Hook automatically"
@@ -264,51 +321,6 @@ function HookSettingsSections({
         </SettingsRow>
         {extra?.text}
       </SettingsSection>
-      {cardShown && (
-        <SettingsSection title="Card style" id={scope.kind === 'defaults' ? HOOK_CARD_SECTION : undefined}>
-          <HookCardPreview
-            autoAlign={value.autoAlign}
-            textSize={value.textSize}
-            opacity={value.opacity}
-            actions={cardActions}
-          />
-          <HookCardLookRow shared={scope.kind !== 'defaults'} />
-          {/* A Transparent card shows nothing to style, and is always auto-aligned (the overlay keeps
-            it over the game's text), so the rest of its style goes until another look is chosen. */}
-          {!alignLocked && (
-            <>
-              <SettingsRow
-                label="Auto align"
-                controlId={id('align')}
-                badge={badge('autoAlign')}
-                description="Lines the card up with the game's text and matches its size."
-              >
-                <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
-              </SettingsRow>
-              {/* Auto align sizes the text to the game's own, so the size is chosen only with it off. */}
-              {!value.autoAlign && (
-                <SettingsRow label="Text size" badge={badge('textSize')}>
-                  <Segmented
-                    aria-label="Text size"
-                    value={textSizeValue(value.textSize)}
-                    onValueChange={(next) => set('textSize', Number(next))}
-                    options={TEXT_SIZES}
-                  />
-                </SettingsRow>
-              )}
-              <SettingsRow label="Background opacity" badge={badge('opacity')}>
-                <Select
-                  aria-label="Background opacity"
-                  value={String(value.opacity)}
-                  onValueChange={(next) => set('opacity', Number(next))}
-                  options={OPACITY_OPTIONS}
-                />
-              </SettingsRow>
-              {extra?.card}
-            </>
-          )}
-        </SettingsSection>
-      )}
     </>
   )
 }
@@ -490,6 +502,26 @@ function Thread({ exe, hooked }: { exe: string; hooked: boolean }): ReactNode {
   )
 }
 
+/** A session in brief: its reading time and lines (as Log & Sessions counts them), and its age. */
+function SessionStats({
+  manifest,
+  id,
+  createdAt
+}: {
+  manifest: SessionsManifest
+  id: string
+  createdAt: number
+}): ReactNode {
+  const summary = useSummaries(manifest.sessions, manifest.activeId, 0)[id]
+  const started = when(createdAt)
+  const parts = [
+    summary && formatReadingTime(summary.readingMs),
+    summary && `${summary.lines.toLocaleString()} line${summary.lines === 1 ? '' : 's'}`,
+    started && `started ${started}`
+  ].filter(Boolean)
+  return <span className="k-num">{parts.join(' · ')}</span>
+}
+
 function SessionRow({ game, manifest }: { game: HookGame; manifest: SessionsManifest }): ReactNode {
   const session = game.sessionId ? manifest.sessions.find((s) => s.id === game.sessionId) : undefined
   if (!session)
@@ -503,20 +535,43 @@ function SessionRow({ game, manifest }: { game: HookGame; manifest: SessionsMani
   return (
     <SettingsRow
       label={session.name}
-      description={`This game’s lines go here, started ${when(session.createdAt) ?? 'when it was first hooked'}. Renaming the game renames it.`}
+      badge={current ? <span className="th-current">Current</span> : null}
+      description={<SessionStats manifest={manifest} id={session.id} createdAt={session.createdAt} />}
     >
-      {current ? (
-        <span className="th-current">Current session</span>
-      ) : (
-        <Button size="sm" onClick={() => void switchSession(session.id)}>
-          Switch to it
-        </Button>
-      )}
+      <Button
+        size="sm"
+        onClick={() => {
+          requestSettingsSection(SESSIONS_SECTION)
+          showSettingsTab('log')
+        }}
+      >
+        Manage sessions
+      </Button>
     </SettingsRow>
   )
 }
 
-function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; onBack: () => void }): ReactNode {
+/** How many of a game's settings differ from the defaults, and the way back to all of them. */
+function ChangesBanner({ exe, game }: { exe: string; game: HookGame }): ReactNode {
+  const [defaults] = useHookDefaults()
+  const changed = HOOK_SETTING_KEYS.filter((key) => overrides(game, key, defaults))
+  if (!changed.length) return null
+  return (
+    <Callout tone="accent" icon={<SlidersHorizontal />} className="th-changes">
+      <span className="th-changes-text">
+        {changed.length === 1 ? '1 setting differs' : `${changed.length} settings differ`} from the defaults.
+      </span>
+      <Button
+        size="sm"
+        onClick={() => void updateHookGame(exe, (g) => changed.reduce((next, key) => withoutOverride(next, key), g))}
+      >
+        Reset to defaults
+      </Button>
+    </Callout>
+  )
+}
+
+function GamePage({ gameId, game, onDeleted }: { gameId: string; game: HookGame; onDeleted: () => void }): ReactNode {
   const manifest = useSessions()
   const status = useHookStatus()
   const exe = game.exe ?? gameId
@@ -544,7 +599,7 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
       await texthookForget(exe, true).catch(() => undefined)
       await updateHookGame(exe, () => null)
       setDeleting(false)
-      onBack()
+      onDeleted()
     } catch (caught) {
       setError(String(caught))
     }
@@ -553,9 +608,6 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
   return (
     <SettingsPage className="th-page">
       <div className="th-game-head">
-        <Button variant="ghost" size="sm" className="th-back" onClick={onBack}>
-          <ChevronLeft /> Text Hooker
-        </Button>
         <div className="th-game-title">
           <GameIcon exe={exe} large />
           <div className="th-game-name">
@@ -574,11 +626,6 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
               }}
             />
             <p className="k-description th-game-meta">
-              {hooked ? (
-                <span className="th-live">Hooked now</span>
-              ) : (
-                when(game.hookedAt) && `Last hooked ${when(game.hookedAt)}`
-              )}
               <span className="th-path" title={exe}>
                 {exe}
               </span>
@@ -591,7 +638,9 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
         {error && <p className="k-description th-error">{error}</p>}
       </div>
 
-      <SettingsSection title="Session">
+      <ChangesBanner exe={exe} game={game} />
+
+      <SettingsSection title="Session & Log">
         <SessionRow game={game} manifest={manifest} />
       </SettingsSection>
 
@@ -649,76 +698,94 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
 
 // ------------------------------------------------------------------------------- the list
 
-function GameList({ onOpen }: { onOpen: (key: string) => void }): ReactNode {
+/** Resizable, as Settings' own column is; the width is remembered (`textHookerListWidth`). */
+const RAIL_WIDTH = { min: 150, max: 360, initial: 192 }
+
+/** Defaults, then every game hooked so far, the latest first: what the page beside it shows. */
+function GamesRail({ open, onOpen }: { open: string | null; onOpen: (key: string | null) => void }): ReactNode {
   const games = useHookGames()
   const manifest = useSessions()
-  const [defaults] = useHookDefaults()
-  const status = useHookStatus()
-  const hookedKey = status.phase === 'hooked' && status.exe ? gameKey(status.exe) : null
+  const [width, setWidth] = useSetting<number>('textHookerListWidth', RAIL_WIDTH.initial)
+  const [live, setLive] = useState<number | null>(null)
   const list = Object.entries(games).sort(([, a], [, b]) => (b.hookedAt ?? 0) - (a.hookedAt ?? 0))
-  if (!list.length)
-    return (
-      <SettingsSection title="Games">
-        <SettingsRow label="No games yet" description="Games you hook show up here, each with its own settings." />
-      </SettingsSection>
-    )
   return (
-    <SettingsSection title="Games">
-      {list.map(([key, game]) => {
-        const changes = (Object.keys(HOOK_DEFAULTS) as (keyof HookSettings)[]).filter((k) =>
-          overrides(game, k, defaults)
-        ).length
-        const detail = [
-          key === hookedKey ? 'Hooked now' : when(game.hookedAt) && `Hooked ${when(game.hookedAt)}`,
-          changes ? `${changes} ${changes === 1 ? 'change' : 'changes'}` : null
-        ]
-          .filter(Boolean)
-          .join(' · ')
-        return (
-          <button key={key} type="button" className="th-game-row" onClick={() => onOpen(key)}>
-            <GameIcon exe={game.exe ?? key} />
-            <span className="th-game-row-text">
-              <span className="th-game-row-name">{gameName(key, game, manifest)}</span>
-              {detail && <span className="th-game-row-detail">{detail}</span>}
-            </span>
-            <ChevronRight className="th-chevron" aria-hidden />
-          </button>
-        )
-      })}
-    </SettingsSection>
+    <nav className="th-rail" aria-label="Text Hooker games" style={{ width: live ?? width ?? RAIL_WIDTH.initial }}>
+      <div className="th-rail-scroll">
+        <button
+          type="button"
+          className="k-row th-rail-row"
+          aria-current={open ? undefined : 'page'}
+          onClick={() => onOpen(null)}
+        >
+          <SlidersHorizontal />
+          <span className="k-row-label">Defaults</span>
+        </button>
+        <div className="th-rail-label">Games</div>
+        {list.length === 0 && <p className="th-rail-empty">Games you hook show up here, each with its own settings.</p>}
+        {list.map(([key, game]) => {
+          const name = gameName(key, game, manifest)
+          return (
+            <button
+              key={key}
+              type="button"
+              className="k-row th-rail-row"
+              aria-current={open === key ? 'page' : undefined}
+              title={name}
+              onClick={() => onOpen(key)}
+            >
+              <GameIcon exe={game.exe ?? key} small />
+              <span className="k-row-label">{name}</span>
+            </button>
+          )
+        })}
+      </div>
+      <ResizeHandle
+        width={live ?? width ?? RAIL_WIDTH.initial}
+        min={RAIL_WIDTH.min}
+        max={RAIL_WIDTH.max}
+        reset={RAIL_WIDTH.initial}
+        label="Resize the games list"
+        onLive={setLive}
+        onCommit={(next) => void setWidth(next)}
+      />
+    </nav>
   )
 }
 
 /**
- * When the hooked line's card is over the game (`textHookerShowCard`, ui/hook-games.ts
- * `hookCardShow`): always, only while the overlay's lookup key is held, or never.
+ * When the hooked line's card is over the game (`showCard`, ui/hook-games.ts `hookCardShow`):
+ * always, only while the overlay's lookup key is held, or never.
  */
-function ShowCard(): ReactNode {
-  const [stored, setStored] = useSetting<boolean | HookCardShow>('textHookerShowCard', true)
+function ShowCardRow({
+  value,
+  badge,
+  onChange
+}: {
+  value: HookCardShow
+  badge: ReactNode
+  onChange: (next: HookCardShow) => void
+}): ReactNode {
   const [lookupKey] = useSetting<string>('overlayLookupKey', 'shift')
   const { os } = useCapabilities()
   const key = lookupKeyName(lookupKey, os === 'macos')
-  const show = hookCardShow(stored)
   const descriptions: Record<HookCardShow, string> = {
-    always: 'The hooked line stays over the game as each one comes in.',
-    hold: `Out of the way until you hold ${key} to read or look up the line. The key is set in Shortcuts & Controls.`,
+    always: 'Each hooked line shows on the card as it comes in.',
+    hold: `Hidden until you hold ${key} to read or look up the line. The key is set in Shortcuts & Controls.`,
     never: 'Lines only go to the Log. Auto align doesn’t read the screen.'
   }
   return (
-    <SettingsSection title="Card">
-      <SettingsRow label="Show the card over the game" description={descriptions[show]}>
-        <Select
-          aria-label="Show the card over the game"
-          value={show}
-          onValueChange={(next) => void setStored(next === 'always' ? true : next === 'never' ? false : 'hold')}
-          options={[
-            { value: 'always', label: 'Always' },
-            { value: 'hold', label: `While holding ${key}` },
-            { value: 'never', label: 'Never' }
-          ]}
-        />
-      </SettingsRow>
-    </SettingsSection>
+    <SettingsRow label="Show card" badge={badge} description={descriptions[value]}>
+      <Select
+        aria-label="Show card"
+        value={value}
+        onValueChange={(next) => onChange(next as HookCardShow)}
+        options={[
+          { value: 'always', label: 'Always' },
+          { value: 'hold', label: `While holding ${key}` },
+          { value: 'never', label: 'Never' }
+        ]}
+      />
+    </SettingsRow>
   )
 }
 
@@ -726,34 +793,40 @@ export function TextHookerTab(): ReactNode {
   const [open, setOpen] = useSetting<string | null>('textHookerSettingsGame', null)
   const games = useHookGames()
   const game = open ? games[open] : undefined
+  const chosen = open && game ? open : null
   return (
     <WithReaderSettings>
-      {() =>
-        open && game ? (
-          <GamePage key={open} gameId={open} game={game} onBack={() => void setOpen(null)} />
-        ) : (
-          <SettingsPage title="Text Hooker" description="How hooked games are read and shown.">
-            <ShowCard />
-            <GameList onOpen={(key) => void setOpen(key)} />
-            <div className="th-scope-head">
-              <h2 className="k-heading">Defaults</h2>
-              <p className="k-description">Every game uses these unless it changes them on its own page.</p>
-            </div>
-            <HookSettingsSections
-              scope={{ kind: 'defaults' }}
-              extra={{
-                text: (
-                  <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
-                    <Button size="sm" onClick={() => showSettingsTab('log')}>
-                      Log & Sessions
-                    </Button>
-                  </SettingsRow>
-                )
-              }}
-            />
-          </SettingsPage>
-        )
-      }
+      {() => (
+        <div className="th-split">
+          <GamesRail open={chosen} onOpen={(key) => void setOpen(key)} />
+          {/* Its own scroller, a fresh one for each choice: it opens at the top. */}
+          <div key={chosen ?? 'defaults'} className="th-pane">
+            {chosen && game ? (
+              <GamePage key={chosen} gameId={chosen} game={game} onDeleted={() => void setOpen(null)} />
+            ) : (
+              <SettingsPage
+                key="defaults"
+                className="th-page"
+                title="Text Hooker defaults"
+                description="Every game uses these unless it changes them. Choose a game to change its own."
+              >
+                <HookSettingsSections
+                  scope={{ kind: 'defaults' }}
+                  extra={{
+                    text: (
+                      <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
+                        <Button size="sm" onClick={() => showSettingsTab('log')}>
+                          Log & Sessions
+                        </Button>
+                      </SettingsRow>
+                    )
+                  }}
+                />
+              </SettingsPage>
+            )}
+          </div>
+        </div>
+      )}
     </WithReaderSettings>
   )
 }

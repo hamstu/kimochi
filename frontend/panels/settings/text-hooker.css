@@ -1,4 +1,4 @@
-/* Settings → Text Hooker (TextHookerTab.tsx): the games, the defaults, and a game's own page. */
+/* Settings → Text Hooker (TextHookerTab.tsx): the games column, the defaults, and a game's own page. */
 
 /* A game's icon: the one it showed while hooked, else a gamepad in a well. */
 .th-icon {
@@ -27,69 +27,128 @@
   width: var(--k-icon);
   height: var(--k-icon);
 }
+.th-icon[data-small] {
+  width: var(--k-icon);
+  height: var(--k-icon);
+  border-radius: var(--k-radius-sm);
+}
+.th-icon[data-small] > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
 .th-icon[data-large] > svg {
   width: 1.5rem;
   height: 1.5rem;
 }
 
-/* The games: full-width rows in the section's group. */
-.th-game-row {
+/* The page: the games column, resizable, beside the chosen one's settings, each scrolling on its
+   own. The settings scroller around it does not scroll. */
+.settings-page-scroll:has(> .th-split) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.th-split {
   display: flex;
-  align-items: center;
-  gap: var(--k-space-3);
-  width: 100%;
-  padding: var(--k-space-2) var(--k-space-3);
-  border: 0;
-  background: transparent;
-  color: var(--k-text);
-  font: inherit;
-  text-align: start;
-  cursor: default;
+  height: 100%;
+  min-height: 0;
 }
-.th-game-row + .th-game-row {
-  border-top: 1px solid var(--k-line);
+.th-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
-.th-game-row:hover,
-.th-game-row[data-native-hover] {
-  background: var(--k-press);
+.th-pane > .k-settings-page {
+  animation: settings-page-in var(--k-base) var(--k-ease-out) both;
 }
-.th-game-row:focus-visible {
-  outline: 2px solid var(--k-focus);
-  outline-offset: -2px;
+@media (prefers-reduced-motion: reduce) {
+  .th-pane > .k-settings-page {
+    animation: none;
+  }
 }
-.th-game-row-text {
+
+/* The column: a shade deeper than Settings' own, behind a hairline. The chosen row is a tab of the
+   page beside it: the page's colour, rounded on its left, outlined but for its right side, where it
+   runs into the page over the hairline. Not clipped: the resize handle straddles its right edge. */
+.th-rail {
+  --th-rail-bg: var(--gray-3);
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--th-rail-bg);
+}
+.dark .th-rail {
+  --th-rail-bg: color-mix(in srgb, var(--k-bg) 72%, black);
+}
+.th-rail-scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  /* Defaults sits flush under the title bar, as Settings' Back does. */
+  padding: 0 0 var(--k-space-2);
+  /* The hairline, painted under the rows so the chosen one covers it. */
+  box-shadow: inset -1px 0 0 var(--k-line);
 }
-.th-game-row-name {
-  overflow: hidden;
-  font-size: var(--k-text-md);
-  font-weight: var(--k-weight-medium);
-  line-height: var(--k-leading-md);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.th-game-row-detail {
+.k-row.th-rail-row {
+  flex: none;
+  width: auto;
+  margin-left: var(--k-space-2);
+  border: 1px solid transparent;
+  border-right: 0;
+  border-radius: var(--k-radius-md) 0 0 var(--k-radius-md);
   color: var(--k-text-2);
+}
+.k-row.th-rail-row:hover,
+.k-row.th-rail-row[data-native-hover] {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.k-row.th-rail-row[aria-current='page'] {
+  border-color: var(--k-line);
+  background: var(--k-bg);
+  box-shadow: 0 1px 2px rgb(15 17 26 / 0.05);
+  color: var(--k-text);
+}
+.dark .k-row.th-rail-row[aria-current='page'] {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+/* Defaults, flush to the top as Back is (main.css .sb-back), and in line with it: chosen, it opens
+   straight up into the title bar, so only its lower corner is rounded. */
+.th-rail-scroll > .th-rail-row:first-child {
+  padding-top: calc(var(--k-space-1-5) + var(--k-space-1) - 1px);
+  min-height: calc(var(--k-row-h) + var(--k-space-1));
+  border-top-width: 0;
+  border-top-left-radius: 0;
+}
+.th-rail-label {
+  padding: var(--k-space-3) var(--k-space-3) var(--k-space-1) calc(var(--k-space-2) + var(--k-space-3));
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-xs);
+  letter-spacing: 0.02em;
+}
+.th-rail-empty {
+  margin: 0;
+  padding: var(--k-space-1) var(--k-space-3) var(--k-space-1) calc(var(--k-space-2) + var(--k-space-3));
+  color: var(--k-text-3);
   font-size: var(--k-text-sm);
   line-height: var(--k-leading-sm);
 }
-.th-chevron {
-  flex: none;
-  width: var(--k-icon-sm);
-  height: var(--k-icon-sm);
-  color: var(--k-text-3);
+/* A game's page: how many settings differ from the defaults, with Reset beside it. */
+.th-changes .k-callout-body {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-3);
 }
-
-/* "Defaults", between the games and the settings they all use. */
-.th-scope-head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--k-space-0-5);
-  padding-top: var(--k-space-2);
-  border-top: 1px solid var(--k-line);
+.th-changes > svg {
+  margin-top: 0.3125rem;
 }
 
 /* A setting changed from its default: a quiet accent label and the way back. */
@@ -112,16 +171,12 @@
   color: var(--k-text-3);
 }
 
-/* A game's page: back, then its icon, name (edited in place), where it is, and Delete. */
+/* A game's page: its icon, name (edited in place), where it is, and Delete. */
 .th-game-head {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--k-space-2);
-}
-.th-back {
-  margin-left: calc(var(--k-space-2) * -1);
-  color: var(--k-text-2);
 }
 .th-game-title {
   display: flex;
@@ -169,19 +224,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.th-live {
-  flex: none;
-  color: var(--k-accent-text);
-  font-weight: var(--k-weight-medium);
-}
 .th-delete {
   flex: none;
   align-self: flex-start;
   color: var(--k-text-2);
 }
+/* The session in use: a quiet label beside its name. */
 .th-current {
+  margin-left: var(--k-space-1);
+  padding: 0 var(--k-space-1-5);
+  border-radius: 999px;
+  background: var(--k-sunken);
   color: var(--k-text-2);
-  font-size: var(--k-text-sm);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-xs);
 }
 .th-error {
   color: var(--k-danger-text);

@@ -40,6 +40,8 @@ export interface HookSettings {
   opacity: number
   /** The card's text size before Auto align measures it, as a fraction of the window's height. */
   textSize: number
+  /** When the card is over the game (`hookCardShow`). */
+  showCard: HookCardShow
 }
 
 export const HOOK_DEFAULTS: HookSettings = {
@@ -51,7 +53,8 @@ export const HOOK_DEFAULTS: HookSettings = {
   speakerNames: true,
   autoAlign: true,
   opacity: 1,
-  textSize: 0.034
+  textSize: 0.034,
+  showCard: 'always'
 }
 
 /**
@@ -116,10 +119,10 @@ export const gameKey = (exe: string): string => exe.toLowerCase()
 export const textHookOn = (game: HookGame | null | undefined): boolean => game?.textHook ?? Boolean(game?.hookedAt)
 
 /**
- * When the hooked line's card is over the game (`textHookerShowCard`): `always`, `hold` (only while
- * the overlay's lookup key, `overlayLookupKey`, is held, where it can be read) or `never` (lines
- * still reach the Log). Stored as true / `'hold'` / false, so a setting from before `hold` existed
- * reads as it did.
+ * When the hooked line's card is over the game (`showCard`, for the defaults and each game):
+ * `always`, `hold` (only while the overlay's lookup key, `overlayLookupKey`, is held, where it can
+ * be read) or `never` (lines still reach the Log). Also reads the global `textHookerShowCard` it
+ * replaced, stored as true / `'hold'` / false.
  */
 export type HookCardShow = 'always' | 'hold' | 'never'
 
@@ -127,6 +130,18 @@ export function hookCardShow(value: unknown): HookCardShow {
   if (value === false || value === 'never') return 'never'
   if (value === 'hold') return 'hold'
   return 'always'
+}
+
+/**
+ * The stored defaults, with the global `textHookerShowCard` (before the card was a per-game
+ * setting) as the default `showCard` until the defaults have one of their own.
+ */
+export function withLegacyShowCard(
+  defaults: Partial<HookSettings> | null | undefined,
+  legacy: unknown
+): Partial<HookSettings> {
+  if (defaults?.showCard !== undefined || legacy === undefined || legacy === null) return defaults ?? {}
+  return { ...(defaults ?? {}), showCard: hookCardShow(legacy) }
 }
 
 /** A game's settings: its own where it has them, the defaults elsewhere. */
@@ -146,7 +161,8 @@ export function hookSettings(
     speakerNames: own.speakerNames ?? base.speakerNames,
     autoAlign: autoAlign ?? base.autoAlign,
     opacity: own.opacity ?? base.opacity,
-    textSize: own.text ?? base.textSize
+    textSize: own.text ?? base.textSize,
+    showCard: hookCardShow(own.showCard ?? base.showCard)
   }
 }
 

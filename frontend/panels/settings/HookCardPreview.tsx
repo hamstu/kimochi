@@ -6,7 +6,7 @@
  * without, it sits where it was dragged and the game's line shows below. Text size is a share of
  * the game's height and the opacity fades the card's background, as on the overlay.
  *
- * Given `actions` (Text Hooker → Card style), it works as the real card does: with the lookup key
+ * Given `actions` (Text Hooker → Card), it works as the real card does: with the lookup key
  * held (or click-through off), its top bar drags it and its corner resizes it, either of which
  * turns Auto align off; −/+ step the text
  * size, which turns Auto align off too; and ⋯ opens the opacity menu. Each changes the setting
@@ -100,7 +100,7 @@ export function HookCardPreview({
   textSize: number
   /** The card's background, 0–1 (`HookSettings.opacity`). */
   opacity: number
-  /** Works like the real card, changing these settings (Text Hooker → Card style). */
+  /** Works like the real card, changing these settings (Text Hooker → Card). */
   actions?: HookCardActions
 }): ReactNode {
   const [stored] = useSetting<OverlayStyleSettings>('overlayStyle', DEFAULT_OVERLAY_STYLE)

@@ -300,11 +300,12 @@
 }
 
 /* --- the Text Hooker card (HookCardPreview.tsx) ---------------------------------------------- */
-/* A game: its dialogue box along the bottom with its own line, and the overlay's card. Aligned
+/* A game: its dialogue box across the middle with its own line, and the overlay's card. Aligned
    (`data-aligned`), the card's text lands exactly on the game's line, so the card covers it:
    the card's padding (14px beside its text, 22px under it) is taken off the dialogue box's inner
-   corner. Otherwise it sits higher, where it was dragged, and the game's line shows. Both are
-   measured from the bottom, so the card glides between them. */
+   corner, and both sit in the middle. Otherwise it sits higher, where it was dragged, and the
+   game's line shows. Both are measured from the bottom, so the card glides between them; the
+   scene is tall enough for the higher one above the box. */
 .hook-preview-stage {
   padding: var(--k-space-3);
 }
@@ -316,10 +317,14 @@
   --hook-preview-inset: 1rem;
   --hook-preview-pad-x: 1rem;
   --hook-preview-pad-y: 0.75rem;
-  /* Below the dialogue box: the inset, or room for the hint where the card can be used. */
-  --hook-preview-bottom: var(--hook-preview-inset);
+  --hook-preview-box: calc(var(--hook-preview-line) + var(--hook-preview-pad-y) * 2);
+  /* Room for the box in the middle and, above it, a card at the same size (its line and ~36px of
+     padding, 0.75rem clear of the box, 1rem from the top). */
+  --hook-preview-height: max(11rem, calc(var(--hook-preview-line) * 3 + 9.5rem));
+  /* Below the dialogue box: as much as above it. */
+  --hook-preview-bottom: calc((var(--hook-preview-height) - var(--hook-preview-box)) / 2);
   display: block;
-  height: max(11rem, calc(var(--hook-preview-line) * 2 + 6.5rem + var(--hook-preview-bottom)));
+  height: var(--hook-preview-height);
   transition: height 200ms var(--k-ease-out);
 }
 .hook-preview-dialogue {
@@ -374,11 +379,7 @@
   white-space: nowrap;
 }
 
-/* Text Hooker → Card style: the card works as it does over a game (HookCardPreview `actions`). */
-.hook-preview-stage .hook-preview-scene[data-interactive] {
-  /* Clear of an aligned card's lower padding (22px past the game's line), with the hint below. */
-  --hook-preview-bottom: 2.5rem;
-}
+/* Text Hooker → Card: the card works as it does over a game (HookCardPreview `actions`). */
 /* Dragged: where it was let go, from the scene's top-left, at the size its corner gave it. */
 .hook-card.hook-preview-card[data-placed] {
   bottom: auto;

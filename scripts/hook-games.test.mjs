@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
-const { hookCardShow, overrides, textHookOn, withSetting } = await load('hook-games.ts')
+const { hookCardShow, hookSettings, overrides, textHookOn, withLegacyShowCard, withSetting } =
+  await load('hook-games.ts')
 
 test('the card shows always, only with the lookup key held, or never; older settings read as before', () => {
   assert.equal(hookCardShow(undefined), 'always', 'shown unless turned off')
@@ -10,6 +11,20 @@ test('the card shows always, only with the lookup key held, or never; older sett
   assert.equal(hookCardShow('hold'), 'hold')
   assert.equal(hookCardShow('never'), 'never')
   assert.equal(hookCardShow('sometimes'), 'always', 'anything else is the default')
+})
+
+test('whether the card shows is per game, after the defaults, which take the old global setting', () => {
+  assert.equal(hookSettings(null, null).showCard, 'always')
+  assert.equal(hookSettings({ showCard: 'hold' }, null).showCard, 'hold')
+  assert.equal(hookSettings({ showCard: 'hold' }, { showCard: 'never' }).showCard, 'never', 'the game’s own wins')
+  // `textHookerShowCard`, from before it was per game, is the default until the defaults have one.
+  assert.equal(hookSettings(withLegacyShowCard({}, false), null).showCard, 'never')
+  assert.equal(hookSettings(withLegacyShowCard({}, 'hold'), null).showCard, 'hold')
+  assert.equal(hookSettings(withLegacyShowCard({ showCard: 'always' }, false), null).showCard, 'always')
+  assert.deepEqual(withLegacyShowCard({ opacity: 0.5 }, undefined), { opacity: 0.5 })
+  // Set to the default, a game follows it again.
+  assert.deepEqual(withSetting({ showCard: 'never' }, 'showCard', 'hold', { showCard: 'hold' }), {})
+  assert.equal(overrides({ showCard: 'never' }, 'showCard', { showCard: 'hold' }), true)
 })
 
 test('a game value equal to the default is not a change', () => {

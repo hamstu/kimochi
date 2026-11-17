@@ -2152,12 +2152,16 @@ game's page in Settings → Text Hooker, through `textHookerSettingsGame`). Any 
   as an example (`HOOK_EXAMPLE`, marked "Example", `data-example`) in the reader's settings,
   replaced live by the first line. In Gaming Mode the card is
   drawn bare (`data-bare`: no bar, −/+, ⋯ or corner), since nothing can point at them.
-- `textHookerShowCard` (default true; Settings → Text Hooker → Card, and the panel above): `true`
-  (always), `'hold'` (only while the overlay's lookup key is held: the pointer feed's `gate`, which
+- `showCard` (`HookSettings`, so in `textHookerDefaults` and each game's record; Settings → Text
+  Hooker → Card → Show card, and the panel's Show card, which sets the hooked game's):
+  `'always'`, `'hold'` (only while the overlay's lookup key is held: the pointer feed's `gate`, which
   follows `overlayLookupKey` and a controller's lookup button; the card stays while a pop-up opened
   from it is up, and where the key can't be read or in Gaming Mode it is always shown), or `false`
-  (never: the card is not drawn except while Read along or the panel holds it, and Auto align's
-  background OCR does not run). Lines still reach the Log. `ui/hook-games.ts` `hookCardShow` reads it.
+  `'never'` (the card is not drawn except while Read along or the panel holds it, and Auto align's
+  background OCR does not run). Lines still reach the Log. `ui/hook-games.ts` `hookCardShow` reads
+  it. The global `textHookerShowCard` it replaced (true / `'hold'` / false) stays the default until
+  `textHookerDefaults` has a `showCard` (`withLegacyShowCard`).
+- `textHookerListWidth`: the width of Settings → Text Hooker's games column (150–360, default 192).
 - The controller's Recent text lists the Log's newest lines (`log_recent`), whatever their source,
   falling back to `scannedTextHistory` when the Log has no open session.
 

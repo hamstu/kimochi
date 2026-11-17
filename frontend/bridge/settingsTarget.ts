@@ -11,6 +11,9 @@ export const ACTIVITY_TICKER_SECTION = 'settings-activity-ticker'
 /** Settings → Text Hooker → Card style (Settings → Overlay → Text Hooker card's button opens it). */
 export const HOOK_CARD_SECTION = 'settings-texthooker-card'
 
+/** Settings → Log & Sessions → Sessions (a game's Session in Settings → Text Hooker opens it). */
+export const SESSIONS_SECTION = 'settings-sessions'
+
 let pending: string | null = null
 const subs = new Set<() => void>()
 
