@@ -147,6 +147,7 @@ test('the overlay tells the activity feed how a result ended', async () => {
 })
 
 const scanPath = functionsNamed([
+  'captureForScan',
   'performScan',
   'reportOutcome',
   'beginAutoRound',
@@ -168,6 +169,10 @@ async function scanContext({ recognise = async () => ({ fullText: 'text' }), app
     ocrModeNow: () => 'meikiocr',
     scanActivity,
     outcomeSound,
+    // Reading OCR, not a hooked game (overlay.js hookMode).
+    hookMode: () => false,
+    SCAN_WAIT_MS: 10000,
+    setTimeout,
     playSound: (name, options = {}) => sounds.push([name, Boolean(options.auto)]),
     activity: () => {},
     trace: () => {},
@@ -237,6 +242,33 @@ test('a failed scan buzzes', async () => {
     ['scan-start', false],
     ['scan-error', false]
   ])
+})
+
+test('a scan the reader asks for waits for a capture already running instead of giving up', async () => {
+  const { context, sounds } = await scanContext({ applied: { lines: 1, duplicate: false } })
+  let tries = 0
+  context.native.captureFrame = async () => {
+    if (++tries < 3) throw new Error('busy: a capture is already running; retry shortly')
+    return { id: 1 }
+  }
+  await context.performScan()
+  assert.equal(tries, 3)
+  assert.deepEqual(sounds, [
+    ['scan-start', false],
+    ['scan-done', false]
+  ])
+})
+
+test('a scan while a game is hooked says to turn Text hooking off to read with OCR', async () => {
+  const { context } = await scanContext({ applied: { lines: 0, duplicate: false } })
+  const posts = []
+  context.hookMode = () => true
+  context.activity = (post) => posts.push(post)
+  await context.performScan()
+  assert.deepEqual(
+    posts.map((post) => post.text),
+    ['Text hooking is on: turn it off to read the game with OCR']
+  )
 })
 
 test('the automatic loop never plucks, chimes for lines, and buzzes as automatic', async () => {

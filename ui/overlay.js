@@ -2250,11 +2250,32 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
  * `explicit` is a ready-made job (a Quick Shot's display region) to run instead of the chosen
  * source's.
  */
+/** How long a scan the reader asked for waits for a capture already running. */
+const SCAN_WAIT_MS = 10000
+
+/**
+ * The frame for a scan the reader asked for. Automatic scanning may be in the middle of a
+ * capture (a slow watcher on a large full-screen frame holds it for seconds): the scan waits for
+ * it rather than giving up, so Scan and Force rescan always scan.
+ */
+async function captureForScan(request) {
+  const until = Date.now() + SCAN_WAIT_MS
+  for (;;) {
+    try {
+      return await native.captureFrame(request, scanner.isRunning, ...observerArgs())
+    } catch (error) {
+      if (!String(error?.message ?? error).startsWith('busy:') || Date.now() > until) throw error
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
+}
+
 async function performScan(explicit = null) {
   trace('manual-scan', { generation: generation.current })
   const ran = await pipeline.run(async () => {
     setScanning(true, 'Capturing\u2026')
-    activity(scanActivity.scanStarted())
+    // While a game is hooked the scan only places the card; it says so once it is done.
+    if (!hookMode()) activity(scanActivity.scanStarted())
     // Only here: every caller of performScan is the reader asking (shortcut, button, gamepad,
     // Quick Shot, a committed region), and the automatic loop never comes through this path.
     playSound('scan-start')
@@ -2269,9 +2290,9 @@ async function performScan(explicit = null) {
         reportOutcome(scanActivity.noSource())
         return
       }
-      const frame = await native.captureFrame(job.request, scanner.isRunning, ...observerArgs())
+      const frame = await captureForScan(job.request)
       stage = 'recognise'
-      activity(scanActivity.recognising(ocrModeNow()))
+      if (!hookMode()) activity(scanActivity.recognising(ocrModeNow()))
       const result = await recognize(frame, { ocrMode: ocrModeNow() })
       if (!result) {
         setScanning(false, 'No result from the OCR engine.')
@@ -2288,7 +2309,10 @@ async function performScan(explicit = null) {
       })
       // Every applied result reaches the publisher, which reports; one that did not was
       // discarded as stale, and applyResult has already said so.
-      if (publication || !generation.isStale(job)) reportOutcome(scanActivity.scanOutcome(publication))
+      // While a game is hooked the reading only places the card: say so, rather than "Nothing
+      // recognised" or nothing at all, to a reader who pressed Scan wanting OCR.
+      if (hookMode()) reportOutcome(scanActivity.hookedScan())
+      else if (publication || !generation.isStale(job)) reportOutcome(scanActivity.scanOutcome(publication))
       // Keep the auto loop from immediately republishing what we just showed —
       // but only if the result was actually accepted.
       // Tell the loop what has just been spent and shown, so it does not

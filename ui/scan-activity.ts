@@ -31,6 +31,19 @@ export const scanBusy = (): ActivityPost => ({
   tone: 'info'
 })
 
+/**
+ * A scan asked for while a game is hooked: the hooked text is the Log's, so the reading only lines
+ * the card up with the game's text. Said, so a reader who wanted OCR knows how to get it.
+ */
+export const hookedScan = (): ActivityPost => ({
+  text: 'Text hooking is on: turn it off to read the game with OCR',
+  tone: 'warn',
+  key: HOOKED_SCAN_KEY
+})
+
+/** The key of [`hookedScan`]: the one post the Log's ticker shows while a game is hooked. */
+export const HOOKED_SCAN_KEY = 'hooked-scan'
+
 export const linesAdded = (lines: number): string => (lines === 1 ? 'Added 1 line' : `Added ${lines} lines`)
 
 /** How a publication went: `publishOcrResult`'s report. */

@@ -359,7 +359,7 @@ choosing that source again brings its region back.
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
-| `capture_frame` | `({request, observe?, observerMode?, observerEngine?, readIfStill?}) -> {id, info, url, observation, observerSkipped, …}` — with `observe`, the watcher reads the frame (with `readIfStill`, only if the frame's `contentFingerprint` equals it; otherwise the read is skipped and `observerSkipped` is true, which Auto OCR uses to wait for text to stop moving before a slow watcher reads it): `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS, and `'vocr'` / `'screenai'` when they are the reader; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts`; one that cannot read the `language` (or the default, when it cannot) is replaced by the first of the OS's engine, PaddleOCR and Screen AI that can (`text_observer::engine_for`) |
+| `capture_frame` | `({request, observe?, observerMode?, observerEngine?, readIfStill?}) -> {id, info, url, observation, observerSkipped, …}` — with `observe`, the watcher reads the frame (with `readIfStill`, only if the frame's `contentFingerprint` equals it; otherwise the read is skipped and `observerSkipped` is true, which Auto OCR uses to wait for text to stop moving before a slow watcher reads it): `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS, and `'vocr'` / `'screenai'` when they are the reader; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts`; one that cannot read the `language` (or the default, when it cannot) is replaced by the first of the OS's engine, PaddleOCR and Screen AI that can (`text_observer::engine_for`). The watcher's read is waited for 1.5 s, or as long as its last read took and a quarter more, up to 6 s: a slow engine on a large frame (a full-screen game on a slow CPU) is still heard on a screen that never repeats a frame. A capture already running rejects with `busy:`; a scan the reader asked for (`performScan`) waits for it, up to 10 s, rather than being skipped |
 | `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, `'ppocr'`, `'screenai'`, `'vocr'`, and `'livetext'` / `'oneocr'` on their OS); an engine that cannot read the `language` setting is refused with `invalid: the <engine> OCR engine cannot read this language (<code>)…` |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
@@ -1430,7 +1430,9 @@ of at most 300 characters. Native code posts through `activity::post` (model dow
 `model_store::install`). Nothing is stored: each window's feed (`ui/activity.ts`) lives in
 memory for that window's lifetime, coalescing repeats and letting the next post with a `busy`
 entry's key settle it. The Log shows it as the activity ticker; the overlay's scan pipeline
-posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-activity.ts`.
+posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-activity.ts`. While
+`inputSource` is `"hook"` the ticker shows only `hooked-scan`: a scan asked for while a game is
+hooked only places the card (Auto align), and says to turn Text hooking off to read with OCR.
 
 ## System, tray and lifecycle
 

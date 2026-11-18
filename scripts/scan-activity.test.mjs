@@ -2,8 +2,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const { SCAN_KEY, autoScanSkipped, autoScanStatus, engineName, recognising, scanFailed, scanOutcome, scanStarted } =
-  await load('scan-activity.ts')
+const {
+  SCAN_KEY,
+  autoScanSkipped,
+  autoScanStatus,
+  engineName,
+  hookedScan,
+  recognising,
+  scanFailed,
+  scanOutcome,
+  scanStarted
+} = await load('scan-activity.ts')
 const { ActivityFeed } = await load('activity.ts')
 const { publishOcrResult } = await load('output.js')
 
@@ -27,6 +36,10 @@ test('a scan outcome says how many lines the Log gained, or why none', () => {
   // The automatic loop reading nothing new is its normal case.
   assert.deepEqual(said(scanOutcome(null, { auto: true })), ['No new text', 'info'])
   assert.equal(scanOutcome(null).key, SCAN_KEY)
+  // A scan while a game is hooked only places the card, and says how to read with OCR instead.
+  assert.equal(hookedScan().text, 'Text hooking is on: turn it off to read the game with OCR')
+  assert.equal(hookedScan().key, 'hooked-scan')
+  assert.equal(hookedScan().tone, 'warn', 'shown even while Auto align reads in the background')
 })
 
 test('native error prefixes become plain sentences with the right tone', () => {

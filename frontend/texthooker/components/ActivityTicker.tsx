@@ -19,6 +19,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { ChevronRight, Settings2 } from 'lucide-react'
 import { Badge, IconButton, StatusDot, Tooltip, cn, type Tone } from '@kit'
 import { relativeTime } from '@ui/activity'
+import { HOOKED_SCAN_KEY } from '@ui/scan-activity'
 import { useActivity, useNow, type ActivityEntry, type ActivityTone } from '../../bridge/activity'
 import { openSettings } from '../../bridge/tauri'
 import { ACTIVITY_TICKER_SECTION, requestSettingsSection } from '../../bridge/settingsTarget'
@@ -119,7 +120,16 @@ function HistoryRow({ entry, now }: { entry: ActivityEntry; now: number }): Reac
   )
 }
 
-export function ActivityTicker({ visible, auto }: { visible: boolean; auto: boolean }): ReactNode {
+export function ActivityTicker({
+  visible,
+  auto,
+  hooked = false
+}: {
+  visible: boolean
+  auto: boolean
+  /** A game is hooked: its lines speak for themselves, and only a scan's note about it shows. */
+  hooked?: boolean
+}): ReactNode {
   const entries = useActivity()
   const latest = entries.at(-1) ?? null
   const active = useWindowActive(visible)
@@ -145,7 +155,8 @@ export function ActivityTicker({ visible, auto }: { visible: boolean; auto: bool
 
   // With Auto OCR on, only a fresh warning or error takes the ticker's place.
   const alert = fresh && (latest?.tone === 'warn' || latest?.tone === 'error') ? latest : null
-  const message = auto ? alert : fresh ? latest : null
+  const note = fresh && latest?.key === HOOKED_SCAN_KEY ? latest : null
+  const message = hooked ? note : auto ? alert : fresh ? latest : null
   const shown = auto || open || message !== null
 
   // The text that was showing, kept for the length of its exit when a new one arrives.
@@ -188,7 +199,7 @@ export function ActivityTicker({ visible, auto }: { visible: boolean; auto: bool
     if (open && list.current) list.current.scrollTop = list.current.scrollHeight
   }, [open, entries.length])
 
-  if (!latest && !auto) return null
+  if ((!latest && !auto) || (hooked && !message && !open)) return null
   const dot = message ? <ActivityDot tone={message.tone} /> : <span className="activity-live-dot" aria-hidden />
   return (
     <div

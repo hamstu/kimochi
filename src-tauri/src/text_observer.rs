@@ -876,6 +876,8 @@ struct Slot<I, O> {
     pending: Option<Job<I>>,
     running: Option<Running>,
     done: Option<Done<O>>,
+    /// How long the last read took: a submit waits at least about that long (`submit`).
+    took: Option<Duration>,
     closed: bool,
     /// The worker thread has returned and dropped its engine.
     exited: bool,
@@ -939,6 +941,9 @@ fn stop_all(workers: &[Arc<dyn Stop>], timeout: Duration) -> usize {
     }
 }
 
+/// The longest a look waits for a slow engine's answer (`LatestWorker::submit`).
+const MAX_WAIT: Duration = Duration::from_secs(6);
+
 /// One owned worker thread, a one-deep latest-wins queue, and generation-stamped
 /// results. `run` is only ever called on the worker, one input at a time.
 struct LatestWorker<I, O> {
@@ -950,7 +955,14 @@ struct LatestWorker<I, O> {
 impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
     fn spawn(name: &str, mut run: impl FnMut(I) -> O + Send + 'static) -> std::io::Result<Self> {
         let channel = Arc::new(Channel {
-            slot: Mutex::new(Slot { pending: None, running: None, done: None, closed: false, exited: false }),
+            slot: Mutex::new(Slot {
+                pending: None,
+                running: None,
+                done: None,
+                took: None,
+                closed: false,
+                exited: false,
+            }),
             changed: Condvar::new(),
         });
         let shared = channel.clone();
@@ -970,8 +982,10 @@ impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
                         slot = shared.changed.wait(slot).unwrap_or_else(|p| p.into_inner());
                     }
                 };
+                let started = Instant::now();
                 let output = run(job.input);
                 let mut slot = shared.lock();
+                slot.took = Some(started.elapsed());
                 slot.running = None;
                 slot.done = Some(Done { generation: job.generation, key: job.key, output });
                 shared.changed.notify_all();
@@ -989,8 +1003,13 @@ impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
     /// Ask for `input` (whose content is identified by `key`) and wait at most
     /// `timeout` for its answer.
     fn submit(&mut self, key: u64, input: I, timeout: Duration) -> Outcome<O> {
-        let deadline = Instant::now() + timeout;
         let mut slot = self.channel.lock();
+        // An engine slower than `timeout` on these frames (a large full-screen game read on a slow
+        // CPU) would otherwise answer every look a moment after it was given up on, and on a screen
+        // that never shows the same pixels twice (an animated game) never be heard at all: wait as
+        // long as its last read took, and a little more, up to [`MAX_WAIT`].
+        let timeout = slot.took.map_or(timeout, |took| timeout.max((took + took / 4).min(MAX_WAIT)));
+        let deadline = Instant::now() + timeout;
         if let Some(done) = slot.done.as_ref().filter(|done| done.key == key) {
             return Outcome::Ready(done.output.clone());
         }
@@ -1363,6 +1382,22 @@ mod tests {
         assert_eq!(worker.submit(2, 2, LONG), Outcome::Ready(20));
         releaser.join().unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn an_engine_slower_than_the_timeout_is_still_heard_on_frames_that_never_repeat() {
+        // An animated full-screen game read by a slow engine: every look is new pixels, and each
+        // read takes longer than a look is given.
+        let mut worker = LatestWorker::spawn("slow", |input: u64| {
+            std::thread::sleep(Duration::from_millis(120));
+            input * 10
+        })
+        .unwrap();
+        let first = Duration::from_millis(40);
+        assert!(matches!(worker.submit(1, 1, first), Outcome::Busy { .. }), "the first look learns how slow it is");
+        std::thread::sleep(Duration::from_millis(150));
+        assert_eq!(worker.submit(2, 2, first), Outcome::Ready(20));
+        assert_eq!(worker.submit(3, 3, first), Outcome::Ready(30));
     }
 
     #[test]

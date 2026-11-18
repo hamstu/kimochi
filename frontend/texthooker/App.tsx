@@ -118,8 +118,9 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const hasActivity = useActivity().length > 0
   // Auto OCR running: the ticker then just says so (and the Log keeps room for it).
   const autoOcr = Boolean(useViewState().state.autoOcrEnabled) && settings.inputSource === 'ocr'
-  // The scan feed is OCR's (a hooked game's lines speak for themselves), and it can be turned off.
-  const showTicker = settings.inputSource !== 'hook' && settings.showActivityTicker
+  // The scan feed is OCR's (a hooked game's lines speak for themselves: then it only says why a
+  // scan read nothing into the Log), and it can be turned off.
+  const showTicker = settings.showActivityTicker
   // The first frame lays out only the newest lines (laying out a full page of furigana held the
   // window's first frame back by ~130 ms); the rest follow right after it, below the fold.
   const [shown, setShown] = useState(FIRST_FRAME_LINES)
@@ -307,7 +308,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
             </div>
           </LineContextMenu>
         </main>
-        {showTicker && <ActivityTicker visible={visible} auto={autoOcr} />}
+        {showTicker && <ActivityTicker visible={visible} auto={autoOcr} hooked={settings.inputSource === 'hook'} />}
       </div>
       <Bar position="bottom">
         <StatsFooter

@@ -78,9 +78,17 @@ function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgre
 
 /**
  * The same engine choice as Settings → OCR (and the same download confirmation), with a way there
- * for the engine's own settings.
+ * for the engine's own settings. While a game is hooked (`placing`) the engine only places the
+ * Text Hooker's card (Auto align), and the heading says so: choosing another engine there does not
+ * read the game with OCR, which takes turning Text hooking off.
  */
-export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
+export function OcrModel({
+  onOpenSettings,
+  placing = false
+}: {
+  onOpenSettings: () => void
+  placing?: boolean
+}): JSX.Element {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
   const [language] = useLanguage()
@@ -90,7 +98,16 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">
-        <span id="sb-ocr-label">OCR model</span>
+        <span
+          id="sb-ocr-label"
+          title={
+            placing
+              ? "With Text hooking on, this engine only finds where the game's text is, so the card can sit on it. Turn Text hooking off to read the game with OCR."
+              : undefined
+          }
+        >
+          {placing ? 'Auto align OCR' : 'OCR model'}
+        </span>
         <SettingsLink label="OCR settings" onClick={onOpenSettings} />
       </div>
       <div className="sb-field">
@@ -293,12 +310,13 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
  * The OCR model only matters while the Log reads the screen or the browser extension's pictures,
  * or while OCR places the Text Hooker's card on the game (Auto align, kept per game).
  */
-function useReadsScreen(): boolean {
+function useReadsScreen(): { reads: boolean; placing: boolean } {
   const [input, setInput] = useState(() => getSettings().inputSource)
   useEffect(() => onSettingsChange((next) => setInput(next.inputSource)), [])
   const hook = useHookStatus()
   const placement = useHookPlacement(input === 'hook' ? hook.exe : null)
-  return input === 'ocr' || input === 'browser' || Boolean(placement?.on)
+  const placing = input === 'hook' && Boolean(placement?.on)
+  return { reads: input === 'ocr' || input === 'browser' || placing, placing }
 }
 
 export function MainSidebar({
@@ -391,7 +409,7 @@ export function MainSidebar({
             onChooseSource={onChooseSource}
           />
         </div>
-        {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
+        {readsScreen.reads && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} placing={readsScreen.placing} />}
         <BrowserEngines />
         <DictionaryPicker onOpenSettings={() => onSettingsTab('dictionary')} />
       </div>
