@@ -239,19 +239,15 @@
   opacity: 0;
 }
 
-/* Settings → Overlay → Radial menu (RadialMenuLookSection.tsx): the ring as a picture, a little
-   smaller, with nothing to drag; then its colour and the way to the editor, across the group. */
-.radial-preview[data-static] {
-  --radial-scale: 0.5;
-  height: calc(620px * 0.5);
-}
-.radial-preview[data-static] .cm-wedge {
-  cursor: default;
-}
 /* Base colour, accent colour, base opacity (RadialStyle.tsx): the two colour columns as wide as
    their swatches, so their rows line up; the opacity takes the rest. */
 @container (min-width: 30rem) {
   .overlay-look-controls.radial-style-controls {
     grid-template-columns: auto auto minmax(0, 1fr);
   }
+}
+
+/* The look's three boxes under the well: no inset between, so their dividers meet it. */
+.radial-preview-well:has(+ .overlay-look) .radial-preview {
+  margin-bottom: 0;
 }

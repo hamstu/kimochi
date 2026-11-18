@@ -8,7 +8,8 @@
 }
 /* The live preview across the group's width, inset by the row padding. */
 .overlay-look-stage {
-  padding: var(--k-space-3);
+  /* No inset below: the controls' dividers run up to meet the well. */
+  padding: var(--k-space-3) var(--k-space-3) 0;
 }
 /* Taller, with the line low, to leave room for the dictionary pop-up over its hovered word. */
 .overlay-look-stage .overlay-look-preview {
@@ -26,12 +27,12 @@
 .overlay-look-stage .overlay-look-cell .ocr-word {
   --ocr-pad: 7px;
 }
-/* One box under the stage, its three parts side by side and parted by rules; one under another
+/* One box under the stage, its three parts side by side and parted by rules that meet the well
+   above (no rule across); one under another
    in a narrow window. */
 .overlay-look-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  border-top: 1px solid var(--k-line);
 }
 .overlay-look-control {
   display: flex;
@@ -263,7 +264,12 @@
   border: 0;
   border-radius: 999px;
   background: var(--swatch);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.14);
+  /* Lit from the top left, shaded at the bottom right, on a soft shadow: a dark swatch still
+     stands off a dark ground. */
+  box-shadow:
+    inset 1px 1px 0 rgb(255 255 255 / 0.22),
+    inset -1px -1px 0 rgb(0 0 0 / 0.28),
+    0 1px 3px rgb(0 0 0 / 0.35);
   color: #fff;
   cursor: default;
   transition:
@@ -274,13 +280,7 @@
 .overlay-look-swatch[data-native-hover] {
   transform: scale(1.1);
 }
-/* Chosen: a ring in its own colour, parted from the swatch by the window's ground. */
-.overlay-look-swatch[data-state='on'] {
-  box-shadow:
-    inset 0 0 0 1px rgb(0 0 0 / 0.14),
-    0 0 0 2px var(--k-bg),
-    0 0 0 3.5px var(--swatch);
-}
+/* Chosen: its tick shows (below), nothing more. */
 .overlay-look-swatch svg {
   width: var(--k-icon-xs);
   height: var(--k-icon-xs);

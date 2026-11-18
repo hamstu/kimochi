@@ -71,6 +71,3 @@ export function useRadialMenuBase(): [RadialMenuBase, (next: RadialMenuBase) => 
   const [stored, setStored] = useSetting<RadialMenuBase>('radialMenuBase', DEFAULT_RADIAL_BASE)
   return [radialMenuBaseOf(stored), (next) => void setStored(next)]
 }
-
-/** What Settings says of the radial menu over its picture, on both pages that show it. */
-export const RADIAL_STYLE_DESCRIPTION = 'The menu you open over a game with its shortcut or a controller button.'

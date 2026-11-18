@@ -1,5 +1,5 @@
 /**
- * Settings → Shortcuts & Controls → Radial menu: which actions the radial menu holds and in what
+ * Settings → Shortcuts & Controls → Radial menu, and the same in Settings → Overlay: which actions the radial menu holds and in what
  * order (`controllerMenuItems`, ui/radial-items.js), and a shortcut for each that runs it without
  * the menu (`hotkeys.menu…`: keys and a controller button or combination).
  *
@@ -133,13 +133,12 @@ interface Drag {
  * the mouse does over a game; clicking one calls `onPick`, and dragging one round the ring calls
  * `onReorder` with the ring's new order once it has snapped into place.
  */
-export function RadialPreview({
+function RadialPreview({
   items,
   selected,
   details,
   color,
   base,
-  interactive = true,
   source = 'ocr',
   onSource,
   onPick,
@@ -156,11 +155,6 @@ export function RadialPreview({
   color: string
   /** The ring's base colour and opacity (`radialMenuBase`). */
   base: RadialMenuBase
-  /**
-   * False for a picture of the menu only (Settings → Overlay → Radial menu): no dragging or
-   * editing, no source to choose, nothing beside the ring. Pointing at items still lights them.
-   */
-  interactive?: boolean
   source?: PreviewSource
   onSource?: (source: PreviewSource) => void
   onPick?: (id: string) => void
@@ -227,7 +221,6 @@ export function RadialPreview({
   }
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
-    if (!interactive) return
     const menu = menuRef.current as unknown as RingParts | null
     const wedge = (event.target as Element).closest?.('.cm-wedge') as SVGElement | null
     if (!menu || !wedge || event.button !== 0 || items.length < 2) return
@@ -309,7 +302,6 @@ export function RadialPreview({
       <div
         ref={previewRef}
         className="radial-preview"
-        data-static={interactive ? undefined : ''}
         data-open={panel ? '' : undefined}
         onMouseLeave={() => {
           if (!dragRef.current) menuRef.current?.select(selectedIndex)
@@ -337,24 +329,20 @@ export function RadialPreview({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         />
-        {interactive && (
-          <>
-            <div className="radial-preview-source">
-              <Select
-                aria-label="Show the menu as it looks with"
-                size="sm"
-                variant="ghost"
-                value={source}
-                onValueChange={(value) => onSource?.(value)}
-                options={SOURCES}
-              />
-            </div>
-            <p className="radial-preview-hint">Drag an item to move it. Click one to edit it.</p>
-            <div className="radial-preview-add">{add}</div>
-            {reset}
-            {panel}
-          </>
-        )}
+        <div className="radial-preview-source">
+          <Select
+            aria-label="Show the menu as it looks with"
+            size="sm"
+            variant="ghost"
+            value={source}
+            onValueChange={(value) => onSource?.(value)}
+            options={SOURCES}
+          />
+        </div>
+        <p className="radial-preview-hint">Drag an item to move it. Click one to edit it.</p>
+        <div className="radial-preview-add">{add}</div>
+        {reset}
+        {panel}
       </div>
     </div>
   )
