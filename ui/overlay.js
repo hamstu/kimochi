@@ -6169,7 +6169,9 @@ await native.listen('pointer', ({ payload }) => {
       syncHookCard()
     }
   }
-  const armed = !clickThrough('words') || gateOpen
+  // Look up on hover lights the word under the pointer as the lookup key would: the reader is
+  // looking words up just by pointing. Clicks still go to the game (native's regions follow the key).
+  const armed = !clickThrough('words') || gateOpen || hoverLookup()
   if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
   // The card clear of the game is the reader's to click without the key (`hookCardClear`).
