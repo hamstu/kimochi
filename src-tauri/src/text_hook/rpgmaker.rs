@@ -62,10 +62,7 @@ mod tests {
     #[test]
     fn actor_codes_are_the_actors_names() {
         assert_eq!(names(), vec!["", "アリス", "ボブ", ""]);
-        assert_eq!(
-            with_names("<\\n[1]>\n「また明日、\\N[2]様」", &names()),
-            "<\\n[1]>\n「また明日、ボブ様」"
-        );
+        assert_eq!(with_names("<\\n[1]>\n「また明日、\\N[2]様」", &names()), "<\\n[1]>\n「また明日、ボブ様」");
         // An actor with no name, or none at that id, is left for the codes to be taken out.
         assert_eq!(with_names("\\N[3]と\\N[9]", &names()), "\\N[3]と\\N[9]");
         // No database: as it was.
