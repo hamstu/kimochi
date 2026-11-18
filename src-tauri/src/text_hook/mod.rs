@@ -908,11 +908,10 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
 /// same line, and which is chosen is down to chance.
 fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Option<String> {
     // Never to the hooker's TextMeshPro setter while one of the DLL's text objects holds a line
-    // (`dll_reads_lines`): it mixes every object's text with layout's (`m
-mm
-…`).
+    // (`dll_reads_lines`): it mixes every object's text with layout's (`m`, `mm`, `mmm`).
     let better = taking_over(session, index, language)?;
-    let hooker = session.threads.iter().find(|t| t.key == better).is_some_and(|t| unity::is_hooker_tmp_setter(&t.hookcode));
+    let hooker =
+        session.threads.iter().find(|t| t.key == better).is_some_and(|t| unity::is_hooker_tmp_setter(&t.hookcode));
     (!(hooker && dll_reads_lines(session))).then_some(better)
 }
 
