@@ -1008,6 +1008,7 @@ const RENPY_TEXT: &[(Option<&str>, &str, &str)] = &[
     (None, "道を進んだ。", "say"),
     (Some("語り"), "一つ目の段落です。", "say"),
     (Some("語り"), "二つ目の段落です。", "say"),
+    (Some("ケン"), "「元気です。」", "say"),
     (None, "最後の台詞です。", "say"),
 ];
 
@@ -1026,11 +1027,19 @@ define config.afm_characters = 1000
 define config.afm_bonus = 1
 define h = Character("ハナ")
 define n = Character("語り", kind=nvl)
+define k = Character("ケン", what_prefix="「", what_suffix="」")
 default player = "太郎"
 
 # No main menu: straight to the start label.
 label main_menu:
     return
+
+# A say screen, as games have (the say statement then shows its line through it).
+screen say(who, what):
+    window:
+        if who is not None:
+            text who id "who"
+        text what id "what"
 
 # A choice screen, as games have (without one, Ren'Py lays a menu out the old way).
 screen choice(items):
@@ -1066,6 +1075,7 @@ label start:
     n "一つ目の段落です。"
     n "二つ目の段落です。"
     nvl clear
+    k "元気です。"
     "最後の台詞です。"
     $ renpy.quit()
     return
