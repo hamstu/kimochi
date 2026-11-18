@@ -119,7 +119,7 @@ export function OverlayTab(): ReactNode {
           <SettingsRow
             label="Outline the word being looked up"
             controlId="ocr-match-outline"
-            description="Text drawn Transparent shows nothing of what you look up. With this on, a faint outline marks the word the dictionary matched while its pop-up is open, as Read along does."
+            description="Only for Transparent: shows a faint outline over the word being looked up, as Read along does."
           >
             <Switch
               id="ocr-match-outline"

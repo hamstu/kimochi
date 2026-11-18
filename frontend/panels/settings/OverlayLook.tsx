@@ -47,6 +47,7 @@ function Preview({
   line,
   lit = line.lit,
   popupOpacity,
+  outline = false,
   onPoint
 }: {
   theme: ResolvedCardAppearance
@@ -57,6 +58,11 @@ function Preview({
   lit?: number | null
   /** The dictionary pop-up over the hovered word is drawn at this opacity (10–100). */
   popupOpacity: number
+  /**
+   * The looked-up word gets the faint outline the overlay draws over Transparent text
+   * (`overlayMatchOutline`, Read along's outline, ui/controller.css `.cm-word-match`).
+   */
+  outline?: boolean
   /** The pointer came onto a word (its index), or left the line (null). */
   onPoint?: (index: number | null) => void
 }): ReactNode {
@@ -92,9 +98,12 @@ function Preview({
                 <span className="ocr-word-current">{previewWord(word, line.shape)}</span>
               </span>
             </span>
+            {index === lit && outline && theme === 'transparent' && <span className="overlay-look-outline" />}
             {index === lit && (
               <span className="overlay-look-popup" style={{ opacity: popupOpacity / 100 }}>
                 <span className="overlay-look-popup-term">{previewWord(word, line.shape)}</span>
+                <span className="overlay-look-popup-gloss" />
+                <span className="overlay-look-popup-gloss" data-short="" />
                 <span className="overlay-look-popup-gloss" />
                 <span className="overlay-look-popup-gloss" data-short="" />
               </span>
@@ -128,6 +137,7 @@ export function OverlayLook(): ReactNode {
   const opacity = opacityDraft ?? look.opacity
   const strength = highlightStrength(opacity)
   const [storedPopupOpacity] = useSetting<number>('dictionaryPopupOpacity', 100)
+  const [matchOutline] = useSetting<boolean>('overlayMatchOutline', true)
   const popupOpacity = popupOpacityOf(storedPopupOpacity)
 
   useEffect(() => {
@@ -170,6 +180,7 @@ export function OverlayLook(): ReactNode {
           line={line}
           lit={lit}
           popupOpacity={popupOpacity}
+          outline={matchOutline !== false}
           onPoint={setPointed}
         />
       </div>
