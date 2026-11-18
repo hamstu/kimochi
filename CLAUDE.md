@@ -12,6 +12,9 @@
   `npm run check:rust`. Changes land through pull requests: CI (GitHub-hosted runners) must pass
   the required `CI` status, and `gh pr merge --auto --squash` merges once it does. The pre-commit
   hook (`.githooks/`, installed by `npm install`) formats and lints what is staged.
+- **Formatter is oxfmt, not Prettier.** Format with `npx oxfmt <files>` or `npm run format`; lint
+  with oxlint (`npm run lint`). The repo has no Prettier, so never run `npx prettier`: npx
+  downloads it and rewraps whole files in a style oxfmt keeps. Markdown is not formatted.
   (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 - **Contracts**: native commands and events are documented in [COMMANDS.md](COMMANDS.md); every
   `invoke('…')` literal must be a registered command (`scripts/command-contract.test.mjs`).

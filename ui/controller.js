@@ -136,7 +136,8 @@ export function scrollSpeed(y) {
  *   API pop-up) is told apart; `builtin` (Yomitan), `hachidori` and `tenten` all look up by range
  * @param {(range: Range) => Promise<boolean>} context.lookupRange open the dictionary engine's popup
  *   on a range (Yomitan's frontend, or the extension host's `lookupRange`)
- * @param {(term: string, x: number, y: number, sentence: string) => Promise<void>} context.lookupTerm open the Yomitan API pop-up
+ * @param {(term: string, x: number, y: number, sentence: string) => Promise<number|null|void>} context.lookupTerm open the
+ *   Yomitan API pop-up on the word that starts `term`; resolves to that word's length, null when none was found
  * @param {(text: string) => Promise<unknown>} context.apiParse the Yomitan API's `/tokenize` (its parse results)
  * @param {() => ({startContainer: Node, startOffset: number, endContainer: Node, endOffset: number}|null)} [context.matchedRange]
  *   the text the open popup's lookup matched, where an extension engine marks it
@@ -1739,12 +1740,16 @@ export function createController(context) {
       if (context.popupType() === 'custom-api') {
         const rect = wordRect(range)
         const origin = context.status().origin ?? { x: 0, y: 0 }
-        await context.lookupTerm(
+        // The word the API finds from here, as a mouse lookup finds it: the outline grows over it
+        // (モ: モンスター), from a word's start or from a character the reader chose.
+        const length = await context.lookupTerm(
           ahead?.toString() || unit.text.slice(word.start),
           origin.x + rect.left + rect.width / 2,
           origin.y + rect.top + rect.height / 2,
           unit.sentence ?? unit.text
         )
+        context.log({ check: 'controller-lookup', length: length ?? null, api: true })
+        if (ticket === lookups && length) fitOutline(word, length)
         return
       }
       const slow = setTimeout(() => {

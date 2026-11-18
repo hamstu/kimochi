@@ -5043,7 +5043,8 @@ function syncMatchOutline() {
     (hidden.words || hidden.card) &&
     native.getSetting('overlayMatchOutline') !== false &&
     (controller?.mode ?? 'idle') === 'idle' &&
-    popupShown()
+    // The Yomitan API's pop-up is a window of its own, not in this page (`apiPopupVisible`).
+    (popupShown() || apiReadingPopup)
   ) {
     const match = matchedRange()
     const node = match?.startContainer

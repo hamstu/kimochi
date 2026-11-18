@@ -30,6 +30,7 @@ import {
   Check,
   ChevronRight,
   ChevronsUpDown,
+  CirclePause,
   Clipboard,
   Crop,
   Eye,
@@ -129,7 +130,7 @@ import type { ControllerWiring } from '../panels/useController'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { keepShape } from '@ui/preview-shape'
 import { useLanguage } from '../bridge/useLanguage'
-import { refusalText, useGamePauseNotice } from '../bridge/gamePause'
+import { refusalText, useGamePause, useGamePauseNotice } from '../bridge/gamePause'
 import { AlignLockMark } from '../components/AlignLockMark'
 
 type Controller = ControllerWiring['props']
@@ -337,6 +338,28 @@ function SourceRow({
 function openSettingsTab(tab: SettingsTabName): void {
   showSettingsTab(tab)
   void openSettings()
+}
+
+/**
+ * Auto game pause, under Show overlay: the sidebar's switch for Settings → Overlay → "Pause the
+ * game while reading" (src-tauri/src/game_pause), where its cog leads. Hidden where pausing isn't
+ * supported.
+ */
+function GamePauseRow(): ReactNode {
+  const [enabled, setEnabled] = useSetting<boolean>('pauseGameWhileReading', false)
+  const info = useGamePause()
+  if (!info?.capability.supported) return null
+  return (
+    <SourceRow
+      icon={<CirclePause aria-hidden />}
+      label="Auto game pause"
+      checked={enabled}
+      info="Kimochi tries to pause your game while you look up words or use the radial menu."
+      settingsLabel="Game pause settings"
+      onToggle={() => void setEnabled(!enabled)}
+      onSettings={() => openSettingsTab('overlay')}
+    />
+  )
 }
 
 /**
@@ -1539,6 +1562,7 @@ export function SourcePanel({
             />
             <EnhanceCardsRow />
             {overlayRow}
+            <GamePauseRow />
           </div>
           {gameModeNotice}
           {gamePauseNoticeView}
@@ -1562,6 +1586,7 @@ export function SourcePanel({
           <div className="src-rows">
             <EnhanceCardsRow quickShot />
             {overlayRow}
+            <GamePauseRow />
           </div>
           {gameModeNotice}
           {gamePauseNoticeView}
@@ -1588,6 +1613,7 @@ export function SourcePanel({
                 onSettings={() => void openTextHookerSettings(hook.exe)}
               />
             )}
+            <GamePauseRow />
             <EnhanceCardsRow />
           </div>
         </div>

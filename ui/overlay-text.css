@@ -82,10 +82,11 @@
 [data-ocr-theme='transparent'] :is(.ocr-word, .ocr-group) {
   text-shadow: none !important;
 }
-[data-ocr-theme='transparent'] :is(.ocr-word, .ocr-word-current, .ocr-group)::selection,
-[data-ocr-theme='transparent'] .ocr-run::selection {
-  background: transparent;
-  color: var(--ocr-ink);
+/* Every piece of text in the boxes, the glyphs placed one by one (`.ocr-glyph`) among them: a
+   Yomitan selection over a word's glyphs otherwise showed as a grey-blue block over some of them. */
+[data-ocr-theme='transparent'] ::selection {
+  background: transparent !important;
+  color: var(--ocr-ink) !important;
 }
 [data-ocr-theme='transparent'] ::highlight(gsm-hoshidicts-match),
 [data-ocr-theme='transparent'] ::highlight(tenten-selection),

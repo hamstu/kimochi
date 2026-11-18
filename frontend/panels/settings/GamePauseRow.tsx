@@ -22,7 +22,7 @@ export function GamePauseRow(): ReactNode {
         controlId="game-pause"
         description={
           supported
-            ? 'Freezes the game while you look up a word, use the controller menu or draw a region, and resumes it when you’re done. Online games may disconnect, and some games jump ahead on resume. Games with anti-cheat are left running.'
+            ? 'Freezes the game while you look up a word, use the radial menu or draw a region, and resumes it when you’re done. Online games may disconnect, and some games jump ahead on resume. Games with anti-cheat are left running.'
             : (info?.capability.note ?? 'Not available on this system yet.')
         }
       >

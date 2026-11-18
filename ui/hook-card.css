@@ -85,9 +85,9 @@
 .hook-card[data-ocr-theme='transparent'] :is(.hook-card-bar, .hook-card-controls, .hook-card-resize, .hook-card-menu) {
   display: none;
 }
-.hook-card[data-ocr-theme='transparent'] :is(.hook-card-text, .hook-card-text-ghost)::selection {
-  background: transparent;
-  color: var(--ocr-ink);
+.hook-card[data-ocr-theme='transparent'] ::selection {
+  background: transparent !important;
+  color: var(--ocr-ink) !important;
 }
 .hook-card[data-ocr-theme='transparent'] ::highlight(gsm-hoshidicts-match),
 .hook-card[data-ocr-theme='transparent'] ::highlight(tenten-selection),

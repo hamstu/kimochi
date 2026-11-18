@@ -8,7 +8,7 @@
  * real events arrive too while the pointer is over a word. Both are read here.
  */
 import { lookupButtonsBit } from './lookup-key.js'
-import { createScanner } from './scan-text.js'
+import { createScanner, wordAtStart, wholeWords, SCAN_WINDOW, SPACED_SCAN_WINDOW } from './scan-text.js'
 import { desktopPointOf } from './desktop-point.js'
 import { languageOf } from './languages.js'
 
@@ -28,10 +28,20 @@ export async function apiTokenize(text) {
   return tokenizeText(text)
 }
 
-/** The controller's word cursor: look `term` up at (x, y). */
+/** The word the Yomitan API finds at the start of some text, once installed. */
+let findTerm = null
+
+/**
+ * The controller's cursor: look up the word `term` starts with at (x, y), found as a mouse lookup
+ * finds it (`/tokenize` over the scan window, `wordAtStart`), so a lookup from モ shows and matches
+ * モンスター. Resolves to that word's length, or null when no word starts there (the pop-up then
+ * looks up `term` as it is).
+ */
 export async function lookupTerm(term, x, y, sentence) {
   if (!showTerm) throw Error('The Yomitan API pop-up is not ready')
-  await showTerm({ term, cursorX: x, cursorY: y, anchor: null, sentence, focus: false })
+  const word = (await findTerm?.(term)) ?? null
+  await showTerm({ term: word ?? term, cursorX: x, cursorY: y, anchor: null, sentence, focus: false })
+  return word ? word.length : null
 }
 
 /** Closes the Yomitan API pop-up, when it is the engine in use (the overlay's words changed). */
@@ -226,6 +236,22 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
   )
 
   showTerm = open
+  findTerm = async (text) => {
+    // The window a mouse lookup reads from the same place (the scanner in scan-text.ts).
+    const windowText = languageOf(language).spaces
+      ? wholeWords(text.slice(0, SPACED_SCAN_WINDOW + 1), SPACED_SCAN_WINDOW)
+      : text.slice(0, SCAN_WINDOW)
+    if (!apiMode() || !windowText.trim()) return null
+    try {
+      const chunks = await invoke('yomitan_tokenize', {
+        baseUrl: baseUrl(),
+        body: { text: windowText, scan_length: windowText.length }
+      })
+      return wordAtStart(chunks, windowText)
+    } catch {
+      return null
+    }
+  }
   tokenizeText = (text) => invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: 16 } })
   hideTerm = () => {
     if (!apiMode()) return
