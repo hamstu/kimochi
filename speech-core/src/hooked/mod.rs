@@ -153,6 +153,10 @@ pub struct Hooked {
     heard: BTreeMap<(PathBuf, u64), crate::matching::Heard>,
     /// Lines given their clip by its words: not checked again.
     worded: BTreeSet<String>,
+    /// How each line (by uid and text) fits each heard clip (`words::fit`), worked out once.
+    fits: BTreeMap<(String, String, words::Key), Option<words::Fit>>,
+    /// What the words pass last decided on (lines, matches, clips taken, clips heard), and when.
+    words_state: words::State,
 }
 impl Default for Hooked {
     fn default() -> Self {
@@ -167,6 +171,8 @@ impl Default for Hooked {
             settled: false,
             heard: BTreeMap::new(),
             worded: BTreeSet::new(),
+            fits: BTreeMap::new(),
+            words_state: ((0, 0, 0, 0), f64::NEG_INFINITY),
             feeds: BTreeMap::new(),
             lines: Vec::new(),
             used: BTreeSet::new(),

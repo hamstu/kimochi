@@ -28,6 +28,7 @@ fn main() {
     ort::init_from(ort.display().to_string()).commit().expect("onnx runtime");
     let loaded = Instant::now();
     let mut asr = SenseVoice::load(&model, threads).expect("sensevoice");
+    let mut vad = kimochi_speech::vad::Vad::new().expect("silero");
     eprintln!("model loaded in {:?}", loaded.elapsed());
     let voices: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(dir.join("voices.json")).unwrap()).unwrap();
     let lines: Vec<Value> = std::fs::read_to_string(dir.join("lines.jsonl"))
@@ -51,12 +52,15 @@ fn main() {
             }
         };
         let secs = samples.len() as f64 / rate as f64;
+        let vad_began = Instant::now();
+        let share = vad.speech_share(&samples, rate).unwrap_or(-1.0);
+        let vad_ms = vad_began.elapsed().as_secs_f64() * 1000.0;
         let began = Instant::now();
         let audio = kimochi_speech::vad::to_16k(&samples, rate);
         let heard = asr.transcribe(&audio).unwrap_or_default();
         let ms = began.elapsed().as_secs_f64() * 1000.0;
         let text: String = heard.iter().map(|c| c.ch).collect();
-        eprintln!("{start:.0} {secs:.2}s in {ms:.0} ms: {text}");
+        eprintln!("{start:.0} {secs:.2}s speech {share:.2} (vad {vad_ms:.0} ms) asr {ms:.0} ms: {text}");
         clips.push((start, secs, Heard::new(start, start + secs * 1000.0, heard), ms));
     }
     let mut pairs = Vec::new();

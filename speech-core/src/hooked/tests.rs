@@ -950,6 +950,30 @@ mod by_words {
     }
 
     #[test]
+    fn a_pass_stops_hearing_clips_once_its_time_is_spent() {
+        // A slow recogniser (a busy machine): one clip a pass, the rest in the passes after.
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 2.);
+        voice(&f, 2, 11_000., 2.);
+        voice(&f, 3, 12_000., 2.);
+        let mut h = f.hooked();
+        h.line(text_line("a", "窓の外では、静かに雨が降り続いている。", 12_500.));
+        h.tick(30_000.);
+        let calls = std::cell::Cell::new(0);
+        let mut slow = |_: &[f32], _: u32| {
+            calls.set(calls.get() + 1);
+            std::thread::sleep(std::time::Duration::from_millis(words::PASS_MS as u64 + 20));
+            Some(Vec::new())
+        };
+        h.by_words(30_000., &mut slow);
+        assert_eq!(calls.get(), 1);
+        h.by_words(30_100., &mut slow);
+        h.by_words(30_200., &mut slow);
+        h.by_words(30_300., &mut slow);
+        assert_eq!(calls.get(), 3, "each clip is heard once");
+    }
+
+    #[test]
     fn without_the_recogniser_nothing_changes_and_it_is_tried_again() {
         let f = Fixture::new();
         voice(&f, 1, 10_000., 4.);

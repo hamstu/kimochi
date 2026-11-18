@@ -54,6 +54,7 @@ fn main() {
     let mut given: std::collections::BTreeMap<String, (f64, &str)> = Default::default();
     let mut asr_ms = 0.0;
     let (mut heard_n, mut heard_s) = (0usize, 0.0f64);
+    let mut passes: Vec<f64> = Vec::new();
     let (first, last) = (lines[0].ts - 1000.0, lines.last().unwrap().ts + 20_000.0);
     let mut next = 0;
     let mut now = first;
@@ -88,7 +89,11 @@ fn main() {
                 asr.transcribe(&kimochi_speech::vad::to_16k(s, r)).ok()
             };
             matched.extend(hooked.by_words(now, &mut hear).into_iter().map(|m| (m, "words")));
-            asr_ms += began.elapsed().as_secs_f64() * 1000.0;
+            let pass = began.elapsed().as_secs_f64() * 1000.0;
+            asr_ms += pass;
+            if pass > 1.0 {
+                passes.push(pass);
+            }
         }
         for (m, how) in matched {
             given.insert(m.line.uid.clone(), (m.clip.start, how));
@@ -120,6 +125,16 @@ fn main() {
         })
         .collect();
     std::fs::write(&args[3], serde_json::to_string_pretty(&out).unwrap()).unwrap();
+    passes.sort_by(f64::total_cmp);
+    let at = |q: f64| passes.get(((passes.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
+    println!(
+        "words passes that heard clips: {}; ms median {:.0}, p90 {:.0}, max {:.0}; over 300 ms: {}",
+        passes.len(),
+        at(0.5),
+        at(0.9),
+        at(1.0),
+        passes.iter().filter(|p| **p > 300.0).count()
+    );
     println!("words pass: {:.0} ms in all; {heard_n} clips heard, {heard_s:.0} s of audio", asr_ms);
     let r = &hooked.report;
     println!("matched {} ({} by words) of {} lines; rejected {}; typing {:.0} ms/char; lead {:.0} ms; lag {:.0} ms; clips seen {}; error {:?}", r.matched, r.by_words, lines.len(), r.rejected, r.typing_ms, r.lead_ms, r.lag_ms, r.clips_seen, r.error);

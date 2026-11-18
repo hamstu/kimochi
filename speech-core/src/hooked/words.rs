@@ -38,15 +38,26 @@ pub const POOR_FIT: f64 = 0.3;
 pub const BETTER_BY: f64 = 0.4;
 /// Timing matches are checked for this long after their line arrives.
 pub const VERIFY_MS: f64 = 60_000.0;
-/// Seconds of clips heard in one pass at most (about 30 ms a second of speech on an idle ARM64
-/// machine, 100-250 ms on a busy one): the pass shares its thread with the recording's listener.
-/// One clip is always heard, however long.
-pub const PER_PASS_S: f64 = 12.0;
+/// How long one pass may spend hearing clips: it shares its thread with the recording's listener.
+/// No new clip is heard once this is spent (one always is); the rest wait for the next pass. A
+/// clip takes about 20 ms a second of speech on an idle ARM64 machine, several times that on a busy one.
+pub const PASS_MS: u128 = 250;
+/// A clip outside the game's voice stream with less speech than this (Silero) is not heard: music
+/// and effects cut into clips. Not the voice stream's own clips: breathy and whispered voices that
+/// the recogniser hears word for word measure 0.00 (live SiglusEngine, eight of 71).
+pub const MIN_SPEECH: f64 = 0.02;
+/// With nothing new, the lines are looked at again this often (ms).
+const RECHECK_MS: f64 = 1000.0;
 /// Clips are transcribed when at least this long, and at most this long (seconds).
 const MIN_CLIP_S: f64 = 0.6;
 const MAX_CLIP_S: f64 = 30.0;
+/// ... and, outside the voice stream (where music and ambience are cut into clips), at most this
+/// long: one clip is heard whatever the pass's time, and a long one would hold the thread.
+const MAX_OTHER_CLIP_S: f64 = 12.0;
 /// A clip: its capture and sequence number.
-type Key = (PathBuf, u64);
+pub(super) type Key = (PathBuf, u64);
+/// The counts the words pass decided on, and when (`Hooked::words_state`).
+pub(super) type State = ((usize, usize, usize, usize), f64);
 
 /// The recogniser: the characters heard in mono `samples` at `rate`, or None when it cannot run.
 pub type Transcribe<'a> = dyn FnMut(&[f32], u32) -> Option<Vec<HeardChar>> + 'a;
@@ -103,10 +114,15 @@ pub fn fit(line: &str, heard: &Heard) -> Option<Fit> {
 
 /// A clip that may be a line's voice whatever its stream's standing: not a loop, not named as
 /// music or effects, not a sound its stream plays again, and of a length a line is spoken in.
-fn worth_hearing(c: &super::HookClip, all: &[super::HookClip]) -> bool {
+fn worth_hearing(c: &super::HookClip, all: &[super::HookClip], voice: &[String]) -> bool {
+    let longest = if voice.contains(&c.group()) || classify::name_says(&classify::clip_name(c)) > 0 {
+        MAX_CLIP_S
+    } else {
+        MAX_OTHER_CLIP_S
+    };
     c.file.is_some()
         && !c.looping
-        && (MIN_CLIP_S..=MAX_CLIP_S).contains(&c.dur)
+        && (MIN_CLIP_S..=longest).contains(&c.dur)
         && classify::name_says(&classify::clip_name(c)) >= 0
         && !classify::repeated(c, all)
 }
@@ -114,7 +130,7 @@ fn worth_hearing(c: &super::HookClip, all: &[super::HookClip]) -> bool {
 impl Hooked {
     /// Lines the timing gave no clip (or a clip that says something else), given theirs by its
     /// words: see the module. Call after [`Hooked::tick`], with the recogniser. Clips are heard
-    /// once each, at most [`PER_PASS_S`] of them a call, those nearest a line waiting for one first.
+    /// once each, for at most [`PASS_MS`] a call, those nearest a line waiting for one first.
     pub fn by_words(&mut self, now: f64, transcribe: &mut Transcribe) -> Vec<Matched> {
         let letters = |text: &str| matching::fold(text).0.len() as f64;
         let all: Vec<super::HookClip> = self.feeds.values().flat_map(|f| f.clips().iter().cloned()).collect();
@@ -147,32 +163,51 @@ impl Hooked {
         for (dir, f) in &self.feeds {
             for c in f.clips() {
                 let key = (dir.clone(), c.seq);
-                let own = checked.iter().any(|(_, k)| *k == key);
-                let free = !self.used.contains(&key) && worth_hearing(c, &all);
-                if !own && !free {
+                // Heard once, once it has played whole (the cheap checks first: a clip that may
+                // be a voice is told by comparing it with every other).
+                if self.heard.contains_key(&key) || now < c.start + c.dur * 1000.0 + 150.0 {
                     continue;
                 }
+                let own = checked.iter().any(|(_, k)| *k == key);
                 let distance = open
                     .iter()
                     .chain(checked.iter().map(|(l, _)| l))
                     .filter(|l| own || near(c.start, l))
                     .map(|l| (c.start - l.anchor()).abs())
                     .fold(f64::INFINITY, f64::min);
-                // Heard once it has played whole.
-                if distance.is_finite() && now >= c.start + c.dur * 1000.0 + 150.0 && !self.heard.contains_key(&key) {
+                if !distance.is_finite() || (!own && self.used.contains(&key)) {
+                    continue;
+                }
+                if own || worth_hearing(c, &all, &self.voice_groups) {
                     wanted.push((distance, dir.clone(), c.clone()));
+                } else {
+                    // Never a voice (a loop, an effect played again...): heard as saying nothing,
+                    // so it is not looked at again.
+                    self.heard.insert(key, Heard::new(c.start, c.start + c.dur * 1000.0, Vec::new()));
                 }
             }
         }
         wanted.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let mut budget = PER_PASS_S;
+        let began = std::time::Instant::now();
         for (_, dir, c) in wanted {
-            if budget <= 0.0 {
+            if began.elapsed().as_millis() >= PASS_MS {
                 break;
             }
-            budget -= c.dur;
+            let voice = self.voice_groups.contains(&c.group()) || classify::name_says(&classify::clip_name(&c)) > 0;
             let heard = match self.feeds[&dir].decode(&c) {
-                Ok((samples, rate)) if !samples.is_empty() => transcribe(&samples, rate),
+                Ok((samples, rate)) if !samples.is_empty() => {
+                    let quiet = !voice
+                        && self
+                            .speech
+                            .as_mut()
+                            .and_then(|vad| vad.speech_share(&samples, rate).ok())
+                            .is_some_and(|share| share < MIN_SPEECH);
+                    if quiet {
+                        Some(Vec::new())
+                    } else {
+                        transcribe(&samples, rate)
+                    }
+                }
                 _ => Some(Vec::new()),
             };
             match heard {
@@ -184,6 +219,13 @@ impl Hooked {
                 None => return Vec::new(),
             }
         }
+        // Nothing new heard, no line, match or clip changed: decided as last time, but for what
+        // time alone settles (a window ending, a clip done playing), looked at once a second.
+        let state = (self.lines.len(), self.done.len(), self.used.len(), self.heard.len());
+        if state == self.words_state.0 && now - self.words_state.1 < RECHECK_MS && now >= self.words_state.1 {
+            return Vec::new();
+        }
+        self.words_state = (state, now);
         // Every heard clip that is still there, one per sound (an adapter's pieces of one sound
         // heard the same; the longest stands for them).
         let mut sounds: Vec<((PathBuf, u64), &super::HookClip, &Heard)> = Vec::new();
@@ -198,12 +240,22 @@ impl Hooked {
                 }
             }
         }
+        // How each line fits each heard clip near it, worked out once (`Hooked::fits`, by line and text).
+        for l in self.lines.iter().filter(|l| now - l.ts < super::feed::KEEP_MS && letters(&l.text) >= MIN_HEARD) {
+            for (key, _, h) in &sounds {
+                if near(h.start_ms, l) {
+                    self.fits.entry((l.uid.clone(), l.text.clone(), key.clone())).or_insert_with(|| fit(&l.text, h));
+                }
+            }
+        }
         let fits = |l: &crate::timeline::Line| -> Vec<(usize, Fit)> {
             sounds
                 .iter()
                 .enumerate()
                 .filter(|(_, (_, c, _))| near(c.start, l))
-                .filter_map(|(i, (_, _, h))| fit(&l.text, h).map(|f| (i, f)))
+                .filter_map(|(i, (k, _, _))| {
+                    self.fits.get(&(l.uid.clone(), l.text.clone(), k.clone())).copied().flatten().map(|f| (i, f))
+                })
                 .collect()
         };
         // The clear best clip of a line, if it has one among `fits`.
@@ -238,7 +290,7 @@ impl Hooked {
             let unheard = self.feeds.iter().any(|(dir, f)| {
                 f.clips().iter().any(|c| {
                     near(c.start, l)
-                        && worth_hearing(c, &all)
+                        && worth_hearing(c, &all, &self.voice_groups)
                         && !self.used.contains(&(dir.clone(), c.seq))
                         && !self.heard.contains_key(&(dir.clone(), c.seq))
                 })
@@ -296,6 +348,8 @@ impl Hooked {
         let existing: std::collections::BTreeSet<(PathBuf, u64)> =
             self.feeds.iter().flat_map(|(p, f)| f.clips().iter().map(move |c| (p.clone(), c.seq))).collect();
         self.heard.retain(|k, _| existing.contains(k));
+        let lines: std::collections::BTreeSet<&str> = self.lines.iter().map(|l| l.uid.as_str()).collect();
+        self.fits.retain(|(uid, _, k), _| existing.contains(k) && lines.contains(uid.as_str()));
         out
     }
 }
