@@ -1863,3 +1863,22 @@ html[data-mini] .main-help {
     k-fade-in var(--k-base) var(--k-ease-out) both,
     k-spin 700ms linear infinite;
 }
+
+/* Restart as administrator (ElevationDialog, #216): paragraphs and a checkbox inside the
+   alert's description. */
+.elevation-copy {
+  display: block;
+}
+.elevation-copy + .elevation-copy {
+  margin-top: var(--k-space-2);
+}
+.elevation-declined {
+  color: var(--k-danger-text);
+}
+.elevation-skip {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  margin-top: var(--k-space-3);
+  color: var(--k-text);
+}

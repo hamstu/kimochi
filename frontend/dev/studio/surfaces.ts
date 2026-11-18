@@ -346,6 +346,14 @@ const MAIN: Surface = {
         { kind: 'toggle', param: 'quickshot', label: 'Quick Shot', on: '1' },
         { kind: 'toggle', param: 'gamemode', label: 'macOS Game Mode notice', on: '1' },
         {
+          kind: 'select',
+          param: 'elevation',
+          label: 'Restart as administrator',
+          default: 'none',
+          options: opts(['none', 'Not offered'], ['offer', 'Offered'], ['declined', 'Offered, prompt declined']),
+          help: 'Windows (set Platform to Windows): the chosen game runs as administrator (#216). “Prompt declined” shows its message when you press Restart.'
+        },
+        {
           kind: 'toggle',
           param: 'session',
           label: 'Steam Deck Gaming Mode',

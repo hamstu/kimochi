@@ -27,6 +27,7 @@ mod debug_report;
 mod dictionary_runtime;
 mod dictionary_switch;
 mod download_mirror;
+mod elevation;
 mod engine_probe;
 mod extension_store;
 mod extensions;
@@ -1756,6 +1757,7 @@ async fn source_preview(state: State<'_, Shared>, source_id: String) -> Reply<Va
 
 #[tauri::command]
 async fn commit_source(
+    app: tauri::AppHandle,
     state: State<'_, Shared>,
     source_id: String,
     crop: Option<Crop>,
@@ -1764,14 +1766,39 @@ async fn commit_source(
     let service = state.inner().clone();
     let keep = keep_crop.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
-        if keep && crop.is_none() {
+        let result = if keep && crop.is_none() {
             sources::select_keeping_crop(&service, &source_id)
         } else {
             sources::commit(&service, &source_id, crop)
+        };
+        // A game that runs as administrator hides its keys from Kimochi (#216): offer to restart.
+        if result.is_ok() {
+            elevation::notify(&app, &service);
         }
+        result
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The chosen source's rights next to Kimochi's, and whether to offer restarting as
+/// administrator (elevation.rs, #216).
+#[tauri::command]
+fn source_elevation(state: State<Shared>) -> Reply<Value> {
+    Ok(elevation::status(&state))
+}
+
+/// Start Kimochi again as administrator (Windows' consent prompt), then quit this copy. The new
+/// copy waits for this one to exit and restores the same source. `cancelled:` when the reader
+/// declined the prompt; this copy keeps running.
+#[tauri::command]
+async fn relaunch_elevated(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<()> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(elevation::launch_elevated).await.map_err(|e| e.to_string())??;
+    record(&app, &service, json!({ "check": "app-relaunch-elevated", "at": now_ms() }));
+    shutdown_platform();
+    app.exit(0);
+    Ok(())
 }
 
 /// Save or clear a source's Anki crop (`ankiCropRegions`); the selection, the OCR crop and
@@ -2463,6 +2490,7 @@ fn should_publish(published: Option<u64>, frame_id: u64) -> bool {
 /// a repeated publish of the same frame is ignored rather than re-rendering.
 #[tauri::command]
 fn scan_state(
+    app: tauri::AppHandle,
     state: State<Shared>,
     scanning: Option<bool>,
     status: Option<String>,
@@ -2502,7 +2530,14 @@ fn scan_state(
             published = true;
         }
     }
-    Ok(json!({ "revision": view.revision, "published": published }))
+    let reply = json!({ "revision": view.revision, "published": published });
+    let read_something = published && view.scan.is_some();
+    drop(view);
+    // A display source shows whatever is in front: offer the restart for an elevated game there.
+    if read_something {
+        elevation::notify_foreground(&app, &state);
+    }
+    Ok(reply)
 }
 
 /// Read-only permission check. Unlike `permission()`, this never prompts, so the
@@ -3142,6 +3177,9 @@ fn main() {
     // `kimochi status`, `kimochi scan --wait`, …: the command line runs instead of the app, before
     // anything below could claim the single instance or quit the running app (cli/mod.rs).
     cli::run_if_invoked();
+    // Restarted as administrator (`relaunch_elevated`): let the copy being replaced quit before
+    // the single-instance check, which would otherwise hand this launch back to it.
+    elevation::wait_for_previous_copy();
     // Added to Steam by hand and started in Gaming Mode: run again with the Gaming Mode
     // launcher's environment, before anything starts (platform/linux/gaming_launch.rs).
     #[cfg(target_os = "linux")]
@@ -3438,6 +3476,8 @@ fn main() {
         accessibility_status,
         request_accessibility,
         commit_source,
+        source_elevation,
+        relaunch_elevated,
         commit_anki_crop,
         clear_source,
         open_source_picker,
@@ -3783,7 +3823,7 @@ fn main() {
             app.manage(sentence_audio);
             app.manage(screenshots::install(&handle, store.clone()));
 
-            spawn_source_restore(service.clone());
+            spawn_source_restore(handle.clone(), service.clone());
 
             // The `kimochi` command's way in (cli/server.rs).
             match cli::server::start(&handle) {
@@ -4180,7 +4220,7 @@ fn onboarding_panel(completed: Option<&Value>) -> &'static str {
 ///
 /// Enumeration needs Screen Recording, but does not prompt for it: capture-core
 /// preflights the permission and returns an error instead of opening a dialog.
-fn spawn_source_restore(service: Shared) {
+fn spawn_source_restore(app: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         #[cfg(target_os = "linux")]
         if platform::gamescope::active()
@@ -4272,6 +4312,8 @@ fn spawn_source_restore(service: Shared) {
                 // Persist the live id so the next launch starts from a current hint.
                 let _ = service.settings.set_path(&["lastSelectedSource", "sourceId"], json!(id));
                 service.set_status(format!("Restored source · {name}"));
+                // A game that runs as administrator hides its keys from Kimochi (#216).
+                elevation::notify(&app, &service);
             }
             sources::Restored::Ambiguous => {
                 service.set_status(format!("Several sources match {name}; choose the one you want."))

@@ -155,6 +155,7 @@ fn handle(app: &tauri::AppHandle, method: &str, params: &Value) -> Result<Value,
         "source.set" => {
             let id = find_source(str_param(params, "query")?)?;
             crate::sources::select_keeping_crop(&service, &id)?;
+            crate::elevation::notify(app, &service);
             Ok(source_now(&service))
         }
         "source.clear" => crate::sources::clear(&service),

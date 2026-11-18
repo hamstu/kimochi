@@ -265,11 +265,31 @@ rather than showing the previous session's selection.
 | `commit_source` | `({sourceId, crop}) -> {sourceId, crop, key}` |
 | `commit_anki_crop` | `({sourceId, crop: Crop\|null}) -> {sourceId, crop, key}` |
 | `clear_source` | `() -> {sourceId: null, previous}` |
+| `source_elevation` | `() -> {sourceId, kind, name, app, rights, selfElevated, skipped, offer}` — Windows (#216): whether the chosen source runs with more rights than Kimochi |
+| `relaunch_elevated` | `() -> ()` — Windows: restart as administrator; `cancelled:` when the consent prompt was declined |
 | `open_source_picker` | `({editCurrent}) -> PanelInfo` |
 | `source_picker_state` | `() -> {sourceId, crop, editCurrent}` |
 
 `kind` is `"display"` or `"window"`. Displays sort first, then windows by application
 and title; the UI is free to re-sort.
+
+**Elevated sources (Windows, #216; elevation.rs).** User Interface Privilege Isolation hides an
+elevated window's keyboard from a process with fewer rights: `GetAsyncKeyState` reads Shift as up and
+the low-level keyboard hook sees nothing while it is in front, so the overlay's Shift gate never
+opens. `source_elevation` reports the selection's `rights`: `elevated` (its token says so), `locked`
+(its token is closed to Kimochi though it runs in the reader's session: higher rights all the same),
+`same` or `unknown`; a display source is judged by the window in front. `offer` is true when those
+rights are above Kimochi's, Kimochi is not elevated itself (`selfElevated`), and the application is
+not in `elevationPromptSkipped` (the "Don't ask again" list, application names, matched without
+case). Native emits the same object as `source-elevation` to the main window, and shows it, when a
+source is chosen (`commit_source`, `kimochi source`, the startup restore) and, for a display source,
+after the first published scan with such a window in front (once per application each run); the
+main window also asks on load (`ElevationDialog`). `relaunch_elevated` starts the executable again
+through the `runas` verb with `--elevated-relaunch=<pid>`, records `app-relaunch-elevated` and quits;
+the new copy waits (at most 15 s) for that pid to exit before the single-instance check, then
+restores `lastSelectedSource` as any launch does. Under `npm run dev` the restarted copy loses the
+dev server when this one quits; use a bundle (`npm start`) to try it. Elsewhere `offer` is always
+false and `relaunch_elevated` answers `not applicable:`.
 
 **Kimochi's own windows are excluded**, matched on owning process id parsed from
 capture-core's `macos:window:{id}:{pid}` rather than on an application name. Selecting

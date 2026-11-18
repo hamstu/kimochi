@@ -45,6 +45,7 @@ import { WhatsNewDialog } from './WhatsNewDialog'
 import { MoveToApplicationsDialog } from '../components/MoveToApplicationsDialog'
 import { useAppLocation } from '../bridge/appLocation'
 import { HelpDialog } from './HelpDialog'
+import { ElevationDialog } from './ElevationDialog'
 import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
 import { GamingSourceView } from './GamingSourceView'
@@ -407,6 +408,7 @@ export default function MainPanel(): JSX.Element {
         <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
         <MoveToApplicationsDialog location={appLocation} />
         {!inDemo() && <HelpDialog open={help} onOpenChange={setHelp} />}
+        {!inDemo() && <ElevationDialog />}
         <BootReady label="log" />
         <PreloadViews />
       </LogActionsProvider>

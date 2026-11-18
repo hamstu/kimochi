@@ -755,6 +755,9 @@ mod wgc {
         /// `[x, y, w, h]` of the visible source inside `frame`.
         region: [u32; 4],
         bounds: Option<Rect>,
+        /// False when the frame is the size of neither the window nor its visible frame: one
+        /// from before a resize, labelled with where the window is now (best effort).
+        matched: bool,
     }
 
     fn locate(target: Target, slot: &Slot, frame: Arc<LatestFrame>) -> Located {
@@ -763,6 +766,7 @@ mod wgc {
                 region: [0, 0, frame.width, frame.height],
                 bounds: monitor_rect(hmonitor).map(PxRect::to_rect),
                 frame,
+                matched: true,
             },
             Target::Window { hwnd: raw, .. } => {
                 let h = hwnd(raw);
@@ -772,10 +776,13 @@ mod wgc {
                         break;
                     };
                     if let Some(region) = visible_region(frame.width, frame.height, outer, visible) {
-                        return Located { frame, region, bounds: Some(visible.to_rect()) };
+                        return Located { frame, region, bounds: Some(visible.to_rect()), matched: true };
                     }
-                    // Just resized: the newest frame predates the new size. WGC
-                    // recreates its pool and sends one of the new size; wait once.
+                    // Just resized: the newest frame predates the new size. A window that keeps
+                    // drawing sends one of the new size soon, so wait once. One that does not
+                    // (a still page) never does: windows-capture recreates its pool on the
+                    // frame that reports the new size and drops that frame, so the caller
+                    // restarts the session instead (`matched: false`).
                     if attempt == 0 {
                         match slot.wait_newer(frame.generation, FIRST_FRAME_WAIT) {
                             Some(newer) => frame = newer,
@@ -788,6 +795,7 @@ mod wgc {
                     region: [0, 0, frame.width, frame.height],
                     bounds: visible_rect(h).or_else(|| outer_rect(h)).map(PxRect::to_rect),
                     frame,
+                    matched: false,
                 }
             }
         }
@@ -978,7 +986,24 @@ mod wgc {
             let resolve_ms = elapsed_ms(start);
             let acquisition = Instant::now();
             let frame = slot.wait_newer(0, FIRST_FRAME_WAIT).ok_or_else(|| no_frame(target, &slot))?;
-            let located = locate(target, &slot, frame);
+            let mut located = locate(target, &slot, frame);
+            if !located.matched {
+                // Still the size from before a resize (`locate`): a window that went full
+                // screen and then stopped drawing never sends a frame of its new size. A new
+                // session is created at the window's current size and sends its first frame at
+                // once, redraw or not.
+                self.drop_session(&request.source_id);
+                let slot = self.session(&request.source_id, target)?;
+                if let Some(frame) = slot.wait_newer(0, FIRST_FRAME_WAIT) {
+                    let fresh = locate(target, &slot, frame);
+                    crate::diagnostic(serde_json::json!({
+                        "check": "windows-capture-resize-restart",
+                        "matched": fresh.matched,
+                        "frame": [fresh.frame.width, fresh.frame.height],
+                    }));
+                    located = fresh;
+                }
+            }
             compose(
                 &request.source_id,
                 &located,

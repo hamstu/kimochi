@@ -60,6 +60,10 @@
  *                    add ?update=available for the offered release's notes on top)
  *   ?whatsnew=update main window: the first launch after an update (`lastSeenVersion` is an older
  *                    version), so What's new opens on its own once the update status arrives
+ *   ?elevation=<state>  main window, Windows (?platform=windows): the chosen source runs as
+ *                    administrator, so "Restart as administrator" opens on load (ElevationDialog,
+ *                    #216): offer, or declined (pressing Restart answers as if Windows' prompt was
+ *                    declined; with offer it waits, as for the prompt)
  *   ?movetoapps=<state>  main and onboarding windows: Kimochi is outside Applications, so "Move
  *                    Kimochi to Applications" opens first (What's new waits): downloads, dmg,
  *                    replace, admin, fail (preview-app-location.ts)
@@ -1245,6 +1249,29 @@ const HANDLERS: Record<string, Handler> = {
     return { sourceId: a?.sourceId ?? null, crop: null, key: '' }
   },
   commit_anki_crop: (a) => ({ sourceId: a?.sourceId ?? null, crop: a?.crop ?? null, key: '' }),
+  // ?elevation=offer|declined: the chosen source runs as administrator (ElevationDialog, #216).
+  source_elevation: () => {
+    const state = params.get('elevation')
+    const offer = state === 'offer' || state === 'declined'
+    return {
+      sourceId: offer ? 'windows:window:0x2A0F4:7316' : (live.source ?? null),
+      kind: 'window',
+      name: offer ? 'Genshin Impact' : '',
+      app: offer ? 'GenshinImpact' : '',
+      rights: offer ? 'elevated' : 'same',
+      selfElevated: false,
+      skipped: false,
+      offer
+    }
+  },
+  // The real command quits once the administrator copy runs; here it waits as for the prompt, or
+  // answers as a declined prompt with ?elevation=declined.
+  relaunch_elevated: () =>
+    params.get('elevation') === 'declined'
+      ? new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('cancelled: Windows did not give Kimochi administrator rights')), 600)
+        )
+      : new Promise(() => undefined),
   clear_source: () => {
     live.source = null
     closedSource = null
