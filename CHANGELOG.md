@@ -37,7 +37,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
-- **Look up on hover:** the pop-up now closes reliably once the pointer leaves the line and the pop-up, with every dictionary.
+- **Look up on hover:** the word under the pointer lights up as it does with Shift held, 10ten glides from word to word as it does in a browser, and the pop-up closes once the pointer leaves the line and the pop-up, with every dictionary.
 - **Windows overlay:** lines up again after a game goes full screen, and its text no longer disappears after Alt+Tab.
 - **Read along** outlines the whole word the dictionary matched, including around punctuation, and the built-in Yomitan pop-up follows your light or dark appearance.
 - **Steam Deck Gaming Mode:** Set OCR crop works again.
