@@ -105,6 +105,7 @@ function Preview({
                 <span className="overlay-look-popup-gloss" />
                 <span className="overlay-look-popup-gloss" data-short="" />
                 <span className="overlay-look-popup-gloss" />
+                <span className="overlay-look-popup-gloss" />
                 <span className="overlay-look-popup-gloss" data-short="" />
               </span>
             )}

@@ -12,7 +12,7 @@
 }
 /* Taller, with the line low, to leave room for the dictionary pop-up over its hovered word. */
 .overlay-look-stage .overlay-look-preview {
-  height: 13rem;
+  height: 15rem;
   align-items: flex-end;
   padding-bottom: 1.5rem;
 }
@@ -86,13 +86,13 @@
 .overlay-look-popup {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 0.5rem);
+  bottom: calc(100% + 0.875rem);
   z-index: 4;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   width: 11rem;
-  padding: 0.5rem 0.625rem 0.75rem;
+  padding: 0.625rem 0.75rem 1rem;
   border-radius: var(--k-radius-md);
   background: var(--k-raised);
   color: var(--k-text);
