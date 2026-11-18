@@ -253,7 +253,9 @@ pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) ->
     let mut scored: Vec<Scored> = candidates
         .iter()
         .filter_map(|candidate| {
-            let text = normalize(candidate.text);
+            // Markup aside: a Unity TextMeshPro object's text carries its colour and alignment
+            // (`<color=#ffffffff><align="center">…`), which the screen never shows.
+            let text = normalize(&super::clean::strip_markup(candidate.text, false));
             let length = text.chars().count();
             // Too short to tell apart, or not the language: file paths, asset names and the window
             // title also turn up in hooked threads and on screen. In a language that spaces its
@@ -1108,6 +1110,24 @@ mod tests {
         ];
         let scored = score(&candidates, &blocks(&screen), ja());
         assert_eq!(scored[0].key, "set_text");
+    }
+
+    #[test]
+    fn a_text_objects_markup_is_not_held_against_it() {
+        // A Unity TextMeshPro object's text, with the colour and alignment it is drawn with.
+        let object = "<color=#ffffffff><align=\"center\">……静かな夜の中で、扉が開いた……</align>";
+        let candidates = [Candidate {
+            key: "object",
+            hookcode: "UNITY:TMP_Text.set_text",
+            name: "TMP_Text",
+            text: object,
+            recent: 1,
+            count: 3,
+            noise: 0.0,
+        }];
+        let screen = [line("……静かな夜の中で、扉が開いた……", 600.0, 500.0, 700.0, 32.0)];
+        let scored = score(&candidates, &blocks(&screen), ja());
+        assert_eq!(chosen(&scored, 6.0, ja()).map(|s| s.key.as_str()), Some("object"));
     }
 
     #[test]
