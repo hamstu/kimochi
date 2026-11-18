@@ -18,7 +18,10 @@
 
 /* The tokens apply wherever `data-cm-variant` is set, so other Gaming Mode surfaces can take
    them on: `:is(#controller, …)` only lends the id's weight, over controller.css's own. */
-:is(#controller, [data-cm-variant])[data-cm-variant] {
+/* The radial menu (`.cm-root`) takes the dark roles whatever the appearance: it looks the same
+   over every game, light or dark, and in Settings' previews of it. */
+:is(#controller, [data-cm-variant])[data-cm-variant],
+[data-cm-variant] .cm-root {
   /* Kimochi's dark roles (tokens.css over Radix slate and indigo). */
   --cm-bg-rgb: 17 17 19;
   --cm-raised-rgb: 24 25 27;
@@ -63,9 +66,6 @@
   --cm-row-h: 44px;
 
   --cm-accent: var(--cm-accent-text);
-  /* The radial menu's colour: the overlay's highlight colour (Settings → Overlay), "r, g, b",
-     set inline by whoever shows the ring; Kimochi's indigo until then. */
-  --cm-ring-rgb: 62, 99, 221;
   --cm-ring: rgb(var(--cm-ring-rgb));
   --cm-ring-bright: color-mix(in srgb, var(--cm-ring) 50%, #fff);
   --cm-ring-lit-from: rgb(var(--cm-bg-rgb) / 0.55);
@@ -75,6 +75,11 @@
   font-family: var(--cm-font);
   font-weight: 430;
   color: var(--cm-text);
+}
+/* The radial menu's colour (Settings → Overlay → Radial menu), "r, g, b", set inline on the host by
+   whoever shows the ring; Kimochi's indigo until then. On the host only, so the ring inherits it. */
+:is(#controller, [data-cm-variant])[data-cm-variant] {
+  --cm-ring-rgb: 62, 99, 221;
 }
 :is(#controller, [data-cm-variant])[data-cm-variant][data-cm-theme='light'] {
   --cm-bg-rgb: 255 255 255;
@@ -515,9 +520,6 @@
   stroke-linejoin: round;
   filter: drop-shadow(0 0 16px rgb(0 0 0 / 0.6));
 }
-[data-cm-variant='halo'][data-cm-theme='light'] .cm-wedge.cm-selected {
-  filter: drop-shadow(0 0 16px rgb(15 17 26 / 0.3));
-}
 [data-cm-variant='halo'] .cm-wedge.cm-selected.cm-disabled {
   fill: rgb(var(--cm-bg-rgb) / 0.4);
   stroke: var(--cm-text-3);
@@ -583,10 +585,6 @@
     opacity 0.12s ease,
     transform 0.16s ease;
 }
-[data-cm-variant='halo'][data-cm-theme='light'] .cm-label {
-  color: var(--cm-text);
-  text-shadow: none;
-}
 [data-cm-variant='halo'] .cm-item.cm-selected .cm-label {
   opacity: 1;
   transform: translate(-50%, 0);
@@ -608,9 +606,6 @@
 /* Icons rest in a greyed tint of the ring's colour; the chosen one grows, bright white. */
 [data-cm-variant='halo'] .cm-item {
   color: color-mix(in srgb, var(--cm-ring) 50%, var(--cm-text-2));
-}
-[data-cm-variant='halo'][data-cm-theme='light'] .cm-item {
-  color: color-mix(in srgb, var(--cm-ring) 45%, var(--cm-text-3));
 }
 [data-cm-variant='halo'] .cm-item.cm-selected .cm-icon {
   color: #fff;
@@ -748,10 +743,4 @@
     inset 0 0 0 2px var(--cm-ring-bright),
     0 6px 18px rgb(0 0 0 / 0.5),
     0 2px 4px rgb(0 0 0 / 0.35);
-}
-[data-cm-variant][data-cm-theme='light'] .cm-shortcut {
-  box-shadow:
-    inset 0 0 0 1.5px var(--cm-line-strong),
-    0 6px 18px rgb(15 17 26 / 0.2),
-    0 2px 4px rgb(15 17 26 / 0.14);
 }
