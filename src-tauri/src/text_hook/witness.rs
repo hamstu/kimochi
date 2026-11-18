@@ -65,6 +65,8 @@ pub struct Other<'a> {
     /// A generic hook (`pick::is_generic`): it sees every string the game handles, so it takes
     /// over only when no engine thread shows the line.
     pub generic: bool,
+    /// Its latest text differs from the one before it: a line, not a label redrawn.
+    pub fresh: bool,
 }
 
 /// OCR reads small kana as full-size ones (`ゃ` as `や`, `っ` as `つ`); both sides fold them.
@@ -114,13 +116,43 @@ pub fn dialogue_blocks(lines: &[OcrLine], title: &str, language: &Language) -> V
 /// What the screen's dialogue `blocks` (`dialogue_blocks`) say about the chosen thread, whose last
 /// line is `chosen`, which sent `earlier` before it (newest first), while `others` hold their own
 /// latest text.
+///
+/// The largest block is the dialogue box, as for the first choice (`pick::chosen`): a line there
+/// outranks one elsewhere either way, so a menu bar or a nameplate never vouches for a thread
+/// over the dialogue, nor hands the choice to one.
 pub fn judge(chosen: &str, earlier: &[&str], others: &[Other], blocks: &[Block], language: &Language) -> Verdict {
     let scale = pick::letter_scale(language);
     let chosen = fold(chosen);
     let letters = |text: &str| text.chars().filter(|c| language.has(*c)).count();
-    let on_screen = |text: &str| blocks.iter().map(|b| found(text, &b.text)).fold(0.0, f64::max);
-    if chosen.chars().count() >= MIN_CHARS * scale && on_screen(&chosen) >= SHOWN {
-        return Verdict::Shown;
+    let largest = blocks.iter().enumerate().max_by(|a, b| a.1.area.total_cmp(&b.1.area)).map(|(i, _)| i);
+    // Where on screen a text is: in the largest block, elsewhere, or not at all.
+    let place = |text: &str| -> Option<bool> {
+        let shown: Vec<usize> = (0..blocks.len()).filter(|i| found(text, &blocks[*i].text) >= SHOWN).collect();
+        (!shown.is_empty()).then(|| shown.iter().any(|i| Some(*i) == largest))
+    };
+    let mine = (chosen.chars().count() >= MIN_CHARS * scale).then(|| place(&chosen)).flatten();
+    // Another engine thread with a fresh line on screen, the one with the most of it: a generic
+    // hook (a menu drawn through `DrawTextExW`) is never handed the choice on the screen's word,
+    // nor a thread that sent the same text again (a label redrawn). A thread with the chosen
+    // line (sent again, or more around it) is no other. Off the largest block, only a long line.
+    let theirs = others
+        .iter()
+        .filter(|o| o.fresh && !o.generic)
+        .filter_map(|o| {
+            let text = fold(o.text);
+            let length = text.chars().count();
+            if length < MIN_OTHER * scale || !pick::reads_as(&text, language) || pick::same_line(&chosen, &text) {
+                return None;
+            }
+            let in_largest = place(&text)?;
+            (in_largest || length >= MIN_OFF_BOX * scale).then_some((o, in_largest, length))
+        })
+        .max_by_key(|(_, in_largest, length)| (*in_largest, *length));
+    match (mine, &theirs) {
+        (Some(true), _) => return Verdict::Shown,
+        (_, Some((other, true, _))) => return Verdict::Other(other.key.to_string()),
+        (Some(false), _) => return Verdict::Shown,
+        _ => {}
     }
     // What the screen shows of the dialogue inside the chosen line: a line typing out, or a thread
     // that sends the line with more around it. A block of a few letters only is no sign (a name).
@@ -131,30 +163,11 @@ pub fn judge(chosen: &str, earlier: &[&str], others: &[Other], blocks: &[Block],
     if within {
         return Verdict::Within;
     }
-    // Another thread whose text is on screen: the engine thread with the most of it, else a
-    // generic one. A thread with the chosen line (sent again, or more around it) is no other.
-    let mut best: Option<(&Other, usize)> = None;
-    for other in others {
-        let text = fold(other.text);
-        let length = text.chars().count();
-        if length < MIN_OTHER * scale || !pick::reads_as(&text, language) || pick::same_line(&chosen, &text) {
-            continue;
-        }
-        if on_screen(&text) < SHOWN {
-            continue;
-        }
-        let better = match best {
-            None => true,
-            Some((b, l)) => (b.generic && !other.generic) || (b.generic == other.generic && length > l),
-        };
-        if better {
-            best = Some((other, length));
-        }
-    }
-    if let Some((other, _)) = best {
+    if let Some((other, _, _)) = theirs {
         return Verdict::Other(other.key.to_string());
     }
-    if earlier.iter().map(|t| fold(t)).any(|t| t.chars().count() >= MIN_CHARS * scale && on_screen(&t) >= SHOWN) {
+    let on_screen = |text: &str| place(text).is_some();
+    if earlier.iter().map(|t| fold(t)).any(|t| t.chars().count() >= MIN_CHARS * scale && on_screen(&t)) {
         return Verdict::Earlier;
     }
     if blocks.iter().any(|b| letters(&b.text) >= MIN_OTHER * scale) {
@@ -162,6 +175,10 @@ pub fn judge(chosen: &str, earlier: &[&str], others: &[Other], blocks: &[Block],
     }
     Verdict::Unclear
 }
+
+/// The fewest characters another thread's line must have to take over from outside the largest
+/// block (`pick::chosen` asks the same of a first choice).
+const MIN_OFF_BOX: usize = 12;
 
 #[cfg(test)]
 mod tests {
@@ -182,7 +199,7 @@ mod tests {
         dialogue_blocks(&lines, "物語の窓 体験版", ja())
     }
     fn other<'a>(key: &'a str, text: &'a str) -> Other<'a> {
-        Other { key, text, generic: false }
+        Other { key, text, generic: false, fresh: true }
     }
 
     #[test]
@@ -234,13 +251,48 @@ mod tests {
     }
 
     #[test]
-    fn an_engine_thread_is_named_over_a_generic_one_with_more_text() {
+    fn a_generic_hook_or_a_label_redrawn_is_never_handed_the_choice() {
         let blocks = screen(&["「明日は早く起きないといけないんだ」"]);
-        let others = [
-            Other { key: "generic", text: "少年「明日は早く起きないといけないんだ」", generic: true },
-            other("engine", "「明日は早く起きないといけないんだ」"),
-        ];
+        let generic =
+            Other {
+                key: "generic", text: "少年「明日は早く起きないといけないんだ」", generic: true, fresh: true
+            };
+        assert_eq!(judge("「昨日の話の続きだけど」", &[], &[generic.clone()], &blocks, ja()), Verdict::Unhooked);
+        let others = [generic, other("engine", "「明日は早く起きないといけないんだ」")];
         assert_eq!(judge("「昨日の話の続きだけど」", &[], &others, &blocks, ja()), Verdict::Other("engine".into()));
+        let redrawn =
+            Other {
+                key: "label", text: "「明日は早く起きないといけないんだ」", generic: false, fresh: false
+            };
+        assert_eq!(judge("「昨日の話の続きだけど」", &[], &[redrawn], &blocks, ja()), Verdict::Unhooked);
+    }
+
+    /// The window's menu bar (in the capture, and sent by a thread of its own) beside the dialogue.
+    fn with_menu(rows: &[&str]) -> Vec<Block> {
+        let mut lines = vec![line("物語の窓 体験版", 2.0), line("終了 ウィンドウ メッセージ 環境設定 ヘルプ", 32.0)];
+        for (i, row) in rows.iter().enumerate() {
+            lines.push(line(row, 600.0 + 40.0 * i as f64));
+        }
+        let mut lines = lines;
+        // The dialogue's rows are in a larger font than the menu.
+        for l in lines.iter_mut().skip(2) {
+            l.height = 40.0;
+            l.width = 40.0 * l.text.chars().count() as f64;
+        }
+        dialogue_blocks(&lines, "物語の窓 体験版", ja())
+    }
+
+    #[test]
+    fn the_dialogue_box_outranks_a_menu_bar_either_way() {
+        let blocks = with_menu(&["築三十年と聞いているが、改築でもしたんだろうか。"]);
+        let menu = "終了ウィンドウメッセージ環境設定ヘルプ";
+        let line = "築三十年と聞いているが、改築でもしたんだろうか。外観はとても綺麗だ。";
+        // A menu thread chosen by mistake is not vouched for: the dialogue thread takes over.
+        assert_eq!(judge(menu, &[], &[other("dialogue", line)], &blocks, ja()), Verdict::Other("dialogue".into()));
+        // The dialogue thread chosen is kept (most of it typed out), however fresh the menu thread is.
+        assert_eq!(judge(line, &[], &[other("menu", menu)], &blocks, ja()), Verdict::Shown);
+        let whole = with_menu(&["築三十年と聞いているが、改築でもしたんだろうか。", "外観はとても綺麗だ。"]);
+        assert_eq!(judge(line, &[], &[other("menu", menu)], &whole, ja()), Verdict::Shown);
     }
 
     #[test]
@@ -267,5 +319,61 @@ mod tests {
         // Too short to tell: neither shown nor anything else.
         let blocks = screen(&["はい"]);
         assert_eq!(judge("はい", &[], &[], &blocks, ja()), Verdict::Unclear);
+    }
+    /// Replays steps a live harness recorded (a game hooked by the sidecar, its window read by the
+    /// OCR worker; one JSON object per line with `title`, `lines` and `threads`), judging every
+    /// thread that has sent text as if it were the chosen one. Prints one row per step and thread.
+    /// `KIMOCHI_WITNESS_REPLAY=<file> cargo test --bin kimochi witness::tests::replay -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn replay_from_env() {
+        let Ok(path) = std::env::var("KIMOCHI_WITNESS_REPLAY") else { return };
+        let mut tally = std::collections::BTreeMap::<String, usize>::new();
+        for row in std::fs::read_to_string(path).unwrap().lines().filter(|l| !l.trim().is_empty()) {
+            let step: serde_json::Value = serde_json::from_str(row).unwrap();
+            let lines: Vec<OcrLine> = step["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| OcrLine {
+                    text: l["text"].as_str().unwrap_or("").into(),
+                    x: l["x"].as_f64().unwrap_or(0.0),
+                    y: l["y"].as_f64().unwrap_or(0.0),
+                    width: l["width"].as_f64().unwrap_or(0.0),
+                    height: l["height"].as_f64().unwrap_or(0.0),
+                })
+                .collect();
+            let blocks = dialogue_blocks(&lines, step["title"].as_str().unwrap_or(""), ja());
+            let threads = step["threads"].as_array().unwrap();
+            let text = |t: &serde_json::Value| t["text"].as_str().unwrap_or("").to_string();
+            for chosen in threads {
+                let others: Vec<(String, String, bool, bool)> = threads
+                    .iter()
+                    .filter(|t| t["key"] != chosen["key"])
+                    .map(|t| {
+                        let history = t["history"].as_array().cloned().unwrap_or_default();
+                        let fresh =
+                            history.get(1).is_none_or(|h| h.as_str() != history.first().and_then(|f| f.as_str()));
+                        let generic =
+                            pick::is_generic(t["hookcode"].as_str().unwrap_or(""), t["name"].as_str().unwrap_or(""));
+                        (t["key"].as_str().unwrap_or("").to_string(), text(t), generic, fresh)
+                    })
+                    .collect();
+                let others: Vec<Other> =
+                    others.iter().map(|(k, t, g, f)| Other { key: k, text: t, generic: *g, fresh: *f }).collect();
+                let earlier: Vec<String> = chosen["history"]
+                    .as_array()
+                    .map(|h| h.iter().skip(1).filter_map(|x| x.as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+                let earlier: Vec<&str> = earlier.iter().map(String::as_str).collect();
+                let verdict = judge(&text(chosen), &earlier, &others, &blocks, ja());
+                let key = chosen["hookcode"].as_str().unwrap_or("").to_string();
+                println!("step {:>3} {:<40} {:?}", step["step"], key, verdict);
+                *tally.entry(format!("{key} {}", verdict.name())).or_default() += 1;
+            }
+        }
+        for (k, n) in tally {
+            println!("TALLY {k}: {n}");
+        }
     }
 }

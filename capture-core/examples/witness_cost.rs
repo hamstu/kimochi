@@ -66,7 +66,8 @@ mod imp {
     }
     /// Kernel + user CPU milliseconds of a process so far.
     fn cpu_ms(handle: HANDLE) -> f64 {
-        let (mut c, mut e, mut k, mut u) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
+        let (mut c, mut e, mut k, mut u) =
+            (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
         if unsafe { GetProcessTimes(handle, &mut c, &mut e, &mut k, &mut u) }.is_err() {
             return f64::NAN;
         }
@@ -157,14 +158,25 @@ mod imp {
         let mut stdout = BufReader::new(child.stdout.take().unwrap());
         let mut line = String::new();
         stdout.read_line(&mut line).expect("ready");
-        eprintln!("worker pid {} ready in {:.0} ms: {}", child.id(), started.elapsed().as_secs_f64() * 1000.0, line.trim());
+        eprintln!(
+            "worker pid {} ready in {:.0} ms: {}",
+            child.id(),
+            started.elapsed().as_secs_f64() * 1000.0,
+            line.trim()
+        );
 
         let stop = Arc::new(AtomicBool::new(false));
         let late = Arc::new(Mutex::new(Vec::new()));
         let probe = pacing(stop.clone(), late.clone());
         let begin = |late: &Arc<Mutex<Vec<f64>>>| {
             late.lock().unwrap().clear();
-            Window { late: late.clone(), game0: cpu_ms(game), worker0: cpu_ms(worker), me0: cpu_ms(me), t0: Instant::now() }
+            Window {
+                late: late.clone(),
+                game0: cpu_ms(game),
+                worker0: cpu_ms(worker),
+                me0: cpu_ms(me),
+                t0: Instant::now(),
+            }
         };
         let end = |w: Window, phase: &str, reads: usize| {
             let wall = w.t0.elapsed().as_secs_f64() * 1000.0;
@@ -187,6 +199,71 @@ mod imp {
             );
         };
 
+        // Serve mode: one read per line on stdin, answered with the lines read (text and box, in
+        // frame pixels) as one JSON line, for a driver that hooks the game alongside.
+        if flag("--serve") {
+            println!("{}", serde_json::json!({ "ready": true, "title": source.name }));
+            for command in std::io::stdin().lines() {
+                if command.map(|c| c.trim() == "quit").unwrap_or(true) {
+                    break;
+                }
+                let t = Instant::now();
+                let frame = match backend.capture(&CaptureRequest { source_id: source.id.clone(), crop: None }) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        println!("{}", serde_json::json!({ "error": e.message }));
+                        continue;
+                    }
+                };
+                let (fw, fh) = (frame.info.width, frame.info.height);
+                let mut rgb = Vec::with_capacity((fw * fh * 3) as usize);
+                for y in 0..fh as usize {
+                    let row = &frame.pixels[y * frame.info.stride..y * frame.info.stride + fw as usize * 4];
+                    for px in row.chunks_exact(4) {
+                        rgb.extend_from_slice(&px[..3]);
+                    }
+                }
+                let mut png_bytes = Vec::new();
+                {
+                    let mut enc = png::Encoder::new(&mut png_bytes, fw, fh);
+                    enc.set_color(png::ColorType::Rgb);
+                    let mut writer = enc.write_header().unwrap();
+                    writer.write_image_data(&rgb).unwrap();
+                }
+                if let Some(dir) = arg("--save-dir") {
+                    let _ = std::fs::write(
+                        format!(
+                            "{dir}/frame-{}.png",
+                            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
+                        ),
+                        &png_bytes,
+                    );
+                }
+                writeln!(stdin, "{{\"png\":\"{}\"}}", b64(&png_bytes)).unwrap();
+                stdin.flush().unwrap();
+                line.clear();
+                stdout.read_line(&mut line).unwrap();
+                let value: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
+                let lines: Vec<serde_json::Value> = value["ocr"]["groups"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|g| {
+                        let b = g["bbox"].as_array()?;
+                        let n = |i: usize| b.get(i).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        Some(serde_json::json!({ "text": g["text"], "x": n(0), "y": n(1), "width": n(2) - n(0), "height": n(3) - n(1) }))
+                    })
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::json!({ "ms": t.elapsed().as_millis() as u64, "width": fw, "height": fh, "lines": lines })
+                );
+            }
+            let _ = child.kill();
+            return;
+        }
+
         if idle_s > 0 {
             let w = begin(&late);
             std::thread::sleep(Duration::from_secs(idle_s));
@@ -194,9 +271,8 @@ mod imp {
         }
 
         println!("read,capture_ms,encode_ms,ocr_ms,worker_cpu_ms,png_kb,width,height,lines,chars");
-        let full = backend
-            .capture(&CaptureRequest { source_id: source.id.clone(), crop: None })
-            .expect("first capture");
+        let full =
+            backend.capture(&CaptureRequest { source_id: source.id.clone(), crop: None }).expect("first capture");
         let (full_w, full_h) = (full.info.full_width, full.info.full_height);
         eprintln!("frame {full_w}x{full_h}");
         drop(full);
@@ -207,7 +283,14 @@ mod imp {
             let t = Instant::now();
             let crop = crop_bottom.map(|f| {
                 let h = (f64::from(full_h) * f).round() as u32;
-                Crop { x: 0, y: full_h - h, width: full_w, height: h, reference_width: full_w, reference_height: full_h }
+                Crop {
+                    x: 0,
+                    y: full_h - h,
+                    width: full_w,
+                    height: h,
+                    reference_width: full_w,
+                    reference_height: full_h,
+                }
             });
             let frame = match backend.capture(&CaptureRequest { source_id: source.id.clone(), crop }) {
                 Ok(f) => f,
@@ -247,8 +330,7 @@ mod imp {
             let worker_cpu = cpu_ms(worker) - cpu0;
             let value: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
             let groups = value["ocr"]["groups"].as_array().cloned().unwrap_or_default();
-            let text: Vec<String> =
-                groups.iter().filter_map(|g| g["text"].as_str().map(String::from)).collect();
+            let text: Vec<String> = groups.iter().filter_map(|g| g["text"].as_str().map(String::from)).collect();
             let chars: usize = text.iter().map(|t| t.chars().count()).sum();
             println!(
                 "{i},{capture_ms:.1},{encode_ms:.1},{ocr_ms:.1},{worker_cpu:.0},{},{fw},{fh},{},{chars}",

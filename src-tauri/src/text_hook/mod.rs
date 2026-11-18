@@ -23,8 +23,8 @@ mod rpgmaker;
 pub mod store;
 mod translations;
 mod unity;
-mod witness;
 pub mod wine;
+mod witness;
 
 use crate::language::Language;
 use crate::state::Shared;
@@ -100,6 +100,8 @@ struct Thread {
     /// A Unity text box that keeps earlier sentences on screen: its text before the sentence now
     /// being shown (markup aside), so that sentence carrying on is the Log's line, not the box.
     box_start: String,
+    /// Its latest text differs from the one before it: a line, not a label drawn again.
+    fresh: bool,
 }
 
 impl Thread {
@@ -142,6 +144,8 @@ struct Session {
     /// the last one started: one at a time, and no more often than `WITNESS_GAP`.
     witness_running: bool,
     witness_at: Option<Instant>,
+    /// The thread the last reading found on screen, and when.
+    vouched: Option<(String, Instant)>,
     /// The last few lines sent, newest first: the screen still showing one of them says the hook
     /// is ahead of it.
     sent: VecDeque<String>,
@@ -592,6 +596,7 @@ fn read_events(
                         japanese: false,
                         foreign: 0,
                         box_start: String::new(),
+                        fresh: false,
                     });
                 }
                 continue;
@@ -786,7 +791,9 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let thread = &mut session.threads[index];
         // A text box keeps its whole text: the next sentence added is told by what is shown.
-        thread.text = screen.clone().unwrap_or_else(|| lines.last().cloned().unwrap_or_default());
+        let text_now = screen.clone().unwrap_or_else(|| lines.last().cloned().unwrap_or_default());
+        thread.fresh = text_now != thread.text;
+        thread.text = text_now;
         if let Some(start) = box_start {
             thread.box_start = start;
         }
@@ -879,6 +886,10 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // as Majiro's does beside the one that keeps going): the screen is read again. A thread taken
     // back from an earlier run too, once it misses lines: SiglusEngine starts threads per scene
     // (the context in their key), and the one remembered may be the last scene's.
+    // Lines missed count for nothing while the screen is being read about them, or soon after it
+    // showed the chosen thread's line (`witness_check`): SiglusEngine sends each line through
+    // several threads, a row at a time, and those came to three "missed" lines within a burst,
+    // dropping a thread whose line was on screen at every line.
     let auto = session.selected_by == Some("auto");
     let saved = session.selected_by == Some("saved");
     // The hooker's TextMeshPro setter, chosen before the DLL read any line (a game drawing a glyph
@@ -890,12 +901,17 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             .threads
             .iter()
             .any(|t| session.selected.as_deref() == Some(t.key.as_str()) && unity::is_hooker_tmp_setter(&t.hookcode));
+    let vouched = session.witness_running
+        || session
+            .vouched
+            .as_ref()
+            .is_some_and(|(key, at)| session.selected.as_ref() == Some(key) && at.elapsed() < WITNESS_GAP);
     if (auto && session.threads[index].count >= 3) || ((auto || saved) && session.missed >= MISSED_LINES) || hooker_left
     {
         let stale = hooker_left
             || session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
                 (auto && t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
-                    || session.missed >= MISSED_LINES
+                    || (session.missed >= MISSED_LINES && !vouched)
             });
         if stale {
             session.missed = 0;
@@ -1139,8 +1155,7 @@ fn witness_check(hook: &'static Hook, generation: u64) {
         });
         match chosen {
             Some(chosen) if session.generation == generation => {
-                let others: Vec<Thread> =
-                    pick_candidates(&session).into_iter().filter(|t| t.key != chosen.0).collect();
+                let others: Vec<Thread> = pick_candidates(&session).into_iter().filter(|t| t.key != chosen.0).collect();
                 // The lines sent before the chosen thread's last: the newest is its last.
                 let earlier: Vec<String> = session.sent.iter().skip(1).cloned().collect();
                 Some((chosen, others, earlier, session.source_id.clone(), session.observer_engine.clone()))
@@ -1161,7 +1176,12 @@ fn witness_check(hook: &'static Hook, generation: u64) {
         let blocks = witness::dialogue_blocks(&lines, &title, language);
         let others: Vec<witness::Other> = others
             .iter()
-            .map(|t| witness::Other { key: &t.key, text: &t.text, generic: pick::is_generic(&t.hookcode, &t.name) })
+            .map(|t| witness::Other {
+                key: &t.key,
+                text: &t.text,
+                generic: pick::is_generic(&t.hookcode, &t.name),
+                fresh: t.fresh,
+            })
             .collect();
         let earlier: Vec<&str> = earlier.iter().map(String::as_str).collect();
         witness::judge(&text, &earlier, &others, &blocks, language)
@@ -1200,7 +1220,10 @@ fn witness_check(hook: &'static Hook, generation: u64) {
     match verdict {
         // The chosen thread's line is what the game shows: the other thread's line was not (lines
         // ahead of the screen, a backlog), and is no line the chosen thread missed.
-        witness::Verdict::Shown | witness::Verdict::Within => session.missed = 0,
+        witness::Verdict::Shown | witness::Verdict::Within => {
+            session.missed = 0;
+            session.vouched = Some((key, Instant::now()));
+        }
         // Another thread has the line on screen, the chosen one does not: it takes over now, with
         // that line, rather than after more lines are lost.
         witness::Verdict::Other(better) => {

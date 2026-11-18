@@ -405,6 +405,7 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
                     japanese: false,
                     foreign: 0,
                     box_start: String::new(),
+                    fresh: false,
                 });
                 hook.publish(&session);
             }
