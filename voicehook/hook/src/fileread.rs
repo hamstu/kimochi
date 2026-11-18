@@ -258,7 +258,7 @@ unsafe extern "system" fn read(h: *mut c_void, buf: *mut u8, n: u32, got: *mut u
             guard(|| unsafe { known(h) });
         }
         if let Some(a) = lock(&ASARS).get(&(h as usize)).cloned() {
-            guard(|| on_asar_read(h as usize, &a, offset.or_else(|| unsafe { before(h, len) })));
+            guard(|| on_asar_read(&a, offset.or_else(|| unsafe { before(h, len) })));
             return ok;
         }
         // A voice file or archive (System4): its synchronous reads, in order.
@@ -277,8 +277,8 @@ unsafe fn before(h: *mut c_void, len: usize) -> Option<u64> {
 }
 
 /// A read of an archive at `offset`: if an audio entry starts there, the game is loading that
-/// sound; it is read whole from the archive and sent as a clip.
-fn on_asar_read(h: usize, a: &Arc<Archive>, offset: Option<u64>) {
+/// sound; it is read whole from the archive (on a thread of its own) and sent as a clip.
+fn on_asar_read(a: &Arc<Archive>, offset: Option<u64>) {
     let Some(offset) = offset else { return };
     let Some(e) = a.at(offset).filter(|e| asar::is_audio(&e.path)) else { return };
     let now = crate::util::now_ms();
@@ -290,28 +290,25 @@ fn on_asar_read(h: usize, a: &Arc<Archive>, offset: Option<u64>) {
             return;
         }
     }
-    let _ = h;
     if e.size as usize > MAX_CLIP_BYTES {
         if lock(&LOGGED).insert(format!("big:{}", e.path)) {
             crate::util::log(&format!("asar: {} is {} bytes (music): not kept", e.path, e.size));
         }
         return;
     }
-    let bytes = match a.read(e) {
-        Ok(b) => b,
-        Err(err) => {
-            crate::util::log(&format!("asar: reading {}: {err}", e.path));
-            return;
-        }
-    };
-    let key = || a.rpgm_key();
-    send_web(
-        &e.path,
-        bytes,
-        now,
-        key,
-        json!({ "archive": a.path.file_name().map(|n| n.to_string_lossy().into_owned()), "entry": e.path }),
-    );
+    let (a, e) = (a.clone(), e.clone());
+    std::thread::spawn(move || {
+        guard(|| match a.read(&e) {
+            Ok(bytes) => send_web(
+                &e.path,
+                bytes,
+                now,
+                || a.rpgm_key(),
+                json!({ "archive": a.path.file_name().map(|n| n.to_string_lossy().into_owned()), "entry": e.path }),
+            ),
+            Err(err) => crate::util::log(&format!("asar: reading {}: {err}", e.path)),
+        })
+    });
 }
 
 /// Sends a Chromium game's sound file (`rel`: its path in the archive or under the game's folder)
