@@ -161,7 +161,8 @@ pub fn wait_for_watch(base: &Path, pid: u32, limit: Duration) -> bool {
                 .is_ok_and(|t| t.elapsed().is_ok_and(|e| e < Duration::from_secs(60)))
         });
         if let Some(dir) = fresh {
-            if std::fs::read_to_string(dir.join("events.jsonl")).is_ok_and(|e| e.contains("\"adapter\":\"unity-text\""))
+            if std::fs::read_to_string(dir.join("events.jsonl"))
+                .is_ok_and(|e| e.contains("\"adapter\":\"unity-text\"") || e.contains("\"adapter\":\"renpy-text\""))
             {
                 return true;
             }
@@ -366,11 +367,17 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
             continue;
         }
         let now = unix_ms();
+        // Ren'Py's lines come as they are shown, whole (`renpy.rs`): nothing to settle.
+        let mut texts = Vec::new();
         for text in read_texts(&dir.as_ref().unwrap().join("events.jsonl"), &mut offset) {
-            glyphs.push(&text, now);
-            settle.push(text, now);
+            if super::renpy::is_renpy_text(&text.method) {
+                texts.push(text);
+            } else {
+                glyphs.push(&text, now);
+                settle.push(text, now);
+            }
         }
-        let mut texts = settle.take(now);
+        texts.extend(settle.take(now));
         texts.extend(glyphs.take(now));
         texts.sort_by_key(|t| t.at.unwrap_or(now));
         if texts.is_empty() {
@@ -381,20 +388,25 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
             return;
         }
         for Text { obj, method, text, at } in texts {
-            let key = format!("{pid}:unity:{obj}");
-            if !session.threads.iter().any(|t| t.key == key) {
+            let (key, hookcode, name, ctx) = if super::renpy::is_renpy_text(&method) {
+                let (key, hookcode, name) = super::renpy::thread_of(pid, &obj);
+                (key, hookcode, name, 0)
+            } else {
                 let name = method.trim_end_matches(".set_text");
+                (
+                    format!("{pid}:unity:{obj}"),
+                    format!("{HOOKCODE}{method}"),
+                    if obj.starts_with(GLYPH_LINE) { format!("{name} (a glyph per object)") } else { name.to_string() },
+                    u64::from_str_radix(obj.trim_start_matches(GLYPH_LINE).trim_start_matches("0x"), 16).unwrap_or(0),
+                )
+            };
+            if !session.threads.iter().any(|t| t.key == key) {
                 session.threads.push(Thread {
                     key: key.clone(),
                     pid,
-                    hookcode: format!("{HOOKCODE}{method}"),
-                    name: if obj.starts_with(GLYPH_LINE) {
-                        format!("{name} (a glyph per object)")
-                    } else {
-                        name.to_string()
-                    },
-                    ctx: u64::from_str_radix(obj.trim_start_matches(GLYPH_LINE).trim_start_matches("0x"), 16)
-                        .unwrap_or(0),
+                    hookcode,
+                    name,
+                    ctx,
                     ctx2: 0,
                     text: String::new(),
                     count: 0,

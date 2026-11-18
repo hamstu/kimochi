@@ -19,6 +19,7 @@
 pub mod clean;
 pub mod pick;
 pub mod process;
+mod renpy;
 mod rpgmaker;
 pub mod store;
 mod translations;
@@ -284,10 +285,13 @@ impl Hook {
         // clicked on to comes later than that.
         let window = (JOIN_BASE + JOIN_PER_CHAR * session.last_piece_chars as u32).min(CARRY_ON);
         // Rows are joined for engines that hand over a row at a time, never for a Unity text box,
-        // which is set whole.
+        // which is set whole, nor Ren'Py's say screen, whose lines come whole as they are shown.
         let recent = session.last_key.as_deref() == Some(key)
             && session.last_sent.is_some_and(|at| at.elapsed() < window)
-            && !session.threads.iter().any(|t| t.key == key && unity::is_unity(&t.hookcode));
+            && !session
+                .threads
+                .iter()
+                .any(|t| t.key == key && (unity::is_unity(&t.hookcode) || renpy::is_renpy(&t.hookcode)));
         let piece_chars = text.chars().count();
         if !carries_on && config.join_lines && recent {
             if let Some(before) = session.last_line.as_deref() {
@@ -687,11 +691,11 @@ fn failed_hook(message: &str) -> Option<String> {
     Some(rest.split_whitespace().next().unwrap_or("").to_string())
 }
 
-/// The voice hook DLL reads this Unity game's text (`unity.rs`). With `then_hooker`, the text
-/// hooker starts once the DLL is watching the text (or has said it cannot), so that the DLL's
-/// breakpoint is in before the hooker patches the same function: a hooker that patches it after
-/// copies the breakpoint along, which the DLL follows; one that patched it first leaves the DLL
-/// out.
+/// The voice hook DLL reads this Unity game's text (`unity.rs`), or this Ren'Py game's dialogue
+/// (`renpy.rs`). With `then_hooker`, the text hooker starts once the DLL is watching the text (or
+/// has said it cannot), so that the DLL's breakpoint is in before the hooker patches the same
+/// function: a hooker that patches it after copies the breakpoint along, which the DLL follows; one
+/// that patched it first leaves the DLL out.
 fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool) {
     let mut then_hooker = then_hooker;
     for target in session.targets.clone() {
@@ -763,9 +767,13 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let (lines, carries_on) = {
         let thread = &session.threads[index];
         let recent = thread.last_at.is_some_and(|at| at.elapsed() < CARRY_ON);
+        // Ren'Py's say screen sends a line as it is shown, whole: shown further after a pause in it
+        // (`{w}`, `{p}`) or by an `extend`, it is the same line, which it replaces however late.
+        if renpy::is_renpy(&thread.hookcode) {
+            (vec![text.to_string()], renpy::carries_on(&thread.text, text))
         // A Unity text object's text arrives settled, the whole text box (`unity::Settle`): one line,
         // never frames of a typewriter to take apart.
-        if unity::is_unity(&thread.hookcode) {
+        } else if unity::is_unity(&thread.hookcode) {
             // One that extends the object's last carries it on, however late: a typewriter paused
             // for longer than it takes to settle (live Unity: 9 s between the pieces).
             // A sentence added under a finished one (a text box the game fills a sentence a
@@ -828,6 +836,25 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             thread.recent.pop_front();
         }
     }
+    // Ren'Py's say screen is the game's dialogue as shown (`renpy.rs`): it takes over from whatever
+    // was chosen before it spoke (a hooker thread read off the title screen, or remembered), unless
+    // the reader chose by hand.
+    if renpy::is_dialogue(&session.threads[index].hookcode)
+        && session.selected.as_deref() != Some(key)
+        && session.selected_by != Some("manual")
+    {
+        crate::debug_report::trace(
+            &hook.app,
+            json!({ "check": "texthook-reselected", "from": session.selected, "to": key }),
+        );
+        if let Some(exe) = session.exe.clone() {
+            remember(hook, &exe, Some(session.threads[index].signature()));
+        }
+        session.selected = Some(key.to_string());
+        session.selected_by = Some("auto");
+        session.pick_note = None;
+        hook.publish(session);
+    }
     if let Some(better) = cleaner_thread(session, index, language) {
         crate::debug_report::trace(
             &hook.app,
@@ -876,16 +903,15 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         let spoken = &session.threads[index];
         let shown = pick::normalize(&clean::strip_markup(text, false));
         let dll_reads = dll_reads_lines(session);
-        let chosen = session
-            .threads
-            .iter()
-            .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
-            .map(|t| pick::normalize(&clean::strip_markup(&t.text, false)))
-            .unwrap_or_default();
+        let chosen_thread = session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str()));
+        let chosen_dialogue = chosen_thread.is_some_and(|t| renpy::is_dialogue(&t.hookcode));
+        let chosen = chosen_thread.map(|t| pick::normalize(&clean::strip_markup(&t.text, false))).unwrap_or_default();
         if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language)
             && !pick::same_line(&chosen, &shown)
             && !pick::is_generic(&spoken.hookcode, &spoken.name)
             && !(dll_reads && unity::is_hooker_tmp_setter(&spoken.hookcode))
+            // Ren'Py's say screen misses no line: the others' are its labels, errors and lines to come.
+            && !chosen_dialogue
         {
             // One click's lines count once: SiglusEngine sends a line through several threads in
             // several forms, often before the chosen thread's, which made three "missed" lines of
@@ -995,6 +1021,11 @@ fn taking_over(session: &Session, index: usize, language: &Language) -> Option<S
         return None;
     }
     let chosen = session.threads.iter().find(|t| t.key == selected)?;
+    // Never from Ren'Py's say screen: it is the line as shown; a run of short lines (`え？`) is no
+    // glyph-per-object game, and the hooker's threads there carry its labels and lines to come.
+    if renpy::is_dialogue(&chosen.hookcode) {
+        return None;
+    }
     // A text object that showed the line once and has shown a glyph at a time since: a thread
     // showing whole lines takes over.
     let spoken = &session.threads[index];
@@ -1604,6 +1635,11 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         // hooker reaches it, when it can, through string functions that run at all times for
         // all sorts of strings, which tell little of when a line is shown (`unity.rs`).
         if cfg!(windows) && targets.iter().any(|t| t.wine.is_none() && unity::is_mono_game(&t.exe)) {
+            read_unity_text(hook, &mut session, true);
+        }
+        // A Ren'Py game's dialogue, likewise, from the say screen (`renpy.rs`); the hooker still
+        // runs, for the game's other text and for a Ren'Py the DLL cannot read.
+        else if cfg!(windows) && targets.iter().any(|t| t.wine.is_none() && renpy::is_renpy_game(&t.exe)) {
             read_unity_text(hook, &mut session, true);
         }
         hook.publish(&session);

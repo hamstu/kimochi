@@ -298,15 +298,31 @@ def _voicehook_ready():
     g = sys.modules.get('renpy.game')
     return g is not None and getattr(g, 'interface', None) is not None
 
+def _voicehook_error(where):
+    # Each different failure once, to the log.
+    try:
+        import sys, traceback, ctypes, json
+        e = traceback.format_exc()[-800:]
+        seen = sys.__dict__.setdefault('_voicehook_errors', set())
+        if e in seen:
+            return
+        seen.add(e)
+        m = json.dumps({'op': 'error', 'where': where, 'error': e})
+        if not isinstance(m, bytes):
+            m = m.encode('utf-8')
+        ctypes.CDLL(r'''{DLL}''').voicehook_emit(m, b'', 0)
+    except Exception:
+        pass
+
 if _voicehook_ready():
     try:
         _voicehook_install()
     except Exception:
-        pass
+        _voicehook_error('audio')
     try:
         _voicehook_text_install()
     except Exception:
-        pass
+        _voicehook_error('text')
 "#####;
 
 struct Py {
@@ -400,6 +416,10 @@ pub unsafe extern "C" fn voicehook_emit(meta: *const c_char, data: *const u8, le
             sink::send(Ev::Note(
                 json!({"ev": "adapter", "adapter": "renpy", "renpy": meta["renpy"], "python": meta["python"], "channels": meta["channels"]}),
             ));
+            return;
+        }
+        if op == "error" {
+            log(&format!("renpy: {} patch failed: {}", meta["where"].as_str().unwrap_or("?"), meta["error"].as_str().unwrap_or("")));
             return;
         }
         if op == "text_installed" {
