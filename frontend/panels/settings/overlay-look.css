@@ -251,7 +251,6 @@
   flex: 1;
   flex-wrap: wrap;
   justify-content: space-between;
-  max-width: 24rem;
 }
 .overlay-look-swatch {
   position: relative;
