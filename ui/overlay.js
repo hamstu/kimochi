@@ -131,8 +131,8 @@ let lookupOnHover = false
  * pointer through a press, so its DOM events are the button's state; the compositor feed has no
  * buttons over a Wayland window. */
 let surfaceButtonDown = false
-/** Whether the last move the native feed handed the engine carried Shift. */
-let lastScanShift = false
+/** Whether the last move the native feed handed the engine carried a modifier (the lookup key). */
+let lastScanKeyed = false
 /**
  * Whether clicks on the overlay's text (`words`) or the hook card (`card`) go to the game unless
  * Shift is held (`overlayClickThrough`, on unless turned off). Off, they take the mouse as before;
@@ -6205,13 +6205,26 @@ await native.listen('pointer', ({ payload }) => {
     // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
     // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
     const types = window.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
-    // Shift just went down with the pointer at rest: 10ten takes WebKitGTK for Safari and drops a
-    // move that only adds a modifier at the point of the last one (a Safari bug it works around).
-    // A plain move a pixel off first makes this one a move. Wayland only: there the last move the
-    // engine saw is often the surface's own, at this very point, as the words started taking it.
+    // The lookup key just went down with the pointer at rest: 10ten takes WebKit (macOS's webview,
+    // WebKitGTK) for Safari and drops a move that only adds a modifier at the point of the last
+    // one (a Safari bug it works around, content.ts `onPointerMove`). A plain move a pixel off
+    // first makes this one a move. Look up on hover always lands here: its keyed move comes once
+    // the pointer rests, where the last plain one was. With 10ten everywhere; on Wayland with any
+    // engine, where the last move the engine saw is often the surface's own, at this very point.
+    const keyed = Boolean(init.shiftKey || init.altKey || init.ctrlKey || init.metaKey)
+    const tenten = window.__kimochiExtensionHost?.descriptor?.id === 'tenten'
     const prime =
-      waylandLayer && init.shiftKey && !lastScanShift
-        ? { ...init, shiftKey: false, clientX: init.clientX + 1, screenX: init.screenX + 1, kimochiPrime: true }
+      keyed && !lastScanKeyed && (waylandLayer || tenten)
+        ? {
+            ...init,
+            shiftKey: false,
+            altKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            clientX: init.clientX + 1,
+            screenX: init.screenX + 1,
+            kimochiPrime: true
+          }
         : null
     for (const type of types) {
       // Composed, so a move dispatched inside a shadow root still reaches the document's listeners.
@@ -6223,7 +6236,7 @@ await native.listen('pointer', ({ payload }) => {
       target.dispatchEvent(make(init))
     }
   }
-  lastScanShift = Boolean(init?.shiftKey)
+  lastScanKeyed = Boolean(init && (init.shiftKey || init.altKey || init.ctrlKey || init.metaKey))
   // Once each, then never again. Whether a modifier can be read at all from a window
   // that does not have the keyboard is the one thing this window cannot find out for
   // itself, and "Shift does nothing" has two completely different causes depending on
