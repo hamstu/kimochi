@@ -117,8 +117,10 @@ pub struct Images {
     /// at, and the preview would 404 while the snapshot still named it.
     published: Option<(u64, Arc<Image>)>,
     /// Independent candidate/in-flight owners, bounded by MAX_RETAINED_FRAMES.
-    /// A newer probe cannot revoke a frame another operation still owns.
-    retained: HashMap<u64, (Arc<Image>, usize)>,
+    /// A newer probe cannot revoke a frame another operation still owns. Each frame keeps how
+    /// many pins each page holds on it (by its webview's label), so a page that reloads or
+    /// closes mid-scan gives back what it held (`release_owner`) instead of keeping it for good.
+    retained: HashMap<u64, (Arc<Image>, HashMap<String, usize>)>,
     /// Source-picker previews, served at `capture://localhost/preview/{id}`. Bounded
     /// so browsing a long source list cannot grow memory without limit.
     previews: Vec<(u64, Arc<Image>)>,
@@ -189,9 +191,10 @@ impl Images {
         }
     }
 
-    pub fn pin_candidate(&mut self, id: u64) -> bool {
+    /// Pin frame `id` for `owner` (the page asking: its webview's label).
+    pub fn pin_candidate(&mut self, id: u64, owner: &str) -> bool {
         if let Some((_, owners)) = self.retained.get_mut(&id) {
-            *owners += 1;
+            *owners.entry(owner.to_string()).or_insert(0) += 1;
             return true;
         }
         if self.retained.len() >= MAX_RETAINED_FRAMES {
@@ -200,19 +203,42 @@ impl Images {
         let Some(image) = self.frame(id).cloned() else {
             return false;
         };
-        self.retained.insert(id, (image, 1));
+        self.retained.insert(id, (image, HashMap::from([(owner.to_string(), 1)])));
         true
     }
 
-    pub fn release_candidate(&mut self, id: u64) -> bool {
+    /// Give back one of `owner`'s pins on frame `id`; false when it held none.
+    pub fn release_candidate(&mut self, id: u64, owner: &str) -> bool {
         let Some((_, owners)) = self.retained.get_mut(&id) else {
             return false;
         };
-        *owners -= 1;
-        if *owners == 0 {
+        let Some(count) = owners.get_mut(owner) else {
+            return false;
+        };
+        *count -= 1;
+        if *count == 0 {
+            owners.remove(owner);
+        }
+        if owners.is_empty() {
             self.retained.remove(&id);
         }
         true
+    }
+
+    /// Give back every pin `owner` holds: its page is loading afresh (a reload, which in
+    /// development comes with every edit of a page) or its window is gone, and nothing on it
+    /// will ever release them. Kept, they filled the slots until no frame could be pinned
+    /// (Auto OCR failed every recognition until the app restarted). Returns how many frames it
+    /// held.
+    pub fn release_owner(&mut self, owner: &str) -> usize {
+        let mut released = 0;
+        self.retained.retain(|_, (_, owners)| {
+            if owners.remove(owner).is_some() {
+                released += 1;
+            }
+            !owners.is_empty()
+        });
+        released
     }
 
     pub fn frame(&self, id: u64) -> Option<&Arc<Image>> {
@@ -1477,13 +1503,13 @@ mod tests {
     fn in_flight_frame_remains_publishable_when_a_new_candidate_arrives() {
         let mut images = Images::default();
         let in_flight = images.put_latest(image());
-        assert!(images.pin_candidate(in_flight));
+        assert!(images.pin_candidate(in_flight, "overlay"));
         let pending = images.put_latest(image());
-        assert!(images.pin_candidate(pending));
+        assert!(images.pin_candidate(pending, "overlay"));
         images.put_latest(image());
         assert!(images.frame(in_flight).is_some(), "OCR still owns the first frame");
         assert!(images.pin_published(in_flight), "completed OCR must remain previewable");
-        assert!(images.release_candidate(in_flight));
+        assert!(images.release_candidate(in_flight, "overlay"));
         assert!(images.frame(pending).is_some());
     }
 
@@ -1510,13 +1536,42 @@ mod tests {
         let mut images = Images::default();
         for _ in 0..MAX_RETAINED_FRAMES {
             let id = images.put_latest(image());
-            assert!(images.pin_candidate(id));
+            assert!(images.pin_candidate(id, "overlay"));
         }
         let refused = images.put_latest(image());
-        assert!(!images.pin_candidate(refused));
+        assert!(!images.pin_candidate(refused, "overlay"));
         assert!(images.frame(1).is_some());
-        assert!(images.release_candidate(1));
-        assert!(images.pin_candidate(refused));
+        assert!(images.release_candidate(1, "overlay"));
+        assert!(images.pin_candidate(refused, "overlay"));
+    }
+
+    #[test]
+    fn a_page_that_reloads_gives_back_the_frames_it_held() {
+        let mut images = Images::default();
+        // The overlay reloaded mid-scan, again and again, never releasing what it had pinned.
+        for _ in 0..MAX_RETAINED_FRAMES {
+            let id = images.put_latest(image());
+            assert!(images.pin_candidate(id, "overlay"));
+        }
+        let next = images.put_latest(image());
+        assert!(!images.pin_candidate(next, "overlay"), "the slots are full");
+        assert_eq!(images.release_owner("overlay"), MAX_RETAINED_FRAMES);
+        assert!(images.pin_candidate(next, "overlay"), "the reloaded page can pin again");
+    }
+
+    #[test]
+    fn a_page_gives_back_only_its_own_pins() {
+        let mut images = Images::default();
+        let shared = images.put_latest(image());
+        assert!(images.pin_candidate(shared, "overlay"));
+        assert!(images.pin_candidate(shared, "main"));
+        assert!(images.pin_candidate(shared, "overlay"));
+        assert!(!images.release_candidate(shared, "popup"), "a page that never pinned it");
+        assert_eq!(images.release_owner("overlay"), 1);
+        assert!(images.frame(shared).is_some(), "the main window still holds it");
+        assert!(!images.release_candidate(shared, "overlay"), "already given back");
+        assert!(images.release_candidate(shared, "main"));
+        assert_eq!(images.release_owner("main"), 0);
     }
 
     #[test]
@@ -1549,12 +1604,12 @@ mod tests {
     fn native_frame_pins_count_independent_owners() {
         let mut images = Images::default();
         let id = images.put_latest(image());
-        assert!(images.pin_candidate(id));
-        assert!(images.pin_candidate(id));
+        assert!(images.pin_candidate(id, "overlay"));
+        assert!(images.pin_candidate(id, "overlay"));
         images.put_latest(image());
-        assert!(images.release_candidate(id));
+        assert!(images.release_candidate(id, "overlay"));
         assert!(images.frame(id).is_some());
-        assert!(images.release_candidate(id));
+        assert!(images.release_candidate(id, "overlay"));
         assert!(images.frame(id).is_none());
     }
 

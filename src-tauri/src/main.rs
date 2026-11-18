@@ -2190,10 +2190,23 @@ fn capture_preview(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Val
 /// the recogniser has answered — never before, because the overlay pins what it
 /// publishes and an early release would let the next probe evict the image the
 /// published scan points at.
+///
+/// Pins are held for the page that asks (its webview), and given back when that page loads
+/// afresh or its window goes (`release_frame_pins`): a page that reloads mid-scan never
+/// releases what it pinned.
 #[tauri::command]
-async fn retain_frame(state: State<'_, Shared>, id: u64, retain: bool) -> Reply<bool> {
+async fn retain_frame(webview: tauri::Webview, state: State<'_, Shared>, id: u64, retain: bool) -> Reply<bool> {
     let mut images = state.images.lock().map_err(|_| "busy: the image store is poisoned".to_string())?;
-    Ok(if retain { images.pin_candidate(id) } else { images.release_candidate(id) })
+    let owner = webview.label();
+    Ok(if retain { images.pin_candidate(id, owner) } else { images.release_candidate(id, owner) })
+}
+
+/// Gives back every frame the page `label` pinned (it is loading afresh, or its window is gone).
+fn release_frame_pins(service: &Shared, label: &str) {
+    let released = service.images.lock().map(|mut images| images.release_owner(label)).unwrap_or(0);
+    if released > 0 {
+        eprintln!("kimochi: {}", json!({"check": "frame-pins-released", "page": label, "frames": released}));
+    }
 }
 
 /// What the local text observer can do on this machine.
@@ -3271,6 +3284,7 @@ fn main() {
                 if let Some(service) = webview.try_state::<Shared>() {
                     let previous = service.relay_channels.lock().unwrap().remove(webview.label());
                     drop(previous);
+                    release_frame_pins(&service, webview.label());
                 }
             }
         })
@@ -3279,6 +3293,7 @@ fn main() {
                 if let Some(service) = window.try_state::<Shared>() {
                     let previous = service.relay_channels.lock().unwrap().remove(window.label());
                     drop(previous);
+                    release_frame_pins(&service, window.label());
                 }
             }
         })
