@@ -10,6 +10,10 @@
  * once (`engineSwitchRecord`), removes it, and every consumer (the main window's first view and
  * page, the scroll offset, the "Now using …" note) renders from the same value on its first frame.
  *
+ * A switch native makes on its own, when a download the user chose "Use when downloaded" for is
+ * ready (`dictionary-switch`, just before the reload), records the view the window is on
+ * (`from: 'here'`), so it comes back where the reader was.
+ *
  * Only a window that has registered a route writes a record: the separate Settings window is not
  * reloaded by a switch, so it keeps its own "Reloading the reader windows…" note instead.
  */
@@ -24,6 +28,8 @@ import {
 export type { EngineSwitchRecord }
 
 interface MainRoute {
+  /** The view shown now. */
+  view: EngineSwitchRecord['view']
   tab: string
   back: 'source' | 'log' | 'notebook' | 'anki' | 'stats'
   scrollTop: number
@@ -46,11 +52,14 @@ export function registerMainRoute(read: () => MainRoute): () => void {
  * Records the switch before native reloads this window. True when a record was written (this is
  * the main window, which the switch reloads); false elsewhere.
  */
-export function rememberEngineSwitch(engine: DictionaryEngine, from: 'settings' | 'sidebar' = 'settings'): boolean {
+export function rememberEngineSwitch(
+  engine: DictionaryEngine,
+  from: 'settings' | 'sidebar' | 'here' = 'settings'
+): boolean {
   if (!routeOf) return false
-  const route = routeOf()
+  const { view: here, ...route } = routeOf()
   // From the sidebar the window is on the Log or the Notebook, which is also where Back points.
-  const view = from === 'settings' ? 'settings' : route.back
+  const view = from === 'settings' ? 'settings' : from === 'here' ? here : route.back
   const record: EngineSwitchRecord = { engine, view, ...route, at: Date.now() }
   try {
     sessionStorage.setItem(ENGINE_SWITCH_KEY, encodeEngineSwitch(record))

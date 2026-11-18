@@ -6,7 +6,10 @@
  * native to reload the reader windows (`dictionary_engine_apply`); the main window is one of them,
  * so it first records where it is (`rememberEngineSwitch`, with `from` saying whether that is
  * Settings or the Log/Notebook the sidebar sits beside). An engine that is not downloaded is asked
- * about first and switched to once its download is ready (a PENDING switch). Choosing the Yomitan
+ * about first and switched to once its download is ready (a PENDING switch). Native owns that
+ * switch (`bridge/dictionarySwitch.ts`): it is the setting `dictionaryEnginePending`, so it
+ * outlives this page and a restart, and native makes it when the download is ready, announcing
+ * it to every window (`switchedTo`). Choosing the Yomitan
  * API switches at once and checks that the API answers (`verifyingApi`), giving the browser's
  * helper `API_GRACE_MS` to wake; only if it still does not answer does its setup wizard open
  * (`setupOpen`). See DictionaryTab.tsx for the whole story.
@@ -18,7 +21,8 @@ import { waitForDictionarySetup } from '@ui/dictionary-setup-switch'
 import { useSetting } from '../../bridge/useSetting'
 import { useLanguage } from '../../bridge/useLanguage'
 import { setSetting } from '../../bridge/settings'
-import { nativeError, onEvent } from '../../bridge/tauri'
+import { nativeError } from '../../bridge/tauri'
+import { queueDictionarySwitch, useBackgroundSwitch, usePendingSwitch } from '../../bridge/dictionarySwitch'
 import {
   applyDictionaryEngine,
   dictionaryEngineOf,
@@ -30,8 +34,8 @@ import {
   popupTypeOf,
   type DictionaryEngine
 } from '../../bridge/dictionaryEngine'
-import { extensionAction, extensionStatus, type ExtensionStatus } from '../../bridge/extensions'
-import { downloadEngineFor, extensionDownloadPrompt, normalizeExtensionStatus } from '@ui/extension-download'
+import { extensionStatus, type ExtensionStatus } from '../../bridge/extensions'
+import { downloadEngineFor, extensionDownloadPrompt } from '@ui/extension-download'
 import { engineSwitchRecord, forgetEngineSwitch, rememberEngineSwitch } from '../../main/engineSwitch'
 import { demoStops } from '../../bridge/demo'
 import { apiCheck } from '../../bridge/yomitanApi'
@@ -57,7 +61,10 @@ function justSwitchedTo(): DictionaryEngine | null {
 export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   // Until the setting loads, the engine this document was (re)loaded for, not the shipped
   // default: after a switch the chooser's first frame already shows the new engine as active.
-  const [switchedTo, setSwitchedTo] = useState<DictionaryEngine | null>(justSwitchedTo)
+  const [switchedHere, setSwitchedTo] = useState<DictionaryEngine | null>(justSwitchedTo)
+  // ...or one native made when a pending switch's download became ready.
+  const switchedInBackground = useBackgroundSwitch(SWITCHED_NOTE_MS)
+  const switchedTo = switchedHere ?? switchedInBackground
   const [yomitanSettings, setYomitanSettings] = useSetting<YomitanSettings>('yomitanSettings', {
     popupType: popupTypeOf(engineSwitchRecord()?.engine ?? documentPlaceholder()),
     customApiUrl: ''
@@ -72,7 +79,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   // (here, or on the reload a switch from Hachidori or 10ten gives this window) when the API has
   // not answered within API_GRACE_MS. `verifyingApi` counts the checks started (0: none running).
   const [setupOpen, openSetup] = useState(false)
-  const [verifyingApi, setVerifyingApi] = useState(switchedTo === 'custom-api' ? 1 : 0)
+  const [verifyingApi, setVerifyingApi] = useState(switchedHere === 'custom-api' ? 1 : 0)
   // Opened or closed by hand: a check still running has nothing more to say.
   const setSetupOpen = useCallback((open: boolean): void => {
     setVerifyingApi(0)
@@ -103,8 +110,8 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
 
   if (picked !== null && picked === saved) setPicked(null)
 
-  // A switch waiting for its engine's download, and the question asked before starting one.
-  const [pending, setPending] = useState<DictionaryEngine | null>(null)
+  // A switch waiting for its engine's download (native's), and the question asked before starting one.
+  const pending: DictionaryEngine | null = usePendingSwitch()
   const [asking, setAsking] = useState<{ engine: DictionaryEngine; status: ExtensionStatus } | null>(null)
 
   useEffect(() => {
@@ -114,10 +121,10 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   }, [reloading])
 
   useEffect(() => {
-    if (!switchedTo) return
+    if (!switchedHere) return
     const timer = setTimeout(() => setSwitchedTo(null), SWITCHED_NOTE_MS)
     return () => clearTimeout(timer)
-  }, [switchedTo])
+  }, [switchedHere])
 
   const commit = useCallback(
     async (engine: DictionaryEngine): Promise<void> => {
@@ -176,8 +183,9 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     [yomitanSettings, saved, from]
   )
 
-  // Choosing: an engine that can run is switched to at once; one that is not downloaded is asked
-  // about (absent) or resumed (paused, failed) and switched to once ready.
+  // Choosing: an engine that can run is switched to at once (and replaces a switch still waiting
+  // for another's download); one that is not downloaded is asked about (absent), or becomes the
+  // pending switch, its download resumed (paused) or retried (failed); native switches once ready.
   const ticket = useRef(0)
   const handleChoose = useCallback(
     async (engine: DictionaryEngine): Promise<void> => {
@@ -198,65 +206,40 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
       }
       if (ticket.current !== mine) return
       if (!status || status.state === 'ready') {
-        setPending(null)
+        if (pending) queueDictionarySwitch(null).catch(() => undefined)
         return commit(engine)
       }
       if (status.state === 'absent') {
         setAsking({ engine, status })
         return
       }
-      setPending(engine === saved ? null : engine)
-      if (status.state === 'paused' || status.state === 'failed') {
-        extensionAction(status.engine, status.state === 'paused' ? 'resume' : 'retry').catch((error) =>
-          setApplyError(`Could not download ${status.name}: ${nativeError(error).message}`)
-        )
-      }
+      const { name } = status
+      queueDictionarySwitch(status.engine).catch((error) =>
+        setApplyError(`Could not download ${name}: ${nativeError(error).message}`)
+      )
     },
-    [commit, saved, language.code]
+    [commit, saved, language.code, pending]
   )
 
   const confirmDownload = useCallback((): void => {
     if (!asking) return
-    const { engine, status } = asking
+    const { status } = asking
     setAsking(null)
-    // The saved engine needs no switch: native moves the windows to it once it is downloaded.
-    setPending(engine === saved ? null : engine)
-    extensionAction(status.engine, 'download').catch((error) => {
-      setPending(null)
+    // Native records the switch and starts the download; it switches once the download is ready,
+    // whether or not this page is still open. (For the saved engine there is nothing to switch:
+    // native moves the windows to it once it is downloaded, and clears the record.)
+    queueDictionarySwitch(status.engine).catch((error) =>
       setApplyError(`Could not download ${status.name}: ${nativeError(error).message}`)
-    })
-  }, [asking, saved])
+    )
+  }, [asking])
 
-  // The pending switch is made when its download is ready; a cancelled download drops it.
-  useEffect(() => {
-    if (!pending) return
-    const needs = downloadEngineFor(pending)
-    if (!needs) return
-    let done = false
-    const settle = (status: ExtensionStatus | null): void => {
-      if (done || status?.engine !== needs) return
-      if (status.state === 'ready') {
-        done = true
-        setPending(null)
-        void commit(pending)
-      } else if (status.state === 'absent') {
-        done = true
-        setPending(null)
-      }
-    }
-    let unlisten: (() => void) | null = null
-    let closed = false
-    onEvent<unknown>('extension-download', (payload) => settle(normalizeExtensionStatus(payload)))
-      .then((stop) => (closed ? stop() : (unlisten = stop)))
-      .catch(() => undefined)
-    // It may have become ready before the listener was up.
-    extensionStatus(needs).then(settle, () => undefined)
-    return () => {
-      closed = true
-      done = true
-      unlisten?.()
-    }
-  }, [pending, commit])
+  // "Keep using …": the pending switch is forgotten; its download carries on and the engine is
+  // offered as "Use <name>" once ready.
+  const keepCurrent = useCallback((): void => {
+    queueDictionarySwitch(null).catch((error) =>
+      setApplyError(`Could not keep the current dictionary: ${nativeError(error).message}`)
+    )
+  }, [])
   const prompt = asking ? extensionDownloadPrompt(asking.status) : null
 
   // The check after choosing the Yomitan API: asked every API_RETRY_MS until it answers (nothing
@@ -305,6 +288,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     dismissAsking: () => setAsking(null),
     prompt,
     confirmDownload,
+    keepCurrent,
     choose: handleChoose,
     reloading,
     waitingForImport,

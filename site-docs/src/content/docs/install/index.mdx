@@ -8,7 +8,9 @@ import Screenshot from '../../../components/Screenshot.astro'
 import PlatformCard from '../../../components/PlatformCard.astro'
 
 Download Kimochi from [kimochiapp.com](https://kimochiapp.com/#download). The download button picks
-the right file for your computer; **Other platforms** lists every build. Builds are also published on
+the right file for your computer; **Other platforms** lists every build. The files come from
+Kimochi's own download server, downloads.kimochiapp.com, so they arrive even where GitHub is slow or
+blocked. The same builds are also published on
 [GitHub Releases](https://github.com/hamstu/kimochi/releases).
 
 <div class="k-platforms">
@@ -24,6 +26,11 @@ Kimochi updates itself. In release builds it checks shortly after launch and the
 hours, and shows a notice in the sidebar when a new version is out. You start the download and you
 choose when to restart. You can also check from
 **Settings → About → Updates**.
+
+Updates and the files Kimochi downloads later (dictionary engines, OCR models, the text hookers)
+come from Kimochi's own download server, downloads.kimochiapp.com, with GitHub and Hugging Face as
+the fallback. If GitHub is slow or blocked where you are, they still arrive; either way every file
+is checked against the fingerprint Kimochi expects before it is used.
 
 <Screenshot id="update-notice" alt="The sidebar's update notice: Kimochi 0.2.0 is available, with a Download button." width={272} />
 

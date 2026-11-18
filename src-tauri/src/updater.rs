@@ -1,6 +1,7 @@
-//! Self-updates from the project's GitHub Releases, as the panels see them.
+//! Self-updates from Kimochi's download mirror and the project's GitHub Releases, as the panels
+//! see them.
 //!
-//! `tauri-plugin-updater` does the work: it fetches `latest.json` from the endpoint in
+//! `tauri-plugin-updater` does the work: it fetches `latest.json` from an endpoint in
 //! `plugins.updater` (tauri.conf.json), compares versions by semver, downloads the bundle and
 //! verifies its minisign signature against the public key there, and swaps the installed app
 //! (macOS: the `.app`; Linux: the AppImage, or `dpkg` through `pkexec` for a `.deb`; Windows: the
@@ -8,6 +9,13 @@
 //! GitHub resolves to the newest *published, non-prerelease* release: pre-releases and the
 //! draft a tag creates are never offered. CI writes `latest.json`
 //! (`scripts/updater-artifacts.mjs`).
+//!
+//! The endpoints are asked one at a time, in order: first the mirror
+//! (`https://downloads.kimochiapp.com/app/latest.json`, whose bundle URLs are the mirror's copies
+//! of the release's, signatures unchanged), then GitHub. The first offer wins; when the mirror
+//! says "no update" or fails, GitHub is still asked, so a mirror that missed a release (CI's
+//! mirror step never fails a release) holds no one back. A bundle download that fails on the
+//! mirror is retried once from the same release on GitHub (`download_mirror::github_release_url`).
 //!
 //! This module keeps one `UpdateStatus` for every window, runs the periodic check, holds the
 //! downloaded bytes until the user asks for the restart, and wraps each step as a command. The
@@ -48,6 +56,8 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(20);
 /// Between automatic checks.
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+/// How long one endpoint may take to answer a check before the next is asked.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 /// The activity-ticker key, so a later post about updates replaces the earlier one.
 const ACTIVITY_KEY: &str = "update";
 
@@ -183,7 +193,7 @@ fn describe(error: tauri_plugin_updater::Error) -> String {
         Error::ReleaseNotFound => "No release information was found.".into(),
         Error::Reqwest(e) => {
             if e.is_connect() || e.is_timeout() || e.is_request() {
-                "Could not reach GitHub. Check your connection and try again.".into()
+                "Could not reach the update server. Check your connection and try again.".into()
             } else {
                 format!("Network error: {e}")
             }
@@ -207,8 +217,52 @@ impl Updates {
         let _ = self.app.emit(EVENT, self.status());
     }
 
-    /// The updater for one check. `KIMOCHI_UPDATE_ENDPOINT` replaces the configured endpoint.
-    fn updater(&self) -> Result<tauri_plugin_updater::Updater, String> {
+    /// The endpoints to ask, in order: `KIMOCHI_UPDATE_ENDPOINT` alone when set, else the
+    /// configured ones (the mirror, then GitHub).
+    fn endpoints(&self) -> Result<Vec<tauri::Url>, String> {
+        if let Ok(endpoint) = std::env::var("KIMOCHI_UPDATE_ENDPOINT") {
+            let url = endpoint.parse().map_err(|e| format!("KIMOCHI_UPDATE_ENDPOINT is not a URL: {e}"))?;
+            return Ok(vec![url]);
+        }
+        let config = self.app.config().plugins.0.get("updater").and_then(|c| c.get("endpoints")).cloned();
+        let endpoints: Vec<String> = config.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+        let endpoints: Vec<tauri::Url> = endpoints.iter().filter_map(|e| e.parse().ok()).collect();
+        if endpoints.is_empty() {
+            return Err("No update endpoint is configured.".into());
+        }
+        Ok(endpoints)
+    }
+
+    /// Ask each endpoint in turn ([module docs](self)): the first offer wins; "no update" from one
+    /// still asks the next; the result is "no update" if any endpoint answered, else the last error.
+    async fn check_endpoints(&self) -> Result<Option<Update>, String> {
+        let mut answered = false;
+        let mut error = None;
+        for endpoint in self.endpoints()? {
+            let host = endpoint.host_str().unwrap_or_default().to_string();
+            match self.updater(endpoint)?.check().await {
+                Ok(Some(update)) => return Ok(Some(update)),
+                Ok(None) => answered = true,
+                Err(e) => {
+                    let message = describe(e);
+                    (self.report)(json!({
+                        "check": "update-endpoint",
+                        "status": "failed",
+                        "endpoint": host,
+                        "detail": message,
+                    }));
+                    error = Some(message);
+                }
+            }
+        }
+        match (answered, error) {
+            (true, _) | (false, None) => Ok(None),
+            (false, Some(error)) => Err(error),
+        }
+    }
+
+    /// The updater for one check against one endpoint.
+    fn updater(&self, endpoint: tauri::Url) -> Result<tauri_plugin_updater::Updater, String> {
         let app = self.app.clone();
         let before_exit = self.before_exit;
         let mut builder = self.app.updater_builder().on_before_exit(move || {
@@ -216,10 +270,8 @@ impl Updates {
             before_exit();
             app.cleanup_before_exit();
         });
-        if let Ok(endpoint) = std::env::var("KIMOCHI_UPDATE_ENDPOINT") {
-            let url = endpoint.parse().map_err(|e| format!("KIMOCHI_UPDATE_ENDPOINT is not a URL: {e}"))?;
-            builder = builder.endpoints(vec![url]).map_err(describe)?;
-        }
+        // A check only; a mirror that does not answer must not hold up asking GitHub.
+        builder = builder.endpoints(vec![endpoint]).map_err(describe)?.timeout(CHECK_TIMEOUT);
         builder.build().map_err(describe)
     }
 
@@ -242,10 +294,7 @@ impl Updates {
         self.emit();
         let updates = self.clone();
         tauri::async_runtime::spawn(async move {
-            let result = match updates.updater() {
-                Ok(updater) => updater.check().await.map_err(describe),
-                Err(e) => Err(e),
-            };
+            let result = updates.check_endpoints().await;
             let announce = {
                 let mut inner = updates.inner.lock().unwrap_or_else(|p| p.into_inner());
                 // Something else moved the status on (a cancel, a dismiss) while the request
@@ -354,26 +403,23 @@ impl Updates {
         self.emit();
         let updates = self.clone();
         let handle = tauri::async_runtime::spawn(async move {
-            let mut received: u64 = 0;
-            let mut last = Instant::now();
-            let result = update
-                .download(
-                    |chunk, total| {
-                        received += chunk as u64;
-                        if last.elapsed() >= PROGRESS_INTERVAL {
-                            last = Instant::now();
-                            {
-                                let mut inner = updates.inner.lock().unwrap_or_else(|p| p.into_inner());
-                                let status = &mut inner.status;
-                                status.received_bytes = Some(received);
-                                status.total_bytes = total.or(status.size);
-                            }
-                            updates.emit();
-                        }
-                    },
-                    || {},
-                )
-                .await;
+            let mut result = updates.fetch_bundle(&update).await;
+            // The mirror's copy failed: the same file (same signature) from GitHub, once.
+            if let (Err(e), Some(github)) =
+                (&result, crate::download_mirror::github_release_url(update.download_url.as_str()))
+            {
+                (updates.report)(json!({
+                    "check": "update-download",
+                    "status": "fallback",
+                    "from": update.download_url.host_str(),
+                    "detail": e.to_string(),
+                }));
+                if let Ok(url) = github.parse() {
+                    let mut retry = update.clone();
+                    retry.download_url = url;
+                    result = updates.fetch_bundle(&retry).await;
+                }
+            }
             {
                 let mut inner = updates.inner.lock().unwrap_or_else(|p| p.into_inner());
                 inner.download = None;
@@ -415,6 +461,30 @@ impl Updates {
         });
         self.inner.lock().unwrap_or_else(|p| p.into_inner()).download = Some(handle);
         Ok(self.status())
+    }
+
+    /// Download one bundle, reporting progress (from zero) on the status.
+    async fn fetch_bundle(&self, update: &Update) -> Result<Vec<u8>, tauri_plugin_updater::Error> {
+        let mut received: u64 = 0;
+        let mut last = Instant::now();
+        update
+            .download(
+                |chunk, total| {
+                    received += chunk as u64;
+                    if last.elapsed() >= PROGRESS_INTERVAL {
+                        last = Instant::now();
+                        {
+                            let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+                            let status = &mut inner.status;
+                            status.received_bytes = Some(received);
+                            status.total_bytes = total.or(status.size);
+                        }
+                        self.emit();
+                    }
+                },
+                || {},
+            )
+            .await
     }
 
     /// Stop a download; the offer stays. A no-op in any other state.

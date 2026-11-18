@@ -8,8 +8,11 @@
  * windows, this one included; the hash route keeps it on this step, now showing the new engine.
  *
  * The action bar carries the step's next move: Download for the chosen engine when it is not yet
- * downloaded, Continue once it is ready (disabled while it downloads or switches), and Skip beside
- * it. Skipping is possible but explicit, behind a warning that nothing will look words up until an
+ * downloaded, else Continue, and Skip beside it. Continue does not wait for the download: native
+ * owns the pending switch (`bridge/dictionarySwitch.ts`), so the download carries on in the
+ * background while the rest of setup goes on, and the engine is switched to once it is ready
+ * (the next step, its setup, waits for it or can be passed). Continue is held only while a
+ * switch to a ready engine reloads this window. Skipping is possible but explicit, behind a warning that nothing will look words up until an
  * engine is chosen in Settings → Dictionary. Offline, the failure is shown with Retry, and another
  * engine can be picked instead.
  *
@@ -22,9 +25,11 @@ import { useNavigate } from 'react-router'
 import { Button, Callout, ConfirmDialog } from '@kit'
 import { DICTIONARY_ENGINES } from '../bridge/dictionaryEngine'
 import { useExtensionControls } from '../bridge/extensions'
+import { queueDictionarySwitch } from '../bridge/dictionarySwitch'
 import { downloadButtonLabel, downloadEngineFor } from '@ui/extension-download'
 import { DictionaryChooser } from '../panels/settings/DictionaryChooser'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
+import { PendingSwitchNote } from '../panels/settings/PendingSwitchNote'
 import Step from './Step'
 import { StepActions } from './StepActions'
 import { STEAM_ROUTE } from './steamRoute'
@@ -36,8 +41,19 @@ export const AFTER_SKIP = STEAM_ROUTE
 
 export default function EngineSetup(): JSX.Element {
   const navigate = useNavigate()
-  const { active, saved, chosen, pending, asking, confirmDownload, choose, reloading, waitingForImport, applyError } =
-    useDictionarySwitch('settings')
+  const {
+    active,
+    saved,
+    chosen,
+    pending,
+    asking,
+    confirmDownload,
+    keepCurrent,
+    choose,
+    reloading,
+    waitingForImport,
+    applyError
+  } = useDictionarySwitch('settings')
   // The panel's button already says "Download · 15 MB": that click is the answer.
   useEffect(() => {
     if (asking) confirmDownload()
@@ -47,7 +63,9 @@ export default function EngineSetup(): JSX.Element {
   const controls = useExtensionControls(downloadEngineFor(target))
   const status = controls.status
   const ready = status === null || status.state === 'ready'
-  const switching = reloading !== null || active !== saved || pending !== null
+  const switching = reloading !== null || active !== saved
+  // Under way (or paused, or failed): setup can go on while it finishes in the background.
+  const inBackground = status !== null && status.state !== 'ready' && status.state !== 'absent'
   const [askSkip, setAskSkip] = useState(false)
   const name = DICTIONARY_ENGINES[target].name
 
@@ -70,9 +88,13 @@ export default function EngineSetup(): JSX.Element {
           ) : null
         }
       />
-      {status?.state === 'failed' && (
-        <p className="k-description">Check your connection and press Retry, or choose another engine.</p>
-      )}
+      {status?.state === 'failed' ? (
+        <p className="k-description">
+          Check your connection and press Retry, or choose another engine. You can also continue and retry later.
+        </p>
+      ) : inBackground ? (
+        <PendingSwitchNote engine={target} saved={saved} onKeepCurrent={keepCurrent} />
+      ) : null}
       {controls.error && <Callout tone="danger">{controls.error}</Callout>}
 
       <StepActions>
@@ -80,11 +102,19 @@ export default function EngineSetup(): JSX.Element {
           Skip for now
         </Button>
         {status?.state === 'absent' ? (
-          <Button variant="primary" disabled={controls.pending !== null} onClick={() => controls.run('download')}>
+          <Button
+            variant="primary"
+            disabled={controls.pending !== null}
+            onClick={() => {
+              // As the pending switch, so it resumes after a quit and the main window shows it.
+              const needs = downloadEngineFor(target)
+              if (needs) queueDictionarySwitch(needs).catch(() => controls.run('download'))
+            }}
+          >
             {downloadButtonLabel(status)}
           </Button>
         ) : (
-          <Button variant="primary" disabled={!ready || switching} onClick={() => void navigate(AFTER_ENGINE)}>
+          <Button variant="primary" disabled={ready && switching} onClick={() => void navigate(AFTER_ENGINE)}>
             {ready && switching ? `Switching to ${name}…` : 'Continue'}
           </Button>
         )}

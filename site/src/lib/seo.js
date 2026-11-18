@@ -276,7 +276,7 @@ const APP = {
       description: 'One payment.'
     }
   ],
-  downloadUrl: 'https://github.com/hamstu/kimochi/releases/latest',
+  downloadUrl: `${SITE_URL}/#download`,
   sameAs: ['https://github.com/hamstu/kimochi']
   // Leave out softwareVersion and datePublished until there is a tagged release.
 }

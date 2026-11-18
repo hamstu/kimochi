@@ -14,10 +14,10 @@ name: CI
 #   builds bundles or publishes.
 #
 # Caches (all saved from `main` only, so pull requests read them without crowding them out):
-# node_modules per OS and lockfile, the engine downloads (extensions/), and each platform's Rust
-# dependencies, which every check crate shares through one target directory. Release bundles
-# start their Rust build cold: a tag can read main's caches, but main never builds the optimised
-# profile.
+# node_modules per OS and lockfile, the engine downloads (extensions/), Linux's apt packages
+# (refreshed weekly), and each platform's Rust dependencies, which every check crate shares through
+# one target directory. Release bundles start their Rust build cold: a tag can read main's caches,
+# but main never builds the optimised profile.
 
 on:
   pull_request:
@@ -221,7 +221,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.checks) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -235,19 +235,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # From a cache of the .debs and package lists (saved from main), so a slow Ubuntu mirror
+      # cannot hold the run up (.github/actions/linux-packages).
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: |
-          # Skip man-db's index rebuild, which apt otherwise runs after every install.
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get update -o Acquire::Retries=3
+        timeout-minutes: 20
+        uses: ./.github/actions/linux-packages
+        with:
+          save: ${{ github.ref == 'refs/heads/main' }}
           # pipewire-bin: /usr/share/pipewire/client.conf (scripts/linux-appimage.mjs).
           # libavif-dev: dictionary AVIF images (Jitendex), which WebKitGTK cannot decode.
-          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
-            libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev pipewire-bin \
-            libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio libavif-dev \
+          packages: >-
+            libwebkit2gtk-4.1-dev build-essential file libxdo-dev libssl-dev
+            libayatana-appindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev pipewire-bin
+            libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio libavif-dev
             libgtk-layer-shell0
 
       - uses: actions/setup-node@v4
@@ -265,26 +267,43 @@ jobs:
         run: |
           echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+      # Only src-tauri's entry names the shared target directory. Before saving, rust-cache prunes
+      # each entry's target down to that workspace's own dependencies, so naming the shared target
+      # once per crate kept only what every crate shares (vocr-core's few): every run rebuilt tauri
+      # and the rest from scratch. src-tauri depends on all the other check crates, and its
+      # dependencies cover theirs by name. The other entries still put their lockfiles in the key
+      # and their crates in the saved registry; their own target paths are never created.
       - uses: Swatinem/rust-cache@v2
         with:
           key: checks
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             src-tauri -> ../target
-            capture-core -> ../target
-            speech-core -> ../target
-            screenai -> ../target
-            vocr-core -> ../target
+            capture-core -> target
+            speech-core -> target
+            screenai -> target
+            vocr-core -> target
+            voicehook -> target
+            hookd -> target
+            oneocr-worker -> target
+            cli-launcher -> target
 
       # The engine trees (Yomitan, Hachidori, 10ten) the tests read are gitignored downloads of
       # the pinned releases (extensions/<id>.sha256.json); cached until a pin moves.
       - name: Restore engine downloads
-        uses: actions/cache@v4
+        id: extensions
+        uses: actions/cache/restore@v4
         with:
           path: extensions
           key: extensions-${{ hashFiles('extensions/*.json') }}
       - name: Fetch vendored extensions
         run: node scripts/sync-extension.mjs --all --if-missing
+      - name: Save engine downloads
+        if: steps.extensions.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: extensions
+          key: ${{ steps.extensions.outputs.cache-primary-key }}
 
       # node_modules whole when package-lock.json is unchanged (`npm ci` takes minutes on the
       # Windows ARM64 image); then only `prepare` runs, building dist/.
@@ -384,11 +403,13 @@ jobs:
         if: runner.os == 'Linux'
         run: echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
+      # The checks' packages and a few more, with recommends. Starts from main's cache of the
+      # checks' .debs and fails over from a slow mirror (.github/actions/linux-packages).
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo rm -f /var/lib/man-db/auto-update
-          sudo apt-get update -o Acquire::Retries=3
+        uses: ./.github/actions/linux-packages
+        with:
+          recommends: 'true'
           # pipewire-bin: /usr/share/pipewire/client.conf, which scripts/linux-appimage.mjs
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
@@ -396,12 +417,15 @@ jobs:
           # libgtk-layer-shell0: the AppImage bundles it so native Wayland overlays (Hyprland,
           # Sway, KDE) work without the user installing it.
           # xdg-utils: tauri's AppImage step runs xdg-mime, which the ARM64 image lacks.
-          sudo apt-get install -y -o Acquire::Retries=3 \
-            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev pipewire-bin \
-            libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio libavif-dev \
+          # MinGW (x64 only): Linux x64 ships the text hook helper too (Windows games under
+          # Proton/Wine), cross-built with it (scripts/prepare-hookd.mjs).
+          packages: >-
+            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev
+            libayatana-appindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev pipewire-bin
+            libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio libavif-dev
             libgtk-layer-shell0 xdg-utils
+            ${{ runner.arch == 'X64' && 'gcc-mingw-w64-x86-64 gcc-mingw-w64-i686' || '' }}
 
       - uses: actions/setup-node@v4
         with:
@@ -420,12 +444,10 @@ jobs:
         run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc i686-pc-windows-msvc
 
       # Linux x64 ships the text hook helper too (Windows games under Proton/Wine), cross-built
-      # with MinGW (scripts/prepare-hookd.mjs).
-      - name: Install text hook helper Rust targets and MinGW
+      # with MinGW (installed with the Linux dependencies above; scripts/prepare-hookd.mjs).
+      - name: Install text hook helper Rust targets
         if: runner.os == 'Linux' && runner.arch == 'X64'
-        run: |
-          rustup target add x86_64-pc-windows-gnu i686-pc-windows-gnu
-          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Retries=3 gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
+        run: rustup target add x86_64-pc-windows-gnu i686-pc-windows-gnu
 
       - name: Ensure ARM64 C++ tools for OneOCR helper
         if: runner.os == 'Windows'
@@ -672,6 +694,59 @@ jobs:
         run: |
           gh release edit "$RELEASE" --draft=false --latest
           echo "Published $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
+
+  # The published release copied to Kimochi's download mirror (downloads.kimochiapp.com, an R2
+  # bucket; DOWNLOADS_MIRROR.md), which installed apps ask first: every asset under
+  # `app/<tag>/`, then `app/latest.json` naming those copies (the signatures are unchanged), only
+  # once each one answers, and `app/release.json` (read by the website's download button and
+  # site/public/install.sh before GitHub's API). Strictly additive: it runs after the release is
+  # published, never fails the run (`continue-on-error`), and is skipped without the R2 secrets.
+  # The apps then simply find the update on GitHub, which they ask second. Re-run this job alone
+  # to retry.
+  mirror:
+    name: Copy the release to the download mirror
+    needs: [plan, manifest]
+    if: needs.plan.outputs.mode == 'release'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+    steps:
+      - name: Check for the R2 secrets
+        id: secrets
+        run: |
+          if [[ -n "$R2_ACCESS_KEY_ID" && -n "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY are not set; the release is not copied to the download mirror (DOWNLOADS_MIRROR.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Upload the release and its manifest
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE: ${{ needs.plan.outputs.release }}
+        run: |
+          set -euo pipefail
+          rm -rf ../mirror && mkdir -p ../mirror/assets
+          gh release download "$RELEASE" --dir ../mirror/assets
+          mv ../mirror/assets/latest.json ../mirror/github-latest.json
+          gh release view "$RELEASE" --json tagName,name,url,publishedAt > ../mirror/github-release.json
+          node scripts/updater-artifacts.mjs mirror --manifest ../mirror/github-latest.json \
+            --base "https://downloads.kimochiapp.com/app/$RELEASE" --out ../mirror/latest.json
+          node scripts/download-mirror.mjs release --backend s3 --tag "$RELEASE" \
+            --dir ../mirror/assets --manifest ../mirror/latest.json --github ../mirror/github-release.json
+          echo "Mirrored to https://downloads.kimochiapp.com/app/$RELEASE/" >> "$GITHUB_STEP_SUMMARY"
 
   # GITHUB_TOKEN publication does not trigger release-event workflows.
   announce:

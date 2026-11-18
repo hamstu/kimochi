@@ -22,8 +22,10 @@
  * downloaded asks first ("Download 10ten?"), starts the download and records a PENDING switch;
  * nothing is saved, so the engine in use is untouched while it downloads, and an offline failure
  * leaves everything as it was, with Retry. When the download is ready and the switch is still
- * pending, it is made exactly as above. If this page is closed meanwhile, the download finishes
- * in Rust and the engine simply offers "Use <name>" next time.
+ * pending, native makes it (saving the setting, then moving the windows as above): the switch is
+ * native's (`bridge/dictionarySwitch.ts`), so closing this page, finishing onboarding or quitting
+ * the app does not lose it, and the main window's sidebar shows its progress meanwhile. Until
+ * then the engine in use keeps working; "Keep using …" forgets the switch.
  */
 import { useState, type ReactNode } from 'react'
 import {
@@ -54,6 +56,7 @@ import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
 import { DictionaryChooser } from './DictionaryChooser'
 import { useDictionarySwitch } from './useDictionarySwitch'
+import { PendingSwitchNote } from './PendingSwitchNote'
 import { DictionaryReadiness } from '../../components/DictionaryReadiness'
 import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 
@@ -69,6 +72,8 @@ export function DictionaryTab(): ReactNode {
     dismissAsking,
     prompt,
     confirmDownload,
+    keepCurrent,
+    saved,
     choose,
     reloading,
     waitingForImport,
@@ -166,6 +171,8 @@ export function DictionaryTab(): ReactNode {
               <span role="status">Switching to {DICTIONARY_ENGINES[active].name}…</span>
             ) : reloading === 'others' ? (
               <span role="status">Reloading the reader windows…</span>
+            ) : pending && pending !== active ? (
+              <PendingSwitchNote engine={pending} saved={saved} onKeepCurrent={keepCurrent} />
             ) : switchedTo && switchedTo === active ? (
               <Callout tone="ok" className="dictionary-chooser-switched">
                 Now using {DICTIONARY_ENGINES[switchedTo].name}.

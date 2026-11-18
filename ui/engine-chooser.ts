@@ -65,3 +65,32 @@ export function dictionaryUseAction(state: {
   if (state.download === null || state.download === 'ready') return 'use'
   return state.download === 'absent' ? 'download' : 'resume'
 }
+
+/**
+ * The line under the dictionary chooser while a switch waits for its download ("Use when
+ * downloaded"): the download goes on in the background and the switch is made once it is ready,
+ * whatever page is open. `current` is the engine looking words up meanwhile (null when there is
+ * none yet, as on a first run).
+ */
+export function pendingSwitchLine(name: string, current: string | null): string {
+  return current
+    ? `${name} keeps downloading in the background, and Kimochi switches to it once it’s ready. ${current} looks words up until then.`
+    : `${name} keeps downloading in the background, and Kimochi starts using it once it’s ready. You can carry on meanwhile.`
+}
+
+/**
+ * What the main window's sidebar says about a switch waiting for its download, besides its
+ * progress in the dictionary picker: a download that stopped needs the reader (Retry, Resume);
+ * one under way needs nothing. Null when there is nothing to say.
+ */
+export interface PendingSwitchNotice {
+  tone: 'warn' | 'danger'
+  text: string
+  action: 'retry' | 'resume'
+}
+
+export function pendingSwitchNotice(name: string, download: string | null): PendingSwitchNotice | null {
+  if (download === 'failed') return { tone: 'danger', text: `${name} download failed.`, action: 'retry' }
+  if (download === 'paused') return { tone: 'warn', text: `${name} download paused.`, action: 'resume' }
+  return null
+}

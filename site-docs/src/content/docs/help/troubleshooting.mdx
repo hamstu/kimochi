@@ -154,8 +154,10 @@ See [Anki](/lookups/anki/#the-ankiconnect-connection).
 - **The AppImage won't start**: install FUSE 3 (`sudo apt install fuse3`, `sudo dnf install fuse3`,
   `sudo pacman -S fuse3`, `sudo zypper install fuse3`), or use the one-line installer, which sets
   Kimochi up to run without it. See [Install on Linux](/install/linux/#if-kimochi-wont-start).
-- **"GitHub's download limit was reached"** from the installer: wait a few minutes, or download the
-  AppImage yourself and run the installer with `--appimage <file>`.
+- **"GitHub's download limit was reached"** from the installer: the installer downloads from
+  Kimochi's own server (downloads.kimochiapp.com) and asks GitHub only when that fails, so this
+  is rare. Wait a few minutes, or download the AppImage yourself and run the installer with
+  `--appimage <file>`.
 - **Dictionary audio is silent**: Kimochi plays audio through GStreamer and needs its base, good and
   bad plugins (the .deb installs them; with the AppImage, install them from your distribution).
 

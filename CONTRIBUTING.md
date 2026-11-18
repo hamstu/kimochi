@@ -92,6 +92,14 @@ fits) and `npm run test:engines`, which runs each engine in headless Chrome agai
 JMdict excerpt (`$KIMOCHI_YOMITAN_DICTS`, default `../yomitan-dicts`) and checks the lookups, the
 pop-up placement and the misses. Both must pass before the new pin ships.
 
+**Downloads and the mirror.** Every file the app downloads at runtime is pinned by SHA-256
+(`extensions/<id>.source.json`, `src-tauri/ocr-models.json`, `src-tauri/texthook-manifest.json`,
+the Yomitan API helper in `src-tauri/src/reader/yomitan_install.rs`). The app asks Kimochi's mirror,
+`downloads.kimochiapp.com`, first and falls back to the upstream URL in the pin
+(`src-tauri/src/download_mirror.rs`); both must match the pin. When a pin moves on `main`, the
+`Download mirror` workflow copies the new file there (`scripts/download-mirror.mjs`), so a pull
+request only changes the pin. `KIMOCHI_DOWNLOAD_MIRROR=off` skips the mirror; a URL replaces it.
+
 **Changelog.** If a user would notice your change, add a `- ` line under `## [Unreleased]` in
 [CHANGELOG.md](CHANGELOG.md), written for the person using the app. These lines become the
 release notes and the app's "What's new". Refactors, CI and tests don't need one.

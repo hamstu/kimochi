@@ -123,9 +123,17 @@ const timers = new Map<ExtensionEngine, ReturnType<typeof setInterval>>()
 const failAt = new Map<ExtensionEngine, number>()
 const FAILURE = 'network error: error sending request for url (https://github.com/…)'
 
+const watchers = new Set<(status: ExtensionStatus) => void>()
+
+/** Hears every download's change, as native's store `on_change` does (the pending switch's mock). */
+export function watchExtensions(watcher: (status: ExtensionStatus) => void): void {
+  watchers.add(watcher)
+}
+
 function publish(next: ExtensionStatus): ExtensionStatus {
   states.set(next.engine, next)
   void emit('extension-download', next)
+  for (const watcher of watchers) watcher(next)
   return next
 }
 

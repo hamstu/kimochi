@@ -1852,8 +1852,37 @@ installed (unless `KIMOCHI_EXTENSIONS_NO_DEV_TREE` is set). No component of the 
 link, and each file is hashed against the map the first time it is served in a session
 (`{check: 'extension-file-refused', engine, file, reason}` when not).
 
-**When the windows move.** Settings → Dictionary and onboarding download first and switch
-(`dictionary_engine_apply`) only once the engine is ready. A download finishing, or an engine
+**A switch that waits for its download** ("Use when downloaded"; `src-tauri/src/dictionary_switch.rs`).
+Choosing an engine that is not downloaded makes it the *pending* switch, which native owns, so it
+outlives the page it was chosen on, onboarding, and a restart:
+
+| Command | Signature |
+| --- | --- |
+| `dictionary_switch_queue` | `({engine: 'yomitan' \| 'hachidori' \| 'tenten' \| null}) -> DictionarySwitchState` — records `engine` as pending and starts (resumes, retries) its download; one already ready is switched to at once. `null` forgets the pending switch and leaves its download running. Refused (`invalid:`) for an engine that cannot read the language being learned |
+| `dictionary_switch_state` | `() -> DictionarySwitchState` |
+
+```ts
+DictionarySwitchState = {
+  pending: 'yomitan' | 'hachidori' | 'tenten' | null,   // the setting `dictionaryEnginePending`
+  switched: { engine, at } | null                       // the last switch native made this session (epoch ms)
+}
+```
+
+The pending engine is the machine setting `dictionaryEnginePending` (never synced), so every
+window follows it through `settings:changed`. One waits at a time; choosing again replaces it
+(the earlier engine's download carries on and is then offered as "Use <name>"), and choosing an
+engine that is ready clears it. When the pending engine's download becomes ready, native saves
+`yomitanSettings.popupType`, clears the setting, emits `dictionary-switch` `{engine, popupType,
+at}` (the main window records its view so the reload brings it back there), posts "<name>
+downloaded. Now using it to look words up" (key `dictionary-switch`), and moves the windows as
+below. The download going back to `absent` (cancelled, removed) drops the switch. At launch a
+pending switch's download carries on (paused), starts again (failed, or its partial file gone), or
+the switch is made (it finished just before the quit); `dictionary-engine-startup` reports it as
+`pending`. Every decision is recorded as `{check: 'dictionary-switch', engine, when, download,
+step}`.
+
+**When the windows move.** Settings → Dictionary and onboarding switch (`dictionary_engine_apply`)
+to an engine that is ready; one that is not becomes the pending switch above. A download finishing, or an engine
 being removed, that changes the effective engine (the engine the setting already names became
 usable, or the one in use went away) makes native write the mirror and reload the windows once
 (`{check: 'dictionary-engine-follow', from, engine}`). At launch, when setup is complete and
@@ -2285,14 +2314,20 @@ it in a Wine game's prefix to learn the game's id there.
 
 ## App updates
 
-Kimochi updates itself from the project's GitHub Releases through `tauri-plugin-updater`
-(`src-tauri/src/updater.rs`). The endpoint, `plugins.updater.endpoints` in `tauri.conf.json`, is
-the *latest* release's `latest.json`, which GitHub resolves to the newest published,
-non-prerelease release: pre-releases and the draft a `v*` tag creates are
-never offered, so only a release someone published by hand is. CI signs each platform's bundle
-with the minisign key whose public half is `plugins.updater.pubkey`, and composes `latest.json`
-(`scripts/updater-artifacts.mjs`, the `manifest` job in `ci.yml`); the app verifies the
-signature before anything is installed. The user starts every download and every restart.
+Kimochi updates itself from its download mirror and the project's GitHub Releases through
+`tauri-plugin-updater` (`src-tauri/src/updater.rs`). `plugins.updater.endpoints` in
+`tauri.conf.json` lists two manifests, asked one at a time: the mirror's
+`https://downloads.kimochiapp.com/app/latest.json` (whose bundle URLs are the mirror's copies,
+`app/v<version>/<file>`), then the *latest* GitHub release's `latest.json`, which GitHub resolves
+to the newest published, non-prerelease release: pre-releases and the draft a `v*` tag creates are
+never offered, so only a release someone published by hand is. The first offer wins; "no update"
+or a failure from the mirror still asks GitHub. A bundle download that fails on the mirror is
+retried once from the same GitHub release. CI signs each platform's bundle with the minisign key
+whose public half is `plugins.updater.pubkey`, composes `latest.json`
+(`scripts/updater-artifacts.mjs`, the `manifest` job in `ci.yml`) and, once the release is
+published, copies it to the mirror (the `mirror` job, which never fails a release); the app
+verifies the signature before anything is installed, wherever the bundle came from. The user starts
+every download and every restart.
 
 Every command answers with the `UpdateStatus` after acting:
 

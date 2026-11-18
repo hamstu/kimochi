@@ -121,9 +121,14 @@ sets `data-theme` on `<html>`. `index.html` applies it before first paint.
 fixed URL (favicon, robots.txt, a future `og.png`) go in `public/`. Give images explicit `width`
 / `height`, `alt`, and `loading="lazy"` below the fold.
 
-**Downloads.** `<DownloadButton align?="start|center" showAll?={true} className? />` fetches
-`https://api.github.com/repos/hamstu/kimochi/releases/latest` (unauthenticated, cached in
-sessionStorage for 10 minutes). It detects the OS and CPU (User-Agent Client Hints
+**Downloads.** `<DownloadButton align?="start|center" showAll?={true} className? />` fetches the
+newest release from the download mirror, `https://downloads.kimochiapp.com/app/release.json`
+(GitHub's release-document shape with the mirror's URLs; CI's `mirror` job writes it once a release
+is published and copied), and falls back to
+`https://api.github.com/repos/hamstu/kimochi/releases/latest` (unauthenticated) when the mirror
+does not answer; either is cached in sessionStorage for 10 minutes. The Linux installer
+(`public/install.sh`) reads the same document first and retries a failed mirror download from the
+same GitHub release. It detects the OS and CPU (User-Agent Client Hints
 `getHighEntropyValues(['architecture', 'bitness'])` in Chromium, else user-agent heuristics;
 Safari on a Mac is assumed Apple silicon), and picks an installer with `pickAsset(assets,
 platform)` from `src/lib/assets.js`. Asset names are tauri's (`Kimochi_<ver>_aarch64.app.zip`,
@@ -132,8 +137,8 @@ an `-arch` suffix before the extension marks the Arch Linux build). Preference: 
 `.app.zip`; Windows `-setup.exe` then `.msi`; Linux `.AppImage` then `.deb` then `.rpm`, with
 every generic build before the `-arch` one. It shows the version, platform and size, plus an
 "Other platforms" disclosure. On a rate limit, network error, no published build, a phone, or no build for the platform, it links to
-https://github.com/hamstu/kimochi/releases instead. The API only answers for a public
-repository; drafts are invisible to it.
+https://github.com/hamstu/kimochi/releases instead. Neither the mirror nor the API ever offers a
+draft.
 
 **Linux install guide.** On Linux the button goes to `/download/linux` (`pages/DownloadLinux.tsx`)
 instead of a file, because the right install depends on the system; the chevron menu still lists

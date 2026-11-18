@@ -4,7 +4,7 @@
 //! `extensions/<id>.source.json` (asset URL, SHA-256, size) and `extensions/<id>.sha256.json`
 //! (every file of the unpacked release and its SHA-256), both compiled in here. When the user
 //! chooses an engine the release zip is downloaded with the OCR models' resumable transfer
-//! (`model_store::download_file`), checked against the pinned hash, unpacked with the same rules
+//! (`download_mirror::download_file`: the mirror, then upstream), checked against the pinned hash, unpacked with the same rules
 //! as `scripts/sync-extension.mjs`, and every file is checked against the pinned map before the
 //! tree is moved into place. See EXTENSION_DOWNLOADS.md.
 //!
@@ -50,8 +50,8 @@
 //! the user; the earlier release stays in use throughout. Nothing is ever downloaded for an
 //! engine the user never downloaded, or removed.
 use crate::model_store::{
-    self, download_file, percent, remove_dir, sha256_file, Fetch, HttpFetch, ModelFile, Phase, Progress, Stop, CANCEL,
-    PAUSE, PROGRESS_INTERVAL, RUN,
+    self, percent, remove_dir, sha256_file, Fetch, HttpFetch, ModelFile, Phase, Progress, Stop, CANCEL, PAUSE,
+    PROGRESS_INTERVAL, RUN,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -991,7 +991,7 @@ impl ExtensionStore {
                     self.set_phase(id, phase, transition);
                 }
             };
-            download_file(self.fetch.as_ref(), &dir, &file, control, &mut progress)?;
+            crate::download_mirror::download_file(self.fetch.as_ref(), &dir, &file, control, &mut progress)?;
         }
         self.set_phase(id, Phase::Verifying { file: "unpacking".into(), overall_received: size }, true);
         self.install(engine, &zip, control)

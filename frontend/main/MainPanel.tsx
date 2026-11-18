@@ -38,7 +38,8 @@ import { settingsTabOf } from '../panels/settings/settingsNav'
 import { useController } from '../panels/useController'
 import { ViewTabs } from './ViewTabs'
 import { LogActionsProvider } from './LogActionsProvider'
-import { engineSwitchRecord, registerMainRoute } from './engineSwitch'
+import { engineSwitchRecord, registerMainRoute, rememberEngineSwitch } from './engineSwitch'
+import { SWITCH_EVENT } from '../bridge/dictionarySwitch'
 import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
 import { WhatsNewDialog } from './WhatsNewDialog'
 import { MoveToApplicationsDialog } from '../components/MoveToApplicationsDialog'
@@ -189,12 +190,31 @@ export default function MainPanel(): JSX.Element {
 
   // A switch of dictionary engine reloads this window; it records where Settings was first.
   const tabNow = useRef(settingsTab)
+  const viewNow = useRef(view)
   useEffect(() => {
     tabNow.current = settingsTab
-  }, [settingsTab])
+    viewNow.current = view
+  }, [settingsTab, view])
+  // One native makes once a download is ready ("Use when downloaded") is announced just before
+  // the reload: this window comes back on the view it is on.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null
+    let alive = true
+    listen<{ engine?: unknown }>(SWITCH_EVENT, ({ payload }) => {
+      const engine = payload?.engine
+      if (engine === 'yomitan' || engine === 'hachidori' || engine === 'tenten') rememberEngineSwitch(engine, 'here')
+    })
+      .then((stop) => (alive ? (unlisten = stop) : stop()))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+      unlisten?.()
+    }
+  }, [])
   useEffect(
     () =>
       registerMainRoute(() => ({
+        view: viewNow.current,
         tab: tabNow.current,
         back: lastView.current,
         scrollTop: settingsScroll.current?.scrollTop ?? 0

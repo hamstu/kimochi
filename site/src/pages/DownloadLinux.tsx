@@ -220,8 +220,8 @@ const inlineLink =
 
 /**
  * A download button for the release's .deb or AppImage for the visitor's CPU, with the other
- * architecture one link away. Without a release (none published yet, GitHub unreachable or rate
- * limited) it goes to the releases page.
+ * architecture one link away. Without a release (none published yet, the mirror and GitHub
+ * unreachable or rate limited) it goes to the releases page.
  */
 function FileDownload({
   release,

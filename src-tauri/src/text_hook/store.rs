@@ -3,7 +3,7 @@
 //!
 //! `src-tauri/texthook-manifest.json` (written by `scripts/texthook-package.mjs`, compiled in
 //! here) pins each engine to one upstream release: every file's name, size and SHA-256, and the
-//! places it can come from, tried in order. A source is either a plain file (our mirror) or an
+//! places it can come from, our mirror first. A source is either a plain file (our mirror) or an
 //! entry of an upstream release zip on GitHub; a zip entry is read with HTTP range requests (the
 //! zip's directory, then that entry's bytes), so only a few megabytes of a large release are
 //! fetched. Whatever the source, the file must have the manifest's size and SHA-256.
@@ -278,7 +278,13 @@ fn zip_entry(fetch: &dyn Fetch, url: &str, entry: &str, expected_size: u64) -> R
 /// Fetches one manifest file from the first source that yields the right bytes.
 pub fn fetch_file(fetch: &dyn Fetch, file: &File) -> Result<Vec<u8>, String> {
     let mut errors = Vec::new();
-    for source in &file.sources {
+    // Our mirror first, then the upstream release (`download_mirror`).
+    let sources = crate::download_mirror::order(
+        &file.sources,
+        |s| s.url.as_str(),
+        |s, url| Source { url, zip_entry: s.zip_entry.clone() },
+    );
+    for source in &sources {
         let result = match &source.zip_entry {
             Some(entry) => zip_entry(fetch, &source.url, entry, file.size),
             None => fetch.get(&source.url, None),

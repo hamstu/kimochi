@@ -1,0 +1,92 @@
+name: Download mirror
+
+# Keeps Kimochi's download mirror (https://downloads.kimochiapp.com, the R2 bucket
+# `kimochi-downloads`; DOWNLOADS_MIRROR.md) in step with the pins. Whenever a pin changes on main,
+# and on a manual run, `scripts/download-mirror.mjs sync` downloads every pinned file the mirror
+# lacks from upstream (main's pins and those of every release tagged in the last KEEP_MONTHS
+# months), checks it against its pinned SHA-256, uploads it under an immutable path and records it
+# in the bucket's ledger. The app asks the mirror first and falls back to upstream, so a run that
+# has not happened yet (or failed) costs users nothing but the fallback.
+#
+# Retention: a mirrored file is deleted only when it is pinned neither by main nor by a release of
+# the last KEEP_MONTHS months, is not among its artifact's KEEP_VERSIONS most recent versions, and
+# was last referenced more than KEEP_MONTHS months ago. Set the repository variables
+# MIRROR_KEEP_VERSIONS / MIRROR_KEEP_MONTHS to change the defaults (5 and 12), or the inputs for one
+# manual run.
+#
+# Needs the R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets (an R2 API token with Object Read &
+# Write on the bucket); without them the run says so and stops.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/*.source.json'
+      - 'src-tauri/ocr-models.json'
+      - 'src-tauri/texthook-manifest.json'
+      - 'src-tauri/src/reader/yomitan_install.rs'
+      - 'scripts/download-mirror.mjs'
+      - '.github/workflows/download-mirror.yml'
+  workflow_dispatch:
+    inputs:
+      prune:
+        description: Delete what the retention policy no longer keeps
+        type: boolean
+        default: true
+      keep_versions:
+        description: Versions kept per artifact (blank for the default)
+        type: string
+        default: ''
+      keep_months:
+        description: Months a release's pins (and anything referenced) are kept (blank for the default)
+        type: string
+        default: ''
+
+# One sync at a time; a newer one waits rather than racing the ledger.
+concurrency:
+  group: download-mirror
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync pinned downloads
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      MIRROR_KEEP_VERSIONS: ${{ inputs.keep_versions || vars.MIRROR_KEEP_VERSIONS || '5' }}
+      MIRROR_KEEP_MONTHS: ${{ inputs.keep_months || vars.MIRROR_KEEP_MONTHS || '12' }}
+      # A push prunes too; a manual run can turn it off.
+      PRUNE: ${{ github.event_name == 'push' || inputs.prune }}
+    steps:
+      - name: Check for the R2 secrets
+        run: |
+          if [[ -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo "::error::R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY are not set (DOWNLOADS_MIRROR.md → Secrets)."
+            exit 1
+          fi
+      # Every release tag, to mirror what recent releases pin.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Node built-ins and the AWS CLI (preinstalled on GitHub's Ubuntu images) only: no npm ci.
+      - name: Sync
+        run: |
+          set -euo pipefail
+          prune=()
+          if [[ "$PRUNE" == true ]]; then prune=(--prune); fi
+          node scripts/download-mirror.mjs sync --backend s3 "${prune[@]}" | tee ../sync.log
+          {
+            echo '### Download mirror'
+            echo '```'
+            tail -n 5 ../sync.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

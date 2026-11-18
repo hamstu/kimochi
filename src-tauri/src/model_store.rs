@@ -948,7 +948,7 @@ impl ModelStore {
                     self.set_phase(engine, phase, transition);
                 }
             };
-            download_file(self.fetch.as_ref(), &dir, file, control, &mut progress)?;
+            crate::download_mirror::download_file(self.fetch.as_ref(), &dir, file, control, &mut progress)?;
             if file.unpack {
                 unpack(&dir, file)?;
             }

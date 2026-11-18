@@ -13,9 +13,37 @@ export const RECOMMENDED_DICTIONARIES = [
     title: 'Jitendex',
     titlePrefix: 'Jitendex.org',
     description: 'Japanese–English definitions.',
-    url: 'https://github.com/stephenmk/stephenmk.github.io/releases/latest/download/jitendex-yomitan.zip'
+    url: 'https://github.com/stephenmk/stephenmk.github.io/releases/latest/download/jitendex-yomitan.zip',
+    // Kimochi's copy of the same latest release, asked first (DOWNLOADS_MIRROR.md); `url` is the
+    // fallback when the mirror fails or answers anything but 200.
+    mirror: 'https://downloads.kimochiapp.com/data/jitendex/latest/jitendex-yomitan.zip'
   }
 ]
+
+/**
+ * The first good response among a dictionary's sources (its mirror, then upstream). A source that
+ * throws or answers anything but 2xx is logged and the next one asked; the last one's answer (or
+ * error) is what the caller sees.
+ */
+export async function fetchFromSources(fetchArchive, recommended, warn = console.warn) {
+  const sources = [recommended.mirror, recommended.url].filter(Boolean)
+  for (const [i, url] of sources.entries()) {
+    const last = i === sources.length - 1
+    try {
+      const response = await fetchArchive(url)
+      if (response.ok || last) return response
+      warn(
+        `[kimochi] ${recommended.title}: ${new URL(url).host} answered HTTP ${response.status}; trying the next source`
+      )
+    } catch (error) {
+      if (last) throw error
+      warn(
+        `[kimochi] ${recommended.title}: ${new URL(url).host} failed (${error?.message ?? error}); trying the next source`
+      )
+    }
+  }
+  throw Error(`${recommended.title} has no download source`)
+}
 
 export function createDictionarySetup({
   api,
@@ -42,7 +70,7 @@ export function createDictionarySetup({
             `An incomplete ${recommended.title} import already exists. Remove it in dictionary settings, then retry.`
           )
         job.stage = 'downloading'
-        const response = await fetchArchive(recommended.url)
+        const response = await fetchFromSources(fetchArchive, recommended)
         if (!response.ok) throw Error(`Dictionary download returned HTTP ${response.status}`)
         job.stage = 'importing'
         const imported = await importArchive(await response.arrayBuffer(), (progress) => {

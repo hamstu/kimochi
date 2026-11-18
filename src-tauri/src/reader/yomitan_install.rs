@@ -86,22 +86,41 @@ fn asset_name() -> Result<String, String> {
     Ok(format!("yomitan-host-{}-{}{}", os_name, arch_name, ext))
 }
 
+/// From Kimochi's mirror first, then GitHub (`download_mirror`); either must match the pin.
 async fn download(asset: &str) -> Result<Vec<u8>, String> {
     let url = format!("{RELEASE_URL}/{HOST_VERSION}/{asset}");
+    let Some(expected) = pinned_sha256(asset) else {
+        return Err(format!("Kimochi has no {HOST_VERSION} helper for this computer ({asset})."));
+    };
     let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-    let response = client.get(&url).send().await.map_err(|e| format!("Download failed: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!("Download failed with status: {}", response.status()));
+    let mut error = String::new();
+    for source in crate::download_mirror::sources(&url, expected) {
+        let attempt = async {
+            let response = client.get(&source).send().await.map_err(|e| format!("Download failed: {}", e))?;
+            if !response.status().is_success() {
+                return Err(format!("Download failed with status: {}", response.status()));
+            }
+            let bytes = response.bytes().await.map_err(|e| format!("Failed to read download: {}", e))?;
+            if sha256_hex(&bytes) != expected {
+                return Err(format!(
+                    "The downloaded helper ({asset}) is not the {HOST_VERSION} release Kimochi expects."
+                ));
+            }
+            Ok(bytes.to_vec())
+        };
+        match attempt.await {
+            Ok(bytes) => return Ok(bytes),
+            Err(e) => {
+                eprintln!("kimochi: Yomitan API helper from {}: {e}", crate::download_mirror::host_of(&source));
+                error = e;
+            }
+        }
     }
-    let bytes = response.bytes().await.map_err(|e| format!("Failed to read download: {}", e))?;
-    match pinned_sha256(asset) {
-        Some(expected) if sha256_hex(&bytes) == expected => Ok(bytes.to_vec()),
-        Some(_) => Err(format!("The downloaded helper ({asset}) is not the {HOST_VERSION} release Kimochi expects.")),
-        None => Err(format!("Kimochi has no {HOST_VERSION} helper for this computer ({asset}).")),
-    }
+    Err(error)
 }
 
 /// A native-messaging manifest for `host`: Chromium browsers allow origins, Firefox extension ids.
