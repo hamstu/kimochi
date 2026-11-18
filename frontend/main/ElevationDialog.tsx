@@ -55,7 +55,6 @@ export function ElevationDialog(): React.JSX.Element | null {
   }, [windows])
 
   if (!windows || !status) return null
-  const game = status.name || status.app || 'This game'
 
   const close = async (): Promise<void> => {
     setOpen(false)
@@ -85,18 +84,15 @@ export function ElevationDialog(): React.JSX.Element | null {
       onOpenChange={(next) => {
         if (!next) void close()
       }}
-      title={`${game} runs as administrator`}
+      title="Kimochi needs to run as administrator"
       description={
         <>
           <span className="elevation-copy">
-            While it’s in front, Windows hides your keyboard from apps that aren’t, so holding Shift won’t look up its
-            text and Kimochi may miss its shortcuts. Restart Kimochi as administrator to read it normally; Windows will
-            ask for permission.
+            The source you selected runs as administrator, so some Kimochi features won’t work until Kimochi does too.
           </span>
           {declined && (
             <span className="elevation-copy elevation-declined">
-              Windows didn’t give permission. Try again, or turn off “Click through text to the game” to look up words
-              without Shift.
+              Windows didn’t give permission. Try again, or choose another source.
             </span>
           )}
           {status.app && (
