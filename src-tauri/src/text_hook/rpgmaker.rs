@@ -28,8 +28,8 @@ fn parse(text: &str) -> Vec<String> {
     actors.iter().map(|a| a["name"].as_str().unwrap_or_default().to_string()).collect()
 }
 
-/// `text` with each actor code (`\N[2]`, and a speaker's tag `<\N[1]>`) as the actor's name, where
-/// `names` has it; other codes are left to `clean`.
+/// `text` with each actor code in a line (`\N[2]`) as the actor's name, where `names` has it; a
+/// speaker's tag (`<\N[1]>`) and other codes are left to `clean`.
 pub fn with_names(text: &str, names: &[String]) -> String {
     static CODE: OnceLock<Regex> = OnceLock::new();
     if names.is_empty() || !text.contains('\\') {
@@ -39,8 +39,9 @@ pub fn with_names(text: &str, names: &[String]) -> String {
     code.replace_all(text, |caps: &Captures| {
         let name = caps[2].parse::<usize>().ok().and_then(|n| names.get(n)).filter(|n| !n.is_empty());
         match name {
-            // A speaker's tag is the name alone, as the game's name box shows it.
-            Some(name) if caps.get(1).is_some() && caps.get(3).is_some() => name.clone(),
+            // A speaker's tag is left for `clean` to take out: the game shows it in a name box of
+            // its own, and as the line's first row the card would no longer match the text box.
+            Some(_) if caps.get(1).is_some() && caps.get(3).is_some() => caps[0].to_string(),
             Some(name) => {
                 format!("{}{name}{}", caps.get(1).map_or("", |m| m.as_str()), caps.get(3).map_or("", |m| m.as_str()))
             }
@@ -63,7 +64,7 @@ mod tests {
         assert_eq!(names(), vec!["", "アリス", "ボブ", ""]);
         assert_eq!(
             with_names("<\\n[1]>\n「おやすみなさい、\\N[2]様」", &names()),
-            "アリス\n「おやすみなさい、ボブ様」"
+            "<\\n[1]>\n「おやすみなさい、ボブ様」"
         );
         // An actor with no name, or none at that id, is left for the codes to be taken out.
         assert_eq!(with_names("\\N[3]と\\N[9]", &names()), "\\N[3]と\\N[9]");
