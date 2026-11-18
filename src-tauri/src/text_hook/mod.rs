@@ -1216,7 +1216,11 @@ fn witness_check(hook: &'static Hook, generation: u64) {
         let mut session = hook.lock();
         let chosen = session.selected.clone().and_then(|key| {
             let thread = session.threads.iter().find(|t| t.key == key)?;
-            Some((key, thread.count, thread.text.clone()))
+            // The line the chosen thread last showed, its rows joined: its own last piece can be
+            // the line's last row alone (SiglusEngine sends a row at a time), `」`, which no screen
+            // shows on its own, and the line went to another thread that had it whole.
+            let shown = session.last_line.clone().filter(|_| session.last_key.as_deref() == Some(key.as_str()));
+            Some((key.clone(), thread.count, shown.unwrap_or_else(|| thread.text.clone())))
         });
         match chosen {
             Some(chosen) if session.generation == generation => {
