@@ -419,7 +419,11 @@ pub unsafe extern "C" fn voicehook_emit(meta: *const c_char, data: *const u8, le
             return;
         }
         if op == "error" {
-            log(&format!("renpy: {} patch failed: {}", meta["where"].as_str().unwrap_or("?"), meta["error"].as_str().unwrap_or("")));
+            log(&format!(
+                "renpy: {} patch failed: {}",
+                meta["where"].as_str().unwrap_or("?"),
+                meta["error"].as_str().unwrap_or("")
+            ));
             return;
         }
         if op == "text_installed" {
