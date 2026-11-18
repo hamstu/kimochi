@@ -395,9 +395,10 @@ export function createHookCard(parent, hooks) {
   }
 
   /**
-   * Where the ink of the first row of `value` falls in the text box, as the card draws it at
-   * `fontPx` with `lineHeight`: its left and right edges from the box's left (`left` is its first
-   * glyph's side bearing; a 「 sits well inside its em), and its top and height from the box's top.
+   * Where the ink of `value` falls in the text box, as the card draws it at `fontPx` with
+   * `lineHeight`: the left and right edges of all its rows' ink from the box's left (`left` is the
+   * first glyphs' side bearing; a 「 sits well inside its em), and its first row's top and height
+   * from the box's top.
    * The baseline is where layout puts it, read from a hidden copy of the text's style (`probe`:
    * layout rounds the font's ascent, descent and leading its own way); the glyphs' ink around it
    * is measured on a canvas in the same font, large and scaled down, as a canvas gives ink bounds
@@ -428,7 +429,7 @@ export function createHookCard(parent, hooks) {
       .filter((row) => row.trim())
     if (!rows.length || !(fontPx > 0)) return null
     const style = getComputedStyle(text)
-    const key = `${style.fontStyle} ${style.fontWeight} ${fontPx}px ${style.fontFamily}|${lineHeight}|${text.lang}|${rows[0]}`
+    const key = `${style.fontStyle} ${style.fontWeight} ${fontPx}px ${style.fontFamily}|${lineHeight}|${text.lang}|${rows.join('\n')}`
     if (inkCache.has(key)) return inkCache.get(key)
     inkCanvas ??= document.createElement('canvas')
     const context = inkCanvas.getContext('2d')
@@ -441,11 +442,19 @@ export function createHookCard(parent, hooks) {
       context.font = `${style.fontStyle} ${style.fontWeight} ${fontPx * scale}px ${style.fontFamily}`
       const m = context.measureText(rows[0])
       const baseline = baselineOf(fontPx, lineHeight, rows[0])
-      const numbers = [baseline, ...['Left', 'Right', 'Ascent', 'Descent'].map((k) => m[`actualBoundingBox${k}`])]
+      // Across, every row's ink: the rows start at the box's left, and the widest decides the
+      // right edge. Not the first row's alone, which is often the shortest (「そうか。」 over a
+      // long second row), and centring it on OCR's box put it half the difference to the right.
+      const across = rows.map((row) => context.measureText(row))
+      const numbers = [
+        baseline,
+        ...['Ascent', 'Descent'].map((k) => m[`actualBoundingBox${k}`]),
+        ...across.flatMap((row) => [row.actualBoundingBoxLeft, row.actualBoundingBoxRight])
+      ]
       if (numbers.every(Number.isFinite)) {
         found = {
-          left: -m.actualBoundingBoxLeft / scale,
-          right: m.actualBoundingBoxRight / scale,
+          left: Math.min(...across.map((row) => -row.actualBoundingBoxLeft)) / scale,
+          right: Math.max(...across.map((row) => row.actualBoundingBoxRight)) / scale,
           top: baseline - m.actualBoundingBoxAscent / scale,
           height: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / scale
         }

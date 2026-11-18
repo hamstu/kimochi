@@ -1531,10 +1531,10 @@ function hookCardView() {
       : null
   if (saved && saved === game.ocrBox) {
     // OCR's box is the game's ink (give or take a few pixels, as far on each side), so the card's
-    // ink goes on it: its first row's ink centred on the box's first row, top to bottom, and across
-    // the box when it shows the line in the game's rows (else its left edge on the box's). The
-    // first row is the line's widest (the game wraps at its box's width; a quote's later rows
-    // are indented), so it spans the box. Centred, never flush with one edge: the card's font is not the game's, its
+    // ink goes on it: its first row's ink centred on the box's first row, top to bottom, and its
+    // rows' ink centred across the box when it shows the line in the game's rows (else its left
+    // edge on the box's). Across, all the rows: the box spans the widest, which need not be the
+    // first (「そうか。」 over a long second row). Centred, never flush with one edge: the card's font is not the game's, its
     // glyphs a little taller or shorter, and OCR pads its boxes by an engine's own margin. Where
     // the card's ink is in its text box is measured in its own font (hook-card.js `ink`).
     const height = (saved.height ?? 0) * bounds.height
