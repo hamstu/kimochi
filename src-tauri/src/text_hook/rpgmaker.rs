@@ -2,7 +2,7 @@
 //!
 //! The engine's own hook sends a message before its codes are drawn, so a speaker's name or one
 //! mentioned in a line comes as `\N[2]`. Taken out (`clean::strip_markup`), the line lost the
-//! name (`「おやすみなさい、様」`) and the card no longer matched the game's text. The names are in
+//! name (`「また明日、様」`) and the card no longer matched the game's text. The names are in
 //! the game's database, `data/Actors.json` (`www/data/` for MV), as the game starts with them.
 use regex::{Captures, Regex};
 use std::path::Path;
@@ -63,8 +63,8 @@ mod tests {
     fn actor_codes_are_the_actors_names() {
         assert_eq!(names(), vec!["", "アリス", "ボブ", ""]);
         assert_eq!(
-            with_names("<\\n[1]>\n「おやすみなさい、\\N[2]様」", &names()),
-            "<\\n[1]>\n「おやすみなさい、ボブ様」"
+            with_names("<\\n[1]>\n「また明日、\\N[2]様」", &names()),
+            "<\\n[1]>\n「また明日、ボブ様」"
         );
         // An actor with no name, or none at that id, is left for the codes to be taken out.
         assert_eq!(with_names("\\N[3]と\\N[9]", &names()), "\\N[3]と\\N[9]");
