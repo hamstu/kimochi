@@ -859,9 +859,19 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // (the context in their key), and the one remembered may be the last scene's.
     let auto = session.selected_by == Some("auto");
     let saved = session.selected_by == Some("saved");
-    if (auto && session.threads[index].count >= 3) || ((auto || saved) && session.missed >= MISSED_LINES) {
-        let stale =
-            session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
+    // The hooker's TextMeshPro setter, chosen before the DLL read any line (a game drawing a glyph
+    // per object, whose setter the game calls for lines ahead of the one shown): once the DLL
+    // reads lines, the screen chooses again, from the DLL's (`pick_candidates`).
+    let hooker_left = (auto || saved)
+        && dll_reads_lines(session)
+        && session
+            .threads
+            .iter()
+            .any(|t| session.selected.as_deref() == Some(t.key.as_str()) && unity::is_hooker_tmp_setter(&t.hookcode));
+    if (auto && session.threads[index].count >= 3) || ((auto || saved) && session.missed >= MISSED_LINES) || hooker_left
+    {
+        let stale = hooker_left
+            || session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
                 (auto && t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
                     || session.missed >= MISSED_LINES
             });
