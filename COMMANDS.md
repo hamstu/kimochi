@@ -2277,6 +2277,19 @@ Per game, `textHookerGames[<exe path, lowercased>]` (`ui/overlay.js`):
   then keeps them; only whole readings of two different lines, both more than 30% off and within
   15% of each other, replace the size. Each reading counts once, however often it is applied. The card's −/+ set `text` a tenth at a time. Resizing the card
   never changes it.
+- **Glyph by glyph** (`ui/hook-glyphs.ts`, `overlay.js` `hookGlyphsFrom`): from a whole reading whose
+  engine boxes characters or words (OneOCR's fragments, Screen AI's and Google Lens's segments;
+  `scene.ts` keeps them on the groups it composes from), each of the game's rows is matched to the
+  hooked line's characters and a line fitted through their centres (medians, brackets and
+  punctuation left out): the game's pitch, where each row's first character's centre is, and
+  where each glyph is from top to bottom. The card then takes the pitch as its spacing (less an
+  em), starts each row there (`indents`: a quote's second row under the character after 「), and
+  puts each glyph's ink, as its own font draws it, on the game's, which also sets its line pitch.
+  The newest reading of the line wins (a game may slide each glyph into place as it appears); one
+  within 0.75 px of the last changes nothing. A line of fewer than 14 glyphs takes the pitch the
+  game's longer lines have had. OneOCR centres its boxes a fifth of a glyph left of the ink
+  (`CENTRE_BIAS`). Curly quotes are a whole em wide, as Japanese fonts draw them (`hook-card-fw`).
+  Without such a reading, the line's box places the card as below.
 - `ocrBox`: where Auto align puts the text, `{x, y, width, height}` of its ink, fractions of the
   game window. The first whole reading of a new line puts it there; after that, where it starts
   moves only when two whole readings in a row put the text more than a line away, and its width and

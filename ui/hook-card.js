@@ -33,6 +33,9 @@ const PAD_TOP = 20
 const PAD_BOTTOM = 22
 const MIN_WIDTH = 60
 const MIN_HEIGHT = 16
+/** Curly quotes, which a CJK game draws a whole em wide (`setText`). Not global: `test` keeps no state. */
+const QUOTES = /([‘’“”])/u
+
 /** The opacities the menu offers for the card's background. */
 export const HOOK_CARD_OPACITIES = [1, 0.85, 0.7, 0.55, 0.4]
 
@@ -152,6 +155,9 @@ export function createHookCard(parent, hooks) {
    * generated break are neither, so a lookup reads on into the next row, whatever the engine.
    * In a language that spaces its words (`spaced`) the last word of a row and the first of the
    * next are two words, so a row but the last ends in a space (unless it, or the next, has one).
+   * Curly quotes go in a span of their own (`hook-card-fw`): Japanese fonts draw them a whole em
+   * wide, as the game does, where the card's font draws them half that, which would move every
+   * glyph after one off the game's (hook-card.css).
    */
   const setText = (value, spaced = false) => {
     shown = value
@@ -160,7 +166,15 @@ export function createHookCard(parent, hooks) {
       ...lines.map((line, index) => {
         const row = make('span', 'hook-card-row')
         const next = lines[index + 1]
-        row.textContent = spaced && next && line && !/\s$/u.test(line) && !/^\s/u.test(next) ? `${line} ` : line
+        const shownRow = spaced && next && line && !/\s$/u.test(line) && !/^\s/u.test(next) ? `${line} ` : line
+        row.append(
+          ...shownRow
+            .split(QUOTES)
+            .filter(Boolean)
+            .map((part) =>
+              QUOTES.test(part) ? Object.assign(make('span', 'hook-card-fw'), { textContent: part }) : part
+            )
+        )
         return row
       })
     )
@@ -295,6 +309,15 @@ export function createHookCard(parent, hooks) {
       setText(next.text, Boolean(next.spaced))
     }
     text.style.lineHeight = String(next.lineHeight ?? 1.5)
+    // Each row where the game starts it (Auto align: a quote's second row under the character after
+    // 「): a margin before the row, which only moves where the row starts.
+    text.querySelectorAll('.hook-card-row').forEach((row, i) => {
+      const indent = next.indents?.[i] ? `${next.indents[i]}px` : ''
+      if (row.style.marginLeft !== indent) {
+        row.style.marginLeft = indent
+        fitted = ''
+      }
+    })
     if (drag || steered) return
     const placed = clampBox(next)
     // Shown again unchanged (the overlay redraws often): leave it, and any glide, alone.

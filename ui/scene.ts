@@ -40,7 +40,7 @@
 
 import { classify, identityKey, stabilityKey, type ObservedLine, type TextBox } from './observation.js'
 import { getBoundingBox, type Annotation } from './annotations.js'
-import { normalizeOcrResult, type OcrGroup, type OcrResult } from './ocr-result.js'
+import { normalizeOcrResult, type OcrGroup, type OcrResult, type Segment } from './ocr-result.js'
 import { isJapanese as isJapaneseLanguage } from './languages.js'
 import { hasLanguageScript, joiner } from './script-text.js'
 
@@ -899,7 +899,16 @@ export class SceneMemory {
         id: this.nextUnit++,
         versions: new Map(lines.map((t) => [t.id, t.version])),
         annotations,
-        groups: (result.groups ?? []).filter((g) => groupIds.has(g.id)),
+        // With each group, where its block's words are on its lines (\`lineSegments\`): an engine
+        // that boxes them apart from its lines (OneOCR's word fragments) has them only on the
+        // block, and the composed result is made from the groups.
+        groups: (result.groups ?? [])
+          .filter((g) => groupIds.has(g.id))
+          .map((g) => {
+            if (g.lineSegments) return g
+            const block = annotations.find((a) => a.groupId === g.id && a.lineSegments?.length)
+            return block ? { ...g, lineSegments: block.lineSegments as Segment[][] } : g
+          }),
         engine: result.engine,
         text,
         key,

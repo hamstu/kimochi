@@ -148,6 +148,10 @@
 .hook-card-row:not(:last-child)::after {
   content: '\A';
 }
+/* A curly quote a whole em wide in CJK text, as Japanese fonts draw it (hook-card.js `setText`). */
+.hook-card-text:is(:lang(ja), :lang(zh), :lang(yue), :lang(ko)) .hook-card-fw {
+  font-variant-east-asian: full-width;
+}
 /* The bar along the whole top: hold and drag to move. Three dots mark it. Each control lights up
    only while the pointer is over it (`data-hover`, set by hook-card.js: the overlay never gets
    :hover), as the Log's ghost buttons do, and eases in and out. */

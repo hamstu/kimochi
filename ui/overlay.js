@@ -63,6 +63,7 @@ import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { annotationGroups, fullWidth, hookAnnotations, readSpan, splitSpeaker } from './hook-match.js'
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
+import { glyphGeometry, OWN_PITCH_GLYPHS } from './hook-glyphs.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookSettings, withLegacyShowCard } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
@@ -329,6 +330,8 @@ const HOOK_FIT_AGREE = 0.1
 const HOOK_PIN_SNAP = 0.15
 const HOOK_PIN_SNAP_BRACKETED = 0.5
 const HOOK_PIN_READINGS = 8
+/** How far (in frame pixels) a reading must move a line's glyphs to move the card's (`hookGlyphsFrom`). */
+const HOOK_GLYPH_STILL = 0.75
 /** Whether a stretch of text starts or ends with a bracket (its ink is where its font puts it). */
 const bracketed = (first, last) => /[「『（【〈《“‘]/u.test(first ?? '') || /[」』）】〉》”’]/u.test(last ?? '')
 const hook = {
@@ -368,6 +371,19 @@ const hook = {
   textAt: null,
   /** The letter-spacing the game's lines have had, as a share of the text's size (`em`), averaged. */
   spacing: null,
+  /**
+   * Where the game draws each glyph of the line (`hookGlyphsFrom`: `{line, rows, pitch, starts,
+   * middles, marks}`, fractions of the frame), from a reading that boxed its characters.
+   */
+  glyphs: null,
+  /** The game's glyph pitch (`{exe, pitch, n, base, line}`), the running mean of its long lines'. */
+  glyphPitch: null,
+  /**
+   * Where the game's lines start as their glyphs place them (`{exe, x, y, n, show, base, line}`):
+   * the running mean (`x`, `y`) of each line's newest reading, shown (`show`) as it was when the
+   * line came (`hookCardView`).
+   */
+  glyphAt: null,
   found: null,
   /** The last reading that did not find the line whole (`hook-line-chase` logs its blocks). */
   missed: null,
@@ -1450,6 +1466,7 @@ function hookAligned(annotations) {
       queueMicrotask(syncHookCard)
     }
   }
+  if (whole) hookGlyphsFrom(placed, annotations, { cx, cy, fw, fh })
   let box = null
   if (fresh && !stays) {
     box = found
@@ -1505,6 +1522,97 @@ function hookAligned(annotations) {
 }
 
 /**
+ * Where the game draws each glyph of the line, from a whole reading whose engine boxed each
+ * character (hook-glyphs.ts): kept in `hook.glyphs` as shares of the frame, for `hookCardView`.
+ * The newest reading of the line wins: a game may draw each character sliding into place as it
+ * fades in (Senren＊Banka: from 8 px to the right), so the first reading of the whole line can
+ * catch its last glyphs on their way, and later ones see them where they stay. One that puts
+ * every glyph within a pixel of where the last did changes nothing, so the card does not twitch.
+ */
+function hookGlyphsFrom(placed, annotations, { cx, cy, fw, fh }) {
+  const block = placed.annotations[0]
+  const polygons = block?.linePolygons ?? []
+  const rows = block?.lineTexts?.length ? block.lineTexts : polygons.length === 1 ? [placed.shown] : null
+  if (!rows || rows.length !== polygons.length) {
+    log({ check: 'hook-glyphs-miss', why: 'rows', rows: rows?.length ?? null, polygons: polygons.length })
+    return
+  }
+  const boxOf = (points) => {
+    const xs = points.map((p) => p[0])
+    const ys = points.map((p) => p[1])
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+  }
+  const pieces = []
+  for (const a of annotations ?? []) {
+    if (a.granularity === 'fragment' && a.description) {
+      const xs = a.boundingPoly.vertices.map((v) => v.x ?? 0)
+      const ys = a.boundingPoly.vertices.map((v) => v.y ?? 0)
+      pieces.push({ text: a.description, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] })
+    }
+    for (const line of a.lineSegments ?? [])
+      for (const seg of line) if (seg?.text && seg.bbox) pieces.push({ text: seg.text, box: seg.bbox })
+  }
+  // The pitch the game's long lines have had: a game sets its dialogue in one size.
+  const known = hook.glyphPitch?.exe === hookKey() ? hook.glyphPitch.pitch * fw : null
+  const geometry = glyphGeometry(rows, polygons.map(boxOf), pieces, known, ocrModeNow())
+  if (!geometry) {
+    log({
+      check: 'hook-glyphs-miss',
+      why: 'fit',
+      rows: rows.length,
+      pieces: pieces.length,
+      kinds: [...new Set((annotations ?? []).map((a) => a.granularity))]
+    })
+    return
+  }
+  const next = {
+    line: hook.line,
+    rows,
+    pitch: geometry.pitch / fw,
+    starts: geometry.rows.map((r) => (r.start === null ? null : (r.start + cx) / fw)),
+    middles: geometry.rows.map((r) => (r.middle === null ? null : (r.middle + cy) / fh)),
+    marks: geometry.rows.map((r) => r.marks.map((m) => ({ c: m.c, y: (m.y + cy) / fh })))
+  }
+  const before = hook.glyphs
+  if (
+    before?.line === next.line &&
+    before.rows.join('\n') === next.rows.join('\n') &&
+    Math.abs(before.pitch - next.pitch) * fw * Math.max(...rows.map((row) => [...row].length)) < HOOK_GLYPH_STILL &&
+    next.starts.every(
+      (x, i) =>
+        (x === null) === (before.starts[i] === null) &&
+        (x === null || Math.abs(x - before.starts[i]) * fw < HOOK_GLYPH_STILL)
+    ) &&
+    next.middles.every(
+      (y, i) => y === null || before.middles[i] === null || Math.abs(y - before.middles[i]) * fh < HOOK_GLYPH_STILL
+    )
+  )
+    return
+  hook.glyphs = next
+  const used = geometry.rows.reduce((n, r) => n + r.used, 0)
+  if (used >= OWN_PITCH_GLYPHS) {
+    // The running mean of the game's long lines' pitch, for its short ones: each line counts
+    // once, by its newest reading (its first may have caught glyphs still sliding into place).
+    const pitch = geometry.pitch / fw
+    const kept = hook.glyphPitch?.exe === hookKey() ? hook.glyphPitch : null
+    if (!kept) hook.glyphPitch = { exe: hookKey(), line: hook.line, n: 1, pitch, base: pitch }
+    else {
+      if (kept.line !== hook.line)
+        Object.assign(kept, { line: hook.line, base: kept.pitch, n: Math.min(kept.n + 1, HOOK_PIN_READINGS) })
+      kept.pitch = kept.base + (pitch - kept.base) / kept.n
+    }
+  }
+  log({
+    check: 'hook-glyphs',
+    rows: rows.length,
+    glyphs: used,
+    pitch: Math.round(geometry.pitch * 10) / 10,
+    error: Math.round(geometry.error * 10) / 10
+  })
+  queueMicrotask(syncHookCard)
+}
+
+/**
  * What the card shows now (hook-card.js `show`), in overlay coordinates: the line, its text box
  * (Auto align's, the reader's, or centred along the bottom before either) and its size; null
  * while it is not to be seen (the overlay is off, or the game is not in front).
@@ -1541,6 +1649,11 @@ function hookCardView() {
     ? Math.max(8, game.text * bounds.height)
     : Math.min(HOOK_TEXT_POINTS[1], Math.max(HOOK_TEXT_POINTS[0], hookSet().textSize * bounds.height))
   const lineHeight = game.leading ?? 1.5
+  // The card's line pitch: the game's own rows apart, where a reading measured them (`hook.glyphs`).
+  let leading = lineHeight
+  // How far in each row of the card starts, past the first (a quote's second row under the
+  // character after 「), where a reading measured the game's.
+  let indents = null
   const saved = (auto ? (game.ocrBox ?? game.box) : game.box) ?? null
   const ox = bounds.x - state.origin.x
   const oy = bounds.y - state.origin.y
@@ -1738,14 +1851,99 @@ function hookCardView() {
       across = at.x * bounds.width - ink.left
       down = at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
     }
+    // Where the game draws every glyph of this line, from OCR's character boxes (hook-glyphs.ts):
+    // the card's go there, row by row. Its glyphs are full-width, a whole em plus the spacing
+    // apart, so each one's centre is half an em into its advance: the spacing is the game's pitch
+    // less an em, each row starts half an em before the centre of its first character, and the
+    // rows are the game's row pitch apart. This replaces everything above, which only knows where
+    // the line's ink starts and ends.
+    let glyphWidth = 0
+    const glyphs = hook.glyphs
+    if (
+      glyphs?.line === hook.line &&
+      cardRows &&
+      cardRows.length === glyphs.rows.length &&
+      cardRows.join('\n') === glyphs.rows.join('\n') &&
+      glyphs.starts[0] !== null
+    ) {
+      // This line's own pitch (a short line's is the game's, `hookGlyphsFrom`): a game sets its
+      // dialogue in one size, but the newest reading of a line knows its glyphs best.
+      const glyphPitch = glyphs.pitch * bounds.width
+      spacing = glyphPitch - fontPx
+      // Each row's top (its line box's), from its glyphs: where each one's box centre is, less
+      // where the card's font puts that glyph's ink in a line box (an engine boxes a short kana
+      // lower, and the card's font draws it lower too). The rows are as far apart as the game's
+      // are, which sets the card's line pitch.
+      const rowTop = (marks, at) => {
+        const tops = marks.flatMap((m) => {
+          const ink = hook.card?.ink?.(m.c, fontPx, at)
+          return ink ? [m.y * bounds.height - (ink.top + ink.height / 2)] : []
+        })
+        if (!tops.length) return null
+        tops.sort((a, b) => a - b)
+        return tops[tops.length >> 1]
+      }
+      const lastRow = glyphs.marks.findLastIndex((m, i) => i > 0 && m.length)
+      if (lastRow > 0) {
+        // Measured at the current leading; the glyphs sit centred in their line box, so the
+        // distance between two rows' tops is the line pitch whatever the leading measured at.
+        const firstTop = rowTop(glyphs.marks[0], leading)
+        const lastTop = rowTop(glyphs.marks[lastRow], leading)
+        if (firstTop !== null && lastTop !== null)
+          leading = Math.min(2.5, Math.max(1, (lastTop - firstTop) / lastRow / fontPx))
+      }
+      const start = glyphs.starts[0] * bounds.width
+      const top = rowTop(glyphs.marks[0], leading)
+      const reading = { x: (start - fontPx / 2) / bounds.width, y: (top ?? down) / bounds.height }
+      // A game draws each line where it drew the last, and each reading finds it a pixel or two
+      // off: shown where the game's lines have started (`hook.glyphAt`, the readings' running
+      // mean), each line's newest reading refining that for the lines after it. Text that really
+      // moves (more than a sliver of a glyph: a box that moved) goes where this reading says.
+      const kept = hook.glyphAt?.exe === hookKey() ? hook.glyphAt : null
+      const sliver = Math.max(2, HOOK_PIN_SNAP * fontPx)
+      if (
+        kept &&
+        Math.abs(reading.x - kept.x) * bounds.width < sliver &&
+        Math.abs(reading.y - kept.y) * bounds.height < sliver
+      ) {
+        if (kept.line !== hook.line)
+          Object.assign(kept, {
+            line: hook.line,
+            show: { x: kept.x, y: kept.y },
+            base: { x: kept.x, y: kept.y },
+            n: Math.min(kept.n + 1, HOOK_PIN_READINGS)
+          })
+        // This line's newest reading stands for it in the mean (the first may have caught its
+        // glyphs still sliding into place).
+        kept.x = kept.base.x + (reading.x - kept.base.x) / kept.n
+        kept.y = kept.base.y + (reading.y - kept.base.y) / kept.n
+      } else {
+        hook.glyphAt = { exe: hookKey(), line: hook.line, n: 1, ...reading, show: reading, base: reading }
+      }
+      across = hook.glyphAt.show.x * bounds.width
+      down = hook.glyphAt.show.y * bounds.height
+      indents = glyphs.starts.map((x) => (x === null ? 0 : x * bounds.width - start))
+      glyphWidth = Math.max(...cardRows.map((row, i) => indents[i] + [...row].length * glyphPitch))
+      hook.spacing = { exe: hookKey(), line: hook.line, n: HOOK_PIN_READINGS, em: spacing / fontPx }
+    } else if (hook.glyphAt?.exe === hookKey()) {
+      // A line too short to measure glyph by glyph (はい。), or not read yet: where the game's
+      // lines start, as the measured ones found it, when that is where this one is. Measured
+      // from its box alone it would land a pixel or few from the lines around it.
+      const kept = hook.glyphAt
+      if (Math.abs(across - kept.x * bounds.width) < pitch && Math.abs(down - kept.y * bounds.height) < pitch) {
+        across = kept.x * bounds.width
+        down = kept.y * bounds.height
+      }
+    }
     letterSpacing = spacing
     where = {
       x: ox + across,
       y: oy + down,
       // To the furthest the text has reached, and a little over: the card's font is not quite
       // the game's.
-      width: Math.max(saved.x + saved.width, at.x + at.width) * bounds.width - across + fontPx * 0.6,
-      height: rows * pitch
+      width:
+        Math.max(Math.max(saved.x + saved.width, at.x + at.width) * bounds.width - across, glyphWidth) + fontPx * 0.6,
+      height: rows * leading * fontPx
     }
   } else if (saved) {
     where = {
@@ -1784,7 +1982,8 @@ function hookCardView() {
     lines,
     pending,
     fontPx,
-    lineHeight,
+    lineHeight: leading,
+    indents,
     theme,
     surface,
     opacity: hookSet().opacity,
@@ -1810,17 +2009,21 @@ function hookCardUnits() {
   const sentence = text.textContent
   const units = []
   let sentenceOffset = 0
+  // A row's text nodes, in order: a curly quote is in a span of its own (hook-card.js `setText`),
+  // and a word never runs through one.
   for (const row of text.children) {
-    const node = row.firstChild
-    const rowText = node?.nodeType === Node.TEXT_NODE ? node.textContent : ''
-    if (rowText) {
-      const range = document.createRange()
-      range.selectNodeContents(node)
-      const { left, top, width, height } = range.getBoundingClientRect()
-      const box = { x: left, y: top, width, height }
-      units.push({ element, node, text: rowText, sentence, sentenceOffset, vertical: false, box })
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const rowText = node.textContent
+      if (rowText) {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const { left, top, width, height } = range.getBoundingClientRect()
+        const box = { x: left, y: top, width, height }
+        units.push({ element, node, text: rowText, sentence, sentenceOffset, vertical: false, box })
+      }
+      sentenceOffset += rowText.length
     }
-    sentenceOffset += rowText.length
   }
   return units
 }
