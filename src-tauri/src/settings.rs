@@ -99,6 +99,8 @@ pub fn defaults() -> Value {
         // The overlay's highlight colour, its cards' appearance and the highlight's opacity
         // (ui/settings.ts DEFAULT_OVERLAY_STYLE); `app` follows Kimochi's own appearance.
         "overlayStyle": { "color": "#3e63dd", "appearance": "app", "opacity": 40 },
+        // How opaque every engine's dictionary pop-up is drawn (Settings → Overlay), 25–100.
+        "dictionaryPopupOpacity": 85,
         // Sentence audio (sentence_audio/): off until the user turns it on.
         "sentenceAudio": {
             "voiceHook": true,

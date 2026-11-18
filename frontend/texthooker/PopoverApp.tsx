@@ -5,6 +5,8 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@kit'
+import { popupOpacityOf } from '@ui/settings'
+import { useSetting } from '../bridge/useSetting'
 import { PopoverAudio } from '@texthooker/components/PopoverAudio'
 import { PopoverAddToAnki, type AnkiConfig } from '@texthooker/components/PopoverAddToAnki'
 import { TermDefinition } from '@texthooker/components/TermDefinition'
@@ -88,6 +90,8 @@ function PopoverApp() {
   const [payload, setPayload] = useState<ShowPayload | null>(null)
   const [visible, setVisible] = useState(false)
   const [ankiTriggerNonce, setAnkiTriggerNonce] = useState<number | undefined>(undefined)
+  // Settings → Overlay → Dictionary pop-up opacity, for the whole card.
+  const [popupOpacity] = useSetting<number>('dictionaryPopupOpacity', 85)
   // Stack of cross-reference lookups followed within the current popover. Empty
   // = showing the originally-scanned term. Reset whenever a new lookup arrives.
   const [xrefStack, setXrefStack] = useState<XrefFrame[]>([])
@@ -363,7 +367,7 @@ function PopoverApp() {
 
   return (
     <div className={`popover-shell ${visible ? 'visible' : ''}`}>
-      <div className="popover-card" onMouseEnter={focusPopup}>
+      <div className="popover-card" style={{ opacity: popupOpacityOf(popupOpacity) / 100 }} onMouseEnter={focusPopup}>
         <div className={`popover-scroll${isNotebook ? ' popover-scroll-flush' : ''}`}>
           {isNotebook && notebookEntry ? (
             <NotebookEntryCard

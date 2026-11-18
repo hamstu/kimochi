@@ -257,16 +257,14 @@ export function installApp(win, { engine, descriptor }) {
     await contentLink.registered
   }
 
-  /** 10ten's pop-up size (Settings → Dictionary, `tentenPopupSize`), now and as it changes. */
-  function followPopupSize() {
-    const apply = (value) => driver?.size(tentenPopupSize(value))
-    apply(undefined)
-    void Promise.resolve(invoke('settings_get', { key: 'tentenPopupSize' }))
+  /** Hand `apply` the setting `key`, now and as it changes. */
+  function followSetting(key, apply) {
+    void Promise.resolve(invoke('settings_get', { key }))
       .then(apply)
       .catch(() => {})
     void tauri?.event
       ?.listen('settings:changed', ({ payload }) => {
-        if (payload?.key === 'tentenPopupSize') apply(payload.value)
+        if (payload?.key === key) apply(payload.value)
       })
       .catch(() => {})
   }
@@ -290,7 +288,12 @@ export function installApp(win, { engine, descriptor }) {
       report,
       backgroundSender: () => ({ id: context.runtimeId, url: `${origin}/${descriptor.background.script}`, origin })
     })
-    if (descriptor.id === 'tenten') followPopupSize()
+    // 10ten's pop-up size (Settings → Dictionary), and every engine's opacity (Settings → Overlay).
+    if (descriptor.id === 'tenten') {
+      driver.size(tentenPopupSize(undefined))
+      followSetting('tentenPopupSize', (value) => driver?.size(tentenPopupSize(value)))
+    }
+    followSetting('dictionaryPopupOpacity', (value) => driver?.opacity(value))
     if (win.document.readyState === 'loading') {
       await new Promise((resolve) => win.document.addEventListener('DOMContentLoaded', resolve, { once: true }))
     }

@@ -279,6 +279,15 @@ export function sizeCss(engine, size) {
 .container.interactive .window { max-height: ${height} !important; }`
 }
 
+/**
+ * The stylesheet that draws the whole pop-up at `opacity`% (`dictionaryPopupOpacity`, 25–100), on
+ * the shadow host the engine hangs it from. '' at 100 or anything else.
+ */
+export function opacityCss(opacity) {
+  if (!Number.isFinite(opacity) || opacity >= 100) return ''
+  return `:host { opacity: ${Math.max(25, Math.round(opacity)) / 100} !important; }`
+}
+
 export function fillCss(engine, rect) {
   if (!rect || !(rect.width > 0) || !(rect.height > 0)) return ''
   const px = (value) => `${Math.round(value * 100) / 100}px`
@@ -603,11 +612,13 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
     if (style.textContent !== css) style.textContent = css
   }
   /**
-   * The room the pop-up may take (`size`, as {@link sizeCss}), kept in the host's shadow root like
-   * the fill: the host is made lazily and 10ten may make it again. Not while a fill is in force,
-   * which sizes the pop-up itself.
+   * The room the pop-up may take (`size`, as {@link sizeCss}) and how opaque it is drawn
+   * (`opacity`, as {@link opacityCss}), kept in the host's shadow root like the fill: the host is
+   * made lazily and 10ten may make it again. The size not while a fill is in force, which sizes the
+   * pop-up itself.
    */
   let size = null
+  let opacity = 100
   let sizeWatch = null
   let sizeRoot = null
   const SIZE_ATTRIBUTE = 'data-kimochi-size'
@@ -621,7 +632,7 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       sizeWatch.observe(root, { childList: true })
     }
     let style = root.querySelector(`style[${SIZE_ATTRIBUTE}]`)
-    const css = fill ? '' : sizeCss(engine, size)
+    const css = [fill ? '' : sizeCss(engine, size), opacityCss(opacity)].filter(Boolean).join('\n')
     if (!css) return void style?.remove()
     if (!style) {
       style = win.document.createElement('style')
@@ -633,10 +644,18 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
   }
   function setSize(next) {
     size = next ? { width: next.width, height: next.height } : null
-    if (size && !sizeWatch && typeof win.MutationObserver === 'function') {
+    watchStyle()
+  }
+  function setOpacity(next) {
+    opacity = next
+    watchStyle()
+  }
+  function watchStyle() {
+    const wanted = Boolean(size) || opacity < 100
+    if (wanted && !sizeWatch && typeof win.MutationObserver === 'function') {
       sizeWatch = new win.MutationObserver(() => applySize())
       sizeWatch.observe(win.document.documentElement, { childList: true, subtree: true })
-    } else if (!size && sizeWatch) {
+    } else if (!wanted && sizeWatch) {
       sizeWatch.disconnect()
       sizeWatch = null
       sizeRoot = null
@@ -765,6 +784,8 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
      */
     /** Keep the pop-up within `{width, height}` (CSS pixels), or with null leave it to the engine. */
     size: setSize,
+    /** Draw the whole pop-up at `percent`, as {@link opacityCss}. */
+    opacity: setOpacity,
     place(rect) {
       const clear = ++fillClear
       if (rect) {
