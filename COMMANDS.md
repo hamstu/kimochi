@@ -2095,8 +2095,10 @@ HookStatus = {
 ```
 
 Events: `texthook-status` (a `HookStatus`, on every change and every hooked sentence) and
-`texthook-line` (`{text, key, at, id, replaces}`: a sentence of the selected thread, consecutive
-repeats dropped; `replaces` is the id of the line it finishes, or null), which the texthooker ingests as source `"hook"` while `inputSource` is `"hook"`.
+`texthook-line` (`{text, key, at, id, replaces, screen}`: a sentence of the selected thread, consecutive
+repeats dropped; `replaces` is the id of the line it finishes, or null; `screen` is the whole text box
+when the line is a sentence the game added under the ones it already shows, or null: the Log takes
+`text`, the card shows `screen`), which the texthooker ingests as source `"hook"` while `inputSource` is `"hook"`.
 A line is finished by the rest of a line still typing out when its burst ended, and, with the
 game's `joinLines` on, by a piece from the same thread that carries on the line
 (`clean::continues`: the line's 「 or 『 is still open and the piece does not open another 「, or

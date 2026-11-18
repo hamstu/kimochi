@@ -19,6 +19,15 @@ pub fn is_unity(hookcode: &str) -> bool {
     hookcode.starts_with(HOOKCODE)
 }
 
+/// Whether a hooker thread is LunaHook's own hook on TextMeshPro's text setter
+/// (`EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY`): the setter the DLL watches
+/// too. The hooker's thread mixes every text object's text with layout's (`m\nmm\n…`, a
+/// typewriter's frames), where the DLL's threads are each object's settled text; while the DLL
+/// reads the game's text, it is the hooker's that goes unused.
+pub fn is_hooker_tmp_setter(hookcode: &str) -> bool {
+    !is_unity(hookcode) && hookcode.contains(":TMP_Text:set_text") && hookcode.ends_with(":JIT:UNITY")
+}
+
 /// Whether a thread can be known again in the next run by its signature. A Unity thread's context
 /// is its text object's address, which is new each run: a thread remembered by it would be some
 /// other text object next time (a menu label as often as the dialogue), so the screen chooses.
@@ -284,6 +293,7 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
                     last_at: None,
                     japanese: false,
                     foreign: 0,
+                    box_start: String::new(),
                 });
                 hook.publish(&session);
             }
@@ -297,6 +307,14 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_hookers_own_tmp_setter_is_told_apart() {
+        assert!(is_hooker_tmp_setter("EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY"));
+        assert!(!is_hooker_tmp_setter("UNITY:TMP_Text.set_text"));
+        assert!(!is_hooker_tmp_setter("EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY"));
+        assert!(!is_hooker_tmp_setter("HMF1@mscorlib:System:String:IndexOf:1:JIT:UNITY"));
+    }
 
     #[test]
     fn a_unity_text_object_is_never_taken_back_by_its_address() {

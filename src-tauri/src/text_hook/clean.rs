@@ -322,6 +322,26 @@ pub fn continues_in(before: &str, after: &str, japanese: bool) -> bool {
     !(ENDS.contains(last) || !japanese && MORE_ENDS.contains(last))
 }
 
+/// The sentence a text box added after the one it already showed: `text` is `before` and more,
+/// and `before` ends a sentence (the new one on a row of its own, or on the same row:
+/// `けれど、どこから？　それはわたくしも分かりません。`). A game that fills its box a
+/// sentence a click (Unity TextMeshPro novels: `ふふ……。` then `ふふ……。\nまだ……かしら。`) keeps the
+/// earlier ones on screen. None when `text` does not carry on `before`, or carries on its
+/// sentence (the box wraps a long one: `…来たのだ\nと……。` arrives whole; a typewriter paused
+/// mid-sentence goes on without a break).
+/// Markup aside: a TextMeshPro typewriter colours what it has shown (`<color=#ffffffff>`), and a
+/// box set again may carry it where it did not before.
+pub fn new_sentence(before: &str, text: &str) -> Option<String> {
+    const ENDS: &str = "。．.！!？?」』）)】…‥―～〜♪";
+    let (before, text) = (strip_markup(before, false), strip_markup(text, false));
+    if before.trim().is_empty() || !text.starts_with(before.as_str()) {
+        return None;
+    }
+    let added = &text[before.len()..];
+    let ended = before.trim_end().chars().last().is_some_and(|c| ENDS.contains(c));
+    ended.then(|| added.trim().to_string()).filter(|a| !a.is_empty())
+}
+
 fn gcd(a: usize, b: usize) -> usize {
     if b == 0 {
         a
@@ -562,5 +582,31 @@ mod tests {
         // Japanese as before: a closing ” is not an end there.
         assert!(continues("彼は“はい”", "と言った。"));
         assert_eq!(continues_in("彼は“はい”", "と言った。", true), continues("彼は“はい”", "と言った。"));
+    }
+
+    #[test]
+    fn a_sentence_added_under_a_finished_one_is_a_new_line() {
+        // The Unity text box keeps what it showed and adds the next sentence on a new row.
+        let first = "<color=#ffffffff>困りますわ、しっかりしてくださらないと。";
+        let both = "<color=#ffffffff>困りますわ、しっかりしてくださらないと。\nでも……お声が聞けて、良かったです。";
+        assert_eq!(new_sentence(first, both).as_deref(), Some("でも……お声が聞けて、良かったです。"));
+        let three = format!("{both}\n「あなた」は周囲を見渡そうとする。");
+        assert_eq!(new_sentence(both, &three).as_deref(), Some("「あなた」は周囲を見渡そうとする。"));
+        // The box set again with its colour tag where it had none (or the other way round).
+        let plain = "それとも……、もう以前のようなご趣味ではないのかしら。";
+        let tagged = "<color=#ffffffff>それとも……、もう以前のようなご趣味ではないのかしら。\nねえ旦那さま、何がよろしいんですの？";
+        assert_eq!(new_sentence(plain, tagged).as_deref(), Some("ねえ旦那さま、何がよろしいんですの？"));
+        // A sentence the box wraps, or a typewriter paused mid-sentence, carries on.
+        assert_eq!(new_sentence("ついにこの時が来たのだ", "ついにこの時が来たのだ\nと……。"), None);
+        assert_eq!(new_sentence("「わたくし、", "「わたくし、ずっと待っていました」"), None);
+        // Another text, or nothing added.
+        assert_eq!(new_sentence("ふふ……。", "困りますわ。"), None);
+        // On the same row, after a full-width space.
+        assert_eq!(
+            new_sentence("けれど、どこから？", "けれど、どこから？　それはわたくしも分かりません。").as_deref(),
+            Some("それはわたくしも分かりません。")
+        );
+        assert_eq!(new_sentence("ふふ……。", "ふふ……。\n"), None);
+        assert_eq!(new_sentence("", "ふふ……。"), None);
     }
 }

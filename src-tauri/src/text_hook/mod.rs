@@ -86,6 +86,9 @@ struct Thread {
     /// Pieces in a row that did not read as the language: a multilingual game switched to another
     /// language draws that through the thread chosen for its line (`cleaner_thread`).
     foreign: u32,
+    /// A Unity text box that keeps earlier sentences on screen: its text before the sentence now
+    /// being shown (markup aside), so that sentence carrying on is the Log's line, not the box.
+    box_start: String,
 }
 
 impl Thread {
@@ -139,6 +142,8 @@ struct Session {
     unity: Vec<unity::Request>,
     /// When the text being handled was set in the game (Unix ms), for a source that says.
     text_at: Option<u64>,
+    /// The whole text box the next line is a sentence of (`clean::new_sentence`), for the card.
+    screen: Option<String>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     /// The code page the helper decodes ANSI text with, when it can be changed while it runs (a
@@ -284,9 +289,12 @@ impl Hook {
             },
         );
         session.last_id = Some(id.clone());
-        let _ = self
-            .app
-            .emit("texthook-line", json!({ "text": text, "key": key, "at": at, "id": id, "replaces": replaces }));
+        // The whole text box this line was added to, cleaned as the line is, for the card.
+        let screen = session.screen.as_deref().and_then(|s| config.clean(s));
+        let _ = self.app.emit(
+            "texthook-line",
+            json!({ "text": text, "key": key, "at": at, "id": id, "replaces": replaces, "screen": screen }),
+        );
     }
 }
 
@@ -549,6 +557,7 @@ fn read_events(
                         last_at: None,
                         japanese: false,
                         foreign: 0,
+                        box_start: String::new(),
                     });
                 }
                 continue;
@@ -687,6 +696,10 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One
     // that pauses while typing for longer than the hooker waits comes in pieces: a piece that
     // carries on the line the last one ended on finishes that line.
+    // The whole text box, when the line is a sentence the game added to what it already shows,
+    // and where in it the line starts (a new box: none).
+    let mut screen = None;
+    let mut box_start: Option<String> = None;
     let (lines, carries_on) = {
         let thread = &session.threads[index];
         let recent = thread.last_at.is_some_and(|at| at.elapsed() < CARRY_ON);
@@ -695,8 +708,34 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         if unity::is_unity(&thread.hookcode) {
             // One that extends the object's last carries it on, however late: a typewriter paused
             // for longer than it takes to settle (live Unity: 9 s between the pieces).
-            let carries_on = !thread.text.is_empty() && text != thread.text && text.starts_with(thread.text.as_str());
-            (vec![text.to_string()], carries_on)
+            // A sentence added under a finished one (a text box the game fills a sentence a
+            // click, keeping the ones before it on screen) is a line of its own, with its own
+            // voice; the card shows the whole box (`screen`).
+            if let Some(added) = clean::new_sentence(&thread.text, text) {
+                screen = Some(text.to_string());
+                box_start = Some(clean::strip_markup(&thread.text, false));
+                (vec![added], false)
+            } else {
+                let carries_on =
+                    !thread.text.is_empty() && text != thread.text && text.starts_with(thread.text.as_str());
+                // The sentence carrying on is in a box with earlier ones: the line is that sentence.
+                let plain = clean::strip_markup(text, false);
+                match plain
+                    .strip_prefix(thread.box_start.as_str())
+                    .filter(|_| carries_on && !thread.box_start.is_empty())
+                {
+                    Some(rest) => {
+                        screen = Some(text.to_string());
+                        (vec![rest.trim().to_string()], true)
+                    }
+                    None => {
+                        if !carries_on {
+                            box_start = Some(String::new());
+                        }
+                        (vec![text.to_string()], carries_on)
+                    }
+                }
+            }
         } else {
             match recent.then(|| pick::typewriter_lines_after(&thread.text, text)).flatten() {
                 Some(lines) => (lines, true),
@@ -706,7 +745,11 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     };
     {
         let thread = &mut session.threads[index];
-        thread.text = lines.last().cloned().unwrap_or_default();
+        // A text box keeps its whole text: the next sentence added is told by what is shown.
+        thread.text = screen.clone().unwrap_or_else(|| lines.last().cloned().unwrap_or_default());
+        if let Some(start) = box_start {
+            thread.box_start = start;
+        }
         thread.japanese |= pick::looks_japanese(&thread.text, language);
         let normalized = pick::normalize(&thread.text);
         thread.foreign = if normalized.is_empty() || pick::reads_as(&normalized, language) {
@@ -751,18 +794,25 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             json!({ "check": "texthook-burst", "text": text, "lines": lines, "carriesOn": carries_on }),
         );
         session.missed = 0;
+        session.screen = screen.clone();
         for (i, line) in lines.iter().enumerate() {
             hook.line(session, key, line, carries_on && i == 0);
         }
+        session.screen = None;
         return;
     }
     // Another engine thread sending a line while the chosen one says nothing: each line once, however
     // many threads send it and however many pieces it is typed out in.
+    // Markup aside (a TextMeshPro typewriter colours what it has shown: `<color=#ffffffff>…`), and
+    // not the hooker's TextMeshPro setter while the DLL reads the same text objects: it sends each
+    // line before the object settles, which is no line the chosen object missed.
     {
         let spoken = &session.threads[index];
-        let shown = pick::normalize(text);
+        let shown = pick::normalize(&clean::strip_markup(text, false));
+        let dll_reads = !session.unity.is_empty();
         if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language)
             && !pick::is_generic(&spoken.hookcode, &spoken.name)
+            && !(dll_reads && unity::is_hooker_tmp_setter(&spoken.hookcode))
         {
             session.missed = session.missed.saturating_add(1);
             session.missed_text = shown;
@@ -789,10 +839,14 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     if session.selected.is_some() {
         return;
     }
-    // A thread chosen for this game before is taken back as soon as it speaks.
+    // A thread chosen for this game before is taken back as soon as it speaks; not the hooker's
+    // TextMeshPro setter while the DLL reads the game's text objects themselves (the screen
+    // chooses one of those instead).
     let saved = session.exe.as_deref().and_then(|exe| remembered(hook, exe));
+    let dll_reads = !session.unity.is_empty();
     if unity::remembers_by_signature(&session.threads[index].hookcode)
         && saved.as_ref() == Some(&session.threads[index].signature())
+        && !(dll_reads && unity::is_hooker_tmp_setter(&session.threads[index].hookcode))
     {
         session.selected = Some(key.to_string());
         session.selected_by = Some("saved");
@@ -925,6 +979,9 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                 .iter()
                 .filter(|t| !t.text.is_empty() && (!unity::is_unity(&t.hookcode) || t.count >= 2))
                 .filter(|t| unity::is_unity(&t.hookcode) || !unity_texts.contains(&t.text.as_str()))
+                // The DLL reading the game's text objects, the hooker's hook on the same setter is
+                // never the better (`unity::is_hooker_tmp_setter`).
+                .filter(|t| session.unity.is_empty() || !unity::is_hooker_tmp_setter(&t.hookcode))
                 .cloned()
                 .collect();
             (session.source_id.clone(), session.observer_engine.clone(), candidates)

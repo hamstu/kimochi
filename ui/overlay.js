@@ -1882,15 +1882,19 @@ function onHookCardTextSize(step, box) {
 /** A new hooked line: shown at once, aligned with what OCR last read if the line is there. */
 function onHookLine(payload) {
   if (!hookMode() || typeof payload?.text !== 'string') return
-  hook.line = payload.text
+  // A sentence the game added to the text box it already shows (`screen`, the whole box): the
+  // Log takes the sentence, the card everything the game shows, so every line on screen can be
+  // pointed at, and Auto align finds the box as OCR reads it.
+  const line = typeof payload.screen === 'string' && payload.screen ? payload.screen : payload.text
+  hook.line = line
   hook.lineAt = performance.now()
   hook.names = []
   // A game known to show its speakers' names apart, or one that sends the name after the quote on
   // a line of its own: the card shows what they say from the start, Auto align on or off.
-  const speech = hookSet().speakerNames ? splitSpeaker(payload.text) : null
-  hook.shown = (speech && (speech.after || hookGame().namesApart) && speech.body) || payload.text
+  const speech = hookSet().speakerNames ? splitSpeaker(line) : null
+  hook.shown = (speech && (speech.after || hookGame().namesApart) && speech.body) || line
   // The chase first: the card shows the line held for it (`pending`) from the start.
-  void chaseHookLine(payload.text)
+  void chaseHookLine(line)
   setOcrAnnotations(state.rawAnnotations ?? [])
   syncHookCard()
   controller?.hookChanged?.()
