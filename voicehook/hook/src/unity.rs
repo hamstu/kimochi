@@ -333,8 +333,13 @@ struct Watch {
 
 static WATCHES: Mutex<Vec<Watch>> = Mutex::new(Vec::new());
 static HANDLER: AtomicBool = AtomicBool::new(false);
-/// The last text per object, to drop repeats (UI code sets the same text every frame).
-static TEXT_LAST: LazyLock<Mutex<HashMap<usize, Vec<u16>>>> = LazyLock::new(Default::default);
+/// The last text per object and when it was last set, to drop repeats (UI code sets the same text
+/// every frame).
+static TEXT_LAST: LazyLock<Mutex<HashMap<usize, (Vec<u16>, f64)>>> = LazyLock::new(Default::default);
+/// A repeat of an object's text is sent again once the object has gone this long unset: a pool of
+/// glyph objects (Unity CatSystem draws a line one TextMeshPro object per character) gives an
+/// object the same character again a line later, which is a new glyph, not UI code's every frame.
+const TEXT_REPEAT_MS: f64 = 250.0;
 /// Longest text sent as one event, in UTF-16 units.
 const TEXT_MAX: usize = 4096;
 /// How many of the setter's bytes after its first instruction are kept, to know a copy of them.
@@ -527,14 +532,19 @@ unsafe fn text_seen(label: &'static str, this: usize, s: usize) {
     }
     let chars = std::slice::from_raw_parts((s + 2 * w + 4) as *const u16, len as usize).to_vec();
     {
+        let now = crate::util::now_ms();
         let mut last = lock(&TEXT_LAST);
-        if last.get(&this) == Some(&chars) {
-            return;
+        if let Some((text, at)) = last.get_mut(&this) {
+            let repeat = *text == chars && now - *at < TEXT_REPEAT_MS;
+            *at = now;
+            if repeat {
+                return;
+            }
         }
         if last.len() > 512 {
             last.clear();
         }
-        last.insert(this, chars.clone());
+        last.insert(this, (chars.clone(), now));
     }
     let text = String::from_utf16_lossy(&chars);
     sink::send(Ev::Note(json!({"ev": "text", "api": "unity", "method": label, "obj": hex(this), "text": text})));
