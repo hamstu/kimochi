@@ -230,6 +230,17 @@ unsafe fn walk_imports(base: usize, mut f: impl FnMut(&str, &[u8], *mut usize)) 
     }
 }
 
+/// Whether a module's imports are not bound yet: an address-table slot still holds its name's RVA.
+unsafe fn unbound(base: usize) -> bool {
+    let mut unbound = false;
+    walk_imports(base, |_, fname, slot| {
+        // `fname` is the name in the hint/name entry, 2 bytes past the RVA the slot points to.
+        let rva = fname.as_ptr() as usize - base - 2;
+        unbound |= std::ptr::read_volatile(slot) == rva;
+    });
+    unbound
+}
+
 unsafe fn write_slot(slot: *mut usize, value: usize) -> bool {
     let mut old = 0u32;
     if VirtualProtect(slot as *const c_void, std::mem::size_of::<usize>(), PAGE_READWRITE, &mut old) == 0 {
@@ -261,6 +272,15 @@ pub fn rescan() {
     for (m, modname) in &fresh {
         // System DLLs call each other through these exports too; leave them alone.
         if is_system(modname) {
+            continue;
+        }
+        // A module still being loaded: the loader has not bound its imports yet, so its address
+        // table still holds the names' RVAs (as its name table does). Patching it now would be
+        // undone by the loader, and comparing would leave every slot alone: it is done on a later
+        // rescan, once bound (NW.js loads its 80 MB nw.dll while our first scan runs).
+        if unsafe { unbound(*m as usize) } {
+            lock(&PATCHED).remove(&(*m as usize));
+            log(&format!("iat: {modname} is still loading; its imports are patched later"));
             continue;
         }
         unsafe {
