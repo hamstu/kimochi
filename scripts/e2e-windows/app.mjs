@@ -136,7 +136,10 @@ export async function dump(label) {
       c.close()
     }
   }
-  await writeFile(path.join(out, 'truth.json'), await readFile(path.join(root, 'game/truth.json')))
+  // The game may be writing it this moment (EBUSY): evidence goes on without it rather than fail.
+  await readFile(path.join(root, 'game/truth.json'))
+    .then((truth) => writeFile(path.join(out, 'truth.json'), truth))
+    .catch(() => {})
   desktop('screenshot', path.join(out, 'desktop.png'))
   return out
 }

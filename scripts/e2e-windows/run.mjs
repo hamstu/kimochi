@@ -67,7 +67,21 @@ const command = async (text) => {
   await sleep(350)
 }
 /** What the game drew, where it drew it: physical pixels over its own window. */
-const gameTruth = async () => JSON.parse(await readFile(path.join(root, 'game/truth.json'), 'utf8'))
+/**
+ * The game's ground truth. The game rewrites the file as it draws, and Windows refuses a read
+ * while the write holds it (EBUSY), or a read can land on a half-written file: read again.
+ */
+async function gameTruth() {
+  for (let tries = 0; ; tries++) {
+    try {
+      return JSON.parse(await readFile(path.join(root, 'game/truth.json'), 'utf8'))
+    } catch (error) {
+      const passing = error?.code === 'EBUSY' || error?.code === 'EPERM' || error instanceof SyntaxError
+      if (!passing || tries >= 20) throw error
+      await sleep(25)
+    }
+  }
+}
 /** Magpie's session (Desktop.cs `magpie`), or null while it scales nothing. */
 const magpieSession = () => JSON.parse(desktop('magpie') || 'null')
 /** A rectangle of the game where Magpie draws it: Src stretched onto Dest. */
@@ -154,16 +168,21 @@ async function activateMain() {
       await click(p, 'button[aria-label="Expand Kimochi"]')
       await sleep(200)
     }
-    desktop('focus', w.hwnd)
-    await sleep(100)
     // A click into the window, so its page has the keyboard: on the title bar, where nothing
     // takes it. Found in the page rather than at a fixed offset, which at 200% landed on
     // Kimochi's own Minimize button.
     const at = await p.eval(
       `(()=>{const s=${SCREEN_SCALE},d=devicePixelRatio,y=14,mid=innerWidth/2;const busy=(e)=>!e||e.closest('button,a,input,select,textarea,[role=button],[role=switch],[role=menuitem],[role=tab]');for(let step=0;step<mid;step+=8)for(const x of [mid-step,mid+step]){if(!busy(document.elementFromPoint(x,y)))return {x:Math.round((screenX*s+x)*d),y:Math.round((screenY*s+y)*d)}}return null})()`
     )
-    if (at) desktop('mouse', at.x, at.y, 'click')
-    await sleep(150)
+    // A game that was just clicked can take the foreground back a moment later: tried again.
+    for (let tries = 0; tries < 4; tries++) {
+      desktop('focus', w.hwnd)
+      await sleep(100)
+      if (at) desktop('mouse', at.x, at.y, 'click')
+      await sleep(200)
+      const now = JSON.parse(desktop('windows')).find((x) => x.hwnd === w.hwnd)
+      if (now && !now.iconic && now.foreground) break
+    }
   } finally {
     p.close()
   }
@@ -455,11 +474,36 @@ async function hookScenario() {
       )
     }
   }
+  /**
+   * The card showing `text`, once it has stopped moving: a new line shows at once, then Auto
+   * align's reading may refine where it sits a moment later (a few pixels). A check that measures
+   * from where the card is must start from where it stays.
+   */
+  const settled = async (text) => {
+    let last = await shown(text)
+    // Still across a reading or two (Auto align reads the screen about once a second).
+    let still = 0
+    return until(async () => {
+      await sleep(300)
+      const c = await card()
+      still = c && Math.abs(c.x - last.x) < 0.5 && Math.abs(c.y - last.y) < 0.5 ? still + 1 : 0
+      last = c ?? last
+      return still >= 5 ? c : false
+    }, 10000)
+  }
+  // A press on one of the card's controls. Over the game they take the mouse only with the
+  // lookup key held (click-through), as the reader holds it; the open menu takes it anyway.
   const press = async (point) => {
-    desktop('mouse', Math.round(point.x), Math.round(point.y))
-    await sleep(150)
-    desktop('mouse', Math.round(point.x), Math.round(point.y), 'click')
-    await sleep(500)
+    desktop('key', 16, 'down')
+    try {
+      desktop('mouse', Math.round(point.x), Math.round(point.y))
+      await sleep(150)
+      desktop('mouse', Math.round(point.x), Math.round(point.y), 'click')
+      await sleep(200)
+    } finally {
+      desktop('key', 16, 'up')
+    }
+    await sleep(300)
   }
   const p = await page('panel.html')
   try {
@@ -569,20 +613,27 @@ async function hookScenario() {
   await check('hook-card-drag-takes-over', async () => {
     await focusGame()
     await say()
-    const before = await shown((await truth()).dialogue)
+    const before = await settled((await truth()).dialogue)
     const from = { x: Math.round(before.bar.x - 60), y: Math.round(before.bar.y) }
-    desktop('mouse', from.x, from.y)
-    await sleep(200)
-    desktop('mouse', from.x, from.y, 'down')
-    await sleep(120)
+    // Over the game, the card takes the mouse only with the lookup key held (click-through, on by
+    // default): a plain press on its bar goes to the game, as it should.
+    desktop('key', 16, 'down')
     const trail = []
-    for (let i = 1; i <= 8; i++) {
-      desktop('mouse', from.x - i * 20, from.y - i * 12)
-      await sleep(35)
-      const c = await card()
-      trail.push([Math.round(c.x - before.x), Math.round(c.y - before.y)])
+    try {
+      desktop('mouse', from.x, from.y)
+      await sleep(200)
+      desktop('mouse', from.x, from.y, 'down')
+      await sleep(120)
+      for (let i = 1; i <= 8; i++) {
+        desktop('mouse', from.x - i * 20, from.y - i * 12)
+        await sleep(35)
+        const c = await card()
+        trail.push([Math.round(c.x - before.x), Math.round(c.y - before.y)])
+      }
+      desktop('mouse', from.x - 160, from.y - 96, 'up')
+    } finally {
+      desktop('key', 16, 'up')
     }
-    desktop('mouse', from.x - 160, from.y - 96, 'up')
     await sleep(600)
     const after = await card()
     const g = await game()
