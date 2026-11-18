@@ -1633,13 +1633,12 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         };
         // A Unity (Mono) game's text is read by the voice hook DLL too, from the start: the
         // hooker reaches it, when it can, through string functions that run at all times for
-        // all sorts of strings, which tell little of when a line is shown (`unity.rs`).
-        if cfg!(windows) && targets.iter().any(|t| t.wine.is_none() && unity::is_mono_game(&t.exe)) {
-            read_unity_text(hook, &mut session, true);
-        }
-        // A Ren'Py game's dialogue, likewise, from the say screen (`renpy.rs`); the hooker still
-        // runs, for the game's other text and for a Ren'Py the DLL cannot read.
-        else if cfg!(windows) && targets.iter().any(|t| t.wine.is_none() && renpy::is_renpy_game(&t.exe)) {
+        // all sorts of strings, which tell little of when a line is shown (`unity.rs`). A Ren'Py
+        // game's dialogue likewise, from the say screen (`renpy.rs`); the hooker still runs, for
+        // the game's other text and for a Ren'Py the DLL cannot read.
+        if cfg!(windows)
+            && targets.iter().any(|t| t.wine.is_none() && (unity::is_mono_game(&t.exe) || renpy::is_renpy_game(&t.exe)))
+        {
             read_unity_text(hook, &mut session, true);
         }
         hook.publish(&session);
