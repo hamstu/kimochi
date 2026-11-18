@@ -489,7 +489,12 @@ impl SentenceAudio {
 
     /// What the listener knows, for the Diagnostics window.
     pub fn debug(&self) -> Debug {
-        let mut report = lock(&self.ears).as_ref().map(|ears| ears.listener.report(DEBUG_LINES, DEBUG_HEARD_MS));
+        let (mut report, worded) = lock(&self.ears).as_ref().map_or((None, Vec::new()), |ears| {
+            let report = ears.listener.report(DEBUG_LINES, DEBUG_HEARD_MS);
+            let worded =
+                report.lines.iter().filter(|l| ears.hooked.by_its_words(&l.uid)).map(|l| l.uid.clone()).collect();
+            (Some(report), worded)
+        });
         if let Some(report) = report.as_mut() {
             let store = lock(&self.store);
             for line in &mut report.lines {
@@ -511,7 +516,11 @@ impl SentenceAudio {
                     line.heard = None;
                     line.clip = info.map(|info| (info.start_ms, info.start_ms + info.duration_ms));
                     line.provisional = false;
-                    line.note = "Clean game voice, matched by capture timing and stream heuristics.".into();
+                    line.note = if worded.contains(&line.uid) {
+                        "Clean game voice, matched by its words.".into()
+                    } else {
+                        "Clean game voice, matched by capture timing and stream heuristics.".into()
+                    };
                 }
             }
         }
@@ -623,7 +632,19 @@ impl SentenceAudio {
             }
             let inputs_ms = began.elapsed().as_millis();
             let now = self.pauses.now();
-            for matched in ears.hooked.tick(now) {
+            let mut matched = ears.hooked.tick(now);
+            // Lines the timing gave no clip, or a clip that says something else: given theirs by
+            // the clip's words, with the recogniser (Japanese, once its model is loaded). A line
+            // the system recording already voiced gets its clean clip in its place.
+            if let Some(asr) = ears.listener.recogniser() {
+                let mut hear = |samples: &[f32], rate: u32| {
+                    asr.transcribe(&kimochi_speech::vad::to_16k(samples, rate))
+                        .map_err(|e| eprintln!("[sentence-audio] a clip could not be heard: {e}"))
+                        .ok()
+                };
+                matched.extend(ears.hooked.by_words(now, &mut hear));
+            }
+            for matched in matched {
                 if let Err(e) = self.keep_hooked(&matched) {
                     ears.hooked.report.error = Some(e);
                     ears.hooked.retry(&matched.line.uid);

@@ -532,6 +532,11 @@ impl Listener {
         self.asr.is_some()
     }
 
+    /// The recogniser, for hearing a clean game clip (`hooked::Hooked::by_words`).
+    pub fn recogniser(&mut self) -> Option<&mut SenseVoice> {
+        self.asr.as_mut()
+    }
+
     /// Whether lines are matched by their words: the recogniser is there (or, in tests, its
     /// transcripts are given).
     fn recognising(&self) -> bool {

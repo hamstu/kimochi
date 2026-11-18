@@ -7,7 +7,7 @@
 //! card falls back to the system recording (music and all). A clip's own words say whose it is,
 //! however far it is from its line. A clean clip transcribes well (SenseVoice on SiglusEngine
 //! voices: a line's own clip covers 56-100% of its characters, another line's rarely half), and
-//! quickly (about 30 ms a second of speech on an ARM laptop).
+//! quickly (about 30 ms a second of speech on an ARM64 machine).
 //!
 //! A wrong voice on a card is worse than the system recording, so a clip is given by its words
 //! only on clear evidence: enough of the line heard in it (`MIN_HEARD`, `MIN_SCORE`), clearly
@@ -38,11 +38,15 @@ pub const POOR_FIT: f64 = 0.3;
 pub const BETTER_BY: f64 = 0.4;
 /// Timing matches are checked for this long after their line arrives.
 pub const VERIFY_MS: f64 = 60_000.0;
-/// Clips transcribed in one pass at most (each about 30 ms a second of speech).
-pub const PER_PASS: usize = 6;
+/// Seconds of clips heard in one pass at most (about 30 ms a second of speech on an idle ARM64
+/// machine, 100-250 ms on a busy one): the pass shares its thread with the recording's listener.
+/// One clip is always heard, however long.
+pub const PER_PASS_S: f64 = 12.0;
 /// Clips are transcribed when at least this long, and at most this long (seconds).
 const MIN_CLIP_S: f64 = 0.6;
 const MAX_CLIP_S: f64 = 30.0;
+/// A clip: its capture and sequence number.
+type Key = (PathBuf, u64);
 
 /// The recogniser: the characters heard in mono `samples` at `rate`, or None when it cannot run.
 pub type Transcribe<'a> = dyn FnMut(&[f32], u32) -> Option<Vec<HeardChar>> + 'a;
@@ -110,7 +114,7 @@ fn worth_hearing(c: &super::HookClip, all: &[super::HookClip]) -> bool {
 impl Hooked {
     /// Lines the timing gave no clip (or a clip that says something else), given theirs by its
     /// words: see the module. Call after [`Hooked::tick`], with the recogniser. Clips are heard
-    /// once each, at most [`PER_PASS`] a call, those nearest a line waiting for one first.
+    /// once each, at most [`PER_PASS_S`] of them a call, those nearest a line waiting for one first.
     pub fn by_words(&mut self, now: f64, transcribe: &mut Transcribe) -> Vec<Matched> {
         let letters = |text: &str| matching::fold(text).0.len() as f64;
         let all: Vec<super::HookClip> = self.feeds.values().flat_map(|f| f.clips().iter().cloned()).collect();
@@ -161,7 +165,12 @@ impl Hooked {
             }
         }
         wanted.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, dir, c) in wanted.into_iter().take(PER_PASS) {
+        let mut budget = PER_PASS_S;
+        for (_, dir, c) in wanted {
+            if budget <= 0.0 {
+                break;
+            }
+            budget -= c.dur;
             let heard = match self.feeds[&dir].decode(&c) {
                 Ok((samples, rate)) if !samples.is_empty() => transcribe(&samples, rate),
                 _ => Some(Vec::new()),
@@ -236,7 +245,7 @@ impl Hooked {
             });
             !unheard && !playing.iter().any(|s| near(*s, l)) && (best_start <= l.anchor() || now >= l.anchor() + LAG_MS)
         };
-        let mut give: Vec<(String, usize, Option<(PathBuf, u64)>)> = Vec::new();
+        let mut give: Vec<(String, usize, Option<Key>)> = Vec::new();
         for l in &open {
             let fits = fits(l);
             if let Some((i, f)) = best(&fits) {

@@ -242,6 +242,10 @@ impl Hooked {
     pub fn retry(&mut self, uid: &str) {
         self.done.remove(uid);
     }
+    /// `uid` was given its clip by the clip's words (`words`), not by timing.
+    pub fn by_its_words(&self, uid: &str) -> bool {
+        self.worded.contains(uid) && self.done.contains_key(uid)
+    }
     pub fn completed(&self, uid: &str) -> bool {
         self.done.contains_key(uid)
     }
