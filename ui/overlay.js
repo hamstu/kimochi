@@ -4596,6 +4596,7 @@ void native.listen('popover:cards', ({ payload }) => {
   checkPopupLeave()
 })
 let popupLeavePointer = null
+let notedPopupLeaveError = false
 let popupLeaveTimer = null
 function checkPopupLeave(pointer = popupLeavePointer) {
   popupLeavePointer = pointer
@@ -4638,11 +4639,29 @@ function hoverLeaveRects() {
   if (!origin) return []
   const toScreen = (r) => ({ x: origin.x + r.left, y: origin.y + r.top, width: r.width, height: r.height })
   const rangeRects = (range) => [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0).map(toScreen)
+  // 10ten marks its match with StaticRanges, which have no rects of their own: a live Range over
+  // the same text has. Asking theirs threw on every pointer sample while its pop-up was up, so no
+  // move reached it and the pop-up stuck on the first word.
+  const live = (range) => {
+    if (typeof range.getClientRects === 'function') return range
+    try {
+      const copy = document.createRange()
+      copy.setStart(range.startContainer, range.startOffset)
+      copy.setEnd(range.endContainer, range.endOffset)
+      return copy
+    } catch {
+      return null
+    }
+  }
   const ranges = []
   const selection = window.getSelection()
   if (selection && !selection.isCollapsed)
     for (let i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i))
-  for (const name of MATCH_HIGHLIGHTS) ranges.push(...(globalThis.CSS?.highlights?.get(name) ?? []))
+  for (const name of MATCH_HIGHLIGHTS)
+    for (const range of globalThis.CSS?.highlights?.get(name) ?? []) {
+      const usable = live(range)
+      if (usable) ranges.push(usable)
+    }
   const word = ranges.flatMap(rangeRects)
   const wordBox = boundingRect(word)
   if (!wordBox) return hitRects()
@@ -6203,7 +6222,15 @@ await native.listen('pointer', ({ payload }) => {
   // The card clear of the game is the reader's to click without the key (`hookCardClear`).
   const cardArmed = !clickThrough('card') || gateOpen || hookCardClear()
   if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), cardArmed)) return
-  checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
+  // Never in the way of the scan below: a throw here once stopped every move reaching 10ten.
+  try {
+    checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
+  } catch (error) {
+    if (!notedPopupLeaveError) {
+      notedPopupLeaveError = true
+      log({ check: 'popup-leave-error', error: String(error?.message ?? error) })
+    }
+  }
   // Yomitan's popups hear the pointer enter and leave them, for "Hide popup on cursor exit" (#95).
   // Not while the controller reads: the resting mouse is not the reader's.
   if (trackPopupHover && !extensionHosted && !controller.drivesLookups) {
