@@ -330,21 +330,6 @@ pub fn chosen<'a>(scored: &'a [Scored], min: f64, language: &Language) -> Option
     scored.iter().find(|s| s.effective >= min * scale && (s.in_largest || s.effective >= MIN_OFF_BOX * scale))
 }
 
-/// Of `score`'s list read again with `incumbent` chosen, the thread to hand the choice to: the best,
-/// when it is another that `chosen` would take and the screen shows it clearly better than the
-/// incumbent (by [`BETTER`]). Never while the incumbent is not on screen at all: its latest text
-/// may be something else it handled between lines (Ren'Py's string formatting is the clean thread
-/// for dialogue, and formats a menu or a file name now and then), and a thread that stops showing
-/// the lines is left to the missed lines (`MISSED_LINES`).
-pub fn better<'a>(scored: &'a [Scored], incumbent: &str, min: f64, language: &Language) -> Option<&'a Scored> {
-    let best = chosen(scored, min, language)?;
-    let old = scored.iter().find(|s| s.key == incumbent)?;
-    (best.key != incumbent && best.score >= old.score * BETTER).then_some(best)
-}
-
-/// How much better a thread must score to take the choice from one already made.
-const BETTER: f64 = 1.25;
-
 /// The fewest characters a thread matched outside the largest text must have to be chosen.
 const MIN_OFF_BOX: f64 = 12.0;
 
@@ -1046,24 +1031,6 @@ mod tests {
         // A nameplate or a code is not a line.
         assert!(!another_line(line, "アカネ", 6, ja()));
         assert!(!another_line(line, "se_21_140_voice", 6, ja()));
-    }
-
-    #[test]
-    fn a_second_look_hands_over_only_to_a_clearly_better_thread_with_the_chosen_one_on_screen() {
-        let s =
-            |key: &str, score: f64| Scored { key: key.into(), score, matched: 20, effective: 20.0, in_largest: true };
-        // The other shows the line alone, the chosen one with the line before it.
-        assert_eq!(
-            better(&[s("clean", 50.0), s("noisy", 30.0)], "noisy", 6.0, ja()).map(|b| b.key.as_str()),
-            Some("clean")
-        );
-        // Not clearly better.
-        assert!(better(&[s("other", 50.0), s("chosen", 45.0)], "chosen", 6.0, ja()).is_none());
-        // The chosen thread's latest text is not on screen (between lines it handled other text):
-        // no hand-over on that alone.
-        assert!(better(&[s("other", 50.0)], "chosen", 6.0, ja()).is_none());
-        // The chosen one is the best.
-        assert!(better(&[s("chosen", 50.0), s("other", 20.0)], "chosen", 6.0, ja()).is_none());
     }
 
     #[test]

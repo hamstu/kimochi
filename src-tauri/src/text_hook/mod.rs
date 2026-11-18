@@ -58,9 +58,6 @@ const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
 const GLYPHS: u32 = 3;
 /// Lines from other engine threads, with the chosen one silent, after which the screen is read again.
 const MISSED_LINES: u32 = 3;
-/// Lines another engine thread must have sent, with one chosen, for the screen to be read again
-/// (`second_look`).
-const SECOND_LOOK_AFTER: u64 = 3;
 /// Pieces in a row in another language after which a chosen thread hands over to one in the language.
 const FOREIGN_LINES: u32 = 3;
 
@@ -129,10 +126,6 @@ struct Session {
     /// Threads given up this session for missing lines: never taken back as the game's remembered
     /// thread, which would hand them the choice again as soon as they speak.
     dropped: Vec<String>,
-    /// Threads the screen has been read again for (`second_look`), once each, and whether a read
-    /// is under way.
-    looked: Vec<String>,
-    looking: bool,
     last_line: Option<String>,
     /// The id the last line was sent with: a line carried on in the next burst replaces it.
     last_id: Option<String>,
@@ -798,24 +791,6 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             return;
         }
     }
-    // A thread chosen when few had spoken (automatically, or remembered from then), while another
-    // engine thread has now said a few lines of its own: the screen is read again, once for each
-    // such thread, and the better one kept (Ren'Py: LunaHook's own hook speaks first, with the
-    // menu's labels and each line twice; the runtime's string formatting, with the line alone,
-    // only from the first line on).
-    if matches!(session.selected_by, Some("auto") | Some("saved"))
-        && session.selected.as_deref() != Some(key)
-        && !session.looking
-        && session.threads[index].count == SECOND_LOOK_AFTER
-        && !pick::is_generic(&session.threads[index].hookcode, &session.threads[index].name)
-        && !session.looked.iter().any(|k| k == key)
-        && pick::reads_as(&pick::normalize(&session.threads[index].text), language)
-    {
-        session.looked.push(key.to_string());
-        session.looking = true;
-        let generation = session.generation;
-        std::thread::spawn(move || second_look(hook, generation));
-    }
     if session.selected.as_deref() == Some(key) {
         crate::debug_report::trace(
             &hook.app,
@@ -1128,53 +1103,6 @@ fn as_candidates(threads: &[Thread]) -> Vec<Candidate<'_>> {
             noise: t.noisy as f64 / t.count.max(1) as f64,
         })
         .collect()
-}
-
-/// Reads the screen again with a thread chosen, after another engine thread began to speak, and
-/// hands the choice to that one when the screen shows it clearly better (`pick::better`).
-fn second_look(hook: &'static Hook, generation: u64) {
-    std::thread::sleep(PICK_DELAY);
-    let looked = {
-        let mut session = hook.lock();
-        if session.generation != generation {
-            return;
-        }
-        match session.selected.clone() {
-            Some(incumbent) => {
-                Some((session.source_id.clone(), session.observer_engine.clone(), pick_candidates(&session), incumbent))
-            }
-            None => {
-                session.looking = false;
-                None
-            }
-        }
-    };
-    let Some((source_id, observer_engine, candidates, incumbent)) = looked else { return };
-    let better = read_screen(hook, &source_id, observer_engine.as_deref()).ok().and_then(|blocks| {
-        let list = as_candidates(&candidates);
-        let scored = pick::score(&list, &blocks, hook.language());
-        pick::better(&scored, &incumbent, PICK_MIN_MATCH as f64, hook.language()).map(|s| s.key.clone())
-    });
-    let mut session = hook.lock();
-    if session.generation != generation {
-        return;
-    }
-    session.looking = false;
-    // Chosen by hand meanwhile, or another thread already taken over.
-    if session.selected.as_deref() != Some(incumbent.as_str()) || session.selected_by == Some("manual") {
-        return;
-    }
-    let Some(better) = better else { return };
-    crate::debug_report::trace(&hook.app, json!({ "check": "texthook-second-look", "from": incumbent, "to": better }));
-    if let Some(thread) = session.threads.iter().find(|t| t.key == better).cloned() {
-        if let Some(exe) = session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name)) {
-            remember(hook, &exe, Some(thread.signature()));
-        }
-        session.dropped.push(incumbent);
-        session.selected = Some(better);
-        session.selected_by = Some("auto");
-        hook.publish(&session);
-    }
 }
 
 fn read_screen(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec<pick::Block>, String> {
