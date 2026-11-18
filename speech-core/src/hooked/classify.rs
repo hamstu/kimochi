@@ -89,10 +89,10 @@ fn near(start: f64, windows: &[(f64, f64, f64)]) -> bool {
 fn same_sound(a: &HookClip, b: &HookClip) -> bool {
     // Two files of their own: different names are different sounds, however close their lengths
     // (whole-file clips carry no loudness to tell them apart; two voice files 0.7 ms apart). A
-    // numbered read of one archive (`voice.ovk#3`) names the archive, not the sound.
-    let file = |c: &HookClip| c.source.as_deref().map(|s| s.rsplit_once('#').map_or(s, |(f, _)| f).to_owned());
-    if let (Some(x), Some(y)) = (file(a), file(b)) {
-        if x != y {
+    // numbered read from an archive (`z0001.ovk#3`) names the archive, not the sound: those are
+    // told by length (live SiglusEngine: the same 0.41 s piece read from several archives).
+    if let (Some(x), Some(y)) = (a.source.as_deref(), b.source.as_deref()) {
+        if x != y && !x.contains('#') && !y.contains('#') {
             return false;
         }
     }
