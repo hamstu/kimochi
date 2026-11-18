@@ -122,8 +122,10 @@ struct Session {
     /// Lines other threads have sent since the chosen one last spoke, and the last of them.
     missed: u32,
     missed_text: String,
-    /// When the last of them was counted.
+    /// When the last of them was counted, and the thread chosen when they were: lines missed are
+    /// the chosen thread's, counted afresh for each choice and not at all while none is made.
     missed_at: Option<Instant>,
+    missed_for: Option<String>,
     pick_note: Option<String>,
     /// Why an earlier engine was given up for the one in use.
     fallback: Option<String>,
@@ -845,11 +847,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             // One click's lines count once: SiglusEngine sends a line through several threads in
             // several forms, often before the chosen thread's, which made three "missed" lines of
             // every click and dropped a good thread while its line came in.
-            let now = Instant::now();
-            if another_click(session.missed_at, now) {
-                session.missed = session.missed.saturating_add(1);
-                session.missed_at = Some(now);
-            }
+            count_missed(session, Instant::now());
             session.missed_text = shown;
         }
     }
@@ -1134,6 +1132,22 @@ fn as_candidates(threads: &[Thread]) -> Vec<Candidate<'_>> {
             noise: t.noisy as f64 / t.count.max(1) as f64,
         })
         .collect()
+}
+
+/// A line another thread sent, counted against the chosen thread (`another_click`). Nothing is
+/// counted while no thread is chosen; and lines counted against an earlier choice (or while none
+/// was made) never count against a thread chosen since: carried over, the thread the screen chose
+/// again was dropped at once, its line's first row lost each time.
+fn count_missed(session: &mut Session, now: Instant) {
+    if session.missed_for != session.selected {
+        session.missed = 0;
+        session.missed_at = None;
+        session.missed_for = session.selected.clone();
+    }
+    if session.selected.is_some() && another_click(session.missed_at, now) {
+        session.missed = session.missed.saturating_add(1);
+        session.missed_at = Some(now);
+    }
 }
 
 /// Whether a line another thread sent at `now` is from a later click than the last line counted
@@ -1643,7 +1657,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{another_click, failed_hook, MISS_GAP};
+    use super::{another_click, count_missed, failed_hook, Session, MISS_GAP};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -1655,6 +1669,25 @@ mod tests {
         assert!(!another_click(Some(t), t + MISS_GAP - Duration::from_millis(1)));
         // The next click's line.
         assert!(another_click(Some(t), t + MISS_GAP));
+    }
+
+    #[test]
+    fn lines_are_missed_by_the_thread_chosen_when_they_came() {
+        let t = Instant::now();
+        let click = |n: u32| t + MISS_GAP * n;
+        let mut session = Session::default();
+        // No thread chosen: nothing is missed.
+        count_missed(&mut session, click(0));
+        count_missed(&mut session, click(1));
+        assert_eq!(session.missed, 0);
+        session.selected = Some("a".into());
+        count_missed(&mut session, click(2));
+        count_missed(&mut session, click(3));
+        assert_eq!(session.missed, 2);
+        // Chosen again (or another chosen): it starts with none missed.
+        session.selected = Some("b".into());
+        count_missed(&mut session, click(4));
+        assert_eq!(session.missed, 1);
     }
 
     #[test]
