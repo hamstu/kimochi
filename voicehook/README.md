@@ -16,7 +16,7 @@ adapter per audio path, an NW.js page script for HTML5 engines, a shared capture
 | Unity IL2CPP (internal calls) | Unity IL2CPP builds (`GameAssembly.dll`) | per `AudioSource.Play*`: clip name + PCM (`GetData`) | a Unity 2020.1 IL2CPP game (x64) |
 | Ren'Py (embedded Python) | Ren'Py 6/7/8 | per file started on a channel: the original file + channel | Ren'Py 8.5 (voiced) and 8.3 games, fixture |
 | CRI ADX2 (exports) | Unity games with CRIWARE (`cri_ware_unity.dll`) | per `CriAtomExPlayer`: its own PCM before CRI mixes, through an Output Analyzer, cut at `Start`/`Stop`, named for the cue | a Unity 2021 IL2CPP game with CRIWARE (x64) |
-| File reads (imports) | engines that mix every sound themselves into one stream (AliceSoft System4) | per voice file read from a voice-named archive or folder: the original Ogg/WAV file | an AliceSoft System4 game (x86) |
+| File reads (imports) | engines that mix every sound themselves into one stream (AliceSoft System4); Chromium-based games (Electron, NW.js: TyranoScript, RPG Maker MV/MZ), attached to the browser process | per voice file read from a voice-named archive or folder; per sound a Chromium game loads (an `app.asar` entry read from its start, or a loose sound file opened for reading, RPG Maker audio decrypted): the original Ogg/WAV file, named by its path | an AliceSoft System4 game (x86), a TyranoScript game (Electron 7, x64, attached), an RPG Maker MV game (NW.js, x86) |
 | Web (page script) | RPG Maker MV/MZ, TyranoScript (howler), `<audio>`, on NW.js or Electron | per play: the original file (RPG Maker audio decrypted) + URL | an RPG Maker MV game (NW.js), a TyranoScript game (Electron) |
 
 Voice clips from these games were checked with `speechcheck` (Kimochi's VAD + SenseVoice): each
