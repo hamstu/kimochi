@@ -6129,32 +6129,6 @@ function rekeyForHover(event) {
 }
 
 /** The element at a point, looking inside open shadow roots (an engine's pop-up) as a real event would. */
-/**
- * The element an extension engine's move goes to at (x, y): the deepest one there, into the
- * engine's pop-up when the point is on it. Off the pop-up, never the pop-up's host: 10ten's host
- * (`#tenten-ja-window`, a manual popover in the top layer) can lie over the text once it has shown,
- * and 10ten ignores any move aimed at it, so the pop-up stuck on the first word looked up until it
- * closed. The element under the host takes the move then.
- */
-function scanTargetAt(x, y) {
-  const deep = deepElementFromPoint(document, x, y)
-  const selector = window.__kimochiExtensionHost?.descriptor?.popupSelector
-  if (!deep || !selector || overPopupAt({ x, y })) return deep
-  const inHost = (element) => {
-    for (let node = element; node; node = node.parentElement ?? node.getRootNode?.()?.host ?? null) {
-      if (node.matches?.(selector)) return true
-    }
-    return false
-  }
-  if (!inHost(deep)) return deep
-  if (!notedUnderPopupHost) {
-    notedUnderPopupHost = true
-    log({ check: 'scan-target-under-popup-host', host: selector })
-  }
-  return document.elementsFromPoint(x, y).find((element) => !inHost(element)) ?? deep
-}
-let notedUnderPopupHost = false
-
 function deepElementFromPoint(doc, x, y) {
   let element = doc.elementFromPoint(x, y)
   while (element?.shadowRoot) {
@@ -6269,7 +6243,7 @@ await native.listen('pointer', ({ payload }) => {
     if (extensionHosted) renderer.flushPointer()
     // Into the engine's pop-up, too: Hachidori opens a nested lookup from a `mousemove` listener
     // on its pop-up inside its shadow root, which an event at the shadow host never reaches (#94).
-    const target = extensionHosted ? (scanTargetAt(local.x, local.y) ?? window) : window
+    const target = extensionHosted ? (deepElementFromPoint(document, local.x, local.y) ?? window) : window
     // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
     // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
     const types = window.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
