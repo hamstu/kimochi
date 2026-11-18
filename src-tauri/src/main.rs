@@ -1,5 +1,8 @@
 // A release build on Windows is a GUI app: no console window behind it.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// settings.rs `defaults()` is one `json!` literal of every setting, past the default 128 levels
+// of macro expansion `serde_json::json!` takes for it.
+#![recursion_limit = "256"]
 mod boot;
 mod browser_bridge;
 mod cli;
