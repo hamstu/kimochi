@@ -238,3 +238,28 @@
 .radial-preview[data-dragging] .cm-shortcut {
   opacity: 0;
 }
+
+/* Settings → Overlay → Radial menu (RadialMenuLookSection.tsx): the ring as a picture, a little
+   smaller, with nothing to drag; then its colour and the way to the editor, across the group. */
+.radial-preview[data-static] {
+  --radial-scale: 0.5;
+  height: calc(620px * 0.5);
+}
+.radial-preview[data-static] .cm-wedge {
+  cursor: default;
+}
+.radial-look-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  padding: var(--k-space-3);
+  border-top: 1px solid var(--k-line);
+}
+.radial-look-colour {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-3);
+}

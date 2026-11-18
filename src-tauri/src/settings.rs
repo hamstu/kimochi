@@ -101,6 +101,9 @@ pub fn defaults() -> Value {
         "overlayStyle": { "color": "#3e63dd", "appearance": "app", "opacity": 40 },
         // How opaque every engine's dictionary pop-up is drawn (Settings → Overlay), 10–100.
         "dictionaryPopupOpacity": 100,
+        // The radial menu's colour (Settings → Overlay → Radial menu); null until chosen, when it
+        // keeps the overlay's highlight colour (ui/settings.ts `radialMenuColorOf`).
+        "radialMenuColor": null,
         // Sentence audio (sentence_audio/): off until the user turns it on.
         "sentenceAudio": {
             "voiceHook": true,

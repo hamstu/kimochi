@@ -113,6 +113,16 @@ export function popupOpacityOf(stored: unknown): number {
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
 
+/**
+ * The radial menu's colour, `#rrggbb`: the one chosen for it (`radialMenuColor`), else the
+ * overlay's highlight colour, which it followed before it had its own.
+ */
+export function radialMenuColorOf(stored: unknown, overlayStyle: unknown): string {
+  return typeof stored === 'string' && HEX_COLOR.test(stored)
+    ? stored.toLowerCase()
+    : overlayStyleOf(overlayStyle).color
+}
+
 /** `#rrggbb` as "r, g, b" for an `rgba(var(--x), a)` colour, or null for anything else. */
 export function hexToRgbTriplet(color: unknown): string | null {
   if (typeof color !== 'string' || !HEX_COLOR.test(color)) return null
@@ -309,6 +319,11 @@ export interface Settings {
   overlayStyle: OverlayStyleSettings
   /** How opaque every engine's dictionary pop-up is drawn, 10 to 100; see `popupOpacityOf`. */
   dictionaryPopupOpacity: number
+  /**
+   * The radial menu's colour, `#rrggbb` (Settings → Overlay → Radial menu), or null until one is
+   * chosen: the ring then keeps the highlight colour it always had (`radialMenuColorOf`).
+   */
+  radialMenuColor: string | null
   autoOCRSettings: AutoScanSettings
   autoScanSettings: {
     enabled: boolean
@@ -414,6 +429,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   textOverlayGrouping: DEFAULT_GROUPING,
   overlayStyle: DEFAULT_OVERLAY_STYLE,
   dictionaryPopupOpacity: 100,
+  radialMenuColor: null,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,
   autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {
@@ -956,6 +972,8 @@ function migrated<K extends keyof Settings>(key: K, stored: unknown): Settings[K
   // A colour or appearance this build does not know reads as the default, not as a broken look.
   if (key === 'overlayStyle') return overlayStyleOf(stored) as Settings[K]
   if (key === 'dictionaryPopupOpacity') return popupOpacityOf(stored) as Settings[K]
+  if (key === 'radialMenuColor')
+    return (typeof stored === 'string' && HEX_COLOR.test(stored) ? stored.toLowerCase() : null) as Settings[K]
   if (key === 'yomitanSettings') {
     // A popupType written by a newer build (an engine this one does not ship) reads as Yomitan
     // rather than leaving every window guessing.

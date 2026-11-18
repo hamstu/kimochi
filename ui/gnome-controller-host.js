@@ -1,6 +1,7 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux GNOME runtime. */
 import { createController } from './controller.js'
 import * as base from './native.js'
+import { radialMenuColorOf } from './settings.js'
 
 if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
   const { core, event } = window.__TAURI__
@@ -134,7 +135,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     buttons: () => settings.controllerButtons,
     menuItems: () => settings.controllerMenuItems,
     appearance: () => settings.appearance,
-    ringColor: () => settings.overlayStyle?.color,
+    ringColor: () => radialMenuColorOf(settings.radialMenuColor, settings.overlayStyle),
     lookupRange: async (range) => {
       const unit = range.startContainer.parentElement.parentElement
       const match = unit.indices.find((entry) => entry.offset >= range.startOffset)

@@ -4,8 +4,11 @@ import { SettingsPage } from '@kit'
 import { ShortcutsSections } from './ShortcutsSections'
 import { GamepadSections } from './GamepadSections'
 import { RadialMenuSection } from './RadialMenuSection'
+import { useSettingsTarget } from '../../bridge/settingsTarget'
 
 export function ControlsTab(): ReactNode {
+  // Settings → Overlay → Radial menu's Configure button opens the Radial menu section.
+  useSettingsTarget()
   return (
     <SettingsPage title="Shortcuts & Controls" description="Keyboard shortcuts and a game controller.">
       <ShortcutsSections />

@@ -199,7 +199,7 @@ export function createController(context) {
           ? 'light'
           : 'dark'
     if (host.dataset) host.dataset.cmTheme = theme
-    // The radial menu in the overlay's highlight colour (Settings → Overlay).
+    // The radial menu in its colour (Settings → Overlay → Radial menu; the highlight's until chosen).
     const hex = context.ringColor?.()
     const ring =
       typeof hex === 'string' && /^#[0-9a-f]{6}$/i.test(hex)

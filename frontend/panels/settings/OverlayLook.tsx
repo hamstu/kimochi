@@ -13,12 +13,9 @@
  * it live (overlay.js `applyOverlayStyle`).
  */
 import { useEffect, useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import * as ToggleGroup from '@radix-ui/react-toggle-group'
-import { Check, Pipette } from 'lucide-react'
-import { Slider, cn } from '@kit'
+import { Slider } from '@kit'
 import {
   DEFAULT_OVERLAY_STYLE,
-  OVERLAY_HIGHLIGHT_PRESETS,
   hexToRgbTriplet,
   highlightStrength,
   overlayStyleOf,
@@ -31,6 +28,7 @@ import { usePrefs } from '../../kit/appearance-state'
 import { PREVIEW_SURFACE, previewWord, usePreviewLine, type PreviewLine } from './overlayPreview'
 import { CardLookSelect, TransparentMark } from './CardLook'
 import { GridField } from '../../components/GridField'
+import { ColourSwatches } from './ColourSwatches'
 import '@ui/overlay-text.css'
 import './overlay-look.css'
 
@@ -132,7 +130,6 @@ export function OverlayLook(): ReactNode {
   const [draft, setDraft] = useState<string | null>(null)
   const color = draft ?? look.color
   const colorRgb = hexToRgbTriplet(color) ?? hexToRgbTriplet(DEFAULT_OVERLAY_STYLE.color)!
-  const preset = OVERLAY_HIGHLIGHT_PRESETS.some((option) => option.value === color)
   // The slider likewise: the preview follows the thumb, the setting follows when it rests.
   const [opacityDraft, setOpacityDraft] = useState<number | null>(null)
   const opacity = opacityDraft ?? look.opacity
@@ -190,42 +187,13 @@ export function OverlayLook(): ReactNode {
           <span className="overlay-look-label" id={`${id}-colour`}>
             Highlight colour
           </span>
-          <div className="overlay-look-swatches">
-            <ToggleGroup.Root
-              type="single"
-              value={preset ? color : ''}
-              onValueChange={(value) => value && chooseColor(value)}
-              className="overlay-look-presets"
-              aria-labelledby={`${id}-colour`}
-            >
-              {OVERLAY_HIGHLIGHT_PRESETS.map((option) => (
-                <ToggleGroup.Item
-                  key={option.value}
-                  value={option.value}
-                  className="overlay-look-swatch"
-                  style={{ '--swatch': option.value } as CSSProperties}
-                  aria-label={option.label}
-                  title={option.label}
-                >
-                  <Check aria-hidden />
-                </ToggleGroup.Item>
-              ))}
-            </ToggleGroup.Root>
-            <label
-              className={cn('overlay-look-swatch', 'overlay-look-swatch-custom')}
-              data-state={preset ? 'off' : 'on'}
-              style={{ '--swatch': color } as CSSProperties}
-              title="Custom colour"
-            >
-              <input
-                type="color"
-                value={color}
-                aria-label="Custom highlight colour"
-                onChange={(event) => setDraft(event.target.value.toLowerCase())}
-              />
-              {preset ? <Pipette aria-hidden /> : <Check aria-hidden />}
-            </label>
-          </div>
+          <ColourSwatches
+            value={color}
+            label="highlight colour"
+            labelledBy={`${id}-colour`}
+            onChoose={chooseColor}
+            onDraft={setDraft}
+          />
         </div>
         <div className="overlay-look-control">
           <span className="overlay-look-label">Highlight opacity</span>
