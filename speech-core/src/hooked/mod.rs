@@ -480,6 +480,14 @@ impl Hooked {
         // better is the voice and the other is set aside, so a line's voice comes from one of them.
         let groups = &self.report.groups;
         let echo = |a: &classify::Verdict, b: &classify::Verdict| classify::echoes(&all, &a.group, &b.group);
+        // Nor is a group that also starts with its lines, near enough every time, but with other
+        // lines: another character's voice in another format.
+        let (lead_ms, lag_ms) = (self.report.lead_ms, self.report.lag_ms);
+        let apart = |a: &classify::Verdict, b: &classify::Verdict| {
+            a.with_lines >= 0.75
+                && b.with_lines >= 0.75
+                && classify::shared_lines(&all, &lines, &a.group, &b.group, lead_ms, lag_ms) < 0.34
+        };
         // The game's remembered voice stream first; then a named one; then the one that hears each
         // sound once (`classify::per_sound`); then the score.
         let remembered = |v: &classify::Verdict| self.remembered.as_ref() == Some(&v.group);
@@ -502,6 +510,7 @@ impl Hooked {
                                         && (sounds(other) || other.named)
                                         && other.voice >= v.voice - 0.15
                                         && !echo(v, other)
+                                        && !apart(v, other)
                                 })))
             })
             .collect();
@@ -558,6 +567,8 @@ impl Hooked {
                     && c.dur >= 0.15
                     && c.dur <= 30.0
                     && classify::candidate(c, &voice)
+                    // An effect sharing the voice's format, played again (`classify::repeated`).
+                    && !classify::repeated(c, &all)
             })
             .collect();
         // Of the pieces an adapter makes of one sound (`classify::per_sound`: the archive's partial

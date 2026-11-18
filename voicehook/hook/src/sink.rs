@@ -9,7 +9,7 @@
 //! - `idle`: it has been quiet for `IDLE_MS` and the pending audio has had time to play out;
 //! - `cap`: more than `CAP_S` seconds pending (a stream that never stops).
 //!
-//! Trailing digital silence (exact zeros) is trimmed off clips; all-silent clips are logged but
+//! Leading and trailing digital silence (exact zeros) is trimmed off clips; all-silent clips are logged but
 //! not written. Times are Unix ms.
 use crate::util::{hex, lock, log, now_ms};
 use serde_json::{json, Value};
@@ -520,6 +520,17 @@ impl Writer {
         let align = s.fmt.map_or(1, |f| f.block_align.max(1) as usize);
         let trimmed = vh_common::trim_zeros(&data).len().div_ceil(align) * align;
         let data = &data[..trimmed.min(data.len())];
+        // Leading digital silence too. Some of it may never have played: a game that fills a
+        // DirectSound buffer with zeros, then streams the sound into it (Majiro: a 16 s buffer
+        // cleared, then a 6 s voice; the clip was 22 s, the voice at its end). What was given
+        // beyond what could play between the clip's start and now is that; the rest played, and
+        // the clip starts that much later.
+        let lead = vh_common::leading_zeros(data, align);
+        let mut start = s.clip_start();
+        if let Some(f) = s.fmt.filter(|_| lead > 0) {
+            start += played_silence(f.seconds(data.len()), (t - start) / 1000.0, f.seconds(lead)) * 1000.0;
+        }
+        let data = &data[lead..];
         let stats = s.fmt.map(|f| level(&f, data));
         let silent = matches!(stats, Some((peak, _)) if peak < 1e-4);
         self.seq += 1;
@@ -538,7 +549,6 @@ impl Writer {
                 }
             }
         };
-        let start = s.clip_start();
         self.write(json!({
             "ev": "clip", "t": t, "seq": self.seq, "s": s.id, "api": s.api, "why": why,
             "start": start, "data_at": s.t_data0, "dur": secs, "bytes": data.len(),
@@ -547,6 +557,14 @@ impl Writer {
             "fmt": s.fmt.map(|f| f.summary()), "file": file, "source": s.source,
         }));
     }
+}
+
+/// Of `lead` seconds of silence a clip of `given` seconds starts with, how much played before the
+/// sound: all but what was given beyond what could play in the `could_play` seconds since it
+/// started (a buffer zero-filled before the sound streamed in never plays its zeros first).
+fn played_silence(given: f64, could_play: f64, lead: f64) -> f64 {
+    let never_played = (given - could_play.max(0.0)).clamp(0.0, lead);
+    lead - never_played
 }
 
 /// `_<name>` from a source path or cue, safe for a file name (at most 40 chars), or "".
@@ -618,4 +636,21 @@ fn write_wav(path: &Path, fmt: &[u8], data: &[u8]) -> std::io::Result<()> {
         f.write_all(&[0])?;
     }
     f.flush()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::played_silence;
+
+    #[test]
+    fn zeros_a_buffer_was_filled_with_never_played() {
+        // A 16 s buffer cleared, then a 6.24 s voice streamed in and stopped 6.4 s after play.
+        // (What played is the voice and the 0.16 s it had to spare before the stop.)
+        assert!(played_silence(22.24, 6.4, 16.0) < 0.2);
+        // A sound with half a second of silence at its start, cut once it had played out.
+        assert!((played_silence(3.5, 3.6, 0.5) - 0.5).abs() < 1e-9);
+        // Partly both: 2 s of zeros given, 1 s more than could play.
+        assert!((played_silence(5.0, 4.0, 2.0) - 1.0).abs() < 1e-9);
+        assert_eq!(played_silence(5.0, 4.0, 0.0), 0.0);
+    }
 }

@@ -281,3 +281,21 @@ pub fn trim_zeros(b: &[u8]) -> &[u8] {
     let end = b.iter().rposition(|&x| x != 0).map_or(0, |i| i + 1);
     &b[..end]
 }
+
+/// How many bytes of leading digital silence (exact zeros) `b` starts with, in whole blocks of
+/// `align` bytes.
+pub fn leading_zeros(b: &[u8], align: usize) -> usize {
+    let align = align.max(1);
+    let n = b.iter().position(|&x| x != 0).unwrap_or(b.len());
+    n / align * align
+}
+
+#[cfg(test)]
+mod leading_zeros_tests {
+    #[test]
+    fn leading_zeros_are_counted_in_whole_blocks() {
+        assert_eq!(super::leading_zeros(&[0, 0, 0, 5, 0], 2), 2);
+        assert_eq!(super::leading_zeros(&[0, 0, 0, 0], 2), 4);
+        assert_eq!(super::leading_zeros(&[1, 0], 2), 0);
+    }
+}

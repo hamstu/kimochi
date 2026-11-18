@@ -742,3 +742,73 @@ fn a_voice_that_starts_after_a_pause_is_timed_on_the_game_clock() {
     assert_eq!(matched.len(), 1);
     assert_eq!((matched[0].clip.seq, matched[0].clip.start), (1, 1_200.));
 }
+#[test]
+fn effects_in_the_voices_format_are_left_out_and_the_voices_kept() {
+    // Live CatSystem2: every sound is a mono DirectSound buffer of one format, voices and effects
+    // alike. Each click that advances plays one of two short click sounds just before the line,
+    // and a longer effect comes back now and then; the voices, each its own recording, start just
+    // before their lines. Counted with the voices, the repeats scored the group 0.13 and no line
+    // was given its voice from the game.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    let mut matched = Vec::new();
+    let mut seq = 1000u64;
+    let mut sound = |f: &Fixture, start: f64, dur: f64, rms: f64| {
+        seq += 1;
+        let name = format!("clips/se{seq}.wav");
+        crate::wav::write(&f.0.join(&name), &vec![0.1; 16000], 16000).unwrap();
+        f.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"dsound","start":start,"t":start+dur*1000.,"dur":dur,"file":name,"fmt":"16000Hz 1ch PCM16","rms":rms}));
+    };
+    for i in 1..=12u64 {
+        let ts = i as f64 * 7000.;
+        // The click that advanced to the line.
+        let (dur, rms) = [(0.178, 0.3032), (0.241, 0.2959)][(i % 2) as usize];
+        sound(&f, ts - 450., dur, rms);
+        // An effect played again with some lines.
+        if i % 4 == 0 {
+            sound(&f, ts - 200., 3.656, 0.0836);
+        }
+        // Most lines are voiced.
+        if i % 3 != 0 {
+            f.clip(i, ts - 300., None, 2.0 + i as f64 * 0.37);
+        }
+        h.line(line(&i.to_string(), ts));
+        matched.extend(h.tick(ts + 5000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+    }
+    assert!(matched.len() >= 7, "{matched:?} groups: {:?}", h.report.groups);
+    // An effect is known as one once it plays again: the first time (line 4) it can still be
+    // taken for a voice; from then on, never.
+    let wrong: Vec<_> = matched.iter().filter(|(uid, seq)| uid != &seq.to_string()).collect();
+    assert!(wrong.iter().all(|(uid, _)| uid == "4"), "{matched:?} groups: {:?}", h.report.groups);
+    assert!(matched.iter().any(|(uid, seq)| uid == "8" && *seq == 8), "{matched:?}");
+}
+#[test]
+fn two_characters_voices_in_two_formats_are_both_the_voice() {
+    // Live YU-RIS: one character's voice is mono 44.1 kHz, another's mono 48 kHz. Each group
+    // starts with its lines every time, but each was the other's competitor: once the second had
+    // a few clips, neither was trusted and the lines fell back to the system recording.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    let mut matched = Vec::new();
+    for i in 1..=12u64 {
+        let ts = i as f64 * 7000.;
+        if i % 2 == 1 {
+            f.clip(i, ts - 330., None, 2.0 + i as f64 * 0.2);
+        } else {
+            let name = format!("clips/b{i}.wav");
+            crate::wav::write(&f.0.join(&name), &vec![0.2; 16000], 16000).unwrap();
+            f.event(json!({"ev":"clip","seq":i,"s":200+i,"api":"dsound","start":ts-330.,"t":ts+3000.,"dur":2.5 + i as f64 * 0.1,"file":name,"fmt":"48000Hz 1ch PCM16","rms":0.05 + i as f64 * 0.002}));
+        }
+        h.line(line(&i.to_string(), ts));
+        matched.extend(h.tick(ts + 5000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+    }
+    assert!(matched.iter().all(|(uid, seq)| uid == &seq.to_string()), "{matched:?} groups: {:?}", h.report.groups);
+    // Every line of either voice from the sixth on (both groups have been heard enough by then).
+    for i in 6..=12u64 {
+        assert!(
+            matched.iter().any(|(uid, _)| uid == &i.to_string()),
+            "line {i}: {matched:?} groups: {:?}",
+            h.report.groups
+        );
+    }
+}

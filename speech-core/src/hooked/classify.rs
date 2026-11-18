@@ -87,7 +87,9 @@ fn near(start: f64, windows: &[(f64, f64, f64)]) -> bool {
 /// loud where the adapter measured it (a stream cut short at its buffer's end, which many clips
 /// share, is told apart by its loudness).
 fn same_sound(a: &HookClip, b: &HookClip) -> bool {
-    a.dur > 0.0
+    // Pieces an adapter makes of one sound start together (`per_sound`): not the sound again.
+    (a.start - b.start).abs() > ECHO_MS
+        && a.dur > 0.0
         && (a.dur - b.dur).abs() < 0.002
         && match (a.rms, b.rms) {
             (Some(x), Some(y)) => (x - y).abs() <= 0.01 * x.max(y),
@@ -95,6 +97,17 @@ fn same_sound(a: &HookClip, b: &HookClip) -> bool {
             _ => false,
         }
 }
+
+/// Whether `c` is a sound its group plays again (another of `clips` in its group is the same
+/// recording): an effect, never a voice (`same_sound`).
+pub fn repeated(c: &HookClip, clips: &[HookClip]) -> bool {
+    let group = c.group();
+    let itself = |o: &HookClip| o.seq == c.seq && o.stream == c.stream && o.start == c.start;
+    clips.iter().any(|o| !itself(o) && o.group() == group && same_sound(c, o))
+}
+
+/// How many clips a group needs that are not repeats, for its repeats to be told apart as effects.
+const UNREPEATED: usize = 3;
 
 /// Scores every group of `clips`. Higher `voice` = more likely the voice.
 pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> Vec<Verdict> {
@@ -104,9 +117,32 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
     }
     let windows: Vec<(f64, f64, f64)> = lines.iter().map(|l| (l.anchor(), lead(l, lead_ms), lag)).collect();
     let mut out = Vec::new();
-    for (group, clips) in by {
+    for (group, all) in by {
         let mut logit = -0.5f64;
         let mut reasons = Vec::new();
+        // The same sound played again and again: effects (a game's script can fire them with its
+        // lines, timed like a voice: live SiglusEngine, a 1.61 s effect 330 ms before two lines).
+        // No two voice lines are one recording. A group that is mostly those is effects. One with
+        // enough other clips is voices and effects in one format (CatSystem2: a mono DirectSound
+        // buffer for each, the text box's click sounds among them): it is judged on the others,
+        // and the repeats are never a line's voice (`repeated`).
+        let again: Vec<&HookClip> =
+            all.iter().copied().filter(|&c| all.iter().any(|&o| !std::ptr::eq(c, o) && same_sound(c, o))).collect();
+        let total = all.len() as f64;
+        let share = again.len() as f64 / total;
+        let unrepeated: Vec<&HookClip> =
+            all.iter().copied().filter(|c| !again.iter().any(|a| std::ptr::eq(*a, *c))).collect();
+        let clips = if total >= 3.0 && share >= 0.34 && unrepeated.len() >= UNREPEATED && share < 0.75 {
+            logit -= share;
+            reasons.push(format!("{} of its clips play the same sounds again (left out as effects)", again.len()));
+            unrepeated
+        } else {
+            if total >= 3.0 && share >= 0.34 {
+                logit -= 2.0 + 4.0 * share;
+                reasons.push(format!("{} of its clips play the same sounds again", again.len()));
+            }
+            all.clone()
+        };
         let n = clips.len() as f64;
         let says: Vec<i32> = clips.iter().map(|c| name_says(&clip_name(c))).collect();
         let yes = says.iter().filter(|s| **s > 0).count() as f64 / n;
@@ -134,14 +170,6 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
         } else if (1.2..=12.0).contains(&med) {
             logit += 0.5;
         }
-        // The same sound played again and again: effects (a game's script can fire them with its
-        // lines, timed like a voice: live SiglusEngine, a 1.61 s effect 330 ms before two lines).
-        // No two voice lines are one recording.
-        let again = clips.iter().filter(|&&c| clips.iter().any(|&o| !std::ptr::eq(c, o) && same_sound(c, o))).count();
-        if n >= 3.0 && again as f64 / n >= 0.34 {
-            logit -= 2.0 + 4.0 * again as f64 / n;
-            reasons.push(format!("{again} of its clips play the same sounds again"));
-        }
         if clips.iter().filter(|c| c.fmt.as_deref().is_some_and(|f| f.contains("1ch"))).count() as f64 / n > 0.5 {
             logit += 0.7;
             reasons.push("mono".into());
@@ -168,6 +196,26 @@ pub fn classify(clips: &[HookClip], lines: &[Line], lead_ms: f64, lag: f64) -> V
     }
     out.sort_by(|a, b| b.voice.partial_cmp(&a.voice).unwrap());
     out
+}
+
+/// Of the lines groups `a` and `b` each start a clip with, the share both do (of the fewer). Two
+/// characters' voices recorded in two formats (YU-RIS: one at 44.1 kHz, another at 48 kHz) start
+/// with different lines; a sound that comes with the voice starts with the same ones.
+pub fn shared_lines(clips: &[HookClip], lines: &[Line], a: &str, b: &str, lead_ms: f64, lag: f64) -> f64 {
+    let with = |g: &str| -> Vec<usize> {
+        lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| {
+                let w = [(l.anchor(), lead(l, lead_ms), lag)];
+                clips.iter().any(|c| c.group() == g && near(c.start, &w))
+            })
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let (x, y) = (with(a), with(b));
+    let both = x.iter().filter(|i| y.contains(i)).count();
+    both as f64 / x.len().min(y.len()).max(1) as f64
 }
 
 /// How close two clips' starts are for them to be one sound heard twice.
