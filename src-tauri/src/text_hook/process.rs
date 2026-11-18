@@ -69,6 +69,26 @@ pub fn is_same_program(parent: Option<&str>, child: &str) -> bool {
     parent.is_some_and(|parent| parent.eq_ignore_ascii_case(child))
 }
 
+/// Whether the program in `dir` is Chromium-based (Electron, NW.js, CEF): Chromium's resource
+/// packs are next to it.
+pub fn is_chromium_dir(dir: &std::path::Path) -> bool {
+    ["resources.pak", "nw.pak", "chrome_100_percent.pak", "nw_100_percent.pak", "cef.pak"]
+        .iter()
+        .any(|p| dir.join(p).is_file())
+}
+
+/// The processes the voice hook goes into. A Chromium-based game's sounds are all read from disk
+/// by its browser process (the window's, `targets[0]`), which the hook's file adapter watches;
+/// its children of the same program (renderers, GPU, utilities) are sandboxed, so the DLL cannot
+/// load there, or play only the mix: they are left out. Any other game: every target.
+pub fn voice_targets(targets: &[Target], chromium: impl Fn(&std::path::Path) -> bool) -> Vec<Target> {
+    let Some(root) = targets.first() else { return Vec::new() };
+    if !root.exe.parent().is_some_and(chromium) {
+        return targets.to_vec();
+    }
+    targets.iter().filter(|t| t.pid == root.pid || t.exe != root.exe).cloned().collect()
+}
+
 #[cfg(windows)]
 mod imp {
     use super::*;
@@ -293,6 +313,28 @@ mod tests {
         assert!(is_same_program(Some("Game.exe"), "game.exe"));
         assert!(!is_same_program(Some("Game.exe"), "crashpad_handler.exe"));
         assert!(!is_same_program(None, "game.exe"));
+    }
+
+    #[test]
+    fn a_chromium_games_voice_hook_goes_into_its_browser_process_alone() {
+        let t = |pid, exe: &str| Target { pid, exe: PathBuf::from(exe), bits: 64, wine: None };
+        let game =
+            [t(10, "C:\\G\\game.exe"), t(11, "C:\\G\\game.exe"), t(12, "C:\\G\\game.exe"), t(13, "C:\\G\\game.bin")];
+        let pids = |v: Vec<Target>| v.iter().map(|t| t.pid).collect::<Vec<_>>();
+        assert_eq!(pids(voice_targets(&game, |_| true)), vec![10, 13]);
+        // Not Chromium: every process, as before.
+        assert_eq!(pids(voice_targets(&game, |_| false)), vec![10, 11, 12, 13]);
+        assert!(voice_targets(&[], |_| true).is_empty());
+    }
+
+    #[test]
+    fn chromium_programs_are_told_by_their_resource_packs() {
+        let dir = std::env::temp_dir().join(format!("kimochi-chromium-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(!is_chromium_dir(&dir));
+        std::fs::write(dir.join("resources.pak"), b"").unwrap();
+        assert!(is_chromium_dir(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

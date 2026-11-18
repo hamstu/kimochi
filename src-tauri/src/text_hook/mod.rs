@@ -1797,7 +1797,8 @@ pub fn refresh_voice_hook() {
     if !enabled {
         return;
     }
-    for target in targets {
+    // A Chromium-based game: its browser process alone (its sandboxed children refuse the DLL).
+    for target in process::voice_targets(&targets, process::is_chromium_dir) {
         if !service.hook_attempt(target.pid) {
             continue;
         }
