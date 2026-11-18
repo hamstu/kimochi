@@ -812,3 +812,153 @@ fn two_characters_voices_in_two_formats_are_both_the_voice() {
         );
     }
 }
+
+// The words pass (`words`): a stand-in recogniser hears in each clip the text it was given.
+mod by_words {
+    use super::*;
+    use crate::sense_voice::HeardChar;
+
+    /// A clip whose samples carry its number (`heard` reads it back).
+    fn voice(f: &Fixture, seq: u64, start: f64, dur: f64) {
+        let name = format!("clips/{seq}.wav");
+        let level = seq as f32 / 100.0;
+        crate::wav::write(&f.0.join(&name), &vec![level; (dur * 16000.0) as usize], 16000).unwrap();
+        f.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"dsound","start":start,"t":start+dur*1000.0,"dur":dur,"file":name,"source":format!("voice/{seq:03}"),"fmt":"16000Hz 1ch PCM16","rms":0.1 + seq as f64 * 0.003}));
+    }
+    /// The recogniser: clip `seq` says `said[seq]`, a character every 120 ms.
+    fn hearing<'a>(said: &'a [(u64, &'a str)]) -> impl FnMut(&[f32], u32) -> Option<Vec<HeardChar>> + 'a {
+        move |samples: &[f32], _| {
+            let seq = (samples.first().copied().unwrap_or(0.0) * 100.0).round() as u64;
+            let text = said.iter().find(|(s, _)| *s == seq).map_or("", |(_, t)| *t);
+            Some(text.chars().enumerate().map(|(i, ch)| HeardChar { ch, ms: 200.0 + i as f64 * 120.0 }).collect())
+        }
+    }
+    fn run(h: &mut Hooked, from: f64, to: f64, said: &[(u64, &str)]) -> Vec<(String, u64)> {
+        let mut hear = hearing(said);
+        let mut out = Vec::new();
+        let mut now = from;
+        while now <= to {
+            out.extend(h.tick(now).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+            out.extend(h.by_words(now, &mut hear).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+            now += 250.0;
+        }
+        out
+    }
+    const A: &str = "「明日の朝は早いから、もう寝なさいね」";
+    const B: &str = "「わかった、でももう少しだけ本を読みたいの」";
+
+    #[test]
+    fn a_line_handed_over_long_after_its_voice_gets_it_by_its_words() {
+        // The text came in late (its first rows lost, the rest 2.5 s after the voice began):
+        // timing's window misses the voice; the clip says the line.
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 4.);
+        let mut h = f.hooked();
+        h.line(text_line("a", "でももう少しだけ本を読みたいの」", 12_500.));
+        let said = [(1, "わかったでももう少しだけ本を読みたいの")];
+        assert_eq!(run(&mut h, 12_500., 30_000., &said), vec![("a".to_string(), 1)]);
+        assert_eq!(h.report.by_words, 1);
+    }
+
+    #[test]
+    fn a_clip_that_says_something_else_is_never_given() {
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 4.);
+        let mut h = f.hooked();
+        h.line(text_line("a", "窓の外では、静かに雨が降り続いている。", 12_500.));
+        let said = [(1, "わかったでももう少しだけ本を読みたいの")];
+        assert!(run(&mut h, 12_500., 30_000., &said).is_empty());
+    }
+
+    #[test]
+    fn a_short_line_is_not_decided_by_words() {
+        // A gasp or a word is heard in any number of clips.
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 2.);
+        let mut h = f.hooked();
+        h.line(text_line("a", "「えっ！」", 12_500.));
+        assert!(run(&mut h, 12_500., 30_000., &[(1, "えっ")]).is_empty());
+    }
+
+    #[test]
+    fn two_clips_that_both_say_the_line_leave_it_to_the_recording() {
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 4.);
+        voice(&f, 2, 16_000., 4.);
+        let mut h = f.hooked();
+        h.line(text_line("a", A, 13_500.));
+        let said = [(1, "明日の朝は早いからもう寝なさいね"), (2, "明日の朝は早いからもう寝なさいね")];
+        let got = run(&mut h, 13_500., 40_000., &said);
+        assert!(got.is_empty(), "{got:?} lag {} lead {}", h.report.lag_ms, h.report.lead_ms);
+    }
+
+    #[test]
+    fn a_clip_two_lines_claim_goes_to_the_one_it_fits_clearly_better_or_to_neither() {
+        // Both lines are near the one clip; only A's words are in it.
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 4.);
+        let mut h = f.hooked();
+        h.line(text_line("a", A, 12_500.));
+        h.line(text_line("b", "「明日の朝は早いからね」", 13_500.));
+        let got = run(&mut h, 13_500., 40_000., &[(1, "明日の朝は早いからもう寝なさいね")]);
+        assert!(got.iter().all(|(uid, _)| uid == "a"), "{got:?}");
+    }
+
+    #[test]
+    fn rows_of_one_speech_share_its_clip() {
+        // A line handed over in two pieces, both late: each piece is its own stretch of the clip.
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 6.);
+        let mut h = f.hooked();
+        h.line(text_line("a", "「わかった、でも", 12_500.));
+        h.line(text_line("b", "もう少しだけ本を読みたいの」", 13_000.));
+        let mut got = run(&mut h, 13_000., 40_000., &[(1, "わかったでももう少しだけ本を読みたいの")]);
+        got.sort();
+        assert_eq!(got, vec![("a".to_string(), 1), ("b".to_string(), 1)]);
+    }
+
+    #[test]
+    fn a_timing_guess_that_says_something_else_gives_way_to_the_clip_that_says_the_line() {
+        // Line A arrives 2.4 s after its own voice and just before B's voice starts: timing gives
+        // A the clip that follows it (B's). Its words take A's own clip, and B's goes back to B.
+        let f = Fixture::new();
+        let mut h = f.hooked();
+        // Earlier voices on time establish the stream.
+        let mut said: Vec<(u64, &str)> = Vec::new();
+        for i in 0..4u64 {
+            let t = 2_000. + i as f64 * 5_000.;
+            voice(&f, 10 + i, t - 330., 2.);
+            h.line(text_line(&format!("e{i}"), "「おはよう、今日もいい天気だね」", t));
+        }
+        said.extend([
+            (10, "おはよう今日もいい天気だね"),
+            (11, "おはよう今日もいい天気だね"),
+            (12, "おはよう今日もいい天気だね"),
+            (13, "おはよう今日もいい天気だね"),
+        ]);
+        voice(&f, 1, 30_000., 2.);
+        voice(&f, 2, 32_700., 4.);
+        said.extend([(1, "明日の朝は早いからもう寝なさいね"), (2, "わかったでももう少しだけ本を読みたいの")]);
+        h.line(text_line("a", A, 32_400.));
+        let got = run(&mut h, 2_000., 50_000., &said);
+        let a: Vec<u64> = got.iter().filter(|(u, _)| u == "a").map(|(_, s)| *s).collect();
+        assert_eq!(a.last(), Some(&1), "{got:?}");
+        // B arrives late too: the clip A gave back is its own.
+        h.line(text_line("b", B, 37_500.));
+        let got = run(&mut h, 50_000., 70_000., &said);
+        assert_eq!(got, vec![("b".to_string(), 2)]);
+    }
+
+    #[test]
+    fn without_the_recogniser_nothing_changes_and_it_is_tried_again() {
+        let f = Fixture::new();
+        voice(&f, 1, 10_000., 4.);
+        let mut h = f.hooked();
+        h.line(text_line("a", "でももう少しだけ本を読みたいの」", 12_500.));
+        let mut none = |_: &[f32], _: u32| None;
+        h.tick(20_000.);
+        assert!(h.by_words(20_000., &mut none).is_empty());
+        let said = [(1, "わかったでももう少しだけ本を読みたいの")];
+        assert_eq!(run(&mut h, 20_000., 21_000., &said), vec![("a".to_string(), 1)]);
+    }
+}

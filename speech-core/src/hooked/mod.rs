@@ -1,6 +1,7 @@
 //! Clean per-sound captures, selected without a speech model. The system listener remains the fallback.
 pub mod classify;
 pub mod feed;
+pub mod words;
 use crate::timeline::Line;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -50,6 +51,8 @@ pub struct Report {
     pub typing_ms: f64,
     /// How long before a line's arrival its voice may start (learned like the lag).
     pub lead_ms: f64,
+    /// Lines given their clip by its words (`words`), of `matched`.
+    pub by_words: usize,
     pub groups: Vec<classify::Verdict>,
     pub error: Option<String>,
 }
@@ -146,6 +149,10 @@ pub struct Hooked {
     /// Enough voices have taught the timing (or an earlier session did): a voice starting well
     /// after a line can be that line's, rather than the next line's still being typed out.
     settled: bool,
+    /// Clips heard by the recogniser (`words`), by capture and sequence.
+    heard: BTreeMap<(PathBuf, u64), crate::matching::Heard>,
+    /// Lines given their clip by its words: not checked again.
+    worded: BTreeSet<String>,
 }
 impl Default for Hooked {
     fn default() -> Self {
@@ -158,6 +165,8 @@ impl Default for Hooked {
             remembered_typing: None,
             voice_groups: Vec::new(),
             settled: false,
+            heard: BTreeMap::new(),
+            worded: BTreeSet::new(),
             feeds: BTreeMap::new(),
             lines: Vec::new(),
             used: BTreeSet::new(),
@@ -179,11 +188,13 @@ impl Hooked {
         if self.lines.len() > 500 {
             let old = self.lines.remove(0);
             self.done.remove(&old.uid);
+            self.worded.remove(&old.uid);
         }
     }
     pub fn forget(&mut self, uids: &[String]) {
         self.lines.retain(|l| !uids.contains(&l.uid));
         for uid in uids {
+            self.worded.remove(uid);
             if let Some(key) = self.done.remove(uid) {
                 // A clip shared by the rows of one quote stays taken while another row has it.
                 if !self.done.values().any(|k| *k == key) {
