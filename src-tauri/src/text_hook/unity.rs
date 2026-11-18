@@ -241,6 +241,107 @@ impl Settle {
     }
 }
 
+/// What the object a line assembled from glyph objects is sent as starts with (`Glyphs`), then
+/// the first object of its pool.
+pub const GLYPH_LINE: &str = "glyphs:";
+
+/// Longest pause between two glyphs of one line: a game that draws each character as its own text
+/// object sets them all in one frame, a few milliseconds at most (emulated, under load).
+const GLYPH_GAP_MS: u64 = 30;
+
+/// Lines from games that draw each character as its own text object (Unity CatSystem: a
+/// TextMeshPro object per glyph, pooled and given a new character for each line). No object holds
+/// the line, but the game sets every glyph of it in one frame, in reading order, just as the line
+/// begins to show: such a burst is the line on screen, at the moment it shows. Every text still
+/// reaches `Settle` as well; this only adds the line.
+///
+/// Each pool of glyph objects is a text of its own (the objects of one burst are one pool): the
+/// game's backlog draws its lines from a pool of its own, several lines a burst.
+#[derive(Default)]
+pub struct Glyphs {
+    /// The burst so far: the objects in it, the line, when it began and when the last glyph came.
+    objs: Vec<String>,
+    line: String,
+    method: String,
+    start: u64,
+    last: u64,
+    /// Objects that have held more than a character (a text box, a label): never a glyph object.
+    whole: std::collections::BTreeSet<String>,
+    /// Per glyph object, an earlier object of its pool (the first object of a pool, itself).
+    pools: std::collections::HashMap<String, String>,
+    done: Vec<Text>,
+}
+
+impl Glyphs {
+    pub fn push(&mut self, text: &Text, now: u64) {
+        let at = text.at.unwrap_or(now);
+        let glyph = text.text.chars().count() == 1 && !text.text.trim().is_empty();
+        if !glyph {
+            self.whole.insert(text.obj.clone());
+        }
+        // A pause, a second glyph on one object (the same object again is a typewriter measuring
+        // its text), or a whole text: the burst so far has ended.
+        if !self.objs.is_empty()
+            && (!glyph || at.saturating_sub(self.last) > GLYPH_GAP_MS || self.objs.contains(&text.obj))
+        {
+            self.end();
+        }
+        if glyph && !self.whole.contains(&text.obj) {
+            if self.objs.is_empty() {
+                self.start = at;
+                self.method = text.method.clone();
+            }
+            self.objs.push(text.obj.clone());
+            self.line.push_str(&text.text);
+            self.last = at;
+        }
+    }
+
+    fn end(&mut self) {
+        let objs = std::mem::take(&mut self.objs);
+        let line = std::mem::take(&mut self.line);
+        // A glyph or two from labels changed together (a counter, a menu's marks) is no line.
+        if objs.len() >= GLYPH_MIN && objs.iter().all(|o| !self.whole.contains(o)) {
+            // The burst's objects join the pool of the first of them that has one.
+            let first = objs.iter().find(|o| self.pools.contains_key(*o)).unwrap_or(&objs[0]);
+            let pool = self.pool(first);
+            for obj in &objs {
+                let other = self.pool(obj);
+                if other != pool {
+                    self.pools.insert(other, pool.clone());
+                }
+            }
+            self.done.push(Text {
+                obj: format!("{GLYPH_LINE}{pool}"),
+                method: std::mem::take(&mut self.method),
+                text: line,
+                at: Some(self.start),
+            });
+        }
+    }
+
+    /// The first object of `obj`'s pool; an object seen for the first time starts one.
+    fn pool(&mut self, obj: &str) -> String {
+        let mut at = obj.to_string();
+        while let Some(up) = self.pools.get(&at).filter(|up| **up != at) {
+            at = up.clone();
+        }
+        self.pools.insert(obj.to_string(), at.clone());
+        at
+    }
+
+    /// The lines whose bursts have ended by `now`.
+    pub fn take(&mut self, now: u64) -> Vec<Text> {
+        if !self.objs.is_empty() && now.saturating_sub(self.last) > GLYPH_GAP_MS {
+            self.end();
+        }
+        std::mem::take(&mut self.done)
+    }
+}
+
+/// Fewest glyph objects in a burst for it to be a line.
+const GLYPH_MIN: usize = 3;
+
 fn unix_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
@@ -251,6 +352,7 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
     let mut dir = None;
     let mut offset = 0u64;
     let mut settle = Settle::default();
+    let mut glyphs = Glyphs::default();
     loop {
         std::thread::sleep(Duration::from_millis(100));
         {
@@ -265,9 +367,12 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
         }
         let now = unix_ms();
         for text in read_texts(&dir.as_ref().unwrap().join("events.jsonl"), &mut offset) {
+            glyphs.push(&text, now);
             settle.push(text, now);
         }
-        let texts = settle.take(now);
+        let mut texts = settle.take(now);
+        texts.extend(glyphs.take(now));
+        texts.sort_by_key(|t| t.at.unwrap_or(now));
         if texts.is_empty() {
             continue;
         }
@@ -278,12 +383,18 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
         for Text { obj, method, text, at } in texts {
             let key = format!("{pid}:unity:{obj}");
             if !session.threads.iter().any(|t| t.key == key) {
+                let name = method.trim_end_matches(".set_text");
                 session.threads.push(Thread {
                     key: key.clone(),
                     pid,
                     hookcode: format!("{HOOKCODE}{method}"),
-                    name: method.trim_end_matches(".set_text").to_string(),
-                    ctx: u64::from_str_radix(obj.trim_start_matches("0x"), 16).unwrap_or(0),
+                    name: if obj.starts_with(GLYPH_LINE) {
+                        format!("{name} (a glyph per object)")
+                    } else {
+                        name.to_string()
+                    },
+                    ctx: u64::from_str_radix(obj.trim_start_matches(GLYPH_LINE).trim_start_matches("0x"), 16)
+                        .unwrap_or(0),
                     ctx2: 0,
                     text: String::new(),
                     count: 0,
@@ -414,6 +525,95 @@ mod tests {
         settle.push(set("0x20", "mm", 5001), 0);
         settle.push(set("0x20", "「三」", 5002), 0);
         assert_eq!(settle.take(5400), vec![Text { text: "「三」".into(), ..set("0x20", "m m", 5000) }]);
+    }
+
+    fn glyph(obj: &str, text: &str, at: u64) -> Text {
+        Text { obj: obj.into(), method: "TMP_Text.set_text".into(), text: text.into(), at: Some(at) }
+    }
+
+    fn line(pool: &str, text: &str, at: u64) -> Text {
+        Text { obj: format!("{GLYPH_LINE}{pool}"), ..glyph("", text, at) }
+    }
+
+    #[test]
+    fn a_line_drawn_a_glyph_per_object_is_the_burst_in_order() {
+        // Live Unity CatSystem: a pool of objects, each given one character of the line in the
+        // frame the line begins to show; the next line a few seconds later reuses them (in another
+        // order), the same character on the same object included.
+        let mut glyphs = Glyphs::default();
+        for (i, c) in "名前「おはよう」".chars().enumerate() {
+            glyphs.push(&glyph(&format!("0x{}", 10 + i), &c.to_string(), 1000 + i as u64), 0);
+        }
+        assert_eq!(glyphs.take(1010), vec![]);
+        assert_eq!(glyphs.take(1050), vec![line("0x10", "名前「おはよう」", 1000)]);
+        for (i, c) in "今日も晴れ。".chars().enumerate() {
+            glyphs.push(&glyph(&format!("0x{}", 15 - i), &c.to_string(), 4000 + i as u64), 0);
+        }
+        // The next line ends the last at once, without waiting for a pause.
+        for (i, c) in "雨です。".chars().enumerate() {
+            glyphs.push(&glyph(&format!("0x{}", 10 + i), &c.to_string(), 4100 + i as u64), 0);
+        }
+        assert_eq!(glyphs.take(4103), vec![line("0x10", "今日も晴れ。", 4000)]);
+        assert_eq!(glyphs.take(5000), vec![line("0x10", "雨です。", 4100)]);
+        // A longer line takes more of the pool: the same pool. The backlog's lines, from objects
+        // of its own: another.
+        for (i, c) in "長い台詞がここに続いていく。".chars().enumerate() {
+            glyphs.push(&glyph(&format!("0x{}", 10 + i), &c.to_string(), 7000 + i as u64), 0);
+        }
+        for (i, c) in "雨です。今日も晴れ。".chars().enumerate() {
+            glyphs.push(&glyph(&format!("0x{}", 90 + i), &c.to_string(), 9000 + i as u64), 0);
+        }
+        assert_eq!(
+            glyphs.take(9500),
+            vec![line("0x10", "長い台詞がここに続いていく。", 7000), line("0x90", "雨です。今日も晴れ。", 9000)]
+        );
+    }
+
+    #[test]
+    fn text_boxes_and_labels_are_no_glyph_line() {
+        let mut glyphs = Glyphs::default();
+        // A typewriter: one object, the characters it measures between prefixes.
+        for (i, text) in ["「", "「メ", "イ", "「メイ", "「メイド」"].iter().enumerate() {
+            glyphs.push(&glyph("0x10", text, 1000 + 10 * i as u64), 0);
+        }
+        // Two labels changed together (a page counter).
+        glyphs.push(&glyph("0x20", "1", 2000), 0);
+        glyphs.push(&glyph("0x21", "2", 2001), 0);
+        // Boxes that begin typing in the same frame, each from a character: once they hold more,
+        // they are text boxes, not glyphs.
+        glyphs.push(&glyph("0x30", "花", 3000), 0);
+        glyphs.push(&glyph("0x31", "「", 3001), 0);
+        glyphs.push(&glyph("0x32", "あ", 3001), 0);
+        glyphs.push(&glyph("0x31", "「あ", 3010), 0);
+        for (i, c) in "花「い".chars().enumerate() {
+            glyphs.push(&glyph(&format!("0x3{i}"), &c.to_string(), 6000 + i as u64), 0);
+        }
+        assert_eq!(glyphs.take(9000), vec![]);
+    }
+
+    /// What `follow` makes of a capture's text (`KIMOCHI_UNITY_REPLAY=<events.jsonl>`), each text
+    /// with its object and when it was set: `cargo test unity_replay -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn unity_replay() {
+        let Some(file) = std::env::var_os("KIMOCHI_UNITY_REPLAY") else { return };
+        let mut offset = 0;
+        let (mut settle, mut glyphs) = (Settle::default(), Glyphs::default());
+        let mut out = Vec::new();
+        for text in read_texts(std::path::Path::new(&file), &mut offset) {
+            let now = text.at.unwrap_or(0);
+            // `follow` reads every 100 ms: what had settled by then.
+            out.extend(settle.take(now));
+            out.extend(glyphs.take(now));
+            glyphs.push(&text, now);
+            settle.push(text, now);
+        }
+        out.extend(settle.take(u64::MAX));
+        out.extend(glyphs.take(u64::MAX));
+        out.sort_by_key(|t| t.at);
+        for t in out {
+            println!("{}\t{}\t{}", t.at.unwrap_or(0), t.obj, t.text.replace('\n', "\\n"));
+        }
     }
 
     #[test]
