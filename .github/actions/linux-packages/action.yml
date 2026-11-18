@@ -1,0 +1,104 @@
+name: Linux packages
+description: >-
+  apt-get install from a cache of the .deb files and package lists (saved from main), so a run
+  normally installs without touching an Ubuntu mirror. On a miss it downloads with a time limit and,
+  when the runner's mirror is too slow, retries once from archive.ubuntu.com.
+
+inputs:
+  packages:
+    description: The packages, separated by spaces or newlines
+    required: true
+  recommends:
+    description: Also install recommended packages
+    default: 'false'
+  save:
+    description: Save the cache when this run missed it (main only, so pull requests read it)
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    # A new cache each week (main saves it), so the package lists follow the runner images. Not
+    # keyed by the image's version: GitHub runs several builds of one image side by side.
+    - name: Cache key
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        RECOMMENDS: ${{ inputs.recommends }}
+      run: |
+        list="$(printf '%s %s' "$RECOMMENDS" "$PACKAGES" | tr -s ' \n' '\n' | sort | sha256sum | cut -c1-16)"
+        prefix="apt-${ImageOS:-linux}-${RUNNER_ARCH}"
+        {
+          echo "key=$prefix-$list-$(date -u +%G-W%V)"
+          echo "same-packages=$prefix-$list-"
+          echo "any=$prefix-"
+        } >> "$GITHUB_OUTPUT"
+
+    # Last week's cache, or another package list's, still saves downloading most of the .debs.
+    - name: Restore the package cache
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/apt
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          ${{ steps.key.outputs.same-packages }}
+          ${{ steps.key.outputs.any }}
+
+    - name: Install
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        RECOMMENDS: ${{ inputs.recommends }}
+        RESTORED: ${{ steps.restore.outputs.cache-matched-key }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/apt"
+        mkdir -p "$dir/archives/partial" "$dir/lists/partial"
+        # Skip man-db's index rebuild, which apt otherwise runs after every install.
+        sudo rm -f /var/lib/man-db/auto-update
+        apt=(sudo env DEBIAN_FRONTEND=noninteractive apt-get -y -o "Dir::Cache::Archives=$dir/archives" -o "Dir::State::Lists=$dir/lists"
+          -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+          -o APT::Keep-Downloaded-Packages=true -o DPkg::Lock::Timeout=120
+          -o DPkg::Options::=--force-unsafe-io -o APT::Sandbox::User=root)
+        install=(install)
+        [[ "$RECOMMENDS" == true ]] || install+=(--no-install-recommends)
+        # shellcheck disable=SC2206 # one word per package
+        names=($PACKAGES)
+
+        # The cache holds package lists and the .debs they name: install offline, without asking a
+        # mirror anything. This fails within seconds when the image has moved on from those lists
+        # (it already has newer versions some package pins) or a .deb is missing.
+        if [[ -n "$RESTORED" ]] && "${apt[@]}" "${install[@]}" --no-download "${names[@]}"; then
+          echo "Installed from the cache ($RESTORED)."
+        else
+          echo "Updating the package lists and downloading what the cache lacks."
+          # Download first, within a time limit: a slow mirror (seen at 100 kB/s, half an hour
+          # for these packages) fails over to archive.ubuntu.com instead of stalling the run.
+          fetch() {
+            timeout "$1" "${apt[@]}" update &&
+              timeout "$1" "${apt[@]}" "${install[@]}" --download-only "${names[@]}"
+          }
+          if ! fetch 300; then
+            echo "::warning::apt could not download the packages within 5 minutes; retrying from archive.ubuntu.com."
+            if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+              cat /etc/apt/apt-mirrors.txt
+              printf 'http://archive.ubuntu.com/ubuntu/\n' | sudo tee /etc/apt/apt-mirrors.txt
+            fi
+            fetch 600
+          fi
+          "${apt[@]}" "${install[@]}" --no-download "${names[@]}"
+          # Drop .debs the archive no longer offers, so the cache does not grow from image to image.
+          "${apt[@]}" autoclean
+        fi
+        # apt ran as root; the cache is saved as the runner user.
+        sudo rm -f "$dir/lock" "$dir/archives/lock" "$dir/lists/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$dir"
+
+    - name: Save the package cache
+      if: inputs.save == 'true' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/apt
+        key: ${{ steps.key.outputs.key }}
