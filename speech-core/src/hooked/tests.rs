@@ -985,6 +985,7 @@ mod by_words {
         let said = [(1, "わかったでももう少しだけ本を読みたいの")];
         assert_eq!(run(&mut h, 20_000., 21_000., &said), vec![("a".to_string(), 1)]);
     }
+}
 #[test]
 fn two_voice_files_as_long_as_each_other_are_two_voices() {
     // Live Electron game: whole voice files from the game's archive carry no loudness, and two
