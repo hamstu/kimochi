@@ -218,6 +218,10 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
             texthooker.settings_changed();
         }
     }
+    // A game's Line delay, or the default's, applies to a game hooked now.
+    if key.starts_with("textHookerDefaults") || key.starts_with("textHookerGames") {
+        text_hook::settings_changed();
+    }
     // Text hooking turned on or off (the Log's input): the voice hook follows it.
     if key == "superTexthooker" {
         text_hook::refresh_voice_hook();

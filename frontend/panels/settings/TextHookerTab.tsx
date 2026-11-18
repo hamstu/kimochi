@@ -78,7 +78,7 @@ import {
 import { showSettingsTab } from './showSettingsTab'
 import './text-hooker.css'
 
-const FLUSH_OPTIONS = [100, 200, 300, 500, 800, 1200].map((ms) => ({
+const FLUSH_OPTIONS = [50, 100, 200, 300, 500, 800, 1200].map((ms) => ({
   value: String(ms),
   label: ms === HOOK_DEFAULTS.flushMs ? `${ms} ms (default)` : `${ms} ms`
 }))
@@ -273,7 +273,7 @@ function HookSettingsSections({
         <SettingsRow
           label="Line delay"
           badge={badge('flushMs')}
-          description="Raise it if lines arrive in pieces. Applies when the game is next hooked."
+          description="How long a line can pause before it counts as finished. Raise it if lines arrive in pieces."
         >
           <Select
             aria-label="Line delay"

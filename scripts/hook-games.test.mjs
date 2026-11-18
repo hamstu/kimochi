@@ -94,3 +94,15 @@ test('games of the same name are told apart by the folders their exes are in', (
   assert.equal(exeFolder(b, [a, b, c]), String.raw`Games\Rewrite`, 'as many folders as it takes')
   assert.equal(exeFolder('/home/me/vn/game.exe', ['/home/me/other/game.exe']), 'vn')
 })
+
+test('the Line delay is 100 ms unless the reader chose one, for every game or for one (#222)', () => {
+  // Never changed: nothing is stored, so the shipped default applies (300 ms before #222).
+  assert.equal(hookSettings(null, null).flushMs, 100)
+  assert.equal(hookSettings({}, { hookedAt: 1 }).flushMs, 100)
+  // A value chosen under Defaults is kept, and every game without its own follows it.
+  assert.equal(hookSettings({ flushMs: 300 }, null).flushMs, 300)
+  assert.equal(hookSettings({ flushMs: 500 }, { hookedAt: 1 }).flushMs, 500)
+  // A game's own value is kept, whatever the default.
+  assert.equal(hookSettings(null, { flushMs: 800 }).flushMs, 800)
+  assert.equal(hookSettings({ flushMs: 50 }, { flushMs: 300 }).flushMs, 300)
+})

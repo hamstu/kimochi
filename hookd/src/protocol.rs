@@ -76,6 +76,12 @@ pub enum Command {
     CodePage {
         codepage: u32,
     },
+    /// Treat a thread's text as a finished line once it has been quiet this long, from now on
+    /// (the reader changed the game's Line delay). Only sent to a helper whose `ready` carried
+    /// `flushMs`.
+    Flush {
+        ms: u32,
+    },
     Quit,
 }
 
@@ -122,6 +128,13 @@ pub fn parse_command(line: &str) -> Result<Command, String> {
                 .filter(|c| *c > 0)
                 .ok_or("codepage needs a code page")?,
         }),
+        "flush" => Ok(Command::Flush {
+            ms: value["ms"]
+                .as_u64()
+                .and_then(|ms| u32::try_from(ms).ok())
+                .filter(|ms| *ms > 0)
+                .ok_or("flush needs a delay in ms")?,
+        }),
         "quit" => Ok(Command::Quit),
         other => Err(format!("unknown command {other:?}")),
     }
@@ -130,6 +143,21 @@ pub fn parse_command(line: &str) -> Result<Command, String> {
 /// Shift-JIS: the code page LunaHook decodes multibyte text with unless told otherwise, and what
 /// an app from before languages (which passes no `--codepage`) still gets.
 pub const DEFAULT_CODE_PAGE: u32 = 932;
+
+/// How long LunaHook waits after a thread's last text before it hands the line over, when the
+/// app passes no `--flush-ms` (the app always does: the game's Line delay).
+pub const DEFAULT_FLUSH_MS: u32 = 100;
+
+/// The `--flush-ms` argument of `luna`, else [`DEFAULT_FLUSH_MS`].
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn flush_arg(args: &[String]) -> u32 {
+    args.iter()
+        .position(|a| a == "--flush-ms")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.parse().ok())
+        .filter(|ms| *ms > 0)
+        .unwrap_or(DEFAULT_FLUSH_MS)
+}
 
 /// The `--codepage` argument of `luna`, else [`DEFAULT_CODE_PAGE`].
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -198,6 +226,23 @@ mod tests {
         assert!(parse_command(r#"{"cmd":"codepage"}"#).is_err());
         assert!(parse_command(r#"{"cmd":"codepage","codepage":0}"#).is_err());
         assert!(parse_command(r#"{"cmd":"codepage","codepage":"949"}"#).is_err());
+    }
+
+    #[test]
+    fn a_line_delay_change_names_the_delay() {
+        assert_eq!(parse_command(r#"{"cmd":"flush","ms":100}"#), Ok(Command::Flush { ms: 100 }));
+        assert!(parse_command(r#"{"cmd":"flush"}"#).is_err());
+        assert!(parse_command(r#"{"cmd":"flush","ms":0}"#).is_err());
+        assert!(parse_command(r#"{"cmd":"flush","ms":"100"}"#).is_err());
+    }
+
+    #[test]
+    fn the_line_delay_argument_has_a_default() {
+        let args = |s: &str| s.split(' ').map(str::to_string).collect::<Vec<_>>();
+        assert_eq!(flush_arg(&args("luna --dir x --flush-ms 250")), 250);
+        assert_eq!(flush_arg(&args("luna --dir x")), DEFAULT_FLUSH_MS);
+        assert_eq!(flush_arg(&args("luna --dir x --flush-ms 0")), DEFAULT_FLUSH_MS);
+        assert_eq!(flush_arg(&args("luna --dir x --flush-ms soon")), DEFAULT_FLUSH_MS);
     }
 
     #[test]

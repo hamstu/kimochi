@@ -7,7 +7,7 @@
 //! address has to come from a process of the game's bitness.
 //!
 //! ```text
-//! kimochi-hookd luna --dir <LunaHook dir> [--flush-ms 400] [--codepage 932]
+//! kimochi-hookd luna --dir <LunaHook dir> [--flush-ms 100] [--codepage 932]
 //! kimochi-hookd textractor --dir <Textractor dir>
 //! kimochi-hookd inject --pid <pid> --dll <path>
 //! kimochi-hookd processes
@@ -108,10 +108,7 @@ fn run(args: &[String]) -> Result<(), String> {
         Textractor(textractor::Textractor),
     }
     let mut engine = match mode {
-        "luna" => {
-            let flush = arg(args, "--flush-ms").and_then(|v| v.parse().ok()).unwrap_or(400);
-            Engine::Luna(luna::Luna::load(&dir, flush, protocol::code_page_arg(args))?)
-        }
+        "luna" => Engine::Luna(luna::Luna::load(&dir, protocol::flush_arg(args), protocol::code_page_arg(args))?),
         "textractor" => Engine::Textractor(textractor::Textractor::new(&dir)?),
         _ => {
             return Err(
@@ -119,11 +116,12 @@ fn run(args: &[String]) -> Result<(), String> {
             )
         }
     };
-    // `codepage` tells the app this helper takes the `codepage` command (an older one would answer
-    // it with an error); Textractor's CLI has no setting for it.
+    // `codepage` and `flushMs` tell the app this helper takes the `codepage` and `flush` commands
+    // (an older one would answer them with an error); Textractor's CLI has no setting for either.
     let mut ready = json!({ "engine": mode, "version": env!("CARGO_PKG_VERSION") });
     if matches!(engine, Engine::Luna(_)) {
         ready["codepage"] = json!(protocol::code_page_arg(args));
+        ready["flushMs"] = json!(protocol::flush_arg(args));
     }
     emit("ready", ready);
 
@@ -170,6 +168,14 @@ fn run(args: &[String]) -> Result<(), String> {
                 Ok(())
             }
             (Engine::Textractor(_), Command::CodePage { .. }) => Ok(()),
+            (Engine::Luna(l), Command::Flush { ms }) => {
+                // Not an attach failure: lines keep coming with the delay they had.
+                if let Err(e) = l.set_flush(ms) {
+                    emit("info", json!({ "level": "warning", "text": format!("line delay {ms} ms: {e}") }));
+                }
+                Ok(())
+            }
+            (Engine::Textractor(_), Command::Flush { .. }) => Ok(()),
         };
         if let Err((pid, e)) = result {
             emit("attach_error", json!({ "pid": pid, "text": e }));

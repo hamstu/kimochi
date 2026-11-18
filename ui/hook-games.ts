@@ -25,7 +25,10 @@ export interface HookReplacement {
 export interface HookSettings {
   /** Hook the game when it starts, if the Text Hooker is the Log's input. */
   autoHook: boolean
-  /** How long a line may pause before it counts as finished, in ms. */
+  /**
+   * How long a line may pause before it counts as finished, in ms: the Line delay (LunaHook's
+   * flush delay). Kimochi shipped 300 until #222; a value the reader chose is kept.
+   */
   flushMs: number
   repeats: Repeats
   /** A line the game sends a row at a time is joined back up (text_hook/clean.rs `continues`). */
@@ -46,7 +49,7 @@ export interface HookSettings {
 
 export const HOOK_DEFAULTS: HookSettings = {
   autoHook: true,
-  flushMs: 300,
+  flushMs: 100,
   repeats: 'auto',
   joinLines: true,
   stripCodes: true,
