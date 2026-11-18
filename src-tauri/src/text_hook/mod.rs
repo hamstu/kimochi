@@ -69,6 +69,15 @@ const FOREIGN_LINES: u32 = 3;
 /// costs a few hundred milliseconds of CPU, and a game the screen cannot settle (a menu, an
 /// unreadable font) would otherwise be read at every line another thread sends.
 const WITNESS_GAP: Duration = Duration::from_secs(4);
+/// Each reading that finds the chosen thread's line on screen doubles the gap before the next, up
+/// to this: a thread that keeps showing the lines needs no reading at every click (SiglusEngine's
+/// script-label threads send at every one). A chosen thread silent for `WITNESS_SILENT` is read
+/// for at the shortest gap again: one that has stopped is found as quickly as before.
+const WITNESS_MAX_GAP: Duration = Duration::from_secs(60);
+const WITNESS_SILENT: Duration = Duration::from_secs(10);
+/// Readings in a row that could not tell, with the chosen thread silent through them, after which
+/// lines missed drop it without the screen's word (a game the screen cannot settle).
+const WITNESS_UNSURE: u32 = 3;
 /// How many of the last lines sent the screen may still show for the hook to be ahead of it.
 const WITNESS_EARLIER: usize = 4;
 
@@ -144,6 +153,12 @@ struct Session {
     /// the last one started: one at a time, and no more often than `WITNESS_GAP`.
     witness_running: bool,
     witness_at: Option<Instant>,
+    /// The gap before the next reading (`WITNESS_MAX_GAP`); none yet: `WITNESS_GAP`.
+    witness_gap: Option<Duration>,
+    /// The window has been read for the chosen thread: from then on, missed lines alone drop it
+    /// only after `WITNESS_UNSURE` readings in a row could not tell (`unsure`).
+    witness_reads: bool,
+    unsure: u32,
     /// The thread the last reading found on screen, and when.
     vouched: Option<(String, Instant)>,
     /// The last few lines sent, newest first: the screen still showing one of them says the hook
@@ -841,6 +856,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             json!({ "check": "texthook-burst", "text": text, "lines": lines, "carriesOn": carries_on }),
         );
         session.missed = 0;
+        session.unsure = 0;
         session.screen = screen.clone();
         for (i, line) in lines.iter().enumerate() {
             hook.line(session, key, line, carries_on && i == 0);
@@ -911,7 +927,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         let stale = hooker_left
             || session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
                 (auto && t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
-                    || (session.missed >= MISSED_LINES && !vouched)
+                    || (session.missed >= MISSED_LINES && !vouched && unwitnessed(session))
             });
         if stale {
             session.missed = 0;
@@ -1128,13 +1144,26 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
     }
 }
 
+/// Whether lines missed may drop the chosen thread without the screen's word: the window has not
+/// been read for it (no OCR, or not yet), or the last `WITNESS_UNSURE` readings could not tell
+/// while it stayed silent. Otherwise only a reading showing another thread's line moves the choice.
+fn unwitnessed(session: &Session) -> bool {
+    !session.witness_reads || session.unsure >= WITNESS_UNSURE
+}
+
 /// Has the window read to vouch for the chosen thread (`witness`), once it is drawn: the chosen
 /// thread was chosen automatically or remembered (never one the reader chose), has gone quiet,
 /// and another thread has just sent a fresh line.
 fn witness_soon(hook: &'static Hook, session: &mut Session) {
+    let silent = session
+        .threads
+        .iter()
+        .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
+        .is_none_or(|t| t.last_at.is_none_or(|at| at.elapsed() >= WITNESS_SILENT));
+    let gap = if silent { WITNESS_GAP } else { session.witness_gap.unwrap_or(WITNESS_GAP) };
     if !matches!(session.selected_by, Some("auto" | "saved"))
         || session.witness_running
-        || session.witness_at.is_some_and(|at| at.elapsed() < WITNESS_GAP)
+        || session.witness_at.is_some_and(|at| at.elapsed() < gap)
         || !hook.reading_text()
     {
         return;
@@ -1215,6 +1244,7 @@ fn witness_check(hook: &'static Hook, generation: u64) {
             "ms": ms,
         }),
     );
+    session.witness_reads = true;
     if !current {
         return;
     }
@@ -1223,7 +1253,9 @@ fn witness_check(hook: &'static Hook, generation: u64) {
         // ahead of the screen, a backlog), and is no line the chosen thread missed.
         witness::Verdict::Shown | witness::Verdict::Within => {
             session.missed = 0;
+            session.unsure = 0;
             session.vouched = Some((key, Instant::now()));
+            session.witness_gap = Some((session.witness_gap.unwrap_or(WITNESS_GAP) * 2).min(WITNESS_MAX_GAP));
         }
         // Another thread has the line on screen, the chosen one does not: it takes over now, with
         // that line, rather than after more lines are lost.
@@ -1236,13 +1268,17 @@ fn witness_check(hook: &'static Hook, generation: u64) {
             session.selected = Some(better.clone());
             session.selected_by = Some("auto");
             session.missed = 0;
+            session.unsure = 0;
+            session.witness_gap = None;
             session.pick_note = None;
             hook.line(&mut session, &better, &thread.text, false);
             hook.publish(&session);
         }
         // Lines ahead of the screen, text nobody sent, or nothing to go by: the choice's own rules
         // carry on.
-        witness::Verdict::Earlier | witness::Verdict::Unhooked | witness::Verdict::Unclear => {}
+        witness::Verdict::Earlier | witness::Verdict::Unhooked | witness::Verdict::Unclear => {
+            session.unsure = session.unsure.saturating_add(1);
+        }
     }
 }
 
@@ -1318,6 +1354,8 @@ fn count_missed(session: &mut Session, now: Instant) {
         session.missed = 0;
         session.missed_at = None;
         session.missed_for = session.selected.clone();
+        session.unsure = 0;
+        session.witness_gap = None;
     }
     if session.selected.is_some() && another_click(session.missed_at, now) {
         session.missed = session.missed.saturating_add(1);
@@ -1837,7 +1875,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{another_click, count_missed, failed_hook, Session, MISS_GAP};
+    use super::{another_click, count_missed, failed_hook, unwitnessed, Session, MISS_GAP, WITNESS_UNSURE};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -1849,6 +1887,20 @@ mod tests {
         assert!(!another_click(Some(t), t + MISS_GAP - Duration::from_millis(1)));
         // The next click's line.
         assert!(another_click(Some(t), t + MISS_GAP));
+    }
+
+    #[test]
+    fn a_thread_the_screen_can_vouch_for_is_not_dropped_blind() {
+        let mut session = Session::default();
+        // No reading yet (or no OCR): missed lines decide, as before.
+        assert!(unwitnessed(&session));
+        session.witness_reads = true;
+        assert!(!unwitnessed(&session));
+        // Readings that could not tell, the thread silent through them all.
+        session.unsure = WITNESS_UNSURE - 1;
+        assert!(!unwitnessed(&session));
+        session.unsure = WITNESS_UNSURE;
+        assert!(unwitnessed(&session));
     }
 
     #[test]
