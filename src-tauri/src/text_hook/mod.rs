@@ -59,6 +59,9 @@ const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
 const GLYPHS: u32 = 3;
 /// Lines from other engine threads, with the chosen one silent, after which the screen is read again.
 const MISSED_LINES: u32 = 3;
+/// Lines other threads send this close together are one click's: the same line in its several
+/// forms (a row, the whole line, the box with the text before it), however many threads send it.
+const MISS_GAP: Duration = Duration::from_millis(1500);
 /// Pieces in a row in another language after which a chosen thread hands over to one in the language.
 const FOREIGN_LINES: u32 = 3;
 
@@ -119,6 +122,8 @@ struct Session {
     /// Lines other threads have sent since the chosen one last spoke, and the last of them.
     missed: u32,
     missed_text: String,
+    /// When the last of them was counted.
+    missed_at: Option<Instant>,
     pick_note: Option<String>,
     /// Why an earlier engine was given up for the one in use.
     fallback: Option<String>,
@@ -837,7 +842,14 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             && !pick::is_generic(&spoken.hookcode, &spoken.name)
             && !(dll_reads && unity::is_hooker_tmp_setter(&spoken.hookcode))
         {
-            session.missed = session.missed.saturating_add(1);
+            // One click's lines count once: SiglusEngine sends a line through several threads in
+            // several forms, often before the chosen thread's, which made three "missed" lines of
+            // every click and dropped a good thread while its line came in.
+            let now = Instant::now();
+            if another_click(session.missed_at, now) {
+                session.missed = session.missed.saturating_add(1);
+                session.missed_at = Some(now);
+            }
             session.missed_text = shown;
         }
     }
@@ -1122,6 +1134,12 @@ fn as_candidates(threads: &[Thread]) -> Vec<Candidate<'_>> {
             noise: t.noisy as f64 / t.count.max(1) as f64,
         })
         .collect()
+}
+
+/// Whether a line another thread sent at `now` is from a later click than the last line counted
+/// as missed (`MISS_GAP`).
+fn another_click(last: Option<Instant>, now: Instant) -> bool {
+    last.is_none_or(|at| now.saturating_duration_since(at) >= MISS_GAP)
 }
 
 fn read_screen(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec<pick::Block>, String> {
@@ -1625,7 +1643,19 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::failed_hook;
+    use super::{another_click, failed_hook, MISS_GAP};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn one_clicks_lines_from_other_threads_are_one_missed_line() {
+        let t = Instant::now();
+        assert!(another_click(None, t));
+        // The same line's other forms, from other threads, moments later.
+        assert!(!another_click(Some(t), t + Duration::from_millis(300)));
+        assert!(!another_click(Some(t), t + MISS_GAP - Duration::from_millis(1)));
+        // The next click's line.
+        assert!(another_click(Some(t), t + MISS_GAP));
+    }
 
     #[test]
     fn a_hook_the_hooker_could_not_insert_is_told_apart() {
