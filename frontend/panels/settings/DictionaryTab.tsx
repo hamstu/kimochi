@@ -55,6 +55,7 @@ import type { Settings } from '@texthooker/lib/types'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
 import { DictionaryChooser } from './DictionaryChooser'
+import { DictionaryOpacityRow } from './DictionaryOpacityRow'
 import { useDictionarySwitch } from './useDictionarySwitch'
 import { PendingSwitchNote } from './PendingSwitchNote'
 import { DictionaryReadiness } from '../../components/DictionaryReadiness'
@@ -180,6 +181,9 @@ export function DictionaryTab(): ReactNode {
             ) : null
           }
         />
+      </SettingsSection>
+      <SettingsSection title="Appearance">
+        <DictionaryOpacityRow />
       </SettingsSection>
     </SettingsPage>
   )

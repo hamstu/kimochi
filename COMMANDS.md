@@ -95,7 +95,7 @@ back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere; an `
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
-`dictionaryPopupOpacity` (85: how opaque every engine's dictionary pop-up is drawn, 25–100),
+`dictionaryPopupOpacity` (100: how opaque every engine's dictionary pop-up is drawn, 10–100),
 `ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'screenai' | 'vocr' | 'livetext' | 'oneocr'`;
 `'local'` is the retired name for `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR
 mode — reads as the default), default `'googlelens'` for a new install only: a settings file that

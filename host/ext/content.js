@@ -280,12 +280,12 @@ export function sizeCss(engine, size) {
 }
 
 /**
- * The stylesheet that draws the whole pop-up at `opacity`% (`dictionaryPopupOpacity`, 25–100), on
+ * The stylesheet that draws the whole pop-up at `opacity`% (`dictionaryPopupOpacity`, 10–100), on
  * the shadow host the engine hangs it from. '' at 100 or anything else.
  */
 export function opacityCss(opacity) {
   if (!Number.isFinite(opacity) || opacity >= 100) return ''
-  return `:host { opacity: ${Math.max(25, Math.round(opacity)) / 100} !important; }`
+  return `:host { opacity: ${Math.max(10, Math.round(opacity)) / 100} !important; }`
 }
 
 export function fillCss(engine, rect) {

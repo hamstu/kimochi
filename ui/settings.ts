@@ -106,9 +106,9 @@ export function highlightStrength(opacity: number): number {
   return Math.round((Math.min(100, Math.max(0, opacity)) / DEFAULT_OVERLAY_STYLE.opacity) * 1000) / 1000
 }
 
-/** A stored `dictionaryPopupOpacity` made whole: a whole percent, 25 to 100, else the default, 85. */
+/** A stored `dictionaryPopupOpacity` made whole: a whole percent, 10 to 100, else the default, 100 (solid). */
 export function popupOpacityOf(stored: unknown): number {
-  return typeof stored === 'number' && Number.isFinite(stored) ? Math.min(100, Math.max(25, Math.round(stored))) : 85
+  return typeof stored === 'number' && Number.isFinite(stored) ? Math.min(100, Math.max(10, Math.round(stored))) : 100
 }
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
@@ -307,7 +307,7 @@ export interface Settings {
   textOverlayGrouping: GroupingSettings
   /** How the overlay's highlights and cards look; see `OverlayStyleSettings`. */
   overlayStyle: OverlayStyleSettings
-  /** How opaque every engine's dictionary pop-up is drawn, 25 to 100; see `popupOpacityOf`. */
+  /** How opaque every engine's dictionary pop-up is drawn, 10 to 100; see `popupOpacityOf`. */
   dictionaryPopupOpacity: number
   autoOCRSettings: AutoScanSettings
   autoScanSettings: {
@@ -413,7 +413,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   pauseGameWhileReading: false,
   textOverlayGrouping: DEFAULT_GROUPING,
   overlayStyle: DEFAULT_OVERLAY_STYLE,
-  dictionaryPopupOpacity: 85,
+  dictionaryPopupOpacity: 100,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,
   autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {

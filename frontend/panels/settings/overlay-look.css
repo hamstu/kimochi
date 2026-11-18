@@ -58,17 +58,13 @@
   font-size: var(--k-text-sm);
   line-height: var(--k-leading-sm);
 }
-/* The dictionary pop-up's opacity, under the three: its label, then a short slider to its right. */
-.overlay-look-popup-control {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--k-space-4);
-  padding: var(--k-space-3);
+/* The rows under the preview and its three controls (Outline the word being looked up, then
+   Dictionary opacity) start with a rule, as rows after rows do, closing off the box above. */
+.overlay-look + .k-settings-row {
   border-top: 1px solid var(--k-line);
 }
-.overlay-look-popup-control .overlay-look-opacity-control {
-  flex: none;
+/* Dictionary opacity's slider (DictionaryOpacityRow.tsx), on the right of its row. */
+.dictionary-opacity-control {
   width: 14rem;
 }
 

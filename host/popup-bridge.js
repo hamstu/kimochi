@@ -125,7 +125,7 @@ iframe.yomitan-popup[data-theme=dark] {
 `
 
 /**
- * Draw `popup`'s frame, and so all of it, at `percent` (`dictionaryPopupOpacity`, 25–100; 100 or
+ * Draw `popup`'s frame, and so all of it, at `percent` (`dictionaryPopupOpacity`, 10–100; 100 or
  * anything else is fully opaque). Inline and important, so Yomitan's own and the reader's custom
  * outer CSS keep it; Yomitan never sets the frame's opacity.
  */
@@ -133,7 +133,7 @@ export function paintPopupOpacity(popup, percent) {
   const frame = popup?._frame
   if (frame?.tagName !== 'IFRAME') return
   if (Number.isFinite(percent) && percent < 100) {
-    frame.style.setProperty('opacity', String(Math.max(25, Math.round(percent)) / 100), 'important')
+    frame.style.setProperty('opacity', String(Math.max(10, Math.round(percent)) / 100), 'important')
   } else frame.style.removeProperty('opacity')
 }
 

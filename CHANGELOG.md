@@ -14,6 +14,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - 🎮 **Make the radial menu your own.** Add, remove and reorder its actions, give any action its own keyboard shortcut or controller button, and enjoy its new look (Settings → Shortcuts & Controls → Radial menu).
 - ⏸️ **Auto Game Pausing** (opt-in, Settings → Overlay) freezes the game while you look up a word, use the radial menu or draw a region. This is experimental and might not work on every game!
 - ✨ **Transparent/invisible overlay mode:** Hover cards and the Text Hooker card can now be **Transparent**, for those who prefer seeing the game's own text while doing lookups. A faint outline marks the word being looked up. You can choose this mode for both the OCR overlay cards and the text hooker card independently.
+- **Dictionary opacity.** Fade the dictionary pop-up so your game shows through it, with every dictionary (Settings → Dictionary, or Settings → Overlay → Overlay appearance).
 - 🖱️ **Look up with a mouse button.** The lookup key can now be the middle, back or forward mouse button.
 - **Hachidori for other languages,** with its own dictionaries and settings for each language it reads. (Experimental)
 - **🎮 PlayStation button names** (✕ ○ □ △, L1/R1…) for DualSense and DualShock pads, and a clearer, consistent look for every shortcut button in Settings.
@@ -36,6 +37,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Look up on hover:** the pop-up now closes reliably once the pointer leaves the line and the pop-up, with every dictionary.
 - **Windows overlay:** lines up again after a game goes full screen, and its text no longer disappears after Alt+Tab.
 - **Read along** outlines the whole word the dictionary matched, including around punctuation, and the built-in Yomitan pop-up follows your light or dark appearance.
 - **Steam Deck Gaming Mode:** Set OCR crop works again.

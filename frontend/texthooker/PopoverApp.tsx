@@ -91,7 +91,7 @@ function PopoverApp() {
   const [visible, setVisible] = useState(false)
   const [ankiTriggerNonce, setAnkiTriggerNonce] = useState<number | undefined>(undefined)
   // Settings → Overlay → Dictionary pop-up opacity, for the whole card.
-  const [popupOpacity] = useSetting<number>('dictionaryPopupOpacity', 85)
+  const [popupOpacity] = useSetting<number>('dictionaryPopupOpacity', 100)
   // Stack of cross-reference lookups followed within the current popover. Empty
   // = showing the originally-scanned term. Reset whenever a new lookup arrives.
   const [xrefStack, setXrefStack] = useState<XrefFrame[]>([])

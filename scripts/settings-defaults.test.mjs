@@ -199,16 +199,16 @@ test('overlay look: the default, the Rust store, and what a stored style reads a
   assert.equal(hexToRgbTriplet(12), null)
 })
 
-test('dictionary pop-up opacity: 85 unless changed, in the Rust store too', async () => {
-  assert.equal(SETTINGS_DEFAULTS.dictionaryPopupOpacity, 85)
+test('dictionary pop-up opacity: 100 (solid) unless changed, in the Rust store too', async () => {
+  assert.equal(SETTINGS_DEFAULTS.dictionaryPopupOpacity, 100)
   const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
-  assert.match(rust, /"dictionaryPopupOpacity": 85,/)
-  assert.equal(withDefaults('dictionaryPopupOpacity', undefined), 85)
+  assert.match(rust, /"dictionaryPopupOpacity": 100,/)
+  assert.equal(withDefaults('dictionaryPopupOpacity', undefined), 100)
   assert.equal(withDefaults('dictionaryPopupOpacity', 42.4), 42)
-  assert.equal(popupOpacityOf(-5), 25, 'never fainter than 25%')
+  assert.equal(popupOpacityOf(-5), 10, 'never fainter than 10%')
   assert.equal(popupOpacityOf(250), 100)
-  assert.equal(popupOpacityOf('50'), 85)
-  assert.equal(popupOpacityOf(Number.NaN), 85)
+  assert.equal(popupOpacityOf('50'), 100)
+  assert.equal(popupOpacityOf(Number.NaN), 100)
 })
 
 test('overlay look: the cards follow Kimochi unless told otherwise', () => {

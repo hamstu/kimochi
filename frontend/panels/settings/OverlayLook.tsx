@@ -7,7 +7,7 @@
  * highlight is separate and stays). The preview is drawn with the overlay's own elements and
  * stylesheet (ui/overlay-text.css) and follows every control as it moves, so what is shown is what
  * is drawn; pointing at a word in it turns that word into its card, with the dictionary pop-up over
- * it at its own opacity (`dictionaryPopupOpacity`, the fourth control, for every engine).
+ * it at its own opacity (`dictionaryPopupOpacity`, set in `DictionaryOpacityRow` under it, for every engine).
  *
  * The stored setting is `overlayStyle` (ui/settings.ts `OverlayStyleSettings`); the overlay reads
  * it live (overlay.js `applyOverlayStyle`).
@@ -55,7 +55,7 @@ function Preview({
   line: PreviewLine
   /** The hovered word, or null for every box at rest. */
   lit?: number | null
-  /** The dictionary pop-up over the hovered word is drawn at this opacity (25–100). */
+  /** The dictionary pop-up over the hovered word is drawn at this opacity (10–100). */
   popupOpacity: number
   /** The pointer came onto a word (its index), or left the line (null). */
   onPoint?: (index: number | null) => void
@@ -127,7 +127,7 @@ export function OverlayLook(): ReactNode {
   const [opacityDraft, setOpacityDraft] = useState<number | null>(null)
   const opacity = opacityDraft ?? look.opacity
   const strength = highlightStrength(opacity)
-  const [storedPopupOpacity, setPopupOpacity] = useSetting<number>('dictionaryPopupOpacity', 85)
+  const [storedPopupOpacity] = useSetting<number>('dictionaryPopupOpacity', 100)
   const popupOpacity = popupOpacityOf(storedPopupOpacity)
 
   useEffect(() => {
@@ -242,30 +242,15 @@ export function OverlayLook(): ReactNode {
           )}
         </div>
       </div>
-      <div className="overlay-look-popup-control">
-        <span className="overlay-look-label">Dictionary pop-up opacity</span>
-        <div className="overlay-look-opacity-control">
-          <Slider
-            aria-label="Dictionary pop-up opacity"
-            valueText={(value) => `${value}%`}
-            value={[popupOpacity]}
-            onValueChange={(values) => void setPopupOpacity(values[0])}
-            min={25}
-            max={100}
-            step={5}
-          />
-          <OpacityScale value={popupOpacity} min={25} onChoose={(value) => void setPopupOpacity(value)} />
-        </div>
-      </div>
     </div>
   )
 }
 
 /**
  * Under an opacity slider: its scale from `min` to 100, a tick each 5% and a number each quarter
- * (0 is Off). The numbers are buttons that set it there, as a step slider's names are.
+ * and at `min` (0 is Off). The numbers are buttons that set it there, as a step slider's names are.
  */
-function OpacityScale({
+export function OpacityScale({
   value,
   min = 0,
   onChoose
@@ -285,7 +270,7 @@ function OpacityScale({
           <span
             key={step}
             className="overlay-look-tick"
-            data-major={step % 25 === 0 || undefined}
+            data-major={step % 25 === 0 || step === min || undefined}
             data-passed={step <= value || undefined}
             style={{ left: at(step) }}
           />
@@ -293,7 +278,7 @@ function OpacityScale({
       </div>
       <div className="overlay-look-numbers">
         {ticks
-          .filter((step) => step % 25 === 0)
+          .filter((step) => step % 25 === 0 || step === min)
           .map((step) => (
             <button
               key={step}

@@ -1,7 +1,7 @@
 /**
  * Settings → Overlay: what Kimochi draws over your source and how it behaves (overlay mode,
  * grouping, the furigana and language filters, click-through, hiding it from recordings), how it
- * looks (`OverlayLook`, the dictionary pop-up's opacity too), the Text Hooker's card as it looks over
+ * looks (`OverlayLook`, and the dictionary pop-up's opacity, `DictionaryOpacityRow`), the Text Hooker's card as it looks over
  * a game, set in Settings → Text Hooker (`TextHookerCardSection`, Windows and Linux), and Game Mode, how Read along shows the dictionary
  * (`GameModeSection`). Choosing the OCR engine and Auto OCR are on Settings → OCR.
  */
@@ -17,7 +17,7 @@ import { SmallTextFilter } from './SmallTextFilter'
 import { GameModeSection } from './GameModeSection'
 import { TextHookerCardSection } from './TextHookerCardSection'
 import { GamePauseRow } from './GamePauseRow'
-import { HoverLookupRow } from './HoverLookupRow'
+import { DictionaryOpacityRow } from './DictionaryOpacityRow'
 
 export function OverlayTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
@@ -96,7 +96,6 @@ export function OverlayTab(): ReactNode {
             onCheckedChange={(checked) => void setClickThrough(checked)}
           />
         </SettingsRow>
-        <HoverLookupRow />
         <SettingsRow
           label="Exclude overlay from screen recording"
           controlId="ocr-exclude-capture"
@@ -129,6 +128,7 @@ export function OverlayTab(): ReactNode {
             />
           </SettingsRow>
         )}
+        <DictionaryOpacityRow />
       </SettingsSection>
 
       <TextHookerCardSection />

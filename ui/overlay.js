@@ -4559,14 +4559,27 @@ async function importFixtureDictionary() {
  * look up on hover, everywhere: there is no click away. Not while the controller reads.
  */
 const popupLeave = new PopupLeave()
-/** Look up on hover: the pop-up goes the moment the pointer is off the line, the gap and the pop-up. */
-const hoverPopupLeave = new PopupLeave(0)
+/**
+ * Look up on hover: the pop-up goes once the pointer has been off the line, the gap and the
+ * pop-up for a moment: long enough that a pointer slipping off the line on its way along it
+ * doesn't close it, short enough to read as going when the pointer moves on.
+ */
+const hoverPopupLeave = new PopupLeave(250)
 /** After dismissal, wait for movement or a return to text before allowing another hover lookup. */
 let hoverPaused = false
 function syncHoverPause(pointer) {
   if (!hoverPaused) return
   hoverPaused = feedHover && !renderer.hitRects(state.origin).some((r) => inRect(r, pointer.x, pointer.y))
 }
+/**
+ * The Yomitan API's pop-ups, in desktop points (`popover:cards`): windows of their own, so neither
+ * `livePopups` nor the extension's rectangle sees them.
+ */
+let apiPopupCards = []
+void native.listen('popover:cards', ({ payload }) => {
+  apiPopupCards = Array.isArray(payload) ? payload : []
+  checkPopupLeave()
+})
 let popupLeavePointer = null
 let popupLeaveTimer = null
 function checkPopupLeave(pointer = popupLeavePointer) {
@@ -4577,7 +4590,10 @@ function checkPopupLeave(pointer = popupLeavePointer) {
   const hover = hoverLookup()
   // Otherwise, with click-through, a click away is free (`onFreeClick`), so the pop-up stays until then.
   if (!hover && (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || clickThrough('words'))) return
-  const open = Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
+  const open =
+    Boolean(extensionPopupRect) ||
+    (hover && apiPopupCards.length > 0) ||
+    [...livePopups].some((popup) => popup.isVisibleSync?.())
   clearTimeout(popupLeaveTimer)
   const leave = hover ? hoverPopupLeave : popupLeave
   // Nothing to measure with no pop-up up: `update` only resets then.
@@ -4637,6 +4653,7 @@ function hoverLeaveRects() {
   const popups = popupRects()
   if (extensionPopupRect)
     popups.push({ ...extensionPopupRect, x: origin.x + extensionPopupRect.x, y: origin.y + extensionPopupRect.y })
+  popups.push(...apiPopupCards)
   const near = line ? boundingRect([wordBox, line]) : wordBox
   return [...word, ...(line ? [line] : []), ...popups, ...popups.map((popup) => gapBetween(near, popup))]
 }
