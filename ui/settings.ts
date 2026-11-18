@@ -93,27 +93,29 @@ export const OVERLAY_HIGHLIGHT_PRESETS: readonly { value: string; label: string 
 
 /**
  * The radial menu's base: the colour its ring is drawn in, behind the icons, and how opaque, 10–100
- * (100 the ring as it always was). Settings → Overlay → Radial menu.
+ * (100 solid; 70, the default, about the ring as it always was). Settings → Overlay → Radial menu.
  */
 export interface RadialMenuBase {
   color: string
   opacity: number
 }
 
-/** The base colours Settings offers, dark to light; any `#rrggbb` is accepted. The first is the default. */
+/**
+ * The base colours Settings offers: dark ones, each a ground for one of the accents; any `#rrggbb`
+ * is accepted. The first is the default.
+ */
 export const RADIAL_BASE_PRESETS: readonly { value: string; label: string }[] = [
   { value: '#111113', label: 'Charcoal' },
   { value: '#000000', label: 'Black' },
-  { value: '#1c2230', label: 'Slate' },
-  { value: '#141a33', label: 'Navy' },
-  { value: '#221a2e', label: 'Plum' },
-  { value: '#4a4d55', label: 'Graphite' },
-  { value: '#d4d6db', label: 'Silver' },
-  { value: '#f2f1ee', label: 'Off-white' },
-  { value: '#ffffff', label: 'White' }
+  { value: '#121a36', label: 'Navy' },
+  { value: '#0b2624', label: 'Deep teal' },
+  { value: '#10271a', label: 'Forest' },
+  { value: '#2e1a0c', label: 'Umber' },
+  { value: '#2a2410', label: 'Olive' },
+  { value: '#241631', label: 'Plum' }
 ]
 
-export const DEFAULT_RADIAL_BASE: RadialMenuBase = { color: RADIAL_BASE_PRESETS[0].value, opacity: 100 }
+export const DEFAULT_RADIAL_BASE: RadialMenuBase = { color: RADIAL_BASE_PRESETS[0].value, opacity: 70 }
 
 export const DEFAULT_OVERLAY_STYLE: OverlayStyleSettings = {
   color: OVERLAY_HIGHLIGHT_PRESETS[0].value,
@@ -152,7 +154,7 @@ export function radialMenuBaseOf(stored: unknown): RadialMenuBase {
 
 /**
  * What the ring's host carries for its base (controller-variants.css): `--cm-base-rgb` ("r g b"),
- * `--cm-base-alpha` (0.1–1, over the ring's own shading) and the tone of what is drawn on it,
+ * `--cm-base-alpha` (0.1–1) and the tone of what is drawn on it,
  * dark text and icons on a light base.
  */
 export function radialBaseVars(stored: unknown): { rgb: string; alpha: string; tone: 'light' | 'dark' } {

@@ -16,8 +16,7 @@ export function ColourSwatches({
   labelledBy,
   onChoose,
   onDraft,
-  presets = OVERLAY_HIGHLIGHT_PRESETS,
-  inline = false
+  presets = OVERLAY_HIGHLIGHT_PRESETS
 }: {
   /** The colour shown as chosen, `#rrggbb`. */
   value: string
@@ -31,12 +30,10 @@ export function ColourSwatches({
   onDraft: (value: string) => void
   /** The colours offered; the highlight colours unless given. */
   presets?: readonly { value: string; label: string }[]
-  /** All on one line, rather than in rows of five. */
-  inline?: boolean
 }): ReactNode {
   const preset = presets.some((option) => option.value === value)
   return (
-    <div className="overlay-look-swatches" data-inline={inline || undefined}>
+    <div className="overlay-look-swatches">
       <ToggleGroup.Root
         type="single"
         value={preset ? value : ''}

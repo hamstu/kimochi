@@ -76,13 +76,12 @@
   font-weight: 430;
   color: var(--cm-text);
 }
-/* The radial menu's accent ("r, g, b") and base ("r g b", and how opaque over the ring's own
-   shading), Settings → Overlay → Radial menu, set inline on the host by whoever shows the ring;
+/* The radial menu's accent ("r, g, b") and base ("r g b", and how opaque: 1 is solid), Settings → Overlay → Radial menu, set inline on the host by whoever shows the ring;
    Kimochi's indigo on charcoal until then. On the host only, so the ring inherits them. */
 :is(#controller, [data-cm-variant])[data-cm-variant] {
   --cm-ring-rgb: 62, 99, 221;
   --cm-base-rgb: 17 17 19;
-  --cm-base-alpha: 1;
+  --cm-base-alpha: 0.7;
 }
 /* A light base: the ring's text, icons and edges go dark, as on Kimochi's light surfaces. */
 [data-cm-variant][data-cm-ring-tone='light'] .cm-root {
@@ -498,8 +497,8 @@
   background: radial-gradient(
     circle closest-side,
     transparent calc(var(--cm-inner) - 0.5px),
-    rgb(var(--cm-base-rgb) / calc(0.58 * var(--cm-base-alpha))) var(--cm-inner),
-    rgb(var(--cm-base-rgb) / calc(0.72 * var(--cm-base-alpha))) var(--cm-outer),
+    rgb(var(--cm-base-rgb) / var(--cm-base-alpha)) var(--cm-inner),
+    rgb(var(--cm-base-rgb) / var(--cm-base-alpha)) var(--cm-outer),
     transparent calc(var(--cm-outer) + 0.5px)
   );
   backdrop-filter: blur(16px) saturate(1.3);
@@ -523,7 +522,7 @@
 /* The track: a faint band between the hub and the segments, which the marker fills. */
 [data-cm-variant='halo'] .cm-track {
   fill: none;
-  stroke: rgb(var(--cm-base-rgb) / calc(0.7 * var(--cm-base-alpha)));
+  stroke: rgb(var(--cm-base-rgb) / var(--cm-base-alpha));
 }
 /* Segments draw nothing until chosen; each casts a shadow then, onto its neighbours, that fades
    in and out with it. */

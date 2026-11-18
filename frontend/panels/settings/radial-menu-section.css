@@ -248,22 +248,10 @@
 .radial-preview[data-static] .cm-wedge {
   cursor: default;
 }
-.radial-look-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--k-space-3);
-  padding: var(--k-space-3);
-  border-top: 1px solid var(--k-line);
-}
-.radial-look-field {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--k-space-3);
-  min-width: 0;
-}
-.radial-look-opacity {
-  width: 12rem;
+/* Base colour, accent colour, base opacity (RadialStyle.tsx): the two colour columns as wide as
+   their swatches, so their rows line up; the opacity takes the rest. */
+@container (min-width: 30rem) {
+  .overlay-look-controls.radial-style-controls {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
 }

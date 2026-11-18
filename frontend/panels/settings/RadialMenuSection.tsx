@@ -39,15 +39,8 @@ import {
   reorderShownItems
 } from '@ui/radial-items.js'
 import { hexToRgbTriplet, radialBaseVars, type RadialMenuBase } from '@ui/settings'
-import { RADIAL_MENU_SECTION } from '../../bridge/settingsTarget'
-import {
-  shownRadialItems,
-  useRadialMenuBase,
-  useRadialMenuColor,
-  useRadialShortcuts,
-  type PreviewSource,
-  type RadialItem
-} from './radialMenuPreview'
+import { useRadialStyle } from './RadialStyle'
+import { shownRadialItems, useRadialShortcuts, type PreviewSource, type RadialItem } from './radialMenuPreview'
 import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { usePrefs } from '../../kit/appearance-state'
@@ -373,8 +366,7 @@ export function RadialMenuSection(): ReactNode {
   const menu = useMemo(() => effectiveRadialMenu(stored), [stored])
   const [selected, setSelected] = useState<string | null>(null)
   const [source, setSource] = useState<PreviewSource>('ocr')
-  const color = useRadialMenuColor()
-  const [base] = useRadialMenuBase()
+  const { accent: color, base, controls } = useRadialStyle()
 
   const inMenu = useMemo(
     () => menu.map((id) => RADIAL_ITEMS.find((item) => item.id === id)).filter((item) => item !== undefined),
@@ -458,7 +450,6 @@ export function RadialMenuSection(): ReactNode {
 
   return (
     <SettingsSection
-      id={RADIAL_MENU_SECTION}
       title="Radial menu"
       description="The actions in the radial menu, clockwise from the top. Click one to give it a shortcut that runs it without opening the menu."
     >
@@ -485,6 +476,8 @@ export function RadialMenuSection(): ReactNode {
           )
         }
       />
+      {/* Its look, as in Settings → Overlay → Radial menu. */}
+      {controls}
       {/* The ring is drawn for the pointer; these open the same panels from the keyboard. */}
       <ul className="sr-only">
         {inMenu.map((item) => (
