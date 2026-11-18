@@ -11,7 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - 📊 **Stats and reading history.** A new Stats tab shows a heatmap with streaks, characters and time per day, reading speed, when you read, per-session totals and your most-read kanji. All your lines are retained and can be exported from the Log's **⋯** menu for apps like exSTATic, or as CSV/JSON. More options are in **Settings → Log**.
-- 🎮 **Make the radial menu your own.** Add, remove and reorder its actions, give any action its own keyboard shortcut or controller button (Settings → Shortcuts & Controls → Radial menu), and pick its colour in Settings → Overlay.
+- 🎮 **Make the radial menu your own.** Add, remove and reorder its actions, give any action its own keyboard shortcut or controller button (Settings → Shortcuts & Controls → Radial menu), and choose its accent colour, base colour and opacity in Settings → Overlay → Radial menu.
 - ⏸️ **Auto Game Pausing** (opt-in, Settings → Overlay) freezes the game while you look up a word, use the radial menu or draw a region. This is experimental and might not work on every game!
 - ✨ **Transparent/invisible overlay mode:** Hover cards and the Text Hooker card can now be **Transparent**, for those who prefer seeing the game's own text while doing lookups. A faint outline marks the word being looked up. You can choose this mode for both the OCR overlay cards and the text hooker card independently.
 - **Dictionary opacity.** Fade the dictionary pop-up so your game shows through it, with every dictionary (Settings → Dictionary, or Settings → Overlay → Overlay appearance).

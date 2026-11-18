@@ -91,6 +91,30 @@ export const OVERLAY_HIGHLIGHT_PRESETS: readonly { value: string; label: string 
   { value: '#8e4ec6', label: 'Violet' }
 ]
 
+/**
+ * The radial menu's base: the colour its ring is drawn in, behind the icons, and how opaque, 10–100
+ * (100 the ring as it always was). Settings → Overlay → Radial menu.
+ */
+export interface RadialMenuBase {
+  color: string
+  opacity: number
+}
+
+/** The base colours Settings offers, dark to light; any `#rrggbb` is accepted. The first is the default. */
+export const RADIAL_BASE_PRESETS: readonly { value: string; label: string }[] = [
+  { value: '#111113', label: 'Charcoal' },
+  { value: '#000000', label: 'Black' },
+  { value: '#1c2230', label: 'Slate' },
+  { value: '#141a33', label: 'Navy' },
+  { value: '#221a2e', label: 'Plum' },
+  { value: '#4a4d55', label: 'Graphite' },
+  { value: '#d4d6db', label: 'Silver' },
+  { value: '#f2f1ee', label: 'Off-white' },
+  { value: '#ffffff', label: 'White' }
+]
+
+export const DEFAULT_RADIAL_BASE: RadialMenuBase = { color: RADIAL_BASE_PRESETS[0].value, opacity: 100 }
+
 export const DEFAULT_OVERLAY_STYLE: OverlayStyleSettings = {
   color: OVERLAY_HIGHLIGHT_PRESETS[0].value,
   appearance: 'app',
@@ -112,6 +136,43 @@ export function popupOpacityOf(stored: unknown): number {
 }
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+/** A stored `radialMenuBase` made whole: a known colour and a whole percent from 10 to 100. */
+export function radialMenuBaseOf(stored: unknown): RadialMenuBase {
+  const raw = stored && typeof stored === 'object' && !Array.isArray(stored) ? (stored as Partial<RadialMenuBase>) : {}
+  return {
+    color:
+      typeof raw.color === 'string' && HEX_COLOR.test(raw.color) ? raw.color.toLowerCase() : DEFAULT_RADIAL_BASE.color,
+    opacity:
+      typeof raw.opacity === 'number' && Number.isFinite(raw.opacity)
+        ? Math.min(100, Math.max(10, Math.round(raw.opacity)))
+        : DEFAULT_RADIAL_BASE.opacity
+  }
+}
+
+/**
+ * What the ring's host carries for its base (controller-variants.css): `--cm-base-rgb` ("r g b"),
+ * `--cm-base-alpha` (0.1–1, over the ring's own shading) and the tone of what is drawn on it,
+ * dark text and icons on a light base.
+ */
+export function radialBaseVars(stored: unknown): { rgb: string; alpha: string; tone: 'light' | 'dark' } {
+  const base = radialMenuBaseOf(stored)
+  return {
+    rgb: [1, 3, 5].map((at) => parseInt(base.color.slice(at, at + 2), 16)).join(' '),
+    alpha: String(base.opacity / 100),
+    tone: isLightColor(base.color) ? 'light' : 'dark'
+  }
+}
+
+/** Whether `#rrggbb` is a light colour, which dark text reads on (its relative luminance). */
+export function isLightColor(hex: string): boolean {
+  if (!HEX_COLOR.test(hex)) return false
+  const [r, g, b] = [1, 3, 5].map((at) => {
+    const c = parseInt(hex.slice(at, at + 2), 16) / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4
+}
 
 /**
  * The radial menu's colour, `#rrggbb`: the one chosen for it (`radialMenuColor`), else the
@@ -324,6 +385,8 @@ export interface Settings {
    * chosen: the ring then keeps the highlight colour it always had (`radialMenuColorOf`).
    */
   radialMenuColor: string | null
+  /** The radial menu's base colour and opacity; see `RadialMenuBase`. */
+  radialMenuBase: RadialMenuBase
   autoOCRSettings: AutoScanSettings
   autoScanSettings: {
     enabled: boolean
@@ -430,6 +493,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   overlayStyle: DEFAULT_OVERLAY_STYLE,
   dictionaryPopupOpacity: 100,
   radialMenuColor: null,
+  radialMenuBase: DEFAULT_RADIAL_BASE,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,
   autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {
@@ -972,6 +1036,7 @@ function migrated<K extends keyof Settings>(key: K, stored: unknown): Settings[K
   // A colour or appearance this build does not know reads as the default, not as a broken look.
   if (key === 'overlayStyle') return overlayStyleOf(stored) as Settings[K]
   if (key === 'dictionaryPopupOpacity') return popupOpacityOf(stored) as Settings[K]
+  if (key === 'radialMenuBase') return radialMenuBaseOf(stored) as Settings[K]
   if (key === 'radialMenuColor')
     return (typeof stored === 'string' && HEX_COLOR.test(stored) ? stored.toLowerCase() : null) as Settings[K]
   if (key === 'yomitanSettings') {

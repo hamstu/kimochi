@@ -8,7 +8,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import { Check, Pipette } from 'lucide-react'
 import { cn } from '@kit'
-import { OVERLAY_HIGHLIGHT_PRESETS } from '@ui/settings'
+import { isLightColor, OVERLAY_HIGHLIGHT_PRESETS } from '@ui/settings'
 
 export function ColourSwatches({
   value,
@@ -16,6 +16,7 @@ export function ColourSwatches({
   labelledBy,
   onChoose,
   onDraft,
+  presets = OVERLAY_HIGHLIGHT_PRESETS,
   inline = false
 }: {
   /** The colour shown as chosen, `#rrggbb`. */
@@ -28,10 +29,12 @@ export function ColourSwatches({
   onChoose: (value: string) => void
   /** The custom picker moved. */
   onDraft: (value: string) => void
-  /** All on one line, spread across the space it is given, rather than in rows of five. */
+  /** The colours offered; the highlight colours unless given. */
+  presets?: readonly { value: string; label: string }[]
+  /** All on one line, rather than in rows of five. */
   inline?: boolean
 }): ReactNode {
-  const preset = OVERLAY_HIGHLIGHT_PRESETS.some((option) => option.value === value)
+  const preset = presets.some((option) => option.value === value)
   return (
     <div className="overlay-look-swatches" data-inline={inline || undefined}>
       <ToggleGroup.Root
@@ -41,7 +44,7 @@ export function ColourSwatches({
         className="overlay-look-presets"
         aria-labelledby={labelledBy}
       >
-        {OVERLAY_HIGHLIGHT_PRESETS.map((option) => (
+        {presets.map((option) => (
           <ToggleGroup.Item
             key={option.value}
             value={option.value}
@@ -49,6 +52,7 @@ export function ColourSwatches({
             style={{ '--swatch': option.value } as CSSProperties}
             aria-label={option.label}
             title={option.label}
+            data-light={isLightColor(option.value) || undefined}
           >
             <Check aria-hidden />
           </ToggleGroup.Item>
@@ -57,6 +61,7 @@ export function ColourSwatches({
       <label
         className={cn('overlay-look-swatch', 'overlay-look-swatch-custom')}
         data-state={preset ? 'off' : 'on'}
+        data-light={(!preset && isLightColor(value)) || undefined}
         style={{ '--swatch': value } as CSSProperties}
         title="Custom colour"
       >

@@ -207,6 +207,14 @@ export function createController(context) {
         : null
     if (ring) host.style?.setProperty?.('--cm-ring-rgb', ring)
     else host.style?.removeProperty?.('--cm-ring-rgb')
+    // And its base: the ring's colour behind the icons, how opaque, and the tone drawn on it.
+    // (`ringBase`: ui/settings.ts `radialBaseVars`, worked out by the host page.)
+    const base = context.ringBase?.()
+    if (base) {
+      host.style?.setProperty?.('--cm-base-rgb', base.rgb)
+      host.style?.setProperty?.('--cm-base-alpha', base.alpha)
+    }
+    if (host.dataset) host.dataset.cmRingTone = base?.tone ?? 'dark'
   }
   /** How the mode was opened, so the hints name the right buttons. */
   let input = 'pad'

@@ -104,6 +104,9 @@ pub fn defaults() -> Value {
         // The radial menu's colour (Settings → Overlay → Radial menu); null until chosen, when it
         // keeps the overlay's highlight colour (ui/settings.ts `radialMenuColorOf`).
         "radialMenuColor": null,
+        // The radial menu's ring: its base colour and how opaque (10–100), ui/settings.ts
+        // `radialMenuBaseOf`.
+        "radialMenuBase": { "color": "#111113", "opacity": 100 },
         // Sentence audio (sentence_audio/): off until the user turns it on.
         "sentenceAudio": {
             "voiceHook": true,

@@ -13,7 +13,17 @@
  * panel. The menu always keeps one item, and Reset to default puts the shipped menu back (the
  * shortcuts stay as they are).
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+  type ReactNode
+} from 'react'
 import { Eye, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, IconButton, Menu, MenuContent, MenuItem, MenuTrigger, Select, SettingsSection } from '@kit'
 import { ICONS, ORBIT, RadialMenu } from '@ui/radial-menu.js'
@@ -28,10 +38,11 @@ import {
   removeRadialItem,
   reorderShownItems
 } from '@ui/radial-items.js'
-import { hexToRgbTriplet } from '@ui/settings'
+import { hexToRgbTriplet, radialBaseVars, type RadialMenuBase } from '@ui/settings'
 import { RADIAL_MENU_SECTION } from '../../bridge/settingsTarget'
 import {
   shownRadialItems,
+  useRadialMenuBase,
   useRadialMenuColor,
   useRadialShortcuts,
   type PreviewSource,
@@ -134,6 +145,7 @@ export function RadialPreview({
   selected,
   details,
   color,
+  base,
   interactive = true,
   source = 'ocr',
   onSource,
@@ -149,6 +161,8 @@ export function RadialPreview({
   details: Record<string, string | undefined>
   /** The ring's colour, `#rrggbb` (`radialMenuColorOf`). */
   color: string
+  /** The ring's base colour and opacity (`radialMenuBase`). */
+  base: RadialMenuBase
   /**
    * False for a picture of the menu only (Settings → Overlay → Radial menu): no dragging or
    * editing, no source to choose, nothing beside the ring. Pointing at items still lights them.
@@ -178,6 +192,7 @@ export function RadialPreview({
   }, [onPick])
   const { resolved } = usePrefs()
   const ringRgb = hexToRgbTriplet(color) ?? undefined
+  const baseVars = radialBaseVars(base)
   const selectedIndex = items.findIndex(({ item }) => item.id === selected)
 
   useEffect(() => {
@@ -313,7 +328,16 @@ export function RadialPreview({
           className="radial-preview-stage"
           data-cm-variant="halo"
           data-cm-theme={resolved}
-          style={{ width: STAGE, height: STAGE, ['--cm-ring-rgb' as string]: ringRgb }}
+          data-cm-ring-tone={baseVars.tone}
+          style={
+            {
+              width: STAGE,
+              height: STAGE,
+              '--cm-ring-rgb': ringRgb,
+              '--cm-base-rgb': baseVars.rgb,
+              '--cm-base-alpha': baseVars.alpha
+            } as CSSProperties
+          }
           aria-hidden
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -350,6 +374,7 @@ export function RadialMenuSection(): ReactNode {
   const [selected, setSelected] = useState<string | null>(null)
   const [source, setSource] = useState<PreviewSource>('ocr')
   const color = useRadialMenuColor()
+  const [base] = useRadialMenuBase()
 
   const inMenu = useMemo(
     () => menu.map((id) => RADIAL_ITEMS.find((item) => item.id === id)).filter((item) => item !== undefined),
@@ -442,6 +467,7 @@ export function RadialMenuSection(): ReactNode {
         selected={selected}
         details={details}
         color={color}
+        base={base}
         source={source}
         onSource={setSource}
         onPick={setSelected}

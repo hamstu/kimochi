@@ -245,12 +245,17 @@
 .overlay-look-presets {
   display: contents;
 }
-/* On one line, spread across the row (Settings → Overlay → Radial menu's colour). */
+/* On one line, spaced as in rows (Settings → Overlay → Radial menu's colours). */
 .overlay-look-swatches[data-inline] {
   display: flex;
-  flex: 1;
   flex-wrap: wrap;
-  justify-content: space-between;
+}
+/* A light swatch (white, silver): its tick in dark ink. */
+.overlay-look-swatch[data-light] {
+  color: #1c2024;
+}
+.overlay-look-swatch[data-light] svg {
+  filter: none;
 }
 .overlay-look-swatch {
   position: relative;

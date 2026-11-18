@@ -5,7 +5,14 @@
  */
 import { useMemo } from 'react'
 import { RADIAL_ITEMS, radialItemsFor } from '@ui/radial-items.js'
-import { DEFAULT_OVERLAY_STYLE, radialMenuColorOf, type OverlayStyleSettings } from '@ui/settings'
+import {
+  DEFAULT_OVERLAY_STYLE,
+  DEFAULT_RADIAL_BASE,
+  radialMenuBaseOf,
+  radialMenuColorOf,
+  type OverlayStyleSettings,
+  type RadialMenuBase
+} from '@ui/settings'
 import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { useCapabilities } from '../../bridge/capabilities'
@@ -57,4 +64,10 @@ export function useRadialMenuColor(): string {
   const [stored] = useSetting<string | null>('radialMenuColor', null)
   const [overlayStyle] = useSetting<OverlayStyleSettings>('overlayStyle', DEFAULT_OVERLAY_STYLE)
   return radialMenuColorOf(stored, overlayStyle)
+}
+
+/** The radial menu's base colour and opacity (`radialMenuBase`), and saving it. */
+export function useRadialMenuBase(): [RadialMenuBase, (next: RadialMenuBase) => void] {
+  const [stored, setStored] = useSetting<RadialMenuBase>('radialMenuBase', DEFAULT_RADIAL_BASE)
+  return [radialMenuBaseOf(stored), (next) => void setStored(next)]
 }

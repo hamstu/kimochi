@@ -103,6 +103,7 @@ import {
   clickThroughLocked,
   hookCardLocksAutoAlign,
   overlayStyleOf,
+  radialBaseVars,
   radialMenuColorOf,
   resolveHookCardAppearance,
   resolveHostEngine,
@@ -894,6 +895,7 @@ controller = createController({
   menuItems: () => setting(RADIAL_MENU_SETTING),
   appearance: () => setting('appearance'),
   ringColor: () => radialMenuColorOf(setting('radialMenuColor'), setting('overlayStyle')),
+  ringBase: () => radialBaseVars(setting('radialMenuBase')),
   // Gaming Mode reads the Deck's own controller. Paused Steam lets it fall back to its keyboard
   // and mouse "lizard" mode, whose arrow keys would move the outline a second time.
   padOnly: () => window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope,
@@ -6353,6 +6355,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
               controllerMenuItems: setting(RADIAL_MENU_SETTING),
               overlayStyle: setting('overlayStyle'),
               radialMenuColor: setting('radialMenuColor'),
+              radialMenuBase: setting('radialMenuBase'),
               appearance: setting('appearance')
             }
           }

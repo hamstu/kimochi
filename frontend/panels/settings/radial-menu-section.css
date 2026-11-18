@@ -257,10 +257,13 @@
   padding: var(--k-space-3);
   border-top: 1px solid var(--k-line);
 }
-.radial-look-colour {
+.radial-look-field {
   display: flex;
-  flex: 1;
-  min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--k-space-3);
+  min-width: 0;
+}
+.radial-look-opacity {
+  width: 12rem;
 }
