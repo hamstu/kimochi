@@ -19,6 +19,7 @@
 pub mod clean;
 pub mod pick;
 pub mod process;
+mod rpgmaker;
 pub mod store;
 mod translations;
 mod unity;
@@ -126,6 +127,9 @@ struct Session {
     /// Threads given up this session for missing lines: never taken back as the game's remembered
     /// thread, which would hand them the choice again as soon as they speak.
     dropped: Vec<String>,
+    /// An RPG Maker game's actors' names, read the first time a line has a code in it
+    /// (`rpgmaker::actor_names`).
+    actor_names: Option<Vec<String>>,
     last_line: Option<String>,
     /// The id the last line was sent with: a line carried on in the next burst replaces it.
     last_id: Option<String>,
@@ -686,6 +690,12 @@ fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool
 fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let language = hook.language();
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
+    // An RPG Maker message's actor codes as the actors' names.
+    if text.contains('\\') && session.actor_names.is_none() {
+        session.actor_names = Some(session.exe.as_deref().map(rpgmaker::actor_names).unwrap_or_default());
+    }
+    let named = rpgmaker::with_names(text, session.actor_names.as_deref().unwrap_or_default());
+    let text = named.as_str();
     // A line sent with its translations (a multilingual release) is the line in the language being
     // read; a line drawn several times over (CatSystem2) is the line once.
     let own = translations::in_language(text, language);
