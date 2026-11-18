@@ -3155,6 +3155,7 @@ dependencies = [
  "base64 0.22.1",
  "block2",
  "crc32fast",
+ "encoding_rs",
  "flate2",
  "futures-lite",
  "getrandom 0.2.17",

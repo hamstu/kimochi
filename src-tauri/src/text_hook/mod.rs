@@ -20,6 +20,7 @@ pub mod clean;
 pub mod pick;
 pub mod process;
 pub mod store;
+mod translations;
 mod unity;
 pub mod wine;
 
@@ -57,6 +58,8 @@ const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
 const GLYPHS: u32 = 3;
 /// Lines from other engine threads, with the chosen one silent, after which the screen is read again.
 const MISSED_LINES: u32 = 3;
+/// Pieces in a row in another language after which a chosen thread hands over to one in the language.
+const FOREIGN_LINES: u32 = 3;
 
 #[derive(Debug, Clone)]
 struct Thread {
@@ -80,6 +83,9 @@ struct Thread {
     /// from when that was always Japanese). Sticky: the hook menu lists the thread from then on,
     /// even while it carries other text.
     japanese: bool,
+    /// Pieces in a row that did not read as the language: a multilingual game switched to another
+    /// language draws that through the thread chosen for its line (`cleaner_thread`).
+    foreign: u32,
 }
 
 impl Thread {
@@ -542,6 +548,7 @@ fn read_events(
                         recent: VecDeque::new(),
                         last_at: None,
                         japanese: false,
+                        foreign: 0,
                     });
                 }
                 continue;
@@ -667,8 +674,10 @@ fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool
 fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let language = hook.language();
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
-    // A line drawn several times over (CatSystem2) is the line once.
-    let collapsed = pick::collapse_repeated_sentences(text, language);
+    // A line sent with its translations (a multilingual release) is the line in the language being
+    // read; a line drawn several times over (CatSystem2) is the line once.
+    let own = translations::in_language(text, language);
+    let collapsed = pick::collapse_repeated_sentences(&own, language);
     let text = collapsed.as_str();
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One
     // that pauses while typing for longer than the hooker waits comes in pieces: a piece that
@@ -694,6 +703,12 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         let thread = &mut session.threads[index];
         thread.text = lines.last().cloned().unwrap_or_default();
         thread.japanese |= pick::looks_japanese(&thread.text, language);
+        let normalized = pick::normalize(&thread.text);
+        thread.foreign = if normalized.is_empty() || pick::reads_as(&normalized, language) {
+            0
+        } else {
+            thread.foreign.saturating_add(1)
+        };
         thread.count += 1;
         thread.noisy += u64::from(clean::has_codes(text));
         thread.glyphs = if pick::normalize(text).chars().count() <= 2 { thread.glyphs.saturating_add(1) } else { 0 };
@@ -816,6 +831,30 @@ fn cleaner_thread(session: &Session, index: usize, language: &Language) -> Optio
             return Some(spoken.key.clone());
         }
     }
+    // A multilingual game showing another language (Senren＊Banka set to English): the thread
+    // chosen for the line draws the translation, while an engine thread that sends every language
+    // at once (kept to the one being read, `translations`) has the line in the language. It takes
+    // over when it speaks along with the chosen thread's lines in the other language (either first).
+    if chosen.foreign >= FOREIGN_LINES {
+        let along = |t: &Thread| t.last_at.is_some_and(|at| at.elapsed() < Duration::from_secs(2));
+        let others: Vec<&Thread> = if spoken.key == selected { session.threads.iter().collect() } else { vec![spoken] };
+        let better = along(chosen).then(|| {
+            others.into_iter().find(|t| {
+                let text = pick::normalize(&t.text);
+                t.key != selected
+                    && along(t)
+                    && t.foreign == 0
+                    && t.count >= 2
+                    && t.glyphs == 0
+                    && !pick::is_generic(&t.hookcode, &t.name)
+                    && text.chars().count() >= PICK_MIN_MATCH * pick::letter_scale(language)
+                    && pick::reads_as(&text, language)
+            })
+        });
+        if let Some(Some(better)) = better {
+            return Some(better.key.clone());
+        }
+    }
     // A Unity text object showing what the chosen hooker thread has: the object is set when the
     // line is shown, the hooker's string functions whenever the game handles the string.
     if !unity::is_unity(&chosen.hookcode) && !chosen.text.is_empty() {
@@ -898,16 +937,32 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                     noise: t.noisy as f64 / t.count.max(1) as f64,
                 })
                 .collect();
-            pick::score(&list, &blocks, hook.language())
+            let scored = pick::score(&list, &blocks, hook.language());
+            let chosen = pick::chosen(&scored, PICK_MIN_MATCH as f64, hook.language()).map(|s| s.key.clone());
+            // Nothing in the language on screen: the game may show a translation of the line.
+            chosen.or_else(|| {
+                let spoken: Vec<pick::Spoken> = candidates
+                    .iter()
+                    .filter_map(|t| {
+                        Some(pick::Spoken {
+                            key: &t.key,
+                            hookcode: &t.hookcode,
+                            name: &t.name,
+                            text: &t.text,
+                            at: t.last_at?,
+                        })
+                    })
+                    .collect();
+                pick::translated_screen(&spoken, &blocks, hook.language()).map(String::from)
+            })
         });
         let mut session = hook.lock();
         if session.generation != generation || session.selected.is_some() {
             continue;
         }
         match outcome {
-            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64, hook.language()) {
-                Some(best) => {
-                    let key = best.key.clone();
+            Ok(chosen) => match chosen {
+                Some(key) => {
                     let thread = session.threads.iter().find(|t| t.key == key).cloned();
                     if let Some(thread) = thread {
                         session.selected = Some(key.clone());

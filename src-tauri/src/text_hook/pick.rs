@@ -122,10 +122,11 @@ pub fn normalize(text: &str) -> String {
 }
 
 /// Share of a text's characters that are letters of the language's scripts (kana and kanji for
-/// Japanese). The name is from when Japanese was the only language.
+/// Japanese). The name is from when Japanese was the only language. Chinese is in kanji too, but is
+/// not Japanese: a game shown in Chinese draws it through the thread chosen for its line.
 pub fn japanese_ratio(normalized: &str, language: &Language) -> f64 {
     let total = normalized.chars().count();
-    if total == 0 {
+    if total == 0 || language.is_japanese() && super::translations::looks_chinese(normalized) {
         return 0.0;
     }
     normalized.chars().filter(|c| language.has(*c)).count() as f64 / total as f64
@@ -331,6 +332,62 @@ pub fn chosen<'a>(scored: &'a [Scored], min: f64, language: &Language) -> Option
 
 /// The fewest characters a thread matched outside the largest text must have to be chosen.
 const MIN_OFF_BOX: f64 = 12.0;
+
+/// A thread as [`translated_screen`] sees it: its latest sentence and when it came.
+#[derive(Debug, Clone)]
+pub struct Spoken<'a> {
+    pub key: &'a str,
+    pub hookcode: &'a str,
+    pub name: &'a str,
+    pub text: &'a str,
+    pub at: std::time::Instant,
+}
+
+/// The thread with the line in the language when the screen shows it in another: a multilingual
+/// game set to its translation (Senren＊Banka in English) draws the translation through one thread,
+/// while an engine thread sends the line in every language (kept to the one being read,
+/// `translations`). Some thread not in the language must be on screen (12 characters of it at
+/// least, found whole or nearly whole in a block), and exactly one engine thread in the language
+/// must have spoken within two seconds of it.
+pub fn translated_screen<'a>(threads: &[Spoken<'a>], blocks: &[Block], language: &Language) -> Option<&'a str> {
+    const ALONG: std::time::Duration = std::time::Duration::from_secs(2);
+    let shown = threads.iter().find(|t| {
+        let text = normalize(t.text);
+        let length = text.chars().count();
+        length >= 12
+            && !reads_as(&text, language)
+            && blocks.iter().any(|b| b.text.contains(&text) || pairs_found(&text, &b.text) >= 0.8)
+    })?;
+    let along = |t: &Spoken| t.at.max(shown.at) - t.at.min(shown.at) < ALONG;
+    let mut partners = threads.iter().filter(|t| {
+        let text = normalize(t.text);
+        t.key != shown.key
+            && along(t)
+            && !is_generic(t.hookcode, t.name)
+            && text.chars().count() >= MIN_MATCH_TRANSLATED * letter_scale(language)
+            && reads_as(&text, language)
+    });
+    let partner = partners.next()?;
+    partners.next().is_none().then_some(partner.key)
+}
+
+/// The share of `text`'s pairs of neighbouring characters that are in `block`: near 1 when the block
+/// shows the text with a letter or two misread.
+fn pairs_found(text: &str, block: &str) -> f64 {
+    let pairs = |s: &str| -> Vec<(char, char)> {
+        let chars: Vec<char> = s.chars().collect();
+        chars.windows(2).map(|w| (w[0], w[1])).collect()
+    };
+    let wanted = pairs(text);
+    if wanted.is_empty() {
+        return 0.0;
+    }
+    let shown: std::collections::HashSet<(char, char)> = pairs(block).into_iter().collect();
+    wanted.iter().filter(|p| shown.contains(p)).count() as f64 / wanted.len() as f64
+}
+
+/// The fewest characters of the line in the language [`translated_screen`] takes.
+const MIN_MATCH_TRANSLATED: usize = 6;
 
 /// The sentences a typewriter effect leaves behind. A game that types its text out sets the
 /// whole text again on every frame ("「", "「旅", "「旅人", …), and the hooker joins those calls
@@ -756,6 +813,10 @@ mod tests {
         for noise in ["", "0x004A21F0", "SYSTEM_MENU_OPEN", "Loading... 42%", r"C:\Game\data.pak"] {
             assert!(!looks_japanese(noise, ja()), "{noise:?}");
         }
+        // A game shown in Chinese (Senren＊Banka's TextRender): kanji, but not Japanese.
+        assert!(!looks_japanese("而且最重要的是，穗织镇以温泉闻名全国。闻名的理由则在于其功效。", ja()));
+        assert!(looks_japanese("而且最重要的是，穗织镇以温泉闻名全国。", crate::language::get("zh-Hans")));
+        assert!(looks_japanese("東京都千代田区一番町", ja()));
     }
 
     #[test]
@@ -1420,6 +1481,58 @@ mod tests {
         ];
         let scored = score(&candidates, &blocks, ja());
         assert_eq!(scored.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(), ["engine", "api", "flood"]);
+    }
+
+    #[test]
+    fn a_screen_showing_the_translation_chooses_the_thread_with_the_line() {
+        // Senren＊Banka set to English: TextRender draws the English, EmbedKrkrZ has the Japanese.
+        let now = std::time::Instant::now();
+        let later = now + std::time::Duration::from_millis(500);
+        let english = "I can't believe anyone would want to go all the way out to Inutsuki just to see a festival.";
+        let threads = [
+            Spoken {
+                key: "embed",
+                hookcode: "ENHVXN-8@2198:SenrenBanka.exe",
+                name: "EmbedKrkrZ",
+                text: "「わざわざイヌツキの土地に祭りを見に来るなんて」",
+                at: now,
+            },
+            Spoken {
+                key: "render",
+                hookcode: "ENHQXN-4@C3B1:textrender.dll",
+                name: "TextRender",
+                text: english,
+                at: later,
+            },
+            Spoken {
+                key: "name",
+                hookcode: "HW-8*14:-8*0@F4600:SenrenBanka.exe",
+                name: "KiriKiriZ",
+                text: "Taxi Driver",
+                at: later,
+            },
+        ];
+        let screen = |text: &str| {
+            vec![Block { text: normalize(text), area: 100.0 }, Block { text: normalize("Taxi Driver"), area: 10.0 }]
+        };
+        // OCR misreads a letter or two.
+        let read = screen(&english.replace("Inutsuki", "lnutsuki"));
+        assert_eq!(translated_screen(&threads, &read, ja()), Some("embed"));
+        // Not when the line in the language came long before, nor when two threads could be it.
+        let mut stale = threads.clone();
+        stale[0].at = now - std::time::Duration::from_secs(5);
+        assert_eq!(translated_screen(&stale, &read, ja()), None);
+        let mut two = threads.to_vec();
+        two.push(Spoken {
+            key: "other",
+            hookcode: "HS0@0:Game.exe",
+            name: "Other",
+            text: "メニューを開いてください",
+            at: later,
+        });
+        assert_eq!(translated_screen(&two, &read, ja()), None);
+        // Nor when nothing on screen is a thread's.
+        assert_eq!(translated_screen(&threads, &screen("Something else entirely is shown here."), ja()), None);
     }
 
     #[test]

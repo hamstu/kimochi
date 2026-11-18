@@ -2109,6 +2109,18 @@ a space. Choosing a thread automatically, handing over to a cleaner thread and t
 filter all ask for text in the `language`'s scripts (`pick::japanese_ratio`), and for a spaced
 language the menu also wants a space in the text (an asset name or a path has none).
 
+**Lines with their translations.** A multilingual release can hand a hook each line together with
+its translations: Yuzusoft's KiriKiri games send the line drawn four times, each translation drawn
+over, and the scene's name (`「あっ、はい。」`×4 `「啊，好的。」`×2 `「啊，好的。」`×2
+`■自動車（車内／走行）`), sometimes after a sound effect's or the new scene's label. Before
+anything else (`text_hook/translations.rs`), such a piece is kept to the `language`: for a line drawn
+over in parts, the first part drawn over, wherever it is drawn again (the same line with its ruby as
+text, labels and translations go); for one sentence beside its translation, the whole sentences in
+the language, when another language's whole sentences there are at least a quarter as long. For
+Japanese a sentence is Japanese with kana in it, and Chinese with none and a sign of Chinese (a
+character only Chinese writes, `，您们吗呢这说`…, or two kanji Shift_JIS has no code for); Chinese
+text never reads as Japanese elsewhere either (`pick::japanese_ratio`).
+
 **Thread choice.** A thread is selected as soon as it speaks if it matches the one remembered
 for this exe (`<app local data>/texthook/games.json`: `hookcode`, `ctx & 0xFFFF`, `ctx2 & 0xFFFF`).
 Otherwise, 700 ms after new text, the window is captured and read with the local OCR, the lines
@@ -2124,7 +2136,12 @@ needed. A choice made this way or by hand is remembered for the game. A thread c
 automatically or remembered (never one chosen by hand) is replaced while the game runs when at
 least a fifth of its pieces (two or more) held script codes and another engine thread that has
 sent three pieces and never a code sends at least 70 % of its latest text, codes aside: the new
-thread is selected (`selectedBy: 'auto'`) and remembered, logged as `texthook-reselected`. The window is read with
+thread is selected (`selectedBy: 'auto'`) and remembered, logged as `texthook-reselected`. So is an
+engine thread in the language when the chosen one (not by hand) has sent three pieces in a row
+that are not, and both spoke within 2 s (the game switched to its translation). When no thread
+matches the screen, the screen may show a translation: if a thread not in the language is on it
+(12 characters or more, its pairs of letters 80 % found in one block) and exactly one engine thread
+in the language spoke within 2 s of it, that one is chosen (`pick::translated_screen`). The window is read with
 `observerEngine`, else the first local engine available (`oneocr`, `ppocr`, `meikiocr`,
 `livetext`).
 

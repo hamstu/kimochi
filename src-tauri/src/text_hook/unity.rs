@@ -283,6 +283,7 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
                     recent: Default::default(),
                     last_at: None,
                     japanese: false,
+                    foreign: 0,
                 });
                 hook.publish(&session);
             }

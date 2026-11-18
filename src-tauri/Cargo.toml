@@ -69,6 +69,9 @@ getrandom = "0.2"
 # Redacts secrets from the debug report and its log tails (debug_report.rs). Already in the lock
 # file via Tauri.
 regex = "1"
+# Tells a hooked game's Chinese from its Japanese: kanji Shift_JIS has no code for are Chinese
+# (text_hook/translations.rs). Already in the lock file via reqwest.
+encoding_rs = "0.8"
 # Sentence audio's listener, recogniser and clips (speech-core: Silero, SenseVoice, LAME).
 kimochi-speech = { path = "../speech-core" }
 # VOCR6 (vita-vn-ocr): its spotter, recognizer and character LM on the same ONNX Runtime (vocr.rs).
