@@ -1,7 +1,27 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
-const { placeHookedLine, splitAcrossLines } = await load('hook-match.ts')
+const { fullWidth, placeHookedLine, readSpan, splitAcrossLines } = await load('hook-match.ts')
+
+test('what OCR read of a line: the characters its box covers, when it dropped a bracket or a mark', () => {
+  assert.deepEqual(readSpan('「だから、終わったんだって」', '「だから、終わったんだって」'), [0, 14])
+  // A 「 and two ？ dropped at the start: the box starts at 春.
+  assert.deepEqual(readSpan('「？？　春日が負けた？」', '春日が負けた？」'), [4, 12])
+  // The closing 」 dropped.
+  assert.deepEqual(readSpan('「あー。終わった」', '「あー。終わった'), [0, 8])
+  // OCR's spaces are not the line's.
+  assert.deepEqual(readSpan('誰が美女だ誰が。', '誰が 美女だ誰が。'), [0, 8])
+  // Ends it misread are not found: nothing to say where the box is.
+  assert.equal(readSpan('誰が美女だ誰が。', '譜が美女だ誰が'), null)
+  assert.equal(readSpan('誰が美女だ誰が。', ''), null)
+})
+
+test('full-width text is a whole em a character; anything else is not', () => {
+  assert.equal(fullWidth('「？？　春日が負けた？」'), true)
+  assert.equal(fullWidth('身長１９０をこえる部長の近藤。'), true)
+  assert.equal(fullWidth('身長190をこえる'), false, 'half-width digits')
+  assert.equal(fullWidth('Hello'), false)
+})
 
 /** An OCR group with one line polygon per text line, stacked from `y`. */
 const group = (id, lines, x, y, size = 30) => ({

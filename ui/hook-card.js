@@ -303,6 +303,13 @@ export function createHookCard(parent, hooks) {
       box = placed
       apply(Boolean(next.glide) && wasShown)
     }
+    // Auto align spaces the glyphs as the game does (overlay.js `hookCardView`), so the last
+    // character sits on the game's last as the first sits on its first.
+    const spacing = next.letterSpacing ? `${next.letterSpacing}px` : ''
+    if (text.style.letterSpacing !== spacing) {
+      text.style.letterSpacing = spacing
+      fitted = ''
+    }
     const key = `${shown}|${next.fontPx}|${box.width}|${next.lines}`
     if (key !== fitted) text.style.fontSize = `${next.fontPx}px`
     fit(next.lines, next.fontPx)
@@ -456,7 +463,14 @@ export function createHookCard(parent, hooks) {
           left: Math.min(...across.map((row) => -row.actualBoundingBoxLeft)) / scale,
           right: Math.max(...across.map((row) => row.actualBoundingBoxRight)) / scale,
           top: baseline - m.actualBoundingBoxAscent / scale,
-          height: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / scale
+          height: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / scale,
+          // Each row's ink and how many characters it has: letter-spacing moves a row's right
+          // edge by the spacing for every character but its last.
+          rows: across.map((row, i) => ({
+            left: -row.actualBoundingBoxLeft / scale,
+            right: row.actualBoundingBoxRight / scale,
+            chars: [...rows[i]].length
+          }))
         }
       }
     }

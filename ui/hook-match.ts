@@ -686,3 +686,31 @@ export function hookAnnotations(
   if (!group?.bbox) return { annotations: [], box: null, ...rest }
   return { annotations: [blockOf(group, annotations)], box: group.bbox, ...rest }
 }
+
+/**
+ * Which characters of `row` (the hooked line as the card shows it on one row) OCR's box covers,
+ * from what OCR read of it (`read`): `[first, end)`, character indices. OCR drops a 「, a ？ or a
+ * … at a line's ends now and then, and its box then starts or stops short of the line. Anchored
+ * on the first and last two characters OCR read (one, where a line is that short); null when they
+ * are not found in the row as read.
+ */
+export function readSpan(row: string, read: string | null | undefined): [number, number] | null {
+  const chars = [...row]
+  const ocr = [...String(read ?? '').replace(/\s/g, '')]
+  if (!chars.length || !ocr.length) return null
+  const at = (from: number, part: string[]): boolean => part.every((char, i) => chars[from + i] === char)
+  const head = ocr.slice(0, Math.min(2, ocr.length))
+  const tail = ocr.slice(-Math.min(2, ocr.length))
+  let first = -1
+  for (let i = 0; i + head.length <= chars.length && first < 0; i++) if (at(i, head)) first = i
+  let end = -1
+  for (let i = chars.length - tail.length; i >= 0 && end < 0; i--) if (at(i, tail)) end = i + tail.length
+  return first >= 0 && end > first ? [first, end] : null
+}
+
+/** Whether every character of `text` is a full-width one, a whole em in the card (CJK, kana, fullwidth forms). */
+export function fullWidth(text: string): boolean {
+  return [...text].every((char) =>
+    /[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff01-\uff60\uffe0-\uffe6]/u.test(char)
+  )
+}

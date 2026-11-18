@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **The Text Hooker card sits right on the game's text, start to end.** With Auto align on, the card's characters are now spaced to match the game's, so long lines no longer drift away from the game's text towards their end. That matters most with Card look set to Transparent, where pointing at a word looks up the card's hidden text. The card also stops twitching from line to line: each new line starts exactly where the game's lines start, and it only moves when the game's text really moves. Lines that start with a 「, or that the game is still typing out, no longer throw the alignment off, and on a line whose first row is short the card no longer starts too far to the right.
+
 - **See what you're looking up on Transparent text.** With **Hover card appearance** (or the Text Hooker's **Card look**) set to Transparent, a faint outline now marks the word the dictionary matched while its pop-up is open, the same outline Read along uses. Turn it off in Settings → Overlay → **Outline the word being looked up**.
 - **Transparent text never swallows your clicks.** While the overlay's hover cards are Transparent, **Click through text to the game** stays on (its switch is greyed out), since a click on text you can't see should always reach the game. The same goes for the Text Hooker's card while its look is Transparent. Hold Shift to look words up as before.
 - **Read along's outline covers the whole word** the dictionary matched, with every dictionary, when you step by character or move the free cursor with the stick. Before, it often stayed on the first kanji.

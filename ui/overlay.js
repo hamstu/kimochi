@@ -61,7 +61,7 @@ import { applyTextStyle, textStyle } from './language-style.js'
 import { sampleFor } from './language-samples.js'
 import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
-import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
+import { annotationGroups, fullWidth, hookAnnotations, readSpan, splitSpeaker } from './hook-match.js'
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookSettings, withLegacyShowCard } from './hook-games.js'
@@ -309,6 +309,28 @@ const HOOK_TEXT_POINTS = [14, 40]
 const HOOK_MOVE_LINES = 1
 /** How much a reading's size must differ from the kept one, twice running, to replace it. */
 const HOOK_RESIZE = 0.3
+/**
+ * Auto align fits the card's letter-spacing to the width OCR found for a row of at least this
+ * many characters, and to no more than this share of the text's size either way (`hookCardView`).
+ */
+const HOOK_FIT_CHARS = 6
+const HOOK_FIT_SPACING = 0.3
+/**
+ * Once this many lines have fitted it, the game's spacing is known, and a reading whose fit is
+ * further than this share of the text's size from it is not trusted (it missed part of the line).
+ */
+const HOOK_FIT_KNOWN = 3
+const HOOK_FIT_AGREE = 0.1
+/**
+ * A reading that puts a line's start within this share of the text's size of where the game's
+ * lines start leaves it there (no twitch), and counts towards that place, its readings averaged
+ * over at most this many.
+ */
+const HOOK_PIN_SNAP = 0.15
+const HOOK_PIN_SNAP_BRACKETED = 0.5
+const HOOK_PIN_READINGS = 8
+/** Whether a stretch of text starts or ends with a bracket (its ink is where its font puts it). */
+const bracketed = (first, last) => /[「『（【〈《“‘]/u.test(first ?? '') || /[」』）】〉》”’]/u.test(last ?? '')
 const hook = {
   /** The newest hooked line. */
   line: null,
@@ -338,11 +360,14 @@ const hook = {
   wrap: null,
   /** Where a whole reading last found the line's ink (`{line, box}`): the card is centred on it. */
   /**
-   * Where the card's text box went for the last line placed on the game's text (`{x, y}`, as
-   * fractions of the window), the box it was found in (`at`) and the game: the next line waits
-   * there for its reading.
+   * Where the game's lines start (`{x, y}`, fractions of the window: the mean of the readings that
+   * agreed, `n` of them), the box they were found in (`at`) and the game: a line is shown there
+   * (`show`, held for the line it was shown for, `shownLine`) and a reading of it that agrees
+   * counts once (`measuredLine`).
    */
   textAt: null,
+  /** The letter-spacing the game's lines have had, as a share of the text's size (`em`), averaged. */
+  spacing: null,
   found: null,
   /** The last reading that did not find the line whole (`hook-line-chase` logs its blocks). */
   missed: null,
@@ -1407,8 +1432,11 @@ function hookAligned(annotations) {
     Math.abs(a.y - b.y) * fh < 2 &&
     Math.abs(a.width - b.width) * fw < 2 &&
     Math.abs(a.height - b.height) * fh < 2
-  if (whole && !(hook.found?.line === hook.line && same(hook.found.box, found))) {
-    hook.found = { line: hook.line, box: found }
+  // `exact`: OCR read the whole line and nothing else, so its width is the line's (one read while
+  // the game was still typing it out is short): only such a reading fits the card's spacing.
+  if (whole && !(hook.found?.line === hook.line && same(hook.found.box, found) && hook.found.exact === exact)) {
+    // What OCR read of it too: a 「 or a ？ it dropped is left out of its box.
+    hook.found = { line: hook.line, box: found, exact, read: placed.annotations[0]?.lineTexts?.join('') ?? null }
     queueMicrotask(syncHookCard)
   }
   // The game's own line breaks: only from a reading of the whole line that cut it into rows
@@ -1517,6 +1545,7 @@ function hookCardView() {
   const ox = bounds.x - state.origin.x
   const oy = bounds.y - state.origin.y
   let where
+  let letterSpacing = 0
   // How many lines the game shows the line on, as OCR found it: the card wraps onto no more.
   let lines
   let pending = false
@@ -1568,21 +1597,148 @@ function hookCardView() {
     // than the last line's ink would put it. Kept with its box, so a move of the text box is not
     // followed by a place found for the old one.
     const kept = hook.textAt
-    const last =
-      !own &&
+    const keptHere =
       kept?.exe === hookKey() &&
       Math.abs(kept.at.x - saved.x) * bounds.width < pitch &&
       Math.abs(kept.at.y - saved.y) * bounds.height < pitch
-        ? kept
-        : null
-    const across = last
-      ? last.x * bounds.width
-      : own && cardRows
-        ? (at.x + at.width / 2) * bounds.width - (ink.left + ink.right) / 2
-        : at.x * bounds.width - ink.left
-    const down = last ? last.y * bounds.height : at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
-    if (own && cardRows)
-      hook.textAt = { x: across / bounds.width, y: down / bounds.height, at: { x: at.x, y: at.y }, exe: hookKey() }
+    // The glyphs spaced as the game spaces them. The card lays each glyph a whole em apart at the
+    // size Auto align measured, which is a few percent off now and then: nothing at a line's start,
+    // a character or more by the end of a long one. So each row's ink is fitted to the width OCR
+    // found for this line (its widest row: the box spans that one), as the OCR overlay fits each
+    // box's text to its box. Before a reading finds the line, and for a line too short to measure,
+    // the spacing the game's lines have had so far (`hook.spacing`, a share of the size).
+    const learned = hook.spacing?.exe === hookKey() ? hook.spacing.em * fontPx : 0
+    let spacing = learned
+    // Only from a reading of exactly the line: one taken while the game was still typing it out
+    // is short, and spread over the whole line it squeezes the glyphs together.
+    const exactRead = Boolean(own && hook.found?.exact)
+    // Where the ink OCR's box covers runs in the card's text box at spacing `s`, from its left:
+    // its widest row, or, on one row, the stretch OCR read (a 「 or ？ it dropped is outside its
+    // box). There, every glyph is a whole em plus the spacing (full-width text, hook-card.css).
+    // Null where that cannot be told: the reading then says nothing about where the line is.
+    let span = null
+    if (exactRead && cardRows && ink.rows?.length) {
+      const chars = cardRows.length === 1 ? [...cardRows[0]] : null
+      const read = chars ? readSpan(cardRows[0], hook.found.read) : null
+      if (read && (read[0] > 0 || read[1] < chars.length)) {
+        const [a, b] = read
+        const first = fullWidth(cardRows[0]) ? hook.card?.ink?.(chars[a], fontPx, lineHeight) : null
+        const last = first ? hook.card?.ink?.(chars[b - 1], fontPx, lineHeight) : null
+        if (first && last)
+          span = {
+            chars: b - a,
+            bracketed: bracketed(chars[a], chars[b - 1]),
+            at: (s) => ({ left: a * (fontPx + s) + first.left, right: (b - 1) * (fontPx + s) + last.right })
+          }
+      } else {
+        const widest = ink.rows.reduce((x, y) => (y.right - y.left > x.right - x.left ? y : x))
+        const whole = [...cardRows.join('')]
+        span = {
+          chars: widest.chars,
+          bracketed: bracketed(whole[0], whole.at(-1)),
+          at: (s) => ({
+            left: ink.left,
+            right: Math.max(...ink.rows.map((row) => row.right + s * (row.chars - 1)))
+          })
+        }
+      }
+    }
+    let trusted = Boolean(span)
+    const known = hook.spacing?.exe === hookKey() && hook.spacing.n >= HOOK_FIT_KNOWN ? hook.spacing : null
+    // A bracket at either end inks wherever the game's font puts it in its em, which is seldom
+    // where the card's does (half an em apart, for a 「): a line between brackets says little
+    // about the spacing. It takes the spacing the game's other lines have had, once that is known.
+    if (span && span.chars >= HOOK_FIT_CHARS && !(span.bracketed && known)) {
+      // The width of what OCR's box covers grows by `chars − 1` spacings: the spacing that makes
+      // it OCR's width.
+      const width = (s) => span.at(s).right - span.at(s).left
+      const fitted = (at.width * bounds.width - width(0)) / (width(1) - width(0))
+      // A wild fit, or one far from the spacing the game's lines have had, is a reading that
+      // missed some of the line or ran into something else, not the game's spacing.
+      if (
+        Math.abs(fitted) > HOOK_FIT_SPACING * fontPx ||
+        (known && Math.abs(fitted / fontPx - known.em) > HOOK_FIT_AGREE)
+      )
+        trusted = false
+      else {
+        spacing = fitted
+        if (hook.spacing?.line !== hook.line || hook.spacing.exe !== hookKey()) {
+          const before = hook.spacing?.exe === hookKey() ? hook.spacing : null
+          const n = Math.min((before?.n ?? 0) + 1, HOOK_PIN_READINGS)
+          const em = fitted / fontPx
+          hook.spacing = { exe: hookKey(), line: hook.line, n, em: before ? before.em + (em - before.em) / n : em }
+        }
+      }
+    }
+    // Where this line's own ink puts the text, once a reading found it: what OCR's box covers
+    // centred on the box (OCR pads about as far on each side) for a reading of exactly the line;
+    // by where its ink starts for one still being typed out. None from a reading it can't trust.
+    let measured = null
+    if (own && cardRows) {
+      const y = at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
+      if (!exactRead) measured = { x: at.x * bounds.width - ink.left, y }
+      else if (trusted) {
+        const { left, right } = span.at(spacing)
+        measured = { x: (at.x + at.width / 2) * bounds.width - (left + right) / 2, y }
+      }
+    }
+    // A game draws its dialogue where it drew the last line, and OCR finds it a pixel or few off
+    // from one reading to the next: moved to each reading, the card twitches. So a line starts
+    // where the game's lines have started (`hook.textAt`, the readings' running mean), and a
+    // reading that agrees within a sliver of a glyph only refines that for the next line. Text
+    // that really moves (a game that writes each line below the last, a box that moved) is a row
+    // or more away, well past the sliver, and the card goes there.
+    // Half a glyph for a line between brackets, where the fonts' brackets put the measured place
+    // that far off; text that really moves goes a row or more.
+    const snap = Math.max(2, (span?.bracketed ? HOOK_PIN_SNAP_BRACKETED : HOOK_PIN_SNAP) * fontPx)
+    let across
+    let down
+    if (
+      measured &&
+      keptHere &&
+      Math.abs(measured.x - kept.x * bounds.width) < snap &&
+      Math.abs(measured.y - kept.y * bounds.height) < snap
+    ) {
+      // Shown where this line started; the reading counts once, for the lines after it.
+      if (kept.shownLine !== hook.line) Object.assign(kept, { shownLine: hook.line, show: { x: kept.x, y: kept.y } })
+      if (kept.measuredLine !== hook.line && !span?.bracketed) {
+        const n = Math.min(kept.n + 1, HOOK_PIN_READINGS)
+        Object.assign(kept, {
+          measuredLine: hook.line,
+          n,
+          x: kept.x + (measured.x / bounds.width - kept.x) / n,
+          y: kept.y + (measured.y / bounds.height - kept.y) / n,
+          at: { x: at.x, y: at.y }
+        })
+      }
+      across = kept.show.x * bounds.width
+      down = kept.show.y * bounds.height
+    } else if (measured) {
+      across = measured.x
+      down = measured.y
+      const x = across / bounds.width
+      const y = down / bounds.height
+      hook.textAt = {
+        x,
+        y,
+        n: 1,
+        at: { x: at.x, y: at.y },
+        exe: hookKey(),
+        shownLine: hook.line,
+        measuredLine: hook.line,
+        show: { x, y }
+      }
+    } else if (keptHere) {
+      // Until a reading finds this line, or from one that can't say where it is: where the game's
+      // lines start.
+      if (kept.shownLine !== hook.line) Object.assign(kept, { shownLine: hook.line, show: { x: kept.x, y: kept.y } })
+      across = kept.show.x * bounds.width
+      down = kept.show.y * bounds.height
+    } else {
+      across = at.x * bounds.width - ink.left
+      down = at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
+    }
+    letterSpacing = spacing
     where = {
       x: ox + across,
       y: oy + down,
@@ -1632,6 +1788,7 @@ function hookCardView() {
     theme,
     surface,
     opacity: hookSet().opacity,
+    letterSpacing,
     // Its rows are words apart in a language that spaces its words (hook-card.js `setText`).
     spaced: languageOf(languageNow()).spaces,
     // In the language being read (its font: `--kimochi-text-font`, `applyTextStyle`).
