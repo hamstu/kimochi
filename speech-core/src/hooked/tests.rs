@@ -985,4 +985,24 @@ mod by_words {
         let said = [(1, "わかったでももう少しだけ本を読みたいの")];
         assert_eq!(run(&mut h, 20_000., 21_000., &said), vec![("a".to_string(), 1)]);
     }
+#[test]
+fn two_voice_files_as_long_as_each_other_are_two_voices() {
+    // Live Electron game: whole voice files from the game's archive carry no loudness, and two
+    // different voice files were 0.7 ms apart in length: taken for one sound played twice (an
+    // effect), the second line never got its voice.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    let mut matched = Vec::new();
+    for i in 1..=8u64 {
+        let ts = i as f64 * 6000.;
+        let dur = if i == 3 || i == 7 { 2.6002 + (i / 7) as f64 * 0.0007 } else { 1.5 + i as f64 * 0.31 };
+        let name = format!("clips/v{i}.wav");
+        crate::wav::write(&f.0.join(&name), &vec![0.2; 16000], 16000).unwrap();
+        f.event(json!({"ev":"clip","seq":i,"s":i,"api":"file","start":ts+20.,"t":ts+20.,"dur":dur,"file":name,
+            "source":format!("data/sound/a_voice{i}.ogg"),"fmt":"ogg","meta":{"channel":"voice"}}));
+        h.line(line(&i.to_string(), ts));
+        matched.extend(h.tick(ts + 5000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+    }
+    assert_eq!(matched.len(), 8, "{matched:?} groups: {:?}", h.report.groups);
+    assert!(matched.iter().all(|(uid, seq)| uid == &seq.to_string()), "{matched:?}");
 }
