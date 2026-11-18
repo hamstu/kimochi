@@ -677,6 +677,11 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // A line sent with its translations (a multilingual release) is the line in the language being
     // read; a line drawn several times over (CatSystem2) is the line once.
     let own = translations::in_language(text, language);
+    // The engine's labels alone (a scene's name as it changes): nothing the game shows, nothing
+    // to choose a thread by or give a voice to.
+    if own.trim().is_empty() && !text.trim().is_empty() {
+        return;
+    }
     let collapsed = pick::collapse_repeated_sentences(&own, language);
     let text = collapsed.as_str();
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One

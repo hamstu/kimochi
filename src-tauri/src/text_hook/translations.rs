@@ -38,6 +38,16 @@ struct Run<'a> {
 /// translations.
 pub fn in_language<'a>(text: &'a str, language: &Language) -> Cow<'a, str> {
     let pieces = sentences(text);
+    // The engine's labels (the scene's name as it changes, `■自動車（車内／走行）`) are no part of
+    // the game's line, wherever they come: before it, after it, or alone (then there is no line,
+    // and none to give a voice to).
+    if pieces.iter().any(|p| is_label(p)) {
+        let rest: String = pieces.iter().filter(|p| !is_label(p)).copied().collect();
+        if rest.trim().is_empty() {
+            return Cow::Borrowed("");
+        }
+        return Cow::Owned(in_language(&rest, language).into_owned());
+    }
     if pieces.len() < 2 {
         return Cow::Borrowed(text);
     }
@@ -78,6 +88,18 @@ pub fn in_language<'a>(text: &'a str, language: &Language) -> Cow<'a, str> {
         return Cow::Borrowed(text);
     }
     Cow::Owned(out.to_string())
+}
+
+/// An engine's label: `■`, a name, and what it says in brackets (`■自動車（車内／減速→停止）`).
+fn is_label(piece: &str) -> bool {
+    let piece = piece.trim();
+    let (Some(name), Some(open)) = (piece.strip_prefix('■'), piece.find(['（', '('])) else { return false };
+    // A name of two characters or more, no ■ in it: `■■■（笑）` is a word blacked out, then text.
+    let name = &name[..open - '■'.len_utf8()];
+    name.chars().count() >= 2
+        && !name.contains('■')
+        && piece.ends_with(['）', ')'])
+        && !piece[open..].contains(['。', '「', '」'])
 }
 
 /// Labels drawn once that may come before a line drawn over in parts.
@@ -325,6 +347,22 @@ mod tests {
             crate::text_hook::pick::collapse_repeated_sentences(&in_language(SENREN[4].0, zh), zh),
             "「啊，不好意思。怎么了？」「啊，不好意思。怎麼了？」"
         );
+    }
+
+    #[test]
+    fn a_scene_label_sent_alone_is_no_line() {
+        assert_eq!(in_language("■自動車（車内／走行）", ja()), "");
+        assert_eq!(in_language("■自動車（車内／走行）■自動車（車内／減速→停止）", ja()), "");
+        assert_eq!(in_language("■", ja()), "■");
+        // Labels before a line sent once (no copies or translations): the line alone.
+        assert_eq!(
+            in_language(
+                "■自動車（車内／走行）■自動車（車内／減速→停止）子供の頃は女を感じるようなことはなかった。",
+                ja()
+            ),
+            "子供の頃は女を感じるようなことはなかった。"
+        );
+        assert_eq!(in_language("■■■（笑）だ。", ja()), "■■■（笑）だ。");
     }
 
     #[test]
