@@ -987,6 +987,140 @@ label splashscreen:
     std::fs::write(expected, serde_json::to_string_pretty(&doc).unwrap()).map_err(|e| e.to_string())
 }
 
+/// The dialogue `renpy_text_game` shows, in order, as the text adapter should send it: (who, text,
+/// object). A line paused at `{w}`/`{p}` comes once per part shown, each the text so far.
+const RENPY_TEXT: &[(Option<&str>, &str, &str)] = &[
+    (Some("ハナ"), "おはようございます。", "say"),
+    // Rolled back to it.
+    (Some("ハナ"), "おはようございます。", "say"),
+    (Some("ハナ"), "おはようございます。", "say"),
+    (Some("ハナ"), "おはようございます。今日もいい天気ですね。", "say"),
+    (None, "一行目です。", "say"),
+    (None, "一行目です。\n二行目です。", "say"),
+    (Some("ハナ"), "太郎さん、こんにちは。", "say"),
+    (None, "赤い花と青い空。", "say"),
+    (None, "漢字の読み方。", "say"),
+    (None, "波括弧{これ}です。", "say"),
+    (Some("ハナ"), "まず、", "say"),
+    (Some("ハナ"), "まず、続きです。", "say"),
+    (None, "どちらへ行きますか？", "say"),
+    (None, "右へ行く\n左へ行く", "menu"),
+    (None, "道を進んだ。", "say"),
+    (Some("語り"), "一つ目の段落です。", "say"),
+    (Some("語り"), "二つ目の段落です。", "say"),
+    (None, "最後の台詞です。", "say"),
+];
+
+/// Writes a Ren'Py `game/` folder that shows dialogue with the text tags and statements that
+/// change what is on screen (pauses, interpolation, ruby, extend, a menu, NVL, a rollback), reading
+/// itself (auto-forward, auto choice), then quits; the expected text events go to `expected`.
+fn renpy_text_game(dir: &str, expected: &str) -> Result<(), String> {
+    let game = std::path::Path::new(dir);
+    std::fs::create_dir_all(game).map_err(|e| e.to_string())?;
+    let script = r#"
+# vh-fixture: shows dialogue without input, then quits.
+define config.has_autosave = False
+define config.window_icon = None
+define config.auto_choice_delay = 1.0
+define config.afm_characters = 1000
+define config.afm_bonus = 1
+define h = Character("ハナ")
+define n = Character("語り", kind=nvl)
+default player = "太郎"
+
+# No main menu: straight to the start label.
+label main_menu:
+    return
+
+# A choice screen, as games have (without one, Ren'Py lays a menu out the old way).
+screen choice(items):
+    vbox:
+        for i in items:
+            textbutton i.caption action i.action
+
+label start:
+    $ _preferences.afm_time = 1
+    $ _preferences.afm_enable = True
+    h "おはようございます。"
+    python:
+        # Once per run: a flag outside the store, which a rollback does not undo.
+        import sys
+        if not getattr(sys, "vh_rolled", False):
+            sys.vh_rolled = True
+            renpy.rollback(force=True, checkpoints=1)
+    h "おはようございます。{w}今日もいい天気ですね。"
+    "一行目です。{p}二行目です。"
+    h "[player]さん、こんにちは。"
+    "{color=#f00}赤い花{/color}と{i}青い空{/i}。"
+    "{rb}漢字{/rb}{rt}かんじ{/rt}の読み方。"
+    "波括弧{{これ}です。"
+    h "まず、{nw}"
+    extend "続きです。"
+    menu:
+        "どちらへ行きますか？"
+        "右へ行く":
+            pass
+        "左へ行く":
+            pass
+    "道を進んだ。"
+    n "一つ目の段落です。"
+    n "二つ目の段落です。"
+    nvl clear
+    "最後の台詞です。"
+    $ renpy.quit()
+    return
+"#;
+    std::fs::write(game.join("script.rpy"), script).map_err(|e| e.to_string())?;
+    let lines: Vec<Value> =
+        RENPY_TEXT.iter().map(|(who, text, obj)| json!({"who": who, "text": text, "obj": obj})).collect();
+    // Ren'Py 7 shows a menu's caption in the menu, with the choices, not as narration.
+    let mut v7 = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if line["obj"] == "menu" {
+            continue;
+        }
+        if lines.get(i + 1).is_some_and(|next| next["obj"] == "menu") {
+            let menu = format!("{}\n{}", line["text"].as_str().unwrap(), lines[i + 1]["text"].as_str().unwrap());
+            v7.push(json!({"who": null, "text": menu, "obj": "menu"}));
+            continue;
+        }
+        v7.push(line.clone());
+    }
+    std::fs::write(expected, serde_json::to_string_pretty(&json!({"text": lines, "renpy7": v7})).unwrap())
+        .map_err(|e| e.to_string())
+}
+
+/// Compares the `text` events of a capture with the expected ones, in order.
+fn check_text(dir: &str, expected: &str) -> Result<bool, String> {
+    let want: Value = serde_json::from_str(&std::fs::read_to_string(expected).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let events = std::fs::read_to_string(std::path::Path::new(dir).join("events.jsonl")).map_err(|e| e.to_string())?;
+    let got: Vec<Value> = events
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter(|e| e["ev"] == "text")
+        .map(|e| json!({"who": e["who"], "text": e["text"], "obj": e["obj"]}))
+        .collect();
+    // Ren'Py 7's menus, when the capture has a menu with its caption in it.
+    let v7 = got.iter().any(|g| g["obj"] == "menu" && g["text"].as_str().is_some_and(|t| t.contains('？')));
+    let want = want[if v7 { "renpy7" } else { "text" }].as_array().cloned().unwrap_or_default();
+    let mut ok = got.len() == want.len();
+    for i in 0..got.len().max(want.len()) {
+        let (g, w) = (got.get(i), want.get(i));
+        let same = g == w;
+        ok &= same;
+        println!(
+            "{} {:>2} got {}  want {}",
+            if same { "ok  " } else { "FAIL" },
+            i,
+            g.map_or("-".into(), |v| v.to_string()),
+            w.map_or("-".into(), |v| v.to_string())
+        );
+    }
+    println!("{}: {} text events, {} expected", if ok { "PASS" } else { "FAIL" }, got.len(), want.len());
+    Ok(ok)
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
@@ -1035,6 +1169,21 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("renpy-text-game") if args.len() >= 4 => match renpy_text_game(&args[2], &args[3]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("check-text") if args.len() >= 4 => match check_text(&args[2], &args[3]) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        },
         Some("check") if args.len() >= 4 => match check(&args[2], &args[3]) {
             Ok(true) => ExitCode::SUCCESS,
             Ok(false) => ExitCode::FAILURE,
@@ -1044,7 +1193,7 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            eprintln!("vh-fixture play <expected.json> [ds] [dss] [xa9] [xa8] [xa7] [wo] [sdl]\nvh-fixture check <capture dir> <expected.json>\nvh-fixture renpy-game <game dir> <expected.json>");
+            eprintln!("vh-fixture play <expected.json> [ds] [dss] [xa9] [xa8] [xa7] [wo] [sdl]\nvh-fixture check <capture dir> <expected.json>\nvh-fixture renpy-game <game dir> <expected.json>\nvh-fixture renpy-text-game <game dir> <expected.json>\nvh-fixture check-text <capture dir> <expected.json>");
             ExitCode::from(2)
         }
     }

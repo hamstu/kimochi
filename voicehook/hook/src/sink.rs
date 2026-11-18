@@ -35,6 +35,11 @@ pub fn set_app_mode() {
     MAX_FILE_SECS.store(APP_MAX_FILE_SECS.to_bits(), std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Whether the DLL runs under Kimochi (`set_app_mode`), not the `voicehook` test harness.
+pub fn app_mode() -> bool {
+    MAX_FILE_SECS.load(std::sync::atomic::Ordering::Relaxed) != 0
+}
+
 fn too_long(secs: f64) -> bool {
     let max = f64::from_bits(MAX_FILE_SECS.load(std::sync::atomic::Ordering::Relaxed));
     max > 0.0 && secs > max
