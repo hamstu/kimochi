@@ -1181,6 +1181,7 @@ fn witness_check(hook: &'static Hook, generation: u64) {
                 text: &t.text,
                 generic: pick::is_generic(&t.hookcode, &t.name),
                 fresh: t.fresh,
+                count: t.count,
             })
             .collect();
         let earlier: Vec<&str> = earlier.iter().map(String::as_str).collect();

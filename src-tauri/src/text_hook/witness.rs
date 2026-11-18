@@ -67,6 +67,9 @@ pub struct Other<'a> {
     pub generic: bool,
     /// Its latest text differs from the one before it: a line, not a label redrawn.
     pub fresh: bool,
+    /// Pieces it has sent: of threads that show the same line, the one that has spoken most is the
+    /// game's steady dialogue thread (SiglusEngine starts a thread per line beside it).
+    pub count: u64,
 }
 
 /// OCR reads small kana as full-size ones (`ゃ` as `や`, `っ` as `つ`); both sides fold them.
@@ -145,9 +148,15 @@ pub fn judge(chosen: &str, earlier: &[&str], others: &[Other], blocks: &[Block],
                 return None;
             }
             let in_largest = place(&text)?;
-            (in_largest || length >= MIN_OFF_BOX * scale).then_some((o, in_largest, length))
+            // How closely: a copy with the speaker's name glued on matches less of itself.
+            let closeness = (blocks.iter().map(|b| found(&text, &b.text)).fold(0.0, f64::max) * 20.0).round() as u32;
+            (in_largest || length >= MIN_OFF_BOX * scale).then_some((
+                o,
+                in_largest,
+                (closeness, o.count.min(5), length),
+            ))
         })
-        .max_by_key(|(_, in_largest, length)| (*in_largest, *length));
+        .max_by_key(|(_, in_largest, rank)| (*in_largest, *rank));
     match (mine, &theirs) {
         (Some(true), _) => return Verdict::Shown,
         (_, Some((other, true, _))) => return Verdict::Other(other.key.to_string()),
@@ -199,7 +208,7 @@ mod tests {
         dialogue_blocks(&lines, "物語の窓 体験版", ja())
     }
     fn other<'a>(key: &'a str, text: &'a str) -> Other<'a> {
-        Other { key, text, generic: false, fresh: true }
+        Other { key, text, generic: false, fresh: true, count: 5 }
     }
 
     #[test]
@@ -251,19 +260,48 @@ mod tests {
     }
 
     #[test]
+    fn of_threads_with_the_line_the_steady_one_without_the_name_is_named() {
+        // A nameplate block above the box, the line in the box; a per-line thread (spoken once), a
+        // thread with the speaker's name glued on, and the steady dialogue thread.
+        let mut lines = vec![line("物語の窓 体験版", 2.0), line("声", 440.0)];
+        lines.push(OcrLine {
+            text: "「あと五秒しかないぞ！」".into(), x: 100.0, y: 520.0, width: 600.0, height: 40.0
+        });
+        let blocks = dialogue_blocks(&lines, "物語の窓 体験版", ja());
+        let others = [
+            Other {
+                key: "per-line", text: "「あと五秒しかないぞ！」", generic: false, fresh: true, count: 1
+            },
+            Other {
+                key: "named", text: "声「あと五秒しかないぞ！」", generic: false, fresh: true, count: 30
+            },
+            Other {
+                key: "steady", text: "「あと五秒しかないぞ！」", generic: false, fresh: true, count: 30
+            },
+        ];
+        assert_eq!(judge("「前の場面の台詞だった」", &[], &others, &blocks, ja()), Verdict::Other("steady".into()));
+    }
+
+    #[test]
     fn a_generic_hook_or_a_label_redrawn_is_never_handed_the_choice() {
         let blocks = screen(&["「明日は早く起きないといけないんだ」"]);
-        let generic =
-            Other {
-                key: "generic", text: "少年「明日は早く起きないといけないんだ」", generic: true, fresh: true
-            };
+        let generic = Other {
+            key: "generic",
+            text: "少年「明日は早く起きないといけないんだ」",
+            generic: true,
+            fresh: true,
+            count: 5,
+        };
         assert_eq!(judge("「昨日の話の続きだけど」", &[], &[generic.clone()], &blocks, ja()), Verdict::Unhooked);
         let others = [generic, other("engine", "「明日は早く起きないといけないんだ」")];
         assert_eq!(judge("「昨日の話の続きだけど」", &[], &others, &blocks, ja()), Verdict::Other("engine".into()));
-        let redrawn =
-            Other {
-                key: "label", text: "「明日は早く起きないといけないんだ」", generic: false, fresh: false
-            };
+        let redrawn = Other {
+            key: "label",
+            text: "「明日は早く起きないといけないんだ」",
+            generic: false,
+            fresh: false,
+            count: 5,
+        };
         assert_eq!(judge("「昨日の話の続きだけど」", &[], &[redrawn], &blocks, ja()), Verdict::Unhooked);
     }
 
@@ -347,7 +385,7 @@ mod tests {
             let threads = step["threads"].as_array().unwrap();
             let text = |t: &serde_json::Value| t["text"].as_str().unwrap_or("").to_string();
             for chosen in threads {
-                let others: Vec<(String, String, bool, bool)> = threads
+                let others: Vec<(String, String, bool, bool, u64)> = threads
                     .iter()
                     .filter(|t| t["key"] != chosen["key"])
                     .map(|t| {
@@ -356,11 +394,19 @@ mod tests {
                             history.get(1).is_none_or(|h| h.as_str() != history.first().and_then(|f| f.as_str()));
                         let generic =
                             pick::is_generic(t["hookcode"].as_str().unwrap_or(""), t["name"].as_str().unwrap_or(""));
-                        (t["key"].as_str().unwrap_or("").to_string(), text(t), generic, fresh)
+                        (
+                            t["key"].as_str().unwrap_or("").to_string(),
+                            text(t),
+                            generic,
+                            fresh,
+                            t["count"].as_u64().unwrap_or(1),
+                        )
                     })
                     .collect();
-                let others: Vec<Other> =
-                    others.iter().map(|(k, t, g, f)| Other { key: k, text: t, generic: *g, fresh: *f }).collect();
+                let others: Vec<Other> = others
+                    .iter()
+                    .map(|(k, t, g, f, c)| Other { key: k, text: t, generic: *g, fresh: *f, count: *c })
+                    .collect();
                 let earlier: Vec<String> = chosen["history"]
                     .as_array()
                     .map(|h| h.iter().skip(1).filter_map(|x| x.as_str().map(String::from)).collect())
