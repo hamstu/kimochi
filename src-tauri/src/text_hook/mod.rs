@@ -58,6 +58,9 @@ const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
 const GLYPHS: u32 = 3;
 /// Lines from other engine threads, with the chosen one silent, after which the screen is read again.
 const MISSED_LINES: u32 = 3;
+/// Lines another engine thread must have sent, with one chosen, for the screen to be read again
+/// (`second_look`).
+const SECOND_LOOK_AFTER: u64 = 3;
 /// Pieces in a row in another language after which a chosen thread hands over to one in the language.
 const FOREIGN_LINES: u32 = 3;
 
@@ -123,6 +126,13 @@ struct Session {
     fallback: Option<String>,
     pick_pending: bool,
     pick_running: bool,
+    /// Threads given up this session for missing lines: never taken back as the game's remembered
+    /// thread, which would hand them the choice again as soon as they speak.
+    dropped: Vec<String>,
+    /// Threads the screen has been read again for (`second_look`), once each, and whether a read
+    /// is under way.
+    looked: Vec<String>,
+    looking: bool,
     last_line: Option<String>,
     /// The id the last line was sent with: a line carried on in the next burst replaces it.
     last_id: Option<String>,
@@ -788,6 +798,24 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             return;
         }
     }
+    // A thread chosen when few had spoken (automatically, or remembered from then), while another
+    // engine thread has now said a few lines of its own: the screen is read again, once for each
+    // such thread, and the better one kept (Ren'Py: LunaHook's own hook speaks first, with the
+    // menu's labels and each line twice; the runtime's string formatting, with the line alone,
+    // only from the first line on).
+    if matches!(session.selected_by, Some("auto") | Some("saved"))
+        && session.selected.as_deref() != Some(key)
+        && !session.looking
+        && session.threads[index].count == SECOND_LOOK_AFTER
+        && !pick::is_generic(&session.threads[index].hookcode, &session.threads[index].name)
+        && !session.looked.iter().any(|k| k == key)
+        && pick::reads_as(&pick::normalize(&session.threads[index].text), language)
+    {
+        session.looked.push(key.to_string());
+        session.looking = true;
+        let generation = session.generation;
+        std::thread::spawn(move || second_look(hook, generation));
+    }
     if session.selected.as_deref() == Some(key) {
         crate::debug_report::trace(
             &hook.app,
@@ -806,11 +834,21 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // Markup aside (a TextMeshPro typewriter colours what it has shown: `<color=#ffffffff>…`), and
     // not the hooker's TextMeshPro setter while the DLL reads the same text objects: it sends each
     // line before the object settles, which is no line the chosen object missed.
+    // Nor the line the chosen thread has just shown, sent again by the others (SiglusEngine sends
+    // each line through several threads, some with the box's earlier text around it): counted as
+    // missed, the chosen thread was dropped every few lines.
     {
         let spoken = &session.threads[index];
         let shown = pick::normalize(&clean::strip_markup(text, false));
-        let dll_reads = !session.unity.is_empty();
+        let dll_reads = dll_reads_lines(session);
+        let chosen = session
+            .threads
+            .iter()
+            .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
+            .map(|t| pick::normalize(&clean::strip_markup(&t.text, false)))
+            .unwrap_or_default();
         if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language)
+            && !pick::same_line(&chosen, &shown)
             && !pick::is_generic(&spoken.hookcode, &spoken.name)
             && !(dll_reads && unity::is_hooker_tmp_setter(&spoken.hookcode))
         {
@@ -821,16 +859,28 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // A thread chosen automatically that has said one thing only and nothing since (a menu drawn
     // once, the largest text on screen when it was read), while this one keeps speaking; or one
     // that has missed the last few lines other threads sent (a hook that starts a thread per line,
-    // as Majiro's does beside the one that keeps going): the screen is read again.
-    if session.selected_by == Some("auto") && (session.threads[index].count >= 3 || session.missed >= MISSED_LINES) {
+    // as Majiro's does beside the one that keeps going): the screen is read again. A thread taken
+    // back from an earlier run too, once it misses lines: SiglusEngine starts threads per scene
+    // (the context in their key), and the one remembered may be the last scene's.
+    let auto = session.selected_by == Some("auto");
+    let saved = session.selected_by == Some("saved");
+    if (auto && session.threads[index].count >= 3) || ((auto || saved) && session.missed >= MISSED_LINES) {
         let stale =
             session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
-                (t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
+                (auto && t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
                     || session.missed >= MISSED_LINES
             });
         if stale {
             session.missed = 0;
             crate::debug_report::trace(&hook.app, json!({ "check": "texthook-repick", "from": session.selected }));
+            if let Some(gone) = session.selected.clone() {
+                session.dropped.push(gone);
+            }
+            if saved {
+                if let Some(exe) = session.exe.clone() {
+                    remember(hook, &exe, None);
+                }
+            }
             session.selected = None;
             session.selected_by = None;
             hook.publish(session);
@@ -843,9 +893,10 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     // TextMeshPro setter while the DLL reads the game's text objects themselves (the screen
     // chooses one of those instead).
     let saved = session.exe.as_deref().and_then(|exe| remembered(hook, exe));
-    let dll_reads = !session.unity.is_empty();
+    let dll_reads = dll_reads_lines(session);
     if unity::remembers_by_signature(&session.threads[index].hookcode)
         && saved.as_ref() == Some(&session.threads[index].signature())
+        && !session.dropped.iter().any(|k| k == key)
         && !(dll_reads && unity::is_hooker_tmp_setter(&session.threads[index].hookcode))
     {
         session.selected = Some(key.to_string());
@@ -968,37 +1019,11 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             // And the hooker's thread with the same text as a Unity text object is left to the
             // object: the object is set when the line is shown, the hooker's string functions
             // whenever the game handles the string.
-            let unity_texts: Vec<&str> = session
-                .threads
-                .iter()
-                .filter(|t| unity::is_unity(&t.hookcode) && t.count >= 2)
-                .map(|t| t.text.as_str())
-                .collect();
-            let candidates: Vec<Thread> = session
-                .threads
-                .iter()
-                .filter(|t| !t.text.is_empty() && (!unity::is_unity(&t.hookcode) || t.count >= 2))
-                .filter(|t| unity::is_unity(&t.hookcode) || !unity_texts.contains(&t.text.as_str()))
-                // The DLL reading the game's text objects, the hooker's hook on the same setter is
-                // never the better (`unity::is_hooker_tmp_setter`).
-                .filter(|t| session.unity.is_empty() || !unity::is_hooker_tmp_setter(&t.hookcode))
-                .cloned()
-                .collect();
+            let candidates = pick_candidates(&session);
             (session.source_id.clone(), session.observer_engine.clone(), candidates)
         };
         let outcome = read_screen(hook, &source_id, observer_engine.as_deref()).map(|blocks| {
-            let list: Vec<Candidate> = candidates
-                .iter()
-                .map(|t| Candidate {
-                    key: &t.key,
-                    hookcode: &t.hookcode,
-                    name: &t.name,
-                    text: &t.text,
-                    recent: t.recent_count(),
-                    count: t.count,
-                    noise: t.noisy as f64 / t.count.max(1) as f64,
-                })
-                .collect();
+            let list = as_candidates(&candidates);
             let scored = pick::score(&list, &blocks, hook.language());
             let chosen = pick::chosen(&scored, PICK_MIN_MATCH as f64, hook.language()).map(|s| s.key.clone());
             // Nothing in the language on screen: the game may show a translation of the line.
@@ -1047,6 +1072,107 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             },
             Err(e) => session.pick_note = Some(format!("Could not read the window to choose a thread: {e}")),
         }
+        hook.publish(&session);
+    }
+}
+
+/// Whether the DLL reads the game's Unity text objects and one of them holds a line: then the
+/// hooker's own hook on TextMeshPro's setter, which mixes every object's text, is left alone
+/// (`unity::is_hooker_tmp_setter`). Where every object holds a character (Unity CatSystem draws
+/// its line one TextMeshPro object per glyph), the hooker's setter is the one with whole lines.
+fn dll_reads_lines(session: &Session) -> bool {
+    !session.unity.is_empty()
+        && session.threads.iter().any(|t| {
+            unity::is_unity(&t.hookcode)
+                && t.count >= 2
+                && pick::normalize(&clean::strip_markup(&t.text, false)).chars().count() > 2
+        })
+}
+
+/// The threads the screen may choose from.
+fn pick_candidates(session: &Session) -> Vec<Thread> {
+    // A Unity text object that has said one thing only is likely a label (a button, a
+    // menu): it says the same thing again and again, and is never sent twice.
+    // And the hooker's thread with the same text as a Unity text object is left to the
+    // object: the object is set when the line is shown, the hooker's string functions
+    // whenever the game handles the string.
+    let unity_texts: Vec<&str> = session
+        .threads
+        .iter()
+        .filter(|t| unity::is_unity(&t.hookcode) && t.count >= 2)
+        .map(|t| t.text.as_str())
+        .collect();
+    let dll_reads = dll_reads_lines(session);
+    session
+        .threads
+        .iter()
+        .filter(|t| !t.text.is_empty() && (!unity::is_unity(&t.hookcode) || t.count >= 2))
+        .filter(|t| unity::is_unity(&t.hookcode) || !unity_texts.contains(&t.text.as_str()))
+        // The DLL reading the game's text objects' lines, the hooker's hook on the same setter is
+        // never the better (`dll_reads_lines`).
+        .filter(|t| !dll_reads || !unity::is_hooker_tmp_setter(&t.hookcode))
+        .cloned()
+        .collect()
+}
+
+fn as_candidates(threads: &[Thread]) -> Vec<Candidate<'_>> {
+    threads
+        .iter()
+        .map(|t| Candidate {
+            key: &t.key,
+            hookcode: &t.hookcode,
+            name: &t.name,
+            text: &t.text,
+            recent: t.recent_count(),
+            count: t.count,
+            noise: t.noisy as f64 / t.count.max(1) as f64,
+        })
+        .collect()
+}
+
+/// Reads the screen again with a thread chosen, after another engine thread began to speak, and
+/// hands the choice to that one when the screen shows it clearly better (`pick::better`).
+fn second_look(hook: &'static Hook, generation: u64) {
+    std::thread::sleep(PICK_DELAY);
+    let looked = {
+        let mut session = hook.lock();
+        if session.generation != generation {
+            return;
+        }
+        match session.selected.clone() {
+            Some(incumbent) => {
+                Some((session.source_id.clone(), session.observer_engine.clone(), pick_candidates(&session), incumbent))
+            }
+            None => {
+                session.looking = false;
+                None
+            }
+        }
+    };
+    let Some((source_id, observer_engine, candidates, incumbent)) = looked else { return };
+    let better = read_screen(hook, &source_id, observer_engine.as_deref()).ok().and_then(|blocks| {
+        let list = as_candidates(&candidates);
+        let scored = pick::score(&list, &blocks, hook.language());
+        pick::better(&scored, &incumbent, PICK_MIN_MATCH as f64, hook.language()).map(|s| s.key.clone())
+    });
+    let mut session = hook.lock();
+    if session.generation != generation {
+        return;
+    }
+    session.looking = false;
+    // Chosen by hand meanwhile, or another thread already taken over.
+    if session.selected.as_deref() != Some(incumbent.as_str()) || session.selected_by == Some("manual") {
+        return;
+    }
+    let Some(better) = better else { return };
+    crate::debug_report::trace(&hook.app, json!({ "check": "texthook-second-look", "from": incumbent, "to": better }));
+    if let Some(thread) = session.threads.iter().find(|t| t.key == better).cloned() {
+        if let Some(exe) = session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name)) {
+            remember(hook, &exe, Some(thread.signature()));
+        }
+        session.dropped.push(incumbent);
+        session.selected = Some(better);
+        session.selected_by = Some("auto");
         hook.publish(&session);
     }
 }

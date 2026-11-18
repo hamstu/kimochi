@@ -330,6 +330,23 @@ pub fn chosen<'a>(scored: &'a [Scored], min: f64, language: &Language) -> Option
     scored.iter().find(|s| s.effective >= min * scale && (s.in_largest || s.effective >= MIN_OFF_BOX * scale))
 }
 
+/// Of `score`'s list read again with `incumbent` chosen, the thread to hand the choice to: the best,
+/// when it is another that `chosen` would take and the screen shows it clearly better than the
+/// incumbent (by [`BETTER`]), or the incumbent not at all.
+pub fn better<'a>(scored: &'a [Scored], incumbent: &str, min: f64, language: &Language) -> Option<&'a Scored> {
+    let best = chosen(scored, min, language)?;
+    if best.key == incumbent {
+        return None;
+    }
+    match scored.iter().find(|s| s.key == incumbent) {
+        Some(old) => (best.score >= old.score * BETTER).then_some(best),
+        None => Some(best),
+    }
+}
+
+/// How much better a thread must score to take the choice from one already made.
+const BETTER: f64 = 1.25;
+
 /// The fewest characters a thread matched outside the largest text must have to be chosen.
 const MIN_OFF_BOX: f64 = 12.0;
 
@@ -755,6 +772,14 @@ fn same_but_breaks(sentence: &[char], rest: &[char]) -> Option<usize> {
     None
 }
 
+/// Whether `shown` (normalized) is the line `chosen` (normalized) has shown, sent again by another
+/// thread: the same text, a piece of it, or it with more around it (a thread that keeps the box's
+/// earlier text). A short line is no sign: `はい` is in many lines that follow it.
+pub fn same_line(chosen: &str, shown: &str) -> bool {
+    const SHORT: usize = 6;
+    !shown.is_empty() && chosen.chars().count() >= SHORT && (chosen.contains(shown) || shown.contains(chosen))
+}
+
 /// Whether `shown` (normalized) is a line of dialogue other than `before`: in the language, `min`
 /// characters or more, and not `before` typed further or the start of it.
 pub fn another_line(before: &str, shown: &str, min: usize, language: &Language) -> bool {
@@ -1023,6 +1048,20 @@ mod tests {
         // A nameplate or a code is not a line.
         assert!(!another_line(line, "アカネ", 6, ja()));
         assert!(!another_line(line, "se_21_140_voice", 6, ja()));
+    }
+
+    #[test]
+    fn a_line_the_chosen_thread_showed_is_the_same_line_from_another_thread() {
+        let line = normalize("「それほど楽な仕事ではない」");
+        assert!(same_line(&line, &line));
+        // A thread that keeps the box's earlier text, or one with only part of it.
+        assert!(same_line(&line, &normalize("仕事ではない」　　　「それほど楽な仕事ではない」")));
+        assert!(same_line(&line, &normalize("それほど楽な")));
+        // The next line is another.
+        assert!(!same_line(&line, &normalize("町の人たちには頼りにされている。")));
+        assert!(!same_line("", &line));
+        // A short line is in many that follow it.
+        assert!(!same_line(&normalize("はい"), &normalize("はい、そうです。それで構いません")));
     }
 
     #[test]
