@@ -23,6 +23,7 @@ mod rpgmaker;
 pub mod store;
 mod translations;
 mod unity;
+mod witness;
 pub mod wine;
 
 use crate::language::Language;
@@ -64,6 +65,12 @@ const MISSED_LINES: u32 = 3;
 const MISS_GAP: Duration = Duration::from_millis(1500);
 /// Pieces in a row in another language after which a chosen thread hands over to one in the language.
 const FOREIGN_LINES: u32 = 3;
+/// The least time between two readings that vouch for the chosen thread (`witness`): a reading
+/// costs a few hundred milliseconds of CPU, and a game the screen cannot settle (a menu, an
+/// unreadable font) would otherwise be read at every line another thread sends.
+const WITNESS_GAP: Duration = Duration::from_secs(4);
+/// How many of the last lines sent the screen may still show for the hook to be ahead of it.
+const WITNESS_EARLIER: usize = 4;
 
 #[derive(Debug, Clone)]
 struct Thread {
@@ -131,6 +138,13 @@ struct Session {
     fallback: Option<String>,
     pick_pending: bool,
     pick_running: bool,
+    /// A reading of the window to vouch for the chosen thread is under way (`witness`), and when
+    /// the last one started: one at a time, and no more often than `WITNESS_GAP`.
+    witness_running: bool,
+    witness_at: Option<Instant>,
+    /// The last few lines sent, newest first: the screen still showing one of them says the hook
+    /// is ahead of it.
+    sent: VecDeque<String>,
     /// Threads given up this session for missing lines: never taken back as the game's remembered
     /// thread, which would hand them the choice again as soon as they speak.
     dropped: Vec<String>,
@@ -278,6 +292,12 @@ impl Hook {
         session.last_sent = Some(Instant::now());
         session.last_piece_chars = piece_chars;
         session.last_line = Some(text.to_string());
+        // A line carried on replaces the last one.
+        if carries_on && session.last_id.is_some() {
+            session.sent.pop_front();
+        }
+        session.sent.push_front(text.to_string());
+        session.sent.truncate(WITNESS_EARLIER);
         let replaces = if carries_on { session.last_id.take() } else { None };
         // When the game set the text, if the source says (the Unity text, timed by the DLL on the
         // clock its voice clips are timed by); else now.
@@ -849,6 +869,8 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
             // every click and dropped a good thread while its line came in.
             count_missed(session, Instant::now());
             session.missed_text = shown;
+            // The first suspicion: the screen says at once whether the chosen thread is fine.
+            witness_soon(hook, session);
         }
     }
     // A thread chosen automatically that has said one thing only and nothing since (a menu drawn
@@ -1090,6 +1112,125 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
     }
 }
 
+/// Has the window read to vouch for the chosen thread (`witness`), once it is drawn: the chosen
+/// thread was chosen automatically or remembered (never one the reader chose), has gone quiet,
+/// and another thread has just sent a fresh line.
+fn witness_soon(hook: &'static Hook, session: &mut Session) {
+    if !matches!(session.selected_by, Some("auto" | "saved"))
+        || session.witness_running
+        || session.witness_at.is_some_and(|at| at.elapsed() < WITNESS_GAP)
+        || !hook.reading_text()
+    {
+        return;
+    }
+    session.witness_running = true;
+    session.witness_at = Some(Instant::now());
+    let generation = session.generation;
+    std::thread::spawn(move || witness_check(hook, generation));
+}
+
+fn witness_check(hook: &'static Hook, generation: u64) {
+    std::thread::sleep(PICK_DELAY);
+    let snapshot = {
+        let mut session = hook.lock();
+        let chosen = session.selected.clone().and_then(|key| {
+            let thread = session.threads.iter().find(|t| t.key == key)?;
+            Some((key, thread.count, thread.text.clone()))
+        });
+        match chosen {
+            Some(chosen) if session.generation == generation => {
+                let others: Vec<Thread> =
+                    pick_candidates(&session).into_iter().filter(|t| t.key != chosen.0).collect();
+                // The lines sent before the chosen thread's last: the newest is its last.
+                let earlier: Vec<String> = session.sent.iter().skip(1).cloned().collect();
+                Some((chosen, others, earlier, session.source_id.clone(), session.observer_engine.clone()))
+            }
+            _ => {
+                if session.generation == generation {
+                    session.witness_running = false;
+                }
+                None
+            }
+        }
+    };
+    let Some(((key, count, text), others, earlier, source_id, engine)) = snapshot else { return };
+    let started = Instant::now();
+    let language = hook.language();
+    let read = read_lines(hook, &source_id, engine.as_deref()).map(|lines| {
+        let title = window_title(&source_id).unwrap_or_default();
+        let blocks = witness::dialogue_blocks(&lines, &title, language);
+        let others: Vec<witness::Other> = others
+            .iter()
+            .map(|t| witness::Other { key: &t.key, text: &t.text, generic: pick::is_generic(&t.hookcode, &t.name) })
+            .collect();
+        let earlier: Vec<&str> = earlier.iter().map(String::as_str).collect();
+        witness::judge(&text, &earlier, &others, &blocks, language)
+    });
+    let ms = started.elapsed().as_millis() as u64;
+    let mut session = hook.lock();
+    if session.generation != generation {
+        return;
+    }
+    session.witness_running = false;
+    // The choice changed, or the chosen thread spoke, while the screen was read: the reading is of
+    // a state that has passed.
+    let current = session.selected.as_deref() == Some(key.as_str())
+        && session.threads.iter().any(|t| t.key == key && t.count == count);
+    let verdict = match read {
+        Ok(verdict) => verdict,
+        Err(e) => {
+            crate::debug_report::trace(&hook.app, json!({ "check": "texthook-witness", "error": e, "ms": ms }));
+            return;
+        }
+    };
+    crate::debug_report::trace(
+        &hook.app,
+        json!({
+            "check": "texthook-witness",
+            "verdict": verdict.name(),
+            "chosen": key,
+            "other": match &verdict { witness::Verdict::Other(k) => Some(k.as_str()), _ => None },
+            "current": current,
+            "ms": ms,
+        }),
+    );
+    if !current {
+        return;
+    }
+    match verdict {
+        // The chosen thread's line is what the game shows: the other thread's line was not (lines
+        // ahead of the screen, a backlog), and is no line the chosen thread missed.
+        witness::Verdict::Shown | witness::Verdict::Within => session.missed = 0,
+        // Another thread has the line on screen, the chosen one does not: it takes over now, with
+        // that line, rather than after more lines are lost.
+        witness::Verdict::Other(better) => {
+            let Some(thread) = session.threads.iter().find(|t| t.key == better).cloned() else { return };
+            if let Some(exe) = session.exe.clone().filter(|_| !pick::is_generic(&thread.hookcode, &thread.name)) {
+                remember(hook, &exe, Some(thread.signature()));
+            }
+            session.dropped.push(key);
+            session.selected = Some(better.clone());
+            session.selected_by = Some("auto");
+            session.missed = 0;
+            session.pick_note = None;
+            hook.line(&mut session, &better, &thread.text, false);
+            hook.publish(&session);
+        }
+        // Lines ahead of the screen, text nobody sent, or nothing to go by: the choice's own rules
+        // carry on.
+        witness::Verdict::Earlier | witness::Verdict::Unhooked | witness::Verdict::Unclear => {}
+    }
+}
+
+/// The window's title, as the source list names it: OCR reads the title bar along with the game.
+fn window_title(source_id: &str) -> Option<String> {
+    crate::sources::catalog()
+        .ok()?
+        .into_iter()
+        .find(|s| s["id"].as_str() == Some(source_id))
+        .and_then(|s| s["name"].as_str().map(String::from))
+}
+
 /// Whether the DLL reads the game's Unity text objects and one of them holds a line: then the
 /// hooker's own hook on TextMeshPro's setter, which mixes every object's text, is left alone
 /// (`unity::is_hooker_tmp_setter`). Where every object holds a character (Unity CatSystem draws
@@ -1167,6 +1308,11 @@ fn another_click(last: Option<Instant>, now: Instant) -> bool {
 }
 
 fn read_screen(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec<pick::Block>, String> {
+    read_lines(hook, source_id, engine).map(|lines| pick::blocks(&lines))
+}
+
+/// The lines the local OCR reads in the window now.
+fn read_lines(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec<OcrLine>, String> {
     use kimochi_capture::TextObserver;
     let service = hook.app.state::<Shared>().inner().clone();
     let frame = crate::sources::capture_whole(&service, source_id)?;
@@ -1205,7 +1351,7 @@ fn read_screen(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec
         .iter()
         .map(|l| OcrLine { text: l.text.clone(), x: l.x, y: l.y, width: l.width, height: l.height })
         .collect();
-    Ok(pick::blocks(&lines))
+    Ok(lines)
 }
 
 /// Moves to the next engine after `failed` could not be installed, started or attached.
