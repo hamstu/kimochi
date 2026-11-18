@@ -12,6 +12,7 @@
 //! - `census` logs which audio libraries the game loaded, so a run says which adapter a game
 //!   still needs when neither API is used (FMOD, CRI, Wwise, WASAPI directly).
 #![allow(clippy::missing_safety_doc)]
+mod asar;
 mod census;
 mod cri;
 mod ds;

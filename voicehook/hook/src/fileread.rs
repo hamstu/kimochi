@@ -9,6 +9,22 @@
 //! the WAV's size is reached. The clip is the original file, timed at its first read, which is
 //! when the engine starts decoding it to play. Reads that start mid-file, and archives that
 //! compress or encrypt their entries, give nothing; such engines are left to the other adapters.
+//!
+//! Chromium-based games (Electron, NW.js: TyranoScript, RPG Maker MV/MZ) play sounds through Web
+//! Audio or `<audio>` in a sandboxed renderer, which then plays the mix through Chromium's audio
+//! service: no audio API sees a voice on its own, and the DLL cannot load in the renderer. But the
+//! renderer asks the browser process for every sound by URL, and the browser process reads it from
+//! disk with `ReadFile` (a synchronous handle, the offset passed in an `OVERLAPPED`), at the moment
+//! the game loads it to play. So in the browser process:
+//! - reads of `app.asar` (Electron) that start where an audio entry starts are that sound: the
+//!   entry, named by its path in the archive, is read whole from the archive (`asar`);
+//! - in a Chromium game (its Chromium resource packs next to the exe), any audio file read from
+//!   its first byte is a sound, named by its path under the game's folder;
+//! - RPG Maker's encrypted audio is decrypted with the key in the game's `System.json`.
+//!
+//! Each becomes one clip, named for its file, so the classifier groups them by folder (and a
+//! name that says voice puts a sound in a `voice` group of its own).
+use crate::asar::{self, Archive};
 use crate::iat::{self, Hook};
 use crate::sink::{self, Ev};
 use crate::util::{guard, lock};
@@ -16,7 +32,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
 static O_CREATE_W: AtomicUsize = AtomicUsize::new(0);
 static O_CREATE_A: AtomicUsize = AtomicUsize::new(0);
@@ -28,6 +44,45 @@ struct Open {
     name: String,
     clip: Option<Partial>,
     clips: u64,
+    /// A sound file of a Chromium game (one sound per file): its path under the game's folder,
+    /// and its full path (for RPG Maker's key).
+    web: Option<(String, String)>,
+}
+
+/// Archives (`app.asar`) the game has open, by handle.
+static ASARS: LazyLock<Mutex<HashMap<usize, Arc<Archive>>>> = LazyLock::new(Default::default);
+/// Sounds sent from archives lately, by archive and offset (a sound read twice in a row, as a
+/// media element's range requests do, is one play).
+static ASAR_SENT: LazyLock<Mutex<HashMap<(usize, u64), f64>>> = LazyLock::new(Default::default);
+static WEB_CLIPS: AtomicUsize = AtomicUsize::new(0);
+
+/// The game's folder, if it is a Chromium-based game (Electron, NW.js, CEF): Chromium's resource
+/// packs are next to its executable.
+fn chromium_dir() -> Option<&'static str> {
+    static DIR: OnceLock<Option<String>> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let exe = crate::util::module_path(std::ptr::null_mut());
+        let dir = exe.parent()?;
+        let packs = ["resources.pak", "nw.pak", "chrome_100_percent.pak", "nw_100_percent.pak", "cef.pak"];
+        packs.iter().any(|p| dir.join(p).is_file()).then(|| {
+            let d = dir.display().to_string().to_lowercase().replace('/', "\\");
+            crate::util::log(&format!("file: a Chromium-based game in {d}: its sound files are watched"));
+            d
+        })
+    })
+    .as_deref()
+}
+
+/// A Chromium game's sound file, as a path under its folder (`www/audio/voice/a1.rpgmvo`).
+fn web_sound(path: &str) -> Option<String> {
+    let dir = chromium_dir()?;
+    let p = path.trim_start_matches(r"\\?\").replace('/', "\\");
+    let lower = p.to_lowercase();
+    if lower.len() != p.len() || !lower.starts_with(dir) || lower.as_bytes().get(dir.len()) != Some(&b'\\') {
+        return None;
+    }
+    let rel = p.get(dir.len() + 1..)?.replace('\\', "/");
+    asar::is_audio(&rel).then_some(rel)
 }
 
 struct Partial {
@@ -118,30 +173,154 @@ unsafe extern "system" fn create_a(
 
 fn opened(h: *mut c_void, path: String) {
     const INVALID: usize = usize::MAX;
-    if h.is_null() || h as usize == INVALID || !voice_path(&path) {
+    if h.is_null() || h as usize == INVALID {
+        return;
+    }
+    if path.to_ascii_lowercase().ends_with(".asar") {
+        if let Some(a) = asar::archive(&path) {
+            lock(&ASARS).insert(h as usize, a);
+        }
+        return;
+    }
+    let web = web_sound(&path);
+    if web.is_none() && !voice_path(&path) {
         return;
     }
     let name = path.rsplit(['\\', '/']).next().unwrap_or(&path).to_string();
-    if lock(&LOGGED).insert(name.clone()) {
+    if web.is_none() && lock(&LOGGED).insert(name.clone()) {
         crate::util::log(&format!("file: watching reads of {path}"));
     }
-    lock(&OPEN).insert(h as usize, Open { name, clip: None, clips: 0 });
+    let web = web.map(|rel| (rel, path));
+    lock(&OPEN).insert(h as usize, Open { name, clip: None, clips: 0, web });
 }
 
 unsafe extern "system" fn read(h: *mut c_void, buf: *mut u8, n: u32, got: *mut u32, ov: *mut c_void) -> i32 {
     let o: unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut u32, *mut c_void) -> i32 =
         std::mem::transmute(O_READ.load(Ordering::SeqCst));
     let ok = o(h, buf, n, got, ov);
-    // Overlapped reads complete later; only synchronous ones are looked at.
-    if !ov.is_null() && lock(&OPEN).contains_key(&(h as usize)) && lock(&LOGGED).insert("overlapped".into()) {
-        crate::util::log("file: a voice file is read asynchronously (overlapped); those reads are not looked at");
-    }
-    if ok != 0 && ov.is_null() && !got.is_null() && *got > 0 {
-        guard(|| unsafe { known(h) });
+    // A read that returned its data now: synchronous, or (`OVERLAPPED` on a synchronous handle,
+    // as Chromium's `base::File::Read` does) at the offset it names. Reads still pending complete
+    // later and are not looked at.
+    if ok != 0 && !got.is_null() && *got > 0 {
         let len = *got as usize;
-        guard(|| unsafe { on_read(h as usize, std::slice::from_raw_parts(buf, len)) });
+        let offset = if ov.is_null() {
+            None
+        } else {
+            // OVERLAPPED: Internal, InternalHigh, then the offset's low and high halves.
+            let p = (ov as *const u8).add(2 * std::mem::size_of::<usize>()) as *const u32;
+            Some(u64::from(*p) | (u64::from(*p.add(1)) << 32))
+        };
+        guard(|| unsafe { known(h) });
+        if let Some(a) = lock(&ASARS).get(&(h as usize)).cloned() {
+            guard(|| on_asar_read(h as usize, &a, offset.or_else(|| unsafe { before(h, len) })));
+            return ok;
+        }
+        // A loose file read with an OVERLAPPED offset: only reads from its start, or that carry on
+        // from where the clip being read is, are its bytes in order.
+        guard(|| unsafe { on_read(h as usize, std::slice::from_raw_parts(buf, len), offset) });
     }
     ok
+}
+
+/// Where a synchronous read of `len` bytes on `h` started (the file pointer, moved past it).
+unsafe fn before(h: *mut c_void, len: usize) -> Option<u64> {
+    use windows_sys::Win32::Storage::FileSystem::{SetFilePointerEx, FILE_CURRENT};
+    let mut pos = 0i64;
+    (SetFilePointerEx(h, 0, &mut pos, FILE_CURRENT) != 0).then(|| (pos as u64).saturating_sub(len as u64))
+}
+
+/// A read of an archive at `offset`: if an audio entry starts there, the game is loading that
+/// sound; it is read whole from the archive and sent as a clip.
+fn on_asar_read(h: usize, a: &Arc<Archive>, offset: Option<u64>) {
+    let Some(offset) = offset else { return };
+    let Some(e) = a.at(offset).filter(|e| asar::is_audio(&e.path)) else { return };
+    let now = crate::util::now_ms();
+    {
+        let id = Arc::as_ptr(a) as usize;
+        let mut sent = lock(&ASAR_SENT);
+        sent.retain(|_, t| now - *t < 2000.0);
+        if sent.insert((id, offset), now).is_some() {
+            return;
+        }
+    }
+    let _ = h;
+    if e.size as usize > MAX_CLIP_BYTES {
+        if lock(&LOGGED).insert(format!("big:{}", e.path)) {
+            crate::util::log(&format!("asar: {} is {} bytes (music): not kept", e.path, e.size));
+        }
+        return;
+    }
+    let bytes = match a.read(e) {
+        Ok(b) => b,
+        Err(err) => {
+            crate::util::log(&format!("asar: reading {}: {err}", e.path));
+            return;
+        }
+    };
+    let key = || a.rpgm_key();
+    send_web(
+        &e.path,
+        bytes,
+        now,
+        key,
+        json!({ "archive": a.path.file_name().map(|n| n.to_string_lossy().into_owned()), "entry": e.path }),
+    );
+}
+
+/// Sends a Chromium game's sound file (`rel`: its path in the archive or under the game's folder)
+/// as a clip started at `at`, if it is an Ogg or WAV (RPG Maker's decrypted with `key`).
+fn send_web(rel: &str, bytes: Vec<u8>, at: f64, key: impl FnOnce() -> Option<[u8; 16]>, mut info: serde_json::Value) {
+    let bytes = if bytes.starts_with(asar::RPGM_HEADER) {
+        match key().and_then(|k| asar::rpgm_decrypt(&bytes, &k)) {
+            Some(plain) => plain,
+            None => {
+                if lock(&LOGGED).insert("rpgm-key".into()) {
+                    crate::util::log(&format!("file: {rel} is RPG Maker-encrypted and its key was not found"));
+                }
+                return;
+            }
+        }
+    } else {
+        bytes
+    };
+    let Some(kind) = starts_file(&bytes) else {
+        if lock(&LOGGED).insert(format!("kind:{}", rel.rsplit('.').next().unwrap_or(""))) {
+            let head: Vec<String> = bytes.iter().take(8).map(|b| format!("{b:02x}")).collect();
+            crate::util::log(&format!(
+                "file: {rel} is not Ogg or WAV ({}); sounds like it are not kept",
+                head.join(" ")
+            ));
+        }
+        return;
+    };
+    let (bytes, ext, dur) = match kind {
+        Kind::Ogg => {
+            let end = ogg_end(&bytes).unwrap_or(bytes.len());
+            let b = bytes[..end].to_vec();
+            let d = ogg_seconds(&b);
+            (b, "ogg", d)
+        }
+        Kind::Wav(size) => {
+            let b = bytes[..size.min(bytes.len())].to_vec();
+            let d = wav_seconds(&b);
+            (b, "wav", d)
+        }
+    };
+    if says_voice(rel) {
+        info["channel"] = json!("voice");
+    }
+    let n = WEB_CLIPS.fetch_add(1, Ordering::SeqCst);
+    sink::send(Ev::Whole {
+        key: (10, n),
+        api: "file",
+        fmt: Vec::new(),
+        bytes,
+        ext: Some(ext.into()),
+        source: Some(rel.to_string()),
+        dur,
+        at: Some(at),
+        info,
+    });
 }
 
 /// Handles read from that were opened before we were in: their path, looked up once each.
@@ -165,6 +344,7 @@ unsafe extern "system" fn close(h: *mut c_void) -> i32 {
     let o: unsafe extern "system" fn(*mut c_void) -> i32 = std::mem::transmute(O_CLOSE.load(Ordering::SeqCst));
     guard(|| {
         lock(&CHECKED).remove(&(h as usize));
+        lock(&ASARS).remove(&(h as usize));
         if let Some(mut f) = lock(&OPEN).remove(&(h as usize)) {
             finish(&mut f, false);
         }
@@ -172,9 +352,33 @@ unsafe extern "system" fn close(h: *mut c_void) -> i32 {
     o(h)
 }
 
-fn on_read(h: usize, data: &[u8]) {
+fn on_read(h: usize, data: &[u8], offset: Option<u64>) {
     let mut open = lock(&OPEN);
     let Some(f) = open.get_mut(&h) else { return };
+    if let Some((rel, path)) = f.web.clone() {
+        // A Chromium game's sound file: one sound, read from its start to its end.
+        if offset.unwrap_or(0) == 0 && f.clip.is_none() {
+            f.clip = Some(Partial { bytes: Vec::new(), at: crate::util::now_ms(), kind: Kind::Ogg });
+        }
+        let Some(p) = f.clip.as_mut() else { return };
+        if offset.is_some_and(|o| o != p.bytes.len() as u64) {
+            return;
+        }
+        p.bytes.extend_from_slice(data);
+        if p.bytes.len() > MAX_CLIP_BYTES {
+            f.clip = None;
+            return;
+        }
+        // Whole once the file's size is in (the browser reads to the end, then once more for 0).
+        let size = file_size(h);
+        if size.is_some_and(|s| p.bytes.len() as u64 >= s) {
+            let p = f.clip.take().unwrap();
+            f.clips += 1;
+            drop(open);
+            send_web(&rel, p.bytes, p.at, || asar::rpgm_key_near(&path), json!({}));
+        }
+        return;
+    }
     if let Some(kind) = starts_file(data) {
         // A new file starts: whatever was being read is done.
         finish(f, false);
@@ -214,6 +418,10 @@ fn on_read(h: usize, data: &[u8]) {
 /// Sends the clip being read, if it is a whole file (`complete`) or an Ogg stream cut short.
 fn finish(f: &mut Open, complete: bool) {
     let Some(p) = f.clip.take() else { return };
+    if f.web.is_some() {
+        // A Chromium game's sound closed before it was read to the end: not a whole sound.
+        return;
+    }
     let (ext, dur) = match p.kind {
         Kind::Ogg => ("ogg", ogg_seconds(&p.bytes)),
         Kind::Wav(_) => ("wav", wav_seconds(&p.bytes)),
@@ -234,6 +442,21 @@ fn finish(f: &mut Open, complete: bool) {
         at: Some(p.at),
         info: json!({ "archive": f.name, "complete": complete }),
     });
+}
+
+/// Whether a sound's path says voice (its folder or name), for its clips' channel.
+fn says_voice(rel: &str) -> bool {
+    let l = format!("/{}", rel.to_lowercase());
+    ["voice", "/vo/", "vo_", "_vo", "koe", "/v/", "voc_", "vox", "serif", "セリフ", "ボイス", "音声"]
+        .iter()
+        .any(|w| l.contains(w))
+}
+
+/// The size of the file open as `h`.
+fn file_size(h: usize) -> Option<u64> {
+    use windows_sys::Win32::Storage::FileSystem::GetFileSizeEx;
+    let mut size = 0i64;
+    (unsafe { GetFileSizeEx(h as *mut c_void, &mut size) } != 0).then_some(size as u64)
 }
 
 /// The kind of file `data` starts with.
