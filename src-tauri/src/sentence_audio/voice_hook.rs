@@ -201,9 +201,12 @@ pub fn remember(base: &std::path::Path, exe: &str, game: &Remembered) -> Result<
 impl Discovery {
     pub fn poll(&mut self, capture: &Capture, hooked: &mut Hooked, enabled: bool) {
         if self.generation != capture.generation || !enabled {
-            let speech = hooked.speech.take();
+            // A new session, on the same game clock: without it, clips would be timed on the wall
+            // clock and lines on the game clock, apart by every pause so far, and none would match.
+            let (speech, clock) = (hooked.speech.take(), hooked.clock.take());
             *hooked = Hooked::default();
             hooked.speech = speech;
+            hooked.clock = clock;
             self.generation = capture.generation;
             self.checked = None;
             self.looked_up = None;
@@ -272,6 +275,20 @@ impl Discovery {
 #[cfg(test)]
 mod tests {
     use super::staged_dll;
+
+    #[test]
+    fn a_new_session_keeps_the_game_clock() {
+        use super::{Capture, Discovery, Hooked};
+        let mut hooked = Hooked::default();
+        hooked.clock = Some(std::sync::Arc::new(|t| t - 29_000.0));
+        let mut discovery = Discovery::default();
+        discovery.poll(&Capture { generation: 7, ..Default::default() }, &mut hooked, true);
+        assert_eq!(discovery.generation, 7);
+        assert_eq!(hooked.clock.as_ref().map(|clock| clock(30_000.0)), Some(1_000.0));
+        // Turned off and on again, too.
+        discovery.poll(&Capture { generation: 7, ..Default::default() }, &mut hooked, false);
+        assert_eq!(hooked.clock.as_ref().map(|clock| clock(30_000.0)), Some(1_000.0));
+    }
 
     #[test]
     fn the_injected_dll_is_a_content_keyed_copy_that_leaves_the_bundled_file_free() {
