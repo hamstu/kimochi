@@ -230,11 +230,14 @@ export function createExtensionContext({
     return settle({ status: 'unanswered' })
   }
 
+  /** What this context's listeners get of a message the hub delivers (`setInbound`); as sent unless set. */
+  let inbound = null
+
   /** Events the hub sends this context. */
   function handleEvent(frame) {
     switch (frame?.type) {
       case 'deliver':
-        runListeners(frame.message, frame.sender, (result) => {
+        runListeners(inbound ? inbound(frame.message) : frame.message, frame.sender, (result) => {
           void call('delivered', { id: frame.id, ...result }).catch(() => {})
         })
         break
@@ -641,6 +644,14 @@ export function createExtensionContext({
     },
     getURL,
     runtimeId,
+    /**
+     * `rewrite(message)` gives what this context's listeners get of each message the background
+     * sends it, instead of the message as sent; null to stop. The host uses it to read 10ten's
+     * settings differently in one window (app.js `bareHover`).
+     */
+    setInbound(rewrite) {
+      inbound = rewrite
+    },
     setMessages(state) {
       i18nState = state
     },

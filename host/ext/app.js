@@ -436,6 +436,35 @@ export function installApp(win, { engine, descriptor }) {
       }
     : null
   api.status = () => (hub ? hub.status() : { ...relay?.status, hub: relay?.status.hub ?? null })
+  /**
+   * 10ten looks up on bare hover in this window while `on` (the overlay's Look up on hover), as it
+   * does by default in a browser: every pointer move looks up, so the pop-up glides from word to
+   * word. Kimochi sets its "Show popup" key to Shift (engines.js `tenten-hold-shift`), and with a
+   * key set 10ten closes a pop-up the key opened on the next move without it, so a key added to
+   * a resting pointer never glides. Its stored settings stay as they are, so the Log and the
+   * reader's other windows keep waiting for the key: only the config its background sends this
+   * window (`enable`) is read without hold-to-show keys, and sent again when `on` changes.
+   */
+  let bareHoverOn = false
+  let lastEnable = null
+  const withBareHover = (message) =>
+    bareHoverOn && message?.config && typeof message.config === 'object'
+      ? { ...message, config: { ...message.config, holdToShowKeys: [] } }
+      : message
+  if (context && descriptor.id === 'tenten') {
+    context.setInbound((message) => {
+      if (message?.type !== 'enable') return message
+      lastEnable = message
+      return withBareHover(message)
+    })
+  }
+  api.bareHover = (on) => {
+    if (!context || descriptor.id !== 'tenten' || Boolean(on) === bareHoverOn) return
+    bareHoverOn = Boolean(on)
+    report({ check: 'tenten-bare-hover', on: bareHoverOn })
+    const sender = { id: context.runtimeId, url: `${origin}/${descriptor.background.script}`, origin }
+    if (lastEnable) void context.deliverLocal(withBareHover(lastEnable), sender)
+  }
 
   win.__kimochiExtensionHost = api
   return api
