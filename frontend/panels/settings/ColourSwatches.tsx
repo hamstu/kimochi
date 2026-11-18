@@ -15,7 +15,8 @@ export function ColourSwatches({
   label,
   labelledBy,
   onChoose,
-  onDraft
+  onDraft,
+  inline = false
 }: {
   /** The colour shown as chosen, `#rrggbb`. */
   value: string
@@ -27,10 +28,12 @@ export function ColourSwatches({
   onChoose: (value: string) => void
   /** The custom picker moved. */
   onDraft: (value: string) => void
+  /** All on one line, spread across the space it is given, rather than in rows of five. */
+  inline?: boolean
 }): ReactNode {
   const preset = OVERLAY_HIGHLIGHT_PRESETS.some((option) => option.value === value)
   return (
-    <div className="overlay-look-swatches">
+    <div className="overlay-look-swatches" data-inline={inline || undefined}>
       <ToggleGroup.Root
         type="single"
         value={preset ? value : ''}

@@ -259,7 +259,8 @@
 }
 .radial-look-colour {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   gap: var(--k-space-3);
 }

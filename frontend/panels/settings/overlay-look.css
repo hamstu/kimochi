@@ -245,6 +245,14 @@
 .overlay-look-presets {
   display: contents;
 }
+/* On one line, spread across the row (Settings → Overlay → Radial menu's colour). */
+.overlay-look-swatches[data-inline] {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  max-width: 24rem;
+}
 .overlay-look-swatch {
   position: relative;
   display: flex;

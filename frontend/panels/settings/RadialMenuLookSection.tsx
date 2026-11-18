@@ -63,6 +63,7 @@ export function RadialMenuLookSection(): ReactNode {
               if (value !== saved) void setColor(value)
             }}
             onDraft={setDraft}
+            inline
           />
         </div>
         <Button size="sm" onClick={configure}>
