@@ -75,13 +75,24 @@ fn chromium_dir() -> Option<&'static str> {
 
 /// A Chromium game's sound file, as a path under its folder (`www/audio/voice/a1.rpgmvo`).
 fn web_sound(path: &str) -> Option<String> {
-    let dir = chromium_dir()?;
+    under_game(path, chromium_dir()?)
+}
+
+/// `path` as a path under the game's folder `dir` (lower case), or under the folder an old NW.js
+/// build unpacks a game packed into its executable to (`%TEMP%\nw1234_5678\`), if it is a sound.
+fn under_game(path: &str, dir: &str) -> Option<String> {
     let p = path.trim_start_matches(r"\\?\").replace('/', "\\");
     let lower = p.to_lowercase();
-    if lower.len() != p.len() || !lower.starts_with(dir) || lower.as_bytes().get(dir.len()) != Some(&b'\\') {
+    if lower.len() != p.len() {
         return None;
     }
-    let rel = p.get(dir.len() + 1..)?.replace('\\', "/");
+    let start = if lower.starts_with(dir) && lower.as_bytes().get(dir.len()) == Some(&b'\\') {
+        dir.len() + 1
+    } else {
+        let at = lower.find("\\temp\\nw")? + "\\temp\\".len();
+        at + lower[at..].find('\\')? + 1
+    };
+    let rel = p.get(start..)?.replace('\\', "/");
     asar::is_audio(&rel).then_some(rel)
 }
 
@@ -597,6 +608,22 @@ mod tests {
         w.extend_from_slice(&[0; 8]);
         assert_eq!(starts_file(&w), Some(Kind::Wav(52)));
         assert_eq!(wav_seconds(&w), Some(0.0005));
+    }
+
+    #[test]
+    fn a_chromium_games_sounds_are_named_by_their_path_in_the_game() {
+        let dir = "d:\\games\\some rpg";
+        assert_eq!(
+            under_game("\\\\?\\D:\\Games\\Some RPG\\www\\audio\\voice\\a1.rpgmvo", dir).as_deref(),
+            Some("www/audio/voice/a1.rpgmvo")
+        );
+        assert_eq!(
+            under_game("C:\\Users\\u\\AppData\\Local\\Temp\\nw1234_5678\\data\\sound\\v01.ogg", dir).as_deref(),
+            Some("data/sound/v01.ogg")
+        );
+        assert_eq!(under_game("D:\\Games\\Some RPG\\www\\data\\Map001.json", dir), None);
+        assert_eq!(under_game("D:\\Games\\Some RPG 2\\audio\\se\\a.ogg", dir), None);
+        assert_eq!(under_game("D:\\Music\\a.ogg", dir), None);
     }
 
     #[test]
