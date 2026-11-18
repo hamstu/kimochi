@@ -208,7 +208,7 @@ fn rules() -> &'static [(Regex, To, bool)] {
             // pictures) and the one-character ones (`\.` `\|` `\!` `\>` `\<` `\^` `\{` `\}`).
             // Before the line breaks written out below: `\n[1]` is a name, not a break.
             (r"<\\[Nn]\[\d+\]>\s*", To::Text(""), false),
-            (r"\\[A-Za-z]{1,3}\[[^\]\n]*\]", To::Text(""), false),
+            (r"\\[A-Za-z][A-Za-z0-9]{0,3}\[[^\]\n]*\]", To::Text(""), false),
             (r"\\[.|!><^{}$]", To::Text(""), false),
             // A line break written out (`\n`) in the script's text: Unity CatSystem.
             (r"(?:\\n)+([^A-Za-z\\]|$)", To::Text("\n$1"), false),
