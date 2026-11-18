@@ -66,7 +66,9 @@ const packagingVersion = 3
 const checksums = {
   'onnxruntime-osx-arm64-1.30.0.tgz': '6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012',
   'onnxruntime-osx-x86_64-1.22.0.tgz': 'e4ec94a7696de74fb1b12846569aa94e499958af6ffa186022cfde16c9d617f0',
-  'Microsoft.ML.OnnxRuntime.DirectML.1.22.0.nupkg': 'b38d92c31d202d1dc772af9416fe30b6abae8527651e742c380c2d131e5f1817',
+  // From NuGet (the GitHub release no longer serves it, #250): nuget.org's repository signature
+  // makes the file differ from GitHub's old copy; the DLLs inside are the same.
+  'Microsoft.ML.OnnxRuntime.DirectML.1.22.0.nupkg': '29f9872d786236b79aa83f94482f3a17c14297e4833768d6d0ed4883ee732e60',
   'Microsoft.AI.DirectML.1.15.4.nupkg': '4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9',
   'onnxruntime-win-x64-1.22.0.zip': '174c616efc0271194488642a72f1a514e01487da4dfe84c49296d66e40ebe0da',
   'onnxruntime-win-arm64-1.22.0.zip': '7008f7ff82f8e7de563a22f2b590e08e706a1289eba606b93de2b56edfb1e04b',
@@ -298,7 +300,11 @@ async function stageRuntime(install) {
     })
   } else if (flavor === 'directml') {
     const archive = `Microsoft.ML.OnnxRuntime.DirectML.${version}.nupkg`
-    const bytes = await download(archive, ortRelease(archive))
+    // NuGet, where Microsoft publishes it; the GitHub release's copy is gone (404, #250).
+    const bytes = await download(
+      archive,
+      `https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/${version}`
+    )
     pinned.push([archive, bytes])
     await extract(install, archive, bytes, {
       dir: `runtimes/win-${nativeArch}/native`,
