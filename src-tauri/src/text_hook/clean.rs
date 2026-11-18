@@ -202,6 +202,14 @@ fn rules() -> &'static [(Regex, To, bool)] {
             // A speaker as CatSystem2 sends one shown under another name (`ゆかり＠？？？「…」`):
             // the name shown.
             (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", To::Text("$1"), false),
+            // RPG Maker's message codes, as its own hook sends the message before they are drawn:
+            // a speaker's name tag (`<\N[1]>` on a row of its own), then any `\X[…]` (`\N[2]` an
+            // actor's name, `\C[2]` a colour, `\AA[3]`, `\F1[]`, `\FH[ON]` from plugins: faces,
+            // pictures) and the one-character ones (`\.` `\|` `\!` `\>` `\<` `\^` `\{` `\}`).
+            // Before the line breaks written out below: `\n[1]` is a name, not a break.
+            (r"<\\[Nn]\[\d+\]>\s*", To::Text(""), false),
+            (r"\\[A-Za-z]{1,3}\[[^\]\n]*\]", To::Text(""), false),
+            (r"\\[.|!><^{}$]", To::Text(""), false),
             // A line break written out (`\n`) in the script's text: Unity CatSystem.
             (r"(?:\\n)+([^A-Za-z\\]|$)", To::Text("\n$1"), false),
         ]
@@ -419,6 +427,11 @@ mod tests {
         assert_eq!(strip_markup("名前\\n「行くぞ」\\n", true), "名前\n「行くぞ」\n");
         assert_eq!(strip_markup("一行目\\n\\n二行目", true), "一行目\n二行目");
         assert_eq!(strip_markup("C:\\name", true), "C:\\name");
+        // RPG Maker's message codes: a speaker's tag, names, faces and pictures, waits.
+        assert_eq!(strip_markup("<\\n[1]>\n「おはよう」\n\\AA[3]\\F3[]", true), "「おはよう」\n");
+        assert_eq!(strip_markup("「\\N[2]様、\\C[2]こちら\\C[0]です\\.\\|」", true), "「様、こちらです」");
+        assert_eq!(strip_markup("夜が来た。\n\\F1[]\\FH[ON]", true), "夜が来た。\n");
+        assert_eq!(strip_markup("一行目\\n二行目", true), "一行目\n二行目");
     }
 
     #[test]
