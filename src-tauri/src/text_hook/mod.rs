@@ -952,7 +952,12 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     {
         let stale = hooker_left
             || session.threads.iter().find(|t| session.selected.as_deref() == Some(t.key.as_str())).is_some_and(|t| {
-                (auto && t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
+                // Never Ren'Py's say screen, which speaks only when a line is shown: a reader on its
+                // first line for a while is no menu drawn once, whatever the hooker sends meanwhile.
+                (auto
+                    && t.count <= 1
+                    && !renpy::is_dialogue(&t.hookcode)
+                    && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)))
                     || (session.missed >= MISSED_LINES && !vouched && unwitnessed(session))
             });
         if stale {
