@@ -59,21 +59,22 @@ if (flavor === 'cuda' && (platform === 'darwin' || arch !== 'x64')) {
   throw new Error('CUDA runtime requires Windows or Linux on x64')
 }
 // 3: Windows DirectML staging gained DirectML.dll and the marker records the target triple.
-const packagingVersion = 3
+// 4: the CPU runtime comes from Microsoft's NuGet package (the GitHub archives are gone, #250).
+const packagingVersion = 4
 
 // SHA-256 of every archive this script downloads. An archive missing from this table is
 // refused unless it is an opt-in CUDA build, which is staged with a loud warning instead.
 const checksums = {
-  'onnxruntime-osx-arm64-1.30.0.tgz': '6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012',
-  'onnxruntime-osx-x86_64-1.22.0.tgz': 'e4ec94a7696de74fb1b12846569aa94e499958af6ffa186022cfde16c9d617f0',
+  // Microsoft's NuGet packages: the onnxruntime GitHub repository (and its release archives) no
+  // longer answers (404, #250). Each holds every platform's library; the ones checked against the
+  // GitHub archives they replace are the same builds (linux-arm64 byte for byte, osx-arm64 but
+  // for its code signature).
+  'Microsoft.ML.OnnxRuntime.1.22.0.nupkg': 'd571e63a2329baacb713f441e65ad75284de354db6e1ac435fe4bebbb417986a',
+  'Microsoft.ML.OnnxRuntime.1.30.0.nupkg': '30df119bd9164eaa187666d93147448fdd4a9a1a3caf83f1505daf7af2d1c5d2',
   // From NuGet (the GitHub release no longer serves it, #250): nuget.org's repository signature
   // makes the file differ from GitHub's old copy; the DLLs inside are the same.
   'Microsoft.ML.OnnxRuntime.DirectML.1.22.0.nupkg': '29f9872d786236b79aa83f94482f3a17c14297e4833768d6d0ed4883ee732e60',
-  'Microsoft.AI.DirectML.1.15.4.nupkg': '4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9',
-  'onnxruntime-win-x64-1.22.0.zip': '174c616efc0271194488642a72f1a514e01487da4dfe84c49296d66e40ebe0da',
-  'onnxruntime-win-arm64-1.22.0.zip': '7008f7ff82f8e7de563a22f2b590e08e706a1289eba606b93de2b56edfb1e04b',
-  'onnxruntime-linux-x64-1.22.0.tgz': '8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3',
-  'onnxruntime-linux-aarch64-1.22.0.tgz': 'bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702'
+  'Microsoft.AI.DirectML.1.15.4.nupkg': '4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9'
 }
 
 // The models are not bundled: the app downloads them on demand (src-tauri/src/model_store.rs)
@@ -288,16 +289,30 @@ async function extract(install, archive, bytes, { dir, pick, top, licensePrefix 
 async function stageRuntime(install) {
   const nativeArch = { arm64: 'arm64', x64: 'x64' }[arch]
   const pinned = []
-  if (platform === 'darwin') {
-    const archive = `onnxruntime-osx-${arch === 'x64' ? 'x86_64' : 'arm64'}-${version}.tgz`
-    const bytes = await download(archive, ortRelease(archive))
+  // Microsoft's NuGet package of the CPU runtime (every platform but CUDA): its library and the
+  // shared providers' under runtimes/<rid>/native, its licences at the top.
+  const nugetRuntime = async () => {
+    const archive = `Microsoft.ML.OnnxRuntime.${version}.nupkg`
+    const bytes = await download(archive, `https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/${version}`)
     pinned.push([archive, bytes])
-    const base = archive.replace('.tgz', '')
+    const rid = `${{ darwin: 'osx', linux: 'linux', win32: 'win' }[platform]}-${nativeArch}`
     await extract(install, archive, bytes, {
-      dir: `${base}/lib`,
-      pick: (name) => name === library,
-      top: base
+      dir: `runtimes/${rid}/native`,
+      pick: (name) =>
+        platform === 'win32'
+          ? /\.dll$/i.test(name)
+          : name === library || /^lib(onnxruntime_)?providers.*\.(so|dylib)$/.test(name),
+      top: '.'
     })
+    // The package ships the Linux library under its plain name only; the SONAME and versioned
+    // names the bundle keeps (`required`) are the same file.
+    if (platform === 'linux') {
+      const lib = await readFile(path.join(install, library))
+      for (const name of [`${library}.1`, `${library}.${version}`]) await writeFile(path.join(install, name), lib)
+    }
+  }
+  if (platform === 'darwin') {
+    await nugetRuntime()
   } else if (flavor === 'directml') {
     const archive = `Microsoft.ML.OnnxRuntime.DirectML.${version}.nupkg`
     // NuGet, where Microsoft publishes it; the GitHub release's copy is gone (404, #250).
@@ -331,11 +346,11 @@ async function stageRuntime(install) {
       top: '.',
       licensePrefix: 'DirectML-'
     })
-  } else {
+  } else if (flavor === 'cuda') {
+    // Opt-in, from the onnxruntime GitHub release (not hash-pinned; see `download`).
     const os = platform === 'win32' ? 'win' : 'linux'
-    const cpuArch = platform === 'linux' && arch === 'arm64' ? 'aarch64' : nativeArch
     const extension = platform === 'win32' ? 'zip' : 'tgz'
-    const archive = `onnxruntime-${os}-${cpuArch}${flavor === 'cuda' ? '-gpu' : ''}-${version}.${extension}`
+    const archive = `onnxruntime-${os}-${nativeArch}-gpu-${version}.${extension}`
     const bytes = await download(archive, ortRelease(archive))
     pinned.push([archive, bytes])
     const base = archive.replace(/\.(zip|tgz)$/, '')
@@ -347,6 +362,8 @@ async function stageRuntime(install) {
           : name === library || name.startsWith(`${library}.`) || /providers.*\.so$/.test(name),
       top: base
     })
+  } else {
+    await nugetRuntime()
   }
   await writeFile(
     path.join(install, 'archive-sha256.txt'),
