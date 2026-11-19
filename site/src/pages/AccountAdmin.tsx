@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Field } from '../components/account/Field'
 import { Meter } from '../components/account/Meter'
 import { Notice } from '../components/account/Notice'
@@ -42,7 +42,15 @@ export function AccountAdmin() {
         <Link to="/account" className="inline-flex items-center gap-1.5 text-small text-ink-3 hover:text-ink">
           <ArrowLeft size={14} aria-hidden /> Your account
         </Link>
-        <h1 className="mt-3 pb-10 text-title text-ink">Admin</h1>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-4 pb-10">
+          <h1 className="text-title text-ink">Admin</h1>
+          <Link
+            to="/account/admin/downloads"
+            className="inline-flex items-center gap-1.5 text-small text-accent-ink hover:underline"
+          >
+            Download stats <ArrowRight size={14} aria-hidden />
+          </Link>
+        </div>
         <OverviewSection />
         <LimitsSection />
         <PersonSection />

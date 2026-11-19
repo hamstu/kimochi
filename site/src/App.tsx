@@ -16,6 +16,7 @@ import { AccountForgot } from './pages/AccountForgot'
 import { AccountReset } from './pages/AccountReset'
 import { AccountVerify } from './pages/AccountVerify'
 import { AccountAdmin } from './pages/AccountAdmin'
+import { AccountAdminDownloads } from './pages/AccountAdminDownloads'
 import { LinkApp } from './pages/LinkApp'
 import { SessionProvider } from './lib/session'
 import { canonicalUrl, routeMeta } from './lib/seo.js'
@@ -67,6 +68,7 @@ export function App() {
           <Route path="account/reset" element={<AccountReset />} />
           <Route path="account/verify" element={<AccountVerify />} />
           <Route path="account/admin" element={<AccountAdmin />} />
+          <Route path="account/admin/downloads" element={<AccountAdminDownloads />} />
           <Route path="link" element={<LinkApp />} />
           <Route path="*" element={<NotFound />} />
         </Route>

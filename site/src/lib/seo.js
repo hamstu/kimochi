@@ -149,6 +149,13 @@ export const ROUTES = [
   },
   { path: '/account/admin', title: 'Admin · Kimochi', description: 'Kimochi admin.', index: false, render: 'shell' },
   {
+    path: '/account/admin/downloads',
+    title: 'Downloads · Admin · Kimochi',
+    description: 'Kimochi download stats.',
+    index: false,
+    render: 'shell'
+  },
+  {
     path: '/link',
     title: 'Sign in to Kimochi · Kimochi',
     description: 'Link the Kimochi app to your account.',

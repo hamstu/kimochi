@@ -37,6 +37,8 @@
   --color-danger: var(--k-danger-text);
   --color-ok: var(--k-ok-text);
   --color-warn: var(--k-warn-text);
+  --color-series-1: var(--k-series-1);
+  --color-series-2: var(--k-series-2);
 
   --font-sans: var(--k-font-ui);
   --font-jp: var(--k-font-jp);

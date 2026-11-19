@@ -100,6 +100,57 @@ export interface AdminOverview {
   recent: { email: string | null; status: string; interval: string | null; updatedAt: string }[]
 }
 
+export interface DownloadsMirrorDay {
+  day: string
+  install: number
+  update: number
+  update_check: number
+  release_lookup: number
+  component: number
+}
+
+export interface DownloadsGithubRelease {
+  tag: string
+  publishedAt: string | null
+  install: number
+  update: number
+  install_or_update: number
+  update_check: number
+  platforms: Record<string, number>
+}
+
+/** `GET /api/admin/downloads` (kimochi-server API.md, "Download stats"). */
+export interface AdminDownloads {
+  range: { from: string; to: string; days: number }
+  mirror: {
+    since: string | null
+    refreshedAt: string | null
+    error: string | null
+    totals: {
+      install: number
+      update: number
+      update_check: number
+      release_lookup: number
+      component: number
+      bytes: number
+    }
+    daily: DownloadsMirrorDay[]
+    byPlatform: { platform: string; install: number; update: number }[]
+    byVersion: { version: string; install: number; update: number }[]
+    components: { item: string; count: number; bytes: number }[]
+  }
+  github: {
+    snapshotDay: string | null
+    since: string | null
+    refreshedAt: string | null
+    error: string | null
+    totals: { install: number; update: number; install_or_update: number; update_check: number }
+    releases: DownloadsGithubRelease[]
+    byPlatform: { platform: string; count: number }[]
+    daily: { day: string; downloads: number | null; update_check: number | null }[]
+  }
+}
+
 export interface AdminLimits {
   plans: Plan[]
   metrics: MetricName[]
@@ -211,6 +262,8 @@ export const api = {
   // Owner only
   adminOverview: () => request<AdminOverview>('GET', '/api/admin/overview'),
   adminLimits: () => request<AdminLimits>('GET', '/api/admin/limits'),
+  adminDownloads: (days: number) => request<AdminDownloads>('GET', `/api/admin/downloads?days=${days}`),
+  adminRefreshDownloads: (days: number) => request<AdminDownloads>('POST', '/api/admin/downloads/refresh', { days }),
   adminSetLimits: (limits: Partial<Record<Plan, Partial<Record<MetricName, number | null>>>>) =>
     request<{ limits: AdminLimits['limits'] }>('PUT', '/api/admin/limits', { limits }).then((r) => r.limits),
   adminUser: (email: string) =>
