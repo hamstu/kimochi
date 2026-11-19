@@ -1927,10 +1927,18 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
         command.creation_flags(0x0800_0000);
     }
     let output = command.output().map_err(|e| e.to_string())?;
-    if output.status.success() {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // The helper says `injected` when it did: under Flatpak the exit status is `flatpak enter`'s,
+    // 0 whatever the helper did (or when Wine could not start it).
+    if output.status.success() && stdout.contains(r#""event":"injected""#) {
         Ok(())
     } else {
-        Err(format!("Voice hook failed; using system audio: {}", String::from_utf8_lossy(&output.stdout)))
+        let said = if stdout.trim().is_empty() {
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        } else {
+            stdout.trim().to_string()
+        };
+        Err(format!("Voice hook failed; using system audio: {said}"))
     }
 }
 

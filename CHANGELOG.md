@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Linux: Text hooking explains when a game's Wine is too old.** Text hooking needs Wine 9.0 or newer. On an older Wine (such as an old Flathub Wine branch), Kimochi used to say it "found no programs in the Wine prefix". It now says the Wine needs updating and how to do it. Audio hooking no longer reports success when the hook helper could not run in a Flatpak sandbox.
+
 ## [1.1.0] - 2026-11-18
 
 ### Added
