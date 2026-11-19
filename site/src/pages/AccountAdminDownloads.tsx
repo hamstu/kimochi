@@ -200,7 +200,7 @@ function Table({ head, rows, empty }: { head: ReactNode[]; rows: ReactNode[][]; 
           {rows.map((r, i) => (
             <tr key={i} className="border-t border-hairline">
               {r.map((cell, j) => (
-                <td key={j} className={`px-4 py-2 ${j ? 'text-right text-ink-2 tnum' : 'text-ink'}`}>
+                <td key={j} className={`px-4 py-2 ${j ? 'whitespace-nowrap text-right text-ink-2 tnum' : 'text-ink'}`}>
                   {cell}
                 </td>
               ))}
@@ -289,7 +289,7 @@ function DailyChart({
   const h = hover === null ? null : rows[hover]
 
   return (
-    <div ref={ref} className="relative" onMouseLeave={() => setHover(null)}>
+    <div ref={ref} className="relative min-w-0 overflow-hidden" onMouseLeave={() => setHover(null)}>
       {width > 0 && (
         <svg width={width} height={height} role="img" aria-label={label} className="block overflow-visible">
           {ticks.map((t) => (
@@ -434,7 +434,11 @@ function MirrorSection({ data }: { data: AdminDownloads }) {
       }
     >
       <div className="grid gap-6">
-        {m.error && <Notice tone="danger">Couldn't read Cloudflare's analytics: {m.error}</Notice>}
+        {m.error && (
+          <Notice tone="danger">
+            <span className="break-words">Couldn't read Cloudflare's analytics: {m.error}</span>
+          </Notice>
+        )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="New installs" value={num(m.totals.install)} swatch="var(--k-series-1)" />
           <Stat label="Updates" value={num(m.totals.update)} swatch="var(--k-series-2)" />
@@ -531,7 +535,14 @@ function GithubSection({ data }: { data: AdminDownloads }) {
       }
     >
       <div className="grid gap-6">
-        {g.error && <Notice tone="danger">Couldn't read GitHub's counts: {g.error}</Notice>}
+        {g.error && (
+          <Notice tone={g.snapshotDay ? 'warn' : 'danger'}>
+            <span className="break-words">
+              The last refresh couldn't read GitHub: {g.error}
+              {g.snapshotDay && ` Showing the snapshot from ${shortDay(g.snapshotDay)}.`}
+            </span>
+          </Notice>
+        )}
         {!g.snapshotDay ? (
           <p className="text-small text-ink-3">No snapshot yet. Refresh to take the first one.</p>
         ) : (
