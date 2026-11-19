@@ -59,6 +59,7 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
     | **Input** | Window or screen | Window or screen, Quick Shot, Clipboard, WebSocket or Browser. |
     | ↳ **Poll interval** (Clipboard) | 200 ms | 100 ms, 200 ms, 500 ms or 1 s. |
     | ↳ **Text hooking** (Window or screen, on Windows and Linux) | — | **Open** goes to the Text Hooker page. Text hooking itself is turned on for each game under its card in the sidebar. |
+    | ↳ **Browser extension** (Browser) | — | **Open** goes to the Browser Extension page. |
     | ↳ **WebSocket URL** | `ws://localhost:6677` | |
     | **Auto switch sessions by window name** | On | Each window you read gets its own session. |
     | **macOS permissions** | — | Screen Recording (reads the window or screen you choose) and Accessibility (brings your source's window to the front): Allowed, or a button to allow it. |
@@ -66,25 +67,25 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
     | **Send scans over WebSocket** | Off | Hosts a WebSocket server at its **WebSocket URL** (`ws://localhost:6677`). |
   </TabItem>
   <TabItem label="Text Hooker">
-    Windows and Linux. Defaults for every hooked game, and a page for each game. See
-    [Text hooking](/reading/text-hooker/#settings).
+    Windows and Linux. A column of the games you've hooked, named after their window, beside the
+    **Text Hooker defaults** every game uses. See [Text hooking](/reading/text-hooker/#settings).
 
     | Setting | Default |
     | --- | --- |
-    | **Show the card over the game** | Always (or **While holding** the lookup key, or **Never**) |
-    | **Games** | Every game you've hooked; click one for its page. |
-    | **Hook automatically** | On |
-    | **Line delay** | 100 ms |
-    | **Separate speaker names** | On |
-    | **Repeated characters** | Undo automatically |
-    | **Join split lines** | On |
-    | **Remove script codes** | On (Off in languages that separate words with spaces) |
-    | **Auto align** | On |
-    | **Text size** (with Auto align off; Auto align matches the game's) | Medium |
-    | **Background opacity** | 100% |
-    | Per game: **Session**, **Dialogue thread**, **Hook codes**, **Replacements**, **Card position** | — |
+    | **Card**: **Show card** | Always (or **While holding** the lookup key, or **Never**) |
+    | ↳ **Card look** | Same as Kimochi (or Light, Dark, Blend, Transparent) |
+    | ↳ **Auto align** | On |
+    | ↳ **Text size** (with Auto align off; Auto align matches the game's) | Medium |
+    | ↳ **Background opacity** | 100% |
+    | **Hooking**: **Hook automatically** | On |
+    | ↳ **Line delay** | 100 ms (50 ms to 1.2 s) |
+    | **Text**: **Separate speaker names** | On |
+    | ↳ **Repeated characters** | Undo automatically |
+    | ↳ **Join split lines** | On |
+    | ↳ **Remove script codes** | On (Off in languages that separate words with spaces) |
+    | A game's page: its name, **Session & Log** (its session and reading stats), the same settings, **Hook codes**, **Replacements**, **Dialogue thread**, **Card position** and **Delete** | — |
 
-    <Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the Games list and the Defaults." width={760} />
+    <Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the games column, then the Text Hooker defaults with the card's preview." width={760} />
   </TabItem>
   <TabItem label="OCR">
     Which engine reads the screen, and when. See [OCR engines](/reading/ocr-engines/) and
@@ -107,18 +108,26 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
 
     | Setting | Default | Notes |
     | --- | --- | --- |
-    | **Overlay enabled** | Off | |
+    | **Overlay enabled** | Off | The same as **Show overlay** in the sidebar. Not in Steam Deck Gaming Mode, where the overlay is always on. |
     | **Group text into regions** | Off | |
+    | **Look up on hover** | Off | Not on Linux with Wayland, nor in Gaming Mode. Also in Shortcuts & Controls. |
     | **Filter out furigana and small text** (Japanese only) | On, strength Balanced | |
-    | **Drop lines** | No Japanese | Named for [your language](/language/support/#text-in-your-language). |
-    | **Click through text to the game** | On | |
+    | **Click through text to the game** | On | Always on while **Hover card appearance** is Transparent. |
     | **Exclude overlay from screen recording** | On | |
+    | **Pause the game while reading** | Off | The sidebar's **Auto game pause**. Once it's on, **Resume paused game** starts a game that stayed frozen. |
+    | **Drop lines** | No Japanese | Named for [your language](/language/support/#text-in-your-language). The same setting as in Log & Sessions. |
     | **Overlay appearance**: **Highlight colour** / **Highlight opacity** / **Hover card appearance** | Indigo / 40% / Same as Kimochi | |
+    | ↳ **Outline the word being looked up** | On | Only while a look is Transparent. |
+    | ↳ **Dictionary opacity** | 100% | 10–100%, for every dictionary's pop-up. The same setting as in Dictionary. |
+    | **Text Hooker card** (Windows and Linux): a preview, **Card look**, and a button to the Text Hooker's card settings | Same as Kimochi | |
+    | **Radial menu** | Every action | As in Shortcuts & Controls, with the shortcut that opens the menu. |
     | **Game Mode**: how Read along shows the dictionary | Pop-up | **Pop-up** beside the word, or **Full screen**: the scanned text across the top with the dictionary filling the space below, with any dictionary. The buttons Read along uses are in **Shortcuts & Controls**. |
+
+    <Screenshot id="settings-ocr-overlay" alt="Settings, Overlay: Overlay enabled, Group text into regions, Look up on hover, Filter out furigana and small text, Click through text to the game, Exclude overlay from screen recording, Pause the game while reading and Drop lines." width={760} />
   </TabItem>
   <TabItem label="Log & Sessions">
-    How the transcript reads, which lines it keeps, and your sessions. See [The Log](/log/the-log/)
-    and [Sessions](/log/sessions/).
+    How the transcript reads, which lines it keeps, and your sessions. See [The Log](/log/the-log/),
+    [Sessions](/log/sessions/) and [Stats](/log/stats/).
 
     | Setting | Default | Notes |
     | --- | --- | --- |
@@ -128,9 +137,14 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
     | **Skip repeats** | 1 | Drop a line that matches any of the last N lines (1–20). |
     | **Merge streamed lines** | Off | Characters to compare: 4. |
     | **Keep at most** | 5000 | Lines per session. |
+    | **Images to retain** | 50 | Screenshots of the newest scans, for the Log and Anki (0–500; 0 saves none). |
+    | **Audio clips to retain** | 15 | Clips of the newest lines, for the Log and Anki (0–100; 0 saves none). |
     | **Text replacements** | None | Pattern rules applied to incoming lines. |
-    | **Pause when idle for** | 60 s | The reading timer (10–600 s). |
-    | **Sessions** | — | Every session: drag to reorder, click a name to rename, switch, delete, or add one. |
+    | **Show activity ticker** | On | The bubble at the foot of the Log. |
+    | **Stats**: **Max time per line** | 300 s | The most one line counts toward your reading time (10–600 s). |
+    | ↳ **Ignore skipped lines** | On | Lines that flash by under a second apart don't count. |
+    | ↳ **Day starts at** | 4 am | Reading before it counts toward the day before. |
+    | **Sessions** | — | Every session: drag to reorder, click a name to rename, switch, clear or delete them, or add one. |
   </TabItem>
   <TabItem label="Dictionary">
     The pop-up that shows definitions. See [Dictionaries](/lookups/dictionaries/).
@@ -141,9 +155,11 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
     | **Open … settings** | The engine's settings page (Yomitan, Hachidori, 10ten). |
     | **Pop-up size** (10ten) | Compact (Medium and Large too) |
     | **API address** (Yomitan API) | `http://127.0.0.1:19633` |
+    | **Pre-fetch lookups** (Yomitan API) | Off |
     | **Pop-up size** (Yomitan API) | 480 × 360 |
     | **Fetch word audio** / **Play on lookup** / **Volume** (Yomitan API) | On / On / 90% |
     | **Anki cards** | A link to Settings → Anki. |
+    | **Appearance**: **Dictionary opacity** | 100% (10–100%), for every engine; also in Settings → Overlay |
   </TabItem>
   <TabItem label="Anki">
     Cards through AnkiConnect. See [Anki](/lookups/anki/).
@@ -157,13 +173,13 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
     | ↳ **Detect from Anki** / **Import from Yomitan** / **Field mapping** (Yomitan API) | — |
     | **Card enhancement** tab: **Enhance with sentence audio** | Off (turning it on in Japanese downloads the speech model) |
     | ↳ **Audio field** | `SentenceAudio`, found in Anki when turned on |
-    | ↳ **Advanced**: **Start offset** / **End offset** / **Seconds kept** / **Clips kept** | 0 ms / 0 ms / 30 / 15 |
+    | ↳ **Advanced**: **Start offset** / **End offset** / **Seconds kept** | 0 ms / 0 ms / 30 |
     | **Card enhancement** tab: **Enhance with screenshot** | On |
     | ↳ **Picture field** | `Picture`, found in Anki when turned on |
-    | ↳ **Screenshots kept** | 50 |
     | **Card enhancement** tab: **Add tags** / **Tags** | On / `kimochi, {{session-name}}` |
 
     10ten adds no cards, and an engine that isn't downloaded yet only offers **Go to Dictionary**.
+    How many screenshots and audio clips are kept is set in Log & Sessions.
   </TabItem>
   <TabItem label="Translation & AI">
     Help with a line you can't read yet. See [Translation and AI](/lookups/translation-and-ai/).
@@ -175,22 +191,28 @@ Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or **Settings** in the me
     | **Explain with AI → Configure…** | Codex CLI, its default model, the default prompt |
   </TabItem>
   <TabItem label="Shortcuts & Controls">
-    Keyboard shortcuts and a game controller. See [Keyboard shortcuts](/reference/shortcuts/) and
-    [Controller](/controller/).
+    Keyboard shortcuts, the radial menu and a game controller. See
+    [Keyboard shortcuts](/reference/shortcuts/) and [Controller](/controller/).
 
     | Setting | Default |
     | --- | --- |
     | **Scan** | <kbd>⇧⌘8</kbd> / <kbd>Shift+F8</kbd>, no gamepad button |
-    | **Controller menu** | <kbd>⇧⌘Space</kbd> / <kbd>Shift+F9</kbd>, LS + RS (R4 on a Steam Deck) |
+    | **Radial menu** | <kbd>⇧⌘Space</kbd> / <kbd>Shift+F9</kbd>, LS + RS (R4 on a Steam Deck) |
     | **Lookup key** | Shift; or Ctrl, Alt, Command (Mac), or the middle, back or forward mouse button (not on Linux with Wayland). Only with **Click through text to the game** on |
-    | **Enable gamepad support** | On |
+    | **Look up on hover** | Off (not on Linux with Wayland, nor in Gaming Mode) |
+    | **Radial menu**: its actions, in order, each with its own keys and controller button | Every action, no shortcuts |
+    | ↳ **Base colour** / **Accent colour** / **Base opacity** | Charcoal / the overlay's Highlight colour / 70% |
+    | **Gamepad**: **Enable gamepad support** | On |
+    | ↳ **Lookup button** | None (L4 on a Steam Deck) |
     | **Scan after a button press**: **Button** / **Delay** | None (off) / 500 ms |
-    | **Controller menu**: **Select** / **Back** | A / B |
+    | **Radial menu buttons**: **Select** / **Back** | A / B (✕ / ○ on a PlayStation pad) |
     | **Reading**: **Word or character** / **Play audio** / **Previous definition** / **Next definition** / **Show all controls** | Y / X / LB / RB / View |
     | **Connected gamepads** / **Button test** | — |
 
-    Scan and Controller menu can also be a middle,
+    Scan and Radial menu can also be a middle,
     back or forward mouse button; see [Mouse buttons](/reference/shortcuts/#mouse-buttons).
+
+    <Screenshot id="settings-radial-menu" alt="Settings, Shortcuts & Controls, Radial menu: the ring with its actions, then Base colour, Accent colour and Base opacity." width={760} />
   </TabItem>
   <TabItem label="Command line">
     The `kimochi` command, to control Kimochi from a terminal and scripts. See

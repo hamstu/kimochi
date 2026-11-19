@@ -1051,6 +1051,17 @@ const HANDLERS: Record<string, Handler> = {
   desktop: () => DISPLAYS.map((d) => d.bounds),
   displays: () => DISPLAYS,
   platform_capabilities: () => CAPABILITIES,
+  // "Pause the game while reading" (Settings → Overlay, the sidebar's Auto game pause): supported,
+  // nothing paused.
+  game_pause_status: () => {
+    const enabled = settings.pauseGameWhileReading === true
+    return {
+      capability: { supported: true, backend: 'preview' },
+      enabled,
+      status: { enabled, phase: 'idle', holds: [], processes: 0 }
+    }
+  },
+  game_pause_resume_all: () => ({ running: false, recovered: [] }),
   // Settings → Browser Extension.
   browser_bridge_status: () => ({ enabled: true, listening: true, port: 27640, connected: 1, browsers: ['Chrome'] }),
   browser_extension_folder: () => '/Users/you/Library/Application Support/com.kimochi.app/browser-extension',

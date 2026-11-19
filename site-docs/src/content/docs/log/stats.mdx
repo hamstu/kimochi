@@ -1,0 +1,51 @@
+---
+title: Stats and reading history
+description: See how much you read, day by day, with streaks, speed and kanji, and export every line you've read for exSTATic, GSM or a spreadsheet.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+Kimochi keeps a **reading history**: every line you read, with when you read it and what it came
+from. The **Stats** tab in the main window (<kbd>⌘4</kbd> / <kbd>Ctrl+4</kbd>) is drawn from it.
+
+<Screenshot id="stats" alt="The Stats tab: a 13-day streak over a year's heatmap, Today, This week, All time and Speed, then the last 30 days' characters per day." width={900} />
+
+## The Stats tab
+
+From the top:
+
+- **The heatmap**: a year of reading days, darker for days you read more, with your current
+  streak, your longest and how many days you've read.
+- **Today**, **This week** and **All time**: characters, reading time and lines; **Speed** is
+  characters an hour, over all time.
+- **The range** (**7 days**, **30 days**, **Year** or **All time**): characters or time per day (per
+  week over longer ranges), your reading speed, the hours of the day you read, each session with its
+  characters, time, speed and when you last read it, and the kanji you met most, with how many were
+  new in that range.
+
+The menu at the bottom right chooses which sessions count: **All sessions** by default, or some of
+them, including sessions you've deleted.
+
+Reading time follows the rules in **Settings → Log & Sessions → Stats**, the same as the Log's
+footer: **Max time per line** (5 minutes) is the most one line can count, **Ignore skipped lines**
+leaves out lines that flash by, and **Day starts at** (4 am) decides which day late-night reading
+belongs to. See [Reading stats](/log/sessions/#reading-stats).
+
+## The reading history
+
+The history is separate from the Log. Clearing a session's lines, the Log's **Keep at most** limit
+and deleting a session leave it alone; editing a line in the Log changes it there too, and deleting
+a line (a misreading) takes it out. With Kimochi Cloud, [Sync](/cloud/sync/) brings it to your
+other computers.
+
+## Exporting it
+
+In the Log's **⋯** menu, **Export reading history** saves the whole history as a file:
+
+| Format | For |
+| --- | --- |
+| **Lines for exSTATic or GSM (CSV)** | [exSTATic](https://github.com/KamWithK/exSTATic), and GameSentenceMiner's exSTATic import: one row a line. |
+| **Daily stats for exSTATic (CSV)** | exSTATic's daily totals for each session. |
+| **Every detail (CSV)** / **Every detail (JSON)** | Everything Kimochi keeps about each line, for a spreadsheet or your own scripts. |
+
+<Screenshot id="log-export-menu" alt="The Log's ⋯ menu with Export reading history open: Lines for exSTATic or GSM (CSV), Daily stats for exSTATic (CSV), Every detail (CSV) and Every detail (JSON)." width={720} />

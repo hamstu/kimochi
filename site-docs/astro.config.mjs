@@ -118,6 +118,7 @@ export default defineConfig({
           items: [
             { label: 'The Log', slug: 'log/the-log' },
             { label: 'Sessions and stats', slug: 'log/sessions' },
+            { label: 'Stats and reading history', slug: 'log/stats' },
             { label: 'Notebook', slug: 'log/notebook' }
           ]
         },

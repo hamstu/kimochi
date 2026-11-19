@@ -1,6 +1,6 @@
 ---
 title: Controller
-description: "Use a gamepad with Kimochi: the controller menu over the game, word-by-word reading, and moving around Kimochi's windows."
+description: "Use a gamepad with Kimochi: the radial menu over the game, word-by-word reading, and moving around Kimochi's windows."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -9,31 +9,49 @@ Kimochi reads gamepads natively, so buttons work while the game has focus. Gamep
 default (**Settings → Shortcuts & Controls → Gamepad → Enable gamepad support**).
 
 Kimochi has been tested with a PlayStation 4 controller on macOS, Windows and Linux, and any
-standard gamepad should work. If your controller doesn't respond, let me know
+standard gamepad should work. On Windows, Xbox-style pads are read with XInput. The docs name
+buttons the Xbox way (**A**, **B**, **LB**); with a DualSense or DualShock, Kimochi shows the
+PlayStation names instead (✕ ○ □ △, **L1**/**R1**, **Options**). If your controller doesn't respond, let me know
 in [Kimochi's Discord](https://discord.gg/vdMge6TBZQ) or
 [open an issue](https://github.com/hamstu/kimochi/issues), with its make and model.
 
-## The controller menu
+## The radial menu
 
 Click both sticks (**LS + RS**; on a Steam Deck, press the upper right back button, **R4**) or
 press <kbd>⇧⌘Space</kbd> / <kbd>Shift+F9</kbd> to open Kimochi's radial menu over the game. Aim with the left stick or step with the D-pad, press
 **A** to choose and **B** to close.
 
+<Screenshot id="radial-menu" alt="The radial menu over a visual novel: Scan at the top, then Read along, Auto OCR (Off), Recent text, Kimochi and Settings." width={720} />
+
 | Item | What it does |
 | --- | --- |
-| **Scan** | Scans, then starts word-by-word reading at the first word. |
-| **Read along** | Word-by-word reading of the last scan (needs a scan first). |
-| **Auto OCR** | Turns [Auto OCR](/reading/auto-ocr/) on or off. |
-| **Recent text** | Your recent scans; pick one to read it again. |
+| **Scan** | Scans, then starts word-by-word reading at the first word. With an OCR source. |
+| **Read along** | Word-by-word reading of the last scan or hooked line. |
+| **Auto OCR** | Turns [Auto OCR](/reading/auto-ocr/) on or off. With an OCR source. |
+| **Text Hooker** | The hooked text and the card's settings. While [text hooking](/reading/text-hooker/#with-a-controller-steam-deck). |
+| **Recent text** | Your recent lines; pick one to read it again. |
 | **Kimochi** | Shows the main window. |
-| **OCR settings** | Opens Settings → OCR. |
+| **OCR settings** / **App settings** | Opens Settings → OCR (or, while text hooking, Settings). |
 
 Pick a menu chord your game doesn't use; you can change it in
-**Settings → Shortcuts & Controls → Shortcuts → Controller menu**.
+**Settings → Shortcuts & Controls → Shortcuts → Radial menu** (or **Settings → Overlay → Radial menu**).
 
-To change what's in the menu, go to **Settings → Shortcuts & Controls → Radial menu**. Drag an item
-round the ring to move it, or click one to give it a shortcut of its own (keys, a controller button
-or both) or remove it. **Add item** puts back one you removed.
+### Making it your own
+
+**Settings → Shortcuts & Controls → Radial menu** (also on **Settings → Overlay**) shows the menu as
+it looks over a game, with an OCR source or while text hooking:
+
+- Drag an item round the ring to move it.
+- Click one to give it a shortcut of its own (keys, a controller button or combination, or both)
+  that runs it without opening the menu, or to remove it. **Add item** puts back one you removed,
+  and **Reset to default** puts back the menu Kimochi ships with.
+- **Base colour**, **Accent colour** and **Base opacity** change how it looks. The accent follows
+  the overlay's highlight colour until you pick one.
+
+<Screenshot id="settings-radial-menu" alt="Settings, Shortcuts & Controls, Radial menu: the ring with its actions, then Base colour, Accent colour and Base opacity." width={760} />
+
+With [Pause the game while reading](/reading/overlay/#pausing-the-game) on, the game freezes while the
+menu is open.
 
 ## Reading word by word
 
@@ -75,21 +93,24 @@ stick at the character a word really starts on and the lookup starts there (in f
 the Yomitan API, it looks up the whole word); the outline covers everything the dictionary
 matched from it.
 
-<Screenshot id="settings-gamemode" alt="Settings, Game Mode: Dictionary in Read along, with Pop-up and Full screen pictures to choose from." width={760} />
+<Screenshot id="settings-gamemode" alt="Settings, Overlay, Game Mode: how Read along shows the dictionary, with Pop-up and Full screen pictures to choose from." width={760} />
 
 ## Settings
 
 **Settings → Shortcuts & Controls** has the gamepad settings:
 
-- **Shortcuts**: a gamepad button or combination for **Scan** and **Controller menu**, beside the
+- **Shortcuts**: a gamepad button or combination for **Scan** and **Radial menu**, beside the
   keyboard shortcut.
-- **Controller menu**: the buttons for **Select** (A) and **Back** (B).
+- **Radial menu**: its items and their shortcuts ([above](#making-it-your-own)).
+- **Gamepad**: **Enable gamepad support**, and a **Lookup button** to hold in place of the lookup
+  key (see [Holding a button instead of Shift](/lookups/looking-up/#holding-a-button-instead-of-shift)).
+- **Radial menu buttons**: the buttons for **Select** (A) and **Back** (B).
 - **Reading**: the buttons for **Word or character** (Y), **Play audio** (X), **Previous definition**
   (LB), **Next definition** (RB) and **Show all controls** (View).
 - **Connected gamepads**: every pad Kimochi sees; **Set as primary** picks the one it listens to.
 - **Button test**: buttons light up as you press them.
 
-<Screenshot id="settings-controls" alt="Settings, Shortcuts & Controls: the Scan and Controller menu shortcuts, Enable gamepad support and the Controller menu and Reading buttons." width={760} />
+<Screenshot id="settings-controls" alt="Settings, Shortcuts & Controls: the Scan and Radial menu shortcuts, Lookup key and Look up on hover, and the top of the Radial menu section." width={760} />
 
 For a game where a button advances the text, **Settings → Shortcuts & Controls → Scan after a button
 press** scans a moment after you press it. See [Auto OCR](/reading/auto-ocr/#scan-after-a-button-press).

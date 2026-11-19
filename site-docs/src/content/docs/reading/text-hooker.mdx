@@ -55,14 +55,16 @@ the switch back on is instant. Switching to Quick Shot, Clipboard, WebSocket or 
 game hooked too: **Back to** at the top of the source menu returns to it, with Text hooking as it was.
 
 No **Text hooking** box shows for a window Kimochi can't hook: Windows' own apps, apps that are
-protected or running as administrator, and apps built for ARM64 (the game must be a 32- or 64-bit
-x86 program).
+protected, and apps built for ARM64 (the game must be a 32- or 64-bit x86 program). A game that runs
+as administrator can be hooked once Kimochi does too: when you choose one, Kimochi offers to
+**Restart as administrator**.
 
 ## Linux and Steam Deck
 
 On Linux, Kimochi hooks Windows games that run through **Proton** (Steam's compatibility layer,
 which every Windows game on a Steam Deck uses) or **Wine** (Lutris, Bottles, Heroic and the like).
-It runs LunaHook with the game's own Proton or Wine, inside the game's prefix. Start the game,
+It runs LunaHook with the game's own Proton or Wine, inside the game's prefix (on NixOS, inside
+Steam's own Wine session too, which needs `nsenter` from util-linux). Start the game,
 choose its window and turn on **Text hooking**, as you would on Windows. In Steam Deck Gaming Mode,
 choose the game in Kimochi's **Source** tab the same way.
 
@@ -76,7 +78,13 @@ Linux on ARM64 computers can't hook games.
 A hooked game sends Kimochi several streams of text, called threads: the dialogue, the speaker's
 name, menus and other bits of the engine. Kimochi chooses the dialogue by the thread it
 remembered for the game or, the first time, by reading the game's window with a local OCR engine
-and matching each thread's text against what's on screen.
+and matching each thread's text against what's on screen. It stays on that thread through the whole
+game, and checks the screen again before it moves to another.
+
+Some engines get extra care: Ren'Py lines come straight from Ren'Py; Unity games that draw their
+text a character at a time, or keep earlier lines in the box, give one Log line per sentence;
+games that show several languages at once (Yuzusoft's, among others) keep only the language you're
+learning; RPG Maker's name and colour codes are resolved; and names in 《》 are kept whole.
 
 <Screenshot id="hook-card" alt="The sidebar with a hooked game: the source card, then the Text hooking box with its switch on, the current dialogue line and Audio hooking, then Show overlay with the Auto align switch under it highlighted, Enhance Anki cards, OCR model and Dictionary." width={272} />
 
@@ -93,20 +101,24 @@ thread that shows the dialogue.
 
 With Text hooking on, the box also has **Audio hooking**. It takes each line's voice straight from
 the game for its [sentence audio](/lookups/anki/#sentence-audio), without the music or sound
-effects. Turning it on turns sentence audio on too. When it's off, or a line's voice can't be taken
-from the game, the voice is recorded from your speakers. Its cog opens the sentence audio settings.
+effects, from most visual novel engines and from Electron and NW.js games (TyranoScript, RPG Maker
+MV/MZ). Turning it on turns sentence audio on too. With the speech model downloaded, Kimochi matches
+each line to the clip that says its words, even when the text arrives late. When Audio hooking is
+off, or a line's voice can't be taken from the game, the voice is recorded from your speakers. Its
+cog opens the sentence audio settings.
 
 ## The card over the game
 
 With **Show overlay** on, each hooked line shows in a card over the game the moment it arrives. The
 card stays visible while the game is in front, and its words are looked up like any text on the
 overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along** in the
-[controller menu](/controller/#the-controller-menu) steps through the card's words.
+[radial menu](/controller/#the-radial-menu) steps through the card's words.
 
 <Screenshot id="hook-card-over-game" alt="A visual novel's dialogue box with the hooked line's card over its text: 今日はいい天気ですね。一緒に海まで散歩しませんか？, with 天気 looked up in the dictionary pop-up above it and the card's size and options buttons in its corner." width={720} />
 
 - **Auto align** (on by default) finds the line on screen with OCR in the background and puts the
-  card over the game's text, at the same size, breaking lines where the game does. It
+  card over the game's text, at the same size, each character where the game draws it, breaking
+  lines where the game does. It
   uses the OCR model in the sidebar. The **Auto align**
   switch under **Show overlay** in the sidebar is for this game only.
 - **Separate speaker names** (on by default) leaves a speaker's name on the game's nameplate; the card
@@ -118,7 +130,8 @@ overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along
   **Auto align** back on to line it up with the game again.
 
 Without <kbd>Shift</kbd>, clicks go through the card to the game, as they do through the rest of the
-overlay; see [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game).
+overlay; see [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game). A card
+you moved off the game's window takes ordinary clicks, since there's no game under it.
 
 **Card look**, under the card's preview in [Settings → Text Hooker](#settings) (and in Settings →
 Overlay → Text Hooker card), sets how the card looks: **Same as Kimochi**, **Light**, **Dark**,
@@ -132,8 +145,8 @@ words. The sidebar's Auto align switch is locked on, with an eye icon that says 
 hides the card's other options (Auto align, text size, background opacity and position) until you
 choose another look.
 
-**Show the card over the game**, at the top of [Settings → Text Hooker](#settings), chooses when the
-card is there: **Always**, **While holding** the overlay's lookup key (<kbd>Shift</kbd> unless you
+**Show card**, at the top of the card's settings in [Settings → Text Hooker](#settings) (for every
+game, or for one), chooses when the card is there: **Always**, **While holding** the overlay's lookup key (<kbd>Shift</kbd> unless you
 changed it in Settings → Shortcuts & Controls), so it stays out of the way until you want to read or
 look something up, or **Never**. With **Never**, lines still reach the Log, and Auto align stops
 reading the screen, which saves battery on a handheld. Where Kimochi can't read the lookup key (some
@@ -141,7 +154,7 @@ Linux Wayland desktops), and in Steam Deck Gaming Mode, **While holding** keeps 
 
 ### With a controller (Steam Deck)
 
-With a controller, the [controller menu](/controller/#the-controller-menu) starts on **Read along**
+With a controller, the [radial menu](/controller/#the-radial-menu) starts on **Read along**
 while you're hooking a game, and has a **Text Hooker** item for its settings. In Steam Deck Gaming
 Mode, where nothing can point at the sidebar or the card, the card is just the text, and **Text
 Hooker** is where you change things.
@@ -175,40 +188,44 @@ a game with Text hooking on, or restart Kimochi.
 
 ## Settings
 
-**Settings → Text Hooker** has the defaults for every game and a page for each game you've hooked.
+**Settings → Text Hooker** lists the games you've hooked in a column on the left, each named after
+its window title (click the name on its page to rename it). Above them, **Defaults** opens the
+**Text Hooker defaults**, the settings every game uses unless it changes them.
 
-<Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the Games list with two games, then Defaults: Hook automatically, Line delay, Separate speaker names and Repeated characters." width={760} />
-
-Under **Defaults**:
+<Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the games column, then the Text Hooker defaults with the card's preview." width={760} />
 
 | Setting | Default | What it does |
 | --- | --- | --- |
+| **Show card** | Always | When the [card](#the-card-over-the-game) is over the game: **Always**, **While holding** the lookup key, or **Never**. |
+| **Card look** | Same as Kimochi | **Same as Kimochi**, **Light**, **Dark**, **Blend** or **Transparent** (nothing drawn; words are still looked up). The same for every game, and separate from the overlay's hover card appearance. |
+| **Auto align** | On | Lines the card up with the game's text. Always on while **Card look** is Transparent. |
+| **Text size** | Medium | With Auto align off, the card's text size (Small, Medium, Large or Larger). Shown only then: Auto align matches the game's own. |
+| **Background opacity** | 100% | The card's background, from 100% down to 40%. |
 | **Hook automatically** | On | Hooks the game when it starts, while Text hooking is on. |
 | **Line delay** | 100 ms | How long Kimochi waits for more text before a line counts as finished (50 ms – 1.2 s). Shorter shows each line sooner; raise it if a game's lines arrive in pieces (a game that types its text out slowly, a character at a time). Takes effect straight away. |
 | **Separate speaker names** | On | Keeps the speaker's name on the game's nameplate; the card shows what they say. |
 | **Repeated characters** | Undo automatically | For games that send ここここ for こ: **Undo automatically**, **Leave as sent**, or **Each sent twice**, **3 times** or **4 times**. |
 | **Join split lines** | On | For games that send their text a row at a time (SiglusEngine, for one): a row that carries on an unfinished sentence joins the line before it. |
 | **Remove script codes** | On | Takes out asset and label names some engines leave in their text, such as `chr01chr02`. Off by default in languages that separate words with spaces, where ordinary words can look like codes. |
-| **Auto align** | On | Lines the card up with the game's text. Always on while **Card look** is Transparent. |
-| **Text size** | Medium | With Auto align off, the card's text size (Small, Medium, Large or Larger). Shown only then: Auto align matches the game's own. |
-| **Background opacity** | 100% | The card's background, from 100% down to 40%. |
-| **Card look** | Same as Kimochi | **Same as Kimochi**, **Light**, **Dark**, **Blend** or **Transparent** (nothing drawn; words are still looked up). The same for every game, and separate from the overlay's hover card appearance. If you set the overlay's cards before this setting existed, the card keeps that look. |
 
 Text replacements for every source are in **Settings → Log & Sessions**; a game can have its own.
 
 ### Per-game settings
 
-Click a game to open its settings. **Delete** forgets the game's settings and what Kimochi learned about it (and, if you tick
-it, its session); hook it again and it starts from the defaults.
+Click a game in the column to open its page: its name and program, then **Session & Log** (the
+session its lines go to, with how much you've read in it), then the same settings as the defaults.
+**Delete** forgets the game's settings and what Kimochi learned about it (and, if you tick it, its
+session); hook it again and it starts from the defaults.
 
-<Screenshot id="settings-texthooker-game" alt="Per-game settings in Settings, Text Hooker: its icon, name and path, Hooked now, its Session, and Hooking with Line delay marked Changed, the Dialogue thread and Hook codes." width={760} />
+<Screenshot id="settings-texthooker-game" alt="A game's page in Settings, Text Hooker: its icon, name and path, its session with reading stats, and its card settings." width={760} />
 
 Per-game settings start as the defaults. Any it changes are marked **Changed**, with a
-reset button beside them. It also has what only a game has:
+reset button beside them, and **Reset to defaults** at the top puts them all back. It also has what
+only a game has:
 
 | Setting | What it does |
 | --- | --- |
-| **Session** | The Log session the game's lines go to, with **Switch to it**. |
+| **Session & Log** | The Log session the game's lines go to, with its reading time and lines, and **Manage sessions**. |
 | **Dialogue thread** | The thread remembered for the game. **Forget** makes Kimochi choose again from the screen. |
 | **Hook codes** | For a game nothing useful hooks into: a hook code (such as `HS-4@1234:game.exe`, the kind LunaHook and Textractor use) is added every time the game is hooked. |
 | **Replacements** | Find-and-replace rules for this game's lines, applied in order before they're shown. Each can be plain text or a regular expression, and turned off without deleting it. |

@@ -12,18 +12,27 @@ screen instead of in the Log.
 
 ## Turning it on
 
-Turn on **Show overlay** in the sidebar (under Auto OCR). The overlay follows the window you read,
-and clicks go through it to the game (see
-[Clicking through to the game](#clicking-through-to-the-game)).
+Turn on **Show overlay** in the sidebar (under Auto OCR), or **Overlay enabled** in
+**Settings → Overlay**. The overlay follows the window you read, and clicks go through it to the game
+(see [Clicking through to the game](#clicking-through-to-the-game)).
 
 <Screenshot id="overlay-switch" alt="The sidebar with the Show overlay switch highlighted." width={272} />
 
 ## Looking up words
 
 Hover a word with <kbd>Shift</kbd> held to open its pop-up (see
-[Which key to hold](/lookups/looking-up/#which-key-to-hold)). With a controller, open the [controller menu](/controller/#the-controller-menu) and
-choose **Scan** or **Read along** to step through the words with the D-pad. See
-[Looking up words](/lookups/looking-up/).
+[Which key to hold](/lookups/looking-up/#which-key-to-hold)), or turn on
+[Look up on hover](#look-up-on-hover) and just rest the pointer on it. With a controller, open the
+[radial menu](/controller/#the-radial-menu) and choose **Scan** or **Read along** to step through the
+words with the D-pad. See [Looking up words](/lookups/looking-up/).
+
+### Look up on hover
+
+With **Look up on hover** on (**Settings → Overlay**, or **Settings → Shortcuts & Controls**), resting
+the pointer on a word on the overlay looks it up, with no key held. Passing over text on the way
+somewhere else doesn't. The pop-up closes once the pointer leaves the line and the pop-up. Clicks still
+go through to the game; hold the lookup key to click the text, or to look a word up straight away.
+It isn't offered on Linux with Wayland, nor in Steam Deck Gaming Mode.
 
 ## Clicking through to the game
 
@@ -66,6 +75,10 @@ What happens to the click itself:
 If a keyboard shortcut uses the same mouse button, it doesn't run while that button is the lookup
 key; Settings points this out.
 
+A game that runs as administrator on Windows (Genshin Impact, for one) hides the keyboard from
+Kimochi. When you choose one, Kimochi offers to **Restart as administrator**, so the lookup key works
+over it; see [Troubleshooting](/help/troubleshooting/).
+
 On **Linux with Wayland**, this works on **KDE Plasma** and on **Hyprland** (there the key is always
 Shift, which Kimochi binds while it runs, see [Linux](/install/linux/)). On other Wayland desktops
 Kimochi can't see Shift while another app is in front, so there the overlay's text always takes your
@@ -82,15 +95,35 @@ Wayland, where Shift doesn't gate clicks, the bar isn't shown.
 
 ## Options
 
+**Settings → Overlay**:
+
 | Setting | Default | What it does |
 | --- | --- | --- |
+| **Overlay enabled** | Off | The sidebar's **Show overlay**. |
 | **Group text into regions** | Off | Marks nearby lines with one shared box to hover, instead of a box for each line. |
+| **Look up on hover** | Off | Rest the pointer on a word to look it up, no key needed. See [above](#look-up-on-hover). |
 | **Filter out furigana and small text** | On | Japanese only. Leaves reading aids above kanji out of the overlay and the Log. |
-| **Drop lines** | No Japanese | Leaves lines without text in [your language](/language/) out of the overlay and the Log; named for it (**No Korean**). The same setting as in [The Log](/log/the-log/#which-lines-are-kept). |
 | **Click through text to the game** | On | Clicks on scanned text go to the game unless you hold Shift. See [above](#clicking-through-to-the-game). |
 | **Exclude overlay from screen recording** | On | Hides the overlay and dictionary pop-ups from screenshots and screen recordings, so Kimochi never reads its own text back. Turn it off to capture them, for example to share a clip. |
+| **Pause the game while reading** | Off | Freezes the game while you read. See [Pausing the game](#pausing-the-game). |
+| **Drop lines** | No Japanese | Leaves lines without text in [your language](/language/) out of the overlay and the Log; named for it (**No Korean**). The same setting as in [The Log](/log/the-log/#which-lines-are-kept). |
 
-<Screenshot id="settings-ocr-overlay" alt="Settings, Overlay: the Overlay switches, then Overlay appearance with highlight colours, Highlight opacity at 40% and the Cards choices with previews." width={760} />
+<Screenshot id="settings-ocr-overlay" alt="Settings, Overlay: Overlay enabled, Group text into regions, Look up on hover, Filter out furigana and small text, Click through text to the game, Exclude overlay from screen recording, Pause the game while reading and Drop lines." width={760} />
+
+The same page has the [Text Hooker's card](/reading/text-hooker/#the-card-over-the-game) look (on
+Windows and Linux), the [radial menu](/controller/#the-radial-menu) and
+[Game Mode](/controller/#pop-up-or-full-screen).
+
+## Pausing the game
+
+With **Pause the game while reading** on (**Settings → Overlay**, or **Auto game pause** in the
+sidebar, under Show overlay), Kimochi freezes the game while you look up a word, use the radial menu
+or draw a crop area, and lets it carry on when you're done. It's off by default and experimental:
+online games may disconnect, and Kimochi leaves alone a game that uses anti-cheat, one the system
+protects, and one that runs with more rights than Kimochi (as administrator), and tells you when it
+can't pause one. If a game ever stays frozen, **Resume paused game → Resume** in Settings starts it again.
+
+<Screenshot id="game-pause-switch" alt="The sidebar with the Auto game pause switch highlighted, under Show overlay." width={272} />
 
 ## Overlay appearance
 
@@ -103,15 +136,22 @@ in it to see its card:
 | **Highlight colour** | Indigo | The tint and outline over text you can hover; pick a preset or any colour. |
 | **Highlight opacity** | 40% | How strongly the highlight shows before you point at it, from **Off** (no highlight) to 100%. |
 | **Hover card appearance** | Same as Kimochi | The card hovered text turns into: **Same as Kimochi** (follows the app's appearance), **Light**, **Dark**, **Blend**, which fills each card with the colours behind that word on your screen and picks light or dark text to match, as if the game drew it, or **Transparent** (no card). |
+| **Outline the word being looked up** | On | Shown only while the hover cards or the Text Hooker's card are Transparent: a faint outline over the word being looked up, as Read along draws. |
+| **Dictionary opacity** | 100% | How solid the dictionary pop-up is, from 10% to 100%, so the game shows through it. Works with every dictionary; the same setting as in **Settings → Dictionary**. |
+
+<Screenshot id="settings-overlay-appearance" alt="Settings, Overlay appearance: the live preview with a word looked up, Highlight colour, Highlight opacity, Hover card appearance and Dictionary opacity." width={760} />
 
 ### Transparent
 
 With **Hover card appearance** set to **Transparent**, a word you point at doesn't turn into a card,
 even while you hold the lookup key: the game's own text stays in view. Looking words up works exactly
-as before (hold <kbd>Shift</kbd> and point at a word, or rest the pointer on it with hover lookup on),
-and the dictionary pop-up opens as usual. The highlight is separate and still shows; set **Highlight
-opacity** to **Off** as well and nothing at all is drawn over your game, so the dictionary pop-up is
-the only thing that appears.
+as before (hold <kbd>Shift</kbd> and point at a word, or rest the pointer on it with
+[Look up on hover](#look-up-on-hover) on), and the dictionary pop-up opens as usual, with a faint
+outline over the word it matched (**Outline the word being looked up**). The text always lets clicks
+through to the game while it's Transparent. The highlight is separate and still shows; set
+**Highlight opacity** to **Off** as well and nothing at all is drawn over your game, so the dictionary
+pop-up (and the outline) is all that appears. Lower **Dictionary opacity** to see the game through
+the pop-up too.
 
 The [Text Hooker's card](/reading/text-hooker/#the-card-over-the-game) has its own look, set
 separately, so the overlay can be transparent while the card stays visible, or the other way round.

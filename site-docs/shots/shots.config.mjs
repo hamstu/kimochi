@@ -79,12 +79,12 @@ const SETTINGS_READY = {
   general: '#general-sound-effects',
   sources: '.input-source-list',
   ocr: '.engine-chooser',
+  overlay: '#ocr-grouping',
   log: '#log-font-size',
   dictionary: '.engine-chooser',
   language: '.language-notes',
   assist: '#assist-deepl',
   controls: '#gamepad-enabled',
-  gamemode: '.read-along-views',
   account: '.settings-page-scroll h2, .settings-page-scroll h3',
   browser: '.browser-hero'
 }
@@ -98,6 +98,16 @@ const HIDE_DEV_SERVER = {
 const switchRow = (text) => ({ selector: '.src-rows > .src-row', text, pad: 1 })
 const sourceAction = (text) => ({ selector: '.src-actions > .src-action', text })
 const settingsTab = (tab, extra = '') => `panel.html?window=settings&tab=${tab}${extra}`
+/** Scrolls a Settings page so the section titled `title` is at the top (a `run` action). */
+const SCROLL_TO_SECTION = (title, offset = -24) => ({
+  // Scrolls only the page's own scroller (scrollIntoView would move the window's frame too).
+  run: `(() => {
+    const scroller = [...document.querySelectorAll('.settings-page-scroll')].find((el) => el.getClientRects().length > 0)
+    const heading = [...scroller.querySelectorAll('h2, h3')].find((h) => h.textContent.trim() === ${JSON.stringify(title)})
+    if (heading) scroller.scrollTop += heading.getBoundingClientRect().top - scroller.getBoundingClientRect().top + ${offset}
+  })()`,
+  after: 300
+})
 
 export const SHOTS = [
   // ------------------------------------------------------------------ main window
@@ -105,7 +115,8 @@ export const SHOTS = [
   {
     id: 'main-window-tour',
     page: 'panel.html?window=log',
-    size: MAIN,
+    // Tall enough for the Dictionary picker under the sidebar's switches.
+    size: [900, 640],
     ready: '.line',
     marks: [
       { type: 'badge', target: { selector: '.src-card', pad: 2 }, n: 1, nudge: [-10, 0] },
@@ -113,9 +124,9 @@ export const SHOTS = [
       { type: 'badge', target: { selector: '#sb-ocr-label', pad: 4 }, n: 3, nudge: [-10, 0] },
       { type: 'badge', target: { selector: '#sb-dictionary-label', pad: 4 }, n: 4, nudge: [-10, 0] },
       { type: 'badge', target: { selector: '.main-tab', index: 0, pad: -4 }, n: 5 },
-      { type: 'badge', target: { selector: '.line', text: 'ラジ館' }, n: 6, at: 'top-right', nudge: [-28, 22] },
-      { type: 'badge', target: { selector: '.log-stats', pad: 4 }, n: 7, nudge: [-12, 0] },
-      { type: 'badge', target: { selector: '.sb-foot-language', pad: 2 }, n: 8, nudge: [-6, 0] }
+      { type: 'badge', target: { selector: '.line', text: '世界線' }, n: 6, at: 'top-right', nudge: [-28, 22] },
+      { type: 'badge', target: { selector: '.log-stats', pad: 4 }, n: 7, nudge: [14, -16] },
+      { type: 'badge', target: { selector: '.sb-account-language', pad: 2 }, n: 8, nudge: [-24, 0] }
     ]
   },
   {
@@ -135,10 +146,20 @@ export const SHOTS = [
     marks: [{ type: 'glow', target: switchRow('Show overlay'), radius: 8 }]
   },
   {
-    id: 'sidebar-callouts',
-    page: 'panel.html?window=log&auto=0',
+    // The sidebar's Auto game pause switch, under Show overlay.
+    id: 'game-pause-switch',
+    page: 'panel.html?window=log',
     size: MAIN,
     crop: SIDEBAR,
+    ready: '.src-card-live',
+    actions: [{ wait: 500 }],
+    marks: [{ type: 'glow', target: switchRow('Auto game pause'), radius: 8 }]
+  },
+  {
+    id: 'sidebar-callouts',
+    page: 'panel.html?window=log&auto=0',
+    size: [900, 640],
+    crop: { ...SIDEBAR, height: 640 },
     pad: [48, 270, 48, 48],
     ready: '.src-card-live',
     marks: [
@@ -149,17 +170,17 @@ export const SHOTS = [
       { type: 'note', target: switchRow('Show overlay'), n: 5, text: 'Draw text over the game' },
       { type: 'note', target: { selector: '.sb-engine-select', index: 0 }, n: 6, text: 'The OCR engine' },
       { type: 'note', target: { selector: '.sb-engine-select', index: 1 }, n: 7, text: 'The pop-up dictionary' },
-      { type: 'note', target: { selector: '.sb-foot-language', pad: 2 }, n: 8, text: 'The language you’re learning' }
+      { type: 'note', target: { selector: '.sb-account-language', pad: 2 }, n: 8, text: 'The language you’re learning' }
     ]
   },
-  // The sidebar's foot: Settings, and the language being learned beside it (no account in use).
+  // The sidebar's foot: the account row, with the language being learned at its right.
   {
     id: 'sidebar-language',
     page: 'panel.html?window=log',
     size: MAIN,
     crop: { x: 0, y: 380, width: 272, height: 180 },
-    ready: '.sb-foot-language',
-    marks: [{ type: 'glow', target: { selector: '.sb-foot-language', pad: 1 }, radius: 8 }]
+    ready: '.sb-account-language',
+    marks: [{ type: 'glow', target: { selector: '.sb-account-language', pad: 3 }, radius: 8 }]
   },
   // With an account in use: the language's code on the account row, and Language in its menu.
   {
@@ -347,7 +368,7 @@ export const SHOTS = [
     id: 'log-footer',
     page: 'panel.html?window=log',
     size: MAIN,
-    crop: { x: 240, y: 470, width: 660, height: 90 },
+    crop: { x: 272, y: 470, width: 628, height: 90 },
     pad: 40,
     ready: '.log-stats'
   },
@@ -367,6 +388,20 @@ export const SHOTS = [
     actions: [{ click: '.log-root button[aria-label="More"]', after: 500 }],
     marks: [{ type: 'glow', target: '.log-more-menu', radius: 10 }]
   },
+  {
+    // The ⋯ menu's Export reading history, open on its formats.
+    id: 'log-export-menu',
+    page: 'panel.html?window=log',
+    size: MAIN,
+    ready: '.log-stats',
+    actions: [
+      { click: '.log-root button[aria-label="More"]', after: 500 },
+      { click: { selector: '[role="menuitem"]', text: 'Export reading history' }, after: 600 }
+    ],
+    marks: [{ type: 'glow', target: { selector: '[role="menu"]', text: 'Every detail (JSON)' }, radius: 10 }]
+  },
+  // The Stats tab: the heatmap, the totals and the range's charts.
+  { id: 'stats', page: 'panel.html?window=log&view=stats', size: [900, 720], ready: '.stats-heatmap', settle: 900 },
   {
     id: 'activity',
     page: 'panel.html?window=log&activity=1',
@@ -438,12 +473,11 @@ export const SHOTS = [
     ['general', 'General'],
     ['language', 'Language'],
     ['sources', 'Sources'],
-    ['ocr', 'OCR & Overlay'],
+    ['ocr', 'OCR'],
     ['log', 'Log & Sessions'],
     ['dictionary', 'Dictionary'],
     ['assist', 'Translation & AI'],
     ['controls', 'Shortcuts & Controls'],
-    ['gamemode', 'Game Mode'],
     ['account', 'Account'],
     ['browser', 'Browser Extension']
   ].map(([tab]) => ({
@@ -484,16 +518,29 @@ export const SHOTS = [
     actions: [{ click: { selector: '.engine-item', text: 'Manga OCR' }, after: 600 }],
     marks: [{ type: 'glow', target: { selector: '.engine-detail' }, radius: 10 }]
   },
+  // Settings → Overlay: the Overlay switches; Overlay appearance; Game Mode.
+  { id: 'settings-ocr-overlay', page: settingsTab('overlay'), size: SETTINGS, ready: '#ocr-live-overlay' },
   {
-    id: 'settings-ocr-overlay',
-    page: settingsTab('ocr'),
+    id: 'settings-overlay-appearance',
+    page: settingsTab('overlay'),
     size: SETTINGS,
-    ready: '#ocr-live-overlay',
-    actions: [
-      {
-        run: `document.querySelector('#ocr-live-overlay').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)`
-      }
-    ]
+    ready: '#dictionary-popup-opacity',
+    actions: [SCROLL_TO_SECTION('Overlay appearance')]
+  },
+  {
+    id: 'settings-gamemode',
+    page: settingsTab('overlay'),
+    size: SETTINGS,
+    ready: '.read-along-views',
+    actions: [SCROLL_TO_SECTION('Game Mode')]
+  },
+  // Settings → Shortcuts & Controls → Radial menu: the ring, its items and its colours.
+  {
+    id: 'settings-radial-menu',
+    page: settingsTab('controls'),
+    size: [820, 760],
+    ready: '.radial-preview-well',
+    actions: [SCROLL_TO_SECTION('Radial menu'), { wait: 600 }]
   },
   {
     id: 'settings-auto-ocr',
@@ -526,14 +573,14 @@ export const SHOTS = [
     id: 'settings-texthooker',
     page: settingsTab('texthooker', '&platform=windows'),
     size: SETTINGS,
-    ready: '.th-game-row'
+    ready: '.th-rail-row'
   },
   {
     id: 'settings-texthooker-game',
     page: settingsTab('texthooker', '&platform=windows'),
     size: SETTINGS,
-    ready: '.th-game-row',
-    actions: [{ click: { selector: '.th-game-row', index: 0 }, after: 800 }]
+    ready: '.th-rail-row',
+    actions: [{ click: { selector: '.th-rail-row', text: 'My VN' }, after: 800 }]
   },
   {
     id: 'settings-anki',
@@ -541,12 +588,7 @@ export const SHOTS = [
     size: SETTINGS,
     // The page opens on AnkiConnect; the shot is the Yomitan API's Mining tab.
     ready: '.k-settings-tabs',
-    actions: [
-      {
-        run: `[...document.querySelectorAll('.k-settings-tab')].find((tab) => tab.textContent.includes('Mining')).click()`
-      },
-      { waitFor: '#anki-enabled' }
-    ]
+    actions: [{ click: { selector: '.k-settings-tab', text: 'Mining' }, after: 400 }, { waitFor: '#anki-enabled' }]
   },
   {
     id: 'settings-account-signedin',
@@ -614,7 +656,7 @@ export const SHOTS = [
     id: 'word-lookup',
     page: 'panel.html?window=log',
     size: MAIN,
-    crop: { x: 240, y: 0, width: 660, height: 560 },
+    crop: { x: 272, y: 0, width: 628, height: 560 },
     ready: '.line',
     actions: [{ run: SHOW_LOOKUP('世界線'), after: 2500 }],
     marks: [{ type: 'cursor', target: '#k-lookup-word', fx: 0.6, fy: 0.75 }]
@@ -664,6 +706,14 @@ export const SHOTS = [
     ready: '.stage-popup:not([hidden])',
     settle: 1500,
     marks: [{ type: 'cursor', target: { selector: '.ocr-word', index: 0 }, fx: 0.55, fy: 0.7 }]
+  },
+  {
+    id: 'radial-menu',
+    // The radial menu over a visual novel, opened with a controller.
+    page: 'stage.html?scene=controller-menu&furigana=0',
+    size: [960, 600],
+    ready: '.cm-ring',
+    settle: 1500
   },
   {
     id: 'overlay-demo-deck',

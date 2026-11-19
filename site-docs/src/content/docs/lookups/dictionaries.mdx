@@ -32,7 +32,7 @@ download still finishes. Choosing another engine meanwhile replaces the switch.
 | Engine | What it is | Download | Anki | Languages |
 | --- | --- | --- | --- | --- |
 | **Yomitan** (recommended) | A copy of Yomitan inside Kimochi, with its own dictionaries and settings. | About 15 MB | Yomitan's mining | Any |
-| **Hachidori** | A fast engine written in C++ and compiled to WebAssembly, with native dictionary indexes. Imports Yomitan dictionaries and MDict. | About 5 MB | Through AnkiConnect | Japanese |
+| **Hachidori** | A fast engine written in C++ and compiled to WebAssembly, with native dictionary indexes. Imports Yomitan dictionaries and MDict. | About 5 MB | Through AnkiConnect | Japanese and about twenty more |
 | **10ten** | Lightweight, works straight away with a bundled word dictionary, then downloads JMdict, kanji and names dictionaries in the background. | About 18 MB | None | Japanese |
 | **Yomitan API** | A pop-up built into Kimochi that looks words up through the Yomitan in your browser. | Small helper | Kimochi's card builder | Any |
 
@@ -41,7 +41,14 @@ download still finishes. Choosing another engine meanwhile replaces the switch.
 Switching engines downloads the new one if needed and reloads the reader windows.
 
 When a Kimochi update brings a new version of an engine you've downloaded, it updates in the
-background.
+background. Downloads come from Kimochi's own server (downloads.kimochiapp.com), with each
+engine's official release as the fallback.
+
+## Dictionary opacity
+
+**Settings → Dictionary → Appearance → Dictionary opacity** (also under **Settings → Overlay →
+Overlay appearance**) fades the pop-up, text and buttons included, so your game shows through it.
+It goes from 10% to 100% (the default) and works with every engine.
 
 ## Yomitan
 
@@ -112,7 +119,7 @@ Uses the Yomitan you already use in your browser, with its dictionaries and sett
 starts (Kimochi installs it) and one setting in Yomitan. When you choose the Yomitan API,
 Kimochi checks that it answers and, if it doesn't within a few seconds, opens its setup:
 
-1. In **Settings → Dictionary → Your browser's Yomitan**, run **Set up the Yomitan API** and choose
+1. In **Settings → Dictionary → Yomitan in your browser**, run **Set up the Yomitan API** and choose
    **Install helper**.
 2. In your browser's Yomitan settings, turn on **Advanced**, then under **General** turn on
    **Enable Yomitan API**.
@@ -123,6 +130,7 @@ Words are split and looked up by the Yomitan in your browser. The pop-up's optio
 | Setting | Default |
 | --- | --- |
 | **API address** | Empty: `http://127.0.0.1:19633` |
+| **Pre-fetch lookups** | Off: looks words up in the background before you hover, so the pop-up opens sooner, at the cost of some CPU |
 | **Pop-up size** | 480 × 360 px |
 | **Fetch word audio** | On |
 | **Play on lookup** | On |

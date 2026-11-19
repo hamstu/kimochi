@@ -26,10 +26,17 @@ Hover a line and press **⋯**, or right-click it:
 | **Copy text** | Copies the line (the English, when it is translated). |
 | **Copy selection** / **Add to notebook…** | With text selected in the Log: copy it, or add it to the Notebook. |
 | **Translate** / **Show original** | See [Translation and AI](/lookups/translation-and-ai/#translate). Shortcut <kbd>T</kbd>. |
-| **Explain** | See [Translation and AI](/lookups/translation-and-ai/#explain). Shortcut <kbd>E</kbd>. |
-| **Delete line** | Removes the line from the session. |
+| **Explain** | See [Translation and AI](/lookups/translation-and-ai/#explain). Shortcut <kbd>X</kbd>. |
+| **Edit line** | Fix a misread line in place. Shortcut <kbd>E</kbd>. **Restore original** puts back what was read. |
+| **Delete line** | Removes the line from the session. Shortcut <kbd>D</kbd>. |
 
 <Screenshot id="line-actions" alt="A line's action menu in the Log." width={720} />
+
+## Notes
+
+**Add a note**, at the end of the Log (or <kbd>A</kbd> anywhere in it), writes a note between your
+lines, in Markdown. Type **@** to mention a name from the [Notebook](/log/notebook/). Notes are
+listed in the Notebook too, under **Notes**, with **Show in Log**.
 
 ## The footer
 
@@ -43,10 +50,13 @@ The footer shows this session's reading stats, the text size buttons and the ses
   Stats**).
 - **A−** / **A+** change the Log's text size (12–48 px).
 - The session name opens the [session menu](/log/sessions/).
-- **⋯** chooses which stats the footer shows, and has **Clear lines…**, **Reset stats…** and
+- **⋯** chooses which stats the footer shows, and has **Clear lines…**, **Reset stats…**,
+  **Export reading history** (see [Stats and reading history](/log/stats/#exporting-it)) and
   **Log settings…**.
 
-<Screenshot id="log-more-menu" alt="The Log's ⋯ menu: Show in footer (Reading time, Line count, Character count, Reading speed), Clear lines, Reset stats and Log settings." width={720} />
+<Screenshot id="log-more-menu" alt="The Log's ⋯ menu: Show in footer (Reading time, Line count, Character count, Reading speed), Clear lines, Reset stats, Export reading history and Log settings." width={720} />
+
+For your reading over days and weeks, open the [Stats](/log/stats/) tab.
 
 ## Which lines are kept
 
@@ -57,7 +67,7 @@ The footer shows this session's reading stats, the text size buttons and the ses
 | **Drop lines** | No Japanese | Skips lines that aren't in [the language you're learning](/language/), on a three-step scale named for it. **No Japanese** drops lines without a single Japanese character; **Mostly not Japanese** also drops lines where more of the text isn't Japanese than is (spaces and punctuation aside), such as OCR junk or an English menu item; **Off** keeps everything. In a language written only in the Latin alphabet the steps are **No letters** and **Mostly not letters**, which drop lines of numbers and symbols. The overlay follows it too. |
 | **Skip repeats** | 1 | Drops a line that matches any of the last N lines. |
 | **Merge streamed lines** | Off | Joins lines that arrive a piece at a time, comparing the first **Characters to compare** (4). |
-| **Keep at most** | 5000 | Lines per session. |
+| **Keep at most** | 5000 | Lines per session. Older lines leave the Log, but stay in your [reading history](/log/stats/). |
 
 **Text replacements** are pattern rules (regular expressions) applied to incoming lines, top to
 bottom, for example to strip stage directions or normalise quotes. Each has a pattern, flags (such as
