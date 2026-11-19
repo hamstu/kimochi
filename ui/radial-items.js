@@ -15,9 +15,10 @@
 /**
  * Every action the menu can hold, in the default order. `hotkey` is the action name native
  * dispatches for its shortcut; `when` says where the item applies: `ocr` only with an OCR source,
- * `hooker` only with the Text Hooker, otherwise always.
+ * `hooker` only with the Text Hooker, otherwise always. `optional` items are not in the menu as it
+ * ships: the reader adds them (Settings → Radial menu) or only uses their shortcut.
  *
- * @type {readonly {id: string, label: string, hotkey: string, description: string, when?: 'ocr'|'hooker'}[]}
+ * @type {readonly {id: string, label: string, hotkey: string, description: string, when?: 'ocr'|'hooker', optional?: boolean}[]}
  */
 export const RADIAL_ITEMS = [
   {
@@ -64,11 +65,22 @@ export const RADIAL_ITEMS = [
     label: 'Settings',
     hotkey: 'menuSettings',
     description: "Open Kimochi's settings: OCR settings with an OCR source."
+  },
+  {
+    id: 'freeze',
+    label: 'Freeze game',
+    hotkey: 'menuFreeze',
+    description: 'Pause the game so a pop-up or tooltip stays up while you read it. Again to unfreeze.',
+    when: 'ocr',
+    optional: true
   }
 ]
 
-/** The menu as it ships: every action, in catalogue order. */
-export const DEFAULT_RADIAL_MENU = RADIAL_ITEMS.map((item) => item.id)
+/** The menu as it ships: every action that is not optional, in catalogue order. */
+export const DEFAULT_RADIAL_MENU = RADIAL_ITEMS.filter((item) => !item.optional).map((item) => item.id)
+
+/** An item's place in the catalogue: where an added item goes. */
+const catalogueRank = (id) => RADIAL_ITEMS.findIndex((item) => item.id === id)
 
 /** The setting holding the menu's item ids. */
 export const RADIAL_MENU_SETTING = 'controllerMenuItems'
@@ -103,21 +115,21 @@ export function isDefaultRadialMenu(menu) {
   return ids.length === DEFAULT_RADIAL_MENU.length && ids.every((id, index) => id === DEFAULT_RADIAL_MENU[index])
 }
 
-/** The actions not in `menu`, in catalogue order: what can be added. */
+/** The actions not in `menu`, in catalogue order: what can be added (optional ones included). */
 export function missingRadialItems(menu) {
   const ids = effectiveRadialMenu(menu)
   return RADIAL_ITEMS.filter((item) => !ids.includes(item.id))
 }
 
 /**
- * `menu` with `id` added, at its default place among what is there (so re-adding a removed item
+ * `menu` with `id` added, at its catalogue place among what is there (so re-adding a removed item
  * puts it back where it was), unchanged if it is already in or unknown.
  */
 export function addRadialItem(menu, id) {
   const ids = effectiveRadialMenu(menu)
   if (!radialItem(id) || ids.includes(id)) return ids
-  const rank = DEFAULT_RADIAL_MENU.indexOf(id)
-  const at = ids.findIndex((other) => DEFAULT_RADIAL_MENU.indexOf(other) > rank)
+  const rank = catalogueRank(id)
+  const at = ids.findIndex((other) => catalogueRank(other) > rank)
   return at < 0 ? [...ids, id] : [...ids.slice(0, at), id, ...ids.slice(at)]
 }
 

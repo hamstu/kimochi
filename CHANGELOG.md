@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- ❄️ **Freeze game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again (or Escape) to carry on. Kimochi rescans the whole frozen screen right away. Give it a key or controller button in Settings → Shortcuts & Controls, or add it to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
+
 ### Fixed
 
 - **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.

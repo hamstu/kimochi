@@ -126,8 +126,12 @@ function LookupKeyRow(): ReactNode {
   )
 }
 
-/** Display order. The native side returns the bindings keyed alphabetically. */
-const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu']
+/**
+ * Display order. The native side returns the bindings keyed alphabetically. Freeze game is a
+ * radial menu item too, but its shortcut is wanted on its own (it works whether or not the item
+ * is in the menu), so it is listed here as well; the radial menu editor shows the same binding.
+ */
+const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu', 'menuFreeze']
 
 export function ShortcutsSections(): ReactNode {
   const [hotkeys, , hotkeyFailures] = useHotkeys()

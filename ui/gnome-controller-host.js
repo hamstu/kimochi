@@ -118,7 +118,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
         if (id === 'ocr-settings') await emit('main:show-settings')
         return
       }
-      return rpc('action', { name: id === 'auto' ? 'toggleAutoOcr' : id })
+      return rpc('action', { name: { auto: 'toggleAutoOcr', freeze: 'menuFreeze' }[id] ?? id })
     },
     scan: async () => {
       const result = await rpc('scan')

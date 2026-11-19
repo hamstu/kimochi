@@ -61,7 +61,7 @@ test('an item added goes back where it was in the shipped menu, once', () => {
   const menu = removeRadialItem(removeRadialItem(DEFAULT_RADIAL_MENU, 'auto'), 'scan')
   assert.deepEqual(
     missingRadialItems(menu).map((item) => item.id),
-    ['scan', 'auto']
+    ['scan', 'auto', 'freeze']
   )
   assert.deepEqual(addRadialItem(menu, 'auto'), ['dictionary', 'auto', 'card', 'history', 'controls', 'ocr-settings'])
   assert.deepEqual(addRadialItem(menu, 'scan')[0], 'scan')
@@ -69,7 +69,19 @@ test('an item added goes back where it was in the shipped menu, once', () => {
   assert.deepEqual(addRadialItem(menu, 'unknown'), menu)
   // In a reordered menu it goes before the first item that comes after it by default.
   assert.deepEqual(addRadialItem(['controls', 'dictionary'], 'history'), ['history', 'controls', 'dictionary'])
-  assert.deepEqual(missingRadialItems(DEFAULT_RADIAL_MENU), [])
+  // Only the optional items are missing from the menu as it ships.
+  assert.deepEqual(
+    missingRadialItems(DEFAULT_RADIAL_MENU).map((item) => item.id),
+    ['freeze']
+  )
+})
+
+test('an optional item is not in the shipped menu, and goes at its catalogue place when added', () => {
+  assert.equal(DEFAULT_RADIAL_MENU.includes('freeze'), false)
+  assert.deepEqual(addRadialItem(DEFAULT_RADIAL_MENU, 'freeze'), [...DEFAULT_RADIAL_MENU, 'freeze'])
+  // In a reordered menu it goes before the first item the catalogue puts after it.
+  assert.deepEqual(addRadialItem(['scan', 'freeze'], 'dictionary'), ['scan', 'dictionary', 'freeze'])
+  assert.equal(radialItemForHotkey('menuFreeze')?.id, 'freeze')
 })
 
 test('a menu of items for the other kind of source shows them, unavailable, rather than nothing', () => {

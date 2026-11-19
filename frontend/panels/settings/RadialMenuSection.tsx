@@ -79,7 +79,8 @@ const ITEM_ICONS: Record<string, string> = {
   card: ICONS.card,
   history: ICONS.history,
   controls: ICONS.app,
-  'ocr-settings': ICONS.settings
+  'ocr-settings': ICONS.settings,
+  freeze: ICONS.freeze
 }
 
 /** The parts of a shown RadialMenu the drag moves (ui/radial-menu.js). */

@@ -12,7 +12,6 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-#[cfg(not(target_os = "windows"))]
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -197,6 +196,13 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
 /// on that same thread to register a key.
 static REGION_KEYS: AtomicBool = AtomicBool::new(false);
 static NAV_KEYS: AtomicBool = AtomicBool::new(false);
+/// Whether Escape releases a freeze (the game is frozen by Freeze game).
+static FREEZE_KEYS: AtomicBool = AtomicBool::new(false);
+/// Escape while the game is frozen and neither the region editor nor the controller menu has it:
+/// the overlay unfreezes. From the global shortcut here, or Windows' keyboard hook.
+pub fn freeze_escape(app: &tauri::AppHandle) {
+    let _ = app.emit("freeze-escape", json!({}));
+}
 /// Serialises `sync_keys`, so two callers cannot both decide to register the same key.
 #[cfg(not(target_os = "windows"))]
 static KEYS_SYNC: Mutex<()> = Mutex::new(());
@@ -227,12 +233,26 @@ pub fn set_nav_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
     sync_keys(app)
 }
 
+/// Escape while the game is frozen (Freeze game), delivered as `freeze-escape`: the game cannot
+/// take it then, and it would only reach the game on resume. The region editor and the
+/// controller menu keep Escape while they are open.
+pub fn set_freeze_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
+    if FREEZE_KEYS.swap(on, Ordering::SeqCst) == on {
+        return Ok(());
+    }
+    sync_keys(app)
+}
+
 /// Register exactly the keys that the region editor and the controller menu want between
 /// them. Escape and Return are shared, so one handler serves both owners and decides at
 /// press time who hears about it; releasing one owner's keys never takes the other's.
 #[cfg(target_os = "windows")]
 fn sync_keys(_app: &tauri::AppHandle) -> Result<(), String> {
-    crate::platform::set_keyboard_guard(REGION_KEYS.load(Ordering::SeqCst), NAV_KEYS.load(Ordering::SeqCst));
+    crate::platform::set_keyboard_guard(
+        REGION_KEYS.load(Ordering::SeqCst),
+        NAV_KEYS.load(Ordering::SeqCst),
+        FREEZE_KEYS.load(Ordering::SeqCst),
+    );
     Ok(())
 }
 
@@ -256,7 +276,8 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
     for key in ["Escape", "Enter", "Space", "Up", "Down", "Left", "Right"] {
         let parsed = Shortcut::from_str(key).map_err(|e| e.to_string())?;
         let wanted = (REGION_KEYS.load(Ordering::SeqCst) && REGION_KEY_NAMES.contains(&key))
-            || (NAV_KEYS.load(Ordering::SeqCst) && NAV_KEY_NAMES.contains(&key));
+            || (NAV_KEYS.load(Ordering::SeqCst) && NAV_KEY_NAMES.contains(&key))
+            || (FREEZE_KEYS.load(Ordering::SeqCst) && key == "Escape");
         if !wanted {
             if shortcuts.is_registered(parsed) {
                 let _ = shortcuts.unregister(parsed);
@@ -287,6 +308,14 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
                     if pressed || name.starts_with("Arrow") {
                         let _ = app.emit("controller-key", json!({ "key": name, "type": kind }));
                     }
+                }
+                if pressed
+                    && key == "Escape"
+                    && FREEZE_KEYS.load(Ordering::SeqCst)
+                    && !REGION_KEYS.load(Ordering::SeqCst)
+                    && !NAV_KEYS.load(Ordering::SeqCst)
+                {
+                    freeze_escape(app);
                 }
             })
             .map_err(|e| e.to_string())?;

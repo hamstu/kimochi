@@ -630,7 +630,7 @@ part Electron performed: restoring the overlay for `triggerScan`, `setCropArea`,
 `selectAndScan`.
 
 **Controller menu items** — `menuScan`, `menuReadAlong`, `menuAutoOcr`, `menuTextHooker`,
-`menuRecentText`, `menuKimochi`, `menuSettings` (`actions::MENU_ITEM_ACTIONS`). Bindable, and
+`menuRecentText`, `menuKimochi`, `menuSettings`, `menuFreeze` (`actions::MENU_ITEM_ACTIONS`). Bindable, and
 unbound by default (an empty `accelerator` registers nothing). Rust restores the overlay; the
 overlay runs that item of the radial menu without opening it (`controller.runItem`; on GNOME it
 sends `gnome-controller-open` `{item, request}` to the controller host, which answers
@@ -2583,8 +2583,16 @@ overlay and resumed when they are done. Native: `src-tauri/src/game_pause/`. Inp
 
 Holds, by reason: `lookup` (a lookup started, or a dictionary pop-up is up), `navigation`
 (controller navigation: taken by `controller_nav`/`set_navigation`, after the overlay has taken
-activation), `regionEditor` (`region_keys(true)` until `region_keys(false)`). A pause is wanted
-while any hold is live; a hold lapses 2 s after its last refresh. Forced resumes: the setting
+activation), `regionEditor` (`region_keys(true)` until `region_keys(false)`), `freeze` (Freeze
+game: the radial menu's optional `freeze` item or its shortcut `menuFreeze`, toggled in the overlay,
+`setFrozen`). A pause is wanted while the setting is on and any hold is live, or while `freeze` is
+live whatever the setting (the reader asked for it outright); a hold lapses 2 s after its last
+refresh. The overlay follows `game-pause` for a freeze: once paused it scans the frozen frame once
+in full (as Scan does: Force rescan with Auto OCR on), and when `freeze` leaves `holds` (a forced resume) or a `refusal`
+comes with it, it lets go and says so on its badge. While the game is frozen (`paused` with
+`freeze` held), Escape pressed on it releases the freeze and never reaches the game, unless the
+region editor or the controller menu has Escape. The shortcut only freezes the game while its window
+is in front; it unfreezes from anywhere. Forced resumes: the setting
 turned off, `select_source` to another source, another application in front (not in Gaming
 Mode), `overlayVisible` set false, the paused game exiting, quit, and `game_pause_resume_all`.
 After a forced resume nothing pauses again until the overlay beats with no reason. Resuming
@@ -2594,12 +2602,12 @@ released.
 | Command | Arguments | Returns |
 | --- | --- | --- |
 | `game_pause_status` | — | `{capability: {supported, backend, note?}, enabled, status: Status \| null}` |
-| `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor")[]}` | — |
+| `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor" \| "freeze")[]}` | — |
 | `game_pause_resume_all` | — | `{running, recovered: [{pid, exe, outcome, since}]}` |
 | `game_pause_spans` | `{since?: number}` | `PauseSpan[]` |
 
-`game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`): every 500 ms while any
-reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
+`game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`; with the setting off it
+sends only `freeze`): every 500 ms while any reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
 the overlay is alive. A beat refreshes the listed reasons and releases `lookup` and
 `regionEditor` when absent. A pop-up in the `popup-host` window counts for `lookup` only while
 that window keeps sending `overlay-reading-popup-alive` to the overlay (every second while a
@@ -2609,6 +2617,8 @@ source (or nothing) selected, a pause is refused as `noPid` (Gaming Mode uses St
 Events:
 - `game-pause` — `Status {enabled, phase: "idle"|"pausing"|"paused"|"resuming", holds, game?,
   processes, mechanism?, refusal?: {kind, detail}}`, on every change.
+- `freeze-escape` — `{}`, Escape pressed on the frozen game (Windows: the keyboard hook, on the
+  selected window only; elsewhere a global Escape shortcut held while frozen). The overlay unfreezes.
 - `game-pause-notice` — `{game, title?, kind, detail}`, once per game and refusal kind per run,
   when a game cannot be paused. `kind`: `unsupported`, `noPid`, `notFound`, `protected`,
   `antiCheat`, `elevated`, `denylisted`, `permissionDenied`, `other`. The main window shows it.

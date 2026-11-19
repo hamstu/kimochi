@@ -556,19 +556,25 @@ function syncHints(readWordRects = null) {
   if (shown) hints.place(hintArea())
 }
 
+/** The source in overlay coordinates (a window's whole bounds), or null when not known. */
+function sourceArea() {
+  const bounds = state.detached ? null : (state.sourceBounds ?? state.info?.source_bounds ?? null)
+  if (!bounds || !state.origin) return null
+  return { x: bounds.x - state.origin.x, y: bounds.y - state.origin.y, width: bounds.width, height: bounds.height }
+}
+
 /**
  * Where the hint bar goes: under the scan area (the crop, else the source window), or at the
  * bottom of it where there is no room below, so a game in a window on a big screen shows it where
  * the reader is looking. Null for a full-screen or display source: the overlay's own bottom.
  */
 function hintArea() {
-  const bounds = state.detached ? null : (state.sourceBounds ?? state.info?.source_bounds ?? null)
-  if (!bounds || !state.origin || state.sourceWindow?.fullscreen) return null
-  let area = { x: bounds.x - state.origin.x, y: bounds.y - state.origin.y, width: bounds.width, height: bounds.height }
+  let area = sourceArea()
+  if (!area || state.sourceWindow?.fullscreen) return null
   const crop = state.crop
   if (crop && crop.reference_width > 0 && crop.reference_height > 0) {
-    const sx = bounds.width / crop.reference_width
-    const sy = bounds.height / crop.reference_height
+    const sx = area.width / crop.reference_width
+    const sy = area.height / crop.reference_height
     area = { x: area.x + crop.x * sx, y: area.y + crop.y * sy, width: crop.width * sx, height: crop.height * sy }
   }
   if (area.width >= innerWidth * 0.9 && area.height >= innerHeight * 0.9) return null
@@ -782,6 +788,8 @@ const overlayTextOn = () =>
   (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) ||
   isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)
 let gamescopeMenuCenter = null
+/** Freeze game is on (`setFrozen`); read by the controller's menu. */
+let frozen = false
 let controller = null
 controller = createController({
   host: document.querySelector('#controller'),
@@ -800,6 +808,7 @@ controller = createController({
       hooked: hookMode(),
       autoOcr: Boolean(state.flags.autoOcrEnabled),
       autoAvailable: !isQuickShot(),
+      frozen,
       textVisible: overlayTextOn(),
       origin,
       area,
@@ -816,6 +825,7 @@ controller = createController({
   },
   run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
+    if (id === 'freeze') return void setFrozen(!frozen, 'reader')
     if (id === 'controls' || id === 'ocr-settings') {
       // With the Text Hooker as the source, its settings (open at the hooked game's page).
       if (id === 'ocr-settings' && hookMode()) {
@@ -1131,16 +1141,118 @@ function gamePauseReasons() {
   return reasons
 }
 function beatGamePause() {
-  if (!setting('pauseGameWhileReading')) {
-    if (gamePauseHeld) void native.gamePauseBeat([])
-    gamePauseHeld = false
-    return
-  }
-  const reasons = gamePauseReasons()
+  // The overlay's own reasons only with the setting on; a freeze is asked for outright.
+  const reasons = setting('pauseGameWhileReading') ? gamePauseReasons() : []
+  if (frozen) reasons.push('freeze')
   if (reasons.length === 0 && !gamePauseHeld) return
   gamePauseHeld = reasons.length > 0
   void native.gamePauseBeat(reasons)
 }
+
+/**
+ * Freeze game (the radial menu's `freeze` item and its shortcut, `menuFreeze`): the reader pauses
+ * the game on purpose, to read what it shows only for a moment, such as a tooltip that follows the
+ * pointer (moving onto its words would close it) or a toast. It rides the game pause beat as the
+ * `freeze` reason, which needs no "Pause the game while reading". Once the game is paused the
+ * screen is read once, so the frozen frame's text is on the overlay. Native ends a freeze on its
+ * own forced resumes (another app in front, the source changed, the overlay hidden) and when the
+ * game cannot be paused: the overlay follows the `game-pause` status and lets go.
+ */
+/** Native has reported holding this freeze: losing the hold after that means it was ended. */
+let freezeHeld = false
+let freezeScanned = false
+const freezeBadge = Object.assign(document.createElement('div'), { className: 'freeze-badge', hidden: true })
+freezeBadge.setAttribute('aria-live', 'polite')
+document.body.append(freezeBadge)
+/**
+ * A cool tint over the frozen game, so it reads as stopped at a glance. Behind every other
+ * overlay layer (first in the body, no z-index), and never in a capture: a frozen source is a
+ * window, which is captured on its own.
+ */
+const freezeTint = Object.assign(document.createElement('div'), { className: 'freeze-tint', hidden: true })
+document.body.prepend(freezeTint)
+let freezeBadgeTimer = 0
+/** The source's bounds in overlay coordinates, when known. */
+function showFreezeBadge(text, { tone = 'info', forMs = 0 } = {}) {
+  clearTimeout(freezeBadgeTimer)
+  if (!text) {
+    freezeBadge.hidden = true
+    return
+  }
+  freezeBadge.textContent = text
+  freezeBadge.dataset.tone = tone
+  // Along the top of the source, where game text rarely is.
+  const bounds = sourceArea()
+  freezeBadge.style.left = bounds ? `${bounds.x + bounds.width / 2}px` : '50%'
+  freezeBadge.style.top = `${Math.max(0, bounds?.y ?? 0) + 12}px`
+  freezeBadge.hidden = false
+  if (forMs > 0) freezeBadgeTimer = setTimeout(() => (freezeBadge.hidden = true), forMs)
+}
+function showFreezeTint(on) {
+  const bounds = on ? sourceArea() : null
+  if (bounds) {
+    Object.assign(freezeTint.style, {
+      left: `${bounds.x}px`,
+      top: `${bounds.y}px`,
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`
+    })
+  } else if (on) {
+    Object.assign(freezeTint.style, { left: '0', top: '0', width: '100vw', height: '100vh' })
+  }
+  freezeTint.hidden = !on
+}
+function setFrozen(on, why) {
+  if (on === frozen) return
+  frozen = on
+  freezeHeld = false
+  freezeScanned = false
+  log({ check: 'freeze', on, why })
+  if (!on) showFreezeTint(false)
+  if (on) showFreezeBadge('Freezing…')
+  // A refusal says why on the badge instead.
+  else if (why !== 'refused') showFreezeBadge('Unfrozen', { forMs: 1200 })
+  beatGamePause()
+}
+/** The frozen frame, read once in full: what Scan does (Force rescan with Auto OCR on). */
+function scanFrozen() {
+  if (hookMode() || browserMode() || isQuickShot()) return
+  // A full rescan, as Scan does: with Auto OCR on that is Force rescan (everything drawn and
+  // remembered dropped), so the pop-up is read from the frozen frame as it is.
+  void onAction('triggerScan').catch((error) =>
+    log({ check: 'freeze-scan-failed', error: String(error?.message ?? error) })
+  )
+}
+/** `game-pause`: the freeze took (paused), was refused, or was ended natively. */
+function onGamePauseStatus(status) {
+  if (!frozen || !status) return
+  const holding = Array.isArray(status.holds) && status.holds.includes('freeze')
+  if (holding && status.refusal) {
+    setFrozen(false, 'refused')
+    showFreezeBadge(`Can't freeze this game: ${status.refusal.detail || status.refusal.kind}`, {
+      tone: 'warn',
+      forMs: 4000
+    })
+    return
+  }
+  if (!holding) {
+    if (freezeHeld) {
+      setFrozen(false, 'resumed')
+    }
+    return
+  }
+  freezeHeld = true
+  if (status.phase !== 'paused') return
+  showFreezeBadge('Frozen · press again to unfreeze', { tone: 'frozen' })
+  showFreezeTint(true)
+  if (!freezeScanned) {
+    freezeScanned = true
+    scanFrozen()
+  }
+}
+void native.listen('game-pause', ({ payload }) => onGamePauseStatus(payload))
+// Escape on the frozen game (native holds it only while the game is frozen).
+void native.listen('freeze-escape', () => setFrozen(false, 'reader'))
 setInterval(beatGamePause, 500)
 
 function holdForController(hold) {
@@ -3082,6 +3194,12 @@ async function onAction(name) {
     default: {
       // A controller menu item's own shortcut (ui/radial-items.js): run it without the menu.
       const item = radialItemForHotkey(name)
+      // Freeze game's shortcut freezes only the game in front: pressed anywhere else it does
+      // nothing (it still unfreezes from anywhere).
+      if (item?.id === 'freeze' && !frozen && state.sourceFocus?.focused === false) {
+        log({ check: 'freeze', on: true, why: 'reader', ignored: 'source not focused' })
+        return undefined
+      }
       if (item) return openController(item.id)
       // Everything else native has already applied before emitting.
       return undefined
@@ -6391,6 +6509,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
             hasText: state.annotations.length > 0,
             autoOcr: Boolean(state.flags.autoOcrEnabled),
             autoAvailable: !isQuickShot(),
+            frozen,
             scanId: state.appliedScanId,
             settings: {
               controllerButtons: setting('controllerButtons'),
@@ -6407,6 +6526,10 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
           result = true
           break
         case 'action':
+          if (p.name === 'menuFreeze') {
+            setFrozen(!frozen, 'reader')
+            break
+          }
           if (p.name !== 'toggleAutoOcr') throw new Error('Invalid controller action')
           await onAction(p.name)
           break
