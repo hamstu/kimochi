@@ -6,6 +6,12 @@
   publishes on its own. Read `RELEASING.md` (maintainer's local copy) or CONTRIBUTING.md's
   Releases paragraph before touching versions, tags, `CHANGELOG.md` or
   `.github/workflows/ci.yml`. Never bump the version or tag by hand.
+- **Development builds** (a fix for one person to try, before a release): push the branch, then
+  `npm run dev-build -- --ref <branch> [--platform linux-x64] [--name <folder>]`. It runs CI's trial
+  release bundles and uploads the platform's bundle to
+  `https://downloads.kimochiapp.com/dev/<folder>/` (Steam Deck: `linux-x64`, the AppImage). Needs
+  `gh` and Cloudflare's `cf` CLI signed in (`npm i -g cf`, `cf auth login`). Not a release: no
+  version bump, nothing announced, and the updater never offers it.
 - **Changelog**: a user-visible change gets a `- ` line under `## [Unreleased]` in `CHANGELOG.md`,
   written for the app's users (it becomes the release notes and the in-app "What's new").
 - **Checks before merging**: `npm test`, `npm run typecheck`, `npm run lint`, `npm run format:check`,

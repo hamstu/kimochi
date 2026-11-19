@@ -36,6 +36,7 @@
     "icons": "node scripts/icons.mjs",
     "verify": "node scripts/prepare.mjs --verify",
     "check:rust": "node scripts/run.mjs check",
+    "dev-build": "node scripts/dev-build.mjs",
     "check:all": "node scripts/run.mjs check:all",
     "trace:summary": "node scripts/trace-report.mjs",
     "bench:startup": "node scripts/startup-bench.mjs",
