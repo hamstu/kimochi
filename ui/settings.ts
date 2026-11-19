@@ -375,6 +375,7 @@ export interface Settings {
   liveOverlayEnabled: boolean
   /** Rest the pointer on an overlay word to look it up, no key held (native `state::HoverIntent`). */
   overlayHoverLookup: boolean
+  overlayLookupCursor: boolean
   /** Suspend the game while a lookup, the controller menu or the region editor is up (native `game_pause`). */
   pauseGameWhileReading: boolean
   textOverlayGrouping: GroupingSettings
@@ -490,6 +491,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   overlayHoverLookup: false,
+  overlayLookupCursor: false,
   pauseGameWhileReading: false,
   textOverlayGrouping: DEFAULT_GROUPING,
   overlayStyle: DEFAULT_OVERLAY_STYLE,

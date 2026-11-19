@@ -116,6 +116,7 @@ import * as scanActivity from './scan-activity.js'
 import { openAppLane } from './app-lane.js'
 import { createSoundPlayer, outcomeSound, soundKind, soundKindOn } from './sounds.js'
 import * as native from './native.js'
+import { updateLookupCursor } from './lookup-cursor.js'
 
 let waylandDisabled = false
 let waylandLayer = false
@@ -6169,11 +6170,22 @@ installPointerDiagnostics('overlay', { label: 'overlay', active: () => state.reg
 // GNOME: where the Shell put the shared surface, sent with each of its pointer samples. The
 // pointer itself comes from the cursor poll below, like everywhere else, with the Shift gate.
 await native.listen('gnome-surface', ({ payload }) => gnomeOverlay?.pointer(payload))
+const lookupCursor = document.getElementById('lookup-cursor')
 await native.listen('pointer', ({ payload }) => {
   // Wayland: the compositor feed has no buttons over a Wayland window; a press on this surface does.
   if (waylandLayer && surfaceButtonDown && !payload?.down) payload = { ...payload, down: true }
-  if (!state.origin || typeof payload?.x !== 'number') return
+  if (!state.origin || typeof payload?.x !== 'number') {
+    updateLookupCursor(lookupCursor, {}, null, null, false)
+    return
+  }
   const local = toOverlayLocal(payload, state.origin)
+  updateLookupCursor(
+    lookupCursor,
+    payload,
+    local,
+    native.getSetting('overlayLookupKey'),
+    window.__KIMOCHI_PLATFORM__?.os === 'windows' && native.getSetting('overlayLookupCursor') === true
+  )
   // Words and the hook card are Shift-only: without Shift a click goes to the game (native
   // leaves them out of what takes the mouse, `View::live_regions`), so nothing lights up either.
   // Without click-through, text lights up on hover as it always has.

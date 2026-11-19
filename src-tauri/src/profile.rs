@@ -33,6 +33,7 @@ pub const SETTINGS_FILE: &str = "profile-settings.json";
 /// permission and choice), and account bookkeeping.
 pub const MACHINE_KEYS: &[&str] = &[
     "windowPositions",
+    "overlayLookupCursor",
     // Whether screen capture can see the overlay: this computer's recording setup.
     "excludeOverlayFromCapture",
     // Pausing games: what this computer's games tolerate (game_pause/).

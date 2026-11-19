@@ -90,6 +90,7 @@ pub fn defaults() -> Value {
         // (`state::HoverIntent`). Lookups only: clicks still go to the game unless the lookup
         // key is held. Off by default. Not on Wayland, where positions follow the key.
         "overlayHoverLookup": false,
+        "overlayLookupCursor": false,
         // Suspend the game while the reader is busy with the overlay (game_pause/). Opt-in: online
         // games may time out and some engines jump on resume. This computer's choice.
         "pauseGameWhileReading": false,

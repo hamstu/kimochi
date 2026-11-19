@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: optionally show a cursor while holding the lookup key in games that hide the pointer (Settings → Overlay). This does not unlock a pointer captured by the game.
+
 ## [1.1.0] - 2026-11-18
 
 ### Added

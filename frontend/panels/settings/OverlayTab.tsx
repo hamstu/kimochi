@@ -25,7 +25,9 @@ import { HoverLookupRow } from './HoverLookupRow'
 export function OverlayTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
   // Gaming Mode always draws the overlay (ui/overlay.js `overlayTextOn`): nothing to switch.
-  const gaming = isGamingMode(useCapabilities())
+  const capabilities = useCapabilities()
+  const gaming = isGamingMode(capabilities)
+  const [lookupCursor, setLookupCursor] = useSetting<boolean>('overlayLookupCursor', false)
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
   // Text drawn Transparent always lets clicks through (ui/settings.ts `clickThroughLocked`).
@@ -110,6 +112,19 @@ export function OverlayTab(): ReactNode {
             onCheckedChange={(checked) => void setExcludeFromCapture(checked)}
           />
         </SettingsRow>
+        {capabilities.os === 'windows' && (
+          <SettingsRow
+            label="Show a cursor while looking up"
+            controlId="overlay-lookup-cursor"
+            description="While holding the lookup key. A visual aid only: it does not release a pointer locked by the game."
+          >
+            <Switch
+              id="overlay-lookup-cursor"
+              checked={lookupCursor}
+              onCheckedChange={(checked) => void setLookupCursor(checked)}
+            />
+          </SettingsRow>
+        )}
         <GamePauseRow />
         <JapaneseFilterRow />
       </SettingsSection>

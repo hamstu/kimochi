@@ -3006,3 +3006,11 @@ all recent lines are hooked or waiting for their hooked clip. Disabling `voiceHo
 stops using captures; an already-loaded DLL stays until game exit, with at most 256 saved clips
 and a 128 MiB clip budget per capture. The reader prunes clips older than ten minutes, and
 captures untouched for an hour that belong to no hooked process are removed.
+
+### Lookup cursor (Windows)
+
+`overlayLookupCursor` is machine-local and off by default. When enabled, the overlay draws a
+passive pointer while its configured lookup key is held, using the existing `pointer` event's
+modifiers and local coordinates. No new command, event field or hit region is added. The webview's
+cursor is hidden only while the visual pointer is drawn. It does not release mouse capture or
+change the game's cursor visibility.
