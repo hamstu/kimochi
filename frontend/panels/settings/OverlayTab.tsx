@@ -20,6 +20,7 @@ import { TextHookerCardSection } from './TextHookerCardSection'
 import { GamePauseRow } from './GamePauseRow'
 import { DictionaryOpacityRow } from './DictionaryOpacityRow'
 import { RadialMenuSection } from './RadialMenuSection'
+import { HoverLookupRow } from './HoverLookupRow'
 
 export function OverlayTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
@@ -45,9 +46,9 @@ export function OverlayTab(): ReactNode {
       <SettingsSection title="Overlay">
         {!gaming && (
           <SettingsRow
-            label="Overlay mode"
+            label="Overlay enabled"
             controlId="ocr-live-overlay"
-            description="Hover scanned text on your source to see its definition."
+            description="Draws scanned text over your source, to look its words up where they are."
           >
             <Switch
               id="ocr-live-overlay"
@@ -67,6 +68,7 @@ export function OverlayTab(): ReactNode {
             onCheckedChange={(enabled) => void setTextOverlayGrouping({ ...textOverlayGrouping, enabled })}
           />
         </SettingsRow>
+        <HoverLookupRow />
         <SmallTextFilter
           enabled={filterSmallText}
           threshold={textOverlayGrouping.filterSmallTextThreshold ?? 0.75}
@@ -77,7 +79,6 @@ export function OverlayTab(): ReactNode {
             void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
           }
         />
-        <JapaneseFilterRow />
         <SettingsRow
           label="Click through text to the game"
           controlId="ocr-click-through"
@@ -110,6 +111,7 @@ export function OverlayTab(): ReactNode {
           />
         </SettingsRow>
         <GamePauseRow />
+        <JapaneseFilterRow />
       </SettingsSection>
 
       <SettingsSection
@@ -135,7 +137,7 @@ export function OverlayTab(): ReactNode {
 
       <TextHookerCardSection />
 
-      <RadialMenuSection />
+      <RadialMenuSection withShortcut />
 
       <GameModeSection />
     </SettingsPage>

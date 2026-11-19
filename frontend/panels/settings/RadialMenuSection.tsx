@@ -40,6 +40,7 @@ import {
 } from '@ui/radial-items.js'
 import { hexToRgbTriplet, radialBaseVars, type RadialMenuBase } from '@ui/settings'
 import { useRadialStyle } from './RadialStyle'
+import { HotkeyRow } from './HotkeyRow'
 import { shownRadialItems, useRadialShortcuts, type PreviewSource, type RadialItem } from './radialMenuPreview'
 import { useSetting } from '../../bridge/useSetting'
 import { useHotkeys } from '../../bridge/useHotkeys'
@@ -348,7 +349,11 @@ function RadialPreview({
   )
 }
 
-export function RadialMenuSection(): ReactNode {
+/**
+ * `withShortcut`: under the look, the shortcut that opens the menu (as Shortcuts & Controls lists
+ * it), for Settings → Overlay, where that list isn't.
+ */
+export function RadialMenuSection({ withShortcut = false }: { withShortcut?: boolean }): ReactNode {
   const [stored, setStored] = useSetting<string[] | null>(RADIAL_MENU_SETTING, null)
   const [hotkeys, setHotkeys] = useHotkeys()
   const menu = useMemo(() => effectiveRadialMenu(stored), [stored])
@@ -466,6 +471,7 @@ export function RadialMenuSection(): ReactNode {
       />
       {/* Its look, as in Settings → Overlay → Radial menu. */}
       {controls}
+      {withShortcut && <HotkeyRow name="openControllerMenu" />}
       {/* The ring is drawn for the pointer; these open the same panels from the keyboard. */}
       <ul className="sr-only">
         {inMenu.map((item) => (
