@@ -20,7 +20,7 @@ use super::super::backend::{
 #[path = "windows_suspend.rs"]
 mod suspend;
 
-use suspend::{FreezeError, Frozen, Identity, Planned, Recovery};
+use suspend::{FreezeError, Frozen, Identity, Planned, Recovery, Threads};
 
 pub const SUPPORTED: bool = true;
 
@@ -105,14 +105,16 @@ pub struct WindowsBackend {
 
 impl WindowsBackend {
     /// Freeze one member; `Ok(None)` when a child is gone (no longer part of the game) or the
-    /// member is already stopped by someone else (left alone, never ours to continue).
-    fn freeze(&self, member: &Member) -> Result<Option<(Frozen, PidResult)>, PauseError> {
-        if self.stopped(&member.id) == Some(true) {
+    /// member is already stopped by someone else (left alone, never ours to continue). `before`
+    /// lists the threads just before the step; the caller catches escaped threads afterwards
+    /// (`suspend::catch_escaped`, with one list for every member).
+    fn freeze(&self, member: &Member, before: &Threads) -> Result<Option<(Frozen, suspend::Step)>, PauseError> {
+        if stopped(&member.id, before) == Some(true) {
             return Ok(None);
         }
         let state_change = self.state_change.unwrap_or_else(suspend::prefer_state_change);
-        match suspend::freeze_one(&planned(member), state_change) {
-            Ok((frozen, step)) => Ok(Some((frozen, frozen_result(&step)))),
+        match suspend::freeze_one(&planned(member), state_change, before) {
+            Ok(done) => Ok(Some(done)),
             Err(FreezeError::Refused(suspend::Refusal::Gone)) if member.role != Role::Main => Ok(None),
             Err(FreezeError::Refused(r)) => {
                 let r2 = refusal(&r);
@@ -137,6 +139,22 @@ impl WindowsBackend {
     }
 }
 
+/// Fully frozen (every listed thread suspended), by anyone. `None` when the pid is gone or now
+/// names another process.
+fn stopped(id: &ProcIdentity, threads: &Threads) -> Option<bool> {
+    let now = suspend::identity(id.pid)?;
+    (now.created == id.start).then(|| suspend::is_frozen_in(threads, id.pid))
+}
+
+/// Resume processes in reverse stop order, with one thread list taken while they are all frozen.
+fn thaw_all(frozen: Vec<Frozen>) -> Vec<suspend::Step> {
+    if frozen.is_empty() {
+        return Vec::new();
+    }
+    let threads = Threads::now();
+    frozen.into_iter().rev().map(|f| suspend::thaw(f, &threads)).collect()
+}
+
 impl Backend for WindowsBackend {
     fn name(&self) -> &'static str {
         "windows-nt"
@@ -158,14 +176,12 @@ impl Backend for WindowsBackend {
     }
 
     fn suspend(&self, plan: &Plan) -> Result<Suspended, PauseError> {
-        let mut done: Vec<Frozen> = Vec::new();
+        let mut done: Vec<(Frozen, suspend::Step)> = Vec::new();
         let mut results = Vec::new();
+        let before = Threads::now();
         for member in &plan.members {
-            match self.freeze(member) {
-                Ok(Some((frozen, result))) => {
-                    done.push(frozen);
-                    results.push(result);
-                }
+            match self.freeze(member, &before) {
+                Ok(Some(frozen)) => done.push(frozen),
                 Ok(None) => results.push(PidResult {
                     pid: member.id.pid,
                     ok: true,
@@ -175,9 +191,8 @@ impl Backend for WindowsBackend {
                 }),
                 Err(mut error) => {
                     // All or nothing.
-                    while let Some(frozen) = done.pop() {
-                        results.push(frozen_result(&suspend::thaw(frozen)));
-                    }
+                    let (frozen, steps): (Vec<_>, Vec<_>) = done.into_iter().unzip();
+                    results.extend(steps.iter().chain(&thaw_all(frozen)).map(frozen_result));
                     results.push(PidResult {
                         pid: member.id.pid,
                         ok: false,
@@ -190,6 +205,16 @@ impl Backend for WindowsBackend {
                 }
             }
         }
+        // Threads started while the calls ran: one list, taken once every process is suspended.
+        let after = Threads::now();
+        let done: Vec<Frozen> = done
+            .into_iter()
+            .map(|(mut frozen, mut step)| {
+                step.escaped = suspend::catch_escaped(&mut frozen, &after);
+                results.push(frozen_result(&step));
+                frozen
+            })
+            .collect();
         let members = done.iter().map(|f| proc_identity(&f.identity)).collect();
         let used = done.first().map_or(mechanism(), |f| match f.mechanism {
             suspend::Mechanism::StateChange => "process state change",
@@ -202,6 +227,8 @@ impl Backend for WindowsBackend {
     fn resume(&self, suspended: &Suspended) -> Result<(), PauseError> {
         let mut failures = Vec::new();
         let mut results = Vec::new();
+        // Listed while every member is still frozen, and shared by all of them.
+        let threads = Threads::now();
         for id in suspended.members.iter().rev() {
             let held = {
                 let mut held = self.held.lock().unwrap_or_else(|e| e.into_inner());
@@ -210,10 +237,10 @@ impl Backend for WindowsBackend {
                     .map(|i| held.remove(i))
             };
             let result = match held {
-                Some(frozen) => frozen_result(&suspend::thaw(frozen)),
+                Some(frozen) => frozen_result(&suspend::thaw(frozen, &threads)),
                 // Not ours (an orphan, or already resumed): only if it is still this process
                 // and still fully frozen.
-                None => match suspend::recover(&identity(id)) {
+                None => match suspend::recover(&identity(id), &threads) {
                     Recovery::Resumed { corrected } => PidResult {
                         pid: id.pid,
                         ok: true,
@@ -255,23 +282,22 @@ impl Backend for WindowsBackend {
         suspend::identity(pid).map(|id| proc_identity(&id))
     }
 
-    /// Fully frozen (every thread suspended), by anyone. `None` when the pid is gone or now names
-    /// another process.
     fn stopped(&self, id: &ProcIdentity) -> Option<bool> {
-        let now = suspend::identity(id.pid)?;
-        (now.created == id.start).then(|| suspend::is_frozen(id.pid))
+        stopped(id, &Threads::now())
     }
 
     /// Catch threads created since the suspend (each held process), and children the game started
     /// since (frozen and added as members).
     fn refresh(&self, suspended: &mut Suspended) -> Result<(), PauseError> {
         let mut held = self.held.lock().unwrap_or_else(|e| e.into_inner());
+        let threads = Threads::now();
         for frozen in held.iter_mut() {
-            suspend::catch_escaped(frozen);
+            suspend::catch_escaped(frozen, &threads);
         }
         let Some(main) = suspended.members.first().map(|m| m.pid) else { return Ok(()) };
         // A protected or vanished child is left out; the game stays paused as planned.
         let Ok(tree) = suspend::plan(main) else { return Ok(()) };
+        let mut added = Vec::new();
         for p in tree.processes {
             let known =
                 held.iter().any(|f| f.identity.pid == p.identity.pid && f.identity.created == p.identity.created);
@@ -279,10 +305,17 @@ impl Backend for WindowsBackend {
                 continue;
             }
             let member = Member { id: proc_identity(&p.identity), role: role(p.role), why: why(p.role).into() };
-            if let Ok(Some((frozen, _))) = self.freeze(&member) {
+            if let Ok(Some((frozen, _))) = self.freeze(&member, &threads) {
                 suspended.members.push(member.id);
-                held.push(frozen);
+                added.push(frozen);
             }
+        }
+        if !added.is_empty() {
+            let after = Threads::now();
+            for frozen in &mut added {
+                suspend::catch_escaped(frozen, &after);
+            }
+            held.extend(added);
         }
         Ok(())
     }
@@ -292,10 +325,7 @@ impl Drop for WindowsBackend {
     /// The guard is going away holding a pause: resume it (closing a state change handle would
     /// too, `NtSuspendProcess` would not).
     fn drop(&mut self) {
-        let held = std::mem::take(&mut *self.held.lock().unwrap_or_else(|e| e.into_inner()));
-        for frozen in held.into_iter().rev() {
-            let _ = suspend::thaw(frozen);
-        }
+        thaw_all(std::mem::take(&mut *self.held.lock().unwrap_or_else(|e| e.into_inner())));
     }
 }
 
