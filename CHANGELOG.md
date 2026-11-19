@@ -11,11 +11,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - 📊 **Stats and reading history.** A new Stats tab shows a heatmap with streaks, characters and time per day, reading speed, when you read, per-session totals and your most-read kanji. All your lines are retained and can be exported from the Log's **⋯** menu for apps like exSTATic, or as CSV/JSON. More options are in **Settings → Log**.
-- 🎮 **Make the radial menu your own.** Add, remove and reorder its actions, give any action its own keyboard shortcut or controller button (Settings → Shortcuts & Controls → Radial menu), and choose its accent colour, base colour and opacity in Settings → Overlay → Radial menu.
+- 🎮 **Make the radial menu your own.** Add, remove and reorder its actions, give any action its own keyboard shortcut or controller button, and pick its colours and opacity (Settings → Overlay → Radial menu).
 - ⏸️ **Auto Game Pausing** (opt-in, Settings → Overlay) freezes the game while you look up a word, use the radial menu or draw a region. This is experimental and might not work on every game!
-- ✨ **Transparent/invisible overlay mode:** Hover cards and the Text Hooker card can now be **Transparent**, for those who prefer seeing the game's own text while doing lookups. A faint outline marks the word being looked up. You can choose this mode for both the OCR overlay cards and the text hooker card independently.
-- **Dictionary opacity.** Fade the dictionary pop-up so your game shows through it, with every dictionary (Settings → Dictionary, or Settings → Overlay → Overlay appearance).
+- ✨ **Transparent/invisible overlay mode:** Hover cards and the Text Hooker card can now be **Transparent**, for those who prefer seeing the game's own text while doing lookups. A faint outline marks the word being looked up. You can choose this look for the OCR overlay's cards and the Text Hooker card independently.
+- **Dictionary opacity:** Fade the dictionary pop-up so your game shows through it, with any dictionary (Settings → Dictionary or Settings → Overlay).
 - 🖱️ **Look up with a mouse button.** The lookup key can now be the middle, back or forward mouse button.
+- **Look up on hover:** On a similar note, you can now look up words just by hovering over them, with no key or mouse button needed (Settings → Overlay).
 - **Hachidori for other languages,** with its own dictionaries and settings for each language it reads. (Experimental)
 - **🎮 PlayStation button names** (✕ ○ □ △, L1/R1…) for DualSense and DualShock pads, and a clearer, consistent look for every shortcut button in Settings.
 - **Windows: Restart as administrator** for games that run elevated (Genshin Impact, among others), so the lookup key works over them.
@@ -24,7 +25,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
-- **Hooked lines show up sooner.** The Text Hooker's **Line delay** is now 100 ms (was 300 ms), with a new 50 ms choice, and changes apply straight away. A Line delay you chose yourself is kept.
+- **Hooked lines show up sooner.** The Text Hooker's **Line delay** is now 100 ms (was 300 ms), with a new 50 ms option, and changes apply straight away.
 - **Text hooking is much smarter about which text to follow.** It stays on the right hook through a whole game, checks the screen before switching, and handles many more engines cleanly: Ren'Py lines come straight from Ren'Py; Unity games that draw text character by character or keep earlier lines on screen get one clean line per sentence, on time; multilingual games (Yuzusoft and others) keep only your language; RPG Maker name and colour codes are resolved; and names in 《》 are no longer cut.
 - **Cleaner voices from audio hooking.** Voices in Electron and NW.js games (TyranoScript, RPG Maker MV/MZ) now come straight from the game, more voice formats are recognised, leading silence is trimmed, and with the speech model downloaded Kimochi matches each line to the clip that says its words, even when the text arrives late.
 - **The Text Hooker card sits right on the game's text.** With Auto align, it's placed glyph by glyph, with no drift along long lines and no twitching between them. When it's not over the game window it now takes regular clicks.
@@ -37,7 +38,6 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
-- **Look up on hover:** the word under the pointer lights up as it does with Shift held, 10ten glides from word to word as it does in a browser, and the pop-up closes once the pointer leaves the line and the pop-up, with every dictionary.
 - **Windows overlay:** lines up again after a game goes full screen, and its text no longer disappears after Alt+Tab.
 - **Read along** outlines the whole word the dictionary matched, including around punctuation, and the built-in Yomitan pop-up follows your light or dark appearance.
 - **Steam Deck Gaming Mode:** Set OCR crop works again.
