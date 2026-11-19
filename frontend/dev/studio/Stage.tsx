@@ -7,6 +7,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { GripHorizontal } from 'lucide-react'
 import type { Surface } from './types'
+import type { Backdrop } from './backdrops'
 
 export interface Placement {
   x: number
@@ -20,6 +21,7 @@ const EDGES: readonly Edge[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 
 const TAB_HEIGHT = 28
 const MARGIN = 24
+const SHOT_MARGIN = 72
 
 export function Stage({
   surface,
@@ -30,7 +32,8 @@ export function Stage({
   zoom,
   frameRef,
   onFrameLoad,
-  copyEditing
+  copyEditing,
+  backdrop
 }: {
   surface: Surface
   url: string
@@ -41,6 +44,8 @@ export function Stage({
   frameRef: RefObject<HTMLIFrameElement | null>
   onFrameLoad: () => void
   copyEditing: boolean
+  /** Screenshot mode: the surface alone, centred, on this backdrop. */
+  backdrop?: Backdrop
 }): ReactNode {
   const desk = useRef<HTMLDivElement>(null)
   const [deskSize, setDeskSize] = useState({ width: 0, height: 0 })
@@ -56,12 +61,24 @@ export function Stage({
   }, [])
 
   const size = surface.size
-  const box = placement ?? { x: 0, y: 0, width: size.width, height: size.height }
-  const fullHeight = box.height + (surface.frameless ? 0 : TAB_HEIGHT)
+  const shot = !!backdrop
+  const placed = placement ?? { x: 0, y: 0, width: size.width, height: size.height }
+  const tab = surface.frameless || shot ? 0 : TAB_HEIGHT
+  const fullHeight = placed.height + tab
+  const margin = shot ? SHOT_MARGIN : MARGIN
   const fit = deskSize.width
-    ? Math.min(1, (deskSize.width - MARGIN * 2) / box.width, (deskSize.height - MARGIN * 2) / fullHeight)
+    ? Math.min(1, (deskSize.width - margin * 2) / placed.width, (deskSize.height - margin * 2) / fullHeight)
     : 1
   const scale = zoom === 'fit' ? Math.max(0.2, fit) : zoom
+  // Screenshot mode keeps the window's size but always centres it.
+  const box = shot
+    ? {
+        ...placed,
+        x: Math.round((deskSize.width / scale - placed.width) / 2),
+        y: Math.round((deskSize.height / scale - placed.height) / 2)
+      }
+    : placed
+  const backdropStyle = backdrop ? { background: backdrop.background, backgroundSize: backdrop.size } : undefined
 
   // A new surface: centred on the desk at its own size.
   useEffect(() => {
@@ -78,7 +95,7 @@ export function Stage({
     if (event.button !== 0) return
     event.preventDefault()
     const from = { x: event.clientX, y: event.clientY }
-    const origin = { ...box }
+    const origin = { ...placed }
     const minWidth = size.minWidth ?? 240
     const minHeight = size.minHeight ?? 160
     setGesture(edge === 'move' ? 'grabbing' : `${edge}-resize`)
@@ -126,7 +143,13 @@ export function Stage({
 
   if (surface.frameless) {
     return (
-      <div ref={desk} className="studio-desk studio-desk-screen" data-gesture={gesture ?? undefined}>
+      <div
+        ref={desk}
+        className="studio-desk studio-desk-screen"
+        data-gesture={gesture ?? undefined}
+        data-shot={shot || undefined}
+        style={backdropStyle}
+      >
         <div
           className="studio-screen"
           style={{ width: box.width, height: box.height, transform: `translate(-50%, -50%) scale(${scale})` }}
@@ -139,14 +162,20 @@ export function Stage({
   }
 
   return (
-    <div ref={desk} className="studio-desk" data-gesture={gesture ?? undefined}>
+    <div
+      ref={desk}
+      className="studio-desk"
+      data-gesture={gesture ?? undefined}
+      data-shot={shot || undefined}
+      style={backdropStyle}
+    >
       <div className="studio-desk-plane" style={{ transform: `scale(${scale})` }}>
         <div
           className="studio-window"
           style={{ left: box.x, top: box.y, width: box.width }}
           data-copy-editing={copyEditing || undefined}
         >
-          <div className="studio-window-tab" onPointerDown={(e) => start(e, 'move')}>
+          <div className="studio-window-tab" hidden={shot} onPointerDown={(e) => start(e, 'move')}>
             <GripHorizontal aria-hidden />
             <span className="studio-window-title">{surface.label}</span>
             <span className="studio-window-size">

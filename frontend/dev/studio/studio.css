@@ -733,3 +733,53 @@ body {
 .studio-presets-foot code {
   font-size: var(--k-text-xs);
 }
+
+/* ---------------------------------------------------------------- screenshot mode */
+
+.studio-shot {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+}
+.studio-chevron {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-3);
+}
+.studio-swatch {
+  display: inline-block;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: var(--k-radius-sm);
+  box-shadow: inset 0 0 0 1px rgb(127 127 127 / 0.35);
+}
+.studio-backdrop-menu {
+  max-height: min(70vh, 40rem);
+  overflow-y: auto;
+}
+.studio-menu-tick {
+  margin-left: auto;
+  padding-left: var(--k-space-3);
+}
+.studio[data-screenshot] .studio-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.studio[data-screenshot] .studio-main {
+  grid-template-rows: minmax(0, 1fr);
+}
+.studio-toolbar[hidden],
+.studio-panel[hidden],
+.studio-window-tab[hidden] {
+  display: none;
+}
+.studio-desk[data-shot]::before {
+  display: none;
+}
+.studio-desk[data-shot] .studio-window-body {
+  border-radius: var(--k-radius-xl);
+  box-shadow:
+    0 0 0 1px var(--k-line-strong),
+    0 2px 6px rgb(0 0 0 / 0.08),
+    0 32px 80px -16px rgb(0 0 0 / 0.45);
+}

@@ -11,12 +11,24 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Theme } from '@radix-ui/themes'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
-import { BookMarked, Check, ExternalLink, Link2, Maximize, PencilLine, RotateCw, SlidersHorizontal } from 'lucide-react'
+import {
+  BookMarked,
+  Camera,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  Link2,
+  Maximize,
+  PencilLine,
+  RotateCw,
+  SlidersHorizontal
+} from 'lucide-react'
 import { IconButton, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Select, cn } from '@kit'
 import KimochiLogo from '../../components/KimochiLogo'
 import { APP_SURFACES, GLOBAL_CONTROLS } from './surfaces'
 import { activeAxes, controlValue, frameUrl, impliedParams, storedValue, type Values } from './params'
 import { Stage, type Placement } from './Stage'
+import { BACKDROPS, backdropOf } from './backdrops'
 import { CopyPanel, StatePanel } from './Inspector'
 import { PresetsPanel } from './PresetsPanel'
 import type { PresetState } from './presets'
@@ -49,6 +61,9 @@ interface Saved {
   panel: 'state' | 'presets' | 'copy'
   copyEditing: boolean
   changes: CopyChange[]
+  /** Screenshot mode: only the top bar and the surface, on a chosen backdrop. */
+  screenshot: boolean
+  backdrop: string
 }
 
 const EMPTY: Saved = {
@@ -61,7 +76,9 @@ const EMPTY: Saved = {
   zoom: 'fit',
   panel: 'state',
   copyEditing: false,
-  changes: []
+  changes: [],
+  screenshot: false,
+  backdrop: 'aurora'
 }
 
 function load(): Saved {
@@ -282,6 +299,12 @@ export function Studio(): ReactNode {
   const absoluteUrl = new URL(frame.url, location.href).href
   const axes = activeAxes(surface, context)
   const box = placement ?? { width: surface.size.width, height: surface.size.height, x: 0, y: 0 }
+  const backdrop = backdropOf(saved.backdrop)
+  const backdropGroups = useMemo(() => {
+    const map = new Map<string, typeof BACKDROPS>()
+    for (const b of BACKDROPS) map.set(b.group, [...(map.get(b.group) ?? []), b])
+    return [...map]
+  }, [])
 
   return (
     <Theme
@@ -292,7 +315,7 @@ export function Studio(): ReactNode {
       panelBackground="solid"
     >
       <TooltipProvider delayDuration={500}>
-        <div className="studio">
+        <div className="studio" data-screenshot={saved.screenshot || undefined}>
           <header className="studio-top">
             <span className="studio-brand">
               <KimochiLogo size={18} />
@@ -337,6 +360,50 @@ export function Studio(): ReactNode {
                 )
               )}
             </nav>
+            <div className="studio-shot">
+              {saved.screenshot && (
+                <Menu>
+                  <MenuTrigger asChild>
+                    <button type="button" className="studio-nav-item">
+                      <span
+                        className="studio-swatch"
+                        style={{ background: backdrop.background, backgroundSize: backdrop.size }}
+                      />
+                      {backdrop.label}
+                      <ChevronDown aria-hidden className="studio-chevron" />
+                    </button>
+                  </MenuTrigger>
+                  <MenuContent align="end" className="studio-backdrop-menu">
+                    {backdropGroups.map(([group, list], i) => (
+                      <div key={group}>
+                        {i > 0 && <MenuSeparator />}
+                        <MenuLabel>{group}</MenuLabel>
+                        {list.map((b) => (
+                          <MenuItem key={b.id} onSelect={() => update(() => ({ backdrop: b.id }))}>
+                            <span
+                              className="studio-swatch"
+                              style={{ background: b.background, backgroundSize: b.size }}
+                            />
+                            {b.label}
+                            {b.id === backdrop.id && <Check className="studio-menu-tick" />}
+                          </MenuItem>
+                        ))}
+                      </div>
+                    ))}
+                  </MenuContent>
+                </Menu>
+              )}
+              <button
+                type="button"
+                className="studio-nav-item"
+                data-active={saved.screenshot || undefined}
+                aria-pressed={saved.screenshot}
+                onClick={() => update((s) => ({ screenshot: !s.screenshot }))}
+              >
+                <Camera aria-hidden className="studio-chevron" />
+                Screenshot mode
+              </button>
+            </div>
             <div className="studio-globals">
               {GLOBAL_CONTROLS.map((control) =>
                 control.kind === 'select' ? (
@@ -358,7 +425,7 @@ export function Studio(): ReactNode {
 
           <div className="studio-body">
             <main className="studio-main">
-              <div className="studio-toolbar">
+              <div className="studio-toolbar" hidden={saved.screenshot}>
                 <div className="studio-contexts">
                   {axes.map(({ axis, value }) => (
                     <div key={axis.param} className="studio-axis" role="tablist" aria-label={axis.label}>
@@ -466,10 +533,11 @@ export function Studio(): ReactNode {
                 frameRef={frameRef}
                 onFrameLoad={installEditing}
                 copyEditing={saved.copyEditing}
+                backdrop={saved.screenshot ? backdrop : undefined}
               />
             </main>
 
-            <aside className="studio-panel">
+            <aside className="studio-panel" hidden={saved.screenshot}>
               <div className="studio-panel-tabs" role="tablist">
                 <button
                   type="button"
