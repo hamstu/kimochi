@@ -54,6 +54,24 @@ fn run(_args: &[String]) -> Result<(), String> {
     Err("kimochi-hookd runs on Windows (or inside a Wine prefix)".into())
 }
 
+/// The other-bitness build of this helper. Kimochi's Linux builds keep the 32-bit one in `x86/`,
+/// beside its own `bcryptprimitives.dll` stand-in for old Wine (the 64-bit one has its own beside
+/// it); Windows builds keep both side by side.
+#[cfg(windows)]
+fn sibling_helper(me: &std::path::Path, bits: u32) -> Option<std::path::PathBuf> {
+    let dir = me.parent()?;
+    let candidates = if bits == 32 {
+        vec![dir.join("x86").join("kimochi-hookd-x86.exe"), dir.join("kimochi-hookd-x86.exe")]
+    } else {
+        let mut list = vec![dir.join("kimochi-hookd-x64.exe")];
+        if dir.file_name().is_some_and(|n| n.eq_ignore_ascii_case("x86")) {
+            list.extend(dir.parent().map(|p| p.join("kimochi-hookd-x64.exe")));
+        }
+        list
+    };
+    candidates.into_iter().find(|p| p.is_file())
+}
+
 /// Injects into a process of the other bitness by running the sibling build of this exe.
 #[cfg(windows)]
 pub fn inject_with_bits(pid: u32, bits: u32, dll: &std::path::Path) -> Result<(), String> {
@@ -62,10 +80,12 @@ pub fn inject_with_bits(pid: u32, bits: u32, dll: &std::path::Path) -> Result<()
         return inject::inject(pid, dll);
     }
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
-    let sibling = me.with_file_name(if bits == 32 { "kimochi-hookd-x86.exe" } else { "kimochi-hookd-x64.exe" });
-    if !sibling.is_file() {
-        return Err(format!("{} is missing", sibling.display()));
-    }
+    let sibling = sibling_helper(&me, bits).ok_or_else(|| {
+        format!(
+            "{} is missing",
+            me.with_file_name(format!("kimochi-hookd-x{}.exe", if bits == 32 { 86 } else { 64 })).display()
+        )
+    })?;
     use std::os::windows::process::CommandExt;
     let output = std::process::Command::new(&sibling)
         .args(["inject", "--pid", &pid.to_string(), "--dll"])
@@ -194,4 +214,38 @@ fn run(args: &[String]) -> Result<(), String> {
     // Give the hook DLLs a moment to receive the detach before the pipes close.
     std::thread::sleep(std::time::Duration::from_millis(300));
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::sibling_helper;
+
+    #[test]
+    fn the_other_bitness_helper_is_found_in_either_layout() {
+        let root = std::env::temp_dir().join(format!("kimochi-hookd-sibling-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (linux, windows) = (root.join("linux"), root.join("windows"));
+        std::fs::create_dir_all(linux.join("x86")).unwrap();
+        std::fs::create_dir_all(&windows).unwrap();
+        for file in [
+            linux.join("kimochi-hookd-x64.exe"),
+            linux.join("x86").join("kimochi-hookd-x86.exe"),
+            windows.join("kimochi-hookd-x64.exe"),
+            windows.join("kimochi-hookd-x86.exe"),
+        ] {
+            std::fs::write(file, b"").unwrap();
+        }
+        // Linux builds: the 32-bit pair in x86/, each helper finding the other.
+        let x64 = linux.join("kimochi-hookd-x64.exe");
+        let x86 = linux.join("x86").join("kimochi-hookd-x86.exe");
+        assert_eq!(sibling_helper(&x64, 32), Some(x86.clone()));
+        assert_eq!(sibling_helper(&x86, 64), Some(x64));
+        // Windows builds: side by side.
+        let x64 = windows.join("kimochi-hookd-x64.exe");
+        let x86 = windows.join("kimochi-hookd-x86.exe");
+        assert_eq!(sibling_helper(&x64, 32), Some(x86.clone()));
+        assert_eq!(sibling_helper(&x86, 64), Some(x64));
+        assert_eq!(sibling_helper(&root.join("kimochi-hookd-x64.exe"), 32), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

@@ -10,7 +10,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
-- **Linux: Text hooking explains when a game's Wine is too old.** Text hooking needs Wine 9.0 or newer. On an older Wine (such as an old Flathub Wine branch), Kimochi used to say it "found no programs in the Wine prefix". It now says the Wine needs updating and how to do it. Audio hooking no longer reports success when the hook helper could not run in a Flatpak sandbox.
+- **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.
 
 ## [1.1.0] - 2026-11-18
 

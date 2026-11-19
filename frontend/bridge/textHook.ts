@@ -36,6 +36,8 @@ export interface HookStatus {
   supported: boolean
   phase: HookPhase
   detail?: string | null
+  /** A page that helps with `detail` (how to update Wine, when the game's is too old). */
+  helpUrl?: string | null
   sourceId?: string
   exe?: string | null
   pids?: number[]

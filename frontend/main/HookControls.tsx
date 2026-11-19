@@ -13,6 +13,7 @@
  * says so in place, so nothing moves when the text arrives.
  */
 import { useState, type ReactNode } from 'react'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { AlertTriangle, ChevronsUpDown, MessageSquareText, Sparkles } from 'lucide-react'
 import {
   Callout,
@@ -103,7 +104,14 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
   return (
     <div className="src-hook">
       {failed && status.detail && (
-        <SidebarNotice action="Open Text Hooker settings" onAction={onManage}>
+        <SidebarNotice
+          action={status.helpUrl ? 'How to update Wine' : 'Open Text Hooker settings'}
+          onAction={() => {
+            const url = status.helpUrl
+            if (url) void openUrl(url).catch(() => undefined)
+            else onManage()
+          }}
+        >
           {status.detail}
         </SidebarNotice>
       )}

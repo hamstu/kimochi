@@ -33,7 +33,7 @@ use pick::{Candidate, OcrLine, Signature};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
@@ -134,6 +134,8 @@ struct Session {
     engine: Option<&'static str>,
     phase: &'static str,
     detail: Option<String>,
+    /// A page that helps with `detail` (how to update Wine, for a Wine too old for the helper).
+    help_url: Option<&'static str>,
     download: Option<(u64, u64)>,
     threads: Vec<Thread>,
     selected: Option<String>,
@@ -368,6 +370,7 @@ fn status_of(session: &Session) -> Value {
         "supported": cfg!(any(windows, target_os = "linux")),
         "phase": session.phase,
         "detail": session.detail,
+        "helpUrl": session.help_url,
         "sourceId": session.source_id,
         "exe": session.exe.as_ref().map(|e| e.to_string_lossy()),
         "pids": session.pids,
@@ -452,6 +455,17 @@ fn hookd_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .chain([development])
         .find(|p| p.is_file())
         .ok_or_else(|| "The text hook helper is missing from this build of Kimochi.".into())
+}
+
+/// The 32-bit helper beside the 64-bit one at `x64`: in `x86/` in Linux builds (with its own
+/// `bcryptprimitives.dll` stand-in for old Wine; prepare-hookd.mjs), beside it on Windows.
+fn helper_x86(x64: &Path) -> PathBuf {
+    let nested = x64.with_file_name("x86").join("kimochi-hookd-x86.exe");
+    if nested.is_file() {
+        nested
+    } else {
+        x64.with_file_name("kimochi-hookd-x86.exe")
+    }
 }
 
 fn send(session: &mut Session, command: Value) -> Result<(), String> {
@@ -1614,8 +1628,14 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             let mut session = hook.lock();
             stop_child(&mut session);
             let generation = session.generation + 1;
-            *session =
-                Session { generation, source_id, phase: "failed", detail: Some(reason.clone()), ..Default::default() };
+            *session = Session {
+                generation,
+                source_id,
+                phase: "failed",
+                help_url: wine::needs_newer_wine(&reason).then_some(wine::WINE_UPDATE_URL),
+                detail: Some(reason.clone()),
+                ..Default::default()
+            };
             hook.publish(&session);
             drop(session);
             refresh_voice_hook();
@@ -1884,16 +1904,10 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
     {
         return Err("The game is paused; the voice hook will be tried again later.".into());
     }
-    let helper = hookd_path(app)?.with_file_name(if target.bits == 32 {
-        "kimochi-hookd-x86.exe"
-    } else {
-        "kimochi-hookd-x64.exe"
-    });
-    let dll = helper.with_file_name(if target.bits == 32 {
-        "kimochi-voicehook-x86.dll"
-    } else {
-        "kimochi-voicehook-x64.dll"
-    });
+    let x64 = hookd_path(app)?;
+    let helper = if target.bits == 32 { helper_x86(&x64) } else { x64.clone() };
+    let dll =
+        x64.with_file_name(if target.bits == 32 { "kimochi-voicehook-x86.dll" } else { "kimochi-voicehook-x64.dll" });
     if !dll.is_file() {
         return Err("The voice hook DLL is missing from this build; using system audio.".into());
     }

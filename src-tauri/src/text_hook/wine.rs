@@ -225,12 +225,40 @@ pub fn flatpak_app(info: &str) -> Option<String> {
     })
 }
 
-/// Whether Wine refused to load a program because its Wine has no `bcryptprimitives.dll`: Rust
-/// programs (the hook helper among them) need its `ProcessPrng`, which Wine added in 8.14, so Wine
-/// 8.0 and older (Flathub's Wine before its 23.08 branch, Proton 8 and older) cannot start them.
+/// What Wine's loader could not give the helper, from its `err:module` lines: the DLL it lacks
+/// (`import_dll Library X.dll (which is needed by …) not found`), else the function
+/// (`No implementation for X.dll.F imported from …`), else that it failed. Wine releases
+/// gain DLLs and functions, so on a Wine too old for the helper this is what goes missing. (Wine
+/// before 8.14 lacks `bcryptprimitives.dll`, which Kimochi ships a stand-in for; see
+/// `hookd/shim/`.)
 #[cfg(any(target_os = "linux", test))]
-fn wine_too_old(output: &str) -> bool {
-    output.lines().any(|l| l.contains("bcryptprimitives.dll") && l.contains("not found"))
+fn missing_from_wine(output: &str) -> Option<String> {
+    let lines: Vec<&str> = output.lines().map(str::trim).filter(|l| l.contains("err:module:")).collect();
+    let after = |l: &str, start: &str, end: &str| -> Option<String> {
+        let rest = &l[l.find(start)? + start.len()..];
+        Some(rest[..rest.find(end)?].trim().to_string())
+    };
+    if lines.is_empty() {
+        return None;
+    }
+    lines
+        .iter()
+        .find_map(|l| after(l, "Library ", " (").filter(|_| l.contains("not found")))
+        .or_else(|| lines.iter().find_map(|l| after(l, "No implementation for ", " imported")))
+        .or_else(|| Some(String::new()))
+}
+
+/// Where someone whose Wine is too old finds how to update it (WineHQ's download page, with
+/// instructions for each distribution; `wiki.winehq.org/Download` redirects here).
+pub const WINE_UPDATE_URL: &str = "https://gitlab.winehq.org/wine/wine/-/wikis/Download";
+
+/// How a reason from `not_found_reason` that comes down to an old Wine begins, so the card can
+/// offer `WINE_UPDATE_URL` with it.
+pub const OLD_WINE: &str = "Kimochi's hook helper could not start with this game's Wine";
+
+/// Whether a failed start's reason is an old Wine, for the card's link to `WINE_UPDATE_URL`.
+pub fn needs_newer_wine(reason: &str) -> bool {
+    reason.starts_with(OLD_WINE)
 }
 
 /// Why the game was not found among what the helper listed, for the person hooking it.
@@ -261,18 +289,14 @@ pub fn not_found_reason(
             .next_back()
     };
     if listed.is_empty() {
-        if wine_too_old(stderr) || wine_too_old(stdout) {
-            let wine = match sandbox {
-                Some(app) => format!("This game's Wine (the {app} Flatpak)"),
-                None => "This game's Wine".to_string(),
-            };
+        if let Some(missing) = missing_from_wine(stderr).or_else(|| missing_from_wine(stdout)) {
+            let wine = sandbox.map(|app| format!(" (the {app} Flatpak)")).unwrap_or_default();
+            let lacks = if missing.is_empty() { String::new() } else { format!(", which has no {missing}") };
             return format!(
-                "{wine} is too old for Text hooking, which needs Wine 9.0 or newer. Update it to a newer release (for Flathub's Wine, install a newer branch of it), or run the game with a recent Proton."
+                "{OLD_WINE}{wine}{lacks}. This Wine is probably too old: update it (for Flathub's Wine, install a newer branch of it), or run the game with a recent Proton."
             );
         }
-        // Wine's loader names the DLL it lacks in an `err:module` line; the last one is a summary.
-        let module = |text: &str| text.lines().map(str::trim).find(|l| l.contains("err:module:")).map(str::to_string);
-        return match module(stderr).or_else(|| said(stderr)).or_else(|| said(stdout)) {
+        return match said(stderr).or_else(|| said(stdout)) {
             Some(what) => format!("Could not run the hook helper with the game's Wine: {what}"),
             None => format!(
                 "Could not run the hook helper with the game's Wine in {} (it said nothing). Turn on verbose logging and send a debug report.",
@@ -810,16 +834,37 @@ not json"#;
 0128:err:module:LdrInitializeThunk Importing dlls for L"Z:\\var\\data\\wine\\drive_c\\users\\deck\\AppData\\Local\\kimochi-texthook\\hookd-0\\kimochi-hookd-x64.exe" failed, status c0000135
 "#;
         let reason = not_found_reason(image, prefix, &[], Some("org.winehq.Wine stable-22.08"), "", stderr);
+        assert_eq!(
+            reason,
+            "Kimochi's hook helper could not start with this game's Wine (the org.winehq.Wine stable-22.08 Flatpak), which has no bcryptprimitives.dll. This Wine is probably too old: update it (for Flathub's Wine, install a newer branch of it), or run the game with a recent Proton."
+        );
+        assert!(needs_newer_wine(&reason));
+        let reason = not_found_reason(image, prefix, &[], None, "", stderr);
         assert!(
-            reason.starts_with("This game's Wine (the org.winehq.Wine stable-22.08 Flatpak) is too old"),
+            reason.starts_with(
+                "Kimochi's hook helper could not start with this game's Wine, which has no bcryptprimitives.dll."
+            ),
             "{reason}"
         );
-        assert!(reason.contains("Wine 9.0 or newer"), "{reason}");
-        assert!(not_found_reason(image, prefix, &[], None, "", stderr).starts_with("This game's Wine is too old"));
-        // Another DLL it lacks: the line that names it, not the summary after it.
-        let other = stderr.replace("bcryptprimitives.dll", "other.dll");
-        let reason = not_found_reason(image, prefix, &[], None, "", &other);
-        assert!(reason.contains("import_dll Library other.dll"), "{reason}");
+        // A function it lacks, and a failure that names neither.
+        let reason = not_found_reason(image, prefix, &[], None, "", "0130:err:module:import_dll No implementation for kernel32.dll.GetSystemTimePreciseAsFileTime imported from L\"Z:\\x.exe\", setting to 0xdeadbeef\n");
+        assert!(reason.contains("which has no kernel32.dll.GetSystemTimePreciseAsFileTime."), "{reason}");
+        let reason = not_found_reason(
+            image,
+            prefix,
+            &[],
+            None,
+            "",
+            "0128:err:module:LdrInitializeThunk Importing dlls for L\"x\" failed, status c0000135\n",
+        );
+        assert!(
+            reason.starts_with("Kimochi's hook helper could not start with this game's Wine. This Wine"),
+            "{reason}"
+        );
+        // Anything else Wine says is passed on as it is, and is not an old Wine.
+        let reason =
+            not_found_reason(image, prefix, &[], None, "", "wine: could not load kernel32.dll, status c0000135");
+        assert!(!needs_newer_wine(&reason) && reason.ends_with("status c0000135"), "{reason}");
     }
 
     #[test]

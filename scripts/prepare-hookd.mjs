@@ -10,7 +10,7 @@
 // there (src-tauri/src/text_hook/wine.rs).
 // Linux ARM64 builds have no x86 games to hook and ship none.
 import { spawnSync } from 'node:child_process'
-import { copyFile, mkdir, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cargoTargetDir } from './cargo-target-dir.mjs'
@@ -49,10 +49,32 @@ if (process.platform === 'win32' || process.platform === 'linux') {
       throw new Error(
         `Text hook helper ${arch} build failed (${built.status}). Install the ${target} Rust target and ${tools}.`
       )
+    // MinGW (Linux) builds run under Wine, which before 8.14 has no bcryptprimitives.dll for Rust's
+    // ProcessPrng: each helper gets the stand-in (hookd/shim/) in its own folder, the 32-bit one
+    // in x86/ so the two can share the name. A Wine that has the DLL loads its own instead.
+    const folder = target.endsWith('-gnu') && arch === 'x86' ? path.join(destination, 'x86') : destination
+    await mkdir(folder, { recursive: true })
     await copyFile(
       path.join(cargoTargetDir(path.join(root, 'hookd')), `${target}/release/kimochi-hookd.exe`),
-      path.join(destination, `kimochi-hookd-${arch}.exe`)
+      path.join(folder, `kimochi-hookd-${arch}.exe`)
     )
+    if (target.endsWith('-gnu')) {
+      if (folder !== destination) await rm(path.join(destination, `kimochi-hookd-${arch}.exe`), { force: true })
+      const gcc = `${target.startsWith('x86_64') ? 'x86_64' : 'i686'}-w64-mingw32-gcc`
+      const shim = path.join(root, 'hookd/shim')
+      const compiled = spawnSync(
+        gcc,
+        [
+          ...['-shared', '-O2', '-s', '-nostartfiles', '-Wl,--entry,0', '-Wl,--kill-at', '-Wl,--enable-stdcall-fixup'],
+          ...['-o', path.join(folder, 'bcryptprimitives.dll')],
+          ...[path.join(shim, 'bcryptprimitives.c'), path.join(shim, 'bcryptprimitives.def'), '-ladvapi32']
+        ],
+        { stdio: 'inherit' }
+      )
+      if (compiled.error) throw compiled.error
+      if (compiled.status !== 0)
+        throw new Error(`The ${arch} bcryptprimitives.dll stand-in failed to build. Install ${tools}.`)
+    }
     // MinGW builds would carry their symbols and line tables inside the DLL (MSVC's go to a PDB).
     const env = target.endsWith('-gnu') ? { ...process.env, CARGO_PROFILE_RELEASE_STRIP: 'symbols' } : process.env
     const voice = spawnSync(

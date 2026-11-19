@@ -2081,6 +2081,7 @@ inside the sandbox.
 HookStatus = {
   supported, phase: 'idle' | 'starting' | 'downloading' | 'attaching' | 'hooked' | 'ended' | 'failed',
   detail,                         // why it failed or ended, or which engine it fell back from
+  helpUrl?,                       // a page that helps with `detail` (how to update Wine, when the game's is too old)
   sourceId, exe, pids,
   engine: {id: 'luna' | 'textractor', name, version} | null,
   download: {done, total} | null, // bytes, while downloading the hooker

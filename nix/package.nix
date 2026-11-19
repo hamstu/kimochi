@@ -72,8 +72,16 @@ let
       runHook preInstall
       mkdir -p "$out"
       ${if crate == "hookd" then ''
+        # Each helper beside its bcryptprimitives.dll stand-in for Wine before 8.14 (hookd/shim/;
+        # scripts/prepare-hookd.mjs), the 32-bit pair in x86/.
+        mkdir -p "$out/x86"
         cp target/x86_64-pc-windows-gnu/release/kimochi-hookd.exe "$out/kimochi-hookd-x64.exe"
-        cp target/i686-pc-windows-gnu/release/kimochi-hookd.exe "$out/kimochi-hookd-x86.exe"
+        cp target/i686-pc-windows-gnu/release/kimochi-hookd.exe "$out/x86/kimochi-hookd-x86.exe"
+        for arch in x86_64:. i686:x86; do
+          ''${arch%%:*}-w64-mingw32-gcc -shared -O2 -s -nostartfiles -Wl,--entry,0 -Wl,--kill-at \
+            -Wl,--enable-stdcall-fixup -o "$out/''${arch#*:}/bcryptprimitives.dll" \
+            hookd/shim/bcryptprimitives.c hookd/shim/bcryptprimitives.def -ladvapi32
+        done
       '' else ''
         cp target/x86_64-pc-windows-gnu/release/vhhook.dll "$out/kimochi-voicehook-x64.dll"
         cp target/i686-pc-windows-gnu/release/vhhook.dll "$out/kimochi-voicehook-x86.dll"
@@ -124,7 +132,7 @@ rustPlatform.buildRustPackage {
       -C src-tauri/resources/meikiocr/runtime '*/LICENSE' '*/ThirdPartyNotices.txt'
     cp ${screenai}/bin/kimochi-screenai-worker src-tauri/resources/screenai/
     ${lib.optionalString x64 ''
-      cp ${hookd}/* ${voicehook}/* src-tauri/resources/hookd/
+      cp -r ${hookd}/* ${voicehook}/* src-tauri/resources/hookd/
     ''}
   '';
   installPhase = ''
@@ -177,7 +185,9 @@ rustPlatform.buildRustPackage {
     PY
     ${lib.optionalString x64 ''
       test -f "$out/lib/${resourceName}/hookd/kimochi-hookd-x64.exe"
-      test -f "$out/lib/${resourceName}/hookd/kimochi-hookd-x86.exe"
+      test -f "$out/lib/${resourceName}/hookd/x86/kimochi-hookd-x86.exe"
+      test -f "$out/lib/${resourceName}/hookd/bcryptprimitives.dll"
+      test -f "$out/lib/${resourceName}/hookd/x86/bcryptprimitives.dll"
       test -f "$out/lib/${resourceName}/hookd/kimochi-voicehook-x64.dll"
       test -f "$out/lib/${resourceName}/hookd/kimochi-voicehook-x86.dll"
     ''}
