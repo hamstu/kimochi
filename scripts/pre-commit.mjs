@@ -103,7 +103,10 @@ try {
   if (changed.length) console.log(`pre-commit: formatted ${changed.length} staged file(s): ${changed.join(', ')}`)
 
   const scripts = files.filter((file) => linted.test(file))
-  if (scripts.length && tool(bin('oxlint'), ['--deny-warnings', ...scripts]).status !== 0) {
+  if (
+    scripts.length &&
+    tool(bin('oxlint'), ['--deny-warnings', '--no-error-on-unmatched-pattern', ...scripts]).status !== 0
+  ) {
     console.error('pre-commit: oxlint found problems in the staged files (commit with --no-verify to skip).')
     failed = true
   }
