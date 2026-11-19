@@ -8,8 +8,6 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-11-18
-
 ### Added
 
 - 📊 **Stats and reading history.** A new Stats tab shows a heatmap with streaks, characters and time per day, reading speed, when you read, per-session totals and your most-read kanji. All your lines are retained and can be exported from the Log's **⋯** menu for apps like exSTATic, or as CSV/JSON. More options are in **Settings → Log**.
