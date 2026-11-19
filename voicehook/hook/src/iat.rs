@@ -42,7 +42,13 @@ static HOOKS: Mutex<Vec<Hook>> = Mutex::new(Vec::new());
 static ON_MODULE: Mutex<Vec<OnModule>> = Mutex::new(Vec::new());
 static PATCHED: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(Default::default);
 static MODULES_SEEN: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(Default::default);
+/// Modules already logged as still loading.
+static LOADING_LOGGED: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(Default::default);
 static REAL_GPA: AtomicUsize = AtomicUsize::new(0);
+/// Whether `rescan` also hooks `GetProcAddress`. The cursor DLL (`cursor/`), which shares this
+/// file, turns it off: with both DLLs in a game, whichever patched a later module second would
+/// overwrite the other's `GetProcAddress` hook there.
+pub static HOOK_GPA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 type FnGpa = unsafe extern "system" fn(HMODULE, *const u8) -> usize;
 
@@ -280,14 +286,17 @@ pub fn rescan() {
         // rescan, once bound (NW.js loads its 80 MB nw.dll while our first scan runs).
         if unsafe { unbound(*m as usize) } {
             lock(&PATCHED).remove(&(*m as usize));
-            log(&format!("iat: {modname} is still loading; its imports are patched later"));
+            // Once per module: a .NET executable's table never looks bound, and is retried forever.
+            if lock(&LOADING_LOGGED).insert(*m as usize) {
+                log(&format!("iat: {modname} is still loading; its imports are patched later"));
+            }
             continue;
         }
         unsafe {
             walk_imports(*m as usize, |dll, fname, slot| {
                 let current = std::ptr::read_volatile(slot);
                 if fname == b"GetProcAddress" && (dll.starts_with("kernel32") || dll.contains("libraryloader")) {
-                    if current != gpa {
+                    if HOOK_GPA.load(Ordering::Relaxed) && current != gpa {
                         let _ = REAL_GPA.compare_exchange(0, current, Ordering::SeqCst, Ordering::SeqCst);
                         if write_slot(slot, gpa) {
                             n += 1;

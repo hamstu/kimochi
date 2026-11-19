@@ -18,6 +18,7 @@ import { SmallTextFilter } from './SmallTextFilter'
 import { GameModeSection } from './GameModeSection'
 import { TextHookerCardSection } from './TextHookerCardSection'
 import { GamePauseRow } from './GamePauseRow'
+import { GameCursorRow } from './GameCursorRow'
 import { DictionaryOpacityRow } from './DictionaryOpacityRow'
 import { RadialMenuSection } from './RadialMenuSection'
 import { HoverLookupRow } from './HoverLookupRow'
@@ -111,6 +112,7 @@ export function OverlayTab(): ReactNode {
           />
         </SettingsRow>
         <GamePauseRow />
+        <GameCursorRow />
         <JapaneseFilterRow />
       </SettingsSection>
 

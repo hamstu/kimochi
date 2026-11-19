@@ -1,7 +1,7 @@
 # Voice-hook library (built by Kimochi on Windows) and standalone test harness.
 # See README.md.
 [workspace]
-members = ["common", "hook", "cli", "fixture", "classify"]
+members = ["common", "hook", "cli", "fixture", "classify", "cursor", "cursortest"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -10,6 +10,7 @@ vh-common = { path = "common" }
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_Globalization",
+  "Win32_Graphics_Gdi",
   "Win32_Media",
   "Win32_Media_Audio",
   "Win32_Security",
@@ -24,6 +25,7 @@ windows-sys = { version = "0.59", features = [
   "Win32_System_SystemInformation",
   "Win32_System_SystemServices",
   "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }
 

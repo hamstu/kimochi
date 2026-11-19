@@ -446,7 +446,7 @@ fn save_icon(hook: &Hook, pid: u32, exe: &std::path::Path) {
 
 // ---------------------------------------------------------------------------- sidecar
 
-fn hookd_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn hookd_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let name = "kimochi-hookd-x64.exe";
     let bundled = app.path().resource_dir().map(|d| d.join("hookd").join(name)).ok();
     let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/hookd").join(name);
