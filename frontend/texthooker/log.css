@@ -1312,3 +1312,104 @@ html[data-mini] .log-add-note {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ selection mode */
+/* Select (a line's menu) picks several rows to copy or delete (lib/logSelection.ts). Every row
+   gets a checkbox at the start of its gutter, the time moves over for it, and the row's text is
+   no longer selectable: a click picks the row. Its ⋯ and Add a note step aside. */
+.log-lines[data-selecting] {
+  --line-select: calc(1rem + var(--k-space-2));
+  --line-gutter: calc(3.25rem + var(--line-select));
+  -webkit-user-select: none;
+  user-select: none;
+}
+html[data-mini] .log-lines[data-selecting] {
+  --line-gutter: calc(var(--k-space-4) + var(--line-select));
+}
+/* Centred on the row's first text line, like its time. */
+.line-select {
+  position: absolute;
+  top: 0.3em;
+  left: var(--k-space-3);
+  display: flex;
+  align-items: center;
+  height: 1.85em;
+}
+.line-translated .line-select {
+  height: 1.7em;
+}
+/* The box keeps the UI's type: the transcript's tall Japanese line would push its tick off centre. */
+.line-select .k-checkbox {
+  font-size: var(--k-text-md);
+  line-height: 1;
+}
+.line-select .k-checkbox > span {
+  display: flex;
+}
+.log-lines[data-selecting] .line-time {
+  left: calc(var(--k-space-3) + var(--line-select));
+}
+.log-lines[data-selecting] .line-actions,
+.log-lines[data-selecting] .log-add-note {
+  display: none;
+}
+/* The whole row is the target: no link or chip under it looks clickable. */
+.log-lines[data-selecting] .line,
+.log-lines[data-selecting] .line * {
+  cursor: default;
+}
+/* A selected row: the selected plane, its rail in, and no hairlines against it. */
+.log-lines .line:has(> .line-select [data-state='checked']) {
+  background: var(--k-selected);
+}
+.log-lines .line:has(> .line-select [data-state='checked'])::before,
+.log-lines .line:has(> .line-select [data-state='checked']) + .line::before {
+  opacity: 0;
+}
+.log-lines .line:has(> .line-select [data-state='checked']) > .line-rail {
+  opacity: 1;
+  transform: none;
+}
+.log-lines .line:has(> .line-select [data-state='checked']) .line-time::before {
+  color: var(--k-text-2);
+}
+
+/* Its bar, in the activity ticker's place (SelectionBar.tsx, activity.css): as wide as it needs. */
+.activity.log-selection-bar {
+  width: max-content;
+  max-width: calc(100% - var(--k-space-3) * 2);
+  animation: log-selection-in var(--k-base) var(--k-ease-out);
+}
+.log-selection-bar .activity-bar {
+  gap: var(--k-space-1);
+  height: var(--k-row-h);
+  padding: 0 var(--k-space-1-5) 0 var(--k-space-3);
+}
+.log-selection-count {
+  flex: 1;
+  min-width: 0;
+  margin-right: var(--k-space-2);
+  overflow: hidden;
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-selection-divider {
+  flex: none;
+  width: 1px;
+  height: var(--k-icon-sm);
+  margin: 0 var(--k-space-1);
+  background: var(--k-line);
+}
+@keyframes log-selection-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity.log-selection-bar {
+    animation: none;
+  }
+}

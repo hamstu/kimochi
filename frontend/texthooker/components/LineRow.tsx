@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { isComposing, Kbd, Tooltip } from '@kit'
+import { Checkbox, isComposing, Kbd, Tooltip } from '@kit'
 import { NotebookMatchChip } from './NotebookMatchChip'
 import { NoteMarkdown } from './NoteMarkdown'
 import { LineActionsMenu } from './LineActionsMenu'
@@ -14,6 +14,8 @@ import { endNote, keepNoteOpen, noteKeptOpen, stopEditing, useLineEditing } from
 import { addNote, setLineText } from '@texthooker/lib/store'
 import { ChevronDown, NotebookPen } from 'lucide-react'
 import { useMentions } from '@texthooker/hooks/useMentions'
+import { useRowSelection } from '@texthooker/hooks/useLogSelection'
+import { lineKey } from '@texthooker/lib/logSelection'
 
 interface Props {
   line: Line
@@ -59,6 +61,22 @@ export function LineGutter({ ts }: { ts: number }) {
         </Tooltip>
       ) : null}
     </>
+  )
+}
+
+/**
+ * The row's checkbox in selection mode (lib/logSelection.ts), in its gutter before the time; none
+ * otherwise. The Log handles the click (App.tsx), so a click anywhere on the row, or Space on the
+ * box, toggles it the same way. Never looked up (`data-no-scan`).
+ */
+function SelectBox({ line }: { line: Line }) {
+  const checked = useRowSelection(lineKey(line))
+  if (checked === null) return null
+  const text = line.text.length > 40 ? `${line.text.slice(0, 40)}…` : line.text
+  return (
+    <span className="line-select" data-no-scan lang="en">
+      <Checkbox checked={checked} aria-label={`${isNote(line) ? 'Select note' : 'Select line'}: ${text}`} />
+    </span>
   )
 }
 
@@ -400,6 +418,7 @@ function NoteView({ line, translateEnabled }: Props) {
   return (
     <div className="line line-own-note" {...groupProps} data-line-id={line.id} data-line-text={line.text}>
       <LineGutter ts={line.ts} />
+      <SelectBox line={line} />
       <div className="note-card" data-tall={tall ? '' : undefined} data-open={open ? '' : undefined}>
         <NoteIcon />
         <div className="note-main">
@@ -473,6 +492,7 @@ function LineView({ line, translateEnabled }: Props) {
     return (
       <div className="line" {...groupProps} data-line-id={line.id} data-line-text={line.text}>
         <LineGutter ts={line.ts} />
+        <SelectBox line={line} />
         <span className="line-pending">{line.text}</span>
         <span className="line-note line-pending" role="status">
           translating…
@@ -502,6 +522,7 @@ function LineView({ line, translateEnabled }: Props) {
         data-line-text={line.translation}
       >
         <LineGutter ts={line.ts} />
+        <SelectBox line={line} />
         <span>{line.translation}</span>
         <LineMedia line={line} />
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
@@ -520,6 +541,7 @@ function LineView({ line, translateEnabled }: Props) {
         data-edited={line.originalText !== undefined ? '' : undefined}
       >
         <LineGutter ts={line.ts} />
+        <SelectBox line={line} />
         <span>{line.text}</span>
         <LineMedia line={line} />
         {translateNote}
@@ -539,6 +561,7 @@ function LineView({ line, translateEnabled }: Props) {
       data-edited={line.originalText !== undefined ? '' : undefined}
     >
       <LineGutter ts={line.ts} />
+      <SelectBox line={line} />
       {pieces.map((piece, i) => {
         if (piece.kind === 'match' && piece.match) {
           return (

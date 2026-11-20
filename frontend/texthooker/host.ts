@@ -271,6 +271,7 @@ const allowed: Record<string, string[]> = {
   store: [
     'clearLines',
     'deleteLine',
+    'deleteLines',
     'setLineTranslation',
     'setLineTranslationVisible',
     'setLineExplanation',
