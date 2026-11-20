@@ -251,7 +251,7 @@ impl Drop for PipeWireThread {
 /// A feed of one PipeWire node on the session's daemon (Mutter's and KWin's screencasts publish
 /// there). `session` keeps the compositor's side alive and is dropped after the stream
 /// disconnects, so ending the screencast never races a live consumer.
-pub(crate) fn pipewire_feed(node: u32, session: Box<dyn Send>) -> Result<Feed> {
+pub(crate) fn pipewire_feed(node: u32, session: Box<dyn Send>, dmabuf: bool) -> Result<Feed> {
     use crate::linux_portal::backend::{pipewire_thread, Shared, PIPEWIRE_START_WAIT};
     let slot = Arc::new(Slot::default());
     let shared = Arc::new(Shared::default());
@@ -260,7 +260,7 @@ pub(crate) fn pipewire_feed(node: u32, session: Box<dyn Send>) -> Result<Feed> {
         let (nodes, shared) = (vec![(node, slot.clone())], shared.clone());
         std::thread::Builder::new()
             .name("kimochi-pw-native".into())
-            .spawn(move || pipewire_thread(None, nodes, shared, ready_tx))
+            .spawn(move || pipewire_thread(None, nodes, shared, ready_tx, dmabuf))
             .map_err(|e| CaptureError::new("native", e))?
     };
     let mut pw = PipeWireThread { stop: None, thread: Some(thread) };

@@ -208,7 +208,7 @@ impl Driver for Mutter {
     }
     fn open(&self, target: Target<'_>) -> Result<Feed> {
         let (node, session) = super::screencast::record(&self.connection, target)?;
-        pipewire_feed(node, Box::new(session))
+        pipewire_feed(node, Box::new(session), false)
     }
     fn activate(&self, window: &NativeWindow) -> Result<()> {
         let payload = serde_json::json!({"operation": "activate", "id": window.handle}).to_string();
