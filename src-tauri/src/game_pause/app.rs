@@ -243,6 +243,15 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                         if let Err(error) = crate::hotkeys::set_freeze_keys(&app, frozen) {
                             log(&app, false, json!({ "check": "game-pause", "freezeKeys": error }));
                         }
+                        FROZEN.store(
+                            status.holds.contains(&manager::Reason::Freeze),
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                        // The controller menu kept the focus while the game was frozen: it goes
+                        // back to the game once the game runs again.
+                        if !frozen && status.phase == Phase::Idle {
+                            crate::gamepad::hand_back_after_freeze(&app);
+                        }
                         let _ = app.emit(EVENT_STATUS, &status);
                         SHARED.lock().unwrap_or_else(|p| p.into_inner()).status = Some(status);
                     }
@@ -296,6 +305,15 @@ const STDERR_NORMAL_LINES: usize = 50;
 static GUARD_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// Whether the game may pause: the setting as the game pause thread last applied it, or a freeze.
 static ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the reader holds a freeze (Freeze game), as the game pause thread last reported it.
+static FROZEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the reader froze the game (Freeze game): the controller menu then keeps the focus
+/// instead of resuming the game to hand it back (cheap, any thread).
+pub fn frozen_now() -> bool {
+    FROZEN.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Whether the game may pause: the setting is on, as the game pause thread last applied it, or
 /// the reader froze it (cheap, any thread).

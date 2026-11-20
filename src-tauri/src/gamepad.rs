@@ -873,6 +873,13 @@ fn reactivate(app: &tauri::AppHandle, pid: u32) {
         });
         return;
     }
+    // Frozen (Freeze game): the game is to stay paused, so it is not resumed to take its focus
+    // back; Kimochi keeps the focus until the freeze ends (`hand_back_after_freeze`).
+    if crate::game_pause::app::frozen_now() {
+        *frozen_return() = Some(pid);
+        log(app, json!({ "check": "controller-nav", "handBack": "deferred: the game is frozen", "pid": pid }));
+        return;
+    }
     let app = app.clone();
     // A paused game is resumed before it is activated, never after: activating a stopped app
     // waits on it (macOS Accessibility, Windows' foreground hand-off). Off the main thread.
@@ -888,6 +895,25 @@ fn reactivate(app: &tauri::AppHandle, pid: u32) {
             let _ = crate::platform::activate_process(pid);
         });
     });
+}
+
+/// The game the menu would have handed focus back to while it was frozen: it gets it once the
+/// freeze ends and the game runs again.
+static FROZEN_RETURN: Mutex<Option<u32>> = Mutex::new(None);
+
+fn frozen_return() -> std::sync::MutexGuard<'static, Option<u32>> {
+    FROZEN_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Freeze game ended and the game runs again: give it the focus the menu kept while it was frozen,
+/// unless the reader has gone to another application since (only while Kimochi is in front).
+pub fn hand_back_after_freeze(app: &tauri::AppHandle) {
+    let Some(pid) = frozen_return().take() else { return };
+    if crate::platform::frontmost_pid() != Some(std::process::id()) {
+        log(app, json!({ "check": "controller-nav", "handBack": "skipped: Kimochi is not in front", "pid": pid }));
+        return;
+    }
+    reactivate(app, pid);
 }
 
 /// Give the game its focus back once the button that closed the menu is up. Handed back while
