@@ -552,6 +552,12 @@ const DEFAULT_KEYS: (&str, &str) = if cfg!(target_os = "macos") {
     ("Shift+F8", "Shift+F9")
 };
 
+/// Explain's key: Alt+X (X is Explain over a line in the Log; a game may well use X itself). With
+/// Control too, the whole sentence, without starting from the word pointed at. Not with Shift: it
+/// is the lookup key by default, held to read the word Alt+X then explains.
+const EXPLAIN_KEY: &str = "Alt+X";
+const EXPLAIN_SENTENCE_KEY: &str = "Control+Alt+X";
+
 fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
     let menu_chord = if steam_deck { json!([DECK_MENU_BUTTON]) } else { json!([10, 11]) };
     let mut hotkeys = Map::new();
@@ -588,6 +594,27 @@ fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
             }),
         );
     }
+    // No controller chord: the game menu's Explain is a button press away.
+    hotkeys.insert(
+        "explainText".into(),
+        json!({
+            "name": "Explain",
+            "accelerator": EXPLAIN_KEY,
+            "description": "Explain the text on the overlay with AI, starting from the word you point at",
+            "enabled": true,
+            "gamepadButtons": []
+        }),
+    );
+    hotkeys.insert(
+        "explainSentence".into(),
+        json!({
+            "name": "Explain sentence",
+            "accelerator": EXPLAIN_SENTENCE_KEY,
+            "description": "Explain the whole sentence on the overlay with AI, not one word in it",
+            "enabled": true,
+            "gamepadButtons": []
+        }),
+    );
     hotkeys
 }
 
@@ -882,6 +909,17 @@ mod tests {
         assert_eq!(merged["menuReadAlong"]["accelerator"], "Shift+F10");
         assert_eq!(merged["menuReadAlong"]["gamepadButtons"], json!([4, 5]));
         assert_eq!(merged["menuReadAlong"]["enabled"], true);
+    }
+
+    #[test]
+    fn explain_is_alt_x_and_parses_as_a_shortcut() {
+        let defaults = default_hotkeys_for(false);
+        let key = defaults["explainText"]["accelerator"].as_str().unwrap();
+        assert_eq!(key, "Alt+X");
+        assert!(key.parse::<tauri_plugin_global_shortcut::Shortcut>().is_ok());
+        let sentence = defaults["explainSentence"]["accelerator"].as_str().unwrap();
+        assert_eq!(sentence, "Control+Alt+X");
+        assert!(sentence.parse::<tauri_plugin_global_shortcut::Shortcut>().is_ok());
     }
 
     #[test]

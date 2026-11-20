@@ -1,6 +1,7 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux GNOME runtime. */
 import { createController } from './controller.js'
 import * as base from './native.js'
+import { createOverlayExplain, textTarget, wordInRange } from './overlay-explain.js'
 import { radialBaseVars, radialMenuColorOf } from './settings.js'
 
 if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
@@ -39,6 +40,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
   async function refresh() {
     snapshot = await rpc('snapshot')
     settings = snapshot.settings ?? {}
+    explaining = snapshot.explain ?? explaining
     words.replaceChildren()
     // Rebuild only text nodes and native character indices. Dictionary lookup and
     // highlight geometry remain owned by the existing Shell/Yomitan bridge.
@@ -101,10 +103,32 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
       keep = setInterval(() => void request({ operation: 'keep' }).catch(() => void controller.close()), 1000)
     }
   }
+  // The game menu's Explain: Wayland binds no Explain shortcut, so this is the way to it here. The
+  // overlay (the OCR coordinator) says what is on screen with each snapshot; the card is this
+  // window's own, by the text it explains, as on the overlay.
+  let explaining = { sections: [], language: 'ja', look: { theme: 'dark', highlight: '', font: '' } }
+  await base.watchSettings(() => {})
+  const explain = createOverlayExplain(document.body, {
+    native: base,
+    target: () => {
+      const reading = controller?.focusedWord?.()
+      const word = reading ? (wordInRange(reading.range) ?? { text: reading.text, rect: null, box: null }) : null
+      return textTarget(explaining.sections, words, word)
+    },
+    language: () => explaining.language,
+    area: () => null,
+    look: () => explaining.look,
+    changed: () => {},
+    closed: () => {
+      if (controller.mode === 'explain') void controller.close()
+    },
+    log: (value) => void core.invoke('report', { value })
+  })
   controller = createController({
     host: document.querySelector('#controller'),
     words,
     native,
+    explain,
     status: () => ({
       ...snapshot,
       origin: { x: 0, y: 0 },
