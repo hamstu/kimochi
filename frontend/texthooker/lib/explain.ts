@@ -7,7 +7,8 @@ import { getActiveSession } from './sessions'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { currentLanguage } from '../core/language'
-import { explainPromptFor } from './explainPrompt'
+import { explainPromptFor } from '@ui/explain-prompt'
+import { explainSettings } from '@ui/explain-settings'
 import { getSettings } from './settings'
 import { setLineExplanation, snapshotLines } from './store'
 import type { Line } from './types'
@@ -105,13 +106,8 @@ export function buildExplainPrompt(line: Line, template: string): string {
 async function runExplain(line: Line): Promise<void> {
   const settings = getSettings()
   const prompt = buildExplainPrompt(line, settings.explainPrompt)
-  const provider = settings.explainProvider
-  const model =
-    provider === 'claude'
-      ? settings.explainClaudeModel.trim()
-      : provider === 'codex'
-        ? settings.explainCodexModel.trim()
-        : ''
+  // Provider, model and effort as the settings choose them (ui/explain-settings.ts).
+  const { provider, model, effort } = explainSettings(settings)
 
   const requestId = ++requestCounter
   activeRequestId = requestId
@@ -123,7 +119,8 @@ async function runExplain(line: Line): Promise<void> {
     await invoke('explain_run', {
       requestId,
       provider,
-      model: model || null,
+      model,
+      effort,
       prompt
     })
   } catch (err) {

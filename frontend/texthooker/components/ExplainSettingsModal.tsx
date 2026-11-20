@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogContent, Input, Select, SettingsRow, Textarea } from '@kit'
 import { updateSettings } from '@texthooker/lib/settings'
-import { defaultExplainPrompt, explainTemplate, isDefaultExplainPrompt } from '@texthooker/lib/explainPrompt'
+import { defaultExplainPrompt, explainTemplate, isDefaultExplainPrompt } from '@ui/explain-prompt'
 import type { ExplainProvider, Settings } from '@texthooker/lib/types'
+import { EXPLAIN_EFFORTS } from '@ui/explain-settings'
 import { useAccount } from '../../bridge/account'
 import { useLanguage } from '../../bridge/useLanguage'
 
@@ -12,6 +13,9 @@ interface Props {
   onOpenChange: (open: boolean) => void
   settings: Settings
 }
+
+/** The effort select's "the CLI's own" entry (a select option needs a value; stored as ''). */
+const DEFAULT_EFFORT = 'default'
 
 /** Claude CLI model aliases. Opus is the default per project preference —
     deliberately not the newer Fable tier, though it stays selectable. */
@@ -39,6 +43,13 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  const provider = settings.explainProvider
+  // The effort each CLI keeps, and what "default" means for it.
+  const effortSetting =
+    provider === 'claude'
+      ? { value: settings.explainClaudeEffort, key: 'explainClaudeEffort', label: 'CLI default' }
+      : { value: settings.explainCodexEffort, key: 'explainCodexEffort', label: 'CLI default (config.toml)' }
+
   const savePrompt = () => {
     const next = promptDraft.trim() ? promptDraft : fallback
     // A default stays as stored (it follows the language either way).
@@ -53,7 +64,7 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
       <DialogContent
         size="lg"
         title="Explain settings"
-        description="The model that explains a line, and the prompt it gets."
+        description="The model that explains a line, how hard it thinks, and the prompt it gets."
       >
         <div className="explain-settings">
           <div className="k-settings-group">
@@ -103,6 +114,25 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
                     }
                   }}
                   placeholder="(CLI default)"
+                />
+              </SettingsRow>
+            )}
+            {provider !== 'kimochi' && (
+              <SettingsRow
+                label="Effort"
+                description={
+                  provider === 'codex'
+                    ? "How long the model thinks before it answers. Lower starts the answer sooner; higher can explain harder lines better. Not every model takes every effort: if Codex refuses one, choose another or the CLI's default."
+                    : 'How long the model thinks before it answers. Lower starts the answer sooner; higher can explain harder lines better.'
+                }
+              >
+                <Select
+                  aria-label="Effort"
+                  value={effortSetting.value || DEFAULT_EFFORT}
+                  onValueChange={(v) =>
+                    void updateSettings({ [effortSetting.key]: v === DEFAULT_EFFORT ? '' : v } as Partial<Settings>)
+                  }
+                  options={[{ value: DEFAULT_EFFORT, label: effortSetting.label }, ...EXPLAIN_EFFORTS[provider]]}
                 />
               </SettingsRow>
             )}
