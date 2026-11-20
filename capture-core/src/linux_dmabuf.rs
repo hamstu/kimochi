@@ -363,6 +363,88 @@ mod egl {
             }
         }
     }
+
+    /// Reads back a DMA-BUF we fill ourselves, through the session's real driver: checks the
+    /// fourcc, byte order, row order and stride handling end to end. Needs a Wayland session
+    /// with a GPU and libgbm (`cargo test -p kimochi-capture -- --ignored dmabuf_readback`).
+    #[cfg(test)]
+    mod live {
+        use super::super::{ARGB8888, IMPLICIT_MODIFIER, XRGB8888};
+        use super::*;
+
+        api!(Gbm {
+            gbm_create_device: fn(i32) -> Handle,
+            gbm_device_destroy: fn(Handle),
+            gbm_bo_create: fn(Handle, u32, u32, u32, u32) -> Handle,
+            gbm_bo_destroy: fn(Handle),
+            gbm_bo_map: fn(Handle, u32, u32, u32, u32, u32, *mut u32, *mut Handle) -> *mut u8,
+            gbm_bo_unmap: fn(Handle, Handle),
+            gbm_bo_get_fd: fn(Handle) -> i32,
+            gbm_bo_get_modifier: fn(Handle) -> u64,
+        });
+        const GBM_BO_USE_RENDERING: u32 = 1 << 2;
+        const GBM_BO_USE_LINEAR: u32 = 1 << 4;
+        const GBM_BO_TRANSFER_WRITE: u32 = 1 << 1;
+
+        /// A linear `width × height` buffer whose pixel (x, y) is B=x, G=y, R=200, A=x+y (in
+        /// DRM's little-endian XRGB/ARGB byte order), as an fd and its stride and modifier.
+        unsafe fn filled_buffer(gbm: &Gbm, device: Handle, fourcc: u32, w: u32, h: u32) -> (Handle, i32, u32, u64) {
+            let bo = (gbm.gbm_bo_create)(device, w, h, fourcc, GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING);
+            assert!(!bo.is_null(), "gbm_bo_create");
+            let (mut stride, mut map_data) = (0u32, null_mut());
+            let map = (gbm.gbm_bo_map)(bo, 0, 0, w, h, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data);
+            assert!(!map.is_null(), "gbm_bo_map");
+            for y in 0..h {
+                for x in 0..w {
+                    let px = map.add((y * stride + x * 4) as usize);
+                    for (i, v) in [x as u8, y as u8, 200, (x + y) as u8].into_iter().enumerate() {
+                        *px.add(i) = v;
+                    }
+                }
+            }
+            (gbm.gbm_bo_unmap)(bo, map_data);
+            (bo, (gbm.gbm_bo_get_fd)(bo), stride, (gbm.gbm_bo_get_modifier)(bo))
+        }
+
+        #[test]
+        #[ignore = "needs a Wayland session with a GPU"]
+        fn dmabuf_readback() {
+            let mut reader = Reader::new().expect("EGL with DMA-BUF import");
+            assert_eq!(reader.modifiers(XRGB8888).last(), Some(&IMPLICIT_MODIFIER));
+            eprintln!("XRGB8888 modifiers: {:x?}", reader.modifiers(XRGB8888));
+            // SAFETY: test-only GBM calls with checked results; buffers are destroyed below.
+            unsafe {
+                let gbm_lib = Box::leak(Box::new(Library::new("libgbm.so.1").expect("libgbm")));
+                let gbm = Gbm::load(|n| gbm_lib.get::<Proc>(n.to_bytes_with_nul()).ok().map(|s| *s)).unwrap();
+                let node = std::fs::File::open("/dev/dri/renderD128").expect("render node");
+                let device = (gbm.gbm_create_device)(std::os::fd::AsRawFd::as_raw_fd(&node));
+                assert!(!device.is_null());
+                let (w, h) = (37, 21); // odd sizes, so the stride is padded
+                for (fourcc, alpha) in [(XRGB8888, false), (ARGB8888, true)] {
+                    let (bo, fd, stride, modifier) = filled_buffer(&gbm, device, fourcc, w, h);
+                    eprintln!("fourcc {fourcc:#x}: stride {stride}, modifier {modifier:#x}");
+                    for modifier in [modifier, IMPLICIT_MODIFIER] {
+                        let plane = Plane { fd, offset: 0, stride: stride as i32 };
+                        let rgba = reader.read(fourcc, modifier, w, h, &[plane]).expect("readback").to_vec();
+                        assert_eq!(rgba.len(), (w * h * 4) as usize);
+                        for (y, x) in [(0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1), (7, 11)] {
+                            let at = ((y * w + x) * 4) as usize;
+                            let a = if alpha { (x + y) as u8 } else { 255 };
+                            assert_eq!(&rgba[at..at + 4], &[200, y as u8, x as u8, a], "pixel ({x}, {y})");
+                        }
+                    }
+                    libc_close(fd);
+                    (gbm.gbm_bo_destroy)(bo);
+                }
+                (gbm.gbm_device_destroy)(device);
+            }
+        }
+
+        fn libc_close(fd: i32) {
+            // SAFETY: we own the fd gbm_bo_get_fd returned.
+            drop(unsafe { <std::os::fd::OwnedFd as std::os::fd::FromRawFd>::from_raw_fd(fd) });
+        }
+    }
 }
 
 #[cfg(test)]
