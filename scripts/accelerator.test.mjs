@@ -11,7 +11,7 @@ const {
   keyPlatformOf,
   formatAccelerator,
   mouseButtonAccelerator
-} = await load('../frontend/panels/settings/accelerator.ts')
+} = await load('accelerator.ts')
 const { fallbackCapabilities, normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
 
 const MAC = { os: 'macos', keys: { primaryModifier: 'meta' } }

@@ -196,12 +196,12 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
 /// on that same thread to register a key.
 static REGION_KEYS: AtomicBool = AtomicBool::new(false);
 static NAV_KEYS: AtomicBool = AtomicBool::new(false);
-/// Whether Escape releases a freeze (the game is frozen by Freeze game).
-static FREEZE_KEYS: AtomicBool = AtomicBool::new(false);
-/// Escape while the game is frozen and neither the region editor nor the controller menu has it:
-/// the overlay unfreezes. From the global shortcut here, or Windows' keyboard hook.
-pub fn freeze_escape(app: &tauri::AppHandle) {
-    let _ = app.emit("freeze-escape", json!({}));
+/// Whether Escape resumes the game (the reader paused it with Pause game).
+static PAUSE_KEYS: AtomicBool = AtomicBool::new(false);
+/// Escape while the reader has the game paused and neither the region editor nor the controller
+/// menu has it: the overlay resumes the game. From the global shortcut here, or Windows' keyboard hook.
+pub fn pause_escape(app: &tauri::AppHandle) {
+    let _ = app.emit("pause-escape", json!({}));
 }
 /// Serialises `sync_keys`, so two callers cannot both decide to register the same key.
 #[cfg(not(target_os = "windows"))]
@@ -233,11 +233,11 @@ pub fn set_nav_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
     sync_keys(app)
 }
 
-/// Escape while the game is frozen (Freeze game), delivered as `freeze-escape`: the game cannot
+/// Escape while the reader has the game paused (Pause game), delivered as `pause-escape`: the game cannot
 /// take it then, and it would only reach the game on resume. The region editor and the
 /// controller menu keep Escape while they are open.
-pub fn set_freeze_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
-    if FREEZE_KEYS.swap(on, Ordering::SeqCst) == on {
+pub fn set_pause_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
+    if PAUSE_KEYS.swap(on, Ordering::SeqCst) == on {
         return Ok(());
     }
     sync_keys(app)
@@ -251,7 +251,7 @@ fn sync_keys(_app: &tauri::AppHandle) -> Result<(), String> {
     crate::platform::set_keyboard_guard(
         REGION_KEYS.load(Ordering::SeqCst),
         NAV_KEYS.load(Ordering::SeqCst),
-        FREEZE_KEYS.load(Ordering::SeqCst),
+        PAUSE_KEYS.load(Ordering::SeqCst),
     );
     Ok(())
 }
@@ -277,7 +277,7 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
         let parsed = Shortcut::from_str(key).map_err(|e| e.to_string())?;
         let wanted = (REGION_KEYS.load(Ordering::SeqCst) && REGION_KEY_NAMES.contains(&key))
             || (NAV_KEYS.load(Ordering::SeqCst) && NAV_KEY_NAMES.contains(&key))
-            || (FREEZE_KEYS.load(Ordering::SeqCst) && key == "Escape");
+            || (PAUSE_KEYS.load(Ordering::SeqCst) && key == "Escape");
         if !wanted {
             if shortcuts.is_registered(parsed) {
                 let _ = shortcuts.unregister(parsed);
@@ -311,11 +311,11 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
                 }
                 if pressed
                     && key == "Escape"
-                    && FREEZE_KEYS.load(Ordering::SeqCst)
+                    && PAUSE_KEYS.load(Ordering::SeqCst)
                     && !REGION_KEYS.load(Ordering::SeqCst)
                     && !NAV_KEYS.load(Ordering::SeqCst)
                 {
-                    freeze_escape(app);
+                    pause_escape(app);
                 }
             })
             .map_err(|e| e.to_string())?;

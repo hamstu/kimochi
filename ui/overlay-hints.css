@@ -3,10 +3,10 @@
  * the scan area (placed by script, `place`) or along the bottom of the overlay. It lets clicks through except on its ×, so it never needs :hover;
  * the × lights from `data-hover`.
  */
-/* The pill both share: the hint bar and the Freeze game badge (below). `--pill-ring` tints its
+/* The pill both share: the hint bar and the Pause game badge (below). `--pill-ring` tints its
    edge. */
 .overlay-hints,
-.freeze-badge {
+.pause-badge {
   position: fixed;
   transform: translateX(-50%);
   z-index: 2147483000;
@@ -116,43 +116,46 @@
   }
 }
 
-/* Freeze game: says the game is paused on purpose (ui/overlay.js `showFreezeBadge`). The hint
-   bar's pill, placed by script along the top of the source; never takes the pointer. */
-.freeze-badge {
+/* Pause game: says the game is paused on purpose and how to resume (ui/overlay.js
+   `showPauseBadge`). The hint bar's pill, placed by script along the top of the source; never
+   takes the pointer. */
+.pause-badge {
   padding: 6px 14px;
   color: rgb(255 255 255 / 0.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.freeze-badge[hidden] {
+.pause-badge[hidden] {
   display: none;
 }
-.freeze-badge[data-tone='frozen'] {
-  --pill-ring: rgb(125 200 255 / 0.55);
+.pause-badge .overlay-hint-key {
+  padding: 1px 6px;
+  margin: 0 1px;
+  vertical-align: 1px;
 }
-.freeze-badge[data-tone='warn'] {
+.pause-badge[data-tone='paused'] {
+  --pill-ring: rgb(140 200 255 / 0.35);
+}
+.pause-badge[data-tone='warn'] {
   --pill-ring: rgb(255 190 90 / 0.6);
 }
-/* Over the frozen game: a light cool wash and a glowing edge. Fades in as OCR text does
-   (`ocr-appear`, overlay-text.css). */
-.freeze-tint {
+/* Over the paused game: no wash and no border, only a faint cool glow in from its edges. Fades in
+   as OCR text does (`ocr-appear`, overlay-text.css). */
+.pause-glow {
   position: fixed;
   box-sizing: border-box;
-  background: rgb(120 190 255 / 0.12);
-  box-shadow:
-    inset 0 0 0 2px rgb(125 200 255 / 0.55),
-    inset 0 0 48px rgb(125 200 255 / 0.28);
+  box-shadow: inset 0 0 clamp(64px, 12vmin, 160px) rgb(120 190 255 / 0.45);
   pointer-events: none;
   user-select: none;
   animation: ocr-appear 220ms ease-out;
 }
-.freeze-tint[hidden] {
+.pause-glow[hidden] {
   display: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .freeze-badge,
-  .freeze-tint {
+  .pause-badge,
+  .pause-glow {
     animation: none;
   }
 }

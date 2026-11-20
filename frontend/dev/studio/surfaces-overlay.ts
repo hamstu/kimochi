@@ -97,23 +97,23 @@ const TEXT: ControlGroup = {
   ]
 }
 
-/** Freeze game (PR #265): the stage plays it, with F standing in for the reader's shortcut. */
-const FREEZE: ControlGroup = {
-  title: 'Freeze game',
+/** Pause game (PR #265): the stage plays it, with P standing in for the reader's shortcut. */
+const PAUSE: ControlGroup = {
+  title: 'Pause game',
   controls: [
     {
       kind: 'toggle',
-      param: 'frozen',
-      label: 'Start frozen',
+      param: 'paused',
+      label: 'Start paused',
       on: '1',
-      help: 'Or click the stage and press F (the Freeze game shortcut); F again or Escape unfreezes.'
+      help: 'Or click the stage and press P (the Pause game shortcut); P again, Escape or B resumes.'
     },
     {
       kind: 'toggle',
-      param: 'freeze',
+      param: 'pause',
       label: 'The game can’t be paused',
       on: 'refuse',
-      help: 'Freezing fails and the badge says why.'
+      help: 'Pausing fails and the badge says why.'
     }
   ]
 }
@@ -169,7 +169,7 @@ export const OVERLAY_SURFACES: Surface[] = [
     groups: [
       GAME,
       { ...TEXT, when: inScene('overlay-words', '') },
-      { ...FREEZE, when: inScene('overlay-words', '') },
+      { ...PAUSE, when: inScene('overlay-words', '') },
       {
         title: 'Pointer and pop-up',
         when: inScene('overlay-words', ''),
@@ -277,16 +277,16 @@ export const OVERLAY_SURFACES: Surface[] = [
         ]
       },
       {
-        ...FREEZE,
+        ...PAUSE,
         controls: [
           {
             kind: 'toggle',
-            param: 'menufreeze',
-            label: 'Freeze game in the menu',
+            param: 'menupause',
+            label: 'Pause items in the menu',
             on: '1',
-            help: 'Settings → Radial menu: not in the menu as it ships.'
+            help: 'Pause game, Pause & scan and Pause & read along (Settings → Radial menu): not in the menu as it ships.'
           },
-          ...FREEZE.controls
+          ...PAUSE.controls
         ]
       },
       {

@@ -90,8 +90,8 @@ static RUNNING: Mutex<Option<u32>> = Mutex::new(None);
 static PRIMARY_DOWN: AtomicBool = AtomicBool::new(false);
 static REGION: AtomicBool = AtomicBool::new(false);
 static NAV: AtomicBool = AtomicBool::new(false);
-/// The game is frozen (Freeze game): Escape on it releases the freeze (`hotkeys::set_freeze_keys`).
-static FREEZE: AtomicBool = AtomicBool::new(false);
+/// The reader paused the game (Pause game): Escape on it resumes it (`hotkeys::set_pause_keys`).
+static MANUAL_PAUSE: AtomicBool = AtomicBool::new(false);
 /// The selected source window (0 for a display), whether or not the overlay shows words on it:
 /// `TARGETS` names it only while the overlay has words there.
 static SOURCE_WINDOW: AtomicUsize = AtomicUsize::new(0);
@@ -100,8 +100,8 @@ static SOURCE_WINDOW: AtomicUsize = AtomicUsize::new(0);
 enum KeyEvent {
     /// A key for the region editor (`region`) and/or the controller menu (`nav`).
     Modal { key: u32, down: bool, region: bool, nav: bool },
-    /// Escape pressed on the frozen game (Freeze game).
-    FreezeEscape,
+    /// Escape pressed on the game the reader paused (Pause game).
+    PauseEscape,
 }
 static BLOCKED_MODIFIERS: AtomicU32 = AtomicU32::new(0);
 static HOVER_LEASE: AtomicBool = AtomicBool::new(false);
@@ -129,10 +129,10 @@ pub(super) fn modifier_down(key: u16) -> bool {
     }
 }
 
-pub fn set_keyboard_guard(region: bool, navigation: bool, freeze: bool) {
+pub fn set_keyboard_guard(region: bool, navigation: bool, manual_pause: bool) {
     REGION.store(region, Ordering::Relaxed);
     NAV.store(navigation, Ordering::Relaxed);
-    FREEZE.store(freeze, Ordering::Relaxed);
+    MANUAL_PAUSE.store(manual_pause, Ordering::Relaxed);
 }
 
 fn key_name(key: u32) -> Option<&'static str> {
@@ -431,8 +431,8 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
         .spawn(move || {
             for event in key_receiver {
                 let (key, down, region, nav) = match event {
-                    KeyEvent::FreezeEscape => {
-                        crate::hotkeys::freeze_escape(&key_app);
+                    KeyEvent::PauseEscape => {
+                        crate::hotkeys::pause_escape(&key_app);
                         continue;
                     }
                     KeyEvent::Modal { key, down, region, nav } => (key, down, region, nav),
@@ -507,19 +507,19 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 let owned = hook.key_owners[key as usize];
                 let was_down = hook.keys_down[key as usize];
                 hook.keys_down[key as usize] = down;
-                // Freeze game: Escape pressed on the frozen game releases it, and never reaches
+                // Pause game: Escape pressed on the paused game resumes it, and never reaches
                 // the game (which would act on it once resumed). Its release and repeats are
                 // swallowed with it, as an owned key.
                 if key == 27
                     && down
                     && !was_down
-                    && FREEZE.load(Ordering::Relaxed)
+                    && MANUAL_PAUSE.load(Ordering::Relaxed)
                     && !region
                     && !nav
                     && !foreground.0.is_null()
                     && foreground.0 as usize == SOURCE_WINDOW.load(Ordering::Relaxed)
                 {
-                    if hook.keys.try_send(KeyEvent::FreezeEscape).is_err() {
+                    if hook.keys.try_send(KeyEvent::PauseEscape).is_err() {
                         return false;
                     }
                     hook.key_owners[key as usize] = true;

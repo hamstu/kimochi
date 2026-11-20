@@ -80,7 +80,9 @@ const ITEM_ICONS: Record<string, string> = {
   history: ICONS.history,
   controls: ICONS.app,
   'ocr-settings': ICONS.settings,
-  freeze: ICONS.freeze
+  pause: ICONS.pause,
+  'pause-scan': ICONS.pauseScan,
+  'pause-read-along': ICONS.pauseReadAlong
 }
 
 /** The parts of a shown RadialMenu the drag moves (ui/radial-menu.js). */

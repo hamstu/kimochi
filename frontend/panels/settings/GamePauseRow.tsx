@@ -22,7 +22,7 @@ export function GamePauseRow(): ReactNode {
         controlId="game-pause"
         description={
           supported
-            ? 'Freezes the game while you look up words or use the radial menu. Online games may disconnect.'
+            ? 'Pauses the game while you look up words or use the radial menu. Online games may disconnect.'
             : (info?.capability.note ?? 'Not available on this system yet.')
         }
       >
@@ -40,7 +40,7 @@ export function GamePauseRow(): ReactNode {
           description={
             paused
               ? `The game is paused now (${status?.processes ?? 0} processes).`
-              : (refusal ?? 'If a game ever stays frozen, this starts it again.')
+              : (refusal ?? 'If a game ever stays paused, this starts it again.')
           }
         >
           <Button

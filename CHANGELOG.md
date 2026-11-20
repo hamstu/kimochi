@@ -10,7 +10,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- ❄️ **Freeze game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again (or Escape) to carry on. Kimochi rescans the whole frozen screen right away. Give it a key or controller button in Settings → Shortcuts & Controls, or add it to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
+- ⏸️ **Pause game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again, Escape or B on your controller to carry on. **Pause & scan** and **Pause & read along** pause the game and then scan it or step through its text, in one press. Give them a key or controller button in Settings → Shortcuts & Controls, or add them to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
 
 ### Fixed
 

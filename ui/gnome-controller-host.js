@@ -118,7 +118,13 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
         if (id === 'ocr-settings') await emit('main:show-settings')
         return
       }
-      return rpc('action', { name: { auto: 'toggleAutoOcr', freeze: 'menuFreeze' }[id] ?? id })
+      // Pause & scan / Pause & read along: the overlay pauses the game, then this menu does the rest.
+      if (id === 'pause-scan' || id === 'pause-read-along') {
+        await rpc('action', { name: 'pauseAndWait' })
+        await refresh()
+        return controller.runItem(id === 'pause-scan' ? 'scan' : 'dictionary')
+      }
+      return rpc('action', { name: { auto: 'toggleAutoOcr', pause: 'menuPause' }[id] ?? id })
     },
     scan: async () => {
       const result = await rpc('scan')

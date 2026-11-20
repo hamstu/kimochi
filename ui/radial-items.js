@@ -67,10 +67,26 @@ export const RADIAL_ITEMS = [
     description: "Open Kimochi's settings: OCR settings with an OCR source."
   },
   {
-    id: 'freeze',
-    label: 'Freeze game',
-    hotkey: 'menuFreeze',
-    description: 'Pause the game so a pop-up or tooltip stays up while you read it. Again to unfreeze.',
+    id: 'pause',
+    label: 'Pause game',
+    hotkey: 'menuPause',
+    description: 'Pause the game so a pop-up or tooltip stays up while you read it. Again, Escape or B to resume.',
+    when: 'ocr',
+    optional: true
+  },
+  {
+    id: 'pause-scan',
+    label: 'Pause & scan',
+    hotkey: 'menuPauseScan',
+    description: 'Pause the game, then scan it and read along with the new text.',
+    when: 'ocr',
+    optional: true
+  },
+  {
+    id: 'pause-read-along',
+    label: 'Pause & read along',
+    hotkey: 'menuPauseReadAlong',
+    description: 'Pause the game, then step through its text word by word with the dictionary.',
     when: 'ocr',
     optional: true
   }

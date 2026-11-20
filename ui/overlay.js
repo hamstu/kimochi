@@ -17,7 +17,7 @@ import { createController } from './controller.js'
 import { radialItemForHotkey, RADIAL_MENU_SETTING } from './radial-items.js'
 import { padButtons, startRegionPad } from './region-pad.js'
 import { buttonName, pageMenuKey } from './controller-input.js'
-import { activePadLayout, setPadLayout } from './pad-layout.js'
+import { activePadLayout, padGlyphHtml, setPadLayout } from './pad-layout.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
 import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
@@ -108,8 +108,10 @@ import {
   resolveHookCardAppearance,
   resolveHostEngine,
   resolveOverlayCardAppearance,
-  usableInputSource
+  usableInputSource,
+  effectiveControllerButtons
 } from './settings.js'
+import { formatAccelerator } from './accelerator.js'
 import { clearOfGame, exceptRects, popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
@@ -788,8 +790,8 @@ const overlayTextOn = () =>
   (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) ||
   isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)
 let gamescopeMenuCenter = null
-/** Freeze game is on (`setFrozen`); read by the controller's menu. */
-let frozen = false
+/** The reader paused the game (Pause game, `setManualPause`); read by the controller's menu. */
+let manualPause = false
 let controller = null
 controller = createController({
   host: document.querySelector('#controller'),
@@ -808,7 +810,7 @@ controller = createController({
       hooked: hookMode(),
       autoOcr: Boolean(state.flags.autoOcrEnabled),
       autoAvailable: !isQuickShot(),
-      frozen,
+      manualPause,
       textVisible: overlayTextOn(),
       origin,
       area,
@@ -825,7 +827,9 @@ controller = createController({
   },
   run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
-    if (id === 'freeze') return void setFrozen(!frozen, 'reader')
+    if (id === 'pause') return void setManualPause(!manualPause, 'reader')
+    if (id === 'pause-scan') return pauseThen('scan')
+    if (id === 'pause-read-along') return pauseThen('dictionary')
     if (id === 'controls' || id === 'ocr-settings') {
       // With the Text Hooker as the source, its settings (open at the hooked game's page).
       if (id === 'ocr-settings' && hookMode()) {
@@ -1141,118 +1145,164 @@ function gamePauseReasons() {
   return reasons
 }
 function beatGamePause() {
-  // The overlay's own reasons only with the setting on; a freeze is asked for outright.
+  // The overlay's own reasons only with the setting on; a manual pause is asked for outright.
   const reasons = setting('pauseGameWhileReading') ? gamePauseReasons() : []
-  if (frozen) reasons.push('freeze')
+  if (manualPause) reasons.push('manual')
   if (reasons.length === 0 && !gamePauseHeld) return
   gamePauseHeld = reasons.length > 0
   void native.gamePauseBeat(reasons)
 }
 
 /**
- * Freeze game (the radial menu's `freeze` item and its shortcut, `menuFreeze`): the reader pauses
- * the game on purpose, to read what it shows only for a moment, such as a tooltip that follows the
- * pointer (moving onto its words would close it) or a toast. It rides the game pause beat as the
- * `freeze` reason, which needs no "Pause the game while reading". Once the game is paused the
- * screen is read once, so the frozen frame's text is on the overlay. Native ends a freeze on its
- * own forced resumes (another app in front, the source changed, the overlay hidden) and when the
- * game cannot be paused: the overlay follows the `game-pause` status and lets go.
+ * Pause game (the radial menu's `pause` item and its shortcut, `menuPause`; `pause-scan` and
+ * `pause-read-along` pause and then do what Scan and Read along do): the reader pauses the game on
+ * purpose, to read what it shows only for a moment, such as a tooltip that follows the pointer
+ * (moving onto its words would close it) or a toast. It rides the game pause beat as the `manual`
+ * reason, which needs no "Pause the game while reading". Native ends it on its own forced resumes
+ * (another app in front, the source changed, the overlay hidden) and when the game cannot be
+ * paused: the overlay follows the `game-pause` status and lets go. While paused, Escape (and B on
+ * a controller nothing else is using) resumes: native sends `pause-escape`.
  */
-/** Native has reported holding this freeze: losing the hold after that means it was ended. */
-let freezeHeld = false
-let freezeScanned = false
-const freezeBadge = Object.assign(document.createElement('div'), { className: 'freeze-badge', hidden: true })
-freezeBadge.setAttribute('aria-live', 'polite')
-document.body.append(freezeBadge)
+/** Native has reported holding this pause: losing the hold after that means it was ended. */
+let pauseHeld = false
+/** Waiting for the game to be paused, for `pause-scan` / `pause-read-along`: settled by the status. */
+let pauseWaiters = []
+/** The game pause phase native last reported (`game-pause`). */
+let gamePausePhase = 'idle'
+/** The radial menu's items that pause the game. */
+const PAUSE_ITEMS = ['pause', 'pause-scan', 'pause-read-along']
+const pauseBadge = Object.assign(document.createElement('div'), { className: 'pause-badge', hidden: true })
+pauseBadge.setAttribute('aria-live', 'polite')
+document.body.append(pauseBadge)
 /**
- * A cool tint over the frozen game, so it reads as stopped at a glance. Behind every other
- * overlay layer (first in the body, no z-index), and never in a capture: a frozen source is a
- * window, which is captured on its own.
+ * A faint cool glow in from the edges of the paused game, so it reads as stopped at a glance
+ * without covering it. Behind every other overlay layer (first in the body, no z-index), and
+ * never in a capture: a paused source is a window, which is captured on its own.
  */
-const freezeTint = Object.assign(document.createElement('div'), { className: 'freeze-tint', hidden: true })
-document.body.prepend(freezeTint)
-let freezeBadgeTimer = 0
-/** The source's bounds in overlay coordinates, when known. */
-function showFreezeBadge(text, { tone = 'info', forMs = 0 } = {}) {
-  clearTimeout(freezeBadgeTimer)
-  if (!text) {
-    freezeBadge.hidden = true
+const pauseGlow = Object.assign(document.createElement('div'), { className: 'pause-glow', hidden: true })
+document.body.prepend(pauseGlow)
+let pauseBadgeTimer = 0
+/** Show `html` on the badge (null hides it), for `forMs` when given. */
+function showPauseBadge(html, { tone = 'info', forMs = 0 } = {}) {
+  clearTimeout(pauseBadgeTimer)
+  if (!html) {
+    pauseBadge.hidden = true
     return
   }
-  freezeBadge.textContent = text
-  freezeBadge.dataset.tone = tone
+  pauseBadge.innerHTML = html
+  pauseBadge.dataset.tone = tone
   // Along the top of the source, where game text rarely is.
   const bounds = sourceArea()
-  freezeBadge.style.left = bounds ? `${bounds.x + bounds.width / 2}px` : '50%'
-  freezeBadge.style.top = `${Math.max(0, bounds?.y ?? 0) + 12}px`
-  freezeBadge.hidden = false
-  if (forMs > 0) freezeBadgeTimer = setTimeout(() => (freezeBadge.hidden = true), forMs)
+  pauseBadge.style.left = bounds ? `${bounds.x + bounds.width / 2}px` : '50%'
+  pauseBadge.style.top = `${Math.max(0, bounds?.y ?? 0) + 12}px`
+  pauseBadge.hidden = false
+  if (forMs > 0) pauseBadgeTimer = setTimeout(() => (pauseBadge.hidden = true), forMs)
 }
-function showFreezeTint(on) {
+function showPauseGlow(on) {
   const bounds = on ? sourceArea() : null
   if (bounds) {
-    Object.assign(freezeTint.style, {
+    Object.assign(pauseGlow.style, {
       left: `${bounds.x}px`,
       top: `${bounds.y}px`,
       width: `${bounds.width}px`,
       height: `${bounds.height}px`
     })
   } else if (on) {
-    Object.assign(freezeTint.style, { left: '0', top: '0', width: '100vw', height: '100vh' })
+    Object.assign(pauseGlow.style, { left: '0', top: '0', width: '100vw', height: '100vh' })
   }
-  freezeTint.hidden = !on
+  pauseGlow.hidden = !on
 }
-function setFrozen(on, why) {
-  if (on === frozen) return
-  frozen = on
-  freezeHeld = false
-  freezeScanned = false
-  log({ check: 'freeze', on, why })
-  if (!on) showFreezeTint(false)
-  if (on) showFreezeBadge('Freezing…')
-  // A refusal says why on the badge instead.
-  else if (why !== 'refused') showFreezeBadge('Unfrozen', { forMs: 1200 })
+/**
+ * How to resume, for the badge: Escape, the Pause game shortcut's key and button when it has
+ * them, and B (the controller's Back) while a controller is connected, e.g.
+ * "Esc, F8 or B to resume".
+ */
+async function resumeHint() {
+  const escape = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+  const key = (html) => `<kbd class="overlay-hint-key">${html}</kbd>`
+  const ways = [key('Esc')]
+  const binding = await native.hotkeysLoad?.().then(
+    (hotkeys) => hotkeys?.menuPause,
+    () => null
+  )
+  if (binding && binding.enabled !== false) {
+    if (binding.accelerator) ways.push(key(escape(formatAccelerator(binding.accelerator, keyPlatform()))))
+    const buttons = binding.gamepadButtons ?? (Number.isInteger(binding.gamepadButton) ? [binding.gamepadButton] : [])
+    if (buttons.length > 0) ways.push(key(buttons.map((b) => padGlyphHtml(buttonName(b))).join(' + ')))
+  }
+  const back = effectiveControllerButtons(setting('controllerButtons')).back
+  if (gamepadConnected() && Number.isInteger(back)) ways.push(key(padGlyphHtml(buttonName(back))))
+  const list = ways.length > 1 ? `${ways.slice(0, -1).join(', ')} or ${ways.at(-1)}` : ways[0]
+  return `Game paused · ${list} to resume`
+}
+function keyPlatform() {
+  const os = window.__KIMOCHI_PLATFORM__?.os
+  return os === 'macos' ? 'mac' : os === 'windows' ? 'windows' : 'linux'
+}
+function settlePauseWaiters(paused) {
+  const waiters = pauseWaiters
+  pauseWaiters = []
+  for (const resolve of waiters) resolve(paused)
+}
+function setManualPause(on, why) {
+  if (on === manualPause) return
+  manualPause = on
+  pauseHeld = false
+  log({ check: 'manual-pause', on, why })
+  if (!on) {
+    showPauseGlow(false)
+    settlePauseWaiters(false)
+    // A refusal says why on the badge instead.
+    if (why !== 'refused') showPauseBadge('Resumed', { forMs: 1200 })
+  } else showPauseBadge('Pausing…')
   beatGamePause()
 }
-/** The frozen frame, read once in full: what Scan does (Force rescan with Auto OCR on). */
-function scanFrozen() {
-  if (hookMode() || browserMode() || isQuickShot()) return
-  // A full rescan, as Scan does: with Auto OCR on that is Force rescan (everything drawn and
-  // remembered dropped), so the pop-up is read from the frozen frame as it is.
-  void onAction('triggerScan').catch((error) =>
-    log({ check: 'freeze-scan-failed', error: String(error?.message ?? error) })
-  )
+/**
+ * Pause the game and resolve once it is paused (true), or once the pause was refused or ended
+ * (false); already paused resolves at once.
+ */
+function pauseAndWait() {
+  if (manualPause && pauseHeld && gamePausePhase === 'paused') return Promise.resolve(true)
+  const settled = new Promise((resolve) => pauseWaiters.push(resolve))
+  setManualPause(true, 'reader')
+  // Native answers within a beat; past that, go on without the pause rather than not at all.
+  return Promise.race([settled, new Promise((resolve) => setTimeout(() => resolve(false), 2500))])
 }
-/** `game-pause`: the freeze took (paused), was refused, or was ended natively. */
+/** Pause & scan / Pause & read along: the game paused first, then Scan or Read along on it. */
+async function pauseThen(item) {
+  const paused = await pauseAndWait()
+  log({ check: 'manual-pause-then', item, paused })
+  return controller.runItem(item)
+}
+/** `game-pause`: the pause took (paused), was refused, or was ended natively. */
 function onGamePauseStatus(status) {
-  if (!frozen || !status) return
-  const holding = Array.isArray(status.holds) && status.holds.includes('freeze')
+  if (status) gamePausePhase = status.phase
+  if (!manualPause || !status) return
+  const holding = Array.isArray(status.holds) && status.holds.includes('manual')
   if (holding && status.refusal) {
-    setFrozen(false, 'refused')
-    showFreezeBadge(`Can't freeze this game: ${status.refusal.detail || status.refusal.kind}`, {
+    setManualPause(false, 'refused')
+    showPauseBadge(`Can't pause this game: ${status.refusal.detail || status.refusal.kind}`, {
       tone: 'warn',
       forMs: 4000
     })
     return
   }
   if (!holding) {
-    if (freezeHeld) {
-      setFrozen(false, 'resumed')
-    }
+    if (pauseHeld) setManualPause(false, 'resumed')
     return
   }
-  freezeHeld = true
+  pauseHeld = true
   if (status.phase !== 'paused') return
-  showFreezeBadge('Frozen · press again to unfreeze', { tone: 'frozen' })
-  showFreezeTint(true)
-  if (!freezeScanned) {
-    freezeScanned = true
-    scanFrozen()
-  }
+  showPauseGlow(true)
+  settlePauseWaiters(true)
+  const shown = manualPause
+  void resumeHint().then((hint) => {
+    if (shown === manualPause && manualPause) showPauseBadge(hint, { tone: 'paused' })
+  })
 }
 void native.listen('game-pause', ({ payload }) => onGamePauseStatus(payload))
-// Escape on the frozen game (native holds it only while the game is frozen).
-void native.listen('freeze-escape', () => setFrozen(false, 'reader'))
+// Escape (or B) on the paused game: native sends it only while the reader has the game paused.
+void native.listen('pause-escape', () => setManualPause(false, 'reader'))
 setInterval(beatGamePause, 500)
 
 function holdForController(hold) {
@@ -3194,10 +3244,11 @@ async function onAction(name) {
     default: {
       // A controller menu item's own shortcut (ui/radial-items.js): run it without the menu.
       const item = radialItemForHotkey(name)
-      // Freeze game's shortcut freezes only the game in front: pressed anywhere else it does
-      // nothing (it still unfreezes from anywhere).
-      if (item?.id === 'freeze' && !frozen && state.sourceFocus?.focused === false) {
-        log({ check: 'freeze', on: true, why: 'reader', ignored: 'source not focused' })
+      // Pause game's shortcuts pause only the game in front: pressed anywhere else they do
+      // nothing (Pause game still resumes from anywhere, and the others still scan or read along
+      // the game already paused).
+      if (PAUSE_ITEMS.includes(item?.id) && !manualPause && state.sourceFocus?.focused === false) {
+        log({ check: 'manual-pause', on: true, item: item.id, why: 'reader', ignored: 'source not focused' })
         return undefined
       }
       if (item) return openController(item.id)
@@ -6509,7 +6560,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
             hasText: state.annotations.length > 0,
             autoOcr: Boolean(state.flags.autoOcrEnabled),
             autoAvailable: !isQuickShot(),
-            frozen,
+            manualPause,
             scanId: state.appliedScanId,
             settings: {
               controllerButtons: setting('controllerButtons'),
@@ -6526,8 +6577,12 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
           result = true
           break
         case 'action':
-          if (p.name === 'menuFreeze') {
-            setFrozen(!frozen, 'reader')
+          if (p.name === 'menuPause') {
+            setManualPause(!manualPause, 'reader')
+            break
+          }
+          if (p.name === 'pauseAndWait') {
+            result = await pauseAndWait()
             break
           }
           if (p.name !== 'toggleAutoOcr') throw new Error('Invalid controller action')

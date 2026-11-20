@@ -116,7 +116,7 @@ export function scrollSpeed(y) {
  * @param {HTMLElement} context.words the text overlay's container, whose boxes hold the scan's text
  * @param {typeof import('./native.js')} context.native
  * @param {() => {hasText: boolean, autoOcr: boolean, autoAvailable: boolean, textVisible: boolean, center: {x: number, y: number}|null, area: {x: number, y: number, width: number, height: number}|null, origin: {x: number, y: number}|null}} context.status
- * @param {(id: 'auto'|'freeze'|'controls'|'ocr-settings') => void} context.run carries out a menu action
+ * @param {(id: 'auto'|'pause'|'pause-scan'|'pause-read-along'|'controls'|'ocr-settings') => void} context.run carries out a menu action
  * @param {() => Promise<boolean>} context.scan scan the source, resolving once its text is applied;
  *   true when the text drawn is current even if no new scan was applied (automatic OCR caught up)
  * @param {(control: {scroll?: number, step?: number, focus?: string}) => boolean} context.popupControl scroll
@@ -384,13 +384,27 @@ export function createController(context) {
         icon: ICONS.settings,
         enabled: true
       },
-      freeze: {
-        id: 'freeze',
-        label: 'Freeze game',
-        icon: ICONS.freeze,
+      pause: {
+        id: 'pause',
+        label: 'Pause game',
+        icon: ICONS.pause,
         enabled: !hooked,
-        lit: Boolean(status.frozen),
-        detail: hooked ? undefined : status.frozen ? 'On' : 'Off',
+        lit: Boolean(status.manualPause),
+        detail: hooked ? undefined : status.manualPause ? 'On' : 'Off',
+        unavailable: 'Not with the Text Hooker'
+      },
+      'pause-scan': {
+        id: 'pause-scan',
+        label: 'Pause & scan',
+        icon: ICONS.pauseScan,
+        enabled: !hooked,
+        unavailable: 'Not with the Text Hooker'
+      },
+      'pause-read-along': {
+        id: 'pause-read-along',
+        label: 'Pause & read along',
+        icon: ICONS.pauseReadAlong,
+        enabled: !hooked,
         unavailable: 'Not with the Text Hooker'
       }
     }

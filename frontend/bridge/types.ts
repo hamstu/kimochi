@@ -205,7 +205,9 @@ export type HotkeyName =
   | 'menuRecentText'
   | 'menuKimochi'
   | 'menuSettings'
-  | 'menuFreeze'
+  | 'menuPause'
+  | 'menuPauseScan'
+  | 'menuPauseReadAlong'
 
 /** Declared once in the shared schema module; re-exported here for convenience. */
 export type { OcrMode } from '@ui/settings'

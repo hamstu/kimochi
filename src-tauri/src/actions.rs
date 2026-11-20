@@ -23,7 +23,9 @@ pub const ACTIONS: &[&str] = &[
     "menuRecentText",
     "menuKimochi",
     "menuSettings",
-    "menuFreeze",
+    "menuPause",
+    "menuPauseScan",
+    "menuPauseReadAlong",
     "toggleOverlay",
     "setCropArea",
     "setAnkiCropArea",
@@ -55,7 +57,9 @@ pub const HOTKEY_ACTIONS: &[&str] = &[
     "menuRecentText",
     "menuKimochi",
     "menuSettings",
-    "menuFreeze",
+    "menuPause",
+    "menuPauseScan",
+    "menuPauseReadAlong",
 ];
 
 /// The controller menu's items, by action, with the name and description Settings shows: each
@@ -69,7 +73,9 @@ pub const MENU_ITEM_ACTIONS: &[(&str, &str, &str)] = &[
     ("menuRecentText", "Recent text", "Lines read earlier, to read along with again"),
     ("menuKimochi", "Kimochi", "Open Kimochi's window"),
     ("menuSettings", "Settings", "Open Kimochi's settings"),
-    ("menuFreeze", "Freeze game", "Pause the game so a pop-up stays up while you read it; again or Escape to unfreeze"),
+    ("menuPause", "Pause game", "Pause the game so a pop-up stays up while you read it; again, Escape or B to resume"),
+    ("menuPauseScan", "Pause & scan", "Pause the game, then scan it and read along with the new text"),
+    ("menuPauseReadAlong", "Pause & read along", "Pause the game, then step through its text with the dictionary"),
 ];
 
 /// Whether `name` is a controller menu item's own action.
@@ -96,7 +102,9 @@ const RESTORES_OVERLAY: &[&str] = &[
     "menuRecentText",
     "menuKimochi",
     "menuSettings",
-    "menuFreeze",
+    "menuPause",
+    "menuPauseScan",
+    "menuPauseReadAlong",
 ];
 
 pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {

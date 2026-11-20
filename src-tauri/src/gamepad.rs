@@ -320,6 +320,18 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             // records a binding the press is still emitted above, so it can be assigned, but
             // it does not fire whatever the button is bound to now.
             let rising: Vec<bool> = buttons.iter().zip(&previous).map(|(now, before)| *now && !*before).collect();
+            // Pause game: B (the controller's Back, `controllerButtons.back`) pressed alone on the
+            // paused game resumes it. Only here, with nothing of Kimochi's using the controller: the
+            // press that closes the menu or reading began while it had the controller.
+            if crate::game_pause::app::manual_pause_now() && !crate::hotkeys::suspended() {
+                let back: Option<usize> = service.settings.get_or("controllerButtons.back", Some(1));
+                let alone = buttons.iter().filter(|down| **down).count() == 1;
+                if back.is_some_and(|back| rising.get(back) == Some(&true)) && alone {
+                    crate::hotkeys::pause_escape(&app);
+                    previous = buttons;
+                    continue;
+                }
+            }
             if rising.contains(&true) && !crate::hotkeys::suspended() {
                 dispatch_for_buttons(&app, &service, &buttons, &rising);
             }
@@ -873,11 +885,11 @@ fn reactivate(app: &tauri::AppHandle, pid: u32) {
         });
         return;
     }
-    // Frozen (Freeze game): the game is to stay paused, so it is not resumed to take its focus
-    // back; Kimochi keeps the focus until the freeze ends (`hand_back_after_freeze`).
-    if crate::game_pause::app::frozen_now() {
-        *frozen_return() = Some(pid);
-        log(app, json!({ "check": "controller-nav", "handBack": "deferred: the game is frozen", "pid": pid }));
+    // Paused by the reader (Pause game): the game is to stay paused, so it is not resumed to take its focus
+    // back; Kimochi keeps the focus until the pause ends (`hand_back_after_pause`).
+    if crate::game_pause::app::manual_pause_now() {
+        *paused_return() = Some(pid);
+        log(app, json!({ "check": "controller-nav", "handBack": "deferred: the reader paused the game", "pid": pid }));
         return;
     }
     let app = app.clone();
@@ -897,18 +909,18 @@ fn reactivate(app: &tauri::AppHandle, pid: u32) {
     });
 }
 
-/// The game the menu would have handed focus back to while it was frozen: it gets it once the
-/// freeze ends and the game runs again.
-static FROZEN_RETURN: Mutex<Option<u32>> = Mutex::new(None);
+/// The game the menu would have handed focus back to while the reader had it paused: it gets it
+/// once that pause ends and the game runs again.
+static PAUSED_RETURN: Mutex<Option<u32>> = Mutex::new(None);
 
-fn frozen_return() -> std::sync::MutexGuard<'static, Option<u32>> {
-    FROZEN_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+fn paused_return() -> std::sync::MutexGuard<'static, Option<u32>> {
+    PAUSED_RETURN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Freeze game ended and the game runs again: give it the focus the menu kept while it was frozen,
+/// Pause game ended and the game runs again: give it the focus the menu kept while it was paused,
 /// unless the reader has gone to another application since (only while Kimochi is in front).
-pub fn hand_back_after_freeze(app: &tauri::AppHandle) {
-    let Some(pid) = frozen_return().take() else { return };
+pub fn hand_back_after_pause(app: &tauri::AppHandle) {
+    let Some(pid) = paused_return().take() else { return };
     if crate::platform::frontmost_pid() != Some(std::process::id()) {
         log(app, json!({ "check": "controller-nav", "handBack": "skipped: Kimochi is not in front", "pid": pid }));
         return;
