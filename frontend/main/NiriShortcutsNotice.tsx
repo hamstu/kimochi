@@ -15,7 +15,7 @@ export function NiriShortcutsNotice(): JSX.Element | null {
   const { busy, error, add } = useNiriInclude()
   if (!setup || setup.status !== 'needsSetup' || dismissed) return null
   return (
-    <Callout tone="warn" className="src-notice">
+    <Callout tone="warn" className="src-notice sb-notice">
       <span>
         {error ? (
           <>
@@ -23,8 +23,8 @@ export function NiriShortcutsNotice(): JSX.Element | null {
           </>
         ) : (
           <>
-            <strong>Shortcuts need one line in your niri config.</strong> Kimochi keeps its shortcuts in {setup.binds};
-            niri runs them once your config includes it.
+            <strong>Shortcuts need one line in your niri config.</strong> Kimochi keeps them in kimochi.kdl, next to
+            your niri config, and niri runs them once the config includes that file.
           </>
         )}
       </span>

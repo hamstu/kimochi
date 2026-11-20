@@ -40,6 +40,9 @@ impl Backend for Niri {
             listen: None,
         })
     }
+    fn rebinds_in_place(&self) -> bool {
+        true
+    }
     fn stop(&self) {
         // Emptied rather than removed, so an include without `optional` still loads.
         if let Ok(paths) = Paths::detect() {
@@ -221,17 +224,39 @@ fn write_binds(path: &Path, text: &str) -> Result<(), String> {
 /// niri's version as `(year, month)`: the running compositor's, else the installed one's.
 fn version() -> Option<(u32, u32)> {
     let run = |args: &[&str]| {
-        std::process::Command::new("niri")
-            .args(args)
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        niri(args, &[]).ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
     };
     let running = run(&["msg", "--json", "version"])
         .and_then(|s| serde_json::from_str::<Value>(&s).ok())
         .and_then(|v| v["compositor"].as_str().map(str::to_owned));
     parse_version(&running.or_else(|| run(&["--version"]))?)
+}
+
+/// Run `niri` and wait at most two seconds: `niri msg` waits on the compositor, which must never
+/// hang the shortcuts (or Settings) when niri itself is stuck.
+fn niri(args: &[&str], env: &[(&str, &str)]) -> Result<std::process::Output, String> {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let mut child = Command::new("niri")
+        .args(args)
+        .envs(env.iter().copied())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if child.try_wait().map_err(|e| e.to_string())?.is_some() {
+            return child.wait_with_output().map_err(|e| e.to_string());
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("niri {} didn't answer within 2 s", args.first().unwrap_or(&"")));
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// `niri 26.04 (8ed0da4)`, `26.04 (8ed0da4)`, `25.11`.
@@ -395,9 +420,11 @@ pub fn refresh() -> Result<Value, String> {
     let paths = Paths::detect()?;
     let niri = setup(&paths);
     update_report(|report| {
-        if report["backend"] == "niri" {
-            report["niri"] = niri.clone();
+        if report["backend"] != "niri" {
+            return None;
         }
+        report["niri"] = niri.clone();
+        Some(niri["status"] == "active" && report["registered"].as_array().is_some_and(|r| !r.is_empty()))
     });
     Ok(niri)
 }
@@ -418,6 +445,10 @@ pub fn append() -> Result<Value, String> {
         Some("nix") => return Err("Your niri config is in the Nix store. Add the line to its source (your Home Manager or NixOS configuration) instead.".into()),
         Some("readOnly") => return Err(format!("{} can't be written. Add the line yourself.", paths.config.display())),
         Some(_) => return Err(format!("There is no niri config at {}. Add the line to your config yourself.", paths.config.display())),
+    }
+    // A config that doesn't load already is the reader's to fix: appending can't be checked.
+    if let Err(error) = validate(&paths.config) {
+        return Err(format!("Your niri config doesn't load as it is, so Kimochi left it alone. {error}"));
     }
     // A plain include of a missing file breaks the config, so the file comes first (it exists
     // once shortcuts have been applied; an empty one otherwise).
@@ -465,12 +496,8 @@ fn restore(real: &Path, original: &[u8]) {
 }
 
 fn validate(config: &Path) -> Result<(), String> {
-    let output = std::process::Command::new("niri")
-        .arg("validate")
-        .arg("-c")
-        .arg(config)
-        .env("NO_COLOR", "1")
-        .output()
+    let config = config.to_string_lossy();
+    let output = niri(&["validate", "-c", &config], &[("NO_COLOR", "1")])
         .map_err(|e| format!("Couldn't run niri validate: {e}"))?;
     if output.status.success() {
         return Ok(());

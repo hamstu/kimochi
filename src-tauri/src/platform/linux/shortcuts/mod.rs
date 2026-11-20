@@ -65,6 +65,12 @@ pub(super) trait Backend: Sync {
     fn bind(&self, run: &Run, shortcuts: &[Shortcut]) -> Result<Bound, String>;
     /// Take back what `bind` set up: before every new set, and on quit.
     fn stop(&self);
+    /// Whether `bind` replaces the last set itself, so a new set needs no `stop` first (niri's
+    /// file: emptying it before rewriting it would make niri reload twice, without shortcuts in
+    /// between). Such a backend is stopped only on suspend, on quit, or when another one binds.
+    fn rebinds_in_place(&self) -> bool {
+        false
+    }
 }
 
 /// The backends, in the order `plan` names them.
@@ -172,19 +178,39 @@ pub fn remediation() -> Option<String> {
     hyprland::remediation(&report())
 }
 
-/// Put the niri setup Kimochi just changed (or re-read) into the report.
-pub(super) fn update_report(change: impl FnOnce(&mut Value)) {
+/// Change the report in place (the niri setup Kimochi just re-read). `change` returns whether
+/// shortcuts can now fire, when that changed.
+pub(super) fn update_report(change: impl FnOnce(&mut Value) -> Option<bool>) {
     if let Some(report) = REPORT.lock().unwrap().as_mut() {
-        change(report);
+        if let Some(available) = change(report) {
+            AVAILABLE.store(available, Ordering::SeqCst);
+        }
     }
 }
 
 pub fn stop() {
+    halt(true);
+}
+
+/// Stop the backends (all of them, or those a new set doesn't replace in place) and make any
+/// binding still running stale.
+fn halt(all: bool) {
     for (_, backend) in BACKENDS {
-        backend.stop();
+        if all || !backend.rebinds_in_place() {
+            backend.stop();
+        }
     }
     GENERATION.fetch_add(1, Ordering::SeqCst);
     AVAILABLE.store(false, Ordering::SeqCst);
+}
+
+/// Stop the in-place backends other than `winner` (`None`: all of them).
+fn stop_in_place(winner: Option<Kind>) {
+    for (kind, backend) in BACKENDS {
+        if backend.rebinds_in_place() && Some(kind) != winner {
+            backend.stop();
+        }
+    }
 }
 
 /// What the shortcut settings ask for, minus what no backend could bind: a mouse button (bound on
@@ -225,7 +251,8 @@ fn shortcuts(settings: &Settings) -> (Vec<Shortcut>, Vec<Value>) {
 }
 
 pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) -> Value {
-    stop();
+    // Suspended (a key is being recorded): nothing may keep a key, so every backend stops.
+    halt(suspended);
     super::shift::portal_bound(false);
     let _ = app.emit("linux-dictionary-modifier", json!({"shift":false}));
     if suspended {
@@ -249,6 +276,7 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
                     if !errors.is_empty() {
                         run.record(json!({"check":"global-shortcuts-fallback","backend":backend.id(),"errors":errors}));
                     }
+                    stop_in_place(Some(*kind));
                     run.publish(bound.report, bound.available);
                     if let Some(listen) = bound.listen {
                         if let Err(error) = listen() {
@@ -268,6 +296,7 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
                 }
             }
         }
+        stop_in_place(None);
         let last = errors.last().cloned().unwrap_or(json!({"backend":"portal","error":"no backend"}));
         fail(&run, last["backend"].as_str().unwrap_or("portal"), last["error"].as_str().unwrap_or("").to_owned());
     });

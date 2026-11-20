@@ -122,7 +122,6 @@ import { showSettingsTab } from '../panels/settings/showSettingsTab'
 import { detectAudioField, detectPictureField } from '../panels/settings/sentenceAudioField'
 import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 import { GnomeExtensionNotice } from './GnomeExtensionNotice'
-import { NiriShortcutsNotice } from './NiriShortcutsNotice'
 import { GnomeWindowLink } from './GnomeWindowLink'
 import { HyprlandWindowLink } from './HyprlandWindowLink'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
@@ -1569,7 +1568,6 @@ export function SourcePanel({
           {gamePauseNoticeView}
           {untrackedNotice}
           {overlayUnavailable && !isGamingMode(capabilities) && <GnomeExtensionNotice />}
-          {!isGamingMode(capabilities) && <NiriShortcutsNotice />}
         </div>
       )}
 
@@ -1594,7 +1592,6 @@ export function SourcePanel({
           {gamePauseNoticeView}
           {untrackedNotice}
           {overlayUnavailable && !isGamingMode(capabilities) && <GnomeExtensionNotice />}
-          {!isGamingMode(capabilities) && <NiriShortcutsNotice />}
         </div>
       )}
       {mode === 'hook' && source && (

@@ -2815,7 +2815,7 @@ is written to the config.
 shortcut settings into `Shortcut`s, `plan` picks the backends to try from the session's `Facts`,
 and the first whose `Backend::bind` succeeds publishes `globalShortcutReport` (its `backend` is
 `globalShortcutBackend`); a backend that fails is stopped before the next is tried, so a shortcut
-never fires twice. `stop` (each re-apply, suspend and quit) stops every backend. The plans:
+never fires twice. `stop` (quit) and a suspend stop every backend; a re-apply stops all but those that rebind in place. The plans:
 Kimochi's GNOME extension when it runs (`gnome.rs`); Hyprland, the portal plus its binds
 (`hyprland.rs`, reported as `portal`); niri, the portal first only where it can grab keys, then
 the kdl binds (`niri.rs`); anywhere else the portal (`portal.rs`).
@@ -2825,7 +2825,9 @@ portals.conf hands it to xdg-desktop-portal-gnome, which grabs keys through `org
 no runtime binds. Kimochi writes each enabled action shortcut as a bind to
 `$XDG_CONFIG_HOME/niri/kimochi.kdl` (`Alt+Z repeat=false hotkey-overlay-title="Kimochi: Scan text"
 { spawn "<AppImage or executable>" "action" "triggerScan" "--no-start"; }`, the command line's
-`action`), rewrites it on every apply and empties it on suspend and quit. A file of that name
+`action`), writes it again only when its text changes (each write makes niri reload, so a
+re-apply never empties it first: `Backend::rebinds_in_place`), and empties it on suspend, on quit
+and when another backend binds. A file of that name
 without Kimochi's header is never replaced. niri reloads an included file when it changes; the
 user's config (`$NIRI_CONFIG`, else `config.kdl` there) must include it, which the report's `niri`
 says (`status: active | needsSetup | unsupported`, `includeLine`, `nixIncludeLine`, `config`,
@@ -2838,7 +2840,8 @@ portal is tried first and the file stays empty.
 whether the config includes the binds and returns `globalShortcutReport.niri`; `append` (Settings →
 Shortcuts & Controls, and the main window's one-time notice, dismissed with
 `niriShortcutsPromptDismissed`) adds the line itself, and only when the config, symlinks resolved,
-is a writable regular file outside `/nix/store` and doesn't include the binds yet: it copies the
+is a writable regular file outside `/nix/store` that `niri validate` accepts and that doesn't include
+the binds yet: it copies the
 file to `<name>.bak-kimochi-<UTC yyyymmdd-hhmmss>` beside it, appends a comment and the include
 line (never rewriting the file), runs `niri validate -c`, and writes the original back if niri
 rejects it, returning the error. Both re-emit `platform-capabilities`.
