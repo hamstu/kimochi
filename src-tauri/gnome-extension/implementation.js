@@ -783,6 +783,7 @@ export default class KimochiOverlay extends Extension {
                             width,
                             height
                         },
+                        menuHeight: height,
                         mode: 'menu'
                     };
                     this._controllerWatch = Gio.bus_watch_name_on_connection(
@@ -798,9 +799,24 @@ export default class KimochiOverlay extends Extension {
             } else {
                 if (!this._controller) throw new Error('Controller lease is closed');
                 if (data.operation === 'mode') {
-                    if (!['menu', 'words'].includes(data.mode))
+                    // `explain`: the menu's Explain card, shown in the menu's own window at its
+                    // size (the words' strip is shorter, so a card opened from it gets that back).
+                    if (!['menu', 'words', 'explain'].includes(data.mode))
                         throw new Error('Invalid controller mode');
                     this._controller.mode = data.mode;
+                    if (
+                        data.mode === 'explain' &&
+                        this._controller.rect.height < this._controller.menuHeight
+                    ) {
+                        this._controller.rect.height = this._controller.menuHeight;
+                        this._controller.window?.move_resize_frame(
+                            false,
+                            this._controller.rect.x,
+                            this._controller.rect.y,
+                            this._controller.rect.width,
+                            this._controller.menuHeight
+                        );
+                    }
                     if (data.mode === 'words') {
                         this._controller.rect.height = 100;
                         this._controller.window?.move_resize_frame(

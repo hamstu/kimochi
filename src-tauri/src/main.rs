@@ -1232,6 +1232,56 @@ async fn linux_window_geometry(
     }
 }
 
+/// The overlay's Explain card opened or closed: Escape closes it while it is open; see
+/// `hotkeys::set_explain_open`.
+#[tauri::command]
+fn explain_card_open(app: tauri::AppHandle, open: bool) -> Reply<()> {
+    hotkeys::set_explain_open(&app, open)
+}
+
+/// Whether text is selected in the overlay's Explain card: the copy shortcut is the overlay's while
+/// it is; see `hotkeys::set_explain_selected`.
+#[tauri::command]
+fn explain_selection(app: tauri::AppHandle, selected: bool) -> Reply<()> {
+    hotkeys::set_explain_selected(&app, selected)
+}
+
+/// Text selected in the overlay's Explain card, to the clipboard (Ctrl+C over the overlay,
+/// `copyExplanation`). The overlay never has the keyboard, so it cannot copy for itself.
+#[tauri::command]
+fn explain_copy(text: String) -> Reply<()> {
+    use std::sync::{mpsc, OnceLock};
+    type Copy = (String, mpsc::Sender<Reply<()>>);
+    // One clipboard, kept by a thread of its own for as long as Kimochi runs: on X11 the text is
+    // served by whoever copied it, so a clipboard dropped right after the copy takes the text
+    // with it where no clipboard manager picks it up.
+    static COPIER: OnceLock<mpsc::Sender<Copy>> = OnceLock::new();
+    let copier = COPIER.get_or_init(|| {
+        let (sender, copies) = mpsc::channel::<Copy>();
+        std::thread::spawn(move || {
+            let mut clipboard: Option<arboard::Clipboard> = None;
+            for (text, reply) in copies {
+                let copied = match clipboard.as_mut() {
+                    Some(clipboard) => clipboard.set_text(text),
+                    None => arboard::Clipboard::new().and_then(|opened| clipboard.insert(opened).set_text(text)),
+                };
+                let _ = reply.send(copied.map_err(|error| error.to_string()));
+            }
+        });
+        sender
+    });
+    let (reply, copied) = mpsc::channel();
+    copier.send((text, reply)).map_err(|error| error.to_string())?;
+    copied.recv().map_err(|error| error.to_string())?
+}
+
+/// A pop-up opened on the overlay, or the last one closed: Escape clears the overlay while one is
+/// open, wherever the pointer is; see `hotkeys::set_popup_open`.
+#[tauri::command]
+fn overlay_popup_open(app: tauri::AppHandle, open: bool) -> Reply<()> {
+    hotkeys::set_popup_open(&app, open)
+}
+
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
@@ -3506,6 +3556,10 @@ fn main() {
         activate_source,
         extension_fetch,
         region_keys,
+        explain_card_open,
+        explain_copy,
+        explain_selection,
+        overlay_popup_open,
         controller_nav,
         game_pause::app::game_pause_status,
         game_cursor::game_cursor_status,

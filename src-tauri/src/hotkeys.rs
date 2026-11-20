@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 /// The longest a suspension can last without being lifted, in case the window that asked
 /// for it goes away without saying so. Recording a shortcut takes seconds, not minutes.
@@ -55,13 +55,21 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Value {
     let _ = app.global_shortcut().unregister_all();
     registry.active.clear();
     crate::mouse_buttons::disarm();
-    // That also took the region editor's and the controller menu's keys; put back any
-    // still in use.
+    // That also took the overlay's own keys (Escape, the copy key) with it.
+    #[cfg(target_os = "windows")]
+    ESCAPE_OWNED.store(false, Ordering::SeqCst);
+    #[cfg(not(target_os = "windows"))]
+    KEYS_OWNED.store(0, Ordering::SeqCst);
+    COPY_OWNED.store(false, Ordering::SeqCst);
+    let report = if registry.suspended {
+        json!({ "registered": [], "failed": [], "suspended": true })
+    } else {
+        register(app, settings, &mut registry)
+    };
+    // And the region editor's and the controller menu's keys: put back any still in use. After
+    // the reader's own shortcuts, so one of theirs on the same keys comes first.
     let _ = sync_keys(app);
-    if registry.suspended {
-        return json!({ "registered": [], "failed": [], "suspended": true });
-    }
-    register(app, settings, &mut registry)
+    report
 }
 
 /// Suspend (`true`) or restore (`false`) the action shortcuts and gamepad actions, so a
@@ -128,8 +136,84 @@ pub fn resume(app: &tauri::AppHandle, settings: &Arc<Settings>) {
     }
 }
 
+/// Take `shortcut` for `action`, firing it on press (the plugin reports release as a second event).
+fn bind(app: &tauri::AppHandle, shortcut: Shortcut, action: &str) -> Result<(), String> {
+    let action = action.to_string();
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |app, _shortcut, event| {
+            if event.state != ShortcutState::Pressed {
+                return;
+            }
+            let service = app.state::<Shared>().inner().clone();
+            actions::dispatch(app, &service, &action);
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// The modifier the overlay's lookup key holds (`overlayLookupKey`: shift by default).
+fn lookup_modifier(key: Option<&str>) -> Modifiers {
+    match key {
+        Some("ctrl") => Modifiers::CONTROL,
+        Some("alt") => Modifiers::ALT,
+        Some("meta") => Modifiers::SUPER,
+        _ => Modifiers::SHIFT,
+    }
+}
+
+/// The shortcuts a press can be: as pressed, and, when the lookup key is held for reading, also
+/// without it, so Explain's key still fires while Shift is held over a word. Ids, as the plugin
+/// compares shortcuts.
+fn press_candidates(pressed: Shortcut, lookup: Modifiers) -> Vec<u32> {
+    let mut ids = vec![pressed.id()];
+    if pressed.mods.contains(lookup) {
+        ids.push(Shortcut::new(Some(pressed.mods - lookup), pressed.key).id());
+    }
+    ids
+}
+
+/// A key press Windows never matched against the shortcuts, because the overlay's keyboard guard
+/// swallowed it with the pointer on the overlay's text (`mouseguard.rs`): fire the live shortcut
+/// it is, if any. True when one fired.
+pub fn fire_swallowed(app: &tauri::AppHandle, accelerator: &str) -> bool {
+    let Ok(pressed) = Shortcut::from_str(accelerator) else { return false };
+    let service = app.state::<Shared>().inner().clone();
+    let lookup = service.settings.get("overlayLookupKey").ok().flatten();
+    // As pressed, and without the lookup key held for reading (Shift+Escape is Escape here).
+    let candidates = press_candidates(pressed, lookup_modifier(lookup.as_ref().and_then(Value::as_str)));
+    let is = |accelerator: &str| Shortcut::from_str(accelerator).is_ok_and(|key| candidates.contains(&key.id()));
+    // Escape is no setting's shortcut: over the overlay's text it clears what the overlay shows.
+    if is("Escape") {
+        return dismiss_overlay(app);
+    }
+    // Nor is Ctrl+C: with the Explain card open, it copies what is selected in the card (the game
+    // has the keyboard, so the card never sees the key itself).
+    if is("Control+C") && EXPLAIN_OPEN.load(Ordering::SeqCst) {
+        return copy_explanation(app);
+    }
+    let action = {
+        let registry = lock();
+        if registry.suspended {
+            return false;
+        }
+        let live: Vec<(String, u32)> = merged_hotkeys(&service.settings)
+            .into_iter()
+            .filter_map(|(name, definition)| {
+                let shortcut = Shortcut::from_str(definition.get("accelerator")?.as_str()?).ok()?;
+                (definition.get("enabled") != Some(&Value::Bool(false)) && registry.active.contains(&shortcut))
+                    .then_some((name, shortcut.id()))
+            })
+            .collect();
+        // The press as it was first, then without the lookup key: a shortcut that has the key in it
+        // (Shift+F8 with Shift as the lookup key) wins over one without (F8).
+        candidates.iter().find_map(|id| live.iter().find(|(_, live)| live == id).map(|(name, _)| name.clone()))
+    };
+    let Some(action) = action else { return false };
+    crate::record(app, &service, json!({ "check": "shortcut-under-pointer", "name": action, "pressed": accelerator }));
+    actions::dispatch(app, &service, &action);
+    true
+}
+
 fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Registry) -> Value {
-    let shortcuts = app.global_shortcut();
     let mut registered = Vec::new();
     let mut failed = Vec::new();
     let mut buttons: Vec<(String, MouseButton)> = Vec::new();
@@ -162,16 +246,7 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
                 continue;
             }
         };
-        let action = name.clone();
-        let result = shortcuts.on_shortcut(parsed, move |app, _shortcut, event| {
-            // Fire on press only: the plugin reports release as a second event.
-            if event.state != ShortcutState::Pressed {
-                return;
-            }
-            let service = app.state::<Shared>().inner().clone();
-            actions::dispatch(app, &service, &action);
-        });
-        match result {
+        match bind(app, parsed, &name) {
             Ok(()) => {
                 registry.active.push(parsed);
                 registered.push(name)
@@ -247,13 +322,139 @@ pub fn set_pause_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
 /// them. Escape and Return are shared, so one handler serves both owners and decides at
 /// press time who hears about it; releasing one owner's keys never takes the other's.
 #[cfg(target_os = "windows")]
-fn sync_keys(_app: &tauri::AppHandle) -> Result<(), String> {
+fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
     crate::platform::set_keyboard_guard(
         REGION_KEYS.load(Ordering::SeqCst),
         NAV_KEYS.load(Ordering::SeqCst),
         PAUSE_KEYS.load(Ordering::SeqCst),
     );
+    // The region editor's and the controller menu's keys go through the keyboard guard here, so
+    // Escape as a shortcut is the overlay's dismissal alone. The guard itself swallows keys with
+    // the pointer on the overlay's text and hands Escape on (`fire_swallowed`); this is the rest.
+    let escape = Shortcut::from_str("Escape").map_err(|e| e.to_string())?;
+    sync_owned(app, escape, escape_wanted(), &ESCAPE_OWNED, |app| {
+        dismiss_overlay(app);
+    })?;
+    sync_copy_key(app)
+}
+
+/// Whether Escape (Windows) and the copy key are registered here, for the overlay, rather than as
+/// one of the reader's own shortcuts on the same keys (`sync_owned`).
+#[cfg(target_os = "windows")]
+static ESCAPE_OWNED: AtomicBool = AtomicBool::new(false);
+static COPY_OWNED: AtomicBool = AtomicBool::new(false);
+
+/// Hold `shortcut` for `pressed` while `wanted`, and let it go after: only a registration made
+/// here (`owned`). One of the reader's own shortcuts on the same keys is neither taken (the
+/// overlay goes without) nor removed when the overlay is done with the keys.
+fn sync_owned(
+    app: &tauri::AppHandle,
+    shortcut: Shortcut,
+    wanted: bool,
+    owned: &'static AtomicBool,
+    pressed: fn(&tauri::AppHandle),
+) -> Result<(), String> {
+    let shortcuts = app.global_shortcut();
+    if wanted && !owned.load(Ordering::SeqCst) {
+        if shortcuts.is_registered(shortcut) {
+            return Ok(());
+        }
+        shortcuts
+            .on_shortcut(shortcut, move |app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    pressed(app);
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        owned.store(true, Ordering::SeqCst);
+    } else if !wanted && owned.swap(false, Ordering::SeqCst) {
+        let _ = shortcuts.unregister(shortcut);
+    }
     Ok(())
+}
+
+/// The copy shortcut while text is selected in the Explain card (`copy_wanted`). The overlay never
+/// has the keyboard, so the key is taken for it, as Escape is, only for as long as there is
+/// something of the card's to copy; the rest of the time it is the game's and every other app's.
+const COPY_KEY: &str = "CommandOrControl+C";
+
+fn copy_wanted() -> bool {
+    EXPLAIN_OPEN.load(Ordering::SeqCst)
+        && EXPLAIN_SELECTED.load(Ordering::SeqCst)
+        && !REGION_KEYS.load(Ordering::SeqCst)
+        && !NAV_KEYS.load(Ordering::SeqCst)
+}
+
+fn sync_copy_key(app: &tauri::AppHandle) -> Result<(), String> {
+    let copy = Shortcut::from_str(COPY_KEY).map_err(|e| e.to_string())?;
+    sync_owned(app, copy, copy_wanted(), &COPY_OWNED, |app| {
+        if copy_wanted() {
+            copy_explanation(app);
+        }
+    })
+}
+
+/// The overlay copies what is selected in its Explain card (`copyExplanation`).
+fn copy_explanation(app: &tauri::AppHandle) -> bool {
+    let service = app.state::<Shared>().inner().clone();
+    actions::dispatch(app, &service, "copyExplanation");
+    true
+}
+
+/// Whether the overlay's Explain card is open (`set_explain_open`), and whether a pop-up is
+/// (`set_popup_open`): either makes Escape the overlay's, wherever the pointer is.
+static EXPLAIN_OPEN: AtomicBool = AtomicBool::new(false);
+static POPUP_OPEN: AtomicBool = AtomicBool::new(false);
+/// Whether text is selected in the open Explain card (`set_explain_selected`): the copy shortcut
+/// is the overlay's while it is.
+static EXPLAIN_SELECTED: AtomicBool = AtomicBool::new(false);
+
+/// Whether Escape is the overlay's now (a pop-up or the Explain card is open): it closes those
+/// before it resumes a game paused with Pause game.
+pub fn escape_wanted() -> bool {
+    EXPLAIN_OPEN.load(Ordering::SeqCst) || POPUP_OPEN.load(Ordering::SeqCst)
+}
+
+/// The overlay's Explain card opened (`true`) or closed: Escape is the overlay's while it is open,
+/// wherever the pointer is, and goes back to the game the moment it closes.
+pub fn set_explain_open(app: &tauri::AppHandle, open: bool) -> Result<(), String> {
+    if !open {
+        EXPLAIN_SELECTED.store(false, Ordering::SeqCst);
+    }
+    if EXPLAIN_OPEN.swap(open, Ordering::SeqCst) == open {
+        return Ok(());
+    }
+    sync_keys(app)
+}
+
+/// Text came to be selected in the Explain card (`true`), or none is any more: the copy shortcut
+/// is the overlay's while there is (`sync_copy_key`).
+pub fn set_explain_selected(app: &tauri::AppHandle, selected: bool) -> Result<(), String> {
+    if EXPLAIN_SELECTED.swap(selected, Ordering::SeqCst) == selected {
+        return Ok(());
+    }
+    sync_keys(app)
+}
+
+/// A pop-up opened on the overlay (`true`), or the last one closed: Escape is the overlay's while
+/// one is open, wherever the pointer is, and the game's again once none is.
+pub fn set_popup_open(app: &tauri::AppHandle, open: bool) -> Result<(), String> {
+    if POPUP_OPEN.swap(open, Ordering::SeqCst) == open {
+        return Ok(());
+    }
+    sync_keys(app)
+}
+
+/// Escape for the overlay: clear what it shows (pop-ups, lit text, the Explain card), unless the
+/// region editor or the controller menu owns Escape (theirs comes first; the controller menu's
+/// closes the card it opened).
+fn dismiss_overlay(app: &tauri::AppHandle) -> bool {
+    if REGION_KEYS.load(Ordering::SeqCst) || NAV_KEYS.load(Ordering::SeqCst) {
+        return false;
+    }
+    let service = app.state::<Shared>().inner().clone();
+    actions::dispatch(app, &service, "dismissOverlay");
+    true
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -272,25 +473,42 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
             .map_err(|e| e.to_string());
     }
     let _serial = KEYS_SYNC.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    sync_copy_key(app)?;
     let shortcuts = app.global_shortcut();
-    for key in ["Escape", "Enter", "Space", "Up", "Down", "Left", "Right"] {
+    for (index, key) in ["Escape", "Enter", "Space", "Up", "Down", "Left", "Right"].into_iter().enumerate() {
         let parsed = Shortcut::from_str(key).map_err(|e| e.to_string())?;
         let wanted = (REGION_KEYS.load(Ordering::SeqCst) && REGION_KEY_NAMES.contains(&key))
             || (NAV_KEYS.load(Ordering::SeqCst) && NAV_KEY_NAMES.contains(&key))
-            || (PAUSE_KEYS.load(Ordering::SeqCst) && key == "Escape");
+            || (key == "Escape" && (PAUSE_KEYS.load(Ordering::SeqCst) || escape_wanted()));
+        // Only what was registered here (`KEYS_OWNED`): one of the reader's own shortcuts on the
+        // same key (Explain on Space, say) is neither taken nor removed.
+        let bit = 1u8 << index;
+        let owned = KEYS_OWNED.load(Ordering::SeqCst) & bit != 0;
         if !wanted {
-            if shortcuts.is_registered(parsed) {
+            if owned {
                 let _ = shortcuts.unregister(parsed);
+                KEYS_OWNED.fetch_and(!bit, Ordering::SeqCst);
             }
             continue;
         }
-        if shortcuts.is_registered(parsed) {
+        if owned || shortcuts.is_registered(parsed) {
             continue;
         }
         shortcuts
             .on_shortcut(parsed, move |app, _shortcut, event| {
                 let pressed = event.state == ShortcutState::Pressed;
                 let kind = if pressed { "keydown" } else { "keyup" };
+                // One Escape for every owner: the overlay's dismissal when neither of the others has
+                // it (`dismiss_overlay` checks), so a modal editor or menu still hears its own.
+                if key == "Escape"
+                    && pressed
+                    && escape_wanted()
+                    && !REGION_KEYS.load(Ordering::SeqCst)
+                    && !NAV_KEYS.load(Ordering::SeqCst)
+                    && dismiss_overlay(app)
+                {
+                    return;
+                }
                 if REGION_KEYS.load(Ordering::SeqCst) && REGION_KEY_NAMES.contains(&key) && (pressed || key == "Space")
                 {
                     // The DOM's names: the editor replays these as keyboard events.
@@ -319,9 +537,15 @@ fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
                 }
             })
             .map_err(|e| e.to_string())?;
+        KEYS_OWNED.fetch_or(bit, Ordering::SeqCst);
     }
     Ok(())
 }
+
+/// Which of the region editor's, the controller menu's and the overlay's keys (`sync_keys`, by
+/// their place in its list) are registered here rather than as the reader's own shortcuts.
+#[cfg(not(target_os = "windows"))]
+static KEYS_OWNED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 #[cfg(test)]
 mod tests {
@@ -333,5 +557,27 @@ mod tests {
         for accelerator in ["Insert", "Pause", "ScrollLock", "F8", "Shift+F8", "Shift+ScrollLock"] {
             assert!(Shortcut::from_str(accelerator).is_ok(), "{accelerator}");
         }
+    }
+
+    #[test]
+    fn a_press_with_the_lookup_key_held_also_counts_without_it() {
+        let x = Shortcut::from_str("X").unwrap().id();
+        let shift_x = Shortcut::from_str("Shift+X").unwrap();
+        // Shift held over a word to read it, then X: a shortcut on X.
+        assert!(press_candidates(shift_x, lookup_modifier(None)).contains(&x));
+        assert!(press_candidates(shift_x, lookup_modifier(Some("shift"))).contains(&shift_x.id()));
+        // Another lookup key: Shift is part of the shortcut pressed, not taken off.
+        assert!(!press_candidates(shift_x, lookup_modifier(Some("ctrl"))).contains(&x));
+        let ctrl_x = Shortcut::from_str("Control+X").unwrap();
+        assert!(press_candidates(ctrl_x, lookup_modifier(Some("ctrl"))).contains(&x));
+        // Nothing held: only the press itself.
+        assert_eq!(press_candidates(Shortcut::from_str("X").unwrap(), Modifiers::SHIFT), vec![x]);
+        // Shift+F8 (Scan) pressed over text is still Shift+F8.
+        let scan = Shortcut::from_str("Shift+F8").unwrap();
+        assert!(press_candidates(scan, Modifiers::SHIFT).contains(&scan.id()));
+        // Escape with Shift held over the text is the overlay's Escape (`fire_swallowed`).
+        let escape = Shortcut::from_str("Escape").unwrap().id();
+        let shift_escape = Shortcut::from_str("Shift+Escape").unwrap();
+        assert!(press_candidates(shift_escape, lookup_modifier(None)).contains(&escape));
     }
 }

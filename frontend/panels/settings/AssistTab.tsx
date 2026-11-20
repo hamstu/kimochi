@@ -6,6 +6,7 @@ import { updateSettings } from '@texthooker/lib/settings'
 import { deeplTranslates } from '@texthooker/lib/translateLanguage'
 import type { Settings, TranslationProvider } from '@texthooker/lib/types'
 import { translationRoute } from '@ui/account'
+import { explainSettings, providerLabel } from '@ui/explain-settings'
 import type { Language } from '@ui/languages'
 import { useAccount } from '../../bridge/account'
 import { useLanguage } from '../../bridge/useLanguage'
@@ -60,9 +61,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
       ? cloud
         ? 'Kimochi cloud'
         : 'Kimochi cloud (needs Kimochi Cloud, see Settings → Account)'
-      : settings.explainProvider === 'claude'
-        ? `Claude CLI · ${settings.explainClaudeModel}`
-        : `Codex CLI${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ''}`
+      : `${providerLabel(explainSettings(settings)).replace(/^(Claude|Codex)/, '$1 CLI')}`
 
   return (
     <div className="texthooker">
@@ -106,7 +105,10 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
       </SettingsSection>
 
       <SettingsSection title="Explain with AI">
-        <SettingsRow label="Provider, model and prompt" description={`${explainSummary}. Also on the E key.`}>
+        <SettingsRow
+          label="Provider, model and prompt"
+          description={`${explainSummary}. On X in the Log, and the Explain shortcut over the game.`}
+        >
           <Button size="sm" onClick={() => setExplainOpen(true)}>
             Configure…
           </Button>

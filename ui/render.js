@@ -695,7 +695,8 @@ function shimmer(width, height, radius) {
 export class TextOverlayRenderer {
   /**
    * @param {HTMLElement} container
-   * @param {{onLookupStart: () => void, onActivity: () => void}} hooks
+   * @param {{onLookupStart: () => void, onActivity: () => void, canLight?: () => boolean}} hooks
+   *   `canLight`: whether the window's own mouse moves may light words now (unset: always)
    */
   constructor(container, hooks = {}) {
     this.container = container
@@ -723,7 +724,13 @@ export class TextOverlayRenderer {
     // stay unlit (click-through without Shift): taking those too relit the box right after the
     // native feed had cleared it, so its fade reversed on every sample and stuttered.
     this.onMouseMove = (event) => {
-      if (event.isTrusted) this.setPointer(event.clientX, event.clientY)
+      if (!event.isTrusted) return
+      // Over Kimochi's own surfaces on the text (the Explain card, marked `data-no-scan`), the
+      // words beneath are covered: none lights. Nor without the page's leave (`canLight`: the
+      // overlay's Shift gate), when the window takes the mouse for another reason.
+      if (event.target instanceof Element && event.target.closest('[data-no-scan]')) return this.clearPointer()
+      if (this.hooks.canLight?.() === false) return this.clearPointer()
+      this.setPointer(event.clientX, event.clientY)
     }
     this.onSelectionChange = () => this.updateSelectionHighlight()
     window.addEventListener('mousemove', this.onMouseMove)

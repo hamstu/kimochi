@@ -8,7 +8,11 @@
  *
  * URL parameters (all optional):
  *   ?scene=overlay-words (default) | overlay-hover | region-select | controller-menu |
- *          controller-words | controller-controls | controller-history | hook-card
+ *          controller-words | controller-controls | controller-history | hook-card | explain
+ *   ?explain=error   explain: the provider fails (a pretend "program not found"); with ?input=, the
+ *                    card is opened from the game menu instead of the shortcut
+ *   ?word=<text>     explain: that text highlighted first, as a lookup selects it (its line is
+ *                    explained, the word first)
  *   ?game=dialogue (default) | manga     a visual novel's dialogue box, or vertical speech bubbles
  *   ?windowed=1      the game is a window on a desktop (a Mac game), not the whole screen
  *   ?furigana=0      no readings over the kanji (default: drawn, and reported as OCR reports them)
@@ -91,6 +95,8 @@ import { createController } from '@ui/controller.js'
 import { DEFAULT_RADIAL_MENU } from '@ui/radial-items.js'
 import { createHookCard } from '@ui/hook-card.js'
 import { createOverlayHints } from '@ui/overlay-hints.js'
+import { createOverlayExplain, textTarget, wordInRange } from '@ui/overlay-explain.js'
+import '@ui/overlay-explain.css'
 import { BUTTON } from '@ui/controller-input.js'
 import { HoverOverlay } from '@ui/hover.js'
 import { RegionSelect } from '@ui/region-select.js'
@@ -494,8 +500,8 @@ const controller = createController({
   },
   popupShowing: () => !popup.hidden,
   // As the overlay: the drawn scan's sections as the Log shows them.
-  sections: () =>
-    logSections(scanGroups(game.annotations as unknown as Annotation[], SETTINGS_DEFAULTS.textOverlayGrouping)),
+  sections: () => stageSections(),
+  explain: { show: () => explain.show(), hide: () => explain.hide(), scroll: (y: number) => explain.scroll(y) },
   log: (record: unknown) => void log.push(record),
   modeChanged: () => undefined
 } as unknown as ControllerContext)
@@ -657,6 +663,103 @@ document.addEventListener('keydown', (event) => {
   else if (event.key === 'Escape' && manualPause) setManualPause(false)
 })
 
+// --------------------------------------------------------------- Explain
+
+const stageSections = (): string[] =>
+  logSections(scanGroups(game.annotations as unknown as Annotation[], SETTINGS_DEFAULTS.textOverlayGrouping))
+
+/** A pretend answer, in the shape the default prompt asks for, streamed in as the providers do. */
+const EXPLAIN_ANSWER = `**Translation:** "Would you like to take a walk with me, down to the sea?"
+
+- **一緒に** — "together": the speaker is inviting the listener along, not just suggesting a walk.
+- **海まで** — **まで** marks how far: all the way *to* the sea.
+- **散歩しませんか** — the polite negative question **〜ませんか** is the standard soft invitation ("won't you…?"), gentler than **しましょう** ("let's…").
+
+The polite **です/ます** register keeps a little distance: they are friendly, but not yet close.`
+
+/** The pretend answer when a word was highlighted (`?word=`): the word first, as the prompt asks. */
+const EXPLAIN_WORD_ANSWER = `**ませんか**
+The polite negative question: **ます** made negative (**ません**) and asked with **か**. Asking "won't you…?" leaves the listener room to say no, which makes it the standard polite *invitation*, softer than **しましょう** ("let's…").
+
+**Translation:** "Would you like to take a walk with me, down to the sea?"
+
+- **一緒に** — "together".
+- **海まで** — **まで**: all the way *to* the sea.`
+
+/** The first `text` in the drawn scan, selected as a dictionary lookup selects what it matched. */
+function highlight(text: string): boolean {
+  const walker = document.createTreeWalker(words, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.parentElement?.closest('.ocr-lookahead')) continue
+    const at = node.textContent?.indexOf(text) ?? -1
+    if (at === -1) continue
+    const range = document.createRange()
+    range.setStart(node, at)
+    range.setEnd(node, at + text.length)
+    getSelection()?.removeAllRanges()
+    getSelection()?.addRange(range)
+    return true
+  }
+  return false
+}
+
+/** Which pretend explanation is streaming, so closing the panel stops it as the app's does. */
+let explaining = 0
+const explain = createOverlayExplain(document.body, {
+  native: {
+    listen: native.listen,
+    getSetting: (key: string) =>
+      key === 'superTexthooker' ? { explainProvider: 'claude', explainClaudeModel: 'opus' } : undefined,
+    invoke: async (command: string, args: { requestId?: number; prompt?: string }) => {
+      if (command === 'log_recent') return history
+      if (command === 'explain_cancel') {
+        if (args.requestId === explaining) explaining = 0
+        return
+      }
+      if (command !== 'explain_run' || !args.requestId) return
+      const id = (explaining = args.requestId)
+      const emit = (event: string, text: string): void => listeners.get(event)?.({ payload: { requestId: id, text } })
+      await pause(700)
+      if (params.get('explain') === 'error')
+        return emit(
+          'explain:error',
+          'failed to spawn claude: program not found. Install Claude Code, or choose another provider in the Log’s Explain settings.'
+        )
+      const answer = args.prompt?.includes('FOCUS:') ? EXPLAIN_WORD_ANSWER : EXPLAIN_ANSWER
+      for (const word of answer.match(/\S+\s*/g) ?? []) {
+        if (explaining !== id) return
+        emit('explain:chunk', word)
+        await pause(18)
+      }
+      if (explaining === id) emit('explain:done', answer)
+    }
+  } as unknown as Parameters<typeof createOverlayExplain>[1]['native'],
+  // As overlay.js reads it: the word read along is on, else the selection a lookup made.
+  target: () => {
+    const reading = controller.focusedWord()
+    const selection = getSelection()
+    const word = reading
+      ? { ...reading, box: null }
+      : selection?.rangeCount
+        ? wordInRange(selection.getRangeAt(0))
+        : null
+    if (word) hidePopup()
+    return textTarget(stageSections(), words, word)
+  },
+  language: () => language,
+  area: () => (flag('windowed') ? game.area : null),
+  look: () => ({
+    theme: words.dataset.ocrTheme === 'light' ? 'light' : 'dark',
+    highlight: words.style.getPropertyValue('--ocr-hl-rgb'),
+    font: words.style.getPropertyValue('--kimochi-text-font')
+  }),
+  changed: () => undefined,
+  closed: () => {
+    if (controller.mode === 'explain') void controller.close()
+  },
+  log: (record: unknown) => void log.push(record)
+})
+
 // --------------------------------------------------------------- scenes
 
 async function play(): Promise<void> {
@@ -790,6 +893,20 @@ async function play(): Promise<void> {
       return
     case 'hook-card':
       return void (await hookCard())
+    case 'explain':
+      // From the game menu with ?input=pad|keys (B closes it, the right stick scrolls), else as the
+      // Explain shortcut opens it.
+      if (params.has('input')) {
+        await controller.toggle(input)
+        await pause(150)
+        // Explain is the fourth of the menu's seven items: aim the left stick at it, then A.
+        const at = (3 / 7) * 2 * Math.PI
+        await send(`stick:${Math.sin(at).toFixed(2)},${Math.cos(at).toFixed(2)}`)
+        await send('stick:0,0')
+        return void (await send('a'))
+      }
+      if (params.get('word') && !highlight(params.get('word') ?? '')) toast(`“${params.get('word')}” is not on screen`)
+      return void (await explain.show())
     default:
       toast(`Unknown scene: ${scene}`)
   }
