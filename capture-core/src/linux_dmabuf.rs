@@ -389,11 +389,25 @@ mod egl {
         /// A linear `width × height` buffer whose pixel (x, y) is B=x, G=y, R=200, A=x+y (in
         /// DRM's little-endian XRGB/ARGB byte order), as an fd and its stride and modifier.
         unsafe fn filled_buffer(gbm: &Gbm, device: Handle, fourcc: u32, w: u32, h: u32) -> (Handle, i32, u32, u64) {
-            let bo = (gbm.gbm_bo_create)(device, w, h, fourcc, GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING);
-            assert!(!bo.is_null(), "gbm_bo_create");
+            // Drivers differ in which usages they'll map for writing; take the first that works.
+            let usages = [GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING, GBM_BO_USE_LINEAR, 0];
             let (mut stride, mut map_data) = (0u32, null_mut());
-            let map = (gbm.gbm_bo_map)(bo, 0, 0, w, h, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data);
-            assert!(!map.is_null(), "gbm_bo_map");
+            let (bo, map) = usages
+                .into_iter()
+                .find_map(|usage| {
+                    let bo = (gbm.gbm_bo_create)(device, w, h, fourcc, usage);
+                    if bo.is_null() {
+                        return None;
+                    }
+                    let map = (gbm.gbm_bo_map)(bo, 0, 0, w, h, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data);
+                    if map.is_null() {
+                        (gbm.gbm_bo_destroy)(bo);
+                        return None;
+                    }
+                    eprintln!("gbm usage {usage:#x} maps");
+                    Some((bo, map))
+                })
+                .expect("a GBM buffer we can write");
             for y in 0..h {
                 for x in 0..w {
                     let px = map.add((y * stride + x * 4) as usize);
