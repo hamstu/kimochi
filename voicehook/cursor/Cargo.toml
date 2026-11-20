@@ -1,0 +1,14 @@
+[package]
+name = "vh-cursor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# The cursor hook (Kimochi's "Keep the mouse cursor visible in games"): injected into the
+# selected game, it keeps the game from hiding the system cursor. See src/lib.rs.
+[lib]
+name = "kimochicursor"
+crate-type = ["cdylib"]
+
+[dependencies]
+windows-sys = { workspace = true }

@@ -3,7 +3,8 @@
 // demand (src-tauri/src/text_hook/store.rs). The x64 build hosts LunaHook and injects 64-bit
 // games; the i686 build injects 32-bit ones. Both run emulated on Windows ARM64.
 //
-// The voice hook DLL (voicehook/hook) is built beside each build, for Audio hooking.
+// The voice hook DLL (voicehook/hook) is built beside each build, for Audio hooking, and the cursor
+// hook DLL (voicehook/cursor), for "Keep the mouse cursor visible in games" (src-tauri/src/game_cursor.rs).
 //
 // Linux x64 builds ship the same Windows programs and DLLs, cross-built with MinGW: Kimochi runs
 // the helper with a Proton or Wine game's own Wine, inside its prefix, and injects the DLL from
@@ -87,6 +88,8 @@ if (process.platform === 'win32' || process.platform === 'linux') {
         path.join(root, 'voicehook/Cargo.toml'),
         '-p',
         'vh-hook',
+        '-p',
+        'vh-cursor',
         '--target',
         target
       ],
@@ -101,8 +104,14 @@ if (process.platform === 'win32' || process.platform === 'linux') {
       path.join(cargoTargetDir(path.join(root, 'voicehook')), `${target}/release/vhhook.dll`),
       path.join(destination, `kimochi-voicehook-${arch}.dll`)
     )
+    await copyFile(
+      path.join(cargoTargetDir(path.join(root, 'voicehook')), `${target}/release/kimochicursor.dll`),
+      path.join(destination, `kimochi-cursorhook-${arch}.dll`)
+    )
   }
   console.log(
-    builds.length ? 'Text hook helpers and voice hook DLLs (x64, x86) staged.' : 'No text hook helpers for this target.'
+    builds.length
+      ? 'Text hook helpers, voice and cursor hook DLLs (x64, x86) staged.'
+      : 'No text hook helpers for this target.'
   )
 }

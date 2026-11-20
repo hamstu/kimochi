@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- 🖱️ **Keep the mouse cursor visible in games** (opt-in, Windows, Settings → Overlay). Some games hide the mouse pointer even while you move it, so you can't see what you're pointing at for a lookup. With this on, Kimochi makes the pointer show whenever you move the mouse in the game you've selected, with no other software and no changes to the game. Games that hide a resting pointer still do. Don't use it with online games that use anti-cheat.
+
 ### Fixed
 
 - 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.

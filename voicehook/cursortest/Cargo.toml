@@ -1,0 +1,14 @@
+[package]
+name = "vh-cursortest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# The cursor hook's harness: fake games that hide the cursor the ways real engines do, and a
+# runner that injects the hook into each and checks what the screen's cursor does. See main.rs.
+[[bin]]
+name = "vh-cursortest"
+path = "src/main.rs"
+
+[dependencies]
+windows-sys = { workspace = true }

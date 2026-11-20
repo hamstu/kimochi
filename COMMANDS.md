@@ -2640,6 +2640,25 @@ every refusal (once per game and kind; later ones verbose), orphans recovered, g
 Verbose: the full plan (pid, exe, role, why; excluded processes), per-pid results, hold changes,
 waits for release.
 
+## Game cursor
+
+"Keep the mouse cursor visible in games" (`showGameCursor`, machine-local, off by default;
+Windows). Native: `src-tauri/src/game_cursor.rs`; the hook is `voicehook/cursor`
+(`kimochi-cursorhook-<arch>.dll`, built by `scripts/prepare-hookd.mjs`). Once a second, with the
+setting on and a Windows window selected (still open as its pid), Kimochi loads the hook into
+that process once per run (through `kimochi-hookd-<arch>.exe inject`, from a staged copy) and
+holds the named event `Local\kimochi_cursor_<pid>`. While the event exists, the hook keeps
+the cursor visible whenever the pointer moves (and for 3 s after); resting, the game may hide it
+again, as an idle hide would. Setting off, another source selected, or Kimochi quit: the event closes and the
+game hides its cursor again as it meant to. Nothing is loaded into a game Kimochi has paused.
+
+| Command | Arguments | Returns |
+| --- | --- | --- |
+| `game_cursor_status` | — | `{supported, active: pid \| null, error: string \| null}` |
+
+Logs: `{"check":"game-cursor", pid, ok, error}` for each load attempt. The hook writes
+`%LOCALAPPDATA%\kimochi-voicehook\cursor\<exe>.log`.
+
 ## Capabilities
 
 `capabilities/core.json` grants `core:event:default` plus a few read-only window
