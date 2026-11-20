@@ -6,6 +6,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@kit'
 import { popupOpacityOf } from '@ui/settings'
+import { entryStepTarget } from '@ui/entry-step.js'
 import { useSetting } from '../bridge/useSetting'
 import { PopoverAudio } from '@texthooker/components/PopoverAudio'
 import { PopoverAddToAnki, type AnkiConfig } from '@texthooker/components/PopoverAddToAnki'
@@ -66,21 +67,31 @@ type ShowPayload =
       sentence: string | null
     }
 
-/** Scroll so the next (`step` 1) or previous (-1) entry sits at the top of the card. */
+/** The last entry a step landed on, where it scrolled to, and when (ui/entry-step.js). */
+let lastStep: { scroller: HTMLElement; index: number; to: number; at: number } | null = null
+/** How long a smooth step counts as still under way: a press meanwhile carries on from its end. */
+const STEP_SETTLE_MS = 500
+
+/**
+ * Scroll so the next (`step` 1) or previous (-1) entry sits at the top of the card: exactly one
+ * entry per press, also when a quick second press comes mid-scroll or the last entries cannot
+ * reach the top.
+ */
 function jumpEntry(scroller: HTMLElement, step: number): void {
   const entries = [...scroller.querySelectorAll<HTMLElement>('.popover-entry')]
-  if (!entries.length) return
   const top = scroller.getBoundingClientRect().top
-  const offsets = entries.map((entry) => entry.getBoundingClientRect().top - top + scroller.scrollTop)
-  let current = 0
-  offsets.forEach((offset, index) => {
-    if (offset <= scroller.scrollTop + 8) current = index
+  const last = lastStep?.scroller === scroller ? lastStep : null
+  const settling = last !== null && performance.now() - last.at < STEP_SETTLE_MS
+  const target = entryStepTarget({
+    offsets: entries.map((entry) => entry.getBoundingClientRect().top - top + scroller.scrollTop),
+    from: settling ? last.to : scroller.scrollTop,
+    max: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+    step,
+    last
   })
-  const next = Math.max(0, Math.min(entries.length - 1, current + step))
-  scroller.scrollTo({
-    top: next === 0 ? 0 : offsets[next],
-    behavior: 'smooth'
-  })
+  if (!target) return
+  lastStep = { scroller, ...target, at: performance.now() }
+  scroller.scrollTo({ top: target.to, behavior: 'smooth' })
 }
 
 /** This window's place in the stack of pop-ups: 0 for the first. */
@@ -154,7 +165,10 @@ function PopoverApp() {
       if (level !== 0) return
       const scroller = document.querySelector<HTMLElement>('.popover-scroll')
       if (!scroller) return
-      if (e.payload.scroll) scroller.scrollTop += e.payload.scroll
+      if (e.payload.scroll) {
+        scroller.scrollTop += e.payload.scroll
+        lastStep = null
+      }
       if (e.payload.step) jumpEntry(scroller, e.payload.step)
     })
 

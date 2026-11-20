@@ -1495,4 +1495,27 @@ mod tests {
         assert_eq!(report["stick"], json!({"x": 0.0, "y": 0.0}));
         assert_eq!(report["released"], json!([]));
     }
+
+    /// #257: R1 held while the right stick scrolls is one press, not one per tick.
+    #[test]
+    fn a_held_shoulder_button_is_pressed_once() {
+        let rb = 5;
+        let mut reported = [(0.0, 0.0); 2];
+        let still = [(0.0, 0.0); 2];
+        let report = nav_report(&states(&[]), &states(&[rb]), &mut reported, still).unwrap();
+        assert_eq!(report["pressed"], json!([rb]));
+        let mut presses = 1;
+        for i in 1..=20 {
+            let scrolling = [(0.0, 0.0), (0.0, f64::from(i) * 0.04)];
+            if let Some(report) = nav_report(&states(&[rb]), &states(&[rb]), &mut reported, scrolling) {
+                assert_eq!(report["held"], json!([rb]));
+                presses += report["pressed"].as_array().unwrap().len();
+            }
+        }
+        assert_eq!(presses, 1);
+        let report = nav_report(&states(&[rb]), &states(&[]), &mut reported, still).unwrap();
+        assert_eq!(report["released"], json!([rb]));
+        let report = nav_report(&states(&[]), &states(&[rb]), &mut reported, still).unwrap();
+        assert_eq!(report["pressed"], json!([rb]));
+    }
 }
