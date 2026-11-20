@@ -62,7 +62,11 @@ A generic dotted-key JSON store, replacing Electron's `settings:get` / `settings
 | `settings_set` | `({key, value}) -> ()` |
 | `settings_all` | `() -> Value` — whole document, defaults merged |
 
-Emits `settings:changed` with `{key, value}` to every window after a successful write.
+Emits `settings:changed` with `{key, value}` to every window after a successful write. A dotted
+key (`overlayStyle.appearance`, from Settings → Browser or `kimochi settings set`) is announced
+as written and then once more as its whole top-level setting (`overlayStyle` with its new
+value), since most windows follow top-level keys; native's side effects see that top-level
+write.
 Writes are atomic: the document is staged, persisted through a temp file and rename,
 and rolled back in memory if the write fails, so memory and disk cannot disagree.
 Grouped writes (see `commit_source`) persist once, so a multi-key change cannot be
