@@ -40,6 +40,7 @@
 
 import './install-pointer-dedupe.js'
 import { anchorViewport, asEdges, boundsOf, chainWindow, fitsIn, insetIn, withExtent } from './popup-geometry.js'
+import { entryStepTarget, hotkeyKeydown, singleEntryHotkey } from './entry-step.js'
 
 const LABEL = 'popup-host'
 const core = window.__TAURI__?.core
@@ -540,47 +541,42 @@ await Application.main(false, async (application) => {
     let desktopPopup = null
 
     if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeBridge) {
+      // The last entry a fallback step landed on (ui/entry-step.js).
+      let lastStep = null
       await window.__TAURI__.event.listen('gnome-controller-popup-control', async ({ payload }) => {
         const doc = desktopPopup?._frame?.contentDocument
         const scroll = doc?.querySelector('#content-scroll')
         if (!scroll) return
-        if (Number.isFinite(payload.scroll)) scroll.scrollBy(0, payload.scroll)
+        if (Number.isFinite(payload.scroll)) {
+          scroll.scrollBy(0, payload.scroll)
+          lastStep = null
+        }
         if (payload.step === 1 || payload.step === -1) {
           // Use the reader's own entry action first, including its active entry and
-          // sticky-header handling, just as the shared controller does.
+          // sticky-header handling, just as the shared controller does: the hotkey that
+          // moves one entry, never Alt+PageDown's three (#257).
           const options = await application.api.optionsGetFull()
           const profile = options?.profiles?.[options.profileCurrent]?.options
-          const action = payload.step > 0 ? 'nextEntry' : 'previousEntry'
-          const hotkey = profile?.inputs?.hotkeys?.find(
-            (h) =>
-              h.action === action &&
-              h.enabled !== false &&
-              typeof h.key === 'string' &&
-              (h.scopes ?? []).includes('popup')
-          )
+          const hotkey = singleEntryHotkey(profile?.inputs?.hotkeys, payload.step)
           if (hotkey) {
-            const win = desktopPopup._frame.contentWindow,
-              mods = hotkey.modifiers ?? []
-            const key = new win.KeyboardEvent('keydown', {
-              key: hotkey.key.replace(/^Key/, '').toLowerCase(),
-              code: hotkey.key,
-              altKey: mods.includes('alt'),
-              ctrlKey: mods.includes('ctrl'),
-              shiftKey: mods.includes('shift'),
-              metaKey: mods.includes('meta'),
-              bubbles: true,
-              cancelable: true
-            })
+            const win = desktopPopup._frame.contentWindow
+            const key = new win.KeyboardEvent('keydown', hotkeyKeydown(hotkey))
             doc.dispatchEvent(key)
             if (key.defaultPrevented) return
           }
           const entries = [...doc.querySelectorAll('.entry')]
-          const top = scroll.getBoundingClientRect().top
-          const current = Math.max(
-            0,
-            entries.findIndex((entry) => entry.getBoundingClientRect().bottom > top + 8)
-          )
-          entries[Math.max(0, Math.min(entries.length - 1, current + payload.step))]?.scrollIntoView({ block: 'start' })
+          const body = doc.getElementById('content-body') ?? scroll
+          const bodyTop = body.getBoundingClientRect().top
+          const target = entryStepTarget({
+            offsets: entries.map((entry) => entry.getBoundingClientRect().top - bodyTop),
+            from: scroll.scrollTop,
+            max: Math.max(0, scroll.scrollHeight - scroll.clientHeight),
+            step: payload.step,
+            last: lastStep?.scroll === scroll ? lastStep : null
+          })
+          if (!target) return
+          lastStep = { scroll, ...target }
+          scroll.scrollTop = target.to
         }
       })
     }
