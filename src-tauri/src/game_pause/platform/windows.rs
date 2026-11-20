@@ -297,15 +297,23 @@ impl Backend for WindowsBackend {
         let Some(main) = suspended.members.first().map(|m| m.pid) else { return Ok(()) };
         // A protected or vanished child is left out; the game stays paused as planned.
         let Ok(tree) = suspend::plan(main) else { return Ok(()) };
+        let new: Vec<_> = tree
+            .processes
+            .into_iter()
+            .filter(|p| {
+                !held.iter().any(|f| f.identity.pid == p.identity.pid && f.identity.created == p.identity.created)
+            })
+            .collect();
+        if new.is_empty() {
+            return Ok(());
+        }
+        // Listed after the plan, so a child started since the first list has its threads (and
+        // their suspend counts, such as a child created suspended) in its baseline.
+        let before = Threads::now();
         let mut added = Vec::new();
-        for p in tree.processes {
-            let known =
-                held.iter().any(|f| f.identity.pid == p.identity.pid && f.identity.created == p.identity.created);
-            if known {
-                continue;
-            }
+        for p in new {
             let member = Member { id: proc_identity(&p.identity), role: role(p.role), why: why(p.role).into() };
-            if let Ok(Some((frozen, _))) = self.freeze(&member, &threads) {
+            if let Ok(Some((frozen, _))) = self.freeze(&member, &before) {
                 suspended.members.push(member.id);
                 added.push(frozen);
             }

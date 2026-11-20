@@ -44,8 +44,8 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::System::Threading::{
-    GetCurrentProcess, GetExitCodeProcess, GetProcessInformation, GetProcessTimes, OpenProcess, OpenProcessToken,
-    OpenThread, ProcessProtectionLevelInfo, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
+    GetCurrentProcess, GetExitCodeProcess, GetProcessIdOfThread, GetProcessInformation, GetProcessTimes, OpenProcess,
+    OpenProcessToken, OpenThread, ProcessProtectionLevelInfo, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
     PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32, PROCESS_PROTECTION_LEVEL_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
     PROCESS_SET_INFORMATION, PROCESS_SUSPEND_RESUME, THREAD_QUERY_LIMITED_INFORMATION, THREAD_SUSPEND_RESUME,
 };
@@ -645,8 +645,12 @@ pub(super) fn toolhelp_threads_of(pid: u32) -> Vec<u32> {
     toolhelp_threads().of(pid).to_vec()
 }
 
-fn open_thread(tid: u32) -> Option<Owned> {
-    unsafe { OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_LIMITED_INFORMATION, false, tid) }.ok().map(Owned)
+/// Open a listed thread, only if it still belongs to `pid`: a list is shared by a whole step, and a
+/// thread that ended since may have left its id to another process's thread.
+fn open_thread(pid: u32, tid: u32) -> Option<Owned> {
+    let thread =
+        Owned(unsafe { OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_LIMITED_INFORMATION, false, tid) }.ok()?);
+    (unsafe { GetProcessIdOfThread(thread.0) } == pid).then_some(thread)
 }
 
 /// A thread's suspend count, read without changing it.
@@ -686,7 +690,7 @@ fn counts_in(threads: &Threads, pid: u32) -> HashMap<u32, u32> {
         .of(pid)
         .iter()
         .filter_map(|&tid| {
-            let thread = open_thread(tid)?;
+            let thread = open_thread(pid, tid)?;
             Some((tid, suspend_count(thread.0)?))
         })
         .collect()
@@ -885,7 +889,7 @@ pub(super) fn thaw(frozen: Frozen, threads: &Threads) -> Step {
 fn settle(threads: &Threads, pid: u32, baseline: &HashMap<u32, u32>) -> usize {
     let mut corrected = 0;
     for &tid in threads.of(pid) {
-        let Some(thread) = open_thread(tid) else { continue };
+        let Some(thread) = open_thread(pid, tid) else { continue };
         let floor = baseline.get(&tid).copied().unwrap_or(0);
         let mut touched = false;
         // Bounded: a suspend count cannot exceed 127.
