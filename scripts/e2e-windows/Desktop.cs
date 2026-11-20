@@ -25,6 +25,10 @@ public static class Native {
  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
  public static bool Focus(IntPtr h){uint pid;uint fg=GetWindowThreadProcessId(GetForegroundWindow(),out pid),target=GetWindowThreadProcessId(h,out pid),self=GetCurrentThreadId();if(fg!=self)AttachThreadInput(self,fg,true);if(target!=self&&target!=fg)AttachThreadInput(self,target,true);try{BringWindowToTop(h);return SetForegroundWindow(h);}finally{if(target!=self&&target!=fg)AttachThreadInput(self,target,false);if(fg!=self)AttachThreadInput(self,fg,false);}}
  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
+ [StructLayout(LayoutKind.Sequential)] public struct CURSORINFO { public int cbSize,flags; public IntPtr hCursor; public int x,y; }
+ [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO c);
+ // The screen's cursor: whether it is showing (the "cursor" scenario).
+ public static object CursorInfo(){var c=new CURSORINFO();c.cbSize=Marshal.SizeOf(c);bool ok=GetCursorInfo(ref c);return new{ok,showing=(c.flags&1)!=0,x=c.x,y=c.y};}
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int n);
  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int t,bool redraw);
  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int k);
@@ -123,6 +127,8 @@ public class Game : Form {
   }
   else if(cmd.StartsWith("skip "))skip=cmd.Substring(5);
   else if(cmd=="minimize-on-blur on"||cmd=="minimize-on-blur off")minimizeOnBlur=cmd.EndsWith("on"); else if(cmd=="close")Close(); else if(cmd=="minimize")WindowState=FormWindowState.Minimized;
+  // .NET's Cursor.Hide: ShowCursor(FALSE) through P/Invoke, looked up at run time (no import slot).
+  else if(cmd=="hidecursor")Cursor.Hide(); else if(cmd=="showcursor")Cursor.Show();
   else if(cmd=="restore"){WindowState=FormWindowState.Normal;Native.SetForegroundWindow(Handle);Invalidate();}
   else if(cmd=="borderless"){saved=Bounds;FormBorderStyle=FormBorderStyle.None;Bounds=Screen.FromHandle(Handle).Bounds;mode=cmd;Invalidate();}
   else if(cmd=="windowed"){FormBorderStyle=FormBorderStyle.Sizable;Bounds=saved.Width>0?saved:new Rectangle(130,90,1017,740);mode=cmd;Invalidate();}
@@ -194,6 +200,7 @@ public class Program {
   if(args[0]=="game"){Application.EnableVisualStyles();Application.Run(new Game(args[1],args.Length>2&&args[2]!=""?args[2]:null){hookable=args.Contains("hookable")});}
   else if(args[0]=="guiinfo") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.GuiInfo()));
   else if(args[0]=="magpie") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.Magpie()));
+  else if(args[0]=="cursorinfo") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.CursorInfo()));
   else if(args[0]=="windows") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.Windows()));
   else if(args[0]=="key") Native.Key(int.Parse(args[1]),args[2]=="up");
   else if(args[0]=="chord"){var k=args.Skip(1).Select(int.Parse).ToArray();foreach(int v in k){Native.Key(v,false);Thread.Sleep(60);}Thread.Sleep(100);foreach(int v in k.Reverse()){Native.Key(v,true);Thread.Sleep(40);}}

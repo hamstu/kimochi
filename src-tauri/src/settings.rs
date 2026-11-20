@@ -93,6 +93,9 @@ pub fn defaults() -> Value {
         // Suspend the game while the reader is busy with the overlay (game_pause/). Opt-in: online
         // games may time out and some engines jump on resume. This computer's choice.
         "pauseGameWhileReading": false,
+        // Keep the mouse cursor visible in the selected game (game_cursor.rs, Windows): loads a
+        // small hook into the game. Opt-in. This computer's choice.
+        "showGameCursor": false,
         // Mini mode when the watched game goes full screen on Kimochi's display (compact.rs).
         // Off: Kimochi is kept on top over the game instead, at its own size.
         "autoMiniMode": false,

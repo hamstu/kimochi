@@ -33,7 +33,8 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use windows::core::{s, w, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, FILETIME, HANDLE};
+use windows::Wdk::System::SystemInformation::{NtQuerySystemInformation, SystemProcessInformation};
+use windows::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, FILETIME, HANDLE, STATUS_INFO_LENGTH_MISMATCH};
 use windows::Win32::Security::{
     EqualSid, GetTokenInformation, TokenElevation, TokenUser, TOKEN_ELEVATION, TOKEN_QUERY, TOKEN_USER,
 };
@@ -43,11 +44,12 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::System::Threading::{
-    GetCurrentProcess, GetExitCodeProcess, GetProcessInformation, GetProcessTimes, OpenProcess, OpenProcessToken,
-    OpenThread, ProcessProtectionLevelInfo, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
+    GetCurrentProcess, GetExitCodeProcess, GetProcessIdOfThread, GetProcessInformation, GetProcessTimes, OpenProcess,
+    OpenProcessToken, OpenThread, ProcessProtectionLevelInfo, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
     PROCESS_ACCESS_RIGHTS, PROCESS_NAME_WIN32, PROCESS_PROTECTION_LEVEL_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
     PROCESS_SET_INFORMATION, PROCESS_SUSPEND_RESUME, THREAD_QUERY_LIMITED_INFORMATION, THREAD_SUSPEND_RESUME,
 };
+use windows::Win32::System::WindowsProgramming::{SYSTEM_PROCESS_INFORMATION, SYSTEM_THREAD_INFORMATION};
 
 use crate::text_hook::process::{is_engine_child, is_same_program, is_system_image};
 
@@ -554,25 +556,101 @@ pub fn plan(pid: u32) -> Result<Tree, Refusal> {
 // ---------------------------------------------------------------------------------------------
 // Threads.
 
-pub(super) fn threads_of(pid: u32) -> Vec<u32> {
-    let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) }) else {
-        return Vec::new();
-    };
-    let snapshot = Owned(snapshot);
-    let mut entry = THREADENTRY32 { dwSize: std::mem::size_of::<THREADENTRY32>() as u32, ..Default::default() };
-    let mut out = Vec::new();
-    let mut ok = unsafe { Thread32First(snapshot.0, &mut entry) }.is_ok();
-    while ok {
-        if entry.th32OwnerProcessID == pid {
-            out.push(entry.th32ThreadID);
+/// Every thread on the system, by process, as of one moment. Listing threads is where a pause
+/// spent its time (Windows lists them for the whole system at once), so each step takes one list
+/// and shares it with every process it touches: a 40-process game (a browser) took 5 s to pause
+/// when each process listed every thread several times.
+pub(super) struct Threads(HashMap<u32, Vec<u32>>);
+
+impl Threads {
+    /// One `NtQuerySystemInformation(SystemProcessInformation)` call; Tool Help if that fails.
+    pub(super) fn now() -> Threads {
+        system_threads().unwrap_or_else(toolhelp_threads)
+    }
+
+    pub(super) fn of(&self, pid: u32) -> &[u32] {
+        self.0.get(&pid).map_or(&[], Vec::as_slice)
+    }
+}
+
+fn system_threads() -> Option<Threads> {
+    // About 1 MB with ten thousand threads; grown to what the call asks for, with room for the
+    // processes started in between.
+    let mut len: usize = 2 << 20;
+    for _ in 0..6 {
+        // u64s, so the records are aligned.
+        let mut buffer = vec![0u64; len.div_ceil(8)];
+        let size = u32::try_from(buffer.len() * 8).ok()?;
+        let mut needed = 0u32;
+        let status = unsafe {
+            NtQuerySystemInformation(SystemProcessInformation, buffer.as_mut_ptr().cast(), size, &mut needed)
+        };
+        if status == STATUS_INFO_LENGTH_MISMATCH {
+            len = (needed as usize + (256 << 10)).max(len * 2);
+            continue;
         }
-        ok = unsafe { Thread32Next(snapshot.0, &mut entry) }.is_ok();
+        nt_ok(status.0).ok()?;
+        let written = (needed as usize).min(buffer.len() * 8);
+        let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), written) };
+        return Some(Threads(parse_system_threads(bytes)));
+    }
+    None
+}
+
+/// Walk the `SYSTEM_PROCESS_INFORMATION` records, never past the bytes written.
+fn parse_system_threads(bytes: &[u8]) -> HashMap<u32, Vec<u32>> {
+    let head = std::mem::size_of::<SYSTEM_PROCESS_INFORMATION>();
+    let each = std::mem::size_of::<SYSTEM_THREAD_INFORMATION>();
+    let mut out = HashMap::new();
+    let mut at = 0usize;
+    while at + head <= bytes.len() {
+        let process: SYSTEM_PROCESS_INFORMATION = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(at).cast()) };
+        let first = at + head;
+        let fit = (bytes.len() - first) / each;
+        let tids = (0..(process.NumberOfThreads as usize).min(fit))
+            .map(|i| {
+                let thread: SYSTEM_THREAD_INFORMATION =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(first + i * each).cast()) };
+                thread.ClientId.UniqueThread.0 as usize as u32
+            })
+            .collect();
+        out.insert(process.UniqueProcessId.0 as usize as u32, tids);
+        if process.NextEntryOffset == 0 {
+            break;
+        }
+        at += process.NextEntryOffset as usize;
     }
     out
 }
 
-fn open_thread(tid: u32) -> Option<Owned> {
-    unsafe { OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_LIMITED_INFORMATION, false, tid) }.ok().map(Owned)
+/// The same list through Tool Help (slower: it copies every thread on the system first).
+fn toolhelp_threads() -> Threads {
+    let mut out: HashMap<u32, Vec<u32>> = HashMap::new();
+    let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) }) else {
+        return Threads(out);
+    };
+    let snapshot = Owned(snapshot);
+    let mut entry = THREADENTRY32 { dwSize: std::mem::size_of::<THREADENTRY32>() as u32, ..Default::default() };
+    let mut ok = unsafe { Thread32First(snapshot.0, &mut entry) }.is_ok();
+    while ok {
+        out.entry(entry.th32OwnerProcessID).or_default().push(entry.th32ThreadID);
+        ok = unsafe { Thread32Next(snapshot.0, &mut entry) }.is_ok();
+    }
+    Threads(out)
+}
+
+/// Tool Help's list, to check the native one against (tests).
+#[cfg(test)]
+pub(super) fn toolhelp_threads_of(pid: u32) -> Vec<u32> {
+    toolhelp_threads().of(pid).to_vec()
+}
+
+/// Open a listed thread, only if it still belongs to `pid`: a list is shared by a whole step, and a
+/// thread that ended since may have left its id to another process's thread.
+fn open_thread(pid: u32, tid: u32) -> Option<Owned> {
+    let thread =
+        Owned(unsafe { OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_LIMITED_INFORMATION, false, tid) }.ok()?);
+    (unsafe { GetProcessIdOfThread(thread.0) } == pid).then_some(thread)
 }
 
 /// A thread's suspend count, read without changing it.
@@ -601,19 +679,31 @@ fn suspend_count(thread: HANDLE) -> Option<u32> {
 }
 
 /// Every live thread's suspend count.
+#[cfg(test)]
 pub(super) fn counts(pid: u32) -> HashMap<u32, u32> {
-    threads_of(pid)
-        .into_iter()
-        .filter_map(|tid| {
-            let thread = open_thread(tid)?;
+    counts_in(&Threads::now(), pid)
+}
+
+/// Each listed thread's suspend count, read now.
+fn counts_in(threads: &Threads, pid: u32) -> HashMap<u32, u32> {
+    threads
+        .of(pid)
+        .iter()
+        .filter_map(|&tid| {
+            let thread = open_thread(pid, tid)?;
             Some((tid, suspend_count(thread.0)?))
         })
         .collect()
 }
 
-/// Whether every thread of the process is suspended: what a pause leaves behind.
+#[cfg(test)]
 pub fn is_frozen(pid: u32) -> bool {
-    let counts = counts(pid);
+    is_frozen_in(&Threads::now(), pid)
+}
+
+/// Whether every listed thread of the process is suspended: what a pause leaves behind.
+pub(super) fn is_frozen_in(threads: &Threads, pid: u32) -> bool {
+    let counts = counts_in(threads, pid);
     !counts.is_empty() && counts.values().all(|c| *c > 0)
 }
 
@@ -643,7 +733,14 @@ pub(super) fn prefer_state_change() -> bool {
     std::env::var_os("KIMOCHI_PAUSE_NO_STATE_CHANGE").is_none() && state_change_available()
 }
 
-pub(super) fn freeze_one(planned: &Planned, use_state_change: bool) -> Result<(Frozen, Step), FreezeError> {
+/// Suspend one process. `before` lists the threads as they were just before the step; the caller
+/// then catches the threads that escaped ([`catch_escaped`]) with one list taken once every
+/// process of the step is suspended.
+pub(super) fn freeze_one(
+    planned: &Planned,
+    use_state_change: bool,
+    before: &Threads,
+) -> Result<(Frozen, Step), FreezeError> {
     let started = Instant::now();
     let pid = planned.identity.pid;
     let refused = |code: u32| {
@@ -660,7 +757,7 @@ pub(super) fn freeze_one(planned: &Planned, use_state_change: bool) -> Result<(F
     if !same(&planned.identity, identity_of(process.0, pid).as_ref()) || !running(process.0) {
         return Err(FreezeError::Refused(Refusal::Gone));
     }
-    let baseline = counts(pid);
+    let baseline = counts_in(before, pid);
 
     let mut mechanism = Mechanism::SuspendProcess;
     let mut state = None;
@@ -678,11 +775,10 @@ pub(super) fn freeze_one(planned: &Planned, use_state_change: bool) -> Result<(F
         // Nothing to undo: the one suspend failed (a state change object closes on drop).
         return Err(FreezeError::Suspend { pid, status });
     }
-    let escaped = catch_escaped(&mut frozen);
     let step = Step {
         pid,
         mechanism: mechanism.name(),
-        escaped,
+        escaped: 0,
         corrected: 0,
         micros: started.elapsed().as_micros() as u64,
         error: None,
@@ -719,8 +815,8 @@ fn resume_once(frozen: &mut Frozen) -> Result<(), u32> {
 }
 
 /// Threads not above their pre-pause count: created during (or since) the process-wide suspend.
-fn escaped_threads(frozen: &Frozen) -> usize {
-    counts(frozen.identity.pid)
+fn escaped_threads(frozen: &Frozen, threads: &Threads) -> usize {
+    counts_in(threads, frozen.identity.pid)
         .into_iter()
         .filter(|(tid, count)| *count <= frozen.baseline.get(tid).copied().unwrap_or(0))
         .count()
@@ -729,14 +825,16 @@ fn escaped_threads(frozen: &Frozen) -> usize {
 /// The second pass: while some thread escaped the process-wide suspend (it is not above its
 /// pre-pause count), suspend the whole process once more, through the same mechanism. The other
 /// threads go one deeper, which `thaw` undoes. Bounded. Returns how many threads had escaped.
-pub(super) fn catch_escaped(frozen: &mut Frozen) -> usize {
+/// `after` is a thread list taken after the suspend; a pass that caught some lists them again.
+pub(super) fn catch_escaped(frozen: &mut Frozen, after: &Threads) -> usize {
     let mut caught = 0;
+    let mut escaped = escaped_threads(frozen, after);
     for _ in 0..3 {
-        let escaped = escaped_threads(frozen);
         if escaped == 0 || suspend_once(frozen).is_err() {
             break;
         }
         caught += escaped;
+        escaped = escaped_threads(frozen, &Threads::now());
     }
     caught
 }
@@ -751,8 +849,10 @@ pub(super) fn abandon(frozen: Frozen) {
     drop(process);
 }
 
-/// Resume one process and verify no thread is left above its pre-pause suspend count.
-pub(super) fn thaw(frozen: Frozen) -> Step {
+/// Resume one process and verify no thread is left above its pre-pause suspend count. `threads`
+/// is a list taken while the process was still frozen (threads it starts once resumed were never
+/// ours), shared by every process the step resumes.
+pub(super) fn thaw(frozen: Frozen, threads: &Threads) -> Step {
     let started = Instant::now();
     let pid = frozen.identity.pid;
     let mut frozen = frozen;
@@ -766,8 +866,8 @@ pub(super) fn thaw(frozen: Frozen) -> Step {
     }
     let Frozen { process, state, baseline, mechanism, .. } = frozen;
     drop(state);
-    let corrected = if running(process.0) { settle(pid, &baseline) } else { 0 };
-    let still = if running(process.0) { left_suspended(pid, &baseline) } else { 0 };
+    let corrected = if running(process.0) { settle(threads, pid, &baseline) } else { 0 };
+    let still = if running(process.0) { left_suspended(threads, pid, &baseline) } else { 0 };
     if still > 0 {
         errors.push(format!("{still} thread(s) still suspended"));
     } else if running(process.0) {
@@ -786,10 +886,10 @@ pub(super) fn thaw(frozen: Frozen) -> Step {
 
 /// Resume threads that sit above their pre-pause count (unknown threads: above 0). Returns how
 /// many threads needed it.
-fn settle(pid: u32, baseline: &HashMap<u32, u32>) -> usize {
+fn settle(threads: &Threads, pid: u32, baseline: &HashMap<u32, u32>) -> usize {
     let mut corrected = 0;
-    for tid in threads_of(pid) {
-        let Some(thread) = open_thread(tid) else { continue };
+    for &tid in threads.of(pid) {
+        let Some(thread) = open_thread(pid, tid) else { continue };
         let floor = baseline.get(&tid).copied().unwrap_or(0);
         let mut touched = false;
         // Bounded: a suspend count cannot exceed 127.
@@ -809,8 +909,8 @@ fn settle(pid: u32, baseline: &HashMap<u32, u32>) -> usize {
     corrected
 }
 
-pub(super) fn left_suspended(pid: u32, baseline: &HashMap<u32, u32>) -> usize {
-    counts(pid).into_iter().filter(|(tid, count)| *count > baseline.get(tid).copied().unwrap_or(0)).count()
+pub(super) fn left_suspended(threads: &Threads, pid: u32, baseline: &HashMap<u32, u32>) -> usize {
+    counts_in(threads, pid).into_iter().filter(|(tid, count)| *count > baseline.get(tid).copied().unwrap_or(0)).count()
 }
 
 /// What `recover` did with one process.
@@ -829,7 +929,8 @@ pub enum Recovery {
 /// Touches the pid only if its identity still matches and it is still fully frozen, so a game
 /// that resumed already does not get its own suspended threads woken. Threads the second pass
 /// froze one by one are not known any more; `settle` brings every thread down to 0.
-pub fn recover(identity: &Identity) -> Recovery {
+/// `threads` is a list taken before (a frozen process starts no threads).
+pub fn recover(identity: &Identity, threads: &Threads) -> Recovery {
     let pid = identity.pid;
     let Ok(process) = open_process(pid, PROCESS_SUSPEND_RESUME | PROCESS_QUERY_LIMITED_INFORMATION) else {
         return Recovery::Mismatch;
@@ -837,7 +938,7 @@ pub fn recover(identity: &Identity) -> Recovery {
     if !running(process.0) || !same(identity, identity_of(process.0, pid).as_ref()) {
         return Recovery::Mismatch;
     }
-    if !is_frozen(pid) {
+    if !is_frozen_in(threads, pid) {
         return Recovery::NotFrozen;
     }
     if let Some(resume) = nt().resume {
@@ -845,6 +946,6 @@ pub fn recover(identity: &Identity) -> Recovery {
     }
     // Anything still above 0 after that was ours: the game's own suspended threads cannot be
     // told apart any more, but a fully frozen game is the worse outcome.
-    let corrected = if is_frozen(pid) { settle(pid, &HashMap::new()) } else { 0 };
+    let corrected = if is_frozen_in(threads, pid) { settle(threads, pid, &HashMap::new()) } else { 0 };
     Recovery::Resumed { corrected }
 }

@@ -221,6 +221,37 @@ fn entry(pid: u32, parent: u32, name: &str) -> ProcEntry {
 }
 
 #[test]
+fn the_native_thread_list_matches_tool_help() {
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    let own = std::process::id();
+    // This thread and four parked ones stay alive while both lists are taken (other tests may
+    // start or end threads in between, so only these are compared).
+    let (tx, rx) = std::sync::mpsc::channel();
+    let parked: Vec<_> = (0..4)
+        .map(|_| {
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                tx.send(unsafe { GetCurrentThreadId() }).unwrap();
+                std::thread::park_timeout(Duration::from_secs(10));
+            })
+        })
+        .collect();
+    let mut ours: Vec<u32> = (0..4).map(|_| rx.recv().unwrap()).collect();
+    ours.push(unsafe { GetCurrentThreadId() });
+    let native = suspend::Threads::now().of(own).to_vec();
+    let toolhelp = suspend::toolhelp_threads_of(own);
+    for tid in &ours {
+        assert!(native.contains(tid), "{tid} missing from {native:?}");
+        assert!(toolhelp.contains(tid), "{tid} missing from {toolhelp:?}");
+    }
+    assert!(suspend::Threads::now().of(u32::MAX).is_empty());
+    for t in parked {
+        t.thread().unpark();
+        let _ = t.join();
+    }
+}
+
+#[test]
 fn the_tree_is_the_window_process_its_engine_and_same_program_children() {
     let all = vec![
         entry(10, 1, "Launcher.exe"),

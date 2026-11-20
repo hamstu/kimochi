@@ -73,6 +73,7 @@ node scripts/e2e-windows/run.mjs keys window gdi windowed
 node scripts/e2e-windows/run.mjs alt window gdi windowed
 node scripts/e2e-windows/run.mjs selfocr display gdi windowed
 node scripts/e2e-windows/run.mjs hook window gdi windowed
+node scripts/e2e-windows/run.mjs cursor window gdi windowed
 node scripts/e2e-windows/quit.mjs 22
 ```
 

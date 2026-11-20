@@ -31,6 +31,7 @@ mod elevation;
 mod engine_probe;
 mod extension_store;
 mod extensions;
+mod game_cursor;
 mod game_pause;
 mod gamepad;
 mod google_lens;
@@ -3507,6 +3508,7 @@ fn main() {
         region_keys,
         controller_nav,
         game_pause::app::game_pause_status,
+        game_cursor::game_cursor_status,
         game_pause::app::game_pause_beat,
         game_pause::app::game_pause_resume_all,
         game_pause::app::game_pause_spans,
@@ -3631,6 +3633,8 @@ fn main() {
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // Resumes whatever an earlier run left paused, then follows the setting.
             game_pause::app::start(&handle, game_pause::app::enabled(&store));
+            // "Keep the mouse cursor visible in games": follows the setting and the selected window.
+            game_cursor::start(&handle);
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
             // Before the first download: the mirror's fallbacks go to the log.

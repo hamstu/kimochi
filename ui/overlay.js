@@ -23,6 +23,7 @@ import { ReadingHold } from './reading-hold.js'
 import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
 import { PopupLeave, gapBetween, inRect, lineAround } from './popup-leave.js'
 import { boundingRect } from './popup-geometry.js'
+import { entryStepTarget, hotkeyKeydown, singleEntryHotkey } from './entry-step.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -4945,9 +4946,9 @@ async function capturePopups() {
  * Scroll the open dictionary popup, or jump between its definitions, for the controller's right
  * stick and shoulder buttons.
  *
- * Yomitan's popup is a same-origin frame in this window, so it is scrolled directly: its
- * definitions are the per-dictionary `.definition-item`s, or whole `.entry`s when no entry
- * holds more than one. The Yomitan API pop-up is its own window and is asked by event.
+ * Yomitan's popup is a same-origin frame in this window, so it is scrolled directly, and a step
+ * moves it exactly one dictionary entry (ui/entry-step.js). The Yomitan API pop-up is its own
+ * window and is asked by event.
  *
  * `control.focus` moves the controller's focus over the popup's buttons (ui/popup-focus.js), for
  * Yomitan and Hachidori; the return value says whether it did anything. The Yomitan API pop-up
@@ -4995,6 +4996,7 @@ function controlPopup(control) {
   if (control.scroll) {
     if (jump) cancelAnimationFrame(jump.frame)
     jump = null
+    lastStep = null
     scroller.scrollTop += control.scroll
   }
   if (control.step) void stepEntry(popup._frame, scroller, control.step)
@@ -5039,20 +5041,11 @@ function yomitanFocus(request) {
  */
 async function stepEntry(frame, scroller, step) {
   const before = scroller.scrollTop
-  const hotkey = await entryHotkey(step > 0 ? 'nextEntry' : 'previousEntry')
+  const hotkey = await entryHotkey(step)
   const win = frame.contentWindow
   let handled = false
   if (hotkey && win) {
-    const event = new win.KeyboardEvent('keydown', {
-      key: hotkey.key.replace(/^Key/, '').toLowerCase(),
-      code: hotkey.key,
-      altKey: hotkey.modifiers.includes('alt'),
-      ctrlKey: hotkey.modifiers.includes('ctrl'),
-      shiftKey: hotkey.modifiers.includes('shift'),
-      metaKey: hotkey.modifiers.includes('meta'),
-      bubbles: true,
-      cancelable: true
-    })
+    const event = new win.KeyboardEvent('keydown', hotkeyKeydown(hotkey))
     win.document.dispatchEvent(event)
     // Yomitan prevents the default of a keystroke it acted on.
     handled = event.defaultPrevented
@@ -5073,19 +5066,15 @@ async function stepEntry(frame, scroller, step) {
   }, 400)
 }
 
-/** The reader's popup hotkey for an entry action, from the current Yomitan profile. */
-async function entryHotkey(action) {
+/**
+ * The reader's popup hotkey that moves one entry forwards (`step` > 0) or back, from the current
+ * Yomitan profile: never the Alt+PageDown one, which moves three (ui/entry-step.js).
+ */
+async function entryHotkey(step) {
   try {
     const options = await extensionApi?.('optionsGetFull')
     const profile = options?.profiles?.[options.profileCurrent]?.options
-    const hotkey = profile?.inputs?.hotkeys?.find(
-      (entry) =>
-        entry.action === action &&
-        entry.enabled !== false &&
-        typeof entry.key === 'string' &&
-        (entry.scopes ?? []).includes('popup')
-    )
-    return hotkey ? { key: hotkey.key, modifiers: hotkey.modifiers ?? [] } : null
+    return singleEntryHotkey(profile?.inputs?.hotkeys, step)
   } catch {
     return null
   }
@@ -5094,10 +5083,13 @@ let lastPopupReport = 0
 
 /** A definition jump in progress: where it is headed, so a quick second press continues from there. */
 let jump = null
+/** The last entry a step landed on, and where it scrolled to; see `entryStepTarget`. */
+let lastStep = null
 const JUMP_MS = 220
 
 /**
- * Scroll `scroller` so the next (`step` 1) or previous (-1) of `targets` is at its top.
+ * Scroll `scroller` so the next (`step` 1) or previous (-1) of `targets` is at its top: exactly one
+ * entry per press (ui/entry-step.js), also near the bottom where an entry cannot reach the top.
  *
  * Positions are measured against `body`, the scrolled content, the way Yomitan measures its own
  * entry navigation: the popup's content is scaled, so a rectangle and `scrollTop` are not in the
@@ -5112,14 +5104,11 @@ function jumpDefinition(scroller, body, targets, step) {
   const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
   // Where the popup is, or is about to be: a press during a jump counts from its destination.
   const from = jump?.scroller === scroller ? jump.to : scroller.scrollTop
-  let current = 0
-  offsets.forEach((offset, index) => {
-    if (offset <= from + 8) current = index
-  })
-  // At the bottom, the last definitions cannot reach the top; step past whichever is showing.
-  if (step > 0 && from >= max - 1) return
-  const next = Math.max(0, Math.min(targets.length - 1, current + step))
-  const to = Math.min(max, next === 0 ? 0 : Math.max(0, offsets[next] - 6))
+  const last = lastStep?.scroller === scroller ? lastStep : null
+  const target = entryStepTarget({ offsets, from, max, step, last })
+  if (!target) return
+  const { index: next, to } = target
+  lastStep = { scroller, index: next, to }
   animateScroll(scroller, to)
   targets[next].animate?.([{ backgroundColor: 'rgba(125, 211, 252, 0.2)' }, { backgroundColor: 'transparent' }], {
     duration: 700,

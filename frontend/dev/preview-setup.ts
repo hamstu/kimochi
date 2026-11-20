@@ -1062,6 +1062,8 @@ const HANDLERS: Record<string, Handler> = {
     }
   },
   game_pause_resume_all: () => ({ running: false, recovered: [] }),
+  // "Keep the mouse cursor visible in games" (Settings → Overlay): supported, nothing loaded yet.
+  game_cursor_status: () => ({ supported: true, active: null, error: null }),
   // Settings → Browser Extension.
   browser_bridge_status: () => ({ enabled: true, listening: true, port: 27640, connected: 1, browsers: ['Chrome'] }),
   browser_extension_folder: () => '/Users/you/Library/Application Support/com.kimochi.app/browser-extension',

@@ -7,7 +7,9 @@ import { alignmentMetrics } from '../overlay-alignment-metrics.mjs'
 import { acquireDesktop } from './desktop-lock.mjs'
 const [scenario = 'scan', source = 'window', renderer = 'gdi', mode = 'windowed'] = process.argv.slice(2)
 assert(
-  ['scan', 'hover', 'auto', 'windows', 'quickshot', 'focus', 'keys', 'alt', 'selfocr', 'hook'].includes(scenario),
+  ['scan', 'hover', 'auto', 'windows', 'quickshot', 'focus', 'keys', 'alt', 'selfocr', 'hook', 'cursor'].includes(
+    scenario
+  ),
   'known scenario'
 )
 assert(['window', 'display'].includes(source), 'source must be window or display')
@@ -1118,6 +1120,55 @@ try {
           return true
         })
       }
+    }
+  } else if (scenario === 'cursor') {
+    // "Keep the mouse cursor visible in games" (src-tauri/src/game_cursor.rs, voicehook/cursor).
+    // The game hides the cursor with .NET's Cursor.Hide: ShowCursor through P/Invoke, looked up
+    // at run time, which no import slot sees, so this is the hook's fallback path.
+    const t = await truth()
+    const middle = [t.client.x + Math.round(t.client.width / 2), t.client.y + Math.round(t.client.height / 2)]
+    const look = async () => {
+      desktop('mouse', middle[0] + 8, middle[1])
+      await sleep(60)
+      desktop('mouse', ...middle)
+      await sleep(500)
+      return JSON.parse(desktop('cursorinfo')).showing
+    }
+    const status = () => invoke(overlay, 'game_cursor_status')
+    try {
+      await focusGame()
+      await check('game-hides-the-cursor', async () => {
+        await command('hidecursor')
+        assert.equal(await look(), false, 'the game hid the cursor')
+        return true
+      })
+      await check('kept-visible-when-on', async () => {
+        await invoke(overlay, 'settings_set', { key: 'showGameCursor', value: true })
+        const s = await until(async () => {
+          const s = await status()
+          return (s.active !== null || s.error !== null) && s
+        }, 10000)
+        assert.equal(s.error, null, 'the cursor hook was loaded')
+        await until(look, 5000)
+        return s
+      })
+      // Kept only while the pointer moves (and for 3 s after): resting, the game's hide stands,
+      // and the next movement brings the cursor back.
+      await check('game-hides-it-at-rest', async () => {
+        await sleep(4200)
+        assert.equal(JSON.parse(desktop('cursorinfo')).showing, false, 'hidden again with the pointer resting')
+        assert.equal(await look(), true, 'visible again when the pointer moves')
+        return true
+      })
+      await check('hidden-again-when-off', async () => {
+        await invoke(overlay, 'settings_set', { key: 'showGameCursor', value: false })
+        await until(async () => (await status()).active === null, 5000)
+        await until(async () => !(await look()), 5000)
+        return true
+      })
+    } finally {
+      await invoke(overlay, 'settings_set', { key: 'showGameCursor', value: false }).catch(() => {})
+      await command('showcursor')
     }
   } else if (scenario === 'focus') {
     // A hover leaves the game in front: keys after a lookup reach it, and a game that

@@ -37,6 +37,8 @@ pub const MACHINE_KEYS: &[&str] = &[
     "excludeOverlayFromCapture",
     // Pausing games: what this computer's games tolerate (game_pause/).
     "pauseGameWhileReading",
+    // Keeping the cursor visible: what this computer's games need (game_cursor.rs).
+    "showGameCursor",
     "nativeWindowBounds",
     "nativeWindowPinned",
     "capture",

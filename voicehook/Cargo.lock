@@ -113,6 +113,20 @@ name = "vh-common"
 version = "0.1.0"
 
 [[package]]
+name = "vh-cursor"
+version = "0.1.0"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
+name = "vh-cursortest"
+version = "0.1.0"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "vh-fixture"
 version = "0.1.0"
 dependencies = [

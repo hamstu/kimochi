@@ -11,10 +11,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - ⏸️ **Pause game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again, Escape or B on your controller to carry on. **Pause & scan** and **Pause & read along** pause the game and then scan it or step through its text, in one press. Give them a key or controller button in Settings → Shortcuts & Controls, or add them to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
+- 🖱️ **Keep the mouse cursor visible in games** (opt-in, Windows, Settings → Overlay). Some games hide the mouse pointer even while you move it, so you can't see what you're pointing at for a lookup. With this on, Kimochi makes the pointer show whenever you move the mouse in the game you've selected, with no other software and no changes to the game. Games that hide a resting pointer still do. Don't use it with online games that use anti-cheat.
 
 ### Fixed
 
+- 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.
 - **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.
+- **Windows: Auto Game Pausing pauses and resumes much faster** for games made of many processes, such as browser and Electron games. One with 40 processes took around 5 seconds to pause; it now takes a fraction of a second.
 
 ## [1.1.0] - 2026-11-18
 

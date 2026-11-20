@@ -30,6 +30,14 @@ on:
         description: Also build release bundles (a trial; kept as workflow artifacts)
         type: boolean
         default: false
+      # One platform's checks and bundle only (scripts/dev-build.mjs passes its --platform): its
+      # bundle need not wait for the others' checks, and no other runner is used. Not on a tag:
+      # a release always builds every platform.
+      platform:
+        description: Only this platform (a manual run on a branch)
+        type: choice
+        default: all
+        options: [all, linux-x64, linux-arm64, windows-x64, windows-arm64, macos]
   push:
     branches: [main]
     tags: ['v*']
@@ -103,6 +111,7 @@ jobs:
         env:
           SKIP: ${{ steps.tagged.outputs.skip }}
           TRIAL: ${{ inputs.bundles }}
+          PLATFORM: ${{ inputs.platform }}
         with:
           script: |
             const tag = context.ref.startsWith('refs/tags/v')
@@ -127,29 +136,33 @@ jobs:
 
             const bundle = `src-tauri/target/${profile}/bundle`
             const platforms = [
-              { name: 'macOS', runner: 'macos-latest', target: 'aarch64-apple-darwin',
+              { id: 'macos', name: 'macOS', runner: 'macos-latest', target: 'aarch64-apple-darwin',
                 artifacts: `${bundle}/macos/Kimochi.app.zip`, pr: true },
-              { name: 'Windows x64', runner: 'windows-2025', target: 'x86_64-pc-windows-msvc',
+              { id: 'windows-x64', name: 'Windows x64', runner: 'windows-2025', target: 'x86_64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe`, pr: true },
-              { name: 'Linux x64', runner: 'ubuntu-24.04', target: 'x86_64-unknown-linux-gnu',
+              { id: 'linux-x64', name: 'Linux x64', runner: 'ubuntu-24.04', target: 'x86_64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage`, pr: true },
-              { name: 'Windows ARM64', runner: 'windows-11-arm', target: 'aarch64-pc-windows-msvc',
+              { id: 'windows-arm64', name: 'Windows ARM64', runner: 'windows-11-arm', target: 'aarch64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Linux ARM64', runner: 'ubuntu-24.04-arm', target: 'aarch64-unknown-linux-gnu',
+              { id: 'linux-arm64', name: 'Linux ARM64', runner: 'ubuntu-24.04-arm', target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
             ]
+            // A manual run may name one platform (never a release, which builds them all).
+            const only = mode !== 'release' && process.env.PLATFORM && process.env.PLATFORM !== 'all' ? process.env.PLATFORM : null
+            const chosen = only ? platforms.filter((p) => p.id === only) : platforms
+            if (!chosen.length) core.setFailed(`No platform ${only}`)
             // Pull requests check the three primary platforms; main, manual runs and releases
             // check all five (the ARM64 builds differ little, and main catches what slips by).
-            const checks = platforms.filter((p) => !pr || p.pr)
+            const checks = chosen.filter((p) => !pr || p.pr)
             core.setOutput('mode', mode)
             core.setOutput('app', String(app))
             core.setOutput('profile', profile)
             // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
             core.setOutput('script', profile === 'release' ? 'release:bundle' : 'bundle')
             core.setOutput('checks', JSON.stringify({ include: checks }))
-            core.setOutput('bundles', JSON.stringify({ include: platforms }))
+            core.setOutput('bundles', JSON.stringify({ include: chosen }))
             await core.summary
-              .addHeading(`Mode: ${mode}${app ? '' : ' (website and docs only: lint only)'}`, 3)
+              .addHeading(`Mode: ${mode}${only ? ` (${only} only)` : ''}${app ? '' : ' (website and docs only: lint only)'}`, 3)
               .addList(checks.map((p) => `${p.name} → ${p.runner}`))
               .write()
 
