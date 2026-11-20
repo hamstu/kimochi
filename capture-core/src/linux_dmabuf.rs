@@ -364,12 +364,15 @@ mod egl {
         }
     }
 
-    /// Reads back a DMA-BUF we fill ourselves, through the session's real driver: checks the
-    /// fourcc, byte order, row order and stride handling end to end. Needs a Wayland session
-    /// with a GPU and libgbm (`cargo test -p kimochi-capture -- --ignored dmabuf_readback`).
+    /// Imports a GPU buffer the way a Niri frame arrives (a GBM DMA-BUF with a padded stride),
+    /// fills it through GL, then reads it back through a fresh import with [`Reader::read`].
+    /// Needs a Wayland session with a GPU and libgbm:
+    /// `cargo test --manifest-path capture-core/Cargo.toml --lib -- --ignored dmabuf_readback`.
+    /// The fill goes through GL too, so this checks import, stride, framebuffer and row order
+    /// on the real driver, not the fourcc's channel mapping (that one is fixed by the spec).
     #[cfg(test)]
     mod live {
-        use super::super::{ARGB8888, IMPLICIT_MODIFIER, XRGB8888};
+        use super::super::{image_attributes, ARGB8888, IMPLICIT_MODIFIER, XRGB8888};
         use super::*;
 
         api!(Gbm {
@@ -377,86 +380,108 @@ mod egl {
             gbm_device_destroy: fn(Handle),
             gbm_bo_create: fn(Handle, u32, u32, u32, u32) -> Handle,
             gbm_bo_destroy: fn(Handle),
-            gbm_bo_map: fn(Handle, u32, u32, u32, u32, u32, *mut u32, *mut Handle) -> *mut u8,
-            gbm_bo_unmap: fn(Handle, Handle),
             gbm_bo_get_fd: fn(Handle) -> i32,
+            gbm_bo_get_stride: fn(Handle) -> u32,
             gbm_bo_get_modifier: fn(Handle) -> u64,
         });
+        api!(Upload {
+            glTexSubImage2D: fn(u32, i32, i32, i32, i32, i32, u32, u32, *const c_void),
+            glFinish: fn(),
+        });
         const GBM_BO_USE_RENDERING: u32 = 1 << 2;
-        const GBM_BO_USE_LINEAR: u32 = 1 << 4;
-        const GBM_BO_TRANSFER_WRITE: u32 = 1 << 1;
 
-        /// A linear `width × height` buffer whose pixel (x, y) is B=x, G=y, R=200, A=x+y (in
-        /// DRM's little-endian XRGB/ARGB byte order), as an fd and its stride and modifier.
-        unsafe fn filled_buffer(gbm: &Gbm, device: Handle, fourcc: u32, w: u32, h: u32) -> (Handle, i32, u32, u64) {
-            // Drivers differ in which usages they'll map for writing; take the first that works.
-            let usages = [GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING, GBM_BO_USE_RENDERING, GBM_BO_USE_LINEAR, 0];
-            let (mut stride, mut map_data) = (0u32, null_mut());
-            let (bo, map) = usages
-                .into_iter()
-                .find_map(|usage| {
-                    let bo = (gbm.gbm_bo_create)(device, w, h, fourcc, usage);
-                    if bo.is_null() {
-                        return None;
-                    }
-                    let map = (gbm.gbm_bo_map)(bo, 0, 0, w, h, GBM_BO_TRANSFER_WRITE, &mut stride, &mut map_data);
-                    if map.is_null() {
-                        (gbm.gbm_bo_destroy)(bo);
-                        return None;
-                    }
-                    eprintln!("gbm usage {usage:#x} maps");
-                    Some((bo, map))
-                })
-                .expect("a GBM buffer we can write");
-            for y in 0..h {
-                for x in 0..w {
-                    let px = map.add((y * stride + x * 4) as usize);
-                    for (i, v) in [x as u8, y as u8, 200, (x + y) as u8].into_iter().enumerate() {
-                        *px.add(i) = v;
-                    }
-                }
-            }
-            (gbm.gbm_bo_unmap)(bo, map_data);
-            (bo, (gbm.gbm_bo_get_fd)(bo), stride, (gbm.gbm_bo_get_modifier)(bo))
+        /// Write tightly packed RGBA into the DMA-BUF through a texture bound to it.
+        unsafe fn upload(reader: &Reader, attrs: &[isize], w: u32, h: u32, rgba: &[u8]) {
+            let (egl, d, gl) = (&reader.display.egl, reader.display.display, &reader.gl);
+            let get_proc = *library().unwrap().get::<GetProcAddress>(b"eglGetProcAddress\0").unwrap();
+            let up = Upload::load(|name| get_proc(name.as_ptr())).unwrap();
+            assert_ne!((egl.eglMakeCurrent)(d, null_mut(), null_mut(), reader.display.context), 0);
+            let image = (egl.eglCreateImage)(d, null_mut(), EGL_LINUX_DMA_BUF, null_mut(), attrs.as_ptr());
+            assert!(!image.is_null(), "eglCreateImage");
+            let mut texture = 0;
+            (gl.glGenTextures)(1, &mut texture);
+            (gl.glBindTexture)(GL_TEXTURE_2D, texture);
+            (gl.glEGLImageTargetTexture2DOES)(GL_TEXTURE_2D, image);
+            (gl.glPixelStorei)(0x0cf5, 1); // GL_UNPACK_ALIGNMENT
+            (up.glTexSubImage2D)(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                w as i32,
+                h as i32,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                rgba.as_ptr().cast(),
+            );
+            (up.glFinish)();
+            assert_eq!((gl.glGetError)(), GL_NO_ERROR, "upload");
+            (gl.glDeleteTextures)(1, &texture);
+            (egl.eglDestroyImage)(d, image);
         }
 
         #[test]
         #[ignore = "needs a Wayland session with a GPU"]
         fn dmabuf_readback() {
             let mut reader = Reader::new().expect("EGL with DMA-BUF import");
-            assert_eq!(reader.modifiers(XRGB8888).last(), Some(&IMPLICIT_MODIFIER));
-            eprintln!("XRGB8888 modifiers: {:x?}", reader.modifiers(XRGB8888));
-            // SAFETY: test-only GBM calls with checked results; buffers are destroyed below.
+            for fourcc in [XRGB8888, ARGB8888] {
+                eprintln!("{fourcc:#x} modifiers: {:x?}", reader.modifiers(fourcc));
+                assert_eq!(reader.modifiers(fourcc).last(), Some(&IMPLICIT_MODIFIER));
+            }
+            // SAFETY: test-only GBM calls with checked results; everything is released below.
             unsafe {
-                let gbm_lib = Box::leak(Box::new(Library::new("libgbm.so.1").expect("libgbm")));
+                let gbm_lib: &'static Library = Box::leak(Box::new(Library::new("libgbm.so.1").expect("libgbm")));
                 let gbm = Gbm::load(|n| gbm_lib.get::<Proc>(n.to_bytes_with_nul()).ok().map(|s| *s)).unwrap();
                 let node = std::fs::File::open("/dev/dri/renderD128").expect("render node");
                 let device = (gbm.gbm_create_device)(std::os::fd::AsRawFd::as_raw_fd(&node));
                 assert!(!device.is_null());
-                let (w, h) = (37, 21); // odd sizes, so the stride is padded
+                let (w, h) = (37u32, 21u32); // odd sizes, so the stride is padded
                 for (fourcc, alpha) in [(XRGB8888, false), (ARGB8888, true)] {
-                    let (bo, fd, stride, modifier) = filled_buffer(&gbm, device, fourcc, w, h);
-                    eprintln!("fourcc {fourcc:#x}: stride {stride}, modifier {modifier:#x}");
+                    let bo = (gbm.gbm_bo_create)(device, w, h, fourcc, GBM_BO_USE_RENDERING);
+                    assert!(!bo.is_null(), "gbm_bo_create");
+                    let fd = std::os::fd::OwnedFd::from_raw_fd_checked((gbm.gbm_bo_get_fd)(bo));
+                    let (stride, modifier) = ((gbm.gbm_bo_get_stride)(bo), (gbm.gbm_bo_get_modifier)(bo));
+                    eprintln!("{fourcc:#x}: stride {stride} for width {w}, modifier {modifier:#x}");
+                    let fd_raw = std::os::fd::AsRawFd::as_raw_fd(&fd);
+                    let plane = || Plane { fd: fd_raw, offset: 0, stride: stride as i32 };
+                    // Pixel (x, y) is R=200, G=y, B=x, A=x+y+1.
+                    let pixel = |x: u32, y: u32| [200u8, y as u8, x as u8, (x + y + 1) as u8];
+                    let rgba: Vec<u8> = (0..h).flat_map(|y| (0..w).flat_map(move |x| pixel(x, y))).collect();
+                    let attrs = image_attributes(fourcc, modifier, w, h, &[plane()]).unwrap();
+                    upload(&reader, &attrs, w, h, &rgba);
                     for modifier in [modifier, IMPLICIT_MODIFIER] {
-                        let plane = Plane { fd, offset: 0, stride: stride as i32 };
-                        let rgba = reader.read(fourcc, modifier, w, h, &[plane]).expect("readback").to_vec();
-                        assert_eq!(rgba.len(), (w * h * 4) as usize);
-                        for (y, x) in [(0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1), (7, 11)] {
-                            let at = ((y * w + x) * 4) as usize;
-                            let a = if alpha { (x + y) as u8 } else { 255 };
-                            assert_eq!(&rgba[at..at + 4], &[200, y as u8, x as u8, a], "pixel ({x}, {y})");
+                        let back = reader.read(fourcc, modifier, w, h, &[plane()]).expect("readback").to_vec();
+                        assert_eq!(back.len(), rgba.len());
+                        for y in 0..h {
+                            for x in 0..w {
+                                let mut want = pixel(x, y);
+                                if !alpha {
+                                    want[3] = 255;
+                                }
+                                let at = ((y * w + x) * 4) as usize;
+                                assert_eq!(
+                                    back[at..at + 4],
+                                    want,
+                                    "{fourcc:#x} modifier {modifier:#x} pixel ({x}, {y})"
+                                );
+                            }
                         }
                     }
-                    libc_close(fd);
                     (gbm.gbm_bo_destroy)(bo);
                 }
                 (gbm.gbm_device_destroy)(device);
             }
         }
 
-        fn libc_close(fd: i32) {
-            // SAFETY: we own the fd gbm_bo_get_fd returned.
-            drop(unsafe { <std::os::fd::OwnedFd as std::os::fd::FromRawFd>::from_raw_fd(fd) });
+        trait FromRawChecked {
+            fn from_raw_fd_checked(fd: i32) -> Self;
+        }
+        impl FromRawChecked for std::os::fd::OwnedFd {
+            fn from_raw_fd_checked(fd: i32) -> Self {
+                assert!(fd >= 0, "gbm_bo_get_fd");
+                // SAFETY: gbm_bo_get_fd hands us a new fd we now own.
+                unsafe { <Self as std::os::fd::FromRawFd>::from_raw_fd(fd) }
+            }
         }
     }
 }
