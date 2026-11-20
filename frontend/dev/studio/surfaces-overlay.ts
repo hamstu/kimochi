@@ -97,6 +97,27 @@ const TEXT: ControlGroup = {
   ]
 }
 
+/** Freeze game (PR #265): the stage plays it, with F standing in for the reader's shortcut. */
+const FREEZE: ControlGroup = {
+  title: 'Freeze game',
+  controls: [
+    {
+      kind: 'toggle',
+      param: 'frozen',
+      label: 'Start frozen',
+      on: '1',
+      help: 'Or click the stage and press F (the Freeze game shortcut); F again or Escape unfreezes.'
+    },
+    {
+      kind: 'toggle',
+      param: 'freeze',
+      label: 'The game can’t be paused',
+      on: 'refuse',
+      help: 'Freezing fails and the badge says why.'
+    }
+  ]
+}
+
 const DICTIONARY: Control = {
   kind: 'select',
   param: 'popup',
@@ -148,6 +169,7 @@ export const OVERLAY_SURFACES: Surface[] = [
     groups: [
       GAME,
       { ...TEXT, when: inScene('overlay-words', '') },
+      { ...FREEZE, when: inScene('overlay-words', '') },
       {
         title: 'Pointer and pop-up',
         when: inScene('overlay-words', ''),
@@ -252,6 +274,19 @@ export const OVERLAY_SURFACES: Surface[] = [
           { kind: 'toggle', param: 'auto', label: 'Auto OCR on', on: '1', help: 'The menu starts on Read along.' },
           { kind: 'toggle', param: 'notext', label: 'Nothing scanned yet', on: '1' },
           { kind: 'toggle', param: 'quickshot', label: 'Quick Shot', on: '1', help: 'Auto OCR is unavailable.' }
+        ]
+      },
+      {
+        ...FREEZE,
+        controls: [
+          {
+            kind: 'toggle',
+            param: 'menufreeze',
+            label: 'Freeze game in the menu',
+            on: '1',
+            help: 'Settings → Radial menu: not in the menu as it ships.'
+          },
+          ...FREEZE.controls
         ]
       },
       {

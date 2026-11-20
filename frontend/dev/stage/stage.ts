@@ -25,8 +25,10 @@
  *   ?cards=light|dark|blend  the hovered cards' and grouped regions' appearance (default: the pop-up's,
  *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
- *   ?frozen=1|freezing|unfrozen|warn  overlay-words: Freeze game's tint and badge (frozen), or
- *                    only its badge in the other states (ui/overlay.js)
+ *   ?frozen=1        Freeze game: start frozen (tint and badge). In any scene, F freezes and
+ *                    unfreezes, as the reader's Freeze game shortcut does; Escape unfreezes
+ *   ?freeze=refuse   Freeze game: the game cannot be paused (the badge says why)
+ *   ?menufreeze=1    controller scenes: Freeze game added to the radial menu
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open);
  *                    hook-card: look up ?word= (default 天気) in the card
  *   ?hints=1         overlay-words: the hint bar (ui/overlay-hints.js), under the game window
@@ -85,6 +87,7 @@ import '@fontsource/zen-kaku-gothic-antique/700.css'
 import './stage.css'
 import { TextOverlayRenderer } from '@ui/render.js'
 import { createController } from '@ui/controller.js'
+import { DEFAULT_RADIAL_MENU } from '@ui/radial-items.js'
 import { createHookCard } from '@ui/hook-card.js'
 import { createOverlayHints } from '@ui/overlay-hints.js'
 import { BUTTON } from '@ui/controller-input.js'
@@ -395,6 +398,7 @@ const controller = createController({
       hasText: !flag('notext') && game.annotations.length > 0,
       autoOcr,
       autoAvailable: !flag('quickshot'),
+      frozen,
       textVisible,
       origin: { x: 0, y: 0 },
       area,
@@ -403,11 +407,13 @@ const controller = createController({
     }
   },
   panelInputHandoff: false,
+  menuItems: () => (flag('menufreeze') ? [...DEFAULT_RADIAL_MENU, 'freeze'] : undefined),
   run: async (id: string) => {
     if (id === 'auto') {
       autoOcr = !autoOcr
       return toast(`Auto OCR ${autoOcr ? 'on' : 'off'}`)
     }
+    if (id === 'freeze') return setFrozen(!frozen)
     toast(id === 'controls' ? 'Opens Kimochi (the main window)' : 'Opens Settings → OCR')
   },
   history: async () => history,
@@ -553,37 +559,77 @@ async function readAlong(): Promise<void> {
 }
 
 /**
- * Freeze game's look (ui/overlay.js `showFreezeBadge` / `showFreezeTint`, styled by
+ * Freeze game (ui/overlay.js `setFrozen`, `showFreezeBadge`, `showFreezeTint`; styled by
  * overlay-hints.css): the same elements, placed the same way over the game (its window with
- * ?windowed=1, else the whole stage). `state`: 1 (frozen), freezing, unfrozen or warn.
+ * ?windowed=1, else the whole stage), going through the same states. F stands in for the
+ * reader's Freeze game shortcut (pressed again, or Escape, unfreezes), as does the radial menu's
+ * Freeze game item (?menufreeze=1). Native's part is pretended: the game "pauses" after
+ * FREEZE_PAUSE_MS, or with ?freeze=refuse it cannot be paused and the badge says why.
  */
-function showFrozen(state: string): void {
-  const area = flag('windowed') ? game.area : null
-  if (state === '1') {
-    const tint = Object.assign(document.createElement('div'), { className: 'freeze-tint' })
-    Object.assign(
-      tint.style,
-      area
-        ? { left: `${area.x}px`, top: `${area.y}px`, width: `${area.width}px`, height: `${area.height}px` }
-        : { left: '0', top: '0', width: '100vw', height: '100vh' }
-    )
-    // Behind the overlay's layers as in the app, but over the stage's pretend game.
-    document.querySelector('#game')?.after(tint)
+const FREEZE_PAUSE_MS = 350
+let frozen = false
+let freezeTimer = 0
+let freezeBadgeTimer = 0
+const freezeBadge = Object.assign(document.createElement('div'), { className: 'freeze-badge', hidden: true })
+document.body.append(freezeBadge)
+const freezeTint = Object.assign(document.createElement('div'), { className: 'freeze-tint', hidden: true })
+// Behind the overlay's layers as in the app, but over the stage's pretend game.
+gameHost.after(freezeTint)
+const freezeArea = (): { x: number; y: number; width: number; height: number } | null =>
+  flag('windowed') ? game.area : null
+function showFreezeBadge(text: string | null, tone = 'info', forMs = 0): void {
+  clearTimeout(freezeBadgeTimer)
+  if (!text) {
+    freezeBadge.hidden = true
+    return
   }
-  const [text, tone] =
-    state === 'freezing'
-      ? ['Freezing…', 'info']
-      : state === 'unfrozen'
-        ? ['Unfrozen', 'info']
-        : state === 'warn'
-          ? ["Can't freeze this game: no game pause backend on this system", 'warn']
-          : ['Frozen · press again to unfreeze', 'frozen']
-  const badge = Object.assign(document.createElement('div'), { className: 'freeze-badge', textContent: text })
-  badge.dataset.tone = tone
-  badge.style.left = area ? `${area.x + area.width / 2}px` : '50%'
-  badge.style.top = `${Math.max(0, area?.y ?? 0) + 12}px`
-  document.body.append(badge)
+  const area = freezeArea()
+  freezeBadge.textContent = text
+  freezeBadge.dataset.tone = tone
+  freezeBadge.style.left = area ? `${area.x + area.width / 2}px` : '50%'
+  freezeBadge.style.top = `${Math.max(0, area?.y ?? 0) + 12}px`
+  freezeBadge.hidden = false
+  if (forMs > 0) freezeBadgeTimer = window.setTimeout(() => (freezeBadge.hidden = true), forMs)
 }
+function showFreezeTint(on: boolean): void {
+  const area = freezeArea()
+  Object.assign(
+    freezeTint.style,
+    area
+      ? { left: `${area.x}px`, top: `${area.y}px`, width: `${area.width}px`, height: `${area.height}px` }
+      : { left: '0', top: '0', width: '100vw', height: '100vh' }
+  )
+  freezeTint.hidden = !on
+}
+function setFrozen(on: boolean, instant = false): void {
+  if (on === frozen) return
+  frozen = on
+  clearTimeout(freezeTimer)
+  if (!on) {
+    showFreezeTint(false)
+    showFreezeBadge('Unfrozen', 'info', 1200)
+    return
+  }
+  const paused = (): void => {
+    if (params.get('freeze') === 'refuse') {
+      frozen = false
+      showFreezeBadge("Can't freeze this game: no game pause backend on this system", 'warn', 4000)
+      return
+    }
+    showFreezeBadge('Frozen · press again to unfreeze', 'frozen')
+    showFreezeTint(true)
+    toast('Scanned the frozen screen')
+  }
+  if (instant) return paused()
+  showFreezeBadge('Freezing…')
+  freezeTimer = window.setTimeout(paused, FREEZE_PAUSE_MS)
+}
+document.addEventListener('keydown', (event) => {
+  if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return
+  if (event.key === 'f' || event.key === 'F') setFrozen(!frozen)
+  else if (event.key === 'Escape' && frozen) setFrozen(false)
+})
+if (params.get('frozen') === '1') setFrozen(true, true)
 
 // --------------------------------------------------------------- scenes
 
@@ -597,7 +643,6 @@ async function play(): Promise<void> {
         hints.sync(true, true, 'shift', params.get('hints') === 'hover')
         hints.place(flag('windowed') ? game.area : null)
       }
-      if (params.has('frozen')) showFrozen(params.get('frozen') ?? '1')
       if (flag('lookup')) {
         const first = words.querySelector<HTMLElement>('.ocr-word, .ocr-group')
         const text = first?.textContent ?? ''
