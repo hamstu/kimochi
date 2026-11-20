@@ -97,6 +97,27 @@ const TEXT: ControlGroup = {
   ]
 }
 
+/** Pause game (PR #265): the stage plays it, with P standing in for the reader's shortcut. */
+const PAUSE: ControlGroup = {
+  title: 'Pause game',
+  controls: [
+    {
+      kind: 'toggle',
+      param: 'paused',
+      label: 'Start paused',
+      on: '1',
+      help: 'Or click the stage and press P (the Pause game shortcut); P again, Escape or B resumes.'
+    },
+    {
+      kind: 'toggle',
+      param: 'pause',
+      label: 'The game can’t be paused',
+      on: 'refuse',
+      help: 'Pausing fails and the badge says why.'
+    }
+  ]
+}
+
 const DICTIONARY: Control = {
   kind: 'select',
   param: 'popup',
@@ -148,6 +169,7 @@ export const OVERLAY_SURFACES: Surface[] = [
     groups: [
       GAME,
       { ...TEXT, when: inScene('overlay-words', '') },
+      { ...PAUSE, when: inScene('overlay-words', '') },
       {
         title: 'Pointer and pop-up',
         when: inScene('overlay-words', ''),
@@ -252,6 +274,19 @@ export const OVERLAY_SURFACES: Surface[] = [
           { kind: 'toggle', param: 'auto', label: 'Auto OCR on', on: '1', help: 'The menu starts on Read along.' },
           { kind: 'toggle', param: 'notext', label: 'Nothing scanned yet', on: '1' },
           { kind: 'toggle', param: 'quickshot', label: 'Quick Shot', on: '1', help: 'Auto OCR is unavailable.' }
+        ]
+      },
+      {
+        ...PAUSE,
+        controls: [
+          {
+            kind: 'toggle',
+            param: 'menupause',
+            label: 'Pause items in the menu',
+            on: '1',
+            help: 'Pause game, Pause & scan and Pause & read along (Settings → Radial menu): not in the menu as it ships.'
+          },
+          ...PAUSE.controls
         ]
       },
       {

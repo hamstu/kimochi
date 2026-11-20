@@ -25,6 +25,11 @@
  *   ?cards=light|dark|blend  the hovered cards' and grouped regions' appearance (default: the pop-up's,
  *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
+ *   ?paused=1        Pause game: start paused (glow and badge). In any scene, P pauses and
+ *                    resumes, as the reader's Pause game shortcut does; Escape or B resumes
+ *   ?pause=refuse    Pause game: the game cannot be paused (the badge says why)
+ *   ?menupause=1     controller scenes: Pause game, Pause & scan and Pause & read along added
+ *                    to the radial menu
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open);
  *                    hook-card: look up ?word= (default 天気) in the card
  *   ?hints=1         overlay-words: the hint bar (ui/overlay-hints.js), under the game window
@@ -83,6 +88,7 @@ import '@fontsource/zen-kaku-gothic-antique/700.css'
 import './stage.css'
 import { TextOverlayRenderer } from '@ui/render.js'
 import { createController } from '@ui/controller.js'
+import { DEFAULT_RADIAL_MENU } from '@ui/radial-items.js'
 import { createHookCard } from '@ui/hook-card.js'
 import { createOverlayHints } from '@ui/overlay-hints.js'
 import { BUTTON } from '@ui/controller-input.js'
@@ -393,6 +399,7 @@ const controller = createController({
       hasText: !flag('notext') && game.annotations.length > 0,
       autoOcr,
       autoAvailable: !flag('quickshot'),
+      manualPause,
       textVisible,
       origin: { x: 0, y: 0 },
       area,
@@ -401,10 +408,17 @@ const controller = createController({
     }
   },
   panelInputHandoff: false,
+  menuItems: () =>
+    flag('menupause') ? [...DEFAULT_RADIAL_MENU, 'pause', 'pause-scan', 'pause-read-along'] : undefined,
   run: async (id: string) => {
     if (id === 'auto') {
       autoOcr = !autoOcr
       return toast(`Auto OCR ${autoOcr ? 'on' : 'off'}`)
+    }
+    if (id === 'pause') return setManualPause(!manualPause)
+    if (id === 'pause-scan' || id === 'pause-read-along') {
+      await pauseAndWait()
+      return controller.runItem(id === 'pause-scan' ? 'scan' : 'dictionary')
     }
     toast(id === 'controls' ? 'Opens Kimochi (the main window)' : 'Opens Settings → OCR')
   },
@@ -549,6 +563,99 @@ async function readAlong(): Promise<void> {
   await send(input === 'keys' ? 'key:Enter' : 'a')
   await pause(250)
 }
+
+/**
+ * Pause game (ui/overlay.js `setManualPause`, `showPauseBadge`, `showPauseGlow`; styled by
+ * overlay-hints.css): the same elements, placed the same way over the game (its window with
+ * ?windowed=1, else the whole stage), going through the same states. P stands in for the reader's
+ * Pause game shortcut (pressed again, Escape or B resumes; on the stage the B key stands in for
+ * the controller's B while no menu is open), as do the radial menu's Pause items (?menupause=1).
+ * Native's part is pretended: the game "pauses" after PRETEND_PAUSE_MS, or with ?pause=refuse it
+ * cannot be paused and the badge says why.
+ */
+const PRETEND_PAUSE_MS = 350
+let manualPause = false
+let pauseTimer = 0
+let pauseBadgeTimer = 0
+let pauseWaiters: ((paused: boolean) => void)[] = []
+const pauseBadge = Object.assign(document.createElement('div'), { className: 'pause-badge', hidden: true })
+document.body.append(pauseBadge)
+const pauseGlow = Object.assign(document.createElement('div'), { className: 'pause-glow', hidden: true })
+// Behind the overlay's layers as in the app, but over the stage's pretend game.
+gameHost.after(pauseGlow)
+const pauseArea = (): { x: number; y: number; width: number; height: number } | null =>
+  flag('windowed') ? game.area : null
+const key = (text: string): string => `<kbd class="overlay-hint-key">${text}</kbd>`
+/** The app's resume hint, with P as the Pause game shortcut and a controller connected. */
+const RESUME_HINT = `Game paused · ${key('Esc')}, ${key('P')} or ${key('B')} to resume`
+function showPauseBadge(html: string | null, tone = 'info', forMs = 0): void {
+  clearTimeout(pauseBadgeTimer)
+  if (!html) {
+    pauseBadge.hidden = true
+    return
+  }
+  const area = pauseArea()
+  pauseBadge.innerHTML = html
+  pauseBadge.dataset.tone = tone
+  pauseBadge.style.left = area ? `${area.x + area.width / 2}px` : '50%'
+  pauseBadge.style.top = `${Math.max(0, area?.y ?? 0) + 12}px`
+  pauseBadge.hidden = false
+  if (forMs > 0) pauseBadgeTimer = window.setTimeout(() => (pauseBadge.hidden = true), forMs)
+}
+function showPauseGlow(on: boolean): void {
+  const area = pauseArea()
+  Object.assign(
+    pauseGlow.style,
+    area
+      ? { left: `${area.x}px`, top: `${area.y}px`, width: `${area.width}px`, height: `${area.height}px` }
+      : { left: '0', top: '0', width: '100vw', height: '100vh' }
+  )
+  pauseGlow.hidden = !on
+}
+function settlePause(paused: boolean): void {
+  const waiters = pauseWaiters
+  pauseWaiters = []
+  for (const resolve of waiters) resolve(paused)
+}
+function setManualPause(on: boolean, instant = false): void {
+  if (on === manualPause) return
+  manualPause = on
+  clearTimeout(pauseTimer)
+  if (!on) {
+    showPauseGlow(false)
+    settlePause(false)
+    showPauseBadge('Resumed', 'info', 1200)
+    return
+  }
+  const paused = (): void => {
+    if (params.get('pause') === 'refuse') {
+      manualPause = false
+      settlePause(false)
+      showPauseBadge("Can't pause this game: no game pause backend on this system", 'warn', 4000)
+      return
+    }
+    showPauseBadge(RESUME_HINT, 'paused')
+    showPauseGlow(true)
+    settlePause(true)
+  }
+  if (instant) return paused()
+  showPauseBadge('Pausing…')
+  pauseTimer = window.setTimeout(paused, PRETEND_PAUSE_MS)
+}
+/** Pause, resolving once paused (true) or refused (false); at once when already paused. */
+function pauseAndWait(): Promise<boolean> {
+  if (manualPause && !pauseBadge.hidden && pauseBadge.dataset.tone === 'paused') return Promise.resolve(true)
+  const settled = new Promise<boolean>((resolve) => pauseWaiters.push(resolve))
+  setManualPause(true)
+  return settled
+}
+document.addEventListener('keydown', (event) => {
+  if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return
+  if (event.key === 'p' || event.key === 'P') setManualPause(!manualPause)
+  // B: the controller's B, which resumes only while nothing of Kimochi's has the controller.
+  else if ((event.key === 'b' || event.key === 'B') && manualPause && controller.mode === 'idle') setManualPause(false)
+  else if (event.key === 'Escape' && manualPause) setManualPause(false)
+})
 
 // --------------------------------------------------------------- scenes
 
@@ -768,3 +875,5 @@ addEventListener('resize', () => {
   resizing = setTimeout(() => (scene === 'overlay-words' ? void layOut() : location.reload()), 200)
 })
 await play()
+// Once the game is laid out, so the glow and the badge are placed over it.
+if (params.get('paused') === '1') setManualPause(true, true)

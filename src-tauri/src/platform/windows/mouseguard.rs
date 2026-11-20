@@ -10,7 +10,7 @@ use crate::state::Service;
 use kimochi_capture::{Rect, SourceId};
 use std::cell::RefCell;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
     mpsc::{self, SyncSender},
     Mutex,
 };
@@ -72,7 +72,7 @@ fn press_origin(flags: u32, extra: usize) -> (&'static str, bool) {
 }
 struct Hook {
     sender: SyncSender<Press>,
-    keys: SyncSender<(u32, bool, bool, bool)>,
+    keys: SyncSender<KeyEvent>,
     key_owners: [bool; 256],
     keys_down: [bool; 256],
     owners: [Option<Target>; 2],
@@ -90,6 +90,19 @@ static RUNNING: Mutex<Option<u32>> = Mutex::new(None);
 static PRIMARY_DOWN: AtomicBool = AtomicBool::new(false);
 static REGION: AtomicBool = AtomicBool::new(false);
 static NAV: AtomicBool = AtomicBool::new(false);
+/// The reader paused the game (Pause game): Escape on it resumes it (`hotkeys::set_pause_keys`).
+static MANUAL_PAUSE: AtomicBool = AtomicBool::new(false);
+/// The selected source window (0 for a display), whether or not the overlay shows words on it:
+/// `TARGETS` names it only while the overlay has words there.
+static SOURCE_WINDOW: AtomicUsize = AtomicUsize::new(0);
+
+/// What the keyboard hook hands the delivery thread.
+enum KeyEvent {
+    /// A key for the region editor (`region`) and/or the controller menu (`nav`).
+    Modal { key: u32, down: bool, region: bool, nav: bool },
+    /// Escape pressed on the game the reader paused (Pause game).
+    PauseEscape,
+}
 static BLOCKED_MODIFIERS: AtomicU32 = AtomicU32::new(0);
 static HOVER_LEASE: AtomicBool = AtomicBool::new(false);
 static FOCUS_PENDING: AtomicBool = AtomicBool::new(false);
@@ -116,9 +129,10 @@ pub(super) fn modifier_down(key: u16) -> bool {
     }
 }
 
-pub fn set_keyboard_guard(region: bool, navigation: bool) {
+pub fn set_keyboard_guard(region: bool, navigation: bool, manual_pause: bool) {
     REGION.store(region, Ordering::Relaxed);
     NAV.store(navigation, Ordering::Relaxed);
+    MANUAL_PAUSE.store(manual_pause, Ordering::Relaxed);
 }
 
 fn key_name(key: u32) -> Option<&'static str> {
@@ -177,6 +191,7 @@ pub fn update_mouse_guard(app: &tauri::AppHandle, service: &Service) {
         .filter(SourceId::is_window)
         .and_then(|id| usize::from_str_radix(id.handle().trim_start_matches("0x"), 16).ok())
         .unwrap_or(0);
+    SOURCE_WINDOW.store(source, Ordering::Relaxed);
     let geometry = crate::platform::DesktopGeometry::current();
     // hwnd()/bounds() may dispatch to the UI thread. Never hold the shared view
     // lock across them: UI commands also acquire that lock.
@@ -414,7 +429,14 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
     std::thread::Builder::new()
         .name("kimochi-key-delivery".into())
         .spawn(move || {
-            for (key, down, region, nav) in key_receiver {
+            for event in key_receiver {
+                let (key, down, region, nav) = match event {
+                    KeyEvent::PauseEscape => {
+                        crate::hotkeys::pause_escape(&key_app);
+                        continue;
+                    }
+                    KeyEvent::Modal { key, down, region, nav } => (key, down, region, nav),
+                };
                 let Some(name) = key_name(key) else { continue };
                 let payload = serde_json::json!({ "key": name, "type": if down { "keydown" } else { "keyup" } });
                 if region && matches!(key, 13 | 27 | 32) {
@@ -485,6 +507,24 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 let owned = hook.key_owners[key as usize];
                 let was_down = hook.keys_down[key as usize];
                 hook.keys_down[key as usize] = down;
+                // Pause game: Escape pressed on the paused game resumes it, and never reaches
+                // the game (which would act on it once resumed). Its release and repeats are
+                // swallowed with it, as an owned key.
+                if key == 27
+                    && down
+                    && !was_down
+                    && MANUAL_PAUSE.load(Ordering::Relaxed)
+                    && !region
+                    && !nav
+                    && !foreground.0.is_null()
+                    && foreground.0 as usize == SOURCE_WINDOW.load(Ordering::Relaxed)
+                {
+                    if hook.keys.try_send(KeyEvent::PauseEscape).is_err() {
+                        return false;
+                    }
+                    hook.key_owners[key as usize] = true;
+                    return true;
+                }
                 if !captures_key(
                     owned,
                     down,
@@ -499,12 +539,12 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 if down
                     && (region || nav)
                     && key_name(key).is_some()
-                    && hook.keys.try_send((key, true, region, nav)).is_err()
+                    && hook.keys.try_send(KeyEvent::Modal { key, down: true, region, nav }).is_err()
                 {
                     return owned;
                 }
                 if up {
-                    let _ = hook.keys.try_send((key, false, region, nav));
+                    let _ = hook.keys.try_send(KeyEvent::Modal { key, down: false, region, nav });
                 }
                 hook.key_owners[key as usize] = down;
                 if down {

@@ -4,7 +4,8 @@
 //! in-process guard; the app runs it on one thread (`app.rs`).
 //!
 //! The rules it keeps:
-//! - A pause is wanted while the setting is on and any hold is live. A hold is live from when it
+//! - A pause is wanted while the setting is on and any hold is live, or while a manual pause is (the
+//!   reader asked for that one outright, so it needs no setting). A hold is live from when it
 //!   is taken until it is released or goes [`HOLD_STALE`] without a refresh: holds are refreshed
 //!   only by the reader's UI (the overlay's beat) or a physically held key, so a dead webview lets
 //!   them lapse.
@@ -44,6 +45,10 @@ pub enum Reason {
     Navigation,
     /// The region editor (Quick Shot) or another modal overlay state.
     RegionEditor,
+    /// The reader paused the game on purpose (Pause game and its shortcuts), to read what it shows
+    /// (a tooltip, a toast) before it goes. Asked for outright, so it pauses even with the
+    /// setting off.
+    Manual,
 }
 
 impl Reason {
@@ -55,6 +60,7 @@ impl Reason {
             Reason::Lookup => "lookup",
             Reason::Navigation => "navigation",
             Reason::RegionEditor => "regionEditor",
+            Reason::Manual => "manual",
         }
     }
 }
@@ -279,9 +285,9 @@ impl Machine {
             }
             Input::Beat(reasons) => {
                 self.ui_quiet = reasons.is_empty();
-                // The UI owns lookup and the region editor outright; navigation is also taken
-                // natively, and a beat without it ends it only after that native hold went stale.
-                for reason in [Reason::Lookup, Reason::RegionEditor] {
+                // The UI owns lookup, the region editor and a manual pause outright; navigation is also
+                // taken natively, and a beat without it ends it only after that native hold went stale.
+                for reason in [Reason::Lookup, Reason::RegionEditor, Reason::Manual] {
                     if !reasons.contains(&reason) && self.holds.remove(&reason).is_some() {
                         self.log_verbose(&mut out, json!({ "hold": reason.name(), "taken": false, "by": "beat" }));
                     }
@@ -365,8 +371,15 @@ impl Machine {
         out
     }
 
+    /// A pause is wanted while the setting is on and anything holds it, or while the reader paused
+    /// the game, which needs no setting.
     fn wanted(&self) -> bool {
-        self.enabled && !self.holds.is_empty() && !self.suppressed
+        !self.suppressed && (self.manual() || (self.enabled && !self.holds.is_empty()))
+    }
+
+    /// Whether the reader paused the game (`Reason::Manual` held).
+    pub fn manual(&self) -> bool {
+        self.holds.contains_key(&Reason::Manual)
     }
 
     fn beat(&mut self, out: &mut Vec<Effect>, now: Instant) {
@@ -758,6 +771,56 @@ mod tests {
         let spans = rig.machine.spans();
         assert_eq!(spans.len(), 1);
         assert!(spans[0].end_ms.is_some_and(|end| end >= spans[0].start_ms));
+    }
+
+    #[test]
+    fn a_manual_pause_pauses_with_the_setting_off_and_ends_with_the_beat() {
+        let mut rig = Rig::new("manual");
+        rig.input(Input::SetEnabled(false));
+        // Off: the overlay's own reasons pause nothing.
+        rig.input(Input::Beat(vec![Reason::Lookup]));
+        assert!(!rig.stopped());
+        rig.input(Input::Beat(vec![]));
+        // A manual pause is asked for outright.
+        rig.input(Input::Beat(vec![Reason::Manual]));
+        assert_eq!(rig.machine.phase(), Phase::Paused);
+        assert!(rig.machine.manual());
+        // Kept by its beats, however long.
+        for _ in 0..10 {
+            rig.advance(500);
+            rig.input(Input::Beat(vec![Reason::Manual, Reason::Lookup]));
+        }
+        assert!(rig.stopped());
+        // Resumed while a lookup is still up: with the setting off, that holds nothing.
+        rig.input(Input::Beat(vec![Reason::Lookup]));
+        assert_eq!(rig.machine.phase(), Phase::Idle);
+        assert!(!rig.stopped());
+    }
+
+    #[test]
+    fn a_manual_pause_lapses_when_the_overlay_stops_beating() {
+        let mut rig = Rig::new("manual-stale");
+        rig.input(Input::SetEnabled(false));
+        rig.input(Input::Beat(vec![Reason::Manual]));
+        assert!(rig.stopped());
+        rig.advance(HOLD_STALE.as_millis() as u64);
+        assert!(!rig.machine.manual());
+        assert!(!rig.stopped());
+    }
+
+    #[test]
+    fn a_forced_resume_ends_a_manual_pause_until_the_overlay_lets_go() {
+        let mut rig = Rig::new("manual-forced");
+        rig.input(Input::Beat(vec![Reason::Manual]));
+        assert!(rig.stopped());
+        rig.input(Input::ForceResume("another app came to the front".into()));
+        assert!(!rig.stopped());
+        // A beat still carrying the manual pause (sent before the overlay heard) does not pause again.
+        rig.input(Input::Beat(vec![Reason::Manual]));
+        assert!(!rig.stopped());
+        rig.input(Input::Beat(vec![]));
+        rig.input(Input::Beat(vec![Reason::Manual]));
+        assert!(rig.stopped());
     }
 
     #[test]

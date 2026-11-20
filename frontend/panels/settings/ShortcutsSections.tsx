@@ -126,8 +126,13 @@ function LookupKeyRow(): ReactNode {
   )
 }
 
-/** Display order. The native side returns the bindings keyed alphabetically. */
-const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu']
+/**
+ * Display order. The native side returns the bindings keyed alphabetically. Pause game and its
+ * two companions are radial menu items too, but their shortcuts are wanted on their own (they work
+ * whether or not the items are in the menu), so they are listed here as well; the radial menu
+ * editor shows the same bindings.
+ */
+const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu', 'menuPause', 'menuPauseScan', 'menuPauseReadAlong']
 
 export function ShortcutsSections(): ReactNode {
   const [hotkeys, , hotkeyFailures] = useHotkeys()

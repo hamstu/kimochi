@@ -8,8 +8,10 @@
   --radial-panel-w: 15.5rem;
   /* SNAP_MS in RadialMenuSection.tsx. */
   --radial-snap: 180ms;
+  /* Room under the ring for its caption (the chosen item's name) above the hint and Add item. */
+  --radial-caption-room: 44px;
   position: relative;
-  height: calc(620px * 0.58);
+  height: calc(620px * 0.58 + var(--radial-caption-room));
   /* Inset in the group like Overlay appearance's preview: a recessed well, its ground, gridlines
      and edges GridField's (grid-field.css). */
   margin: var(--k-space-3);
@@ -22,7 +24,7 @@
   left: 50%;
   /* Centred in the well and scaled about its centre, so a change of scale keeps the ring where it
      is: it only ever moves sideways. */
-  top: calc(50% - 310px);
+  top: calc(50% - 310px - var(--radial-caption-room) / 2);
   transform: translateX(-50%) scale(var(--radial-scale));
   transform-origin: center;
   /* A little overshoot, so the ring springs into its place. */

@@ -238,6 +238,21 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                         }
                     }
                     Effect::Status(status) => {
+                        // Escape resumes the game while the reader has it paused (`pause-escape`).
+                        let paused_by_reader =
+                            status.phase == Phase::Paused && status.holds.contains(&manager::Reason::Manual);
+                        if let Err(error) = crate::hotkeys::set_pause_keys(&app, paused_by_reader) {
+                            log(&app, false, json!({ "check": "game-pause", "pauseKeys": error }));
+                        }
+                        MANUAL_PAUSE.store(
+                            status.holds.contains(&manager::Reason::Manual),
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                        // The controller menu kept the focus while the reader had the game paused: it goes
+                        // back to the game once the game runs again.
+                        if !paused_by_reader && status.phase == Phase::Idle {
+                            crate::gamepad::hand_back_after_pause(&app);
+                        }
                         let _ = app.emit(EVENT_STATUS, &status);
                         SHARED.lock().unwrap_or_else(|p| p.into_inner()).status = Some(status);
                     }
@@ -262,7 +277,10 @@ pub fn start(app: &tauri::AppHandle, enabled: bool) {
                     recover_orphans(&app, &journal, backend.as_ref(), None, "orphan check");
                 }
             }
-            ENABLED.store(machine.enabled(), std::sync::atomic::Ordering::Relaxed);
+            // Whether the game may pause: the setting, or a manual pause (which needs no setting) held or
+            // still being undone.
+            let may_pause = machine.enabled() || machine.manual() || machine.phase() != Phase::Idle;
+            ENABLED.store(may_pause, std::sync::atomic::Ordering::Relaxed);
             {
                 let mut shared = SHARED.lock().unwrap_or_else(|p| p.into_inner());
                 shared.pids = machine.paused_pids();
@@ -286,10 +304,20 @@ const ORPHAN_CHECK_EVERY: Duration = Duration::from_secs(2);
 const STDERR_NORMAL_LINES: usize = 50;
 /// The guard the app talks to now; replies and exits of earlier ones are ignored.
 static GUARD_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// The setting, as the game pause thread last applied it.
+/// Whether the game may pause: the setting as the game pause thread last applied it, or a manual pause.
 static ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Whether the setting is on, as the game pause thread last applied it (cheap, any thread).
+/// Whether the reader holds a manual pause (Pause game), as the game pause thread last reported it.
+static MANUAL_PAUSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the reader paused the game (Pause game): the controller menu then keeps the focus
+/// instead of resuming the game to hand it back (cheap, any thread).
+pub fn manual_pause_now() -> bool {
+    MANUAL_PAUSE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether the game may pause: the setting is on, as the game pause thread last applied it, or
+/// the reader paused it (cheap, any thread).
 pub fn enabled_now() -> bool {
     ENABLED.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -450,9 +478,9 @@ pub fn game_pause_status(state: tauri::State<crate::state::Shared>) -> Value {
     })
 }
 
-/// The overlay's beat while the setting is on: exactly the reasons it holds now ("lookup",
-/// "navigation", "regionEditor"). Sent every 500 ms while any is held, at once when one starts,
-/// and once with none when they all end.
+/// The overlay's beat: exactly the reasons it holds now ("lookup", "navigation", "regionEditor"
+/// while the setting is on; "manual" whatever it is). Sent every 500 ms while any is held, at once
+/// when one starts, and once with none when they all end.
 #[tauri::command]
 pub fn game_pause_beat(reasons: Vec<String>) {
     send(Input::Beat(reasons.iter().filter_map(|r| manager::Reason::parse(r)).collect()));

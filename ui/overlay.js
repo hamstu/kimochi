@@ -17,7 +17,7 @@ import { createController } from './controller.js'
 import { radialItemForHotkey, RADIAL_MENU_SETTING } from './radial-items.js'
 import { padButtons, startRegionPad } from './region-pad.js'
 import { buttonName, pageMenuKey } from './controller-input.js'
-import { activePadLayout, setPadLayout } from './pad-layout.js'
+import { activePadLayout, padGlyphHtml, setPadLayout } from './pad-layout.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
 import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
@@ -109,8 +109,10 @@ import {
   resolveHookCardAppearance,
   resolveHostEngine,
   resolveOverlayCardAppearance,
-  usableInputSource
+  usableInputSource,
+  effectiveControllerButtons
 } from './settings.js'
+import { formatAccelerator } from './accelerator.js'
 import { clearOfGame, exceptRects, popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
@@ -557,19 +559,25 @@ function syncHints(readWordRects = null) {
   if (shown) hints.place(hintArea())
 }
 
+/** The source in overlay coordinates (a window's whole bounds), or null when not known. */
+function sourceArea() {
+  const bounds = state.detached ? null : (state.sourceBounds ?? state.info?.source_bounds ?? null)
+  if (!bounds || !state.origin) return null
+  return { x: bounds.x - state.origin.x, y: bounds.y - state.origin.y, width: bounds.width, height: bounds.height }
+}
+
 /**
  * Where the hint bar goes: under the scan area (the crop, else the source window), or at the
  * bottom of it where there is no room below, so a game in a window on a big screen shows it where
  * the reader is looking. Null for a full-screen or display source: the overlay's own bottom.
  */
 function hintArea() {
-  const bounds = state.detached ? null : (state.sourceBounds ?? state.info?.source_bounds ?? null)
-  if (!bounds || !state.origin || state.sourceWindow?.fullscreen) return null
-  let area = { x: bounds.x - state.origin.x, y: bounds.y - state.origin.y, width: bounds.width, height: bounds.height }
+  let area = sourceArea()
+  if (!area || state.sourceWindow?.fullscreen) return null
   const crop = state.crop
   if (crop && crop.reference_width > 0 && crop.reference_height > 0) {
-    const sx = bounds.width / crop.reference_width
-    const sy = bounds.height / crop.reference_height
+    const sx = area.width / crop.reference_width
+    const sy = area.height / crop.reference_height
     area = { x: area.x + crop.x * sx, y: area.y + crop.y * sy, width: crop.width * sx, height: crop.height * sy }
   }
   if (area.width >= innerWidth * 0.9 && area.height >= innerHeight * 0.9) return null
@@ -783,6 +791,8 @@ const overlayTextOn = () =>
   (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) ||
   isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)
 let gamescopeMenuCenter = null
+/** The reader paused the game (Pause game, `setManualPause`); read by the controller's menu. */
+let manualPause = false
 let controller = null
 controller = createController({
   host: document.querySelector('#controller'),
@@ -801,6 +811,7 @@ controller = createController({
       hooked: hookMode(),
       autoOcr: Boolean(state.flags.autoOcrEnabled),
       autoAvailable: !isQuickShot(),
+      manualPause,
       textVisible: overlayTextOn(),
       origin,
       area,
@@ -817,6 +828,9 @@ controller = createController({
   },
   run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
+    if (id === 'pause') return void setManualPause(!manualPause, 'reader')
+    if (id === 'pause-scan') return pauseThen('scan')
+    if (id === 'pause-read-along') return pauseThen('dictionary')
     if (id === 'controls' || id === 'ocr-settings') {
       // With the Text Hooker as the source, its settings (open at the hooked game's page).
       if (id === 'ocr-settings' && hookMode()) {
@@ -1132,16 +1146,164 @@ function gamePauseReasons() {
   return reasons
 }
 function beatGamePause() {
-  if (!setting('pauseGameWhileReading')) {
-    if (gamePauseHeld) void native.gamePauseBeat([])
-    gamePauseHeld = false
-    return
-  }
-  const reasons = gamePauseReasons()
+  // The overlay's own reasons only with the setting on; a manual pause is asked for outright.
+  const reasons = setting('pauseGameWhileReading') ? gamePauseReasons() : []
+  if (manualPause) reasons.push('manual')
   if (reasons.length === 0 && !gamePauseHeld) return
   gamePauseHeld = reasons.length > 0
   void native.gamePauseBeat(reasons)
 }
+
+/**
+ * Pause game (the radial menu's `pause` item and its shortcut, `menuPause`; `pause-scan` and
+ * `pause-read-along` pause and then do what Scan and Read along do): the reader pauses the game on
+ * purpose, to read what it shows only for a moment, such as a tooltip that follows the pointer
+ * (moving onto its words would close it) or a toast. It rides the game pause beat as the `manual`
+ * reason, which needs no "Pause the game while reading". Native ends it on its own forced resumes
+ * (another app in front, the source changed, the overlay hidden) and when the game cannot be
+ * paused: the overlay follows the `game-pause` status and lets go. While paused, Escape (and B on
+ * a controller nothing else is using) resumes: native sends `pause-escape`.
+ */
+/** Native has reported holding this pause: losing the hold after that means it was ended. */
+let pauseHeld = false
+/** Waiting for the game to be paused, for `pause-scan` / `pause-read-along`: settled by the status. */
+let pauseWaiters = []
+/** The game pause phase native last reported (`game-pause`). */
+let gamePausePhase = 'idle'
+/** The radial menu's items that pause the game. */
+const PAUSE_ITEMS = ['pause', 'pause-scan', 'pause-read-along']
+const pauseBadge = Object.assign(document.createElement('div'), { className: 'pause-badge', hidden: true })
+pauseBadge.setAttribute('aria-live', 'polite')
+document.body.append(pauseBadge)
+/**
+ * A faint cool glow in from the edges of the paused game, so it reads as stopped at a glance
+ * without covering it. Behind every other overlay layer (first in the body, no z-index), and
+ * never in a capture: a paused source is a window, which is captured on its own.
+ */
+const pauseGlow = Object.assign(document.createElement('div'), { className: 'pause-glow', hidden: true })
+document.body.prepend(pauseGlow)
+let pauseBadgeTimer = 0
+/** Show `html` on the badge (null hides it), for `forMs` when given. */
+function showPauseBadge(html, { tone = 'info', forMs = 0 } = {}) {
+  clearTimeout(pauseBadgeTimer)
+  if (!html) {
+    pauseBadge.hidden = true
+    return
+  }
+  pauseBadge.innerHTML = html
+  pauseBadge.dataset.tone = tone
+  // Along the top of the source, where game text rarely is.
+  const bounds = sourceArea()
+  pauseBadge.style.left = bounds ? `${bounds.x + bounds.width / 2}px` : '50%'
+  pauseBadge.style.top = `${Math.max(0, bounds?.y ?? 0) + 12}px`
+  pauseBadge.hidden = false
+  if (forMs > 0) pauseBadgeTimer = setTimeout(() => (pauseBadge.hidden = true), forMs)
+}
+function showPauseGlow(on) {
+  const bounds = on ? sourceArea() : null
+  if (bounds) {
+    Object.assign(pauseGlow.style, {
+      left: `${bounds.x}px`,
+      top: `${bounds.y}px`,
+      width: `${bounds.width}px`,
+      height: `${bounds.height}px`
+    })
+  } else if (on) {
+    Object.assign(pauseGlow.style, { left: '0', top: '0', width: '100vw', height: '100vh' })
+  }
+  pauseGlow.hidden = !on
+}
+/**
+ * How to resume, for the badge: Escape, the Pause game shortcut's key and button when it has
+ * them, and B (the controller's Back) while a controller is connected, e.g.
+ * "Esc, F8 or B to resume".
+ */
+async function resumeHint() {
+  const escape = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+  const key = (html) => `<kbd class="overlay-hint-key">${html}</kbd>`
+  const ways = [key('Esc')]
+  const binding = await native.hotkeysLoad?.().then(
+    (hotkeys) => hotkeys?.menuPause,
+    () => null
+  )
+  if (binding && binding.enabled !== false) {
+    if (binding.accelerator) ways.push(key(escape(formatAccelerator(binding.accelerator, keyPlatform()))))
+    const buttons = binding.gamepadButtons ?? (Number.isInteger(binding.gamepadButton) ? [binding.gamepadButton] : [])
+    if (buttons.length > 0) ways.push(key(buttons.map((b) => padGlyphHtml(buttonName(b))).join(' + ')))
+  }
+  const back = effectiveControllerButtons(setting('controllerButtons')).back
+  if (gamepadConnected() && Number.isInteger(back)) ways.push(key(padGlyphHtml(buttonName(back))))
+  const list = ways.length > 1 ? `${ways.slice(0, -1).join(', ')} or ${ways.at(-1)}` : ways[0]
+  return `Game paused · ${list} to resume`
+}
+function keyPlatform() {
+  const os = window.__KIMOCHI_PLATFORM__?.os
+  return os === 'macos' ? 'mac' : os === 'windows' ? 'windows' : 'linux'
+}
+function settlePauseWaiters(paused) {
+  const waiters = pauseWaiters
+  pauseWaiters = []
+  for (const resolve of waiters) resolve(paused)
+}
+function setManualPause(on, why) {
+  if (on === manualPause) return
+  manualPause = on
+  pauseHeld = false
+  log({ check: 'manual-pause', on, why })
+  if (!on) {
+    showPauseGlow(false)
+    settlePauseWaiters(false)
+    // A refusal says why on the badge instead.
+    if (why !== 'refused') showPauseBadge('Resumed', { forMs: 1200 })
+  } else showPauseBadge('Pausing…')
+  beatGamePause()
+}
+/**
+ * Pause the game and resolve once it is paused (true), or once the pause was refused or ended
+ * (false); already paused resolves at once.
+ */
+function pauseAndWait() {
+  if (manualPause && pauseHeld && gamePausePhase === 'paused') return Promise.resolve(true)
+  const settled = new Promise((resolve) => pauseWaiters.push(resolve))
+  setManualPause(true, 'reader')
+  // Native answers within a beat; past that, go on without the pause rather than not at all.
+  return Promise.race([settled, new Promise((resolve) => setTimeout(() => resolve(false), 2500))])
+}
+/** Pause & scan / Pause & read along: the game paused first, then Scan or Read along on it. */
+async function pauseThen(item) {
+  const paused = await pauseAndWait()
+  log({ check: 'manual-pause-then', item, paused })
+  return controller.runItem(item)
+}
+/** `game-pause`: the pause took (paused), was refused, or was ended natively. */
+function onGamePauseStatus(status) {
+  if (status) gamePausePhase = status.phase
+  if (!manualPause || !status) return
+  const holding = Array.isArray(status.holds) && status.holds.includes('manual')
+  if (holding && status.refusal) {
+    setManualPause(false, 'refused')
+    showPauseBadge(`Can't pause this game: ${status.refusal.detail || status.refusal.kind}`, {
+      tone: 'warn',
+      forMs: 4000
+    })
+    return
+  }
+  if (!holding) {
+    if (pauseHeld) setManualPause(false, 'resumed')
+    return
+  }
+  pauseHeld = true
+  if (status.phase !== 'paused') return
+  showPauseGlow(true)
+  settlePauseWaiters(true)
+  const shown = manualPause
+  void resumeHint().then((hint) => {
+    if (shown === manualPause && manualPause) showPauseBadge(hint, { tone: 'paused' })
+  })
+}
+void native.listen('game-pause', ({ payload }) => onGamePauseStatus(payload))
+// Escape (or B) on the paused game: native sends it only while the reader has the game paused.
+void native.listen('pause-escape', () => setManualPause(false, 'reader'))
 setInterval(beatGamePause, 500)
 
 function holdForController(hold) {
@@ -3083,6 +3245,13 @@ async function onAction(name) {
     default: {
       // A controller menu item's own shortcut (ui/radial-items.js): run it without the menu.
       const item = radialItemForHotkey(name)
+      // Pause game's shortcuts pause only the game in front: pressed anywhere else they do
+      // nothing (Pause game still resumes from anywhere, and the others still scan or read along
+      // the game already paused).
+      if (PAUSE_ITEMS.includes(item?.id) && !manualPause && state.sourceFocus?.focused === false) {
+        log({ check: 'manual-pause', on: true, item: item.id, why: 'reader', ignored: 'source not focused' })
+        return undefined
+      }
       if (item) return openController(item.id)
       // Everything else native has already applied before emitting.
       return undefined
@@ -6380,6 +6549,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
             hasText: state.annotations.length > 0,
             autoOcr: Boolean(state.flags.autoOcrEnabled),
             autoAvailable: !isQuickShot(),
+            manualPause,
             scanId: state.appliedScanId,
             settings: {
               controllerButtons: setting('controllerButtons'),
@@ -6396,6 +6566,14 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
           result = true
           break
         case 'action':
+          if (p.name === 'menuPause') {
+            setManualPause(!manualPause, 'reader')
+            break
+          }
+          if (p.name === 'pauseAndWait') {
+            result = await pauseAndWait()
+            break
+          }
           if (p.name !== 'toggleAutoOcr') throw new Error('Invalid controller action')
           await onAction(p.name)
           break

@@ -630,7 +630,8 @@ part Electron performed: restoring the overlay for `triggerScan`, `setCropArea`,
 `selectAndScan`.
 
 **Controller menu items** — `menuScan`, `menuReadAlong`, `menuAutoOcr`, `menuTextHooker`,
-`menuRecentText`, `menuKimochi`, `menuSettings` (`actions::MENU_ITEM_ACTIONS`). Bindable, and
+`menuRecentText`, `menuKimochi`, `menuSettings`, `menuPause`, `menuPauseScan`,
+`menuPauseReadAlong` (`actions::MENU_ITEM_ACTIONS`). Bindable, and
 unbound by default (an empty `accelerator` registers nothing). Rust restores the overlay; the
 overlay runs that item of the radial menu without opening it (`controller.runItem`; on GNOME it
 sends `gnome-controller-open` `{item, request}` to the controller host, which answers
@@ -2583,8 +2584,20 @@ overlay and resumed when they are done. Native: `src-tauri/src/game_pause/`. Inp
 
 Holds, by reason: `lookup` (a lookup started, or a dictionary pop-up is up), `navigation`
 (controller navigation: taken by `controller_nav`/`set_navigation`, after the overlay has taken
-activation), `regionEditor` (`region_keys(true)` until `region_keys(false)`). A pause is wanted
-while any hold is live; a hold lapses 2 s after its last refresh. Forced resumes: the setting
+activation), `regionEditor` (`region_keys(true)` until `region_keys(false)`), `manual` (Pause
+game: the radial menu's optional `pause` item or its shortcut `menuPause`, toggled in the overlay,
+`setManualPause`; `pause-scan` / `menuPauseScan` and `pause-read-along` / `menuPauseReadAlong` take
+it and, once the game is paused, run Scan or Read along). A pause is wanted while the setting is on
+and any hold is live, or while `manual` is live whatever the setting (the reader asked for it
+outright); a hold lapses 2 s after its last refresh. The overlay follows `game-pause` for a manual
+pause: when `manual` leaves `holds` (a forced resume) or a `refusal` comes with it, it lets go and
+says so on its badge. While the reader has the game paused (`paused` with `manual` held), Escape
+pressed on it resumes it and never reaches the game, unless the region editor or the controller
+menu has Escape; so does the controller's Back button (`controllerButtons.back`, B) pressed alone
+while controller navigation is off. Controller navigation ending while the reader has the game
+paused does not resume it to hand it the focus: Kimochi keeps the focus and hands it back once the
+pause ends, if Kimochi is still in front. The shortcuts only pause the game while its window is in
+front; `menuPause` resumes from anywhere. Forced resumes: the setting
 turned off, `select_source` to another source, another application in front (not in Gaming
 Mode), `overlayVisible` set false, the paused game exiting, quit, and `game_pause_resume_all`.
 After a forced resume nothing pauses again until the overlay beats with no reason. Resuming
@@ -2594,12 +2607,12 @@ released.
 | Command | Arguments | Returns |
 | --- | --- | --- |
 | `game_pause_status` | — | `{capability: {supported, backend, note?}, enabled, status: Status \| null}` |
-| `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor")[]}` | — |
+| `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor" \| "manual")[]}` | — |
 | `game_pause_resume_all` | — | `{running, recovered: [{pid, exe, outcome, since}]}` |
 | `game_pause_spans` | `{since?: number}` | `PauseSpan[]` |
 
-`game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`): every 500 ms while any
-reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
+`game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`; with the setting off it
+sends only `manual`): every 500 ms while any reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
 the overlay is alive. A beat refreshes the listed reasons and releases `lookup` and
 `regionEditor` when absent. A pop-up in the `popup-host` window counts for `lookup` only while
 that window keeps sending `overlay-reading-popup-alive` to the overlay (every second while a
@@ -2609,6 +2622,9 @@ source (or nothing) selected, a pause is refused as `noPid` (Gaming Mode uses St
 Events:
 - `game-pause` — `Status {enabled, phase: "idle"|"pausing"|"paused"|"resuming", holds, game?,
   processes, mechanism?, refusal?: {kind, detail}}`, on every change.
+- `pause-escape` — `{}`, Escape pressed on the game the reader paused (Windows: the keyboard hook,
+  on the selected window only; elsewhere a global Escape shortcut held while paused), or the
+  controller's Back pressed alone with controller navigation off. The overlay resumes the game.
 - `game-pause-notice` — `{game, title?, kind, detail}`, once per game and refusal kind per run,
   when a game cannot be paused. `kind`: `unsupported`, `noPid`, `notFound`, `protected`,
   `antiCheat`, `elevated`, `denylisted`, `permissionDenied`, `other`. The main window shows it.

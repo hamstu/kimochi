@@ -61,7 +61,7 @@ test('an item added goes back where it was in the shipped menu, once', () => {
   const menu = removeRadialItem(removeRadialItem(DEFAULT_RADIAL_MENU, 'auto'), 'scan')
   assert.deepEqual(
     missingRadialItems(menu).map((item) => item.id),
-    ['scan', 'auto']
+    ['scan', 'auto', 'pause', 'pause-scan', 'pause-read-along']
   )
   assert.deepEqual(addRadialItem(menu, 'auto'), ['dictionary', 'auto', 'card', 'history', 'controls', 'ocr-settings'])
   assert.deepEqual(addRadialItem(menu, 'scan')[0], 'scan')
@@ -69,7 +69,39 @@ test('an item added goes back where it was in the shipped menu, once', () => {
   assert.deepEqual(addRadialItem(menu, 'unknown'), menu)
   // In a reordered menu it goes before the first item that comes after it by default.
   assert.deepEqual(addRadialItem(['controls', 'dictionary'], 'history'), ['history', 'controls', 'dictionary'])
-  assert.deepEqual(missingRadialItems(DEFAULT_RADIAL_MENU), [])
+  // Only the optional items are missing from the menu as it ships.
+  assert.deepEqual(
+    missingRadialItems(DEFAULT_RADIAL_MENU).map((item) => item.id),
+    ['pause', 'pause-scan', 'pause-read-along']
+  )
+})
+
+test('an optional item is not in the shipped menu, and goes at its catalogue place when added', () => {
+  for (const id of ['pause', 'pause-scan', 'pause-read-along']) assert.equal(DEFAULT_RADIAL_MENU.includes(id), false)
+  assert.deepEqual(addRadialItem(DEFAULT_RADIAL_MENU, 'pause'), [...DEFAULT_RADIAL_MENU, 'pause'])
+  assert.deepEqual(addRadialItem([...DEFAULT_RADIAL_MENU, 'pause-read-along'], 'pause-scan'), [
+    ...DEFAULT_RADIAL_MENU,
+    'pause-scan',
+    'pause-read-along'
+  ])
+  // In a reordered menu it goes before the first item the catalogue puts after it.
+  assert.deepEqual(addRadialItem(['scan', 'pause'], 'dictionary'), ['scan', 'dictionary', 'pause'])
+  assert.equal(radialItemForHotkey('menuPause')?.id, 'pause')
+  assert.equal(radialItemForHotkey('menuPauseScan')?.id, 'pause-scan')
+  assert.equal(radialItemForHotkey('menuPauseReadAlong')?.id, 'pause-read-along')
+})
+
+test('Pause game is for any source; Pause & scan and Pause & read along only with OCR', () => {
+  const menu = ['card', 'pause', 'pause-scan', 'pause-read-along']
+  assert.deepEqual(radialItemsFor(menu, true), [
+    { id: 'card', inapplicable: false },
+    { id: 'pause', inapplicable: false }
+  ])
+  assert.deepEqual(radialItemsFor(menu, false), [
+    { id: 'pause', inapplicable: false },
+    { id: 'pause-scan', inapplicable: false },
+    { id: 'pause-read-along', inapplicable: false }
+  ])
 })
 
 test('a menu of items for the other kind of source shows them, unavailable, rather than nothing', () => {
