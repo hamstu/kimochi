@@ -365,10 +365,10 @@ mod egl {
     }
 
     /// Imports a GPU buffer the way a Niri frame arrives (a GBM DMA-BUF with a padded stride),
-    /// fills it through GL, then reads it back through a fresh import with [`Reader::read`].
+    /// paints it through GL, then reads it back through a fresh import with [`Reader::read`].
     /// Needs a Wayland session with a GPU and libgbm:
     /// `cargo test --manifest-path capture-core/Cargo.toml --lib -- --ignored dmabuf_readback`.
-    /// The fill goes through GL too, so this checks import, stride, framebuffer and row order
+    /// The paint goes through GL too, so this checks import, stride, framebuffer and row order
     /// on the real driver, not the fourcc's channel mapping (that one is fixed by the spec).
     #[cfg(test)]
     mod live {
@@ -384,38 +384,49 @@ mod egl {
             gbm_bo_get_stride: fn(Handle) -> u32,
             gbm_bo_get_modifier: fn(Handle) -> u64,
         });
-        api!(Upload {
-            glTexSubImage2D: fn(u32, i32, i32, i32, i32, i32, u32, u32, *const c_void),
+        api!(Fill {
+            glEnable: fn(u32),
+            glDisable: fn(u32),
+            glScissor: fn(i32, i32, i32, i32),
+            glClearColor: fn(f32, f32, f32, f32),
+            glClear: fn(u32),
             glFinish: fn(),
         });
         const GBM_BO_USE_RENDERING: u32 = 1 << 2;
+        const GL_SCISSOR_TEST: u32 = 0x0c11;
+        const GL_COLOR_BUFFER_BIT: u32 = 0x4000;
 
-        /// Write tightly packed RGBA into the DMA-BUF through a texture bound to it.
-        unsafe fn upload(reader: &Reader, attrs: &[isize], w: u32, h: u32, rgba: &[u8]) {
+        /// Paint `pixel(x, y)` (RGBA bytes) into every pixel of the DMA-BUF, one scissored clear
+        /// each, through a framebuffer on a texture bound to it.
+        unsafe fn fill(reader: &Reader, attrs: &[isize], w: u32, h: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) {
             let (egl, d, gl) = (&reader.display.egl, reader.display.display, &reader.gl);
             let get_proc = *library().unwrap().get::<GetProcAddress>(b"eglGetProcAddress\0").unwrap();
-            let up = Upload::load(|name| get_proc(name.as_ptr())).unwrap();
+            let f = Fill::load(|name| get_proc(name.as_ptr())).unwrap();
             assert_ne!((egl.eglMakeCurrent)(d, null_mut(), null_mut(), reader.display.context), 0);
             let image = (egl.eglCreateImage)(d, null_mut(), EGL_LINUX_DMA_BUF, null_mut(), attrs.as_ptr());
             assert!(!image.is_null(), "eglCreateImage");
-            let mut texture = 0;
+            let (mut texture, mut framebuffer) = (0, 0);
             (gl.glGenTextures)(1, &mut texture);
             (gl.glBindTexture)(GL_TEXTURE_2D, texture);
             (gl.glEGLImageTargetTexture2DOES)(GL_TEXTURE_2D, image);
-            (gl.glPixelStorei)(0x0cf5, 1); // GL_UNPACK_ALIGNMENT
-            (up.glTexSubImage2D)(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                w as i32,
-                h as i32,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                rgba.as_ptr().cast(),
-            );
-            (up.glFinish)();
-            assert_eq!((gl.glGetError)(), GL_NO_ERROR, "upload");
+            (gl.glGenFramebuffers)(1, &mut framebuffer);
+            (gl.glBindFramebuffer)(GL_FRAMEBUFFER, framebuffer);
+            (gl.glFramebufferTexture2D)(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+            assert_eq!((gl.glCheckFramebufferStatus)(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+            (f.glEnable)(GL_SCISSOR_TEST);
+            for y in 0..h {
+                for x in 0..w {
+                    let [r, g, b, a] = pixel(x, y).map(|c| c as f32 / 255.0);
+                    (f.glScissor)(x as i32, y as i32, 1, 1);
+                    (f.glClearColor)(r, g, b, a);
+                    (f.glClear)(GL_COLOR_BUFFER_BIT);
+                }
+            }
+            (f.glDisable)(GL_SCISSOR_TEST);
+            (f.glFinish)();
+            assert_eq!((gl.glGetError)(), GL_NO_ERROR, "fill");
+            (gl.glBindFramebuffer)(GL_FRAMEBUFFER, 0);
+            (gl.glDeleteFramebuffers)(1, &framebuffer);
             (gl.glDeleteTextures)(1, &texture);
             (egl.eglDestroyImage)(d, image);
         }
@@ -446,12 +457,11 @@ mod egl {
                     let plane = || Plane { fd: fd_raw, offset: 0, stride: stride as i32 };
                     // Pixel (x, y) is R=200, G=y, B=x, A=x+y+1.
                     let pixel = |x: u32, y: u32| [200u8, y as u8, x as u8, (x + y + 1) as u8];
-                    let rgba: Vec<u8> = (0..h).flat_map(|y| (0..w).flat_map(move |x| pixel(x, y))).collect();
                     let attrs = image_attributes(fourcc, modifier, w, h, &[plane()]).unwrap();
-                    upload(&reader, &attrs, w, h, &rgba);
+                    fill(&reader, &attrs, w, h, pixel);
                     for modifier in [modifier, IMPLICIT_MODIFIER] {
                         let back = reader.read(fourcc, modifier, w, h, &[plane()]).expect("readback").to_vec();
-                        assert_eq!(back.len(), rgba.len());
+                        assert_eq!(back.len(), (w * h * 4) as usize);
                         for y in 0..h {
                             for x in 0..w {
                                 let mut want = pixel(x, y);
