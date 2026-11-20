@@ -1426,7 +1426,10 @@ pub(crate) mod backend {
         const IMPLICIT: u64 = linux_dmabuf::IMPLICIT_MODIFIER;
 
         fn object(bytes: &[u8]) -> Object {
-            PodDeserializer::deserialize_any_from(bytes).unwrap().1.as_object().unwrap().clone()
+            match PodDeserializer::deserialize_any_from(bytes).unwrap().1 {
+                Value::Object(object) => object,
+                other => panic!("not an object: {other:?}"),
+            }
         }
 
         fn modifier(bytes: &[u8]) -> Option<Property> {
