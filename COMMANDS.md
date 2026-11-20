@@ -2811,6 +2811,38 @@ naming Kimochi counts, and a shortcut that then fires drops its failure). The bi
 the event socket's `configreloaded` and removed by `shortcuts::stop` (re-apply and quit). Nothing
 is written to the config.
 
+**Global shortcut backends** (`platform/linux/shortcuts/`). One generic layer (`mod.rs`) turns the
+shortcut settings into `Shortcut`s, `plan` picks the backends to try from the session's `Facts`,
+and the first whose `Backend::bind` succeeds publishes `globalShortcutReport` (its `backend` is
+`globalShortcutBackend`); a backend that fails is stopped before the next is tried, so a shortcut
+never fires twice. `stop` (each re-apply, suspend and quit) stops every backend. The plans:
+Kimochi's GNOME extension when it runs (`gnome.rs`); Hyprland, the portal plus its binds
+(`hyprland.rs`, reported as `portal`); niri, the portal first only where it can grab keys, then
+the kdl binds (`niri.rs`); anywhere else the portal (`portal.rs`).
+
+**niri binds** (`platform/linux/shortcuts/niri.rs`). niri 26.04 has no GlobalShortcuts portal (its
+portals.conf hands it to xdg-desktop-portal-gnome, which grabs keys through `org.gnome.Shell`) and
+no runtime binds. Kimochi writes each enabled action shortcut as a bind to
+`$XDG_CONFIG_HOME/niri/kimochi.kdl` (`Alt+Z repeat=false hotkey-overlay-title="Kimochi: Scan text"
+{ spawn "<AppImage or executable>" "action" "triggerScan" "--no-start"; }`, the command line's
+`action`), rewrites it on every apply and empties it on suspend and quit. A file of that name
+without Kimochi's header is never replaced. niri reloads an included file when it changes; the
+user's config (`$NIRI_CONFIG`, else `config.kdl` there) must include it, which the report's `niri`
+says (`status: active | needsSetup | unsupported`, `includeLine`, `nixIncludeLine`, `config`,
+`binds`, `blocked: missing | nix | notFile | readOnly`). `include optional=true` needs niri 26.04
+(`niri msg --json version`, else `niri --version`); 25.11 to 26.03 get a plain include, and older
+niri none. Where `org.gnome.Shell` has an owner on the session bus (a niri with niri#4744), the
+portal is tried first and the file stays empty.
+
+`niri_shortcuts({operation}) -> Value` (Linux; elsewhere `not applicable:`): `status` re-reads
+whether the config includes the binds and returns `globalShortcutReport.niri`; `append` (Settings →
+Shortcuts & Controls, and the main window's one-time notice, dismissed with
+`niriShortcutsPromptDismissed`) adds the line itself, and only when the config, symlinks resolved,
+is a writable regular file outside `/nix/store` and doesn't include the binds yet: it copies the
+file to `<name>.bak-kimochi-<UTC yyyymmdd-hhmmss>` beside it, appends a comment and the include
+line (never rewriting the file), runs `niri validate -c`, and writes the original back if niri
+rejects it, returning the error. Both re-emit `platform-capabilities`.
+
 The compositor is asked for positions (≤ ~80/s) only while Shift is held or the gate is still open
 (`platform::pointer_demand`); otherwise the poll reads the modifiers alone. Buttons are known only
 over an X11 window; over Wayland ones the overlay takes them from its own surface's DOM events.

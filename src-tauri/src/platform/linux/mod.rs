@@ -484,7 +484,7 @@ pub fn capabilities() -> Value {
             "lookupOnHover": !x11 && layer::available() && matches!(s.compositor.as_deref(), Some("KDE" | "Hyprland" | "niri")) && feed.is_none(),
             "nativeHoverWorkaround": false,
         },
-        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else if shortcuts::report()["backend"] == "gnome-shell" { "gnome-shell" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if x11 { None } else { shortcuts::hyprland_remediation() }},
+        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11".to_owned() } else { shortcuts::backend_id() }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if x11 { None } else { shortcuts::remediation() }},
         // The executable's file name, which is what `frontmost_app` and focus events
         // report for this app.
         "ownAppNames": ["Kimochi", "kimochi"],

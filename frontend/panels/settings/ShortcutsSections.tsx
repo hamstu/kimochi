@@ -9,6 +9,7 @@ import type { HotkeyName } from '../../bridge/types'
 import { formatAccelerator, isMouseAccelerator, keyPlatformOf } from './accelerator'
 import { useCapabilities } from '../../bridge/capabilities'
 import { HotkeyRow } from './HotkeyRow'
+import { NiriShortcutsSection } from './NiriShortcutsSection'
 import { HoverLookupRow } from './HoverLookupRow'
 import { LookupKeyRecorder } from './LookupKeyRecorder'
 import {
@@ -173,6 +174,7 @@ export function ShortcutsSections(): ReactNode {
         <LookupKeyRow />
         <HoverLookupRow />
       </SettingsSection>
+      <NiriShortcutsSection />
     </>
   )
 }

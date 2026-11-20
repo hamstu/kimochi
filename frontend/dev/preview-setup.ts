@@ -82,6 +82,9 @@
  *   ?accessibility=denied  macOS Accessibility not granted yet (default: granted; `none` for
  *                          a platform without it)
  *   ?fullscreen=1       the chosen window is a full-screen app
+ *   ?niri=needs|active|nix|old  with ?platform=linux: niri without a shortcuts portal, its config
+ *                    not including Kimochi's binds yet (Add to my niri config works), including them,
+ *                    kept in the Nix store, or a niri older than 25.11
  *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
@@ -676,7 +679,41 @@ function withCloudAccess(capabilities: PlatformCapabilities): PlatformCapabiliti
   }
 }
 
-const CAPABILITIES = withCloudAccess(previewCapabilities())
+const CAPABILITIES = withNiri(withCloudAccess(previewCapabilities()))
+
+/** `?niri=` (with `?platform=linux`): niri's global shortcuts through Kimochi's binds file. */
+function withNiri(capabilities: PlatformCapabilities): PlatformCapabilities {
+  const state = params.get('niri')
+  if (!state || capabilities.os !== 'linux') return capabilities
+  return {
+    ...capabilities,
+    session: { backend: 'wayland', compositor: 'niri', layerShell: true },
+    input: {
+      globalShortcuts: state === 'active',
+      globalShortcutBackend: 'niri',
+      globalShortcutReport: {
+        backend: 'niri',
+        pending: false,
+        registered: ['triggerScan', 'openControllerMenu'],
+        failed: [],
+        niri: niriSetup(state === 'active' ? 'active' : state === 'old' ? 'unsupported' : 'needsSetup')
+      }
+    }
+  }
+}
+
+function niriSetup(
+  status: 'active' | 'needsSetup' | 'unsupported'
+): NonNullable<NonNullable<PlatformCapabilities['input']['globalShortcutReport']>['niri']> {
+  return {
+    status,
+    includeLine: status === 'unsupported' ? 'include "kimochi.kdl"' : 'include optional=true "kimochi.kdl"',
+    nixIncludeLine: 'include optional=true "~/.config/niri/kimochi.kdl"',
+    config: '/home/you/.config/niri/config.kdl',
+    binds: '/home/you/.config/niri/kimochi.kdl',
+    blocked: status === 'active' ? null : params.get('niri') === 'nix' ? 'nix' : null
+  }
+}
 
 // ---------------------------------------------------------------- view state
 
@@ -1075,6 +1112,19 @@ const HANDLERS: Record<string, Handler> = {
       return { installed: true, live: false, needsLogin: true }
     }
     return { available: false, installed: gnomeInstalled, current: gnomeInstalled, enabled: gnomeInstalled }
+  },
+  // Settings → Shortcuts & Controls on niri (?niri=…): the line goes in, and the shortcuts are active.
+  niri_shortcuts: (args) => {
+    const report = CAPABILITIES.input.globalShortcutReport
+    if (!report?.niri) throw 'not applicable: niri runs on Linux only'
+    if ((args as { operation: string }).operation === 'append') {
+      if (report.niri.blocked === 'nix')
+        throw 'invalid: Your niri config is in the Nix store. Add the line to its source instead.'
+      report.niri = niriSetup('active')
+      CAPABILITIES.input.globalShortcuts = true
+      void emit('platform-capabilities', CAPABILITIES)
+    }
+    return report.niri
   },
   cli_status: () => cliCommand(cliInstalled),
   cli_install: () => cliCommand((cliInstalled = true)),
