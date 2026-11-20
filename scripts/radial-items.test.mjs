@@ -91,6 +91,19 @@ test('an optional item is not in the shipped menu, and goes at its catalogue pla
   assert.equal(radialItemForHotkey('menuPauseReadAlong')?.id, 'pause-read-along')
 })
 
+test('Pause game is for any source; Pause & scan and Pause & read along only with OCR', () => {
+  const menu = ['card', 'pause', 'pause-scan', 'pause-read-along']
+  assert.deepEqual(radialItemsFor(menu, true), [
+    { id: 'card', inapplicable: false },
+    { id: 'pause', inapplicable: false }
+  ])
+  assert.deepEqual(radialItemsFor(menu, false), [
+    { id: 'pause', inapplicable: false },
+    { id: 'pause-scan', inapplicable: false },
+    { id: 'pause-read-along', inapplicable: false }
+  ])
+})
+
 test('a menu of items for the other kind of source shows them, unavailable, rather than nothing', () => {
   assert.deepEqual(radialItemsFor(['scan', 'auto'], true), [
     { id: 'scan', inapplicable: true },

@@ -71,7 +71,6 @@ export const RADIAL_ITEMS = [
     label: 'Pause game',
     hotkey: 'menuPause',
     description: 'Pause the game so a pop-up or tooltip stays up while you read it. Again, Escape or B to resume.',
-    when: 'ocr',
     optional: true
   },
   {

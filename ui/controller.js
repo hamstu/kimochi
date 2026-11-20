@@ -388,10 +388,10 @@ export function createController(context) {
         id: 'pause',
         label: 'Pause game',
         icon: ICONS.pause,
-        enabled: !hooked,
+        // Whatever the source: a hooked game can be paused as well as one being scanned.
+        enabled: true,
         lit: Boolean(status.manualPause),
-        detail: hooked ? undefined : status.manualPause ? 'On' : 'Off',
-        unavailable: 'Not with the Text Hooker'
+        detail: status.manualPause ? 'On' : 'Off'
       },
       'pause-scan': {
         id: 'pause-scan',
