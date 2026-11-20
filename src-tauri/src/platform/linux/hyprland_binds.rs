@@ -156,11 +156,22 @@ fn command(legacy: String, lua: String) -> Option<String> {
     let known = *PARSER.lock().unwrap();
     if known != Some(Parser::Lua) {
         let reply = send(legacy)?;
-        if !reply.contains("non-legacy") {
+        if reply == "ok" {
             *PARSER.lock().unwrap() = Some(Parser::Legacy);
             return Some(reply);
         }
-        *PARSER.lock().unwrap() = Some(Parser::Lua);
+        if known == Some(Parser::Legacy) {
+            return Some(reply);
+        }
+        // Not known yet, and `keyword` did not work: a Lua config refuses it, in words that change
+        // between versions (0.57 no longer says "non-legacy"), so try the Lua form before deciding.
+        let lua_reply = send(lua)?;
+        if lua_reply == "ok" || reply.contains("non-legacy") {
+            *PARSER.lock().unwrap() = Some(Parser::Lua);
+            return Some(lua_reply);
+        }
+        eprintln!("Hyprland bind: `keyword` answered {reply:?}, `eval` answered {lua_reply:?}");
+        return Some(reply);
     }
     send(lua)
 }
