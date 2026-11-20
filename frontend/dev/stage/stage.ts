@@ -25,6 +25,8 @@
  *   ?cards=light|dark|blend  the hovered cards' and grouped regions' appearance (default: the pop-up's,
  *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
+ *   ?frozen=1|freezing|unfrozen|warn  overlay-words: Freeze game's tint and badge (frozen), or
+ *                    only its badge in the other states (ui/overlay.js)
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open);
  *                    hook-card: look up ?word= (default 天気) in the card
  *   ?hints=1         overlay-words: the hint bar (ui/overlay-hints.js), under the game window
@@ -550,6 +552,39 @@ async function readAlong(): Promise<void> {
   await pause(250)
 }
 
+/**
+ * Freeze game's look (ui/overlay.js `showFreezeBadge` / `showFreezeTint`, styled by
+ * overlay-hints.css): the same elements, placed the same way over the game (its window with
+ * ?windowed=1, else the whole stage). `state`: 1 (frozen), freezing, unfrozen or warn.
+ */
+function showFrozen(state: string): void {
+  const area = flag('windowed') ? game.area : null
+  if (state === '1') {
+    const tint = Object.assign(document.createElement('div'), { className: 'freeze-tint' })
+    Object.assign(
+      tint.style,
+      area
+        ? { left: `${area.x}px`, top: `${area.y}px`, width: `${area.width}px`, height: `${area.height}px` }
+        : { left: '0', top: '0', width: '100vw', height: '100vh' }
+    )
+    // Behind the overlay's layers as in the app, but over the stage's pretend game.
+    document.querySelector('#game')?.after(tint)
+  }
+  const [text, tone] =
+    state === 'freezing'
+      ? ['Freezing…', 'info']
+      : state === 'unfrozen'
+        ? ['Unfrozen', 'info']
+        : state === 'warn'
+          ? ["Can't freeze this game: no game pause backend on this system", 'warn']
+          : ['Frozen · press again to unfreeze', 'frozen']
+  const badge = Object.assign(document.createElement('div'), { className: 'freeze-badge', textContent: text })
+  badge.dataset.tone = tone
+  badge.style.left = area ? `${area.x + area.width / 2}px` : '50%'
+  badge.style.top = `${Math.max(0, area?.y ?? 0) + 12}px`
+  document.body.append(badge)
+}
+
 // --------------------------------------------------------------- scenes
 
 async function play(): Promise<void> {
@@ -562,6 +597,7 @@ async function play(): Promise<void> {
         hints.sync(true, true, 'shift', params.get('hints') === 'hover')
         hints.place(flag('windowed') ? game.area : null)
       }
+      if (params.has('frozen')) showFrozen(params.get('frozen') ?? '1')
       if (flag('lookup')) {
         const first = words.querySelector<HTMLElement>('.ocr-word, .ocr-group')
         const text = first?.textContent ?? ''
