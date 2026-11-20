@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react'
 import { Badge, Button, Callout, Dialog, DialogContent, Spinner } from '@kit'
 import { closeExplain, getExplainState, regenerateExplain, subscribeExplainState } from '@texthooker/lib/explain'
 import { getSettings } from '@texthooker/lib/settings'
+import { explainSettings, providerLabel as explainProviderLabel } from '@ui/explain-settings'
 import { useTextLang } from '../../bridge/useTextLang'
 
 export function ExplainModal() {
@@ -19,12 +20,8 @@ export function ExplainModal() {
   if (!state) return null
 
   const settings = getSettings()
-  const providerLabel =
-    settings.explainProvider === 'kimochi'
-      ? 'Kimochi cloud'
-      : settings.explainProvider === 'claude'
-        ? `Claude · ${settings.explainClaudeModel || 'default'}`
-        : `Codex${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ''}`
+  // Provider, model and effort (ui/explain-settings.ts).
+  const providerLabel = explainProviderLabel(explainSettings(settings))
 
   const busy = state.status === 'loading' || state.status === 'streaming'
 

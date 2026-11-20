@@ -1,6 +1,7 @@
 // explain.rs — run a local LLM CLI (codex or claude) to explain a sentence,
 // streaming output back to the frontend as events. Provider "kimochi" streams
-// from Kimochi cloud instead (`cloud::explain`), with the same events.
+// from Kimochi cloud instead (`cloud::explain`), and "openai" from OpenAI's API
+// with the reader's key (`reader::openai`), with the same events.
 //
 // Commands are spawned through `platform::run_cli`, which on macOS goes through
 // `zsh -ilc` so the user's interactive shell PATH applies (fnm/nvm shims and
@@ -59,6 +60,93 @@ fn validate_model(model: &str) -> Result<(), String> {
     }
 }
 
+/// The efforts each CLI takes (`claude --effort`, Codex's `model_reasoning_effort`). Anything else
+/// is refused rather than passed on: like model names, they go into a shell string on macOS.
+/// Must match `EXPLAIN_EFFORTS` in ui/explain-settings.ts, which the settings offer.
+const CLAUDE_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+// Codex passes its effort on to OpenAI as it is, so these are OpenAI's; which a model takes varies
+// (gpt-6-astra: low to max), and OpenAI's refusal names the ones it does.
+const CODEX_EFFORTS: &[&str] = &["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// The CLI to run for a provider and its arguments: the model when one is chosen (else the CLI's
+/// default), and the effort when one is chosen (else the CLI's default, for Codex its config.toml).
+fn cli_args(provider: &str, model: Option<&str>, effort: Option<&str>) -> Result<(&'static str, Vec<String>), String> {
+    let model = model.map(str::trim).filter(|m| !m.is_empty());
+    if let Some(model) = model {
+        validate_model(model)?;
+    }
+    let effort = effort.map(str::trim).filter(|e| !e.is_empty());
+    let allowed = if provider == "claude" { CLAUDE_EFFORTS } else { CODEX_EFFORTS };
+    if let Some(effort) = effort {
+        if !allowed.contains(&effort) {
+            return Err(format!("invalid: {provider} does not take the effort \"{effort}\""));
+        }
+    }
+    let owned = |args: &[&str]| args.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+    match provider {
+        "codex" => {
+            // --json: JSONL events; the answer arrives as item.completed /
+            // agent_message. `-` reads the prompt from stdin. read-only
+            // sandbox: this is a pure text task, the agent needs no writes.
+            let mut args = owned(&["exec", "--skip-git-repo-check", "-s", "read-only", "--color", "never", "--json"]);
+            if let Some(model) = model {
+                args.extend(owned(&["-m", model]));
+            }
+            if let Some(effort) = effort {
+                args.extend(["-c".to_string(), format!("model_reasoning_effort={effort}")]);
+            }
+            args.push("-".into());
+            Ok(("codex", args))
+        }
+        "claude" => {
+            // stream-json + partial messages gives token-level deltas.
+            // --strict-mcp-config skips the user's MCP servers (slow startup,
+            // irrelevant here). --verbose is required for stream-json in -p.
+            let mut args = owned(&[
+                "-p",
+                "--verbose",
+                "--output-format",
+                "stream-json",
+                "--include-partial-messages",
+                "--strict-mcp-config",
+            ]);
+            if let Some(model) = model {
+                args.extend(owned(&["--model", model]));
+            }
+            if let Some(effort) = effort {
+                args.extend(owned(&["--effort", effort]));
+            }
+            Ok(("claude", args))
+        }
+        other => Err(format!("unknown explain provider: {other}")),
+    }
+}
+
+/// The OpenAI model and effort to ask for, checked as the CLIs' are: a model name of the safe
+/// characters (none: the default), an effort Chat Completions takes (none: the model's own).
+fn openai_choice(model: Option<&str>, effort: Option<&str>, tier: Option<&str>) -> Result<OpenaiChoice, String> {
+    let model = model.map(str::trim).filter(|m| !m.is_empty());
+    if let Some(model) = model {
+        validate_model(model)?;
+    }
+    let effort = effort.map(str::trim).filter(|e| !e.is_empty());
+    if let Some(effort) = effort {
+        if !crate::reader::openai::EFFORTS.contains(&effort) {
+            return Err(format!("invalid: openai does not take the effort \"{effort}\""));
+        }
+    }
+    let tier = tier.map(str::trim).filter(|t| !t.is_empty());
+    if let Some(tier) = tier {
+        if !crate::reader::openai::TIERS.contains(&tier) {
+            return Err(format!("invalid: openai has no service tier \"{tier}\""));
+        }
+    }
+    Ok((model.map(String::from), effort.map(String::from), tier.map(String::from)))
+}
+
+/// An OpenAI request's model, effort and service tier, each None for OpenAI's own.
+type OpenaiChoice = (Option<String>, Option<String>, Option<String>);
+
 async fn kill_current() {
     let mut guard = CHILD.lock().await;
     if let Some((_, child)) = guard.take() {
@@ -88,6 +176,11 @@ pub async fn explain_run(
     request_id: u64,
     provider: String,
     model: Option<String>,
+    // How hard the model thinks (`claude --effort`, Codex's `model_reasoning_effort`, OpenAI's
+    // `reasoning_effort`); none: its default.
+    effort: Option<String>,
+    // OpenAI's service tier (`default`, `fast` or `ultrafast`); the CLI providers have none.
+    tier: Option<String>,
     prompt: String,
 ) -> Result<(), String> {
     if provider == "kimochi" {
@@ -100,42 +193,18 @@ pub async fn explain_run(
         })
         .await;
     }
-    let model = model.unwrap_or_default();
-    if !model.is_empty() {
-        validate_model(&model)?;
+    if provider == "openai" {
+        // OpenAI's API streams over HTTP with the reader's key, as Kimochi cloud does.
+        let (model, effort, tier) = openai_choice(model.as_deref(), effort.as_deref(), tier.as_deref())?;
+        ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
+        kill_current().await;
+        return crate::reader::openai::explain(app, request_id, model, effort, tier, prompt, move || {
+            ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id
+        })
+        .await;
     }
-
-    let (program, args): (&str, Vec<&str>) = match provider.as_str() {
-        "codex" => {
-            // --json: JSONL events; the answer arrives as item.completed /
-            // agent_message. `-` reads the prompt from stdin. read-only
-            // sandbox: this is a pure text task, the agent needs no writes.
-            let mut args = vec!["exec", "--skip-git-repo-check", "-s", "read-only", "--color", "never", "--json"];
-            if !model.is_empty() {
-                args.extend(["-m", model.as_str()]);
-            }
-            args.push("-");
-            ("codex", args)
-        }
-        "claude" => {
-            // stream-json + partial messages gives token-level deltas.
-            // --strict-mcp-config skips the user's MCP servers (slow startup,
-            // irrelevant here). --verbose is required for stream-json in -p.
-            let mut args = vec![
-                "-p",
-                "--verbose",
-                "--output-format",
-                "stream-json",
-                "--include-partial-messages",
-                "--strict-mcp-config",
-            ];
-            if !model.is_empty() {
-                args.extend(["--model", model.as_str()]);
-            }
-            ("claude", args)
-        }
-        other => return Err(format!("unknown explain provider: {other}")),
-    };
+    let (program, args) = cli_args(&provider, model.as_deref(), effort.as_deref())?;
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
 
     // Take over as the active run; the previous CLI (if any) is killed when
     // we claim the child slot below.
@@ -305,4 +374,53 @@ pub async fn explain_run(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_effort_goes_to_each_cli_its_own_way() {
+        let (program, args) = cli_args("claude", Some("haiku"), Some("low")).unwrap();
+        assert_eq!(program, "claude");
+        assert_eq!(&args[args.len() - 4..], ["--model", "haiku", "--effort", "low"]);
+        let (program, args) = cli_args("codex", None, Some("minimal")).unwrap();
+        assert_eq!(program, "codex");
+        assert_eq!(&args[args.len() - 3..], ["-c", "model_reasoning_effort=minimal", "-"]);
+    }
+
+    #[test]
+    fn no_effort_leaves_the_cli_its_default() {
+        for effort in [None, Some(""), Some("  ")] {
+            let (_, args) = cli_args("claude", Some("opus"), effort).unwrap();
+            assert!(!args.iter().any(|a| a == "--effort"));
+            let (_, args) = cli_args("codex", Some(""), effort).unwrap();
+            assert!(!args.iter().any(|a| a.contains("effort") || a == "-m"));
+        }
+    }
+
+    #[test]
+    fn an_effort_the_cli_does_not_take_is_refused() {
+        assert!(cli_args("claude", None, Some("minimal")).unwrap_err().starts_with("invalid:"));
+        assert!(cli_args("codex", None, Some("ultra")).unwrap_err().starts_with("invalid:"));
+        assert!(cli_args("claude", None, Some("none")).unwrap_err().starts_with("invalid:"));
+        assert!(cli_args("codex", None, Some("low; rm -rf ~")).is_err());
+        assert!(cli_args("claude", Some("opus'; x"), None).is_err());
+    }
+
+    #[test]
+    fn openai_takes_a_safe_model_and_its_own_efforts_and_tiers() {
+        assert_eq!(openai_choice(None, None, None).unwrap(), (None, None, None));
+        assert_eq!(
+            openai_choice(Some(" gpt-6-luna "), Some("none"), Some("fast")).unwrap(),
+            (Some("gpt-6-luna".into()), Some("none".into()), Some("fast".into()))
+        );
+        assert_eq!(openai_choice(None, None, Some("default")).unwrap().2.as_deref(), Some("default"));
+        assert!(openai_choice(None, Some("ultra"), None).unwrap_err().starts_with("invalid:"));
+        assert_eq!(openai_choice(None, Some("max"), None).unwrap().1.as_deref(), Some("max"));
+        assert_eq!(openai_choice(None, None, Some("ultrafast")).unwrap().2.as_deref(), Some("ultrafast"));
+        assert!(openai_choice(None, None, Some("priority")).unwrap_err().starts_with("invalid:"));
+        assert!(openai_choice(Some("gpt 5; x"), None, None).is_err());
+    }
 }

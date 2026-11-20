@@ -27,7 +27,7 @@ async function loadFrontend(entry) {
   return import(`data:text/javascript;base64,${code}`)
 }
 
-const prompt = await loadFrontend('texthooker/lib/explainPrompt.ts')
+const prompt = await load('explain-prompt.ts')
 const { countWords } = await loadFrontend('texthooker/core/wordCount.ts')
 const { DEEPL_SOURCES, deeplTranslates, translationErrorMessage } = await loadFrontend(
   'texthooker/lib/translateLanguage.ts'

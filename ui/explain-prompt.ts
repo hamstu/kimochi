@@ -11,7 +11,7 @@
  * Kimochi stored before languages) counts as "the default" and follows the language; anything
  * else is the user's own and is sent as written.
  */
-import { DEFAULT_LANGUAGE, LANGUAGES, isJapanese, languageOf } from '../../../ui/languages'
+import { DEFAULT_LANGUAGE, LANGUAGES, isJapanese, languageOf } from './languages.js'
 
 /** The default prompt as Kimochi stored it before there was a language setting. */
 export const LEGACY_EXPLAIN_PROMPT = `You are an expert Japanese tutor helping a learner read native Japanese media. The sentence below comes from a game, comic, anime, or other Japanese media — most likely an anime or a visual novel.
