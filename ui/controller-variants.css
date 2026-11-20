@@ -94,7 +94,7 @@
   --cm-ring-lit-from: rgba(var(--cm-ring-rgb), 0.55);
   --cm-ring-lit-to: rgba(var(--cm-ring-rgb), 0.95);
 }
-[data-cm-variant='halo'][data-cm-ring-tone='light'] .cm-label {
+[data-cm-variant][data-cm-ring-tone='light'] .cm-caption {
   color: var(--cm-text);
   text-shadow: none;
 }
@@ -486,6 +486,57 @@
     var(--cm-shadow-pop);
 }
 
+/* The pointed-at item's name, in a pill centred under the ring: the donut's ground, blur and rim,
+   white text with a soft shadow. Drawn in the ring's pixels, so it scales with it (Settings'
+   preview shrinks the whole stage). */
+[data-cm-variant] .cm-caption {
+  position: absolute;
+  display: block;
+  left: 50%;
+  top: calc(50% + var(--cm-outer) + 24px);
+  box-sizing: border-box;
+  max-width: calc(var(--cm-outer) * 2);
+  padding: 8px 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--cm-text-sm) * 1.3);
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  background: rgb(var(--cm-base-rgb) / var(--cm-base-alpha));
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow:
+    inset 0 0 0 1.5px rgba(var(--cm-ring-rgb), 0.6),
+    0 8px 24px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.16s ease;
+}
+[data-cm-variant] .cm-caption[data-shown] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Why the item can't be chosen now: quieter than a name. */
+[data-cm-variant] .cm-caption[data-disabled] {
+  font-weight: 520;
+  color: rgb(255 255 255 / 0.78);
+}
+[data-cm-variant][data-cm-ring-tone='light'] .cm-caption[data-disabled] {
+  color: var(--cm-text-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-cm-variant] .cm-caption {
+    transition: none;
+  }
+}
+
 /* === Halo ====================================================================
    Over the base above: the game blurs behind a thick frosted donut of
    segments, clear in the empty hub and the thin track round it, where a
@@ -588,43 +639,20 @@
   height: 47px;
   stroke-width: 1.6;
 }
-/* The chosen item's name, just under its icon, without moving the icon off its place. */
+/* The chosen item's name is not in its segment, where a long one ran out of room, but in the
+   caption under the ring (below). Chosen, the icon sits in the middle of its segment, as it looks:
+   moved out along the segment towards its wider end (the orbit is nearer the hub than the
+   segment's centre). It snaps there at once (`translate` is not transitioned), and composes with
+   the icon's own scale. */
 [data-cm-variant='halo'] .cm-label {
-  position: absolute;
-  top: calc(50% + 36px);
-  left: 50%;
-  display: block;
-  max-width: 156px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: calc(var(--cm-text-sm) * 1.3);
-  font-weight: 600;
-  color: #fff;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
-  opacity: 0;
-  transform: translate(-50%, -3px);
-  transition:
-    opacity 0.12s ease,
-    transform 0.16s ease;
+  display: none;
 }
-[data-cm-variant='halo'] .cm-item.cm-selected .cm-label {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-/* Chosen, the icon and its name sit together in the middle of the segment, as it looks: moved out
-   along the segment towards its wider end (the orbit is nearer the hub than the segment's centre)
-   and up by half the name's height. They snap there at once (`translate` is not transitioned), and
-   compose with the icon's own scale and the name's own fade. */
 [data-cm-variant='halo'] .cm-item.cm-selected {
   --cm-shift-x: calc(var(--x) * 0.08);
-  --cm-shift-y: calc(var(--y) * 0.08 - 14px);
+  --cm-shift-y: calc(var(--y) * 0.08);
 }
-[data-cm-variant='halo'] .cm-item.cm-selected :is(.cm-icon, .cm-label, .cm-detail) {
+[data-cm-variant='halo'] .cm-item.cm-selected :is(.cm-icon, .cm-detail) {
   translate: var(--cm-shift-x) var(--cm-shift-y);
-}
-[data-cm-variant='halo'] .cm-item.cm-selected[data-disabled] .cm-label {
-  font-weight: 520;
 }
 /* Icons rest in a greyed tint of the ring's colour; the chosen one grows, bright white. */
 [data-cm-variant='halo'] .cm-item {

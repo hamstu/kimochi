@@ -243,6 +243,10 @@
 .cm-item[data-disabled] {
   opacity: 0.38;
 }
+/* The caption under the ring is the variants' (controller-variants.css); here the name is under its icon. */
+.cm-caption {
+  display: none;
+}
 .cm-item[data-lit] .cm-icon {
   color: var(--cm-accent);
   animation: cm-lit 1.8s ease-in-out infinite;

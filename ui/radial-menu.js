@@ -44,15 +44,21 @@ const SCAN_ICON =
 const READ_ALONG_ICON =
   '<path d="M12 7v14"/><path d="M16 12h2"/><path d="M16 8h2"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/><path d="M6 12h2"/><path d="M6 8h2"/>'
 
+/** Gives each mark its own mask id: an id shared between icons breaks them all inside a hidden one. */
+let pauseMarks = 0
 /**
- * An icon with Pause game's mark: the icon a little smaller, down and to the left, and in the
- * corner it leaves a solid circle with a pause sign cut out of it. No mask (an id shared between
- * icons breaks inside a hidden one), so the icon is drawn smaller rather than cut around the circle.
+ * An icon with Pause game's mark: a solid circle in its top-right corner with a pause sign cut out
+ * of it, and a gap cut round the circle from the icon, which is drawn a little smaller and down to
+ * the left so the gap takes less of it. A fresh mask id each call.
  */
 function withPauseMark(paths) {
+  const id = `kimochi-pause-mark-${++pauseMarks}`
   return (
-    `<g transform="translate(0 4.8) scale(0.8)" stroke-width="2.25">${paths}</g>` +
-    '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M16.2 3.9a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0 -7.8 0ZM18.55 2.25h1.1v3.3h-1.1ZM20.45 2.25h1.1v3.3h-1.1Z"/>'
+    `<mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">` +
+    '<rect width="24" height="24" fill="#fff" stroke="none"/>' +
+    '<circle cx="18.6" cy="5.4" r="7" fill="#000" stroke="none"/></mask>' +
+    `<g mask="url(#${id})"><g transform="translate(0 2.4) scale(0.9)" stroke-width="2">${paths}</g></g>` +
+    '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M13.2 5.4a5.4 5.4 0 1 0 10.8 0a5.4 5.4 0 1 0 -10.8 0ZM16.45 3.2h1.5v4.4h-1.5ZM19.25 3.2h1.5v4.4h-1.5Z"/>'
   )
 }
 
@@ -66,8 +72,14 @@ export const ICONS = {
   card: '<rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 17h10"/><path d="M12 3v6"/><path d="m9 6 3 3 3-3"/>',
   settings:
     '<path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/>',
-  pauseScan: withPauseMark(SCAN_ICON),
-  pauseReadAlong: withPauseMark(READ_ALONG_ICON),
+  /** Pause & scan's: a fresh copy (its own mask id) each time it is read. */
+  get pauseScan() {
+    return withPauseMark(SCAN_ICON)
+  },
+  /** Pause & read along's: a fresh copy (its own mask id) each time it is read. */
+  get pauseReadAlong() {
+    return withPauseMark(READ_ALONG_ICON)
+  },
   pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>'
 }
 
@@ -300,6 +312,14 @@ export class RadialMenu {
       return chip
     })
 
+    // The pointed-at item's name, or why it can't be chosen now, in a pill under the ring
+    // (controller-variants.css), so a long name never runs out of its segment.
+    const caption = document.createElement('div')
+    caption.className = 'cm-caption'
+    caption.setAttribute('aria-live', 'polite')
+    ring.append(caption)
+    this.caption = caption
+
     // The hub: empty, the game showing through; clicking it closes the menu.
     const middle = document.createElement('div')
     middle.className = 'cm-center'
@@ -433,15 +453,20 @@ export class RadialMenu {
       wedge.classList.toggle('cm-selected', index === this.selected)
       wedge.classList.toggle('cm-disabled', !this.items[index].enabled)
     })
-    // The chosen item's name shows under its icon (controller-variants.css), or why it can't be
-    // chosen now.
+    // The chosen item's name shows in the caption under the ring (controller-variants.css), or why
+    // it can't be chosen now; the plain look shows it under its icon.
     this.shortcuts.forEach((chip, index) => chip?.classList.toggle('cm-selected', index === this.selected))
+    const said = (item) => (item.enabled ? item.label : (item.unavailable ?? 'Unavailable'))
     this.labels.forEach((label, index) => {
       label.classList.toggle('cm-selected', index === this.selected)
       const item = this.items[index]
-      label.querySelector('.cm-label').textContent =
-        index === this.selected && !item.enabled ? (item.unavailable ?? 'Unavailable') : item.label
+      label.querySelector('.cm-label').textContent = index === this.selected ? said(item) : item.label
     })
+    const chosen = this.items[this.selected]
+    if (chosen) this.caption.textContent = said(chosen)
+    const flag = (name, on) => (on ? (this.caption.dataset[name] = '') : delete this.caption.dataset[name])
+    flag('shown', Boolean(chosen))
+    flag('disabled', Boolean(chosen && !chosen.enabled))
     this.pointAtSelected()
   }
 

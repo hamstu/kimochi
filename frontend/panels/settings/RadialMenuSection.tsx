@@ -71,18 +71,21 @@ const ONLY_WHEN: Record<string, string> = {
   hooker: 'Shows only while text hooking'
 }
 
-/** The overlay's icon for each item (ui/controller.js). */
-const ITEM_ICONS: Record<string, string> = {
-  scan: ICONS.scan,
-  dictionary: ICONS.dictionary,
-  auto: ICONS.auto,
-  card: ICONS.card,
-  history: ICONS.history,
-  controls: ICONS.app,
-  'ocr-settings': ICONS.settings,
-  pause: ICONS.pause,
-  'pause-scan': ICONS.pauseScan,
-  'pause-read-along': ICONS.pauseReadAlong
+/**
+ * The overlay's icon for each item (ui/controller.js), read afresh for each use: Pause & scan's
+ * and Pause & read along's carry a mask whose id must not repeat on the page.
+ */
+const ITEM_ICONS: Record<string, () => string> = {
+  scan: () => ICONS.scan,
+  dictionary: () => ICONS.dictionary,
+  auto: () => ICONS.auto,
+  card: () => ICONS.card,
+  history: () => ICONS.history,
+  controls: () => ICONS.app,
+  'ocr-settings': () => ICONS.settings,
+  pause: () => ICONS.pause,
+  'pause-scan': () => ICONS.pauseScan,
+  'pause-read-along': () => ICONS.pauseReadAlong
 }
 
 /** The parts of a shown RadialMenu the drag moves (ui/radial-menu.js). */
@@ -93,6 +96,7 @@ interface RingParts {
 }
 
 function ItemIcon({ id }: { id: string }): ReactNode {
+  const html = useMemo(() => ITEM_ICONS[id]?.() ?? '', [id])
   return (
     <svg
       className="radial-row-icon"
@@ -103,7 +107,7 @@ function ItemIcon({ id }: { id: string }): ReactNode {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      dangerouslySetInnerHTML={{ __html: ITEM_ICONS[id] ?? '' }}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   )
 }
@@ -208,7 +212,7 @@ function RadialPreview({
       items.map(({ item, label, enabled }) => ({
         id: item.id,
         label,
-        icon: ITEM_ICONS[item.id] ?? '',
+        icon: ITEM_ICONS[item.id]?.() ?? '',
         enabled,
         shortcut: details[item.id],
         unavailable: ONLY_WHEN[item.when ?? '']
