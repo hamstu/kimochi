@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use std::sync::Mutex;
 
 /// The setting (machine-local, off by default).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const SETTING: &str = "showGameCursor";
 
 #[derive(Default)]
@@ -20,6 +21,7 @@ struct State {
     /// The game whose cursor is kept visible now, and our handle to its event.
     held: Option<(u32, usize)>,
     /// Game processes the hook was loaded into (or refused by), this run.
+    #[cfg_attr(not(windows), allow(dead_code))]
     tried: Vec<u32>,
     /// Why the hook could not be loaded into the current game, for Settings.
     error: Option<String>,
