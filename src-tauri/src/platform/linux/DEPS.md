@@ -193,6 +193,13 @@ output-local with a layer-shell overlay, which follows the window's output. Veri
   overlay operation. Current Niri unstable supplies these positions directly and needs no
   patch; older builds without positions retain capture but hide the window-following overlay. Window activation, fractional scaling and the full
   move/workspace/monitor matrix remain unverified.
+- Niri 26.04 (#273): its screencast is DMA-BUF only (shared memory arrived in Niri unstable
+  2026-09, which is what the check above used), so the native driver also offers DMA-BUF
+  formats after shared memory and reads frames back through the host's libEGL
+  (`capture-core/src/linux_dmabuf.rs`, loaded at runtime, only for Niri). Readback verified on
+  omarchy-vm's virgl (Mesa 26.2, aarch64) with the ignored `dmabuf_readback` test; the reporter
+  verified real Niri 26.04 capture on NVIDIA with the original patch. Not yet verified here
+  against a live Niri 26.04 session: nested (winit) Niri has no GBM device and can't screencast.
 
 NixOS Steam gives Wine a private `/tmp`. `text_hook/wine.rs` detects a private Wine socket
 and distinct user/mount namespaces, then launches helpers through util-linux's `nsenter

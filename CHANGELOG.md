@@ -15,7 +15,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
-- **Linux:** Window, display and Quick Shot capture work with Niri's DMA-BUF-only screencasts.
+- **Linux: Window, display and Quick Shot capture work on Niri 26.04.** Before, choosing a source said "That source is gone", because that Niri version shares the screen only as GPU buffers, which Kimochi couldn't read. Thanks to TAG for finding the cause and writing the first version of this fix!
 - 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.
 - **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.
 - **Windows: Auto Game Pausing pauses and resumes much faster** for games made of many processes, such as browser and Electron games. One with 40 processes took around 5 seconds to pause; it now takes a fraction of a second.
