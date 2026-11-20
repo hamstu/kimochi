@@ -250,7 +250,8 @@ impl Drop for PipeWireThread {
 
 /// A feed of one PipeWire node on the session's daemon (Mutter's and KWin's screencasts publish
 /// there). `session` keeps the compositor's side alive and is dropped after the stream
-/// disconnects, so ending the screencast never races a live consumer.
+/// disconnects, so ending the screencast never races a live consumer. `dmabuf` also offers
+/// DMA-BUF formats (after shared memory) for a producer that has nothing else.
 pub(crate) fn pipewire_feed(node: u32, session: Box<dyn Send>, dmabuf: bool) -> Result<Feed> {
     use crate::linux_portal::backend::{pipewire_thread, Shared, PIPEWIRE_START_WAIT};
     let slot = Arc::new(Slot::default());

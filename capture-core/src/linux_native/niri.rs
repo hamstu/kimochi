@@ -249,7 +249,7 @@ impl Driver for Niri {
     }
     fn open(&self, target: Target<'_>) -> Result<Feed> {
         let (node, session) = super::screencast::record(&self.connection, target)?;
-        // Niri 26.04 offers only DMA-BUF screencasts.
+        // Niri 26.04 screencasts only in DMA-BUF (shared memory came in September 2026).
         pipewire_feed(node, Box::new(session), true)
     }
     fn activate(&self, window: &NativeWindow) -> Result<()> {
