@@ -1102,8 +1102,8 @@ impl SentenceAudio {
         let mut done = Vec::new();
         if sentence_empty {
             let data = base64::engine::general_purpose::STANDARD.encode(&made.mp3);
-            anki.call("storeMediaFile", json!({ "filename": made.filename, "data": data })).await?;
-            update.insert(field.to_string(), json!(format!("[sound:{}]", made.filename)));
+            let stored = anki.store_media(&made.filename, data).await?;
+            update.insert(field.to_string(), json!(format!("[sound:{stored}]")));
             done.push(format!("{:.1} seconds of audio to “{field}”", made.duration_ms / 1000.0));
         }
         if word_empty {
@@ -1111,8 +1111,8 @@ impl SentenceAudio {
                 Some((w, mp3)) => {
                     let filename = format!("kimochi_{}_word.mp3", now_ms() as u64);
                     let data = base64::engine::general_purpose::STANDARD.encode(&mp3);
-                    anki.call("storeMediaFile", json!({ "filename": filename, "data": data })).await?;
-                    update.insert(word_field.to_string(), json!(format!("[sound:{filename}]")));
+                    let stored = anki.store_media(&filename, data).await?;
+                    update.insert(word_field.to_string(), json!(format!("[sound:{stored}]")));
                     done.push(format!("“{w}” to “{word_field}”"));
                 }
                 None if !self.recognises() => done.push("no word audio (Japanese only for now)".into()),
@@ -1218,6 +1218,11 @@ pub struct Anki {
 impl Anki {
     async fn call(&self, action: &str, params: Value) -> Result<Value, String> {
         ankiconnect::action(&self.url, self.key.as_deref(), action, params).await
+    }
+
+    /// Store a file; the name it was stored under, for the field (ankiconnect::store_media).
+    pub(crate) async fn store_media(&self, filename: &str, data: String) -> Result<String, String> {
+        ankiconnect::store_media(&self.url, self.key.as_deref(), filename, data).await
     }
 }
 

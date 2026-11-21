@@ -449,14 +449,14 @@ async fn attach(
         .map_err(|e| e.to_string())??;
     let filename = format!("kimochi_{}.jpg", now_ms() as u64);
     let data = base64::engine::general_purpose::STANDARD.encode(&jpeg);
-    call("storeMediaFile", json!({ "filename": filename, "data": data })).await?;
+    let stored = anki.store_media(&filename, data).await?;
     // Filled meanwhile (by hand, or the extension's own picture): left as it is.
     let info = call("notesInfo", json!({ "notes": [note_id] })).await?;
     if empty(&info) != Some(true) {
         return Ok(format!("The card's “{field}” field was filled meanwhile; left as it was."));
     }
     let mut fields = serde_json::Map::new();
-    fields.insert(field.clone(), json!(format!("<img src=\"{filename}\">")));
+    fields.insert(field.clone(), json!(format!("<img src=\"{stored}\">")));
     call("updateNoteFields", json!({ "note": { "id": note_id, "fields": fields } })).await?;
     crate::anki_cards::enhanced(note_id, &[SCREENSHOT]);
     Ok(format!("Added the screenshot to “{field}”."))

@@ -198,6 +198,22 @@ pub(crate) async fn action(url: &str, key: Option<&str>, action: &str, params: V
     post(&url, &request(action, params, key), RELAY_TIMEOUT).await.map_err(|failure| failure.message(&url))
 }
 
+/// Store `data` (base64) as `filename` in the media folder of the AnkiConnect at `url`, and return
+/// the name it was stored under, which is the one a field must reference. Anki keeps the name
+/// unless a different file already has it; Manatan SRS converts every file and names it after its
+/// content (`kimochi_1.mp3` becomes `mtn_<hash>.webm`, a `.jpg` becomes `.avif`), so a field
+/// naming the file that was sent shows nothing there.
+pub(crate) async fn store_media(url: &str, key: Option<&str>, filename: &str, data: String) -> Result<String, String> {
+    let stored = action(url, key, "storeMediaFile", json!({ "filename": filename, "data": data })).await?;
+    Ok(stored_name(&stored, filename))
+}
+
+/// `storeMediaFile`'s answer: the stored name, or the one sent when an older AnkiConnect answered
+/// without one.
+fn stored_name(result: &Value, sent: &str) -> String {
+    result.as_str().map(str::trim).filter(|name| !name.is_empty()).unwrap_or(sent).to_string()
+}
+
 #[tauri::command]
 pub async fn anki_probe(state: tauri::State<'_, Shared>, url: String) -> Result<u64, String> {
     let started = Instant::now();
@@ -241,7 +257,9 @@ pub async fn anki_store_media_file(
     filename: String,
     data_base64: String,
 ) -> Result<String, String> {
-    call(&state.settings, &url, "storeMediaFile", json!({ "filename": filename, "data": data_base64 })).await
+    let stored: Value =
+        call(&state.settings, &url, "storeMediaFile", json!({ "filename": filename, "data": data_base64 })).await?;
+    Ok(stored_name(&stored, &filename))
 }
 
 #[tauri::command]
@@ -695,6 +713,41 @@ pub(crate) mod tests {
             "the extension's address is validated"
         );
         assert!(relay(&closed_port(), r#"{"action":"version"}"#).await.unwrap_err().contains("not answering"));
+    }
+
+    /// Manatan SRS (#286) stores `kimochi_1.mp3` as `mtn_<hash>.webm`, as its own server does
+    /// (checked against Manatan 6.3.27), so a field must name what `storeMediaFile` answered.
+    #[tokio::test]
+    async fn a_media_file_is_named_as_it_was_stored() {
+        let (manatan, seen) = serve(|body| {
+            let request: Value = serde_json::from_str(body).unwrap();
+            assert_eq!(request["version"], 6, "Manatan answers without the envelope below version 5");
+            let stored = match request["params"]["filename"].as_str().unwrap() {
+                "kimochi_1.mp3" => "mtn_b00348a8f180d1e2518131d7d770c463.webm",
+                _ => "mtn_d6b9f5f8d1e8db3e4c1825bf7ea22c58.avif",
+            };
+            (200, json!({ "result": stored, "error": null }).to_string())
+        });
+        let stored = store_media(&manatan, None, "kimochi_1.mp3", "AAAA".into()).await.unwrap();
+        assert_eq!(stored, "mtn_b00348a8f180d1e2518131d7d770c463.webm");
+        let stored = store_media(&manatan, Some("k"), "kimochi_1.jpg", "AAAA".into()).await.unwrap();
+        assert_eq!(stored, "mtn_d6b9f5f8d1e8db3e4c1825bf7ea22c58.avif");
+        let request = seen.lock().unwrap().last().cloned().unwrap();
+        assert!(request.contains(r#""data":"AAAA""#) && request.contains(r#""key":"k""#), "{request}");
+
+        // Anki keeps the name; an AnkiConnect that answers no name keeps the one sent.
+        let (anki, _) = serve(|body| {
+            let request: Value = serde_json::from_str(body).unwrap();
+            (200, json!({ "result": request["params"]["filename"], "error": null }).to_string())
+        });
+        assert_eq!(store_media(&anki, None, "kimochi_2.mp3", "AAAA".into()).await.unwrap(), "kimochi_2.mp3");
+        let (silent, _) = serve(|_| (200, json!({ "result": null, "error": null }).to_string()));
+        assert_eq!(store_media(&silent, None, "kimochi_3.mp3", "AAAA".into()).await.unwrap(), "kimochi_3.mp3");
+        let (refusing, _) = serve(|_| (200, json!({ "result": null, "error": "unsupported audio" }).to_string()));
+        assert_eq!(
+            store_media(&refusing, None, "kimochi_4.mp3", "AAAA".into()).await.unwrap_err(),
+            "unsupported audio"
+        );
     }
 
     /// Against a real AnkiConnect, opt-in: `KIMOCHI_ANKI_E2E_URL=http://127.0.0.1:8771

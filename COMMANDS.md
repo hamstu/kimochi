@@ -1640,7 +1640,7 @@ they carry no Origin header and AnkiConnect's `webCorsOriginList` never applies.
 
 | Command | Signature |
 | --- | --- |
-| `anki_probe`, `anki_deck_names`, `anki_model_names`, `anki_model_field_names`, `anki_find_notes`, `anki_gui_browse`, `anki_store_media_file`, `anki_add_note` | `({url, …})`: Kimochi's own calls (the Yomitan API pop-up's Add to Anki and its card builder). `url` is validated; the configured key is added. |
+| `anki_probe`, `anki_deck_names`, `anki_model_names`, `anki_model_field_names`, `anki_find_notes`, `anki_gui_browse`, `anki_store_media_file`, `anki_add_note` | `({url, …})`: Kimochi's own calls (the Yomitan API pop-up's Add to Anki and its card builder). `url` is validated; the configured key is added. `anki_store_media_file` answers the name the file was stored under, which fields must use (Manatan SRS renames every file). |
 | `anki_connect_status` | `({url?, key?}) -> Status`: the connection check behind Settings → Anki; the configured address and key when omitted |
 | `anki_connect_relay` | `({url, body}) -> {status, body}`: a dictionary extension's AnkiConnect request, to the `url` it asked for |
 

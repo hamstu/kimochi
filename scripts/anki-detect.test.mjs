@@ -67,8 +67,9 @@ const asMap = (mappings) => Object.fromEntries(mappings.map((m) => [m.ankiField,
 
 const TANGO = ['Expression', 'Reading', 'Meaning', 'Audio']
 
-test('only Lapis, Kiku and Senren count, by a name that starts with the family', () => {
+test('only Lapis, Kiku, Senren and Manatan count, by a name that starts with the family', () => {
   assert.equal(noteFamily('Lapis'), 'lapis')
+  assert.equal(noteFamily('Manatan-NoteType'), 'manatan')
   assert.equal(noteFamily('Kiku v2'), 'kiku')
   assert.equal(noteFamily('senren 5.1'), 'senren')
   for (const other of ['My Kiku', 'Kikuchi', 'Tango Card Format', 'Kaishi 1.5k'])
@@ -151,7 +152,7 @@ test('nothing to suggest, or a tie, says why', async () => {
     anki({ 'Tango Card Format': TANGO }, notes('Tango Card Format', 'Default', 5, 1), ['Default'])
   )
   assert.equal(none.ok, false)
-  assert.match(none.reason, /No Lapis, Kiku or Senren/)
+  assert.match(none.reason, /No Lapis, Kiku, Senren or Manatan/)
   const empty = await detectAnkiSetup(anki({ Lapis: LAPIS }, [], ['Default']))
   assert.match(empty.reason, /Lapis note type has no notes yet/)
   const emptyBoth = await detectAnkiSetup(anki({ Lapis: LAPIS, 'Senren v5': SENREN, Kiku: LAPIS }, [], ['Default']))
@@ -232,4 +233,54 @@ test('the note type the Yomitan API mines with wins when it has the field', asyn
     'Tango'
   )
   assert.equal(fallback.ok && fallback.field, 'SentenceAudio')
+})
+
+// Manatan SRS's own note type, as its collection lists it (github.com/KolbyML/Manatan-NoteType).
+const MANATAN = [
+  'Expression',
+  'ExpressionFurigana',
+  'ExpressionReading',
+  'ExpressionAudio',
+  'SelectionText',
+  'MainDefinition',
+  'DefinitionPicture',
+  'Sentence',
+  'SentenceFurigana',
+  'SentenceAudio',
+  'Picture',
+  'Glossary',
+  'Hint',
+  'IsWordAndSentenceCard',
+  'IsClickCard',
+  'IsSentenceCard',
+  'IsAudioCard',
+  'PitchPosition',
+  'PitchCategories',
+  'Frequency',
+  'FreqSort',
+  'MiscInfo',
+  'Tags',
+  'CardID',
+  'SentenceTranslation'
+]
+
+test("Manatan SRS's note type is found and mapped like Kiku", async () => {
+  const found = await detectAnkiSetup(
+    anki({ Basic: ['Front', 'Back'], 'Manatan-NoteType': MANATAN }, notes('Manatan-NoteType', 'Mining', 4, 1), [
+      'Default',
+      'Mining'
+    ])
+  )
+  assert.equal(found.ok, true, found.reason)
+  assert.equal(found.modelName, 'Manatan-NoteType')
+  assert.equal(found.deckName, 'Mining')
+  assert.deepEqual(asMap(found.fieldMappings), {
+    Expression: 'expression',
+    ExpressionReading: 'reading',
+    ExpressionAudio: 'audio',
+    MainDefinition: 'glossary',
+    Sentence: '(sentence)',
+    SentenceFurigana: 'sentence-furigana',
+    Frequency: 'frequencies'
+  })
 })

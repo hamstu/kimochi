@@ -2,8 +2,9 @@
    someone already mines into, read from Anki, and which of its fields take which Yomitan marker.
 
    The same rules as Hachidori's setup (its anki-setup.js), so both find the same deck:
-   - Only the mining note types made for Yomitan qualify: Lapis, Kiku and Senren, by a name that
-     starts with the family ("Lapis", "Kiku v2", not "My Kiku"), with the family's core fields.
+   - Only the mining note types made for Yomitan qualify: Lapis, Kiku and Senren, and Manatan SRS's
+     own Manatan-NoteType (Kiku's fields), by a name that starts with the family ("Lapis",
+     "Kiku v2", "Manatan-NoteType", not "My Kiku"), with the family's core fields.
      Pre-made decks' note types (Kaishi, Tango, …) can hold more notes than someone's own mining,
      so they are never candidates.
    - The candidate with the most notes wins; a tie is left to the person.
@@ -33,10 +34,10 @@ export type DetectedSetup =
     }
   | { ok: false; reason: string }
 
-type Family = 'lapis' | 'kiku' | 'senren'
+type Family = 'lapis' | 'kiku' | 'senren' | 'manatan'
 
 /** The family a note type's name starts with, ending at a word boundary. */
-const FAMILY_PATTERN = /^(senren|lapis|kiku)(?![\p{L}\p{N}])/iu
+const FAMILY_PATTERN = /^(senren|lapis|kiku|manatan)(?![\p{L}\p{N}])/iu
 
 export function noteFamily(model: string): Family | null {
   const match = FAMILY_PATTERN.exec(model.trim())
@@ -47,7 +48,7 @@ export function noteFamily(model: string): Family | null {
 type Source = string
 
 /** Each family's fields that Kimochi's markers can fill. Kiku is Lapis's successor and shares
-    its fields. MainDefinition takes the whole glossary: the Yomitan API has no single-dictionary
+    its fields, as Manatan-NoteType (github.com/KolbyML/Manatan-NoteType) does. MainDefinition takes the whole glossary: the Yomitan API has no single-dictionary
     marker, and Lapis shows MainDefinition first. */
 const LAPIS: Record<string, Source> = {
   Expression: 'expression',
@@ -68,12 +69,13 @@ const SENREN: Record<string, Source> = {
   pitchAccents: 'pitch-accents',
   frequencies: 'frequencies'
 }
-const PRESETS: Record<Family, Record<string, Source>> = { lapis: LAPIS, kiku: LAPIS, senren: SENREN }
+const PRESETS: Record<Family, Record<string, Source>> = { lapis: LAPIS, kiku: LAPIS, senren: SENREN, manatan: LAPIS }
 
 /** The fields a note type of the family must have to count as one. */
 const CORE: Record<Family, string[]> = {
   lapis: ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence'],
   kiku: ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence'],
+  manatan: ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence'],
   senren: ['word', 'reading', 'definition', 'sentence']
 }
 
@@ -150,7 +152,10 @@ export async function detectAnkiSetup(
     }))
   ).filter((c): c is typeof c & { fieldMappings: AnkiFieldMapping[] } => c.fieldMappings !== null)
   if (candidates.length === 0) {
-    return { ok: false, reason: `No Lapis, Kiku or Senren note type with its usual fields was found. ${CHOOSE}` }
+    return {
+      ok: false,
+      reason: `No Lapis, Kiku, Senren or Manatan note type with its usual fields was found. ${CHOOSE}`
+    }
   }
 
   const counted = await each(candidates, PARALLEL, async (c) => ({
