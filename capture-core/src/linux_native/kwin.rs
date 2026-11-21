@@ -720,7 +720,7 @@ impl Kwin {
             Err(e) => return Err(CaptureError::new("native", format!("KWin could not stream it: {e}"))),
         };
         drop(created);
-        let feed = pipewire_feed(node, Box::new(guard))?;
+        let feed = pipewire_feed(node, Box::new(guard), false)?;
         let slot = feed.slot.clone();
         let feed = Arc::new(Mutex::new(feed));
         let (inner, closed, model) = (feed.clone(), s.clone(), self.model.clone());

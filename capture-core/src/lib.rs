@@ -22,6 +22,9 @@ pub use linux_x11::gamescope_portal_now;
 #[cfg(target_os = "linux")]
 pub use linux_x11::{desktop as x11, X11Capture};
 pub use linux_x11::{is_wayland_session, wayland_session_now};
+// DMA-BUF readback for PipeWire streams that offer nothing else (Niri 26.04). Its attribute
+// and modifier rules compile everywhere; the EGL reader is Linux-only.
+mod linux_dmabuf;
 // Wayland: xdg-desktop-portal ScreenCast + PipeWire. Its ids, stride-aware conversion
 // and restore-token store compile everywhere; the backend is Linux-only.
 mod linux_portal;

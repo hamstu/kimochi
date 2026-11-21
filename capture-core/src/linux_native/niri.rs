@@ -249,7 +249,8 @@ impl Driver for Niri {
     }
     fn open(&self, target: Target<'_>) -> Result<Feed> {
         let (node, session) = super::screencast::record(&self.connection, target)?;
-        pipewire_feed(node, Box::new(session))
+        // Niri 26.04 screencasts only in DMA-BUF (shared memory came in September 2026).
+        pipewire_feed(node, Box::new(session), true)
     }
     fn activate(&self, window: &NativeWindow) -> Result<()> {
         let id: u64 = window.handle.parse().map_err(native)?;

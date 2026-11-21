@@ -35,10 +35,11 @@
 //! RGBA (the same shape as `windows.rs`); `capture` waits at most 500 ms for a first
 //! frame and otherwise copies the newest one.
 //!
-//! **Formats.** The stream offers BGRx, BGRA, RGBx and RGBA, SHM only: buffers are
-//! `MemPtr` or `MemFd` (mapped by PipeWire), never DMA-BUF, because no modifier is
-//! offered. Compositors that pad rows get a stride-aware copy; window streams that
-//! carry a `VideoCrop` region (GNOME) are cut to it.
+//! **Formats.** The stream offers BGRx, BGRA, RGBx and RGBA in shared memory: buffers are
+//! `MemPtr` or `MemFd` (mapped by PipeWire). Compositors that pad rows get a stride-aware
+//! copy; window streams that carry a `VideoCrop` region (GNOME) are cut to it. The native
+//! Niri driver also offers BGRx and BGRA as DMA-BUFs, after shared memory, because Niri 26.04
+//! offers nothing else (#273); those frames are read back through EGL (`linux_dmabuf`).
 //!
 //! **Coordinates.** A monitor stream's position and size are in the compositor's
 //! logical coordinate space; frames are physical pixels. `Source.bounds` and
@@ -335,6 +336,7 @@ pub(crate) mod backend {
         crop_region, frame_scale, parse_stream_id, plane_layout, plane_to_rgba, store_token, stored_token, PixelOrder,
         PortalStream, StreamKind, PICKER_TIMEOUT,
     };
+    use crate::linux_dmabuf;
     use crate::pixels::{box_downscale, crop_pixels, fit_within, unpremultiply};
     use crate::{
         crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, FrameInfo,
@@ -346,8 +348,11 @@ pub(crate) mod backend {
     use futures_util::StreamExt;
     use pipewire as pw;
     use pw::spa;
-    use spa::pod::{Object, Pod, Property, PropertyFlags, Value};
+    use spa::pod::{ChoiceValue, Object, Pod, PodPropFlags, Property, PropertyFlags, Value};
+    use spa::utils::{Choice, ChoiceEnum, ChoiceFlags};
+    use std::cell::RefCell;
     use std::os::fd::OwnedFd;
+    use std::rc::Rc;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{mpsc, Arc, Condvar, Mutex};
     use std::thread::JoinHandle;
@@ -750,21 +755,84 @@ pub(crate) mod backend {
         enum_format_with(Vec::new())
     }
 
+    /// The DMA-BUF layouts we read back: the negotiated order, its DRM fourcc, and the order
+    /// of the RGBA bytes EGL hands back. Niri renders only these two.
+    const DMABUF_LAYOUTS: [(PixelOrder, u32, PixelOrder); 2] = [
+        (PixelOrder::Bgrx, linux_dmabuf::XRGB8888, PixelOrder::Rgbx),
+        (PixelOrder::Bgra, linux_dmabuf::ARGB8888, PixelOrder::Rgba),
+    ];
+
+    /// Every EnumFormat the stream offers, most wanted first. Shared memory always leads, so a
+    /// producer that has it keeps using it exactly as before; DMA-BUF formats (one per layout
+    /// with the modifiers the reader can import) follow for producers that have nothing else.
+    fn format_offers(dmabuf: &[(PixelOrder, Vec<u64>)]) -> Option<Vec<Vec<u8>>> {
+        let mut offers = vec![enum_format()?];
+        for (order, modifiers) in dmabuf {
+            offers.push(dmabuf_format(*order, modifiers)?);
+        }
+        Some(offers)
+    }
+
+    /// EnumFormat for one DMA-BUF layout. The modifier is mandatory (that's what makes it a
+    /// DMA-BUF format); with more than one, `DONT_FIXATE` lets the producer pick, as PipeWire's
+    /// DMA-BUF negotiation asks.
+    fn dmabuf_format(order: PixelOrder, modifiers: &[u64]) -> Option<Vec<u8>> {
+        use spa::param::format::FormatProperties;
+        use spa::utils::Fraction;
+        let mut format = format_object(spa::pod::property!(FormatProperties::VideoFormat, Id, spa_format(order)));
+        let flags = if modifiers.len() > 1 {
+            PropertyFlags::from_bits_retain(PodPropFlags::DONT_FIXATE.bits())
+        } else {
+            PropertyFlags::empty()
+        };
+        format.properties.push(Property {
+            key: FormatProperties::VideoModifier.as_raw(),
+            flags: PropertyFlags::MANDATORY | flags,
+            value: Value::Choice(ChoiceValue::Long(Choice(
+                ChoiceFlags::empty(),
+                ChoiceEnum::Enum {
+                    default: *modifiers.first()? as i64,
+                    alternatives: modifiers.iter().map(|m| *m as i64).collect(),
+                },
+            ))),
+        });
+        // Niri streams at a variable rate (0/1) and paces by VideoMaxFramerate, which would
+        // otherwise default to the output's refresh rate: ask for 10, like the shared path.
+        format.properties.push(spa::pod::property!(
+            FormatProperties::VideoMaxFramerate,
+            Choice,
+            Range,
+            Fraction,
+            Fraction { num: 10, denom: 1 },
+            Fraction { num: 1, denom: 1 },
+            Fraction { num: 30, denom: 1 }
+        ));
+        serialize(Value::Object(format))
+    }
+
     /// EnumFormat: raw video in one of our four layouts, any size, 10 fps preferred
     /// (OCR needs no more, and every frame is a CPU copy), at most 30. No modifier
-    /// property, so producers stay on SHM buffers. `extra` adds producer-specific
+    /// property, so this one is always shared memory. `extra` adds producer-specific
     /// properties (Gamescope's focus app ID).
     pub(crate) fn enum_format_with(extra: Vec<Property>) -> Option<Vec<u8>> {
+        use spa::param::format::FormatProperties;
+        let [a, b, c, d] = PixelOrder::PREFERRED.map(spa_format);
+        let mut object =
+            format_object(spa::pod::property!(FormatProperties::VideoFormat, Choice, Enum, Id, a, a, b, c, d));
+        object.properties.extend(extra);
+        serialize(Value::Object(object))
+    }
+
+    fn format_object(pixel_format: Property) -> Object {
         use spa::param::format::{FormatProperties, MediaSubtype, MediaType};
         use spa::param::ParamType;
         use spa::utils::{Fraction, Rectangle, SpaTypes};
-        let [a, b, c, d] = PixelOrder::PREFERRED.map(spa_format);
-        let mut object = spa::pod::object!(
+        spa::pod::object!(
             SpaTypes::ObjectParamFormat,
             ParamType::EnumFormat,
             spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
             spa::pod::property!(FormatProperties::MediaSubtype, Id, MediaSubtype::Raw),
-            spa::pod::property!(FormatProperties::VideoFormat, Choice, Enum, Id, a, a, b, c, d),
+            pixel_format,
             spa::pod::property!(
                 FormatProperties::VideoSize,
                 Choice,
@@ -783,21 +851,32 @@ pub(crate) mod backend {
                 Fraction { num: 0, denom: 1 },
                 Fraction { num: 30, denom: 1 }
             ),
-        );
-        object.properties.extend(extra);
-        serialize(Value::Object(object))
+        )
     }
 
-    /// Buffers: CPU-mappable memory only (no DMA-BUF).
+    /// Buffers: CPU-mappable memory only, for the shared-memory formats.
     pub(crate) fn buffers_param() -> Option<Vec<u8>> {
         let types = (1u32 << spa::sys::SPA_DATA_MemPtr) | (1u32 << spa::sys::SPA_DATA_MemFd);
+        buffer_param(Value::Int(types as i32))
+    }
+
+    /// Buffers: DMA-BUF only, once a DMA-BUF format (one with a modifier) is fixed.
+    fn dmabuf_buffers_param() -> Option<Vec<u8>> {
+        let dmabuf = 1 << spa::sys::SPA_DATA_DmaBuf;
+        buffer_param(Value::Choice(ChoiceValue::Int(Choice(
+            ChoiceFlags::empty(),
+            ChoiceEnum::Flags { default: dmabuf, flags: vec![dmabuf] },
+        ))))
+    }
+
+    fn buffer_param(data_type: Value) -> Option<Vec<u8>> {
         serialize(Value::Object(Object {
             type_: spa::utils::SpaTypes::ObjectParamBuffers.as_raw(),
             id: spa::param::ParamType::Buffers.as_raw(),
             properties: vec![Property {
                 key: spa::sys::SPA_PARAM_BUFFERS_dataType,
                 flags: PropertyFlags::empty(),
-                value: Value::Int(types as i32),
+                value: data_type,
             }],
         }))
     }
@@ -827,12 +906,15 @@ pub(crate) mod backend {
         order: PixelOrder,
         width: u32,
         height: u32,
+        modifier: Option<u64>,
     }
 
     struct StreamData {
         slot: Arc<Slot>,
         shared: Arc<Shared>,
         format: Option<Negotiated>,
+        /// The thread's DMA-BUF reader, when this stream may negotiate DMA-BUF.
+        dmabuf: Option<Rc<RefCell<linux_dmabuf::Reader>>>,
     }
 
     pub(crate) type Ready = mpsc::Sender<std::result::Result<pw::channel::Sender<()>, String>>;
@@ -842,6 +924,7 @@ pub(crate) mod backend {
         nodes: &[(u32, Arc<Slot>)],
         shared: &Arc<Shared>,
         ready: &Ready,
+        dmabuf: bool,
     ) -> std::result::Result<(), String> {
         let mainloop = pw::main_loop::MainLoopRc::new(None).map_err(|e| e.to_string())?;
         let context = pw::context::ContextRc::new(&mainloop, None).map_err(|e| e.to_string())?;
@@ -870,9 +953,22 @@ pub(crate) mod backend {
             })
             .register();
 
-        let format = enum_format().ok_or("could not build the format request")?;
+        // One EGL reader for the thread (its context is current here), shared by its streams.
+        let reader = if dmabuf { linux_dmabuf::Reader::new().map(|r| Rc::new(RefCell::new(r))) } else { None };
+        let dmabuf_offers: Vec<_> = reader
+            .as_ref()
+            .map(|reader| {
+                let reader = reader.borrow();
+                DMABUF_LAYOUTS.iter().map(|(order, fourcc, _)| (*order, reader.modifiers(*fourcc))).collect()
+            })
+            .unwrap_or_default();
+        let formats = format_offers(&dmabuf_offers).ok_or("could not build the format request")?;
         let mut streams = Vec::new();
         for (node, slot) in nodes {
+            let mut format_pods: Vec<&Pod> = formats
+                .iter()
+                .map(|f| Pod::from_bytes(f).ok_or("invalid format pod"))
+                .collect::<std::result::Result<_, _>>()?;
             let stream = pw::stream::StreamRc::new(
                 core.clone(),
                 "kimochi-capture",
@@ -888,6 +984,7 @@ pub(crate) mod backend {
                     slot: slot.clone(),
                     shared: shared.clone(),
                     format: None,
+                    dmabuf: reader.clone(),
                 })
                 .state_changed(|_, data, old, new| {
                     use pw::stream::StreamState as S;
@@ -899,10 +996,11 @@ pub(crate) mod backend {
                     }
                 })
                 .param_changed(|stream, data, id, param| {
-                    let Some(param) = param else { return };
                     if id != spa::param::ParamType::Format.as_raw() {
                         return;
                     }
+                    data.format = None;
+                    let Some(param) = param else { return };
                     let Ok((media, sub)) = spa::param::format_utils::parse_format(param) else {
                         return;
                     };
@@ -910,16 +1008,29 @@ pub(crate) mod backend {
                         return;
                     }
                     let mut info = spa::param::video::VideoInfoRaw::default();
+                    // A modifier means the producer took one of our DMA-BUF formats. (Only
+                    // when we offered them: otherwise it's not ours to act on, and the buffers
+                    // stay shared memory as they always were.)
+                    let modifier = data.dmabuf.as_ref().and(param.as_object().ok()).and_then(|object| {
+                        object.find_prop(spa::utils::Id(spa::param::format::FormatProperties::VideoModifier.as_raw()))
+                    });
+                    if modifier.is_some_and(|prop| prop.flags().contains(PodPropFlags::DONT_FIXATE)) {
+                        // The producer still has to pick the modifier; it sends the final format.
+                        return;
+                    }
+                    let dmabuf = modifier.is_some();
                     data.format = info.parse(param).ok().and_then(|_| {
                         let size = info.size();
                         pixel_order(info.format()).map(|order| Negotiated {
                             order,
                             width: size.width,
                             height: size.height,
+                            modifier: dmabuf.then(|| info.modifier()),
                         })
                     });
                     // The format is fixed: now say which buffers and metadata we take.
-                    let (Some(buffers), Some(meta)) = (buffers_param(), crop_meta_param()) else {
+                    let buffers = if dmabuf { dmabuf_buffers_param() } else { buffers_param() };
+                    let (Some(buffers), Some(meta)) = (buffers, crop_meta_param()) else {
                         return;
                     };
                     let mut params: Vec<&Pod> =
@@ -948,6 +1059,39 @@ pub(crate) mod backend {
                             (p.x, p.y, s.width, s.height)
                         });
                     let datas = buffer.datas_mut();
+                    let (w, h) = (format.width, format.height);
+                    if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_PIXELS {
+                        return;
+                    }
+                    let region = crop_region(w, h, crop);
+                    if let Some(modifier) = format.modifier {
+                        let Some(reader) = &data.dmabuf else { return };
+                        let Some(&(_, fourcc, order)) = DMABUF_LAYOUTS.iter().find(|(o, ..)| *o == format.order) else {
+                            return;
+                        };
+                        // Niri marks a frame it couldn't render with size 0 and CORRUPTED.
+                        if !datas.first().is_some_and(|plane| {
+                            plane.chunk().size() != 0
+                                && !plane.chunk().flags().contains(spa::buffer::ChunkFlags::CORRUPTED)
+                        }) {
+                            return;
+                        }
+                        let planes = datas
+                            .iter()
+                            .map(|plane| {
+                                (plane.type_() == spa::buffer::DataType::DmaBuf).then(|| linux_dmabuf::Plane {
+                                    fd: plane.fd(),
+                                    offset: plane.chunk().offset(),
+                                    stride: plane.chunk().stride(),
+                                })
+                            })
+                            .collect::<Option<Vec<_>>>();
+                        let mut reader = reader.borrow_mut();
+                        if let Some(bytes) = planes.and_then(|planes| reader.read(fourcc, modifier, w, h, &planes)) {
+                            data.slot.publish_raw(bytes, 0, w as i32 * 4, w, h, region, order);
+                        }
+                        return;
+                    }
                     let Some(plane) = datas.first_mut() else {
                         return;
                     };
@@ -962,24 +1106,18 @@ pub(crate) mod backend {
                     }
                     let Some(bytes) = plane.data() else { return };
                     let valid = &bytes[..bytes.len().min(offset.saturating_add(size))];
-                    let (w, h) = (format.width, format.height);
-                    if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_PIXELS {
-                        return;
-                    }
-                    let region = crop_region(w, h, crop);
                     if plane_layout(valid.len(), offset, stride, w, h, region).is_some() {
                         data.slot.publish_raw(valid, offset, stride, w, h, region, format.order);
                     }
                 })
                 .register()
                 .map_err(|e| e.to_string())?;
-            let format_pod = Pod::from_bytes(&format).ok_or("invalid format pod")?;
             stream
                 .connect(
                     spa::utils::Direction::Input,
                     Some(*node),
                     pw::stream::StreamFlags::AUTOCONNECT | pw::stream::StreamFlags::MAP_BUFFERS,
-                    &mut [format_pod],
+                    &mut format_pods,
                 )
                 .map_err(|e| e.to_string())?;
             streams.push((stream, listener));
@@ -1005,8 +1143,9 @@ pub(crate) mod backend {
         nodes: Vec<(u32, Arc<Slot>)>,
         shared: Arc<Shared>,
         ready: Ready,
+        dmabuf: bool,
     ) {
-        if let Err(e) = pipewire_main(fd, &nodes, &shared, &ready) {
+        if let Err(e) = pipewire_main(fd, &nodes, &shared, &ready, dmabuf) {
             let _ = ready.send(Err(e));
         }
         for (_, slot) in &nodes {
@@ -1023,7 +1162,7 @@ pub(crate) mod backend {
             let (nodes, shared) = (slots.clone(), shared.clone());
             std::thread::Builder::new()
                 .name("kimochi-pipewire".into())
-                .spawn(move || pipewire_thread(Some(started.fd), nodes, shared, ready_tx))
+                .spawn(move || pipewire_thread(Some(started.fd), nodes, shared, ready_tx, false))
                 .map_err(native_error)?
         };
         let mut cast = Cast { streams: started.streams, slots, shared, pw_stop: None, threads: vec![portal, pw] };
@@ -1274,6 +1413,195 @@ pub(crate) mod backend {
     impl Drop for PortalCapture {
         fn drop(&mut self) {
             self.drop_cast();
+        }
+    }
+    #[cfg(test)]
+    mod dmabuf_tests {
+        use super::*;
+        use spa::param::format::FormatProperties;
+        use spa::pod::deserialize::PodDeserializer;
+        use spa::utils::{Fraction, Id, Rectangle};
+
+        const NVIDIA: u64 = 0x0300_0000_0060_6015;
+        const IMPLICIT: u64 = linux_dmabuf::IMPLICIT_MODIFIER;
+
+        fn object(bytes: &[u8]) -> Object {
+            match PodDeserializer::deserialize_any_from(bytes).unwrap().1 {
+                Value::Object(object) => object,
+                other => panic!("not an object: {other:?}"),
+            }
+        }
+
+        fn modifier(bytes: &[u8]) -> Option<Property> {
+            object(bytes).properties.into_iter().find(|p| p.key == FormatProperties::VideoModifier.as_raw())
+        }
+
+        /// What Niri 26.04 publishes (`make_video_params` in its `pw_utils.rs`): one layout,
+        /// the output's size, variable rate, and a mandatory modifier from its renderer.
+        fn niri_offer(order: PixelOrder, modifiers: &[u64]) -> Vec<u8> {
+            let dont_fixate = if modifiers.len() > 1 {
+                PropertyFlags::from_bits_retain(PodPropFlags::DONT_FIXATE.bits())
+            } else {
+                PropertyFlags::empty()
+            };
+            let mut format = shm_offer(order);
+            format.properties.retain(|p| p.key != FormatProperties::VideoFramerate.as_raw());
+            format.properties.push(spa::pod::property!(
+                FormatProperties::VideoFramerate,
+                Fraction,
+                Fraction { num: 0, denom: 1 }
+            ));
+            format.properties.push(Property {
+                key: FormatProperties::VideoModifier.as_raw(),
+                flags: PropertyFlags::MANDATORY | dont_fixate,
+                value: Value::Choice(ChoiceValue::Long(Choice(
+                    ChoiceFlags::empty(),
+                    ChoiceEnum::Enum {
+                        default: modifiers[0] as i64,
+                        alternatives: modifiers.iter().map(|m| *m as i64).collect(),
+                    },
+                ))),
+            });
+            format.properties.push(spa::pod::property!(
+                FormatProperties::VideoMaxFramerate,
+                Choice,
+                Range,
+                Fraction,
+                Fraction { num: 60, denom: 1 },
+                Fraction { num: 1, denom: 1 },
+                Fraction { num: 60, denom: 1 }
+            ));
+            serialize(Value::Object(format)).unwrap()
+        }
+
+        /// A shared-memory producer (Mutter, KWin, newer Niri): one layout at a fixed size.
+        fn shm_offer(order: PixelOrder) -> Object {
+            use spa::param::format::{MediaSubtype, MediaType};
+            spa::pod::object!(
+                spa::utils::SpaTypes::ObjectParamFormat,
+                spa::param::ParamType::EnumFormat,
+                spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
+                spa::pod::property!(FormatProperties::MediaSubtype, Id, MediaSubtype::Raw),
+                spa::pod::property!(FormatProperties::VideoFormat, Id, spa_format(order)),
+                spa::pod::property!(FormatProperties::VideoSize, Rectangle, Rectangle { width: 2560, height: 1440 }),
+                spa::pod::property!(
+                    FormatProperties::VideoFramerate,
+                    Choice,
+                    Range,
+                    Fraction,
+                    Fraction { num: 30, denom: 1 },
+                    Fraction { num: 0, denom: 1 },
+                    Fraction { num: 60, denom: 1 }
+                ),
+            )
+        }
+
+        fn intersects(producer: &[u8], consumer: &[u8]) -> bool {
+            let (producer, consumer) = (Pod::from_bytes(producer).unwrap(), Pod::from_bytes(consumer).unwrap());
+            let mut out = Vec::with_capacity(1024);
+            let builder = spa::pod::builder::Builder::new(&mut out);
+            // SAFETY: both pods and the builder outlive the call.
+            unsafe {
+                spa::sys::spa_pod_filter(
+                    builder.as_raw_ptr(),
+                    std::ptr::null_mut(),
+                    producer.as_raw_ptr(),
+                    consumer.as_raw_ptr(),
+                ) >= 0
+            }
+        }
+
+        /// Which of our offers PipeWire settles on: it walks the consumer's EnumFormats in order
+        /// and takes the first any producer format intersects (`pw_context_find_format`);
+        /// running out is the "no more input formats" (-22) of #273.
+        fn negotiated(producer: &[Vec<u8>], offers: &[Vec<u8>]) -> Option<usize> {
+            offers.iter().position(|offer| producer.iter().any(|p| intersects(p, offer)))
+        }
+
+        fn with_dmabuf(modifiers: &[u64]) -> Vec<Vec<u8>> {
+            let layouts: Vec<_> = DMABUF_LAYOUTS.iter().map(|(order, ..)| (*order, modifiers.to_vec())).collect();
+            format_offers(&layouts).unwrap()
+        }
+
+        #[test]
+        fn without_a_reader_only_shared_memory_is_offered() {
+            let offers = format_offers(&[]).unwrap();
+            assert_eq!(offers, [enum_format().unwrap()]);
+        }
+
+        #[test]
+        fn shared_memory_leads_and_dmabuf_formats_carry_a_mandatory_modifier() {
+            let offers = with_dmabuf(&[NVIDIA, IMPLICIT]);
+            assert_eq!(offers.len(), 3);
+            assert_eq!(offers[0], enum_format().unwrap());
+            assert!(modifier(&offers[0]).is_none());
+            for (offer, (order, ..)) in offers[1..].iter().zip(DMABUF_LAYOUTS) {
+                let format =
+                    object(offer).properties.into_iter().find(|p| p.key == FormatProperties::VideoFormat.as_raw());
+                assert_eq!(format.unwrap().value, Value::Id(Id(spa_format(order).as_raw())));
+                let modifier = modifier(offer).unwrap();
+                assert!(modifier.flags.contains(PropertyFlags::MANDATORY));
+                assert!(modifier.flags.bits() & PodPropFlags::DONT_FIXATE.bits() != 0);
+                let Value::Choice(ChoiceValue::Long(Choice(_, ChoiceEnum::Enum { default, alternatives }))) =
+                    modifier.value
+                else {
+                    panic!("modifier is not an enum of longs");
+                };
+                assert_eq!((default, alternatives), (NVIDIA as i64, vec![NVIDIA as i64, IMPLICIT as i64]));
+            }
+        }
+
+        #[test]
+        fn a_single_modifier_is_left_for_us_to_fix() {
+            let offers = with_dmabuf(&[IMPLICIT]);
+            let modifier = modifier(&offers[1]).unwrap();
+            assert!(modifier.flags.contains(PropertyFlags::MANDATORY));
+            assert_eq!(modifier.flags.bits() & PodPropFlags::DONT_FIXATE.bits(), 0);
+        }
+
+        #[test]
+        fn niri_26_04_fails_on_shared_memory_alone() {
+            let niri = [niri_offer(PixelOrder::Bgrx, &[NVIDIA, IMPLICIT])];
+            assert_eq!(negotiated(&niri, &format_offers(&[]).unwrap()), None);
+        }
+
+        #[test]
+        fn niri_26_04_negotiates_the_dmabuf_layout_it_renders() {
+            let offers = with_dmabuf(&[NVIDIA, 0, IMPLICIT]);
+            let opaque = [niri_offer(PixelOrder::Bgrx, &[NVIDIA, 0])];
+            assert_eq!(negotiated(&opaque, &offers), Some(1));
+            let alpha = [niri_offer(PixelOrder::Bgra, &[0])];
+            assert_eq!(negotiated(&alpha, &offers), Some(2));
+            // Only the implicit layout on Niri's side (force-pipewire-invalid-modifier).
+            let implicit = [niri_offer(PixelOrder::Bgrx, &[IMPLICIT])];
+            assert_eq!(negotiated(&implicit, &offers), Some(1));
+        }
+
+        #[test]
+        fn no_shared_modifier_means_no_format() {
+            let niri = [niri_offer(PixelOrder::Bgrx, &[NVIDIA])];
+            assert_eq!(negotiated(&niri, &with_dmabuf(&[0, IMPLICIT])), None);
+        }
+
+        #[test]
+        fn shared_memory_producers_keep_shared_memory() {
+            let mutter = [serialize(Value::Object(shm_offer(PixelOrder::Bgrx))).unwrap()];
+            assert_eq!(negotiated(&mutter, &with_dmabuf(&[NVIDIA, IMPLICIT])), Some(0));
+            // A producer with both (Niri since September 2026) stays on shared memory too.
+            let both = [mutter[0].clone(), niri_offer(PixelOrder::Bgrx, &[NVIDIA, IMPLICIT])];
+            assert_eq!(negotiated(&both, &with_dmabuf(&[NVIDIA, IMPLICIT])), Some(0));
+        }
+
+        #[test]
+        fn dmabuf_layouts_read_back_as_rgba_bytes() {
+            for (order, fourcc, readback) in DMABUF_LAYOUTS {
+                let expected = match order {
+                    PixelOrder::Bgrx => (u32::from_le_bytes(*b"XR24"), PixelOrder::Rgbx),
+                    PixelOrder::Bgra => (u32::from_le_bytes(*b"AR24"), PixelOrder::Rgba),
+                    _ => panic!("unexpected layout"),
+                };
+                assert_eq!((fourcc, readback), expected);
+            }
         }
     }
     #[cfg(test)]

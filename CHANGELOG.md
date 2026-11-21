@@ -16,6 +16,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Linux: Window, display and Quick Shot capture work on Niri 26.04.** Before, choosing a source said "That source is gone", because that Niri version shares the screen only as GPU buffers, which Kimochi couldn't read. Thanks to TAG for finding the cause and writing the first version of this fix!
 - **Linux: Global shortcuts now work on niri.** niri has no shortcut portal yet, so Kimochi now writes your shortcuts as niri binds to `~/.config/niri/kimochi.kdl` and keeps that file up to date. Your niri config needs to include it once: **Settings → Shortcuts & Controls** shows the line, and can add it for you after backing up your config. Once niri gets the shortcut portal, Kimochi uses that instead.
 - **Settings → Text Hooker:** the card preview's game dialogue box now surrounds the card, as a game's would, instead of showing as a thin strip beside it.
 - 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.

@@ -665,6 +665,7 @@ dependencies = [
  "async-io",
  "block2",
  "futures-util",
+ "libloading",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
