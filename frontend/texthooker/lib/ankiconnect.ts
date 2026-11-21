@@ -84,12 +84,30 @@ export async function openInAnkiBrowser(url: string, query: string): Promise<voi
   await invoke<number[]>('anki_gui_browse', { url, query })
 }
 
-export async function storeMedia(url: string, filename: string, base64: string): Promise<void> {
-  await invoke<string>('anki_store_media_file', {
+/** Store a media file; resolves with the name it was stored under, which fields must use: Anki
+ *  keeps `filename` unless another file has it, and Manatan SRS converts and renames every file
+ *  (`a.mp3` becomes `mtn_<hash>.webm`). */
+export async function storeMedia(url: string, filename: string, base64: string): Promise<string> {
+  return invoke<string>('anki_store_media_file', {
     url,
     filename,
     dataBase64: base64
   })
+}
+
+/** The markers with each stored media file's sent name replaced by the name it was stored under
+ *  (`renamed`: sent → stored), wherever the markers name it (`[sound:…]`, `<img src="…">`). */
+export function withStoredMediaNames(markers: YomitanAnkiFields, renamed: Map<string, string>): YomitanAnkiFields {
+  const changes = [...renamed].filter(([sent, stored]) => sent && stored && sent !== stored)
+  if (changes.length === 0) return markers
+  const out: YomitanAnkiFields = { ...markers }
+  for (const [marker, value] of Object.entries(out)) {
+    if (typeof value !== 'string') continue
+    let next = value
+    for (const [sent, stored] of changes) next = next.split(sent).join(stored)
+    ;(out as Record<string, unknown>)[marker] = next
+  }
+  return out
 }
 
 /** Add a note. Returns { id, duplicate }. Catches the "duplicate" error and
@@ -243,18 +261,17 @@ function resolveFieldValue(mapping: AnkiFieldMapping, yomitan: YomitanAnkiFields
 export async function sendCardForTerm(opts: SendCardOpts): Promise<SendCardResult> {
   const { ankiUrl, deck, model, modelFields, mappings, tags, yomitan, sentence } = opts
   // Not one of /ankiFields' markers: the selection is the pop-up's, read as the card was added.
-  const markers: YomitanAnkiFields = {
+  const sentMarkers: YomitanAnkiFields = {
     ...yomitan.fields,
     [POPUP_SELECTION_MARKER]: selectionHtml(opts.popupSelectionText ?? '')
   }
 
-  // 1. Store any media bundled with the term.
-  for (const item of yomitan.audioMedia) {
-    await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64)
+  // 1. Store any media bundled with the term, and name each file in the fields as it was stored.
+  const renamed = new Map<string, string>()
+  for (const item of [...yomitan.audioMedia, ...yomitan.dictionaryMedia]) {
+    renamed.set(item.ankiFilename, await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64))
   }
-  for (const item of yomitan.dictionaryMedia) {
-    await storeMedia(ankiUrl, item.ankiFilename, item.contentBase64)
-  }
+  const markers = withStoredMediaNames(sentMarkers, renamed)
 
   // 2. Build the fields record. Skip Anki fields with no mapping (default empty).
   const fields: Record<string, string> = {}
