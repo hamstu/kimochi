@@ -12,6 +12,7 @@
  * for one, so every offset and box measured on the text still holds.
  */
 import { languageOf } from './languages.js'
+import { SCRIPT_PATTERNS } from './script-text.js'
 
 /** Each lookalike and the Latin letter it stands for: those drawn the same in common fonts. */
 const LOOKALIKES: Readonly<Record<string, string>> = {
@@ -67,35 +68,41 @@ const LOOKALIKES: Readonly<Record<string, string>> = {
   ο: 'o'
 }
 
-const LOOKALIKE = new RegExp(`[${Object.keys(LOOKALIKES).join('')}]`, 'u')
+const LOOKALIKE_CLASS = `[${Object.keys(LOOKALIKES).join('')}]`
+const LOOKALIKE = new RegExp(LOOKALIKE_CLASS, 'u')
+const EACH_LOOKALIKE = new RegExp(LOOKALIKE_CLASS, 'gu')
 /** A word: letters and their marks (an accent read as a mark of its own stays with its letter). */
 const WORD = /[\p{L}\p{M}]+/gu
-const LATIN_OR_MARK = /[\p{Script=Latin}\p{M}]/u
+const MARK = /\p{M}/u
 
 /** Whether every letter of `word` is Latin or a lookalike, and at least one is a lookalike. */
 function isLatinWithLookalikes(word: string): boolean {
   let found = false
   for (const c of word) {
     if (LOOKALIKES[c] !== undefined) found = true
-    else if (!LATIN_OR_MARK.test(c)) return false
+    else if (!SCRIPT_PATTERNS.Latn.test(c) && !MARK.test(c)) return false
   }
   return found
+}
+
+/** Whether `text` has any lookalike in it, in a word of any alphabet: the cheap test first. */
+export function hasLatinLookalike(text: string): boolean {
+  return LOOKALIKE.test(text)
 }
 
 /** `text` with the lookalikes in its Latin words put back. Unchanged when it has none. */
 export function restoreLatinLookalikes(text: string): string {
   if (!LOOKALIKE.test(text)) return text
   return text.replace(WORD, (word) =>
-    isLatinWithLookalikes(word) ? [...word].map((c) => LOOKALIKES[c] ?? c).join('') : word
+    isLatinWithLookalikes(word) ? word.replace(EACH_LOOKALIKE, (c) => LOOKALIKES[c]) : word
   )
 }
 
 /**
- * `restoreLatinLookalikes` for a language written only in the Latin alphabet (Spanish, French,
- * German…), or null for any other: Russian or Greek text is its own, and Serbo-Croatian is written
- * in both alphabets.
+ * Whether lookalikes are put back for `language`: one written only in the Latin alphabet (Spanish,
+ * French, German…). Russian or Greek text is its own, and Serbo-Croatian is written in both.
  */
-export function latinLookalikeFixer(language?: string): ((text: string) => string) | null {
+export function writtenOnlyInLatin(language?: string): boolean {
   const { scripts } = languageOf(language)
-  return scripts.length === 1 && scripts[0] === 'Latn' ? restoreLatinLookalikes : null
+  return scripts.length === 1 && scripts[0] === 'Latn'
 }

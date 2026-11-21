@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
-const { restoreLatinLookalikes, latinLookalikeFixer } = await load('latin-lookalikes.ts')
+const { restoreLatinLookalikes, writtenOnlyInLatin } = await load('latin-lookalikes.ts')
 const { normalizeOcrResult } = await load('ocr-result.ts')
 
 // Screen AI's misreads, as recorded: a Cyrillic а (U+0430) for the Latin a.
@@ -40,10 +40,11 @@ test('the length never changes, so every box and offset measured on the text sti
 })
 
 test('only languages written in the Latin alphabet alone are fixed', () => {
-  for (const code of ['es', 'en', 'fr', 'de', 'pt', 'pl', 'tr', 'vi']) assert.ok(latinLookalikeFixer(code), code)
+  for (const code of ['es', 'en', 'fr', 'de', 'pt', 'pl', 'tr', 'vi'])
+    assert.equal(writtenOnlyInLatin(code), true, code)
   // Russian and Greek are their own; Serbo-Croatian is written in both alphabets; Japanese (the
   // default for no language) has nothing to fix.
-  for (const code of ['ru', 'el', 'sh', 'ja', undefined]) assert.equal(latinLookalikeFixer(code), null, String(code))
+  for (const code of ['ru', 'el', 'sh', 'ja', undefined]) assert.equal(writtenOnlyInLatin(code), false, String(code))
 })
 
 test('an OCR result read in Spanish comes out with its lookalikes put back everywhere', () => {
