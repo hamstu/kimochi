@@ -152,7 +152,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const selecting = selection.active
   // New lines keep the Log at its end while the reader is at or near it (hooks/useLogFollow.ts);
   // picking rows holds it still, so nothing moves under the pointer.
-  const { scroll, following, setFollowing, toEnd, onScroll } = useLogFollow(
+  const { scroll, following, setFollowing, toEnd, settle, onScroll } = useLogFollow(
     '.log-lines',
     followThreshold(settings.fontSizePx),
     selecting
@@ -239,8 +239,8 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
       // Its lines are numbered afresh: an edit open in the last session is not one of them.
       stopEditing()
     }
-    toEnd()
-  }, [snap.lines.length, tailKey, snap.sessions.activeId, shown, setFollowing, toEnd])
+    settle()
+  }, [snap.lines.length, tailKey, snap.sessions.activeId, shown, setFollowing, settle])
   const changeFont = (delta: number) =>
     void updateSettings({
       fontSizePx: Math.max(12, Math.min(48, settings.fontSizePx + delta))

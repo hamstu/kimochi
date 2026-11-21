@@ -24,22 +24,27 @@ export function followThreshold(fontSizePx: number): number {
   return Math.max(80, Math.round(fontSizePx * 4))
 }
 
+/** How long after the reader's own wheel, touch, key or pointer a scroll counts as theirs. */
+export const USER_SCROLL_MS = 600
+
 /**
  * Whether the Log keeps following after the box scrolled to `m` from `previousTop`.
  *
- * Near the end it follows. Further away it stops only when the view moved up: the content growing
- * under a following view (a line taller once laid out, an image loading) leaves `scrollTop` where
- * it was, and that must not count as the reader scrolling away. A reader scrolled up who moves
- * down, but not yet near the end, stays unfollowed.
+ * Near the end it follows. Further away it stops only when the reader moved the view up
+ * (`byUser`: a wheel, touch, key or scrollbar drag just now). The layout moves it too, and that
+ * must not count: lines growing under a following view leave `scrollTop` where it was, and at the
+ * line limit the oldest row going makes the browser's scroll anchoring lower `scrollTop` by its
+ * height. A reader scrolled up who moves down, but not yet near the end, stays unfollowed.
  */
 export function followAfterScroll(
   m: ScrollMetrics,
   previousTop: number,
   following: boolean,
-  threshold: number
+  threshold: number,
+  byUser: boolean
 ): boolean {
   if (distanceFromBottom(m) <= threshold) return true
   // A pixel of slack: fractional scroll positions round differently between reads.
-  if (m.scrollTop < previousTop - 1) return false
+  if (byUser && m.scrollTop < previousTop - 1) return false
   return following
 }
