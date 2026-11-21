@@ -187,6 +187,34 @@ test('removing a preceding word preserves the remaining node and reindexes its i
   r.render(view([word('猫', 60)]))
   assert.notEqual(host.children[0], stable)
 })
+test('a box fades in once: after that, being moved never replays it, and a render does not cut it short', () => {
+  const host = element(),
+    r = new TextOverlayRenderer(host)
+  const faded = (box) => box.listeners.animationend({ target: box, animationName: 'ocr-appear' })
+  r.render(view([word('猫', 60), word('犬', 120)]))
+  const [cat, dog] = host.children
+  // Drawn again straight away (Auto OCR redraws several times a second): still fading in, so the
+  // fade runs on rather than stopping (`[data-settled]` would end it, overlay-text.css).
+  r.render(view([word('猫', 60), word('犬', 120)]))
+  assert.ok(!('settled' in cat.dataset) && !('settled' in dog.dataset))
+  // Its fade done, a box is settled.
+  faded(cat)
+  faded(dog)
+  assert.ok('settled' in cat.dataset && 'settled' in dog.dataset)
+  // A box comes in ahead of them (an icon read as text) and goes again: they move, and stay settled.
+  r.render(view([word('i', 0), word('猫', 60), word('犬', 120)]))
+  const icon = host.children[0]
+  assert.deepEqual(host.children, [icon, cat, dog])
+  assert.ok(!('settled' in icon.dataset), 'the new box fades in')
+  r.render(view([word('猫', 60), word('犬', 120)]))
+  assert.deepEqual(host.children, [cat, dog])
+  assert.ok('settled' in cat.dataset && 'settled' in dog.dataset)
+  // Another animation ending inside the box says nothing about its own.
+  r.render(view([word('i', 0), word('猫', 60), word('犬', 120)]))
+  host.children[0].listeners.animationend({ target: {}, animationName: 'ocr-appear' })
+  assert.ok(!('settled' in host.children[0].dataset))
+  r.clear()
+})
 test('moving the selected source updates actual word placement rather than caching stale coordinates', () => {
   const host = element(),
     r = new TextOverlayRenderer(host)
