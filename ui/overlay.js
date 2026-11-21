@@ -815,6 +815,8 @@ controller = createController({
       textVisible: overlayTextOn(),
       origin,
       area,
+      // Read along's bar stays inside a full-screen source: there's no desktop around it.
+      fullscreen: Boolean(state.sourceWindow?.fullscreen),
       scanId: state.appliedScanId,
       center: nativeGamescope
         ? gamescopeMenuCenter
@@ -855,6 +857,8 @@ controller = createController({
     return false
   },
   popupControl: (control) => controlPopup(control),
+  // Settings → Overlay → Read along bar (ui/read-along-bar.js).
+  barSettings: () => setting('readAlongBar'),
   // Whose popup buttons the controller can focus and press: Yomitan's and Hachidori's.
   popupFocusable: () =>
     extensionHosted

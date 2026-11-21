@@ -44,6 +44,9 @@ pub fn defaults() -> Value {
         // How Read along shows the dictionary: "popup" or "fullscreen" (any engine;
         // ui/game-dictionary.js).
         "gameModeSettings": { "dictionaryView": "popup" },
+        // Read along's control bar: shown, its position counter, and which hints ("all",
+        // "basic" or "none"; ui/read-along-bar.js).
+        "readAlongBar": { "shown": true, "counter": true, "hints": "all" },
         "autoOCRSettings": {
             "pollInterval": 2000,
             "imageHashThreshold": 5,

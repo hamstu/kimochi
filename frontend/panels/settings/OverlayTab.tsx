@@ -4,7 +4,7 @@
  * looks (`OverlayLook`, and the dictionary pop-up's opacity, `DictionaryOpacityRow`), the Text Hooker's card as it looks over
  * a game, set in Settings → Text Hooker (`TextHookerCardSection`, Windows and Linux), the radial menu
  * (`RadialMenuSection`, as in Shortcuts & Controls), and Game Mode, how Read along shows the dictionary
- * (`GameModeSection`). Choosing the OCR engine and Auto OCR are on Settings → OCR.
+ * (`GameModeSection`), and Read along's control bar (`ReadAlongBarSection`). Choosing the OCR engine and Auto OCR are on Settings → OCR.
  */
 import type { ReactNode } from 'react'
 import { SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
@@ -16,6 +16,7 @@ import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
 import { GameModeSection } from './GameModeSection'
+import { ReadAlongBarSection } from './ReadAlongBarSection'
 import { TextHookerCardSection } from './TextHookerCardSection'
 import { GamePauseRow } from './GamePauseRow'
 import { GameCursorRow } from './GameCursorRow'
@@ -142,6 +143,8 @@ export function OverlayTab(): ReactNode {
       <RadialMenuSection withShortcut />
 
       <GameModeSection />
+
+      <ReadAlongBarSection />
     </SettingsPage>
   )
 }

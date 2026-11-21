@@ -351,6 +351,22 @@ export interface GameModeSettings {
 export const DEFAULT_GAME_MODE_SETTINGS: GameModeSettings = { dictionaryView: 'popup' }
 
 /**
+ * Read along's control bar (Settings → Overlay → Read along bar, ui/read-along-bar.js): whether it
+ * shows, the position counter ("9 / 13"), and which shortcut hints: every one, the basics
+ * (stepping, looking up, going back), or none.
+ */
+export type ReadAlongBarHints = 'all' | 'basic' | 'none'
+
+export interface ReadAlongBarSettings {
+  shown: boolean
+  counter: boolean
+  hints: ReadAlongBarHints
+}
+
+/** The same as `READ_ALONG_BAR_DEFAULTS` in ui/read-along-bar.js. */
+export const DEFAULT_READ_ALONG_BAR: ReadAlongBarSettings = { shown: true, counter: true, hints: 'all' }
+
+/**
  * Whether Read along opens the full-screen dictionary: Settings → Overlay → Game Mode says so, whichever
  * engine is in use (it once also needed the Yomitan API; a caller still passing the engine as a
  * second argument from plain JS is unaffected).
@@ -411,6 +427,7 @@ export interface Settings {
   }
   controllerButtons: ControllerButtons
   gameModeSettings: GameModeSettings
+  readAlongBar: ReadAlongBarSettings
   yomitanSettings: {
     /** Which dictionary engine; see `DICTIONARY_ENGINES`. `'builtin'` is Yomitan. */
     popupType: PopupType
@@ -511,6 +528,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   gamepadSettings: { enabled: true, preferredGamepadIndex: undefined },
   controllerButtons: DEFAULT_CONTROLLER_BUTTONS,
   gameModeSettings: DEFAULT_GAME_MODE_SETTINGS,
+  readAlongBar: DEFAULT_READ_ALONG_BAR,
   yomitanSettings: { popupType: 'builtin', customApiUrl: '' },
   ocrMode: 'googlelens',
   scannedTextHistory: [],

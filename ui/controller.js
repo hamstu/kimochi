@@ -48,6 +48,7 @@ import { ControllerCard, nextLook, stepValue, CARD_LOOKS, hookSummary, threadCho
 import { stickTravel } from './region-select.js'
 import { GameDictionary } from './game-dictionary.js'
 import { sectionText } from './log-sections.js'
+import { barHints, placeBar, readAlongBarSettings } from './read-along-bar.js'
 
 /** How long the full-screen dictionary waits for an engine's pop-up before saying there is no entry. */
 const POPUP_WAIT_MS = 1500
@@ -115,7 +116,7 @@ export function scrollSpeed(y) {
  * @param {HTMLElement} context.host where the menu and the word cursor are drawn
  * @param {HTMLElement} context.words the text overlay's container, whose boxes hold the scan's text
  * @param {typeof import('./native.js')} context.native
- * @param {() => {hasText: boolean, autoOcr: boolean, autoAvailable: boolean, textVisible: boolean, center: {x: number, y: number}|null, area: {x: number, y: number, width: number, height: number}|null, origin: {x: number, y: number}|null}} context.status
+ * @param {() => {hasText: boolean, autoOcr: boolean, autoAvailable: boolean, textVisible: boolean, center: {x: number, y: number}|null, area: {x: number, y: number, width: number, height: number}|null, origin: {x: number, y: number}|null, fullscreen?: boolean}} context.status
  * @param {(id: 'auto'|'pause'|'pause-scan'|'pause-read-along'|'controls'|'ocr-settings') => void} context.run carries out a menu action
  * @param {() => Promise<boolean>} context.scan scan the source, resolving once its text is applied;
  *   true when the text drawn is current even if no new scan was applied (automatic OCR caught up)
@@ -125,6 +126,8 @@ export function scrollSpeed(y) {
  *   ui/popup-focus.js), answering whether the focus request did anything
  * @param {() => boolean} [context.popupFocusable] whether the engine's popup has buttons the
  *   controller can focus (Yomitan, Hachidori; not 10ten or the Yomitan API pop-up)
+ * @param {() => unknown} [context.barSettings] Read along's bar as Settings → Overlay → Read along bar
+ *   has it (`readAlongBar`, ui/read-along-bar.js); status's `fullscreen` keeps it inside the source
  * @param {() => void} context.redraw redraw the text overlay (it is held visible in word mode)
  * @param {object} [context.card] the Text Hooker card (ui/overlay.js): `state()` →
  *   `{shown, autoAlign, opacity, fontPx, look, box}`, `opacities`, and the setters `setShown`,
@@ -1216,7 +1219,7 @@ export function createController(context) {
       unit
     })
     if (!cursor.current) {
-      showHud('No words found in the last scan')
+      showHud('No words found in the last scan', { notice: true })
       return
     }
     render()
@@ -1649,60 +1652,96 @@ export function createController(context) {
     return unit === 'word' ? 'Word' : 'Character'
   }
 
-  function showHud(message) {
+  /**
+   * The line being read, one rectangle per piece (overlay coordinates), with the word's own
+   * outline: what the bar must stay off (ui/read-along-bar.js `placeBar`).
+   */
+  function readLineRects() {
+    const word = cursor?.current
+    if (!word) return []
+    const line = cursor.lines[word.line]
+    const rects = segments.map((segment) => segment.getBoundingClientRect())
+    if (line && line.end > line.start) {
+      const range = spanRange(line.unit, line.start, line.end - line.start)
+      if (range) rects.push(...wordSegments({ unit: line.unit, start: line.start, end: line.end }, range))
+    }
+    return rects.filter((rect) => rect && rect.width > 0 && rect.height > 0)
+  }
+
+  /**
+   * The bar along the text while reading: what the reader is doing, where they are, and the
+   * buttons (as Settings → Overlay → Read along bar has it). Off, only `notice`s show: something
+   * the reader has to know because nothing else happened (no words, no entry).
+   */
+  function showHud(message, { notice = false } = {}) {
+    const bar = readAlongBarSettings(context.barSettings?.())
+    if (!bar.shown && !notice) {
+      hud?.remove()
+      hud = null
+      return
+    }
     if (!hud) {
       hud = document.createElement('div')
       hud.className = 'cm-hud'
       host.append(hud)
     }
-    // Along the bottom of the source, clear of the text more often than not; the bottom of the
-    // display when the source's position is unknown.
-    const { area } = context.status()
-    if (area) {
-      hud.style.left = `${area.x + area.width / 2}px`
-      hud.style.top = `${Math.min(area.y + area.height, window.innerHeight) - 64}px`
-      hud.style.bottom = 'auto'
-    }
     const keys = input === 'keys'
     const dirs = directionGlyphs()
     const vertical = cursor?.vertical
-    const count = cursor?.current ? `${cursor.index + 1} / ${cursor.words.length}` : ''
+    const count = bar.counter && cursor?.current ? `${cursor.index + 1} / ${cursor.words.length}` : ''
     const back = historical ? 'Recent text' : 'Back'
+    // Basic: stepping, looking up and going back, kept when the setting says only those.
+    const basic = (glyph, label, tone) => ({ html: hint(glyph, label, tone), basic: true })
+    const extra = (glyph, label, tone) => ({ html: hint(glyph, label, tone), basic: false })
     let hints
     if (layer === 'popup') {
       hints = keys
-        ? hint(dirs.all, 'Choose') + hint('return', 'Press', 'confirm') + hint('esc', 'Back to text', 'cancel')
-        : hint(dirs.all, 'Choose') +
-          hint(glyphOf('confirm'), 'Press', 'confirm') +
-          hint(glyphOf('playAudio'), 'Audio') +
-          hint([glyphOf('previousDefinition'), glyphOf('nextDefinition')].filter(Boolean).join(' '), 'Entry') +
-          hint(glyphOf('back'), 'Back to text', 'cancel')
+        ? [basic(dirs.all, 'Choose'), basic('return', 'Press', 'confirm'), basic('esc', 'Back to text', 'cancel')]
+        : [
+            basic(dirs.all, 'Choose'),
+            basic(glyphOf('confirm'), 'Press', 'confirm'),
+            extra(glyphOf('playAudio'), 'Audio'),
+            extra([glyphOf('previousDefinition'), glyphOf('nextDefinition')].filter(Boolean).join(' '), 'Entry'),
+            basic(glyphOf('back'), 'Back to text', 'cancel')
+          ]
     } else {
       const other = unit === 'word' ? 'By character' : 'By word'
       const select = context.popupFocusable?.() ? 'Pop-up' : 'Look up'
+      const steps = [
+        basic(dirs.along, unit === 'word' ? 'Word' : 'Character'),
+        basic(dirs.across, vertical ? 'Column' : 'Line')
+      ]
       hints = keys
-        ? hint(dirs.along, unit === 'word' ? 'Word' : 'Character') +
-          hint(dirs.across, vertical ? 'Column' : 'Line') +
-          hint('return', select, 'confirm') +
-          hint('space', other) +
-          hint('esc', back, 'cancel')
-        : (pointer.active
-            ? hint('LS', 'Point') + hint('D-pad', 'Step from here')
-            : hint(dirs.along, unit === 'word' ? 'Word' : 'Character') +
-              hint(dirs.across, vertical ? 'Column' : 'Line')) +
-          hint(glyphOf('confirm'), select, 'confirm') +
-          hint(glyphOf('toggleUnit'), other) +
-          hint(glyphOf('showControls'), 'Controls') +
-          hint(glyphOf('back'), back, 'cancel')
+        ? [...steps, basic('return', select, 'confirm'), extra('space', other), basic('esc', back, 'cancel')]
+        : [
+            ...(pointer.active ? [basic('LS', 'Point'), basic('D-pad', 'Step from here')] : steps),
+            basic(glyphOf('confirm'), select, 'confirm'),
+            extra(glyphOf('toggleUnit'), other),
+            extra(glyphOf('showControls'), 'Controls'),
+            basic(glyphOf('back'), back, 'cancel')
+          ]
     }
     hud.innerHTML = `
       <span class="cm-hud-mark">${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.dictionary + '</svg>'}</span>
       <span class="cm-hud-mode" data-mode="${layer === 'popup' ? 'popup' : pointer.active ? 'pointer' : unit}"></span>
       <span class="cm-hud-message"></span>
-      ${hints}`
+      ${barHints(hints, bar.hints)}`
     hud.querySelector('.cm-hud-mode').textContent = modeLabel()
     hud.querySelector('.cm-hud-message').textContent = message ?? count
     hud.classList.toggle('cm-hud-away', driver === 'mouse')
+    // Outside a window source where there is room, inside a full-screen one; never on the line.
+    const status = context.status()
+    const place = placeBar({
+      view: { width: window.innerWidth, height: window.innerHeight },
+      area: status.area,
+      fullscreen: Boolean(status.fullscreen),
+      size: { width: hud.offsetWidth, height: hud.offsetHeight },
+      avoid: readLineRects()
+    })
+    hud.style.left = `${place.x}px`
+    hud.style.top = `${place.y}px`
+    hud.style.bottom = 'auto'
+    hud.dataset.edge = place.edge
   }
 
   /** Every control while reading, with the buttons as they are bound now. */
@@ -1808,7 +1847,7 @@ export function createController(context) {
         void fitToMatch(word)
         return
       }
-      if (result.length === 0) return void showHud(`No entry for ${word.text}`)
+      if (result.length === 0) return void showHud(`No entry for ${word.text}`, { notice: true })
       showHud(null)
       // How much matched isn't known (10ten answering from its cache, Hachidori's answer lost):
       // what the engine marked on the page says, once its pop-up is drawn.
