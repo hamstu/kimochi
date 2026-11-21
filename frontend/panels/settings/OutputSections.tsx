@@ -1,20 +1,32 @@
 import { Input, SettingsRow, SettingsSection, SettingsSubgroup, Switch } from '@kit'
 import { useSetting } from '../../bridge/useSetting'
-import type { TexthookerSettings } from '../../vendor/shared-types'
+import type { Settings } from '../../bridge/settings'
 /** Existing Kimochi output bridges remain opt-in; intake no longer depends on either. */
 export function OutputSections() {
-  const [settings, save] = useSetting<TexthookerSettings>('texthookerSettings', {
+  const [settings, save] = useSetting<Settings['texthookerSettings']>('texthookerSettings', {
     copyToClipboard: false,
+    copyHookedLines: false,
     sendToWebSocket: false,
     webSocketUrl: 'ws://localhost:6677'
   })
   return (
-    <SettingsSection title="Output" description="Send OCR scans to other tools.">
+    <SettingsSection title="Output" description="Send OCR scans and hooked lines to other tools.">
       <SettingsRow label="Copy scans to clipboard" controlId="texthooker-out-clipboard">
         <Switch
           id="texthooker-out-clipboard"
           checked={settings.copyToClipboard}
           onCheckedChange={(value) => void save({ ...settings, copyToClipboard: value })}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Copy hooked lines to clipboard"
+        description="Each new line from the Text Hooker, after the Log's line filter and duplicate check."
+        controlId="texthooker-out-hook-clipboard"
+      >
+        <Switch
+          id="texthooker-out-hook-clipboard"
+          checked={settings.copyHookedLines}
+          onCheckedChange={(value) => void save({ ...settings, copyHookedLines: value })}
         />
       </SettingsRow>
       <SettingsRow label="Send scans over WebSocket" controlId="texthooker-out-ws">

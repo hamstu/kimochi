@@ -15,6 +15,7 @@ import { countWords } from './wordCount'
 import { countChars } from './charCount'
 import { getManifest } from './sessions'
 import { acceptsInput } from '../input-source'
+import { copyHookedLine } from './hookClipboard'
 import type { Line, LineSource } from '@texthooker/lib/types'
 
 /** A line's words for the stats, in a language that spaces them; undefined otherwise (Japanese
@@ -61,7 +62,8 @@ export function preparedText(text: string): string | null {
  *   7. a line that replaces the last (`replaces`, its ingest id), or start-merge if enabled and
  *      prefix matches → replace last line
  *   8. drop if duplicate within last N
- *   9. append + stats
+ *   9. append + stats; a hooked line (new, or the last one carried on) goes to the clipboard
+ *      when Copy hooked lines to clipboard is on (core/hookClipboard.ts)
  *  10. tokenize with stale-text guard
  */
 export const ingestText = async (
@@ -90,6 +92,7 @@ export const ingestText = async (
     const merged = replaceLastLineText(value)
     if (merged && ingestId) merged.ingestIds = [...(merged.ingestIds || []), ingestId]
     recordCharDelta(countChars(value) - countChars(prev), wordDelta(prev, value))
+    if (merged && source === 'hook') copyHookedLine(merged.text)
     return
   }
 
@@ -101,6 +104,7 @@ export const ingestText = async (
       const merged = replaceLastLineText(value)
       if (merged && ingestId) merged.ingestIds = [...(merged.ingestIds || []), ingestId]
       recordCharDelta(countChars(value) - countChars(prev), wordDelta(prev, value))
+      if (merged && source === 'hook') copyHookedLine(merged.text)
       return
     }
   }
@@ -113,4 +117,5 @@ export const ingestText = async (
   if (!line) return
   if (ingestId) line.ingestIds = [ingestId]
   recordLine(countChars(value), words(value), activeSession())
+  if (source === 'hook') copyHookedLine(line.text)
 }

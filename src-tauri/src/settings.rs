@@ -59,6 +59,7 @@ pub fn defaults() -> Value {
         },
         "texthookerSettings": {
             "copyToClipboard": false,
+            "copyHookedLines": false,
             "sendToWebSocket": false,
             "webSocketUrl": "ws://localhost:6677"
         },
