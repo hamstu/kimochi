@@ -106,6 +106,10 @@ export function useLogFollow(contentSelector: string, threshold: number, held: b
           el.scrollTop += shift
           lastTop.current = el.scrollTop
         }
+        // The same row at the same place: `scrollTop` lands on whole device pixels, so measuring
+        // afresh would add the rounding up over many lines.
+        anchor.current = { ...a, top: el.scrollTop }
+        return
       }
     }
     remember()
@@ -117,7 +121,8 @@ export function useLogFollow(contentSelector: string, threshold: number, held: b
     const byUser = pointerHeld.current || performance.now() - userAt.current < USER_SCROLL_MS
     follow.current = followAfterScroll(el, lastTop.current, follow.current, thresholdRef.current, byUser)
     lastTop.current = el.scrollTop
-    remember()
+    // The scroll was ours, keeping the remembered row in place: it is still where it was.
+    if (anchor.current?.top !== el.scrollTop) remember()
   }, [remember])
 
   useEffect(() => {
