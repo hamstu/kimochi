@@ -49,6 +49,8 @@
  *                    cloud (default), local, forced (local, pinned by KIMOCHI_SERVER)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
+ *   ?select=<state>  main window: the Log's selection mode (#277): one (Select just chosen on a
+ *                    line), several (three lines and a note of the person's, added for it)
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
  *                    paused, failed, verifying, ready; updating, update-failed (after an app update)
  *   ?model=<state>   OCR model downloads (preview-models.ts)
@@ -1521,6 +1523,30 @@ function installIpc(label: string): void {
 let scriptStopped = false
 
 /** `?activity=1`: what the overlay and native post during a few scans, on a loop. */
+/**
+ * `?select=`: the Log in selection mode, once its lines are in (lib/logSelection.ts). `several`
+ * writes a note of the person's at the end first, so a note is among what is selected.
+ */
+async function previewSelection(state: 'one' | 'several'): Promise<void> {
+  const ready = (): boolean => Boolean(document.querySelector('.log-lines [data-line-id]'))
+  for (let tries = 0; !ready() && tries < 100; tries++) await new Promise((resolve) => setTimeout(resolve, 100))
+  if (!ready()) return
+  const [{ addNote, snapshotLines }, selection] = await Promise.all([
+    import('../texthooker/lib/store'),
+    import('../texthooker/lib/logSelection')
+  ])
+  if (state === 'several') await addNote('Menu screen junk from here down: delete it.')
+  const lines = snapshotLines()
+  const last = lines.at(-1)
+  if (!last) return
+  if (state === 'one') return selection.startSelecting(lines.at(-3) ?? last)
+  selection.startSelecting(lines.at(-6) ?? last)
+  let next = selection.currentSelection()
+  for (const line of [lines.at(-4), lines.at(-3), last])
+    if (line) next = selection.toggle(next, selection.lineKey(line))
+  selection.setSelection(next)
+}
+
 function playActivity(): void {
   type Step = [delayMs: number, text: string, tone: string, key?: string]
   const steps: Step[] = [
@@ -2003,6 +2029,8 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   syncDictionaryEngine()
   if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed, noLines: params.get('lines') === '0' })
   if (params.get('activity') === '1') playActivity()
+  const select = params.get('select')
+  if (page === 'panel' && (select === 'one' || select === 'several')) void previewSelection(select)
 
   // The Log window is the texthooker host (sole owner of session files). Every other window that
   // reads reader data is a client of it over events, so run a host in-page for those windows.

@@ -381,6 +381,14 @@ const MAIN: Surface = {
           on: '1',
           help: 'A scripted run of scans on the activity ticker.'
         },
+        {
+          kind: 'select',
+          param: 'select',
+          label: 'Selection mode',
+          default: 'none',
+          options: opts(['none', 'Off'], ['one', 'Just started (one line)'], ['several', 'Lines and a note']),
+          help: 'Select, from a line’s menu (#277): checkboxes on every row, and the bar in the ticker’s place.'
+        },
         { kind: 'toggle', param: 'sidebar', label: 'Sidebar', on: '1', off: '0', default: true },
         {
           kind: 'select',

@@ -22,15 +22,17 @@ import { useRowHotkeys } from './useRowHotkeys'
  *   e — edit its text
  *   d — delete it
  *
- * A note (Add a note) takes c, e and d. A, anywhere in the Log, starts a new note (`useAddNoteHotkey`).
+ * Not in selection mode (`enabled` false). A note (Add a note) takes c, e and d. A, anywhere in the Log, starts a new note (`useAddNoteHotkey`).
  */
-export function useLineHotkeys() {
+export function useLineHotkeys(enabled = true) {
   // Read aloud and Kimochi's explanations run on Kimochi cloud, as in the menu.
   const { cloudAccess } = useCapabilities()
   const [language] = useLanguage()
   const onLine =
     (action: (line: Line) => void, notes = true) =>
     (row: HTMLElement) => {
+      // Off in selection mode: rows are picked there, not acted on one by one.
+      if (!enabled) return
       const id = Number(row.dataset.lineId)
       const line = snapshotLines().find((l) => l.id === id)
       // A note is not read aloud, translated or explained (its menu has no such items).

@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - ⏸️ **Pause game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again, Escape or B on your controller to carry on. **Pause & scan** and **Pause & read along** pause the game and then scan it or step through its text, in one press. Give them a key or controller button in Settings → Shortcuts & Controls, or add them to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
 - 🖱️ **Keep the mouse cursor visible in games** (opt-in, Windows, Settings → Overlay). Some games hide the mouse pointer even while you move it, so you can't see what you're pointing at for a lookup. With this on, Kimochi makes the pointer show whenever you move the mouse in the game you've selected, with no other software and no changes to the game. Games that hide a resting pointer still do. Don't use it with online games that use anti-cheat.
+- ☑️ **Select several Log lines at once.** Right-click a line (or open its ⋯ menu) and choose **Select**: every line and note gets a checkbox, and the bar at the bottom of the Log shows how many you've picked. Click lines to add or remove them, or Shift+click to select a whole range, then **Copy text** or **Delete** them all at once. Handy for clearing out junk lines from OCR or a texthooker. Dictionary lookups are off while you select; press **Done** or Escape to go back.
 
 ### Fixed
 

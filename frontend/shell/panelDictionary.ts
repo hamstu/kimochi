@@ -51,6 +51,27 @@ interface PanelDictionary {
 }
 
 let relay: Promise<PanelDictionary> | null = null
+/** What the window asked for (`usePanelDictionary`), and whether something holds lookups off. */
+let wanted = true
+let suppressed = false
+
+/** Tells the engine whether it may look anything up now: wanted, and not held off. */
+function applyEnabled(): void {
+  const on = wanted && !suppressed
+  if (relay) void relay.then((module) => module.setEmbeddedEnabled(on)).catch(() => undefined)
+}
+
+/**
+ * Holds every lookup in this window off (the Log's selection mode), or lets them run again as the
+ * window had them. Off, the engine looks nothing up: not under the pointer (hover, the lookup key,
+ * a mouse button), and not for the controller (`lookupRange`), and its pop-up closes (the
+ * extension host dismisses it; Yomitan's frontend hides its own once disabled).
+ */
+export function suppressPanelLookups(off: boolean): void {
+  if (off === suppressed) return
+  suppressed = off
+  applyEnabled()
+}
 
 /** The transcript lines, which are all a content script may scan in the Log. */
 const SCAN_SCOPE = '[data-yomitan-scan]'
@@ -154,7 +175,8 @@ export function usePanelDictionary(enabled = true): LookupState {
   })
 
   useEffect(() => {
-    if (relay) void relay.then((module) => module.setEmbeddedEnabled(enabled)).catch(() => undefined)
+    wanted = enabled
+    applyEnabled()
     if (!enabled) return
     let live = true
     let retry: ReturnType<typeof setTimeout> | undefined
