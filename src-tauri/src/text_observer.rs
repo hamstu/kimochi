@@ -548,7 +548,7 @@ impl EngineObserver {
             |app| {
                 Box::new(move |Request { image, .. }| -> Answer {
                     let started = Instant::now();
-                    let result = crate::screen_ai::recognize_rgb(&app, &image).map_err(Failure::Inference)?;
+                    let result = crate::screen_ai::recognize_rgb(&app, image).map_err(Failure::Inference)?;
                     Ok(Read {
                         lines: line_annotation_lines(&result),
                         duration_ms: started.elapsed().as_secs_f64() * 1000.0,
