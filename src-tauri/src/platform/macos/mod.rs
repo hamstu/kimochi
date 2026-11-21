@@ -1232,6 +1232,35 @@ pub fn window_fullscreen(id: &SourceId) -> Option<bool> {
     focus::is_full_screen(i32::try_from(pid).ok()?, number)
 }
 
+/// Window source `id`'s frame as ScreenCaptureKit captures it (`SCWindow.frame`, which is
+/// `kCGWindowBounds`: the title bar included) and its content area below the title bar, in
+/// desktop points. macOS says nothing about another application's title bar without
+/// Accessibility, so this needs it: the title bar is as tall as the window's close button sits
+/// centred in (`window_content::title_bar_height`), which follows the window's style (a plain
+/// title bar, a unified toolbar) and the macOS version. A full-screen window, or one without a
+/// close button (borderless), is all content. `None` without Accessibility, or when the window
+/// has no element: the whole window is read, as before.
+pub fn window_content(id: &SourceId) -> Option<(Rect, Rect)> {
+    if !id.is_window() || !id.is_local() {
+        return None;
+    }
+    let (number, pid) = (id.handle_u32()?, id.pid()?);
+    // Accessibility waits on the app (up to 0.5 s): never on a paused game.
+    if crate::game_pause::app::holds_pid(pid) {
+        return None;
+    }
+    let (frame, _) = window_bounds(id)?;
+    if window_fullscreen(id) == Some(true) {
+        return Some((frame, frame));
+    }
+    let bar = focus::title_bar(i32::try_from(pid).ok()?, number)?;
+    let height = match bar.close {
+        Some(close) => crate::window_content::title_bar_height(bar.window, close)?,
+        None => 0.,
+    };
+    Some((frame, Rect { y: frame.y + height, height: frame.height - height, ..frame }))
+}
+
 /// Bring window source `id` to the front: that window, not just its application, switching to
 /// its Space when it is on another (a full-screen app). Falls back to activating the whole application.
 /// Main thread.

@@ -78,6 +78,7 @@ mod updater;
 mod vitals;
 mod vocr;
 mod webview_scale;
+mod window_content;
 
 use kimochi_capture::*;
 use serde::{Deserialize, Serialize};
@@ -5216,6 +5217,10 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             // read with the same crop, and the text on screen still belongs to it.
             let shape_fullscreen = state.fullscreen && !state.scaled;
             let was_fullscreen = service.source_fullscreen.swap(shape_fullscreen, Ordering::Relaxed);
+            // Its new shape's crop was never saved: it starts at the content area (#235).
+            if was_fullscreen != shape_fullscreen && sources::adopt_content_crop(&service, &source_id) {
+                record(&handle, &service, json!({ "check": "source-content-crop", "fullscreen": shape_fullscreen }));
+            }
             compact::observe_source(&handle, &service, &source_id, &state);
             if previous.is_some_and(|p| p.scaled != state.scaled) {
                 record(

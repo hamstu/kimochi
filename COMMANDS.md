@@ -341,6 +341,13 @@ It persists `cropRegions`, `cropScanEnabled` and `lastSelectedSource` in **one s
 transaction**, keyed per source descriptor — application name, then window title, then
 normalised kind. It invalidates the previous scan when the source changes **or when the
 crop changes on the same source**, since the old text no longer matches the new region.
+With `keepCrop: true` (and `kimochi source`, and the startup restore in Gaming Mode) a window
+whose descriptor has **neither a `cropRegions` nor a `cropScanEnabled` entry** starts at its
+content area, without its title bar and frame (`window_content.rs`, #235; Windows, and macOS
+with Accessibility), and that crop is saved like any other. Clearing a crop (`crop: null`,
+`keepCrop: false`) removes the `cropRegions` entry and leaves `cropScanEnabled: false`, so the
+window stays whole; `keepCrop: true` with nothing to keep writes neither. The same applies when
+the selected window goes full screen or comes back and its new shape has neither entry yet.
 
 `commit_anki_crop` saves (or, with `null`, clears) a source's **Anki crop**: the part of it
 that goes on Anki cards as the screenshot, the whole source when there is none. It is

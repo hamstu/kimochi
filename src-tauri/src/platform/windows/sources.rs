@@ -6,12 +6,14 @@ use super::{hwnd_from, monitors, process_name, rules, window_pid, window_text};
 use kimochi_capture::{Platform, Rect, Source, SourceId};
 use std::collections::HashMap;
 use windows::core::BOOL;
-use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+use windows::Win32::Graphics::Gdi::{
+    ClientToScreen, GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowRect, IsIconic,
-    IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, WS_CAPTION,
+    EnumWindows, GetAncestor, GetClassNameW, GetClientRect, GetForegroundWindow, GetWindow, GetWindowLongW,
+    GetWindowRect, IsIconic, IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, WS_CAPTION,
 };
 
 /// Every top-level window, front to back (`EnumWindows` order is z-order).
@@ -208,6 +210,31 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
         rect.height,
     );
     Some((shown_rect(hwnd, rect), shown))
+}
+
+/// Window source `id`'s frame as it is captured (`DWMWA_EXTENDED_FRAME_BOUNDS`, which is what a
+/// window's frame is cut to) and its client area (`GetClientRect` + `ClientToScreen`: no title
+/// bar, menu bar or frame), both in physical virtual-screen pixels, which is what a Per-Monitor-V2
+/// process (the app, under tao) is given whatever the window's own DPI awareness. The window
+/// itself, not the Magpie picture of it: a crop is relative to the window's frame. `None` when
+/// the window is gone or minimised.
+pub fn window_content(id: &SourceId) -> Option<(Rect, Rect)> {
+    let hwnd = resolve(id)?;
+    if unsafe { IsIconic(hwnd) }.as_bool() {
+        return None;
+    }
+    let frame = frame_bounds(hwnd)?;
+    let mut client = RECT::default();
+    unsafe { GetClientRect(hwnd, &mut client) }.ok()?;
+    let mut top_left = POINT { x: client.left, y: client.top };
+    let mut bottom_right = POINT { x: client.right, y: client.bottom };
+    if !unsafe { ClientToScreen(hwnd, &mut top_left) }.as_bool()
+        || !unsafe { ClientToScreen(hwnd, &mut bottom_right) }.as_bool()
+    {
+        return None;
+    }
+    let content = RECT { left: top_left.x, top: top_left.y, right: bottom_right.x, bottom: bottom_right.y };
+    Some((frame, super::rect_of(content)))
 }
 
 /// Where the reader sees `rect` of window `hwnd`: the rectangle itself, or, while Magpie scales the
