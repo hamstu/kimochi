@@ -6,6 +6,9 @@ export const clearLines = (
 export const deleteLine = (
   ...args: Parameters<typeof Core.deleteLine>
 ): Promise<Awaited<ReturnType<typeof Core.deleteLine>>> => call('store', 'deleteLine', args)
+export const deleteLines = (
+  ...args: Parameters<typeof Core.deleteLines>
+): Promise<Awaited<ReturnType<typeof Core.deleteLines>>> => call('store', 'deleteLines', args)
 export const setLineTranslation = (
   ...args: Parameters<typeof Core.setLineTranslation>
 ): Promise<Awaited<ReturnType<typeof Core.setLineTranslation>>> => call('store', 'setLineTranslation', args)

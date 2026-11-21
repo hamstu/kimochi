@@ -481,6 +481,44 @@ test('lines carry uids for Sync, old lines get the same uid Rust derives, and de
   assert.equal(file.lines[0].uid, fresh.uid, 'uids are written to the file')
 })
 
+test('deleting a selection removes its lines and notes in one go, for Sync and the history too', async () => {
+  const h = await harness({
+    superTexthooker: { inputSource: 'clipboard', autoMatchSource: false, japaneseFilter: 'off' }
+  })
+  await h.call('host', 'ingest', ['一行目', 'clipboard'])
+  await h.call('store', 'addNote', ['my note'])
+  await h.call('host', 'ingest', ['二行目', 'clipboard'])
+  await h.call('host', 'ingest', ['三行目', 'clipboard'])
+  const [one, note, two, three] = h.snapshot().lines
+  const writes = h.history.length
+  await h.call('store', 'deleteLines', [[note.id, three.id, one.id, 999]])
+  assert.deepEqual(
+    h.snapshot().lines.map((l) => l.text),
+    ['二行目'],
+    'the other windows are sent the Log without them'
+  )
+  const file = linesFile(h, h.snapshot().sessions.activeId)
+  assert.deepEqual(
+    file.lines.map((l) => l.uid),
+    [two.uid]
+  )
+  assert.deepEqual(
+    file.deleted.map((d) => d.uid),
+    [one.uid, note.uid, three.uid],
+    'Sync deletes each of them everywhere, in the order they were in the Log'
+  )
+  assert.deepEqual(
+    h.history.slice(writes).map((e) => [e.op, e.uid]),
+    [
+      ['delete', one.uid],
+      ['delete', three.uid]
+    ],
+    'the lines leave the reading history; the note was never in it'
+  )
+  await h.call('store', 'deleteLines', [[]])
+  assert.equal(h.snapshot().lines.length, 1, 'nothing selected deletes nothing')
+})
+
 test('an edited line keeps what was recorded, drops its old translation, and still catches a repeat', async () => {
   const h = await harness({ superTexthooker: { inputSource: 'clipboard', autoMatchSource: false } })
   await h.call('host', 'ingest', ['かれが来た', 'clipboard'])

@@ -371,6 +371,22 @@ export function deleteLine(id: number) {
   scheduleSave()
 }
 
+/**
+ * Deletes several lines and notes at once (the Log's selection mode), as `deleteLine` deletes one:
+ * Sync deletes them everywhere, and they leave the reading history. One write for all of them.
+ */
+export function deleteLines(ids: readonly number[]) {
+  const doomed = new Set(ids)
+  const removed = lines.filter((l) => doomed.has(l.id))
+  if (!removed.length) return
+  lines = lines.filter((l) => !doomed.has(l.id))
+  rememberDeleted(removed)
+  for (const line of removed) historyDelete(line)
+  forgetLines(removed)
+  for (const line of removed) emit({ type: 'remove', id: line.id })
+  scheduleSave()
+}
+
 export function clearLines() {
   rememberDeleted(lines)
   forgetLines(lines)

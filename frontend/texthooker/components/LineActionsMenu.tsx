@@ -6,6 +6,7 @@ import {
   BookPlus,
   Copy,
   Languages,
+  ListChecks,
   MoreHorizontal,
   Pencil,
   RotateCcw,
@@ -32,6 +33,7 @@ import { openExplain } from '@texthooker/lib/explain'
 import { getSettings } from '@texthooker/lib/settings'
 import { showOriginal, showTranslation } from '@texthooker/lib/translate'
 import { isNote, type Line } from '@texthooker/lib/types'
+import { selecting, startSelecting } from '@texthooker/lib/logSelection'
 
 const copy = async (text: string) => {
   try {
@@ -186,6 +188,11 @@ function LineMenuItems({
           Restore original
         </MenuItem>
       ) : null}
+      {/* Selection mode, with this row selected: several lines and notes copied or deleted at
+          once (lib/logSelection.ts). */}
+      <MenuItem icon={<ListChecks />} onSelect={() => startSelecting(line)}>
+        Select
+      </MenuItem>
       <MenuSeparator />
       <MenuItem icon={<Trash2 />} tone="danger" shortcut="d" onSelect={() => deleteLine(line.id)}>
         {note ? 'Delete note' : 'Delete line'}
@@ -268,6 +275,11 @@ export function LineContextMenu({
   }, [])
 
   const onContextMenu = (event: MouseEvent) => {
+    // Selection mode has its own bar (SelectionBar.tsx): no line menu, and no system menu.
+    if (selecting()) {
+      event.preventDefault()
+      return
+    }
     const rowElement = (event.target as Element).closest<HTMLElement>('[data-line-id]')
     const id = rowElement?.dataset.lineId
     const found = id ? lines.find((l) => String(l.id) === id) : undefined
@@ -304,7 +316,8 @@ export function LineContextMenu({
         if (open) return
         stopShowing.current()
         stopShowing.current = () => {}
-        restore(kept.current)
+        // Select was chosen: rows are picked whole now, so the text selection is not put back.
+        restore(selecting() ? [] : kept.current)
         kept.current = []
         row.current?.removeAttribute('data-menu-open')
         row.current = null

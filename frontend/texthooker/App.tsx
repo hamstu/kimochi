@@ -6,7 +6,19 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { AArrowDown, AArrowUp, ChevronUp, ScrollText, X } from 'lucide-react'
-import { Bar, BarSpacer, Button, Callout, EmptyState, IconButton, Spinner, StatusDot, Tooltip, type Tone } from '@kit'
+import {
+  Bar,
+  BarSpacer,
+  Button,
+  Callout,
+  EmptyState,
+  IconButton,
+  isComposing,
+  Spinner,
+  StatusDot,
+  Tooltip,
+  type Tone
+} from '@kit'
 import './log.css'
 import { LineRow } from './components/LineRow'
 import { dayLabel, dayStarts } from './lib/logDays'
@@ -20,6 +32,9 @@ import { AddNote } from './components/AddNote'
 import { useAddNoteHotkey } from './hooks/useAddNoteHotkey'
 import { SessionMenu } from '../main/SessionMenu'
 import { ActivityTicker } from './components/ActivityTicker'
+import { SelectionBar } from './components/SelectionBar'
+import { useLogSelection } from './hooks/useLogSelection'
+import { currentSelection, lineKey, prune, selectRange, setSelection, stopSelecting, toggle } from './lib/logSelection'
 import { useActivity } from '../bridge/activity'
 import { useViewState } from '../bridge/state'
 import { onEditModalRequest } from './lib/editModal'
@@ -36,7 +51,7 @@ import { useLineHotkeys } from './hooks/useLineHotkeys'
 import { onLogDoubleClick, onLogMouseDown, stopEditing } from './lib/lineEdit'
 import { onRevealRequest, pendingReveal, requestNotesFilter, takeReveal } from './lib/noteNav'
 import { isNote } from './lib/types'
-import { usePanelDictionary } from '../shell/panelDictionary'
+import { suppressPanelLookups, usePanelDictionary } from '../shell/panelDictionary'
 import { openSettings } from '../bridge/tauri'
 import { useAccount } from '../bridge/account'
 import { translationAvailable } from '../../ui/account'
@@ -132,6 +147,9 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const follow = useRef(true)
   const apiMode = settings.dictionaryMode === 'custom-api'
   const lookup = usePanelDictionary(!apiMode)
+  // Selection mode (lib/logSelection.ts): rows are picked, not read, so nothing is looked up.
+  const selection = useLogSelection()
+  const selecting = selection.active
   useEffect(() => subscribe(setSnap), [])
   useEffect(() => onSettingsChange(setSettings), [])
   const openNotebook = useRef(onOpenNotebook)
@@ -158,9 +176,46 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   useClipboardPoll()
   useWebSocketInput(socketStatus)
   useTextHookInput()
-  useScanMode(apiMode)
-  useLineHotkeys()
-  useAddNoteHotkey(visible)
+  useScanMode(apiMode && !selecting)
+  useLineHotkeys(!selecting)
+  useAddNoteHotkey(visible && !selecting)
+  // While selecting, the dictionary looks nothing up in the Log: not the engine under the pointer
+  // or for the controller (`suppressPanelLookups`), not the Yomitan API's Shift scan (above), and
+  // the transcript is `data-no-scan` as well. A pop-up already open closes. On the way out every
+  // lookup comes back as it was. An edit still open closes (opening the line's menu has already
+  // saved it, as any click away does).
+  useLayoutEffect(() => {
+    suppressPanelLookups(selecting)
+    if (!selecting) return
+    stopEditing()
+    void invoke('hide_popover').catch(() => undefined)
+    window.getSelection()?.removeAllRanges()
+    // The bar takes the ticker's room at the foot: the newest line stays in view above it.
+    if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight
+  }, [selecting])
+  useEffect(() => () => suppressPanelLookups(false), [])
+  // Escape leaves selection mode (a dialog or menu open over the Log takes its own Escape).
+  useEffect(() => {
+    if (!selecting || !visible) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || isComposing(e)) return
+      if (document.querySelector('[role="menu"], [role="dialog"], [role="alertdialog"]')) return
+      e.preventDefault()
+      stopSelecting()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selecting, visible])
+  // Another view covers the Log: the selection goes with it.
+  useEffect(() => {
+    if (!visible) stopSelecting()
+  }, [visible])
+  // Lines deleted elsewhere (the other window, Sync) leave the selection; the Log cleared ends it.
+  useEffect(() => {
+    if (!currentSelection().active) return
+    if (!snap.lines.length) return stopSelecting()
+    setSelection(prune(currentSelection(), new Set(snap.lines.map(lineKey))))
+  }, [snap.lines])
   // Another session opened (chosen here, or switched to for a browser tab's lines): start at
   // its newest line, wherever the last one was scrolled to.
   const shownSession = useRef(snap.sessions.activeId)
@@ -168,6 +223,8 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     if (shownSession.current !== snap.sessions.activeId) {
       shownSession.current = snap.sessions.activeId
       follow.current = true
+      // Another session's lines: nothing in them was selected.
+      stopSelecting()
       // Its lines are numbered afresh: an edit open in the last session is not one of them.
       stopEditing()
     }
@@ -254,7 +311,10 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           )}
         </div>
       )}
-      <div className="log-transcript-frame" data-activity={(showTicker && (hasActivity || autoOcr)) || undefined}>
+      <div
+        className="log-transcript-frame"
+        data-activity={selecting || (showTicker && (hasActivity || autoOcr)) || undefined}
+      >
         <main
           ref={scroll}
           onScroll={() => {
@@ -288,8 +348,34 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           <LineContextMenu lines={snap.lines} translateEnabled={translateEnabled} onAddToNotebook={setAddText}>
             <div
               className="jp-text scan-region log-lines"
-              onDoubleClick={(e) => onLogDoubleClick(e, snap.lines)}
-              onMouseDown={onLogMouseDown}
+              data-selecting={selecting || undefined}
+              data-no-scan={selecting || undefined}
+              aria-multiselectable={selecting || undefined}
+              // Selecting: a click on a row (or its checkbox, or Space on it) toggles it, and
+              // Shift+click selects from the row last clicked. Nothing on the row reacts to the
+              // click itself (a notebook chip, a note's Show more, a screenshot).
+              onClickCapture={(e) => {
+                if (!currentSelection().active) return
+                e.preventDefault()
+                e.stopPropagation()
+                const row = (e.target as Element).closest<HTMLElement>('[data-line-id]')
+                const line = row && snap.lines.find((l) => String(l.id) === row.dataset.lineId)
+                if (!line) return
+                const key = lineKey(line)
+                setSelection(
+                  e.shiftKey
+                    ? selectRange(currentSelection(), key, snap.lines.map(lineKey))
+                    : toggle(currentSelection(), key)
+                )
+              }}
+              onMouseDownCapture={(e) => {
+                // No text selection from a Shift+click, and no focus moving onto the text.
+                if (currentSelection().active && !(e.target as Element).closest('.line-select')) e.preventDefault()
+              }}
+              onDoubleClick={(e) => {
+                if (!selecting) onLogDoubleClick(e, snap.lines)
+              }}
+              onMouseDown={selecting ? undefined : onLogMouseDown}
               translate="no"
               lang={textLang}
               style={{ fontSize: settings.fontSizePx }}
@@ -308,7 +394,11 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
             </div>
           </LineContextMenu>
         </main>
-        {showTicker && <ActivityTicker visible={visible} auto={autoOcr} hooked={settings.inputSource === 'hook'} />}
+        {selecting ? (
+          <SelectionBar lines={snap.lines} selection={selection} />
+        ) : (
+          showTicker && <ActivityTicker visible={visible} auto={autoOcr} hooked={settings.inputSource === 'hook'} />
+        )}
       </div>
       <Bar position="bottom">
         <StatsFooter

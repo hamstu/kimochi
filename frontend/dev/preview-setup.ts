@@ -49,6 +49,8 @@
  *                    cloud (default), local, forced (local, pinned by KIMOCHI_SERVER)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
+ *   ?select=<state>  main window: the Log's selection mode (#277): one (Select just chosen on a
+ *                    line), several (three lines and a note of the person's, added for it)
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
  *                    paused, failed, verifying, ready; updating, update-failed (after an app update)
  *   ?model=<state>   OCR model downloads (preview-models.ts)
@@ -82,6 +84,9 @@
  *   ?accessibility=denied  macOS Accessibility not granted yet (default: granted; `none` for
  *                          a platform without it)
  *   ?fullscreen=1       the chosen window is a full-screen app
+ *   ?niri=needs|active|nix|old  with ?platform=linux: niri without a shortcuts portal, its config
+ *                    not including Kimochi's binds yet (Add to my niri config works), including them,
+ *                    kept in the Nix store, or a niri older than 25.11
  *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
@@ -676,7 +681,41 @@ function withCloudAccess(capabilities: PlatformCapabilities): PlatformCapabiliti
   }
 }
 
-const CAPABILITIES = withCloudAccess(previewCapabilities())
+const CAPABILITIES = withNiri(withCloudAccess(previewCapabilities()))
+
+/** `?niri=` (with `?platform=linux`): niri's global shortcuts through Kimochi's binds file. */
+function withNiri(capabilities: PlatformCapabilities): PlatformCapabilities {
+  const state = params.get('niri')
+  if (!state || capabilities.os !== 'linux') return capabilities
+  return {
+    ...capabilities,
+    session: { backend: 'wayland', compositor: 'niri', layerShell: true },
+    input: {
+      globalShortcuts: state === 'active',
+      globalShortcutBackend: 'niri',
+      globalShortcutReport: {
+        backend: 'niri',
+        pending: false,
+        registered: ['triggerScan', 'openControllerMenu'],
+        failed: [],
+        niri: niriSetup(state === 'active' ? 'active' : state === 'old' ? 'unsupported' : 'needsSetup')
+      }
+    }
+  }
+}
+
+function niriSetup(
+  status: 'active' | 'needsSetup' | 'unsupported'
+): NonNullable<NonNullable<PlatformCapabilities['input']['globalShortcutReport']>['niri']> {
+  return {
+    status,
+    includeLine: status === 'unsupported' ? 'include "kimochi.kdl"' : 'include optional=true "kimochi.kdl"',
+    nixIncludeLine: 'include optional=true "~/.config/niri/kimochi.kdl"',
+    config: '/home/you/.config/niri/config.kdl',
+    binds: '/home/you/.config/niri/kimochi.kdl',
+    blocked: status === 'active' ? null : params.get('niri') === 'nix' ? 'nix' : null
+  }
+}
 
 // ---------------------------------------------------------------- view state
 
@@ -1075,6 +1114,19 @@ const HANDLERS: Record<string, Handler> = {
       return { installed: true, live: false, needsLogin: true }
     }
     return { available: false, installed: gnomeInstalled, current: gnomeInstalled, enabled: gnomeInstalled }
+  },
+  // Settings → Shortcuts & Controls on niri (?niri=…): the line goes in, and the shortcuts are active.
+  niri_shortcuts: (args) => {
+    const report = CAPABILITIES.input.globalShortcutReport
+    if (!report?.niri) throw 'not applicable: niri runs on Linux only'
+    if ((args as { operation: string }).operation === 'append') {
+      if (report.niri.blocked === 'nix')
+        throw 'invalid: Your niri config is in the Nix store. Add the line to its source instead.'
+      report.niri = niriSetup('active')
+      CAPABILITIES.input.globalShortcuts = true
+      void emit('platform-capabilities', CAPABILITIES)
+    }
+    return report.niri
   },
   cli_status: () => cliCommand(cliInstalled),
   cli_install: () => cliCommand((cliInstalled = true)),
@@ -1521,6 +1573,30 @@ function installIpc(label: string): void {
 let scriptStopped = false
 
 /** `?activity=1`: what the overlay and native post during a few scans, on a loop. */
+/**
+ * `?select=`: the Log in selection mode, once its lines are in (lib/logSelection.ts). `several`
+ * writes a note of the person's at the end first, so a note is among what is selected.
+ */
+async function previewSelection(state: 'one' | 'several'): Promise<void> {
+  const ready = (): boolean => Boolean(document.querySelector('.log-lines [data-line-id]'))
+  for (let tries = 0; !ready() && tries < 100; tries++) await new Promise((resolve) => setTimeout(resolve, 100))
+  if (!ready()) return
+  const [{ addNote, snapshotLines }, selection] = await Promise.all([
+    import('../texthooker/lib/store'),
+    import('../texthooker/lib/logSelection')
+  ])
+  if (state === 'several') await addNote('Menu screen junk from here down: delete it.')
+  const lines = snapshotLines()
+  const last = lines.at(-1)
+  if (!last) return
+  if (state === 'one') return selection.startSelecting(lines.at(-3) ?? last)
+  selection.startSelecting(lines.at(-6) ?? last)
+  let next = selection.currentSelection()
+  for (const line of [lines.at(-4), lines.at(-3), last])
+    if (line) next = selection.toggle(next, selection.lineKey(line))
+  selection.setSelection(next)
+}
+
 function playActivity(): void {
   type Step = [delayMs: number, text: string, tone: string, key?: string]
   const steps: Step[] = [
@@ -2003,6 +2079,8 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   syncDictionaryEngine()
   if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed, noLines: params.get('lines') === '0' })
   if (params.get('activity') === '1') playActivity()
+  const select = params.get('select')
+  if (page === 'panel' && (select === 'one' || select === 'several')) void previewSelection(select)
 
   // The Log window is the texthooker host (sole owner of session files). Every other window that
   // reads reader data is a client of it over events, so run a host in-page for those windows.
