@@ -204,10 +204,30 @@ fn settings_set(app: tauri::AppHandle, state: State<Shared>, key: String, value:
 /// effects set in motion, and Sync told. Shared with the command line (cli/server.rs).
 pub(crate) fn apply_setting(app: &tauri::AppHandle, settings: &Arc<Settings>, key: &str, value: Value) -> Reply<()> {
     settings.set(key, value.clone())?;
-    let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
-    setting_side_effects(app, settings, key, &value);
+    let changed = changed_settings(settings, key, value);
+    for (key, value) in &changed {
+        let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
+    }
+    // The whole setting, last: side effects match top-level keys (`sentenceAudio`, `appearance`).
+    if let Some((key, value)) = changed.last() {
+        setting_side_effects(app, settings, key, value);
+    }
     sync::local_changed();
     Ok(())
+}
+
+/// What `settings:changed` announces for a write of `key`. A dotted key (`kimochi settings set
+/// overlayStyle.appearance light`, Settings → Browser's `browserExtension.enabled`) changes part
+/// of a top-level setting: it is announced as written, for a window that follows that very key,
+/// and then as the whole top-level setting, which is what most windows follow
+/// (`key === 'overlayStyle'`), as Sync announces its writes.
+fn changed_settings(settings: &Settings, key: &str, value: Value) -> Vec<(String, Value)> {
+    let mut changed = vec![(key.to_owned(), value)];
+    if let Some((top, _)) = key.split_once('.') {
+        let whole = settings.get(top).ok().flatten().unwrap_or(Value::Null);
+        changed.push((top.to_owned(), whole));
+    }
+    changed
 }
 
 /// What a settings write sets in motion beyond `settings:changed`: shared by `settings_set` and
@@ -5270,6 +5290,28 @@ fn request_accessibility() -> Reply<bool> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_dotted_write_announces_the_whole_top_level_setting_too() {
+        use serde_json::json;
+        let path = std::env::temp_dir().join(format!("kimochi-changed-settings-{}.json", std::process::id()));
+        let settings = crate::settings::Settings::load(path.clone());
+        settings.set("overlayStyle", json!({ "appearance": "dark", "opacity": 40 })).unwrap();
+        settings.set("overlayStyle.appearance", json!("light")).unwrap();
+        assert_eq!(
+            super::changed_settings(&settings, "overlayStyle.appearance", json!("light")),
+            vec![
+                ("overlayStyle.appearance".to_owned(), json!("light")),
+                ("overlayStyle".to_owned(), json!({ "appearance": "light", "opacity": 40 })),
+            ]
+        );
+        // A top-level write is announced once, as it was.
+        assert_eq!(
+            super::changed_settings(&settings, "appearance", json!("dark")),
+            vec![("appearance".to_owned(), json!("dark"))]
+        );
+        let _ = std::fs::remove_file(path);
+    }
 
     #[test]
     fn overlay_hides_from_capture_only_when_a_capture_could_read_it() {
