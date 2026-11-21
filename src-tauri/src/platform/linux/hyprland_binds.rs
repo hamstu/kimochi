@@ -151,18 +151,42 @@ fn send(command: String) -> Option<String> {
 static PARSER: Mutex<Option<Parser>> = Mutex::new(None);
 
 /// Send a command in this Hyprland's config language: the legacy parser takes `keyword`, the Lua
-/// one refuses it ("keyword can't work with non-legacy parsers") and takes `eval`.
+/// one takes `eval` and refuses `keyword` (0.55 and 0.56: "keyword can't work with non-legacy
+/// parsers"; 0.57 dropped the legacy parser and with it `keyword`: "unknown request").
 fn command(legacy: String, lua: String) -> Option<String> {
     let known = *PARSER.lock().unwrap();
-    if known != Some(Parser::Lua) {
-        let reply = send(legacy)?;
-        if !reply.contains("non-legacy") {
-            *PARSER.lock().unwrap() = Some(Parser::Legacy);
-            return Some(reply);
-        }
-        *PARSER.lock().unwrap() = Some(Parser::Lua);
+    let (reply, shown) = command_in(known, legacy, lua, send);
+    if let Some(parser) = shown {
+        *PARSER.lock().unwrap() = Some(parser);
     }
-    send(lua)
+    reply
+}
+
+/// `command` with the socket passed in: the reply, and the config language it showed (if any).
+fn command_in(
+    known: Option<Parser>,
+    legacy: String,
+    lua: String,
+    mut send: impl FnMut(String) -> Option<String>,
+) -> (Option<String>, Option<Parser>) {
+    if known == Some(Parser::Lua) {
+        return (send(lua), None);
+    }
+    let Some(reply) = send(legacy) else { return (None, None) };
+    if reply == "ok" {
+        return (Some(reply), Some(Parser::Legacy));
+    }
+    if known == Some(Parser::Legacy) {
+        return (Some(reply), None);
+    }
+    // Not known yet, and `keyword` did not work: a Lua config refuses it, in words that change
+    // between versions, so try the Lua form before deciding.
+    let Some(lua_reply) = send(lua) else { return (None, None) };
+    if lua_reply == "ok" || reply.contains("non-legacy") {
+        return (Some(lua_reply), Some(Parser::Lua));
+    }
+    eprintln!("Hyprland bind: `keyword` answered {reply:?}, `eval` answered {lua_reply:?}");
+    (Some(reply), None)
 }
 
 fn add(combo: &Combo, global: &str, description: &str, passive: bool) -> Option<String> {
@@ -306,6 +330,43 @@ fn watch_reloads() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A Hyprland socket that answers `keyword` and `eval` as the given version and config would.
+    fn hyprland(keyword: &'static str, eval: &'static str) -> impl FnMut(String) -> Option<String> {
+        move |command: String| Some(if command.starts_with("keyword ") { keyword } else { eval }.to_owned())
+    }
+
+    #[test]
+    fn the_config_language_is_learned_from_the_replies() {
+        let ask = |known, keyword, eval| {
+            command_in(known, "keyword bind".into(), "eval hl.bind()".into(), hyprland(keyword, eval))
+        };
+        let ok = || Some("ok".to_owned());
+        let lua_only = "eval is only supported with the lua config manager";
+        // hyprland.conf (any version up to 0.56): `keyword` works, `eval` is never sent.
+        let mut sent = Vec::new();
+        let reply = command_in(None, "keyword bind".into(), "eval hl.bind()".into(), |c| {
+            sent.push(c);
+            Some("ok".into())
+        });
+        assert_eq!((reply, sent), ((ok(), Some(Parser::Legacy)), vec!["keyword bind".to_owned()]));
+        // hyprland.lua on 0.55/0.56, and on 0.57, which has no `keyword` at all.
+        assert_eq!(ask(None, "keyword can't work with non-legacy parsers. Use eval.", "ok"), (ok(), Some(Parser::Lua)));
+        assert_eq!(ask(None, "unknown request", "ok"), (ok(), Some(Parser::Lua)));
+        // 0.56's words still settle it when the Lua command itself fails.
+        assert_eq!(
+            ask(None, "keyword can't work with non-legacy parsers. Use eval.", "hl.bind: bad key"),
+            (Some("hl.bind: bad key".into()), Some(Parser::Lua))
+        );
+        // A legacy config refusing one bind is not taken for Lua: the reply is `keyword`'s, nothing learned.
+        assert_eq!(ask(None, "Invalid dispatcher", lua_only), (Some("Invalid dispatcher".into()), None));
+        assert_eq!(ask(None, "Invalid dispatcher", "unknown request"), (Some("Invalid dispatcher".into()), None));
+        // Once known, one form is sent and nothing is relearned.
+        assert_eq!(ask(Some(Parser::Legacy), "Invalid dispatcher", "ok"), (Some("Invalid dispatcher".into()), None));
+        assert_eq!(ask(Some(Parser::Lua), "ok", "ok"), (ok(), None));
+        // No socket: no reply.
+        assert_eq!(command_in(None, "keyword bind".into(), "eval".into(), |_| None), (None, None));
+    }
 
     #[test]
     fn accelerators_become_hyprland_combinations() {
