@@ -112,6 +112,10 @@ export function LookupKeyRecorder({
   }, [recording, onChange, mac, buttons])
 
   const label = lookupKeyLabel(value, mac)
+  // The current key is always listed, so it shows ticked: Command synced from a Mac reads Super
+  // elsewhere, where the recorder and the list do not offer it.
+  const offered = lookupKeyChoices(mac, support)
+  const choices = offered.includes(value) ? offered : [...offered, value]
   const prompt = buttons ? 'Press a key or mouse button…' : 'Press a key…'
   return (
     <span className="lookup-key-control">
@@ -147,7 +151,7 @@ export function LookupKeyRecorder({
               onChange(next as LookupKey)
             }}
           >
-            {lookupKeyChoices(mac, support).map((choice) => (
+            {choices.map((choice) => (
               <MenuRadioItem key={choice} value={choice}>
                 {lookupKeyLabel(choice, mac)}
               </MenuRadioItem>

@@ -52,8 +52,17 @@ test('the lookup key menu offers the keys the recorder takes (#275)', () => {
   ])
   // Where no mouse button can be read (Wayland), only the modifiers.
   assert.deepEqual(lookupKeyChoices(false, 'unsupported'), ['shift', 'ctrl', 'alt'])
-  // Every choice is one the recorder could record and the labels name.
-  for (const key of lookupKeyChoices(true, 'consumed')) assert.equal(effectiveLookupKey(key, 'consumed'), key)
+  // Every choice is one the recorder could record, and each has its own label.
+  const KEY_NAME = { shift: 'Shift', ctrl: 'Control', alt: 'Alt', meta: 'Meta' }
+  for (const mac of [true, false]) {
+    const choices = lookupKeyChoices(mac, 'consumed')
+    for (const key of choices) {
+      if (isLookupButton(key)) continue
+      assert.equal(lookupModifierFromKey(KEY_NAME[key], mac), key, `${key} on ${mac ? 'a Mac' : 'Windows/Linux'}`)
+    }
+    const labels = choices.map((key) => lookupKeyLabel(key, mac))
+    assert.equal(new Set(labels).size, labels.length, labels.join(', '))
+  }
 })
 
 test('mouse buttons are stored under the names a mouse shortcut uses', () => {
