@@ -13,6 +13,7 @@ const {
   isLookupButton,
   lookupButtonFromEvent,
   lookupButtonsBit,
+  lookupKeyChoices,
   lookupKeyLabel,
   lookupKeyWord,
   lookupModifier,
@@ -20,6 +21,40 @@ const {
 } = await load('lookup-key.ts')
 const { withHoverKey } = await load('scan-input.ts')
 const { fallbackCapabilities, normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
+
+test('the lookup key menu offers the keys the recorder takes (#275)', () => {
+  // A Mac adds Command; elsewhere the Windows / Super key is not offered (it opens system menus).
+  assert.deepEqual(lookupKeyChoices(true, 'consumed'), [
+    'shift',
+    'ctrl',
+    'alt',
+    'meta',
+    'MouseMiddle',
+    'MouseBack',
+    'MouseForward'
+  ])
+  assert.deepEqual(lookupKeyChoices(false, 'passthrough'), [
+    'shift',
+    'ctrl',
+    'alt',
+    'MouseMiddle',
+    'MouseBack',
+    'MouseForward'
+  ])
+  assert.deepEqual(lookupKeyChoices(true, 'needsAccessibility'), [
+    'shift',
+    'ctrl',
+    'alt',
+    'meta',
+    'MouseMiddle',
+    'MouseBack',
+    'MouseForward'
+  ])
+  // Where no mouse button can be read (Wayland), only the modifiers.
+  assert.deepEqual(lookupKeyChoices(false, 'unsupported'), ['shift', 'ctrl', 'alt'])
+  // Every choice is one the recorder could record and the labels name.
+  for (const key of lookupKeyChoices(true, 'consumed')) assert.equal(effectiveLookupKey(key, 'consumed'), key)
+})
 
 test('mouse buttons are stored under the names a mouse shortcut uses', () => {
   for (const key of ['MouseMiddle', 'MouseBack', 'MouseForward']) assert.ok(isLookupButton(key), key)

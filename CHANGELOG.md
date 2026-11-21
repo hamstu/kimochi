@@ -16,6 +16,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- 🖱️ **The lookup key can be picked from a list.** In Settings → Shortcuts & Controls, the new ▾ button next to **Lookup key** lists every key and mouse button it can be. Use it when pressing a button there doesn't set it, as can happen with the middle mouse button when mouse software is installed.
 - **Linux: Window, display and Quick Shot capture work on Niri 26.04.** Before, choosing a source said "That source is gone", because that Niri version shares the screen only as GPU buffers, which Kimochi couldn't read. Thanks to TAG for finding the cause and writing the first version of this fix!
 - **Linux: Global shortcuts now work on niri.** niri has no shortcut portal yet, so Kimochi now writes your shortcuts as niri binds to `~/.config/niri/kimochi.kdl` and keeps that file up to date. Your niri config needs to include it once: **Settings → Shortcuts & Controls** shows the line, and can add it for you after backing up your config. Once niri gets the shortcut portal, Kimochi uses that instead.
 - **Settings → Text Hooker:** the card preview's game dialogue box now surrounds the card, as a game's would, instead of showing as a thin strip beside it.

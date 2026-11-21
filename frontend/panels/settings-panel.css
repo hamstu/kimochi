@@ -12,6 +12,13 @@
   width: 4.5rem;
   text-align: right;
 }
+/* The lookup key's chip and the ▾ menu beside it that sets it from a list (LookupKeyRecorder). */
+.lookup-key-control {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-1);
+}
 /* A shortcut, keyboard or controller (frontend/components/ShortcutChip.tsx): one framed control
    with a darker cap on the left holding a keyboard or gamepad icon, the keys or buttons, and a
    faint × at the right end once something is set. The two kinds look the same side by side. */
