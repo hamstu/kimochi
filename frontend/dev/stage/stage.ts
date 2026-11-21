@@ -11,6 +11,10 @@
  *          controller-words | controller-controls | controller-history | hook-card
  *   ?game=dialogue (default) | manga     a visual novel's dialogue box, or vertical speech bubbles
  *   ?windowed=1      the game is a window on a desktop (a Mac game), not the whole screen
+ *   ?window=small | bottom  windowed: a smaller window with desktop below it, or one down at the
+ *                    bottom of the screen (where Read along's bar goes, ui/read-along-bar.js)
+ *   ?bar=off         controller scenes: Read along's bar hidden (Settings → Overlay → Read along bar);
+ *                    ?counter=0 without its position, ?barhints=basic|none fewer hints
  *   ?furigana=0      no readings over the kanji (default: drawn, and reported as OCR reports them)
  *   ?fragments=1     OCR reports a box per word (a particle a box), not a box per line
  *   ?filter=0        keep furigana and small text (the overlay's small-text filter off)
@@ -253,6 +257,7 @@ async function layOut(): Promise<void> {
     script,
     furigana: params.get('furigana') !== '0',
     windowed: flag('windowed'),
+    window: (['small', 'bottom'] as const).find((value) => value === params.get('window')) ?? null,
     fragments: flag('fragments')
   })
   draw()
@@ -408,6 +413,11 @@ const controller = createController({
     }
   },
   panelInputHandoff: false,
+  barSettings: () => ({
+    shown: params.get('bar') !== 'off',
+    counter: params.get('counter') !== '0',
+    hints: params.get('barhints') ?? 'all'
+  }),
   menuItems: () =>
     flag('menupause') ? [...DEFAULT_RADIAL_MENU, 'pause', 'pause-scan', 'pause-read-along'] : undefined,
   run: async (id: string) => {

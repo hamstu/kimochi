@@ -38,6 +38,12 @@ body {
     0 0 0 1px rgb(0 0 0 / 0.35),
     0 24px 60px rgb(0 0 0 / 0.45);
 }
+.game-windowed[data-window='small'] {
+  inset: 8% 22% 30% 22%;
+}
+.game-windowed[data-window='bottom'] {
+  inset: 34% 22% 1% 22%;
+}
 /* The desktop behind a windowed game. A pseudo-element, since the overlay's own styles keep the
    page itself transparent. */
 body:has(.game-windowed)::before {

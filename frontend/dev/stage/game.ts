@@ -33,6 +33,8 @@ export interface GameOptions {
   furigana: boolean
   /** A window on a desktop rather than the whole screen (a Mac game, not the Deck). */
   windowed: boolean
+  /** Windowed: a smaller window with desktop below it, or one at the bottom of the screen. */
+  window?: 'small' | 'bottom' | null
   /**
    * Report each word as its own box, as some engines do (a particle a box), instead of each
    * line: the case Read along's full screen has to put back together as the Log does.
@@ -142,6 +144,8 @@ function scanLine(node: HTMLElement, area: Rect, vertical: boolean, fragments = 
 export function drawGame(host: HTMLElement, options: GameOptions): Game {
   host.replaceChildren()
   host.className = `game${options.windowed ? ' game-windowed' : ''}`
+  if (options.windowed && options.window) host.dataset.window = options.window
+  else delete host.dataset.window
   host.dataset.kind = options.kind
   const screen = element('div', 'game-screen')
   if (options.windowed) {
