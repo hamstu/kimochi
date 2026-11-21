@@ -415,6 +415,8 @@ export interface Settings {
   }
   texthookerSettings: {
     copyToClipboard: boolean
+    /** Copy each line the Log takes in from the Text Hooker (after its filter and dedupe). */
+    copyHookedLines: boolean
     sendToWebSocket: boolean
     webSocketUrl: string
   }
@@ -520,6 +522,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {
     copyToClipboard: false,
+    copyHookedLines: false,
     sendToWebSocket: false,
     webSocketUrl: 'ws://localhost:6677'
   },

@@ -29,7 +29,7 @@ function bundle() {
             namespace: 'mock'
           }))
           builder.onLoad({ filter: /.*/, namespace: 'mock' }, () => ({
-            contents: `const env=globalThis[${JSON.stringify(ENV_KEY)}]; export const {listen,emit,invoke,getSetting,setSetting,onSettingsChange,BaseDirectory,exists,mkdir,readTextFile,writeTextFile,readFile,writeFile,remove,rename,open,save,getCurrentWindow}=env;`
+            contents: `const env=globalThis[${JSON.stringify(ENV_KEY)}]; export const {listen,emit,invoke,writeText,getSetting,setSetting,onSettingsChange,BaseDirectory,exists,mkdir,readTextFile,writeTextFile,readFile,writeFile,remove,rename,open,save,getCurrentWindow}=env;`
           }))
         }
       }
@@ -73,6 +73,11 @@ async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
     },
     invoked: [],
     holds: [],
+    /** What reached the clipboard (`writeText`, plugin-clipboard-manager). */
+    copied: [],
+    async writeText(text) {
+      env.copied.push(text)
+    },
     /** What the Log sent the reading history (`reading_history_append`). */
     history: [],
     async invoke(command, args) {
@@ -634,6 +639,42 @@ test('a hooked line that carries on the last one replaces it, and only that one'
     ['「はぁっ、もうだめよぉ、んーーっ」', '「何よ……！」', '「何よ……！　私を」']
   )
   assert.deepEqual(lines[0].ingestIds, ['hook-1', 'hook-2'])
+  await h.call('stats', 'resetStats')
+})
+
+test('Copy hooked lines to clipboard copies each hooked line the Log takes in, once', async () => {
+  const output = { copyToClipboard: false, copyHookedLines: true, sendToWebSocket: false, webSocketUrl: '' }
+  const h = await harness({
+    superTexthooker: { inputSource: 'hook', autoMatchSource: false, japaneseFilter: 'off' },
+    texthookerSettings: output
+  })
+  // Copies wait on a settings read each, one after another.
+  const copies = () => new Promise((resolve) => setTimeout(() => resolve(h.copied), 30))
+  await h.call('host', 'ingest', ['「おはよう」', 'hook', 1, 'hook-1'])
+  // The same line again is a duplicate: not in the Log, not copied again.
+  await h.call('host', 'ingest', ['「おはよう」', 'hook', 2, 'hook-2'])
+  // The typewriter carries a line on: copied again, whole.
+  await h.call('host', 'ingest', ['「今日は', 'hook', 3, 'hook-3'])
+  await h.call('host', 'ingest', ['「今日はいい天気だね」', 'hook', 4, 'hook-4', null, 'hook-3'])
+  assert.deepEqual(await copies(), ['「おはよう」', '「今日は', '「今日はいい天気だね」'])
+  // Off: nothing more is copied.
+  h.copied.length = 0
+  h.settings.texthookerSettings = { ...output, copyHookedLines: false }
+  await h.call('host', 'ingest', ['「またね」', 'hook', 5, 'hook-5'])
+  assert.deepEqual(await copies(), [])
+  assert.equal(h.snapshot().lines.at(-1).text, '「またね」')
+  await h.call('stats', 'resetStats')
+})
+
+test('Copy hooked lines to clipboard leaves lines from other sources alone', async () => {
+  const h = await harness({
+    superTexthooker: { inputSource: 'clipboard', autoMatchSource: false, japaneseFilter: 'off' },
+    texthookerSettings: { copyToClipboard: false, copyHookedLines: true, sendToWebSocket: false, webSocketUrl: '' }
+  })
+  await h.call('host', 'ingest', ['「クリップボードから」', 'clipboard', 1, 'clip-1'])
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(h.snapshot().lines.length, 1)
+  assert.deepEqual(h.copied, [])
   await h.call('stats', 'resetStats')
 })
 
