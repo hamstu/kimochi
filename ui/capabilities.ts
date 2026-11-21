@@ -23,6 +23,31 @@ export type OcrEngineKey =
   | 'livetext'
   | 'oneocr'
 
+/** `globalShortcutReport` (Linux Wayland): what the shortcut backend bound. */
+export interface GlobalShortcutReport {
+  backend?: string
+  pending?: boolean
+  registered?: string[]
+  failed?: { name: string; accelerator?: string | null; error?: string }[]
+  /** niri without a working shortcuts portal: Kimochi's binds file and whether niri reads it. */
+  niri?: NiriShortcutSetup
+}
+
+/** `globalShortcutReport.niri` (`platform/linux/shortcuts/niri.rs` `setup`). */
+export interface NiriShortcutSetup {
+  /** `active`: niri's config includes Kimochi's binds. `unsupported`: niri older than 25.11. */
+  status: 'active' | 'needsSetup' | 'unsupported'
+  /** The line that includes them, e.g. `include optional=true "kimochi.kdl"`. */
+  includeLine: string
+  /** The same line for a config kept in the Nix store, spelled from home. */
+  nixIncludeLine: string
+  /** niri's config file, and Kimochi's binds file. */
+  config: string
+  binds: string
+  /** Why Kimochi won't add the line itself: no config, it's in the Nix store, or read-only. */
+  blocked?: 'missing' | 'nix' | 'notFile' | 'readOnly' | null
+}
+
 export interface OcrEngineCapability {
   available: boolean
   /** A supported engine whose externally supplied runtime still needs setup. */
@@ -122,8 +147,11 @@ export interface PlatformCapabilities {
   }
   input: {
     globalShortcuts: boolean
+    /** Linux: `x11`, `portal`, `gnome-shell` or `niri` (`platform/linux/shortcuts`). */
     globalShortcutBackend?: string
     globalShortcutRemediation?: string | null
+    /** Linux Wayland: what the shortcut backend bound (null on X11). */
+    globalShortcutReport?: GlobalShortcutReport | null
   }
   ocrEngines: Record<OcrEngineKey, OcrEngineCapability>
   /**

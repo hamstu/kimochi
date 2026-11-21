@@ -1101,6 +1101,33 @@ fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Rep
     Ok(())
 }
 
+/// niri's global shortcut setup (Settings → Shortcuts & Controls): `status` re-reads whether
+/// niri's config includes Kimochi's binds, `append` adds the include line. Linux only.
+#[tauri::command]
+async fn niri_shortcuts(app: tauri::AppHandle, state: State<'_, Shared>, operation: String) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    {
+        let service = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let result = match operation.as_str() {
+                "status" => platform::shortcuts::niri::refresh(),
+                "append" => platform::shortcuts::niri::append(),
+                other => Err(format!("invalid: unknown operation {other:?}")),
+            };
+            record(&app, &service, json!({"check":"niri-shortcuts","operation":operation,"result":result.as_ref().map_err(|e| e.as_str())}));
+            let _ = app.emit("platform-capabilities", capabilities_value(&app, &service));
+            result
+        })
+        .await
+        .map_err(|e| format!("native: {e}"))?
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, state, operation);
+        Err("not applicable: niri runs on Linux only".into())
+    }
+}
+
 #[tauri::command]
 async fn gnome_overlay(
     app: tauri::AppHandle,
@@ -3576,6 +3603,7 @@ fn main() {
         open_screen_capture_preferences,
         platform_capabilities,
         gnome_overlay,
+        niri_shortcuts,
         linux_window_geometry,
         steam_library::steam_library_status,
         steam_library::steam_library_add,

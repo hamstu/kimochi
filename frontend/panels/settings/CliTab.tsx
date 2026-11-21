@@ -45,7 +45,8 @@ function examples(os: Os): { command: string; what: string }[] {
   ]
 }
 
-function CopyButton({ text }: { text: string }): ReactNode {
+/** Copies `text`; a tick for a moment after. */
+export function CopyButton({ text }: { text: string }): ReactNode {
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     if (!copied) return

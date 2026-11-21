@@ -52,6 +52,7 @@ import { useOcrModelState } from './modelState'
 import { EngineValue } from './EngineValue'
 import { progressProps, useSteadyProgress, type FieldProgress } from './fieldProgress'
 import { SidebarNotice } from './SidebarNotice'
+import { NiriShortcutsNotice } from './NiriShortcutsNotice'
 import { UpdateNotice } from './UpdateNotice'
 import { AccountBar } from './AccountBar'
 
@@ -412,6 +413,7 @@ export function MainSidebar({
         {readsScreen.reads && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} placing={readsScreen.placing} />}
         <BrowserEngines />
         <DictionaryPicker onOpenSettings={() => onSettingsTab('dictionary')} />
+        {!mini && <NiriShortcutsNotice />}
       </div>
       <UpdateNotice />
       <div className="sb-footer">
