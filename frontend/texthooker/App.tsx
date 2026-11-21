@@ -34,6 +34,8 @@ import { SessionMenu } from '../main/SessionMenu'
 import { ActivityTicker } from './components/ActivityTicker'
 import { SelectionBar } from './components/SelectionBar'
 import { useLogSelection } from './hooks/useLogSelection'
+import { useLogFollow } from './hooks/useLogFollow'
+import { followThreshold } from './lib/logFollow'
 import { currentSelection, lineKey, prune, selectRange, setSelection, stopSelecting, toggle } from './lib/logSelection'
 import { useActivity } from '../bridge/activity'
 import { useViewState } from '../bridge/state'
@@ -143,13 +145,18 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     const frame = requestAnimationFrame(() => setTimeout(() => setShown((n) => Math.max(n, PAGE_LINES)), 0))
     return () => cancelAnimationFrame(frame)
   }, [])
-  const scroll = useRef<HTMLDivElement>(null)
-  const follow = useRef(true)
   const apiMode = settings.dictionaryMode === 'custom-api'
   const lookup = usePanelDictionary(!apiMode)
   // Selection mode (lib/logSelection.ts): rows are picked, not read, so nothing is looked up.
   const selection = useLogSelection()
   const selecting = selection.active
+  // New lines keep the Log at its end while the reader is at or near it (hooks/useLogFollow.ts);
+  // picking rows holds it still, so nothing moves under the pointer.
+  const { scroll, following, setFollowing, toEnd, onScroll } = useLogFollow(
+    '.log-lines',
+    followThreshold(settings.fontSizePx),
+    selecting
+  )
   useEffect(() => subscribe(setSnap), [])
   useEffect(() => onSettingsChange(setSettings), [])
   const openNotebook = useRef(onOpenNotebook)
@@ -191,8 +198,8 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     void invoke('hide_popover').catch(() => undefined)
     window.getSelection()?.removeAllRanges()
     // The bar takes the ticker's room at the foot: the newest line stays in view above it.
-    if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight
-  }, [selecting])
+    if (following()) toEnd(true)
+  }, [selecting, following, toEnd])
   useEffect(() => () => suppressPanelLookups(false), [])
   // Escape leaves selection mode (a dialog or menu open over the Log takes its own Escape).
   useEffect(() => {
@@ -217,19 +224,23 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     setSelection(prune(currentSelection(), new Set(snap.lines.map(lineKey))))
   }, [snap.lines])
   // Another session opened (chosen here, or switched to for a browser tab's lines): start at
-  // its newest line, wherever the last one was scrolled to.
+  // its newest line, wherever the last one was scrolled to. A new line, or the last line read
+  // again (OCR's fuller reading of it), follows by its id and text: at the line limit a line in
+  // means the oldest out, so the count stays the same.
   const shownSession = useRef(snap.sessions.activeId)
+  const tail = snap.lines.at(-1)
+  const tailKey = tail ? `${tail.id}:${tail.text}` : ''
   useLayoutEffect(() => {
     if (shownSession.current !== snap.sessions.activeId) {
       shownSession.current = snap.sessions.activeId
-      follow.current = true
+      setFollowing(true)
       // Another session's lines: nothing in them was selected.
       stopSelecting()
       // Its lines are numbered afresh: an edit open in the last session is not one of them.
       stopEditing()
     }
-    if (follow.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight
-  }, [snap.lines.length, snap.sessions.activeId, shown])
+    toEnd()
+  }, [snap.lines.length, tailKey, snap.sessions.activeId, shown, setFollowing, toEnd])
   const changeFont = (delta: number) =>
     void updateSettings({
       fontSizePx: Math.max(12, Math.min(48, settings.fontSizePx + delta))
@@ -252,7 +263,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
       setRevealing(null)
     }
     if (index === -1) return done()
-    follow.current = false
+    setFollowing(false)
     const need = snap.lines.length - index
     if (shown < need) {
       // Lay out back to the line first; this effect scrolls to it on the next pass.
@@ -268,7 +279,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     void row.offsetWidth
     row.setAttribute('data-flash', '')
     window.setTimeout(() => row.removeAttribute('data-flash'), 2000)
-  }, [revealing, visible, shown, snap.lines])
+  }, [revealing, visible, shown, snap.lines, scroll, setFollowing])
   const noteCount = useMemo(() => snap.lines.filter(isNote).length, [snap.lines])
 
   const shownLines = snap.lines.slice(-shown)
@@ -315,14 +326,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
         className="log-transcript-frame"
         data-activity={selecting || (showTicker && (hasActivity || autoOcr)) || undefined}
       >
-        <main
-          ref={scroll}
-          onScroll={() => {
-            const e = scroll.current
-            if (e) follow.current = e.scrollHeight - e.scrollTop - e.clientHeight < 32
-          }}
-          className="log-transcript"
-        >
+        <main ref={scroll} onScroll={onScroll} className="log-transcript">
           {!snap.lines.length && (
             <EmptyState
               className="log-empty"
