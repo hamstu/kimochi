@@ -36,6 +36,7 @@
 //! activate_process(pid: u32) -> Result<(), String>
 //! activate_window(&SourceId) -> Result<Value, String> // that window, on its Space/desktop; a report of how
 //! window_fullscreen(&SourceId) -> Option<bool>       // the OS's own answer; None: cannot say
+//! window_content(&SourceId) -> Option<(Rect, Rect)> // (frame as captured, content area), raw units; window_content.rs
 //! accessibility_status() -> Option<bool>             // None: no such permission here
 //! request_accessibility() -> Result<bool, String>
 //! open_capture_settings() -> Result<(), String>

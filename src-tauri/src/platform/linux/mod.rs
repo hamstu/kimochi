@@ -343,6 +343,14 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
 
 // ---------------------------------------------------------------- system links
 
+/// Linux crops no window to its content on its own (#235): an X11 window source is already its
+/// client window, without the window manager's frame (`Source.bounds`), and a client-side title
+/// bar (GTK, libadwaita) is drawn inside the window like its content, as it is in what a Wayland
+/// portal shares, with nothing that says where it ends.
+pub fn window_content(_id: &SourceId) -> Option<(Rect, Rect)> {
+    None
+}
+
 /// Linux leaves "is it full screen" to the shared rule (the window fills its display).
 pub fn window_fullscreen(_id: &SourceId) -> Option<bool> {
     None

@@ -31,7 +31,12 @@ extern "C" {
     fn AXUIElementSetAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: CFTypeRef) -> i32;
     fn AXUIElementPerformAction(element: CFTypeRef, action: CFTypeRef) -> i32;
     fn AXUIElementSetMessagingTimeout(element: CFTypeRef, seconds: f32) -> i32;
+    fn AXValueGetValue(value: CFTypeRef, kind: u32, out: *mut c_void) -> bool;
 }
+
+/// `kAXValueCGPointType` and `kAXValueCGSizeType`.
+const AX_POINT: u32 = 1;
+const AX_SIZE: u32 = 2;
 
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
@@ -244,6 +249,52 @@ pub fn is_full_screen(pid: i32, number: u32) -> Option<bool> {
         let number = &*(value.0 as *const NSNumber);
         Some(number.boolValue())
     }
+}
+
+/// What Accessibility tells about a window's title bar: the window's frame and its close
+/// button's, both in global desktop points with a top-left origin (the space `CGWindowList` and
+/// ScreenCaptureKit use). A window without a close button (borderless, a game drawing its own
+/// window) has `close: None`.
+pub struct TitleBar {
+    pub window: kimochi_capture::Rect,
+    pub close: Option<kimochi_capture::Rect>,
+}
+
+/// The title bar facts of window `number` of process `pid`, when Accessibility is allowed and the
+/// window is on the Space that is showing (it was just chosen, so it normally is).
+pub fn title_bar(pid: i32, number: u32) -> Option<TitleBar> {
+    let element = window_element(pid, number)?;
+    let window = frame(&element)?;
+    let close = unsafe {
+        let mut value: CFTypeRef = std::ptr::null();
+        let attribute = ns_string!("AXCloseButton");
+        (AXUIElementCopyAttributeValue(element.0, (attribute as *const NSString).cast(), &mut value) == 0
+            && !value.is_null())
+        .then(|| Owned(value))
+    };
+    Some(TitleBar { window, close: close.as_ref().and_then(frame) })
+}
+
+/// An element's `AXPosition` and `AXSize`.
+fn frame(element: &Owned) -> Option<kimochi_capture::Rect> {
+    let mut origin = [0f64; 2];
+    let mut size = [0f64; 2];
+    let read = |name: &NSString, kind: u32, out: *mut c_void| unsafe {
+        let mut value: CFTypeRef = std::ptr::null();
+        if AXUIElementCopyAttributeValue(element.0, (name as *const NSString).cast(), &mut value) != 0
+            || value.is_null()
+        {
+            return false;
+        }
+        let value = Owned(value);
+        AXValueGetValue(value.0, kind, out)
+    };
+    if !read(ns_string!("AXPosition"), AX_POINT, origin.as_mut_ptr().cast())
+        || !read(ns_string!("AXSize"), AX_SIZE, size.as_mut_ptr().cast())
+    {
+        return None;
+    }
+    Some(kimochi_capture::Rect { x: origin[0], y: origin[1], width: size[0], height: size[1] })
 }
 
 /// A window of another application that Accessibility has raised, to raise again later.

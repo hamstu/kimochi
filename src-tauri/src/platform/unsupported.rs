@@ -122,6 +122,10 @@ pub fn activate_window(_id: &SourceId) -> Result<Value, String> {
     Err(UNSUPPORTED.into())
 }
 
+pub fn window_content(_id: &SourceId) -> Option<(Rect, Rect)> {
+    None
+}
+
 pub fn window_fullscreen(_id: &SourceId) -> Option<bool> {
     None
 }

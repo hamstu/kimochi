@@ -328,8 +328,70 @@ pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, S
         backend.enumerate().map_err(err)?.into_iter().find(|s| s.id == source_id).ok_or_else(|| closed(source_id))?
     };
     let key = selection_crop_key(service, source.kind, &source.name, source.app.as_deref());
-    let saved = saved_crop_for_key(service, &key);
-    commit_with_key(service, source_id, saved, Some(key))
+    let (crop, persist) = saved_or_content_crop(service, &key, &source.id);
+    commit_with_key(service, source_id, crop, Some(key), persist)
+}
+
+/// The crop a source starts with, and whether to save it: the one saved under `key`, or, when
+/// the reader never decided one, a window's content area (`window_content`, #235), which is then
+/// saved like any other. Choosing a source with nothing decided and no content crop saves
+/// nothing, so that it stays undecided.
+fn saved_or_content_crop(service: &Service, key: &str, source_id: &str) -> (Option<Crop>, bool) {
+    if crop_decided(&service.settings, key) {
+        return (saved_crop_for_key(service, key), true);
+    }
+    let crop = content_crop(source_id);
+    (crop, crop.is_some())
+}
+
+/// Whether the crop under `key` was ever decided: a crop is saved, or the reader cleared one
+/// (which removes `cropRegions` and leaves `cropScanEnabled: false`). Before #235 choosing a
+/// source without a crop left that `false` too, so a source chosen before then stays whole.
+fn crop_decided(settings: &crate::settings::Settings, key: &str) -> bool {
+    ["cropRegions", "cropScanEnabled"]
+        .iter()
+        .any(|map| settings.get_path(&[map, key]).ok().flatten().is_some_and(|v| !v.is_null()))
+}
+
+/// The content-area crop of window source `source_id` (`window_content::content_crop`).
+fn content_crop(source_id: &str) -> Option<Crop> {
+    let crop = SourceId::parse(source_id).and_then(|id| crate::window_content::content_crop(&id));
+    if crate::debug_report::verbose() {
+        crate::debug_report::trace_now(json!({ "check": "source-content-crop", "sourceId": source_id, "crop": crop }));
+    }
+    crop
+}
+
+/// The selected window went full screen or came back, so another crop applies
+/// (`state::shaped_crop_key`). When none was ever decided for its new shape it starts at the
+/// window's content area, as a window just chosen does (a full-screen window has no decorations
+/// and stays whole). The scan on screen was read with the old crop and goes. Whether a crop was
+/// saved.
+pub fn adopt_content_crop(service: &Service, source_id: &str) -> bool {
+    if service.selection.lock().unwrap().as_deref() != Some(source_id) {
+        return false;
+    }
+    let Some(key) = current_crop_key(service) else {
+        return false;
+    };
+    if crop_decided(&service.settings, &key) {
+        return false;
+    }
+    let Some(crop) = content_crop(source_id) else {
+        return false;
+    };
+    let saved = service.settings.set_many(&[
+        (&["cropRegions", key.as_str()], serde_json::to_value(crop).unwrap()),
+        (&["cropScanEnabled", key.as_str()], json!(true)),
+    ]);
+    if saved.is_err() {
+        return false;
+    }
+    let mut view = service.view.lock().unwrap();
+    view.scan = None;
+    view.regions.clear();
+    view.revision += 1;
+    true
 }
 
 /// Selection and crop change together or not at all.
@@ -337,17 +399,19 @@ pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, S
 /// All three persisted keys go through a single settings transaction, so a failed
 /// write cannot leave a source selected with another source's crop.
 pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<Value, String> {
-    commit_with_key(service, source_id, crop, None)
+    commit_with_key(service, source_id, crop, None, true)
 }
 
+/// `persist_crop: false` selects the source and leaves its crop entries as they are: absent.
 fn commit_with_key(
     service: &Shared,
     source_id: &str,
     crop: Option<Crop>,
     saved_key: Option<String>,
+    persist_crop: bool,
 ) -> Result<Value, String> {
     let had_crop = crop.is_some();
-    let result = commit_with_key_inner(service, source_id, crop, saved_key);
+    let result = commit_with_key_inner(service, source_id, crop, saved_key, persist_crop);
     if crate::debug_report::verbose() {
         // On failure, what the backend does list, so a report shows a source that vanished
         // or was never offered.
@@ -377,6 +441,7 @@ fn commit_with_key_inner(
     source_id: &str,
     crop: Option<Crop>,
     saved_key: Option<String>,
+    persist_crop: bool,
 ) -> Result<Value, String> {
     let source = {
         let mut backend = service.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -401,12 +466,17 @@ fn commit_with_key_inner(
         "name": source.name,
         "appName": source.app,
     });
-    service.settings.set_many(&[
-        // Literal segments: an application name may contain a dot.
-        (&["cropRegions", key.as_str()], crop_value),
-        (&["cropScanEnabled", key.as_str()], json!(crop.is_some())),
-        (&["lastSelectedSource"], selection_value),
-    ])?;
+    let selection_write: (&[&str], Value) = (&["lastSelectedSource"], selection_value);
+    if persist_crop {
+        service.settings.set_many(&[
+            // Literal segments: an application name may contain a dot.
+            (&["cropRegions", key.as_str()], crop_value),
+            (&["cropScanEnabled", key.as_str()], json!(crop.is_some())),
+            selection_write,
+        ])?;
+    } else {
+        service.settings.set_many(&[selection_write])?;
+    }
     {
         let mut selection = service.selection.lock().unwrap();
         let source_changed = selection.as_deref() != Some(source.id.as_str());
@@ -772,6 +842,29 @@ pub fn saved_crop(service: &Service, kind: &str, name: &str, app: Option<&str>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_crop_never_decided_starts_at_the_content_area() {
+        let dir = std::env::temp_dir().join(format!("kimochi-crop-decided-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = crate::settings::Settings::load(dir.join("settings.json"));
+        let crop =
+            json!({"x": 0, "y": 31, "width": 640, "height": 480, "reference_width": 640, "reference_height": 511});
+        settings
+            .set_many(&[
+                (&["cropRegions", "Saved"], crop),
+                (&["cropScanEnabled", "Saved"], json!(true)),
+                // Cleared (or chosen before #235 with no crop): null removes the region.
+                (&["cropRegions", "Cleared"], Value::Null),
+                (&["cropScanEnabled", "Cleared"], json!(false)),
+            ])
+            .unwrap();
+        assert!(crop_decided(&settings, "Saved"));
+        assert!(crop_decided(&settings, "Cleared"));
+        assert!(!crop_decided(&settings, "Never chosen"));
+        let _ = std::fs::remove_file(dir.join("settings.json"));
+        let _ = std::fs::remove_dir(&dir);
+    }
 
     #[test]
     fn record_crop_key_matches_the_commit_key() {

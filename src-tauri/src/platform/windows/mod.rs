@@ -60,7 +60,7 @@ pub use mouseguard::{set_keyboard_guard, sync_mouse_buttons};
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use sources::{
     front_window, frontmost_app, frontmost_pid, picker_sources, scaled_full_screen, shown_frame_info, source_spaces,
-    window_bounds, window_fullscreen,
+    window_bounds, window_content, window_fullscreen,
 };
 pub use window::{
     activate_process, activate_self, activate_window, bounds, ignore_key_menu, inspect, make_panel, order_front,
