@@ -389,12 +389,18 @@
 .hook-preview-stage .hook-preview-scene {
   --hook-preview-line: calc(var(--hook-preview-font) * 1.4);
   --hook-preview-inset: 1rem;
-  --hook-preview-pad-x: 1rem;
-  --hook-preview-pad-y: 0.75rem;
+  /* Roomier than the aligned card's own padding (14px at the sides, 20px above its line and 22px
+     below), so the card sits inside the box as it would over a game's, rather than overhanging
+     a box no taller than the line, which then read as a strip beside it. */
+  --hook-preview-pad-x: 1.5rem;
+  --hook-preview-pad-y: 1.875rem;
   --hook-preview-box: calc(var(--hook-preview-line) + var(--hook-preview-pad-y) * 2);
   /* Room for the box in the middle and, above it, a card at the same size (its line and ~36px of
      padding, 0.75rem clear of the box, 1rem from the top). */
-  --hook-preview-height: max(11rem, calc(var(--hook-preview-line) * 3 + 9.5rem));
+  --hook-preview-height: max(
+    calc(9.5rem + var(--hook-preview-pad-y) * 2),
+    calc(var(--hook-preview-line) * 3 + var(--hook-preview-pad-y) * 2 + 8rem)
+  );
   /* Below the dialogue box: as much as above it. */
   --hook-preview-bottom: calc((var(--hook-preview-height) - var(--hook-preview-box)) / 2);
   display: block;

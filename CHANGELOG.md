@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - **Linux: Global shortcuts now work on niri.** niri has no shortcut portal yet, so Kimochi now writes your shortcuts as niri binds to `~/.config/niri/kimochi.kdl` and keeps that file up to date. Your niri config needs to include it once: **Settings → Shortcuts & Controls** shows the line, and can add it for you after backing up your config. Once niri gets the shortcut portal, Kimochi uses that instead.
+- **Settings → Text Hooker:** the card preview's game dialogue box now surrounds the card, as a game's would, instead of showing as a thin strip beside it.
 - 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.
 - **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.
 - **Windows: Auto Game Pausing pauses and resumes much faster** for games made of many processes, such as browser and Electron games. One with 40 processes took around 5 seconds to pause; it now takes a fraction of a second.
