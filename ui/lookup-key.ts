@@ -85,6 +85,17 @@ export function lookupKeyLabel(key: unknown, mac: boolean): string {
   }
 }
 
+/**
+ * Every lookup key this platform can take, in the order the Settings menu lists them (#275): the
+ * modifiers the recorder accepts (Command only on a Mac), then the mouse buttons where native can
+ * read one. The menu sets one without pressing it, for a button the recorder never hears (a mouse
+ * utility that keeps the middle button's release from the window).
+ */
+export function lookupKeyChoices(mac: boolean, support: LookupButtonSupport): LookupKey[] {
+  const modifiers: LookupModifier[] = mac ? ['shift', 'ctrl', 'alt', 'meta'] : ['shift', 'ctrl', 'alt']
+  return support === 'unsupported' ? modifiers : [...modifiers, ...LOOKUP_BUTTONS]
+}
+
 /** The label without macOS's symbol, for running text ("Set its lookup key to Control"). */
 export function lookupKeyWord(key: unknown, mac: boolean): string {
   return lookupKeyLabel(key, mac).replace(/^[⇧⌃⌥⌘] /, '')

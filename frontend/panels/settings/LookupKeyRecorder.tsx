@@ -4,17 +4,24 @@
  * forward) to make it the key held to look words up. Escape cancels. There is always a lookup
  * key, so there is no ×.
  *
+ * Beside it, a ▾ menu sets the key from a list (#275): the same choices, picked rather than
+ * pressed, for a button the recorder never hears in full (mouse software that keeps the middle
+ * button's release from the window, so the press shows and nothing is taken). The current key is
+ * ticked; there is no clearing it there either.
+ *
  * Mouse buttons only where native can read them (`keys.lookupButtons`, ui/lookup-key.ts); on
  * Wayland the recorder says why one was not taken. Shortcuts and bound mouse buttons are paused
  * while recording, so a button that is also a shortcut is recorded instead of firing.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Kbd } from '@kit'
+import { ChevronDown } from 'lucide-react'
+import { IconButton, Kbd, Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@kit'
 import { ShortcutChip } from '../../components/ShortcutChip'
 import { useSuspendHotkeys } from '../../bridge/useHotkeys'
 import {
   isLookupButton,
   lookupButtonFromEvent,
+  lookupKeyChoices,
   lookupKeyLabel,
   lookupModifierFromKey,
   type LookupButtonSupport,
@@ -105,24 +112,53 @@ export function LookupKeyRecorder({
   }, [recording, onChange, mac, buttons])
 
   const label = lookupKeyLabel(value, mac)
+  // The current key is always listed, so it shows ticked: Command synced from a Mac reads Super
+  // elsewhere, where the recorder and the list do not offer it.
+  const offered = lookupKeyChoices(mac, support)
+  const choices = offered.includes(value) ? offered : [...offered, value]
   const prompt = buttons ? 'Press a key or mouse button…' : 'Press a key…'
   return (
-    <ShortcutChip
-      kind={isLookupButton(value) ? 'mouse' : 'keys'}
-      state={recording ? 'recording' : 'set'}
-      buttonRef={buttonRef}
-      disabled={disabled}
-      label={
-        recording
-          ? `Recording the lookup key. Press a modifier key${buttons ? ' or a mouse button' : ''}, Escape to cancel.`
-          : `Lookup key: ${label}. Click to change.`
-      }
-      onPress={() => {
-        setNotice(null)
-        setRecording((on) => !on)
-      }}
-    >
-      {recording ? <span className="shortcut-chip-prompt">{notice ?? prompt}</span> : <Kbd>{label}</Kbd>}
-    </ShortcutChip>
+    <span className="lookup-key-control">
+      <ShortcutChip
+        kind={isLookupButton(value) ? 'mouse' : 'keys'}
+        state={recording ? 'recording' : 'set'}
+        buttonRef={buttonRef}
+        disabled={disabled}
+        label={
+          recording
+            ? `Recording the lookup key. Press a modifier key${buttons ? ' or a mouse button' : ''}, Escape to cancel.`
+            : `Lookup key: ${label}. Click to change.`
+        }
+        onPress={() => {
+          setNotice(null)
+          setRecording((on) => !on)
+        }}
+      >
+        {recording ? <span className="shortcut-chip-prompt">{notice ?? prompt}</span> : <Kbd>{label}</Kbd>}
+      </ShortcutChip>
+      <Menu>
+        <MenuTrigger asChild>
+          <IconButton label="Choose the lookup key" size="sm" disabled={disabled}>
+            <ChevronDown />
+          </IconButton>
+        </MenuTrigger>
+        <MenuContent align="end">
+          <MenuRadioGroup
+            value={value}
+            onValueChange={(next) => {
+              setRecording(false)
+              setNotice(null)
+              onChange(next as LookupKey)
+            }}
+          >
+            {choices.map((choice) => (
+              <MenuRadioItem key={choice} value={choice}>
+                {lookupKeyLabel(choice, mac)}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>
+    </span>
   )
 }
