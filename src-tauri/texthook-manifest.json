@@ -293,6 +293,46 @@
         }
       ]
     },
+    "agent-macos-arm64": {
+      "name": "Agent",
+      "version": "17.27.4",
+      "project": "https://github.com/frida/frida",
+      "license": "wxWindows Library Licence 3.1",
+      "files": [
+        {
+          "name": "frida-inject",
+          "size": 87997424,
+          "sha256": "735a9aea5e235bce883bab1faeebc4c0779f5e5813415fc07792808a09590aff",
+          "xz": {
+            "size": 22725936,
+            "sha256": "7fc59a6d36c4c075d539e3167cff483c973b386e9d7674bb8970ee0d6c9ac230"
+          },
+          "sources": [
+            {
+              "url": "https://github.com/frida/frida/releases/download/17.27.4/frida-inject-17.27.4-macos-arm64.xz",
+              "xz": true
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-macos-arm64/17.27.4/frida-inject.xz",
+              "xz": true
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 2416,
+          "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/frida/frida/17.27.4/COPYING"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-macos-arm64/17.27.4/LICENSE.txt"
+            }
+          ]
+        }
+      ]
+    },
     "agent-arm64": {
       "name": "Agent",
       "version": "17.27.4",

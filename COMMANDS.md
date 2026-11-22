@@ -2083,7 +2083,7 @@ missing. It is re-sent as `platform-capabilities` when the download changes stat
 browser installs meanwhile is found the next time the capabilities are asked for (the panel's
 "Look again").
 
-## Text Hooker (Windows; macOS and Linux through Wine)
+## Text Hooker (Windows, macOS and Linux)
 
 The `inputSource` `"hook"`: the game behind a chosen window is hooked and its text read from
 inside it. Implementation: `src-tauri/src/text_hook/` (session, process resolution, thread
@@ -2117,6 +2117,18 @@ Wine sessions remain unhookable, rather than starting a second wineserver on the
 On X11 a window's process is the one the X
 server reports for its client (XRes), else `_NET_WM_PID`, which a sandboxed client sets to its id
 inside the sandbox.
+
+On macOS, sentence audio uses ScreenCaptureKit to record everything the Mac plays, excluding
+Kimochi itself. Voice DLL injection stays disabled: testing found that it crashes a 32-bit
+Wine WoW64 game. System audio capture remains available for native games, Wine and emulators.
+
+Native macOS Apple Silicon games and emulators use Agent scripts only when a script matches.
+LunaHook and Textractor are Windows engines and are not offered for native Mac targets.
+Native attach works for unhardened ARM64 targets; hardened and Rosetta processes may refuse
+injection and report the injector’s reason. Kimochi does not change signing, SIP or entitlements.
+Native Frida is pinned as `agent-macos-arm64`. The host uses POSIX paths, and applies Citra
+(main module) and Yuzu (libc++ symbol) ARM64 overlays while reading libraries, leaving the pinned
+archive unchanged. These overlays do not guarantee support for every emulator/game version.
 
 **Agent scripts** (`text_hook/agent/`). A game the Agent collection (https://github.com/0xDC00/scripts,
 MIT) has a script for is hooked by that script first, LunaHook and Textractor following if it

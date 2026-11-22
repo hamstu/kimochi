@@ -37,13 +37,14 @@
   console.error = logged('error')
   console.debug = () => {}
 
-  // ---------------------------------------------------------------- paths (Windows' rules)
-  const SEP = '\\'
-  const isAbsolute = (p) => /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}/.test(p)
+  // ---------------------------------------------------------------- paths (the game’s platform)
+  const windows = Process.platform === 'windows'
+  const SEP = windows ? '\\' : '/'
+  const isAbsolute = (p) => (windows ? /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}/.test(p) : p.startsWith('/'))
   function normalise(p) {
-    const drive = /^[A-Za-z]:/.exec(p)?.[0] ?? ''
+    const drive = windows ? (/^[A-Za-z]:/.exec(p)?.[0] ?? '') : ''
     const parts = []
-    for (const part of p.slice(drive.length).split(/[\\/]+/)) {
+    for (const part of p.slice(drive.length).split(windows ? /[\\/]+/ : /\/+/)) {
       if (!part || part === '.') continue
       if (part === '..') parts.pop()
       else parts.push(part)
@@ -54,13 +55,13 @@
   const dirname = (p) => {
     const n = normalise(String(p))
     const at = n.lastIndexOf(SEP)
-    return at > 2 ? n.slice(0, at) : n.slice(0, 3)
+    return at > (windows ? 2 : 0) ? n.slice(0, at) : n.slice(0, windows ? 3 : 1)
   }
   const root = normalise(host.dir)
   // Only the collection's own files are ever read.
   const inside = (p) => {
-    const lower = p.toLowerCase()
-    const base = root.toLowerCase()
+    const lower = windows ? p.toLowerCase() : p
+    const base = windows ? root.toLowerCase() : root
     return lower === base || lower.startsWith(base + SEP)
   }
   function isFile(p) {
@@ -75,10 +76,27 @@
   function readText(p) {
     if (!inside(p)) return null
     try {
-      return File.readAllText(p)
+      return patchLibrary(p, File.readAllText(p))
     } catch (_) {
       return null
     }
+  }
+
+  // Overlays are applied to loaded source only: the verified collection remains byte-for-byte
+  // pinned. These ARM64 library branches otherwise assume Android's module and C++ ABI.
+  function patchLibrary(path, source) {
+    if (Process.platform !== 'darwin' || Process.arch !== 'arm64') return source
+    const name = path.slice(path.lastIndexOf(SEP) + 1)
+    if (name === 'libCitra.js') {
+      return source.replace("Process.findModuleByName('libcitra-android.so')", 'Process.mainModule')
+    }
+    if (name === 'libYuzu.js') {
+      return source.replace(
+        /\[__e\.getExportByName\('([^']*NSt6__ndk1[^']*)'\)\]/g,
+        (_, symbol) => `DebugSymbol.findFunctionsNamed('${symbol.replace('NSt6__ndk1', 'NSt3__1')}')`
+      )
+    }
+    return source
   }
 
   // ---------------------------------------------------------------- the host's answers

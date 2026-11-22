@@ -274,6 +274,9 @@ mod tests {
     #[test]
     fn emulators_are_told_by_their_executable() {
         assert_eq!(emulator_platform(Path::new(r"C:\Emu\yuzu.exe")), Some("switch"));
+        assert_eq!(emulator_platform(Path::new("/Applications/PPSSPPSDL.app/Contents/MacOS/PPSSPPSDL")), Some("psp"));
+        assert_eq!(emulator_platform(Path::new("/Applications/azahar.app/Contents/MacOS/azahar")), Some("3ds"));
+        assert_eq!(emulator_platform(Path::new("/Applications/Eden.app/Contents/MacOS/eden")), Some("switch"));
         assert_eq!(emulator_platform(Path::new("/opt/Ryujinx/Ryujinx.Ava")), Some("switch"));
         assert_eq!(emulator_platform(Path::new(r"C:\PPSSPP\PPSSPPWindows64.exe")), Some("psp"));
         assert_eq!(emulator_platform(Path::new(r"C:\pcsx2\pcsx2-qt.exe")), Some("ps2"));

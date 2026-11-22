@@ -260,7 +260,9 @@ pub fn age(_pid: u32) -> Option<std::time::Duration> {
     None
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "macos")]
+pub use super::macos::target;
+#[cfg(target_os = "linux")]
 pub use super::wine::target;
 /// Under Wine, the window's process alone; its engine children are found inside the prefix
 /// (`wine::windows_targets`), where the parent links are.

@@ -26,7 +26,9 @@ fn parse_arguments(bytes: &[u8]) -> Option<Arguments> {
     for _ in 0..argc {
         args.push(String::from_utf8_lossy(strings.next()?).into_owned());
     }
+    // Wine rewrites argv in place, leaving NUL padding before the original environment.
     let env = strings
+        .skip_while(|s| s.is_empty())
         .take_while(|s| !s.is_empty())
         .filter_map(|s| {
             let s = String::from_utf8_lossy(s);
@@ -66,6 +68,25 @@ pub fn executable(pid: u32) -> Option<PathBuf> {
     let end = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
     use std::os::unix::ffi::OsStrExt;
     Some(PathBuf::from(std::ffi::OsStr::from_bytes(&buf[..end])))
+}
+
+/// Native apps are candidates for Agent only; the source list also requires a matching script.
+#[cfg(target_os = "macos")]
+pub fn target(pid: u32) -> Result<Target, String> {
+    if pid == 0 || pid == std::process::id() {
+        return Err("Kimochi and the system cannot be hooked".into());
+    }
+    let exe = executable(pid).ok_or("this process is not running or cannot be inspected")?;
+    if wine::is_wine_loader(&exe) {
+        return wine_target(pid);
+    }
+    if exe.starts_with("/System") || exe.starts_with("/usr") || exe.starts_with("/sbin") {
+        return Err("this is part of macOS".into());
+    }
+    if !cfg!(target_arch = "aarch64") {
+        return Err("Native Agent scripts currently require an Apple Silicon Mac.".into());
+    }
+    Ok(Target { pid, exe, bits: 64, wine: None })
 }
 
 #[cfg(target_os = "macos")]
@@ -135,10 +156,26 @@ pub fn wine_target(pid: u32) -> Result<Target, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "requires a running Wine game; set KIMOCHI_TEST_WINE_PID"]
+    fn running_wine_game_is_discovered() {
+        let pid = std::env::var("KIMOCHI_TEST_WINE_PID").unwrap().parse().unwrap();
+        let target = wine_target(pid).expect("the running Wine game must be discoverable");
+        let wine = target.wine.unwrap();
+        println!(
+            "game={} bits={} runtime={} prefix={}",
+            target.exe.display(),
+            target.bits,
+            wine.binary.display(),
+            wine.prefix.display()
+        );
+    }
+
     #[test]
     fn process_arguments_preserve_spaces_empty_arguments_and_environment_values() {
         let mut bytes = 3i32.to_ne_bytes().to_vec();
-        bytes.extend_from_slice(b"/Applications/Wine Devel.app/wine\0\0\0C:\\Games\\My VN.exe\0\0--windowed\0WINEPREFIX=/Users/me/Game Bottle\0TOKEN=a=b\0\0");
+        bytes.extend_from_slice(b"/Applications/Wine Devel.app/wine\0\0\0C:\\Games\\My VN.exe\0\0--windowed\0\0\0WINEPREFIX=/Users/me/Game Bottle\0TOKEN=a=b\0\0");
         assert_eq!(
             parse_arguments(&bytes),
             Some(Arguments {
