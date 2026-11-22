@@ -70,6 +70,37 @@ pub fn executable(pid: u32) -> Option<PathBuf> {
     Some(PathBuf::from(std::ffi::OsStr::from_bytes(&buf[..end])))
 }
 
+#[cfg(target_os = "macos")]
+fn working_directory(pid: u32) -> Option<PathBuf> {
+    let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of_val(&info);
+    let read = unsafe {
+        libc::proc_pidinfo(
+            i32::try_from(pid).ok()?,
+            libc::PROC_PIDVNODEPATHINFO,
+            0,
+            (&mut info as *mut libc::proc_vnodepathinfo).cast(),
+            size as i32,
+        )
+    };
+    if read != size as i32 {
+        return None;
+    }
+    let bytes: Vec<u8> = info.pvi_cdir.vip_path.iter().flatten().map(|b| *b as u8).take_while(|b| *b != 0).collect();
+    use std::os::unix::ffi::OsStrExt;
+    let path = PathBuf::from(std::ffi::OsStr::from_bytes(&bytes));
+    path.is_absolute().then_some(path)
+}
+
+#[cfg(target_os = "macos")]
+fn relative_image(image: &str, cwd: Option<PathBuf>) -> Option<PathBuf> {
+    // A drive-relative or root-relative Windows path needs Wine's drive state; never guess it.
+    if image.is_empty() || image.starts_with(['/', '\\']) || image.contains(':') {
+        return None;
+    }
+    Some(cwd?.join(image.replace('\\', "/")))
+}
+
 /// Native apps are candidates for Agent only; the source list also requires a matching script.
 #[cfg(target_os = "macos")]
 pub fn target(pid: u32) -> Result<Target, String> {
@@ -130,6 +161,7 @@ pub fn wine_target(pid: u32) -> Result<Target, String> {
         .ok_or("this is part of Wine, not a game")?
         .clone();
     let exe = wine::unix_path(&prefix, &image, |p| std::fs::read_link(p).ok())
+        .or_else(|| relative_image(&image, working_directory(pid)))
         .ok_or("Kimochi cannot locate this game's Windows executable.")?;
     let exe = std::fs::canonicalize(exe).map_err(|_| "this game's Windows executable cannot be read")?;
     let windows = std::fs::canonicalize(prefix.join("drive_c/windows")).ok();
@@ -156,6 +188,18 @@ pub fn wine_target(pid: u32) -> Result<Target, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn relative_wine_images_use_the_games_working_directory() {
+        let cwd = Some(PathBuf::from("/Games/My VN"));
+        assert_eq!(relative_image("Game Name.exe", cwd.clone()), Some(PathBuf::from("/Games/My VN/Game Name.exe")));
+        assert_eq!(relative_image(r"bin\Game.exe", cwd.clone()), Some(PathBuf::from("/Games/My VN/bin/Game.exe")));
+        for image in ["", r"C:Game.exe", r"\Game.exe", "/Game.exe"] {
+            assert_eq!(relative_image(image, cwd.clone()), None);
+        }
+        assert_eq!(relative_image("Game.exe", None), None);
+        assert_eq!(working_directory(std::process::id()), std::env::current_dir().ok());
+    }
     #[cfg(target_os = "macos")]
     #[test]
     #[ignore = "requires a running Wine game; set KIMOCHI_TEST_WINE_PID"]
