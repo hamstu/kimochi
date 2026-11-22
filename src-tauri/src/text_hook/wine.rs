@@ -152,6 +152,16 @@ pub fn unix_path(prefix: &Path, windows: &str, read_link: impl Fn(&Path) -> Opti
     Some(PathBuf::from(path))
 }
 
+/// A relative image in Wine's command line is relative to the game's Linux working
+/// directory, not Kimochi's. Drive-qualified and UNC paths need their prefix mapping.
+#[cfg(any(target_os = "linux", test))]
+fn relative_image(image: &str, cwd: &Path) -> Option<PathBuf> {
+    if image.contains(':') || image.starts_with(['/', '\\']) {
+        return None;
+    }
+    Some(PathBuf::from(format!("{}/{}", cwd.to_string_lossy().trim_end_matches('/'), image.replace('\\', "/"))))
+}
+
 /// A Linux path as Wine sees it, on the `Z:` drive every prefix maps to `/`.
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn windows_path(path: &Path) -> String {
@@ -409,12 +419,26 @@ mod imp {
             return Err("Kimochi cannot find this game's Wine prefix.".into());
         }
         let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).map_err(|_| "this process cannot be inspected")?;
-        let image = String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default()).trim().to_string();
+        let mut image =
+            String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default()).trim().to_string();
         if !image.to_ascii_lowercase().ends_with(".exe") {
             return Err("this is part of Wine, not a game".into());
         }
-        let exe = unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok())
-            .unwrap_or_else(|| PathBuf::from(&image));
+        let exe = match unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok()) {
+            Some(path) => path,
+            None => {
+                let cwd = std::fs::read_link(format!("/proc/{pid}/cwd"))
+                    .map_err(|_| "Kimochi cannot find this game's working directory.")?;
+                match relative_image(&image, &cwd) {
+                    Some(path) => {
+                        // Match the full image inside the prefix, even with two games named game.exe.
+                        image = windows_path(&path);
+                        path
+                    }
+                    None => PathBuf::from(&image),
+                }
+            }
+        };
         let lower = image.to_ascii_lowercase().replace('/', "\\");
         if lower.starts_with("c:\\windows\\") || lower.contains("\\proton") && lower.contains("\\files\\") {
             return Err("this is part of Wine, not a game".into());
@@ -793,6 +817,22 @@ not json"#;
         // Wine may report another drive for the same file; the name still finds it.
         assert_eq!(pids("Z:\\home\\deck\\Game\\game.exe"), vec![308, 400]);
         assert!(pids("S:\\Other\\Other.exe").is_empty());
+    }
+
+    #[test]
+    fn relative_images_use_the_games_directory() {
+        let cwd = Path::new("/home/deck/Games/Cave Story");
+        assert_eq!(
+            relative_image("Doukutsu.exe", cwd),
+            Some(PathBuf::from("/home/deck/Games/Cave Story/Doukutsu.exe"))
+        );
+        assert_eq!(
+            relative_image(r"bin\Game.exe", cwd),
+            Some(PathBuf::from("/home/deck/Games/Cave Story/bin/Game.exe"))
+        );
+        assert!(relative_image(r"C:\Games\game.exe", cwd).is_none());
+        assert!(relative_image(r"\\server\share\game.exe", cwd).is_none());
+        assert!(relative_image("/opt/game.exe", cwd).is_none());
     }
 
     #[test]

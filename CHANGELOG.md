@@ -23,6 +23,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Linux: Wine games appear in the source picker on WSLg.** Games started with a relative path are also hooked with the right 32- or 64-bit helper.
 - **Steam Deck Gaming Mode: drop-down lists work by touch.** A list such as **Section** in Hachidori's settings (and the lists in Yomitan's and 10ten's) took many taps to change. It now opens as a list inside the window, with rows big enough for a finger: one tap opens it, one tap chooses.
 - **Steam Deck Gaming Mode: the on-screen keyboard.** Tapping a text field in Kimochi (a session's name, a search box, a dictionary's settings) now brings up Steam's on-screen keyboard, so you can type without **Steam + X**.
 - **Steam Deck Gaming Mode: each game gets its own session.** With **Screen** as the source, a second game's lines went into the first game's session. The Log now switches to the session named after the game you are playing, and makes one the first time. Kimochi also no longer stays on the first game when the second one was still starting as you switched.
