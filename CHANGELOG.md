@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Fixed Text Hooker finding Wine games on Mac when launched with a relative executable path.
+
 - Agent scripts can attach to native Apple Silicon Mac games and emulators with a matching script; hardened apps may refuse attachment.
 
 - On macOS, sentence audio records the selected game’s audio, including Wine games, without injecting an audio DLL. Selecting a display records all system audio.
