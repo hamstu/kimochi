@@ -235,6 +235,8 @@ struct Session {
     text_at: Option<u64>,
     /// The whole text box the next line is a sentence of (`clean::new_sentence`), for the card.
     screen: Option<String>,
+    #[cfg(target_os = "macos")]
+    gadget: Option<PathBuf>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     /// The code page the helper decodes ANSI text with, when it can be changed while it runs (a
@@ -522,6 +524,8 @@ fn send(session: &mut Session, command: Value) -> Result<(), String> {
 }
 
 fn stop_child(session: &mut Session) {
+    #[cfg(target_os = "macos")]
+    agent::gadget::stop(session);
     // Agent's frida-inject takes its script out of the game as it exits: it goes at once, before
     // anything else hooks the game.
     if session.engine == Some(agent::ENGINE) {
@@ -2190,5 +2194,32 @@ mod tests {
         assert_eq!(failed_hook("MH_ERROR_MEMORY_ALLOC"), None);
         assert_eq!(failed_hook("注入钩子: String:String: 000001DCD4B56610"), None);
         assert_eq!(failed_hook("移除钩子: String:String:"), None);
+    }
+}
+
+/// Choose a native Mac game and opt into loading Agent at launch.
+#[tauri::command]
+pub async fn texthook_launch(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<Value, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog().file().set_title("Launch native Mac game through Kimochi").set_parent(&window).pick_file(
+            move |path| {
+                let _ = tx.send(path);
+            },
+        );
+        let Some(path) = rx.await.map_err(|e| e.to_string())? else {
+            return Ok(json!({"launched":false}));
+        };
+        let path = path.into_path().map_err(|e| e.to_string())?;
+        tauri::async_runtime::spawn_blocking(move || agent::gadget::launch_game(path))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, window);
+        Err("Native game launch is available on macOS only.".into())
     }
 }

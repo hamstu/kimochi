@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Native Mac games with a matching Agent script can opt into **Launch through Kimochi** in Text Hooker settings. This enables supported Rosetta games without changing the game or Mac security settings; stopping the hook leaves the game running.
+
 - Fixed Text Hooker finding Wine games on Mac when launched with a relative executable path.
 
 - Agent scripts can attach to native Apple Silicon Mac games and emulators with a matching script; hardened apps may refuse attachment.

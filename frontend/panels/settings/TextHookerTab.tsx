@@ -40,6 +40,7 @@ import {
   texthookGame,
   texthookGameIcon,
   texthookInsert,
+  texthookLaunch,
   texthookSelect,
   useHookStatus
 } from '../../bridge/textHook'
@@ -825,6 +826,43 @@ function AgentScriptsRow(): ReactNode {
   )
 }
 
+/** Start a compatible native app with Agent available before macOS blocks attachment. */
+function NativeAgentLaunchRow(): ReactNode {
+  const capabilities = useCapabilities()
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  if (capabilities.os !== 'macos') return null
+  const launch = async (): Promise<void> => {
+    setBusy(true)
+    setMessage('Downloading Agent if needed, then launching the chosen game…')
+    try {
+      const result = await texthookLaunch()
+      setMessage(
+        result.launched
+          ? `${result.title ?? 'Game'} launched. Select its window as your source, then use Agent scripts.`
+          : ''
+      )
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <SettingsRow
+      label="Native Mac games"
+      description={
+        message ||
+        'Launch a game with an indexed Agent script. Close it first. Clearing the source unloads the hook and leaves the game running.'
+      }
+    >
+      <Button size="sm" disabled={busy} onClick={() => void launch()}>
+        {busy ? 'Launching…' : 'Launch through Kimochi…'}
+      </Button>
+    </SettingsRow>
+  )
+}
+
 export function TextHookerTab(): ReactNode {
   const [open, setOpen] = useSetting<string | null>('textHookerSettingsGame', null)
   const games = useHookGames()
@@ -849,7 +887,12 @@ export function TextHookerTab(): ReactNode {
                 <HookSettingsSections
                   scope={{ kind: 'defaults' }}
                   extra={{
-                    hooking: <AgentScriptsRow />,
+                    hooking: (
+                      <>
+                        <AgentScriptsRow />
+                        <NativeAgentLaunchRow />
+                      </>
+                    ),
                     text: (
                       <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
                         <Button size="sm" onClick={() => showSettingsTab('log')}>

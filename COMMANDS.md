@@ -2128,7 +2128,23 @@ Native attach works for unhardened ARM64 targets; hardened and Rosetta processes
 injection and report the injector’s reason. Kimochi does not change signing, SIP or entitlements.
 Native Frida is pinned as `agent-macos-arm64`. The host uses POSIX paths, and applies Citra
 (main module) and Yuzu (libc++ symbol) ARM64 overlays while reading libraries, leaving the pinned
-archive unchanged. These overlays do not guarantee support for every emulator/game version.
+archive unchanged. Native Mono also falls back to exact export enumeration when named lookup
+misses an exported function. For Rosetta Gadget hooks, the Mono overlay also preserves
+originally writable JIT allocations across script disposal (only ranges observed as rwx;
+read-only code is never made writable by this restoration). These overlays do not guarantee support for every emulator/game version.
+
+Settings → Text Hooker → **Launch through Kimochi…** is an opt-in launch for a native Mac `.app`
+with an indexed PC script (including Rosetta Higurashi). Close the game first. Kimochi downloads
+checksum-pinned universal Frida Gadget, launches with `DYLD_INSERT_LIBRARIES` and the matched
+Steam app id when available, and verifies the process id and executable written by Gadget. It
+does not alter the game bundle, signing, entitlements or system permissions. Select the launched
+window, then use Agent as usual. Gadget uses script reload mode, with no network listener; its
+private directory is mode 0700 under `texthook/gadget-<random>/`. Each hook run writes the normal
+Agent protocol to its own event file, read through the same text pipeline. Stop or switching sources
+replaces the script with an idle script, unloading hooks without terminating the game. Closing the
+game ends the session and removes its launch directory while Kimochi is running. Relaunch through
+Kimochi after restarting Kimochi; a still-running game is not adopted. Hardened games may refuse
+to load Gadget, in which case launch reports the failure without changing security settings.
 
 **Agent scripts** (`text_hook/agent/`). A game the Agent collection (https://github.com/0xDC00/scripts,
 MIT) has a script for is hooked by that script first, LunaHook and Textractor following if it
@@ -2162,6 +2178,7 @@ helper can keep its standard error open after it exits); a script that neither l
 
 | Command | Signature |
 | --- | --- |
+| `texthook_launch` | `() -> {launched, pid?, title?}` — macOS only: native application picker, pinned Gadget download, opt-in launch; cancelled picker returns `launched: false`. Select the game window afterward |
 | `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?, agent?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames. `agent` (an `AgentScript`) when the game has an Agent script |
 | `texthook_start` | `({sourceId, observerEngine?, engine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is (with the same engine first). `engine` (`'agent'` | `'luna'`) asks for that engine first, over the game's `engine` setting. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher). When the game cannot be hooked at all, the session becomes the window's, `failed` with the reason in `detail`, and the command rejects with it |
 | `texthook_engine` | `({engine}) -> HookStatus` — hooks the game being hooked again with `engine` (`'agent'` | `'luna'`) first, its processes as found; threads start afresh. Fails when nothing is hooked, or for `'agent'` when the game has no script. The card keeps the choice in `textHookerGames.<exe>.engine` |

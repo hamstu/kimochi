@@ -412,6 +412,46 @@
           ]
         }
       ]
+    },
+    "agent-gadget-macos": {
+      "name": "Agent launch",
+      "version": "17.27.4",
+      "project": "https://github.com/frida/frida",
+      "license": "wxWindows Library Licence 3.1",
+      "files": [
+        {
+          "name": "Gadget.dylib",
+          "size": 94406832,
+          "sha256": "b086b3a7660bf63e7e216e055a31788aeb58defcc20ed2d5e8255df08706d228",
+          "xz": {
+            "size": 25464384,
+            "sha256": "cbae308319700ec6a380ee1c25adae50f83a4b5e6bc14076a708906feb1640ee"
+          },
+          "sources": [
+            {
+              "url": "https://github.com/frida/frida/releases/download/17.27.4/frida-gadget-17.27.4-macos-universal.dylib.xz",
+              "xz": true
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-gadget-macos/17.27.4/Gadget.dylib.xz",
+              "xz": true
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 2416,
+          "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/frida/frida/17.27.4/COPYING"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-gadget-macos/17.27.4/LICENSE.txt"
+            }
+          ]
+        }
+      ]
     }
   }
 }
