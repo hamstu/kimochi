@@ -818,7 +818,7 @@ function AgentScriptsRow(): ReactNode {
     <SettingsRow
       label="Agent scripts"
       controlId="th-agent-scripts"
-      description="Hook a game the Agent collection has a script for (many emulated console games, some PC games) with that script, ahead of LunaHook. Its card offers it. Frida and the scripts download the first time a game needs them."
+      description="A game with a script in the Agent collection (many emulated console games, some PC games) is hooked with it first, then LunaHook. Frida and the scripts download the first time a game needs them."
     >
       <Switch id="th-agent-scripts" checked={on !== false} onCheckedChange={(next) => void setOn(next)} />
     </SettingsRow>

@@ -2136,10 +2136,14 @@ writes refused, storage for the session), `frida16.js` (the Frida 16 API on 17),
 standard error, unbuffered, one line per event: `K <JSON, ASCII-escaped>`, with `cmd`
 `ready` (loaded: the session is `hooked`, one thread `AGENT:<file>` selected at once,
 `selectedBy: 'agent'`), `copy` (a line, whole; over 2000 characters cut, over 8000 dropped),
-`log` and `detach`. Exiting before `ready` (or before any text, unless frida-inject says the game
+`log`, `error` (the script threw while loading: frida-inject would stay, so it is stopped) and
+`detach`. An `error`, or exiting, before `ready` (or before any text, unless frida-inject says the game
 terminated) falls back to the next engine; a Unity game whose runtime is not up yet ("Mono not
 found") is tried again for up to 20 s. Stopping kills frida-inject, which takes the script out of
-the game.
+the game. A watcher notices the game closing, or frida-inject stopping, within half a second (a Frida
+helper can keep its standard error open after it exits); a script that neither loads nor fails within
+45 s hands over too. Debug builds only: `KIMOCHI_AGENT_SCRIPT=<file>` gives every game that script
+(a file put in the collection folder), for trying the engine on a game the collection does not know.
 
 | Command | Signature |
 | --- | --- |

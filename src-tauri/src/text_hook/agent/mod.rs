@@ -26,6 +26,7 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 pub use index::Script;
@@ -40,6 +41,8 @@ pub const ENGINE: &str = "agent";
 const HOOKCODE: &str = "AGENT:";
 /// The longest text taken as one line; a script sending more is cut there, four times more dropped.
 const MAX_CHARS: usize = 2000;
+/// How long a script may take to load (some scan the game's memory first) before the next engine.
+const STARTUP_LIMIT: Duration = Duration::from_secs(45);
 /// How long a Unity game's runtime may take to come up before its script can hook it.
 const UNITY_STARTUP: Duration = Duration::from_secs(20);
 
@@ -66,21 +69,51 @@ pub fn injector() -> Option<&'static str> {
 /// and the collection has one.
 pub fn script_for(target: &process::Target, window_title: Option<&str>, language: &str) -> Option<&'static Script> {
     injector()?;
+    // Development: every game has the script named here (a file put in the collection's folder),
+    // to try the engine on a game the collection does not know.
+    #[cfg(debug_assertions)]
+    if let Some(file) = std::env::var("KIMOCHI_AGENT_SCRIPT").ok().filter(|f| !f.is_empty()) {
+        static TEST: std::sync::OnceLock<Script> = std::sync::OnceLock::new();
+        return Some(TEST.get_or_init(|| Script {
+            title: file.trim_end_matches(".js").to_string(),
+            file,
+            platform: "pc".into(),
+            ids: Vec::new(),
+            steam: Vec::new(),
+            lang: None,
+            version: None,
+            author: None,
+            generic: false,
+        }));
+    }
     let steam = index::steam_app_id(&target.exe);
     index::find(&index::Game { exe: &target.exe, window_title, steam, language })
 }
 
+/// What the injector still needs, summed by `size` over its files (0 when it is here).
+fn injector_missing(root: &Path, size: fn(&store::File) -> u64) -> u64 {
+    let Some(engine) = injector() else { return 0 };
+    match store::installed(root, engine) {
+        Some(_) => 0,
+        None => store::manifest().engines.get(engine).map_or(0, |e| e.files.iter().map(size).sum()),
+    }
+}
+
+/// The collection's download, if it is not here yet.
+fn collection_missing(root: &Path) -> u64 {
+    if scripts::installed(root).is_some() {
+        0
+    } else {
+        scripts::download_size()
+    }
+}
+
 /// The bytes still to download before Agent can run (0 when it is ready).
 pub fn missing_bytes(root: &Path) -> u64 {
-    let Some(engine) = injector() else { return 0 };
-    let injector = match store::installed(root, engine) {
-        Some(_) => 0,
-        None => {
-            store::manifest().engines.get(engine).map_or(0, |e| e.files.iter().map(store::File::download_size).sum())
-        }
-    };
-    let collection = if scripts::installed(root).is_some() { 0 } else { scripts::download_size() };
-    injector + collection
+    if injector().is_none() {
+        return 0;
+    }
+    injector_missing(root, store::File::download_size) + collection_missing(root)
 }
 
 /// What the status says about the script: shown on the game's card.
@@ -130,7 +163,9 @@ pub(super) fn run(hook: &'static Hook, generation: u64) {
 fn install(hook: &'static Hook, generation: u64) -> Result<(PathBuf, PathBuf), String> {
     let engine = injector().ok_or("Agent does not run on this computer")?;
     let root = hook.root()?;
-    let missing = missing_bytes(&root);
+    // One bar for both: the injector's download and unpacking (`File::work`), then the collection.
+    let injector_work = injector_missing(&root, store::File::work);
+    let missing = injector_work + collection_missing(&root);
     if missing > 0 {
         let mut session = hook.lock();
         if session.generation != generation {
@@ -153,12 +188,7 @@ fn install(hook: &'static Hook, generation: u64) -> Result<(PathBuf, PathBuf), S
         Some(dir) => dir,
         None => store::install(&fetch, &root, engine, &|done, _| report(done))?,
     };
-    let before = store::manifest()
-        .engines
-        .get(engine)
-        .map_or(0, |e| e.files.iter().map(store::File::download_size).sum::<u64>());
-    let already = if missing > scripts::download_size() { before } else { 0 };
-    let collection = scripts::install(&fetch, &root, &|n| report(already + n.min(scripts::download_size())))?;
+    let collection = scripts::install(&fetch, &root, &|n| report(injector_work + n.min(scripts::download_size())))?;
     let mut session = hook.lock();
     if session.generation != generation {
         return Err("cancelled".into());
@@ -175,11 +205,12 @@ fn build_script(loader: &str, dir: &str, mission: &str) -> String {
         format!("globalThis.__kimochi = {params};"),
         PRELUDE.to_string(),
         FRIDA16.to_string(),
-        // Frida's own send and recv are read-only: libLoader's are the prelude's.
-        ";(function (send, recv) {".to_string(),
+        // Frida's own send and recv are read-only: libLoader's are the prelude's. Whether it loaded
+        // the game's script is said either way (frida-inject itself says nothing of a failure).
+        ";try { (function (send, recv) {".to_string(),
         loader.to_string(),
         "\n}).call(globalThis, globalThis.__kimochi.send, globalThis.__kimochi.recv);".to_string(),
-        "globalThis.__kimochi.ready();".to_string(),
+        "globalThis.__kimochi.ready(); } catch (e) { globalThis.__kimochi.failed(e); }".to_string(),
     ]
     .join("\n")
 }
@@ -275,23 +306,71 @@ fn launch(
         &hook.app,
         json!({ "check": "texthook-agent-start", "script": script.file, "pid": target.pid }),
     );
-    let (injector, collection, target) = (injector.to_path_buf(), collection.to_path_buf(), target.clone());
+    let context = Arc::new(Context {
+        injector: injector.to_path_buf(),
+        collection: collection.to_path_buf(),
+        script,
+        target: target.clone(),
+        started,
+    });
+    let run = Arc::new(Mutex::new(Run::default()));
+    // A script that neither loads nor fails (a scan of the game's memory that never ends) is given
+    // up after a while, for the next engine.
     std::thread::spawn(move || {
-        let end = read(hook, generation, script, target.pid, BufReader::new(stderr));
-        // A Unity game whose runtime was not up yet: the script is tried again until it is.
-        if end == End::RuntimeNotReady && started.elapsed() < UNITY_STARTUP && hook.lock().generation == generation {
-            std::thread::sleep(Duration::from_millis(750));
-            if hook.lock().generation != generation {
-                return;
-            }
-            if let Err(reason) = launch(hook, generation, &injector, &collection, script, &target, started) {
-                if reason != "cancelled" {
-                    fall_back(hook, generation, ENGINE, reason);
-                }
-            }
+        std::thread::sleep(STARTUP_LIMIT);
+        let stuck = {
+            let session = hook.lock();
+            session.generation == generation && session.engine == Some(ENGINE) && session.phase == "attaching"
+        };
+        if stuck {
+            fall_back(hook, generation, ENGINE, "the script did not start".into());
         }
     });
+    // The game closing, or frida-inject stopping: noticed here, since its standard error may stay
+    // open after it (a Frida helper it started keeps it), and the reader would never hear the end.
+    {
+        let (context, run) = (context.clone(), run.clone());
+        std::thread::spawn(move || watch(hook, generation, &context, &run));
+    }
+    std::thread::spawn(move || {
+        read(hook, generation, &context, &run, BufReader::new(stderr));
+        // The output ended: frida-inject has exited.
+        let end = finish(hook, generation, &context, &run, Ending::Exited);
+        again(hook, generation, &context, end);
+    });
     Ok(())
+}
+
+/// What a session's run of frida-inject needs to be started again.
+struct Context {
+    injector: PathBuf,
+    collection: PathBuf,
+    script: &'static Script,
+    target: process::Target,
+    /// When the first run started (a Unity game's runtime is waited for from then).
+    started: Instant,
+}
+
+/// What a run of frida-inject has said so far, shared by its reader and its watcher.
+#[derive(Default)]
+struct Run {
+    ready: bool,
+    spoke: bool,
+    /// The script's log said the game's Unity runtime is not up yet.
+    not_ready: bool,
+    /// Its last few messages of its own and warnings, for why it stopped.
+    said: VecDeque<String>,
+    /// Its end has been dealt with, by whichever noticed it first.
+    over: bool,
+}
+
+impl Run {
+    fn note(&mut self, text: String) {
+        self.said.push_back(text);
+        if self.said.len() > 6 {
+            self.said.pop_front();
+        }
+    }
 }
 
 /// How frida-inject's run ended, for what follows.
@@ -301,6 +380,95 @@ enum End {
     Done,
     /// The script could not find the game's Unity runtime yet: worth trying again.
     RuntimeNotReady,
+}
+
+/// What ended a run.
+#[derive(Debug, PartialEq)]
+enum Ending {
+    Exited,
+    GameClosed,
+}
+
+/// A Unity game whose runtime was not up yet: the script is tried again, until it is or the time
+/// for it is up.
+fn again(hook: &'static Hook, generation: u64, context: &Context, end: End) {
+    if end != End::RuntimeNotReady || hook.lock().generation != generation {
+        return;
+    }
+    if context.started.elapsed() >= UNITY_STARTUP {
+        fall_back(hook, generation, ENGINE, "the game's Unity runtime did not come up".into());
+        return;
+    }
+    std::thread::sleep(Duration::from_millis(750));
+    if hook.lock().generation != generation {
+        return;
+    }
+    let result = launch(
+        hook,
+        generation,
+        &context.injector,
+        &context.collection,
+        context.script,
+        &context.target,
+        context.started,
+    );
+    if let Err(reason) = result {
+        if reason != "cancelled" {
+            fall_back(hook, generation, ENGINE, reason);
+        }
+    }
+}
+
+/// Whether the process is still running: `None` where that cannot be told (under Wine its id is
+/// the prefix's).
+#[cfg(windows)]
+fn running(pid: u32) -> Option<bool> {
+    use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_PARAMETER};
+    use windows::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    const STILL_ACTIVE: u32 = 259;
+    let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
+        Ok(handle) => handle,
+        // No such process any more.
+        Err(e) if e.code() == ERROR_INVALID_PARAMETER.to_hresult() => return Some(false),
+        Err(_) => return None,
+    };
+    let mut code = 0u32;
+    let read = unsafe { GetExitCodeProcess(handle, &mut code) }.is_ok();
+    let _ = unsafe { CloseHandle(handle) };
+    read.then_some(code == STILL_ACTIVE)
+}
+#[cfg(not(windows))]
+fn running(_pid: u32) -> Option<bool> {
+    None
+}
+
+/// Every half second, while the run is the session's: the game gone, or frida-inject gone.
+fn watch(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run>) {
+    loop {
+        std::thread::sleep(Duration::from_millis(500));
+        let ending = {
+            let mut session = hook.lock();
+            if session.generation != generation || session.engine != Some(ENGINE) {
+                return;
+            }
+            if run.lock().unwrap_or_else(|e| e.into_inner()).over {
+                return;
+            }
+            let exited = session.child.as_mut().is_none_or(|child| matches!(child.try_wait(), Ok(Some(_))));
+            if running(context.target.pid) == Some(false) {
+                Some(Ending::GameClosed)
+            } else if exited {
+                Some(Ending::Exited)
+            } else {
+                None
+            }
+        };
+        if let Some(ending) = ending {
+            let end = finish(hook, generation, context, run, ending);
+            again(hook, generation, context, end);
+            return;
+        }
+    }
 }
 
 /// One event line: the JSON after the mark, the colour codes around it taken off.
@@ -330,43 +498,63 @@ fn plain(line: &str) -> String {
     out.trim().to_string()
 }
 
+/// A script's error as the card says it: `Error:` off, and any path down to its file name
+/// (`Module C:\…\NS_x.js not found!` → `Module NS_x.js not found!`).
+pub fn plain_error(text: &str) -> String {
+    let text = text.trim().trim_start_matches("Error:").trim();
+    let line = text.lines().next().unwrap_or_default();
+    line.split(' ')
+        .map(|word| {
+            let is_path = word.contains(":\\") || word.starts_with('/') || word.starts_with("\\\\");
+            match word.rsplit(['\\', '/']).next() {
+                Some(name) if is_path && !name.is_empty() => name,
+                _ => word,
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Whether the script's log says the game's Unity (Mono) runtime is not there yet.
 fn runtime_not_ready(text: &str) -> bool {
     let lower = text.to_lowercase();
     lower.contains("mono not found") || lower.contains("mono is not ready") || lower.contains("il2cpp not found")
 }
 
-fn read(hook: &'static Hook, generation: u64, script: &'static Script, pid: u32, mut stderr: impl BufRead) -> End {
+fn kill(session: &mut Session) {
+    if let Some(mut child) = session.child.take() {
+        let _ = child.kill();
+        std::thread::spawn(move || child.wait());
+    }
+}
+
+/// Reads frida-inject's events until its output ends, or the script ended the run itself.
+fn read(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run>, mut stderr: impl BufRead) {
+    let (script, pid) = (context.script, context.target.pid);
     let key = format!("{pid}:agent");
-    let mut ready = false;
-    let mut spoke = false;
-    let mut not_ready = false;
-    let mut said: VecDeque<String> = VecDeque::new();
     let mut buffer = Vec::new();
     loop {
         buffer.clear();
         match stderr.read_until(b'\n', &mut buffer) {
-            Ok(0) | Err(_) => break,
+            Ok(0) | Err(_) => return,
             Ok(_) => {}
         }
         let line = String::from_utf8_lossy(&buffer);
         let Some(event) = event_of(&line) else {
             let text = plain(&line);
             if !text.is_empty() {
-                said.push_back(text);
-                if said.len() > 6 {
-                    said.pop_front();
-                }
+                run.lock().unwrap_or_else(|e| e.into_inner()).note(text);
             }
             continue;
         };
         let mut session = hook.lock();
-        if session.generation != generation {
-            return End::Done;
+        let mut state = run.lock().unwrap_or_else(|e| e.into_inner());
+        if session.generation != generation || state.over {
+            return;
         }
         match event["cmd"].as_str().unwrap_or_default() {
             "ready" => {
-                ready = true;
+                state.ready = true;
                 session.phase = "hooked";
                 session.detail = None;
                 add_thread(&mut session, &key, pid, script);
@@ -384,59 +572,85 @@ fn read(hook: &'static Hook, generation: u64, script: &'static Script, pid: u32,
                 if !session.threads.iter().any(|t| t.key == key) {
                     add_thread(&mut session, &key, pid, script);
                 }
-                spoke = true;
+                state.spoke = true;
+                drop(state);
                 on_text(hook, &mut session, &key, text);
                 hook.publish(&session);
             }
             "log" => {
                 let text = event["text"].as_str().unwrap_or_default();
-                if !spoke && runtime_not_ready(text) {
-                    not_ready = true;
+                if !state.spoke && runtime_not_ready(text) {
+                    state.not_ready = true;
                 }
                 if event["level"] != "info" {
-                    said.push_back(text.to_string());
-                    if said.len() > 6 {
-                        said.pop_front();
-                    }
+                    state.note(text.to_string());
                 }
                 crate::debug_report::trace(
                     &hook.app,
                     json!({ "check": "texthook-agent-log", "level": event["level"], "text": text }),
                 );
             }
+            // The script could not load (a library it needs, the game's code it looks for): it says
+            // so itself, and frida-inject, which would stay, is stopped.
+            "error" if !state.ready => {
+                let text = event["text"].as_str().unwrap_or("the script did not load").to_string();
+                crate::debug_report::trace(
+                    &hook.app,
+                    json!({ "check": "texthook-agent-error", "text": text, "stack": event["stack"] }),
+                );
+                state.over = true;
+                if state.not_ready || runtime_not_ready(&text) {
+                    kill(&mut session);
+                    drop((state, session));
+                    again(hook, generation, context, End::RuntimeNotReady);
+                    return;
+                }
+                drop((state, session));
+                fall_back(hook, generation, ENGINE, plain_error(&text));
+                return;
+            }
             // The script gave up on this game (a version it does not know).
-            "detach" if !spoke => {
-                drop(session);
+            "detach" if !state.spoke => {
+                state.over = true;
+                drop((state, session));
                 fall_back(hook, generation, ENGINE, format!("the {} script stopped", script.title));
-                return End::Done;
+                return;
             }
             _ => {}
         }
     }
-    // frida-inject has exited.
+}
+
+/// The run has ended (`ending`): the game closed, the session is over; frida-inject stopped before
+/// the script ran or spoke, the next engine; after, the session failed. Once per run.
+fn finish(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run>, ending: Ending) -> End {
     let mut session = hook.lock();
-    if session.generation != generation {
+    let mut state = run.lock().unwrap_or_else(|e| e.into_inner());
+    if session.generation != generation || state.over {
         return End::Done;
     }
-    session.child = None;
-    if not_ready && !spoke {
-        return End::RuntimeNotReady;
-    }
-    let what = said.iter().rev().find(|s| !s.is_empty()).cloned();
-    let closed = said.iter().any(|s| s.to_lowercase().contains("terminated"));
-    if !ready || (!spoke && !closed) {
-        drop(session);
-        let reason = what.unwrap_or_else(|| "the script did not load".into());
-        fall_back(hook, generation, ENGINE, reason);
-        return End::Done;
-    }
+    state.over = true;
+    kill(&mut session);
+    let key = format!("{}:agent", context.target.pid);
+    let closed = ending == Ending::GameClosed || state.said.iter().any(|s| s.to_lowercase().contains("terminated"));
     if closed {
         session.phase = "ended";
         session.detail = Some("The game has closed.".into());
-    } else {
-        session.phase = "failed";
-        session.detail = Some(format!("Agent stopped{}", what.map(|w| format!(": {w}")).unwrap_or_default()));
+        session.threads.retain(|t| t.key != key);
+        hook.publish(&session);
+        return End::Done;
     }
+    if state.not_ready && !state.spoke {
+        return End::RuntimeNotReady;
+    }
+    let what = state.said.iter().rev().find(|s| !s.is_empty()).cloned();
+    if !state.ready || !state.spoke {
+        drop((state, session));
+        fall_back(hook, generation, ENGINE, what.unwrap_or_else(|| "the script did not load".into()));
+        return End::Done;
+    }
+    session.phase = "failed";
+    session.detail = Some(format!("Agent stopped{}", what.map(|w| format!(": {w}")).unwrap_or_default()));
     session.threads.retain(|t| t.key != key);
     hook.publish(&session);
     End::Done
@@ -490,12 +704,23 @@ mod tests {
             serde_json::from_str(params.trim_start_matches("globalThis.__kimochi = ").trim_end_matches(';')).unwrap();
         assert_eq!(value["dir"], r"C:\K\scripts");
         assert_eq!(value["mission"], r"C:\K\scripts\NS_x.js");
-        // The loader's own `send` and `recv` are the prelude's, after the shim, and it says when it
-        // has loaded.
+        // The loader's own `send` and `recv` are the prelude's, after the shim, and it says whether
+        // it has loaded.
         let loader = built.find("function main(){}").unwrap();
-        assert!(built[..loader].ends_with(";(function (send, recv) {\n"));
+        assert!(built[..loader].ends_with(";try { (function (send, recv) {\n"));
         assert!(built.find("findGlobalExportByName").unwrap() < loader);
-        assert!(built.trim_end().ends_with("globalThis.__kimochi.ready();"));
+        assert!(built
+            .trim_end()
+            .ends_with("globalThis.__kimochi.ready(); } catch (e) { globalThis.__kimochi.failed(e); }"));
+    }
+
+    #[test]
+    fn script_errors_are_said_with_file_names_not_paths() {
+        assert_eq!(
+            plain_error(r"Error: Module C:\Users\a\texthook\agent-scripts-1\NS_x.js not found!"),
+            "Module NS_x.js not found!"
+        );
+        assert_eq!(plain_error("Hook not found!\n    at libYuzu.js:12"), "Hook not found!");
     }
 
     #[test]

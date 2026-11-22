@@ -61,6 +61,11 @@ impl File {
     pub fn download_size(&self) -> u64 {
         self.xz.as_ref().map_or(self.size, |p| p.size)
     }
+    /// How much of a progress bar it takes: its download, and as much again for unpacking one
+    /// that comes compressed (a hundred megabytes take seconds to unpack).
+    pub fn work(&self) -> u64 {
+        self.xz.as_ref().map_or(self.size, |p| p.size * 2)
+    }
 }
 
 fn is_sha256(hash: &str) -> bool {
@@ -344,12 +349,30 @@ fn zip_entry(fetch: &dyn Fetch, url: &str, entry: &str, expected_size: u64) -> R
 }
 
 /// Fetches one manifest file from the first source that yields the right bytes.
-/// An xz stream's contents.
-pub fn unxz(packed: &[u8]) -> Result<Vec<u8>, String> {
-    let mut out = Vec::new();
+/// An xz stream's contents, telling `unpacked` how many bytes are out every megabyte or so.
+pub fn unxz(packed: &[u8], unpacked: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
+    struct Counting<'a> {
+        out: Vec<u8>,
+        told: usize,
+        unpacked: &'a dyn Fn(u64),
+    }
+    impl std::io::Write for Counting<'_> {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.out.extend_from_slice(buf);
+            if self.out.len() - self.told >= 1 << 20 {
+                self.told = self.out.len();
+                (self.unpacked)(self.told as u64);
+            }
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut out = Counting { out: Vec::new(), told: 0, unpacked };
     lzma_rs::xz_decompress(&mut std::io::BufReader::new(packed), &mut out)
         .map_err(|e| format!("could not unpack: {e}"))?;
-    Ok(out)
+    Ok(out.out)
 }
 
 #[cfg(test)]
@@ -357,8 +380,9 @@ pub fn fetch_file(fetch: &dyn Fetch, file: &File) -> Result<Vec<u8>, String> {
     fetch_file_with(fetch, file, &|_| {})
 }
 
-/// The file, verified, from the first of its sources that has it. `received` hears how many bytes
-/// of the download under way have arrived (from 0 again for each source tried).
+/// The file, verified, from the first of its sources that has it. `received` hears how far it has
+/// got, in `File::work` units: bytes downloaded, then for a compressed file the download's size
+/// again in proportion as it is unpacked (from 0 again for each source tried).
 pub fn fetch_file_with(fetch: &dyn Fetch, file: &File, received: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
     let mut errors = Vec::new();
     // Our mirror first, then the upstream release (`download_mirror`).
@@ -375,7 +399,8 @@ pub fn fetch_file_with(fetch: &dyn Fetch, file: &File, received: &dyn Fn(u64)) -
                 if packed.len() as u64 != pin.size || hex(&Sha256::digest(&packed)) != pin.sha256 {
                     return Err("the compressed file does not match its pin".to_string());
                 }
-                unxz(&packed)
+                let (packed_size, size) = (pin.size, file.size.max(1));
+                unxz(&packed, &|out| received(packed_size + packed_size * out.min(size) / size))
             }),
             None => fetch.get_streamed(&source.url, received),
         }
@@ -415,7 +440,8 @@ pub fn installed(root: &Path, id: &str) -> Option<PathBuf> {
 }
 
 /// Downloads and verifies every file of `id` into a staging directory, then renames it into
-/// place. `progress` gets (bytes done, bytes total) as the download goes.
+/// place. `progress` gets (done, total) as it goes, in `File::work` units (bytes, but for a
+/// compressed file twice its download: downloading, then unpacking).
 pub fn install(fetch: &dyn Fetch, root: &Path, id: &str, progress: &dyn Fn(u64, u64)) -> Result<PathBuf, String> {
     install_from(fetch, manifest(), root, id, progress)
 }
@@ -435,18 +461,18 @@ fn install_from(
     fs::create_dir_all(root).map_err(|e| e.to_string())?;
     let staging = root.join(format!(".staging-{id}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&staging);
-    let total: u64 = engine.files.iter().map(File::download_size).sum();
+    let total: u64 = engine.files.iter().map(File::work).sum();
     let mut done = 0;
     progress(0, total);
     let result = (|| {
         for file in &engine.files {
-            let data = fetch_file_with(fetch, file, &|n| progress(done + n.min(file.download_size()), total))?;
+            let data = fetch_file_with(fetch, file, &|n| progress(done + n.min(file.work()), total))?;
             let path = staging.join(&file.name);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             fs::write(&path, data).map_err(|e| e.to_string())?;
-            done += file.download_size();
+            done += file.work();
             progress(done, total);
         }
         fs::rename(&staging, &dir).map_err(|e| e.to_string())
@@ -686,7 +712,9 @@ mod tests {
         assert_eq!(file.download_size(), packed.len() as u64);
         let heard = Mutex::new(Vec::new());
         assert_eq!(fetch_file_with(&fake, &file, &|n| heard.lock().unwrap().push(n)).unwrap(), real);
-        assert_eq!(heard.lock().unwrap().last(), Some(&(packed.len() as u64)));
+        // Downloaded, then unpacked: the second half of its share of the bar.
+        assert_eq!(file.work(), 2 * packed.len() as u64);
+        assert!(heard.lock().unwrap().contains(&(packed.len() as u64)));
         // The tampered mirror copy alone: refused before it is unpacked.
         let only_tampered = File { sources: file.sources[..1].to_vec(), ..file.clone() };
         let error = fetch_file(&fake, &only_tampered).unwrap_err();
