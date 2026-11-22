@@ -691,8 +691,6 @@ mod imp {
     }
 }
 
-#[cfg(target_os = "macos")]
-pub use super::macos::wine_target as target;
 #[cfg(target_os = "linux")]
 pub use imp::target;
 #[cfg(any(target_os = "linux", target_os = "macos"))]

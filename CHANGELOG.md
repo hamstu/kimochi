@@ -8,7 +8,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- Text Hooker can read Windows games running through Wine on macOS, using the game’s own Wine prefix for Agent scripts, LunaHook, Textractor and audio hooks.
+- Agent scripts can attach to native Apple Silicon Mac games and emulators with a matching script; hardened apps may refuse attachment.
+
+- Text Hooker can read Windows games running through Wine on macOS, using the game’s own Wine prefix for Agent scripts, LunaHook and Textractor.
 
 ### Added
 

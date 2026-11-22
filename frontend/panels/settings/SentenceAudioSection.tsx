@@ -192,7 +192,7 @@ export function SentenceAudioSection(): ReactNode {
             <SettingsRow
               label="Audio hooking"
               controlId="sentence-audio-hook"
-              description="Take each line's voice straight from a Windows game with Text hooking on, also through Proton or Wine on Linux. Where it can't, system audio is recorded instead."
+              description="Take each line's voice straight from a Windows game with Text hooking on, also through Proton/Wine on Linux. Where it can't, system audio is recorded instead."
             >
               <Switch
                 id="sentence-audio-hook"

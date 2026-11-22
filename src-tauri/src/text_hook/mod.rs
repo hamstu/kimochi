@@ -59,6 +59,25 @@ fn engines_for(script: Option<&agent::Script>, choice: Option<&str>) -> Vec<&'st
         (None, _) => ENGINES.to_vec(),
     }
 }
+fn target_engines(
+    target: Option<&process::Target>,
+    script: Option<&agent::Script>,
+    choice: Option<&str>,
+) -> Result<Vec<&'static str>, String> {
+    if cfg!(target_os = "macos") && target.is_some_and(|t| t.wine.is_none()) {
+        if script.is_none() {
+            return Err("No Agent script matches this native Mac game.".into());
+        }
+        if choice.is_some_and(|c| c != agent::ENGINE) {
+            return Err(
+                "LunaHook and Textractor require a Windows game; use Agent scripts for native Mac games.".into()
+            );
+        }
+        return Ok(vec![agent::ENGINE]);
+    }
+    Ok(engines_for(script, choice))
+}
+
 /// How long after a burst the next can carry on its line (a typewriter paused for effect).
 const CARRY_ON: Duration = Duration::from_secs(5);
 /// How soon after a row of the text box the next row can join it: this, and the time the row
@@ -397,12 +416,12 @@ fn status_of(session: &Session) -> Value {
         "exe": session.exe.as_ref().map(|e| e.to_string_lossy()),
         "pids": session.pids,
         "engine": session.engine.and_then(|id| match id {
-            agent::ENGINE => Some(agent::engine_status()),
+            agent::ENGINE => Some(agent::engine_status(session.targets.first())),
             _ => manifest.engines.get(id).map(|e| json!({ "id": id, "name": e.name, "version": e.version })),
         }),
         "engines": session.engines,
         // Without its download size: the status goes out at every line (its progress is `download`).
-        "agent": session.agent.map(|script| agent::describe(script, None)),
+        "agent": session.agent.map(|script| agent::describe(script, None, session.targets.first())),
         "download": session.download.map(|(done, total)| json!({ "done": done, "total": total })),
         "selected": session.selected,
         "selectedBy": session.selected_by,
@@ -1624,9 +1643,18 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
             let pid = window_pid(&id);
             let value = match pid.map(process::target) {
                 Some(Ok(target)) => {
+                    let script = agent_script(&target, titles.get(&id).map(String::as_str));
+                    if cfg!(target_os = "macos") && target.wine.is_none() && script.is_none() {
+                        out.insert(
+                            id,
+                            json!({ "hookable": false, "reason": "No Agent script matches this native Mac game." }),
+                        );
+                        continue;
+                    }
                     let mut value = json!({ "hookable": true, "bits": target.bits, "exe": target.exe });
-                    if let Some(script) = agent_script(&target, titles.get(&id).map(String::as_str)) {
-                        value["agent"] = agent::describe(script, hook().and_then(|h| h.root().ok()).as_deref());
+                    if let Some(script) = script {
+                        value["agent"] =
+                            agent::describe(script, hook().and_then(|h| h.root().ok()).as_deref(), Some(&target));
                     }
                     value
                 }
@@ -1732,7 +1760,7 @@ pub async fn texthook_start(
     let title = window_title(&source_id);
     let script = targets.first().and_then(|t| agent_script(t, title.as_deref()));
     let choice = engine.or_else(|| targets.first().and_then(|t| chosen_engine(hook, &t.exe)));
-    let engines = engines_for(script, choice.as_deref());
+    let engines = target_engines(targets.first(), script, choice.as_deref())?;
     let generation = {
         let mut session = hook.lock();
         // The same game, already being hooked or hooked (the game started with Hook automatically
@@ -1817,7 +1845,7 @@ pub fn texthook_engine(engine: String) -> Result<Value, String> {
     if engine == agent::ENGINE && session.agent.is_none() {
         return Err("This game has no Agent script.".into());
     }
-    let engines = engines_for(session.agent, Some(engine.as_str()));
+    let engines = target_engines(session.targets.first(), session.agent, Some(engine.as_str()))?;
     stop_child(&mut session);
     let generation = session.generation + 1;
     let previous = std::mem::take(&mut *session);
@@ -1989,8 +2017,9 @@ pub fn refresh_voice_hook() {
         return;
     };
     let config = service.config();
-    // Windows games, natively or (on Linux) through Wine or Proton.
-    let enabled = (cfg!(windows) || targets.iter().any(|t| t.wine.is_some()))
+    // The voice DLL crashes 32-bit games under macOS Wine WoW64. Keep macOS on
+    // ScreenCaptureKit until that injector is validated; text hooking is independent.
+    let enabled = (cfg!(windows) || (cfg!(target_os = "linux") && targets.iter().any(|t| t.wine.is_some())))
         && config.enabled
         && config.voice_hook
         && hook.reading_text();

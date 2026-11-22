@@ -88,6 +88,16 @@ export const ENGINES = {
       'LICENSE.txt': { url: FRIDA_LICENSE }
     }
   },
+  'agent-macos-arm64': {
+    name: 'Agent',
+    version: FRIDA,
+    project: 'https://github.com/frida/frida',
+    license: 'wxWindows Library Licence 3.1',
+    files: {
+      'frida-inject': { xz: `${FRIDA_RELEASE}/frida-inject-${FRIDA}-macos-arm64.xz` },
+      'LICENSE.txt': { url: FRIDA_LICENSE }
+    }
+  },
   'agent-arm64': {
     name: 'Agent',
     version: FRIDA,

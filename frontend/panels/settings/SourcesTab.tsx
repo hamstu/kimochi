@@ -136,7 +136,7 @@ export function SourcesTab(): ReactNode {
   const [quickShot, setQuickShot] = useSetting<boolean>('quickShotEnabled', false)
   // Text hooking reads Windows games: on Windows, and on Linux through Proton or Wine.
   const os = useCapabilities().os
-  const hookable = os === 'windows' || os === 'linux'
+  const hookable = os === 'windows' || os === 'linux' || os === 'macos'
   const choose = (next: Mode, current: InputSource): void => {
     // A hooked game is already a window: choosing the window keeps its Text hooking.
     if (!(next === 'ocr' && current === 'hook'))

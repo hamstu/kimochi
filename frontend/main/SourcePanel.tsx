@@ -985,7 +985,7 @@ export function SourcePanel({
   const empty = windowMode && !source
   const hook = useHookStatus()
   // Windows games, natively or (on Linux) through Proton or Wine.
-  const hookAvailable = capabilities.os === 'windows' || capabilities.os === 'linux'
+  const hookAvailable = capabilities.os === 'windows' || capabilities.os === 'linux' || capabilities.os === 'macos'
   // The OCR that matches hooked text to the screen: the Auto OCR watcher, else the best one here.
   const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
   const [autoOcr] = useSetting<AutoOCRSettings | null>('autoOCRSettings', null)
