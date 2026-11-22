@@ -1610,12 +1610,20 @@ fn window_pid(source_id: &str) -> Option<u32> {
 pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut out = serde_json::Map::new();
+        // Window titles, for matching games to Agent scripts: the source list, read once.
+        let titles: BTreeMap<String, String> = crate::sources::catalog()
+            .map(|all| {
+                all.into_iter()
+                    .filter_map(|s| Some((s["id"].as_str()?.to_string(), s["name"].as_str()?.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
         for id in source_ids {
             let pid = window_pid(&id);
             let value = match pid.map(process::target) {
                 Some(Ok(target)) => {
                     let mut value = json!({ "hookable": true, "bits": target.bits, "exe": target.exe });
-                    if let Some(script) = agent_script(&target, &id) {
+                    if let Some(script) = agent_script(&target, titles.get(&id).map(String::as_str)) {
                         value["agent"] = agent::describe(script, hook().and_then(|h| h.root().ok()).as_deref());
                     }
                     value
@@ -1631,9 +1639,9 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
     .map_err(|e| e.to_string())
 }
 
-/// The Agent script for the game in `target` (its window `source_id`), unless the reader turned
+/// The Agent script for the game in `target` (its window titled `title`), unless the reader turned
 /// Agent scripts off (Settings → Text Hooker).
-fn agent_script(target: &process::Target, source_id: &str) -> Option<&'static agent::Script> {
+fn agent_script(target: &process::Target, title: Option<&str>) -> Option<&'static agent::Script> {
     let hook = hook()?;
     let service = hook.app.try_state::<Shared>()?;
     let on = service.settings.get_path(&["textHookerAgentScripts"]).ok().flatten();
@@ -1641,7 +1649,7 @@ fn agent_script(target: &process::Target, source_id: &str) -> Option<&'static ag
         return None;
     }
     let language = crate::language::current(&service.settings);
-    agent::script_for(target, window_title(source_id).as_deref(), &language.code)
+    agent::script_for(target, title, &language.code)
 }
 
 /// The engine the reader chose for the game at `exe` (`"agent"`, `"luna"`), if any.
@@ -1719,7 +1727,8 @@ pub async fn texthook_start(
     };
     // The game's Agent script, and the engines to try: the one asked for, else the one the reader
     // chose for this game, else Agent when there is a script.
-    let script = targets.first().and_then(|t| agent_script(t, &source_id));
+    let title = window_title(&source_id);
+    let script = targets.first().and_then(|t| agent_script(t, title.as_deref()));
     let choice = engine.or_else(|| targets.first().and_then(|t| chosen_engine(hook, &t.exe)));
     let engines = engines_for(script, choice.as_deref());
     let generation = {

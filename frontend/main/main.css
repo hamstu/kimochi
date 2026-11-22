@@ -1011,6 +1011,8 @@ html[data-mini] .main-help {
   color: var(--k-text-2);
   font-size: var(--k-text-xs);
   line-height: var(--k-leading-xs);
+  /* A file name in why an engine was given up wraps rather than running off the card. */
+  overflow-wrap: anywhere;
 }
 .src-hook-status > svg {
   flex: none;
@@ -1099,6 +1101,11 @@ html[data-mini] .main-help {
 }
 .src-hook-select[data-placeholder] .src-hook-select-text {
   color: var(--k-text-2);
+}
+/* A download under way: nothing to choose yet, but its progress is shown at full strength, as the
+   OCR model's and the Dictionary's are. */
+.src-hook-select[data-progress]:disabled {
+  opacity: 1;
 }
 .src-hook-menu {
   max-width: min(28rem, calc(100vw - var(--k-space-4)));

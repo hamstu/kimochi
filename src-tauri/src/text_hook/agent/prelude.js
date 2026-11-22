@@ -183,4 +183,10 @@
   }
 
   host.ready = () => out({ cmd: 'ready' })
+  // A script that throws while it loads leaves frida-inject running, its error on the buffered
+  // standard output: said here instead, so Kimochi can move on to another engine.
+  host.failed = (e) => {
+    const text = e && e.message ? String(e.message) : String(e)
+    out({ cmd: 'error', text: text.slice(0, 500), stack: String((e && e.stack) || '').slice(0, 2000) })
+  }
 })()
