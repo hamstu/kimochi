@@ -270,12 +270,12 @@ mod tests {
 
     #[test]
     fn emulators_are_told_by_their_executable() {
-        assert_eq!(emulator_platform(Path::new(r"C:\Emu\yuzu.exe")), Some("switch"));
+        assert_eq!(emulator_platform(Path::new("C:/Emu/yuzu.exe")), Some("switch"));
         assert_eq!(emulator_platform(Path::new("/opt/Ryujinx/Ryujinx.Ava")), Some("switch"));
-        assert_eq!(emulator_platform(Path::new(r"C:\PPSSPP\PPSSPPWindows64.exe")), Some("psp"));
-        assert_eq!(emulator_platform(Path::new(r"C:\pcsx2\pcsx2-qt.exe")), Some("ps2"));
-        assert_eq!(emulator_platform(Path::new(r"C:\Vita3K\Vita3K.exe")), Some("vita"));
-        assert_eq!(emulator_platform(Path::new(r"C:\Games\Air\SiglusEngine.exe")), None);
+        assert_eq!(emulator_platform(Path::new("C:/PPSSPP/PPSSPPWindows64.exe")), Some("psp"));
+        assert_eq!(emulator_platform(Path::new("C:/pcsx2/pcsx2-qt.exe")), Some("ps2"));
+        assert_eq!(emulator_platform(Path::new("C:/Vita3K/Vita3K.exe")), Some("vita"));
+        assert_eq!(emulator_platform(Path::new("C:/Games/Air/SiglusEngine.exe")), None);
     }
 
     #[test]
@@ -291,20 +291,20 @@ mod tests {
     #[test]
     fn an_emulated_game_is_matched_by_id_then_by_its_name_in_the_title() {
         let all = scripts();
-        let yuzu = PathBuf::from(r"C:\Emu\yuzu.exe");
+        let yuzu = PathBuf::from("C:/Emu/yuzu.exe");
         // By id, in the language being read.
         let found = find_in(&all, &game(&yuzu, "yuzu 1734 | 0100A3A00CC7E000 | CLANNAD")).unwrap();
         assert_eq!(found.file, "NS_0100A3A00CC7E000_CLANNAD_JP.js");
         let english = Game { language: "en", ..game(&yuzu, "yuzu | 0100A3A00CC7E000") };
         assert_eq!(find_in(&all, &english).unwrap().file, "NS_0100A3A00CC7E000_CLANNAD.js");
         // By name: the longest title found, never a shorter one inside it.
-        let eden = PathBuf::from(r"C:\Eden\eden.exe");
+        let eden = PathBuf::from("C:/Eden/eden.exe");
         let found = find_in(&all, &game(&eden, "Eden | v0.0.3 | 月姫 -A piece of blue glass moon- | 1.0.2")).unwrap();
         assert_eq!(found.file, "NS_01001DC01486A000_Tsukihime.js");
         let found = find_in(&all, &game(&eden, "Eden | v0.0.3 | Tsukihime (64-bit) | 1.0.2")).unwrap();
         assert_eq!(found.file, "NS_0100YYYY_Tsukihime_EN.js");
         // Another platform's script never.
-        let ppsspp = PathBuf::from(r"C:\PPSSPP\PPSSPPWindows64.exe");
+        let ppsspp = PathBuf::from("C:/PPSSPP/PPSSPPWindows64.exe");
         assert!(find_in(&all, &game(&ppsspp, "PPSSPP - 0100A3A00CC7E000")).is_none());
         assert_eq!(
             find_in(&all, &game(&ppsspp, "PPSSPP v1.18 - NPJH50505")).unwrap().file,
@@ -315,14 +315,14 @@ mod tests {
     #[test]
     fn a_pc_game_is_matched_by_steam_id_or_exact_title_only() {
         let all = scripts();
-        let exe = PathBuf::from(r"D:\SteamLibrary\steamapps\common\AIR\SiglusEngine.exe");
+        let exe = PathBuf::from("D:/SteamLibrary/steamapps/common/AIR/SiglusEngine.exe");
         let steam = Game { steam: Some(2983250), ..game(&exe, "AIR") };
         assert_eq!(find_in(&all, &steam).unwrap().file, "PC_Steam_Air.js");
         // Not a Steam game it knows: the title must be the script's, exactly.
-        let other = PathBuf::from(r"C:\Games\Kizuato\kizuato.exe");
+        let other = PathBuf::from("C:/Games/Kizuato/kizuato.exe");
         assert_eq!(find_in(&all, &game(&other, "Kizuato")).unwrap().file, "PC_Leaf_Kizuato.js");
         assert_eq!(find_in(&all, &game(&other, "whatever")).unwrap().file, "PC_Leaf_Kizuato.js", "by its folder");
-        let lookalike = PathBuf::from(r"C:\Games\Airship\game.exe");
+        let lookalike = PathBuf::from("C:/Games/Airship/game.exe");
         assert!(find_in(&all, &game(&lookalike, "AIR Battle")).is_none());
     }
 
