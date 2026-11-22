@@ -67,7 +67,15 @@ export function scriptEntry(name, source) {
   const ids = new Set()
   // `[0100A3A00CC7E000] CLANNAD`, `[PCSG00291] Amagami`: the id in the name...
   const bracketed = /^\s*\[([^\]]+)\]\s*/.exec(header.name)
-  if (bracketed) for (const id of bracketed[1].split(/[,/\s]+/)) if (/\d/.test(id)) ids.add(normaliseId(id))
+  if (bracketed) {
+    for (const id of bracketed[1].split(/[,/\s]+/)) {
+      // Multi-disc PSP serials such as ULJM06302-3 name both discs, not ULJM063023.
+      const discs = /^([A-Z]{4}\d{4})(\d)-(\d)$/i.exec(id)
+      if (discs && Number(discs[2]) <= Number(discs[3])) {
+        for (let disc = Number(discs[2]); disc <= Number(discs[3]); disc++) ids.add(normaliseId(discs[1] + disc))
+      } else if (/\d/.test(id)) ids.add(normaliseId(id))
+    }
+  }
   // ...and in the file name (`NS_<title id>_…`, `PS2_SLPM65732_…`).
   const second = name.split('_')[1] ?? ''
   if (platform === 'switch' && /^[0-9A-F]{16}$/i.test(second)) ids.add(second.toUpperCase())

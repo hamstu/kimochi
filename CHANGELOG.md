@@ -19,6 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Text Hooker:** recognize both PSP discs of Seishun Hajimemashita! when offering its Agent script.
 - **Linux: Global shortcuts and the dictionary Shift work on Hyprland 0.57.** Hyprland 0.57 answers Kimochi differently, so Kimochi never added its key binds there: shortcuts did nothing, and the overlay's words caught clicks meant for the game.
 - 🗂️ **Sentence audio and screenshots work with Manatan SRS.** Cards mined into Manatan's flashcards (through its AnkiConnect) now get their sentence audio and screenshot. Before, the fields pointed to a file Manatan had renamed, so they showed nothing. Settings → Anki's **Detect** also recognises Manatan's own note type now.
 - ✂️ **Window sources no longer read the title bar.** When you choose a window that has no crop area saved yet, Kimochi now starts it cropped to the window's content, without the title bar, its title and buttons, or the frame, so they no longer turn up as stray lines in your Log. Borderless and full-screen games are still read whole, and a crop area you've set or cleared yourself is never changed. Windows and macOS (on macOS, once Kimochi is allowed Accessibility). Change it any time with the crop tool.
