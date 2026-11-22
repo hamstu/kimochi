@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Text Hooker can read Windows games running through Wine on macOS, using the game’s own Wine prefix for Agent scripts, LunaHook, Textractor and audio hooks.
+
 ### Added
 
 - 🧩 **Agent scripts for the Text Hooker.** Many games LunaHook can't reach, emulated console games above all (Switch, PSP, PS2, PS Vita, 3DS and more) and some PC games, have a script in the community's Agent collection that knows exactly where their text is. When the game you've picked has one, its Text hooking box says so: press **Use** and Kimochi hooks the game with that script, downloading what it needs the first time (about 30 MB). If the script can't hook the game, LunaHook takes over. While a game is hooked you can switch between **Agent script** and **LunaHook** on its card, and Kimochi remembers your choice. Windows, and Linux for Windows games under Proton or Wine. Turn it off in Settings → Text Hooker.

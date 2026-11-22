@@ -23,6 +23,8 @@
 //! (`textHookerGames.<exe>.engine`), and switch between the two while it is hooked.
 pub mod agent;
 pub mod clean;
+#[cfg(any(target_os = "macos", test))]
+mod macos;
 pub mod pick;
 pub mod process;
 mod renpy;
@@ -388,7 +390,7 @@ fn status_of(session: &Session) -> Value {
     threads.sort_by_key(|t| pick::is_generic(&t.hookcode, &t.name));
     let manifest = store::manifest();
     json!({
-        "supported": cfg!(any(windows, target_os = "linux")),
+        "supported": cfg!(any(windows, target_os = "linux", target_os = "macos")),
         "phase": session.phase,
         "detail": session.detail,
         "helpUrl": session.help_url,
@@ -545,7 +547,7 @@ fn launch(
     // Under Wine the helper runs in the game's prefix, so it sees the game as Windows would, and
     // takes the hooker's folder as a Windows path; both copied where the game can reach them,
     // for a game in a sandbox that does not see Kimochi's folders.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     if let Some(wine) = targets.first().and_then(|t| t.wine.as_ref()) {
         command = wine::command(wine, &wine::reachable(wine, &exe)?);
         command.arg(engine).arg("--dir").arg(wine::windows_path(&wine::reachable_dir(wine, dir)?));
@@ -1679,11 +1681,11 @@ pub async fn texthook_start(
     engine: Option<String>,
 ) -> Result<Value, String> {
     let hook = hook().ok_or("text hooking is not available")?;
-    if !cfg!(any(windows, target_os = "linux")) {
-        return Err("Text Hooker works on Windows and Linux.".into());
+    if !cfg!(any(windows, target_os = "linux", target_os = "macos")) {
+        return Err("Text Hooker works on Windows, macOS and Linux.".into());
     }
     let pid = window_pid(&source_id).ok_or("Choose an app window to hook.")?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let helper = hookd_path(&hook.app);
     let found = tauri::async_runtime::spawn_blocking(move || {
         // Listing a Wine game's processes asks a helper inside its prefix: not while paused.
@@ -1696,7 +1698,7 @@ pub async fn texthook_start(
         }
         // Under Wine the hooker addresses the game by the prefix's process id, which only a
         // program inside the prefix can see.
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if found[0].wine.is_some() {
             return wine::windows_targets(&helper?, &found[0]);
         }
@@ -1994,8 +1996,10 @@ pub fn refresh_voice_hook() {
     };
     let config = service.config();
     // Windows games, natively or (on Linux) through Wine or Proton.
-    let enabled =
-        (cfg!(windows) || cfg!(target_os = "linux")) && config.enabled && config.voice_hook && hook.reading_text();
+    let enabled = (cfg!(windows) || targets.iter().any(|t| t.wine.is_some()))
+        && config.enabled
+        && config.voice_hook
+        && hook.reading_text();
     if enabled {
         let mut bases: Vec<PathBuf> = Vec::new();
         for target in &targets {
@@ -2053,7 +2057,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
     let prepare = |e: String| format!("The voice hook DLL could not be prepared; using system audio: {e}");
     // Under Wine the helper injects from inside the game's prefix, and the DLL is staged in the
     // prefix so that the game (inside Steam's runtime container, for Proton) can load it.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let mut command = {
         let wine = target.wine.as_ref().ok_or("Audio hooking reads Windows games running through Proton or Wine.")?;
         let user = std::env::var("USER").ok();
@@ -2066,7 +2070,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
         command.args(["inject", "--pid", &target.pid.to_string(), "--dll", &path]);
         command
     };
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let mut command = {
         let dll = crate::sentence_audio::voice_hook::staged_dll(&dll, &crate::sentence_audio::voice_hook::base_dir())
             .map_err(prepare)?;

@@ -60,7 +60,8 @@ pub fn index() -> &'static Index {
 
 /// The platform an emulator runs games of, from its executable's name.
 pub fn emulator_platform(exe: &Path) -> Option<&'static str> {
-    let stem = exe.file_stem()?.to_string_lossy().to_lowercase();
+    let path = exe.to_string_lossy().replace('\\', "/");
+    let stem = Path::new(&path).file_stem()?.to_string_lossy().to_lowercase();
     const EMULATORS: &[(&str, &[&str])] = &[
         ("switch", &["yuzu", "suyu", "sudachi", "citron", "eden", "torzu", "ryujinx", "ryubing"]),
         ("psp", &["ppsspp"]),
@@ -203,7 +204,9 @@ pub fn find_in<'s>(scripts: &'s [Script], game: &Game) -> Option<&'s Script> {
                 .map_or_else(Vec::new, |id| scripts.iter().filter(pc).filter(|s| s.steam.contains(&id)).collect());
             if by_steam.is_empty() {
                 let window = normalise(title);
-                let folder = game.exe.parent().and_then(Path::file_name).map(|f| normalise(&f.to_string_lossy()));
+                let path = game.exe.to_string_lossy().replace('\\', "/");
+                let folder =
+                    Path::new(&path).parent().and_then(Path::file_name).map(|f| normalise(&f.to_string_lossy()));
                 scripts
                     .iter()
                     .filter(pc)

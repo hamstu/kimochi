@@ -12,7 +12,7 @@
 //! - Not hookable: Kimochi itself, Windows' own processes and Store apps, native ARM64
 //!   processes (the hook DLLs are x86/x64), and any process we may not open for injection
 //!   (protected, anti-cheat, or elevated while Kimochi is not).
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -29,7 +29,7 @@ pub struct Target {
 
 /// The PE image's bitness from its header: 32 for i386, 64 for x64, `None` for anything else
 /// (ARM64 native images cannot take x86/x64 hook DLLs). `bytes` is the start of the file.
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 pub fn pe_bits(bytes: &[u8]) -> Option<u32> {
     if bytes.get(..2)? != b"MZ" {
         return None;
@@ -55,7 +55,7 @@ pub fn is_system_image(exe: &Path) -> bool {
 }
 
 /// A launcher's child that is the real game: same family of image, another extension.
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 pub fn is_engine_child(exe: &Path) -> bool {
     exe.extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
@@ -260,20 +260,20 @@ pub fn age(_pid: u32) -> Option<std::time::Duration> {
     None
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub use super::wine::target;
 /// Under Wine, the window's process alone; its engine children are found inside the prefix
 /// (`wine::windows_targets`), where the parent links are.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn game_processes(pid: u32) -> Vec<Target> {
     target(pid).into_iter().collect()
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub fn target(_pid: u32) -> Result<Target, String> {
     Err("text hooking runs on Windows and Linux".into())
 }
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub fn game_processes(_pid: u32) -> Vec<Target> {
     Vec::new()
 }

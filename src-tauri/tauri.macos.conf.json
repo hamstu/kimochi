@@ -4,6 +4,9 @@
     "targets": ["app"],
     "macOS": {
       "minimumSystemVersion": "14.0"
+    },
+    "resources": {
+      "resources/hookd/": "hookd/"
     }
   }
 }
