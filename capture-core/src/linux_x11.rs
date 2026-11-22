@@ -370,6 +370,22 @@ pub fn process_name(pid: u32) -> Option<String> {
     process_name_from(exe.as_deref(), comm.as_deref())
 }
 
+/// Find ICCCM clients below window-manager frames when EWMH client lists are absent.
+#[cfg(any(target_os = "linux", test))]
+fn icccm_clients(root: u32, managed: impl Fn(u32) -> bool, children: impl Fn(u32) -> Vec<u32>) -> Vec<u32> {
+    let mut clients = Vec::new();
+    let mut pending = vec![(root, 0)];
+    while let Some((window, depth)) = pending.pop() {
+        if window != root && managed(window) {
+            clients.push(window);
+        } else if depth < 8 {
+            // QueryTree is bottom to top; the stack visits the top first.
+            pending.extend(children(window).into_iter().map(|child| (child, depth + 1)));
+        }
+    }
+    clients
+}
+
 // ----- Shared X11 desktop queries -------------------------------------------------------
 
 /// The X11 metadata both crates read: atoms, monitors, the client list, window facts
@@ -549,7 +565,10 @@ pub mod desktop {
                 .ok()
                 .and_then(|cookie| cookie.reply().ok())
                 .and_then(|reply| reply.ids.into_iter().find_map(|id| id.value.first().copied()))
-                .filter(|&p| p != 0);
+                // WSLg can return a peer id from the X server's namespace that is
+                // absent here; Wine can also hand its connection off. In either case,
+                // the client's own _NET_WM_PID is the usable fallback.
+                .filter(|&p| p != 0 && std::path::Path::new(&format!("/proc/{p}")).exists());
             from_server.or_else(|| {
                 self.property32(window, self.atoms._NET_WM_PID, AtomEnum::CARDINAL)?
                     .first()
@@ -612,13 +631,29 @@ pub mod desktop {
 
         /// Managed client windows, front to back. `_NET_CLIENT_LIST_STACKING` is
         /// bottom to top; window managers without it get `_NET_CLIENT_LIST` (mapping
-        /// order) as is.
+        /// order) as is, then an ICCCM tree walk when neither list is published.
         pub fn clients(&self) -> Vec<Window> {
             if let Some(mut list) = self.property32(self.root, self.atoms._NET_CLIENT_LIST_STACKING, AtomEnum::WINDOW) {
                 list.reverse();
                 return list;
             }
-            self.property32(self.root, self.atoms._NET_CLIENT_LIST, AtomEnum::WINDOW).unwrap_or_default()
+            if let Some(list) = self.property32(self.root, self.atoms._NET_CLIENT_LIST, AtomEnum::WINDOW) {
+                return list;
+            }
+            // WSLg's Weston WM publishes neither EWMH list. Walk its frame windows
+            // to the ICCCM clients (WM_STATE), stopping before toolkit children.
+            super::icccm_clients(
+                self.root,
+                |window| self.property32(window, self.atoms.WM_STATE, self.atoms.WM_STATE).is_some(),
+                |window| {
+                    self.conn
+                        .query_tree(window)
+                        .ok()
+                        .and_then(|cookie| cookie.reply().ok())
+                        .map(|tree| tree.children)
+                        .unwrap_or_default()
+                },
+            )
         }
 
         /// `_NET_ACTIVE_WINDOW`, `None` when nothing has focus (or no EWMH WM runs).
@@ -1000,6 +1035,23 @@ mod backend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn icccm_fallback_finds_clients_inside_frames_without_listing_toolkit_children() {
+        let clients = icccm_clients(
+            1,
+            |w| [4, 5, 6].contains(&w),
+            |w| match w {
+                1 => vec![2, 3, 7], // bottom frame, top frame, unmanaged popup
+                2 => vec![4],
+                3 => vec![5],
+                5 => vec![6], // toolkit child: not another source
+                _ => Vec::new(),
+            },
+        );
+        assert_eq!(clients, vec![5, 4]);
+        assert!(icccm_clients(1, |_| false, |_| Vec::new()).is_empty());
+    }
 
     #[test]
     fn logind_session_type_wins() {
