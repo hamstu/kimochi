@@ -2045,12 +2045,15 @@ missing. It is re-sent as `platform-capabilities` when the download changes stat
 browser installs meanwhile is found the next time the capabilities are asked for (the panel's
 "Look again").
 
-## Text Hooker (Windows; Linux through Proton or Wine)
+## Text Hooker (Windows; macOS and Linux through Wine)
 
 The `inputSource` `"hook"`: the game behind a chosen window is hooked and its text read from
 inside it. Implementation: `src-tauri/src/text_hook/` (session, process resolution, thread
-choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). On macOS the commands
-answer `supported: false` or refuse.
+choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). macOS runs the same Windows helpers inside
+the selected game’s Wine/CrossOver prefix. Process inspection uses `proc_pidpath` and
+`KERN_PROCARGS2`; only prefix/runtime variables are inherited, and the existing wineserver
+socket must be reachable. Mac bundles cross-build the helpers with a pinned, checksum-verified LLVM-MinGW download
+(build tool only; Rust targets `x86_64-pc-windows-gnullvm`, `i686-pc-windows-gnullvm`).
 
 On Linux a window is hookable when its process is a Wine loader running a Windows game
 (`text_hook/wine.rs`): Proton (including Steam Deck Gaming Mode's `gamescope:window:{appid}:{pid}`
@@ -2087,7 +2090,7 @@ or disc serial in its window title, else the game's name there; a Steam game by 
 PC game by its exact title only. Off with `textHookerAgentScripts: false`; per game,
 `textHookerGames.<exe>.engine` (`'agent'` (default) | `'luna'`) says which comes first. On first
 use it downloads Frida's `frida-inject` (texthook manifest `agent-x64` / `agent-arm64`, Frida 17;
-on Linux `agent-wine`, Frida 16, which starts inside Wine where 17 does not; xz-compressed, pinned
+under Wine on macOS and Linux `agent-wine`, Frida 16, which starts inside Wine where 17 does not; xz-compressed, pinned
 both packed and unpacked) and the collection at its pinned commit (GitHub's archive, every file
 checked against the pin, into `<app local data>/texthook/agent-scripts-<commit>/`). Then
 `frida-inject -p <pid> -s <script> -R qjs` runs (under Wine, the Windows build in the game's

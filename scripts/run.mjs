@@ -147,7 +147,7 @@ if (task === 'bundle' || task === 'release' || (task === 'dev' && !ocrStaged.eve
   // ...and the Chrome Screen AI worker's (prepare-screenai.mjs), on every OS.
   await mkdir('src-tauri/resources/screenai', { recursive: true })
   // ...and the Text Hooker sidecar's (prepare-hookd.mjs), which Linux bundles too.
-  if (process.platform === 'win32' || process.platform === 'linux')
+  if (['win32', 'linux', 'darwin'].includes(process.platform))
     await mkdir('src-tauri/resources/hookd', { recursive: true })
   const legal = [
     ['meikiocr', 'LICENSE', 'src-tauri/resources/meikiocr/LICENSE'],
@@ -189,7 +189,7 @@ if (process.platform === 'win32' && ['dev', 'bundle', 'release'].includes(task))
   await import('./prepare-hookd.mjs')
   await import('./prepare-cli-launcher.mjs')
 }
-if (process.platform === 'linux' && ['dev', 'bundle', 'release'].includes(task)) {
+if (['linux', 'darwin'].includes(process.platform) && ['dev', 'bundle', 'release'].includes(task)) {
   await import('./prepare-hookd.mjs')
 }
 

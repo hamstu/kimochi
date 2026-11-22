@@ -58,7 +58,7 @@ pub fn injector() -> Option<&'static str> {
         Some("agent-arm64")
     } else if cfg!(all(windows, target_arch = "x86_64")) {
         Some("agent-x64")
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    } else if cfg!(any(all(target_os = "linux", target_arch = "x86_64"), target_os = "macos")) {
         Some("agent-wine")
     } else {
         None
@@ -221,25 +221,25 @@ fn build_script(loader: &str, dir: &str, mission: &str) -> String {
 fn game_path(_target: &process::Target, path: &Path, _dir: bool) -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn game_path(target: &process::Target, path: &Path, dir: bool) -> Result<String, String> {
     let wine = target.wine.as_ref().ok_or("Agent hooks Windows games only")?;
     let reachable = if dir { super::wine::reachable_dir(wine, path)? } else { super::wine::reachable(wine, path)? };
     Ok(super::wine::windows_path(&reachable))
 }
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 fn game_path(_target: &process::Target, _path: &Path, _dir: bool) -> Result<String, String> {
     Err("Agent does not run on this computer".into())
 }
 
 /// The command that runs frida-inject on the game, as the game's platform needs it.
 fn injector_command(target: &process::Target, exe: &Path) -> Result<Command, String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
         let wine = target.wine.as_ref().ok_or("Agent hooks Windows games only")?;
         Ok(super::wine::command(wine, &super::wine::reachable(wine, exe)?))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = target;
         Ok(Command::new(exe))
