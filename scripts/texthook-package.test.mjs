@@ -21,6 +21,15 @@ test('the text hooker manifest lists exactly the pinned files, upstream first, m
       assert.match(file.sha256, /^[0-9a-f]{64}$/)
       assert.ok(file.size > 0)
       const [upstream, mirror] = file.sources
+      if (spec.xz) {
+        // Compressed upstream and on the mirror: the pin names both forms.
+        assert.deepEqual(upstream, { url: spec.xz, xz: true })
+        assert.deepEqual(mirror, { url: `${MIRROR}/${id}/${engine.version}/${file.name}.xz`, xz: true })
+        assert.match(file.xz.sha256, /^[0-9a-f]{64}$/)
+        assert.ok(file.xz.size > 0 && file.xz.size < file.size)
+        continue
+      }
+      assert.equal(file.xz, undefined)
       if (spec.entry) assert.deepEqual(upstream, { url: engine.zip, zipEntry: spec.entry })
       else assert.deepEqual(upstream, { url: spec.url })
       assert.deepEqual(mirror, { url: `${MIRROR}/${id}/${engine.version}/${file.name}` })

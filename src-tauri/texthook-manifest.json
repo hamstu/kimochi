@@ -252,6 +252,126 @@
           ]
         }
       ]
+    },
+    "agent-x64": {
+      "name": "Agent",
+      "version": "17.27.4",
+      "project": "https://github.com/frida/frida",
+      "license": "wxWindows Library Licence 3.1",
+      "files": [
+        {
+          "name": "frida-inject.exe",
+          "size": 102915584,
+          "sha256": "3415601f709ffa1aefa8e5aa8825ec91ea36f94ee5c61e1e8f1441a13f384edc",
+          "xz": {
+            "size": 28042520,
+            "sha256": "68474826ac22767b8c5711fde83cb2f468deddcfdacaffd1b2fce547419e0a01"
+          },
+          "sources": [
+            {
+              "url": "https://github.com/frida/frida/releases/download/17.27.4/frida-inject-17.27.4-windows-x86_64.exe.xz",
+              "xz": true
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-x64/17.27.4/frida-inject.exe.xz",
+              "xz": true
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 2416,
+          "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/frida/frida/17.27.4/COPYING"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-x64/17.27.4/LICENSE.txt"
+            }
+          ]
+        }
+      ]
+    },
+    "agent-arm64": {
+      "name": "Agent",
+      "version": "17.27.4",
+      "project": "https://github.com/frida/frida",
+      "license": "wxWindows Library Licence 3.1",
+      "files": [
+        {
+          "name": "frida-inject.exe",
+          "size": 140830720,
+          "sha256": "187a0ce6d8d6792048a527823d5753651ba404dee5f2159487ad2d20464c1380",
+          "xz": {
+            "size": 37319896,
+            "sha256": "c9afcf833fb95bf6c5d0cc8aa8550b3fad67cfb5024bc9d4f9dcf734cfc63d83"
+          },
+          "sources": [
+            {
+              "url": "https://github.com/frida/frida/releases/download/17.27.4/frida-inject-17.27.4-windows-arm64.exe.xz",
+              "xz": true
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-arm64/17.27.4/frida-inject.exe.xz",
+              "xz": true
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 2416,
+          "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/frida/frida/17.27.4/COPYING"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-arm64/17.27.4/LICENSE.txt"
+            }
+          ]
+        }
+      ]
+    },
+    "agent-wine": {
+      "name": "Agent",
+      "version": "16.7.19",
+      "project": "https://github.com/frida/frida",
+      "license": "wxWindows Library Licence 3.1",
+      "files": [
+        {
+          "name": "frida-inject.exe",
+          "size": 69428736,
+          "sha256": "2c81058b8463c087a53255624087ad05ba1eeb46f82b476ac71c889d8dbcca1e",
+          "xz": {
+            "size": 20407008,
+            "sha256": "7d3c62bbd90bfae41e8891dce0e78bef37fa7a3e67d2a8d3dd5c42d9350d59ad"
+          },
+          "sources": [
+            {
+              "url": "https://github.com/frida/frida/releases/download/16.7.19/frida-inject-16.7.19-windows-x86_64.exe.xz",
+              "xz": true
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-wine/16.7.19/frida-inject.exe.xz",
+              "xz": true
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 2416,
+          "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/frida/frida/16.7.19/COPYING"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-wine/16.7.19/LICENSE.txt"
+            }
+          ]
+        }
+      ]
     }
   }
 }

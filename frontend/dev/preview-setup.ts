@@ -17,6 +17,9 @@
  *                                   on for the chosen game, hooked with its threads; pair it with
  *                                   ?platform=windows. With ocr there, the game's Text hooking box
  *                                   shows with its switch off)
+ *   ?agent=offer|downloading|hooked  every game has an Agent script: offered under its Text hooking
+ *                    switch (with input=ocr); its first download under way, or the game hooked by
+ *                    it (with input=hook), with the Agent script / LunaHook switch
  *   ?quickshot=1     main window: Quick Shot (with input=ocr)
  *   ?nosource=1      main window: no window or screen chosen yet (choosing one in Change source
  *                    selects it: the view state follows `commit_source`, `clear_source` and the
@@ -326,6 +329,30 @@ const HOOK_THREADS = [
     selected: false
   }
 ]
+/**
+ * `?agent=offer|downloading|hooked`: every game has an Agent script (text_hook/agent), offered
+ * while Text hooking is off; its first download under way; the game hooked by it.
+ */
+const AGENT = params.get('agent')
+const AGENT_SCRIPT = {
+  file: 'NS_0100A3A00CC7E000_CLANNAD_JP.js',
+  title: 'CLANNAD',
+  platform: 'switch',
+  author: 'DC',
+  version: '1.0.0',
+  download: AGENT === 'offer' ? 29_946_594 : 0,
+  collection: 'https://github.com/0xDC00/scripts'
+}
+const AGENT_THREAD = {
+  key: '4120:agent',
+  name: 'CLANNAD',
+  hookcode: 'AGENT:NS_0100A3A00CC7E000_CLANNAD_JP.js',
+  preview: '「ねえ、あんた」振り返ると、桜並木の坂の下に女の子がひとり立っていた。',
+  count: 7,
+  japanese: true,
+  generic: false,
+  selected: true
+}
 /** The hooked game of `?input=hook` (Settings → Text Hooker's first game). */
 const PRESET_EXE = 'C:/Games/Moonlit Harbor/Game.exe'
 /**
@@ -366,6 +393,17 @@ const HOOK_STATUS: Record<string, unknown> & { threads: typeof HOOK_THREADS } = 
   selected: HOOK_THREADS[0].key,
   selectedBy: 'auto',
   threads: PRESET_HOOKED ? HOOK_THREADS : []
+}
+if (AGENT === 'downloading' || AGENT === 'hooked') {
+  Object.assign(HOOK_STATUS, {
+    agent: AGENT_SCRIPT,
+    engines: ['agent', 'luna', 'textractor'],
+    engine: { id: 'agent', name: 'Agent', version: '17.27.4' },
+    ...(AGENT === 'downloading'
+      ? { phase: 'downloading', download: { done: 12_400_000, total: 29_946_594 }, selected: null, selectedBy: null }
+      : { selected: AGENT_THREAD.key, selectedBy: 'agent' }),
+    threads: AGENT === 'hooked' ? [AGENT_THREAD] : []
+  })
 }
 
 // ---------------------------------------------------------------- settings store
@@ -1211,7 +1249,7 @@ const HANDLERS: Record<string, Handler> = {
           id,
           !source || source.kind === 'display' || id === UNHOOKABLE
             ? { hookable: false, reason: 'this is part of Windows' }
-            : { hookable: true, bits: 32, exe: hookExeOf(source) }
+            : { hookable: true, bits: 32, exe: hookExeOf(source), ...(AGENT ? { agent: AGENT_SCRIPT } : {}) }
         ]
       })
     ),
@@ -1226,6 +1264,22 @@ const HANDLERS: Record<string, Handler> = {
     ),
   texthook_forget: () => null,
   texthook_insert: () => null,
+  // Switching between the game's Agent script and LunaHook: hooked again at once.
+  texthook_engine: (a) => {
+    const agent = a?.engine === 'agent'
+    Object.assign(HOOK_STATUS, {
+      phase: 'hooked',
+      engines: agent ? ['agent', 'luna', 'textractor'] : ['luna', 'textractor', 'agent'],
+      engine: agent
+        ? { id: 'agent', name: 'Agent', version: '17.27.4' }
+        : { id: 'luna', name: 'LunaHook', version: '12.1.3.8' },
+      selected: agent ? AGENT_THREAD.key : HOOK_THREADS[0].key,
+      selectedBy: agent ? 'agent' : 'auto',
+      threads: agent ? [AGENT_THREAD] : HOOK_THREADS.map((t) => ({ ...t, selected: t.key === HOOK_THREADS[0].key }))
+    })
+    pushHookStatus()
+    return HOOK_STATUS
+  },
   texthook_start: (a) => {
     // Hooking another window (the site's demo hooks its own game, once its Text hooking switch is
     // turned on): that window's game.

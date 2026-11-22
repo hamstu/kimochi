@@ -16,7 +16,9 @@
     "extensions/**",
     "src-tauri/patches/**",
     "**/fixtures/**",
-    ".impeccable/**"
+    ".impeccable/**",
+    // Generated, one line per file and per script (scripts/agent-scripts-package.mjs --check).
+    "src-tauri/agent-scripts.json"
   ],
   // The GNOME Shell extension keeps GJS's own style; the tests that load it rely on its semicolons.
   "overrides": [

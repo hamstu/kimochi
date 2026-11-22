@@ -68,12 +68,14 @@ import {
 } from '@kit'
 import { SourceGrid, SystemPickerButton } from './SourceGrid'
 import { HookControls } from './HookControls'
+import { AgentOffer } from './AgentHook'
 import {
   texthookStart,
   texthookStatus,
   texthookStop,
   texthookTargets,
   useHookStatus,
+  type AgentScript,
   type HookStatus,
   type HookTarget
 } from '../bridge/textHook'
@@ -451,17 +453,23 @@ function AudioHookRow(): ReactNode {
 /**
  * Text hooking, right under a game's card: a box like the switch rows', headed by its switch.
  * While it is on, the box also holds the hooked text's select and, on Windows (the only place
- * a game's voices can be hooked so far), Audio hooking.
+ * a game's voices can be hooked so far), Audio hooking. While it is off, a game with an Agent
+ * script is offered it (AgentHook.tsx).
  */
 function TextHookBox({
   on,
   status,
+  agent,
   onToggle,
+  onUseAgent,
   onManage
 }: {
   on: boolean
   status: HookStatus
+  /** The game's Agent script, when it has one. */
+  agent?: AgentScript | null
   onToggle: () => void
+  onUseAgent: () => void
   onManage: () => void
 }): ReactNode {
   const os = useCapabilities().os
@@ -477,6 +485,7 @@ function TextHookBox({
         onToggle={onToggle}
         onSettings={onManage}
       />
+      {!on && agent && <AgentOffer script={agent} onUse={onUseAgent} />}
       {on && (
         <>
           <div className="src-hook-body">
@@ -1134,6 +1143,13 @@ export function SourcePanel({
     choose(on ? 'hook' : 'ocr')
     if (on) ensureHook(sourceId)
   }
+  /** The Agent offer taken: the script is the game's engine from now on, and Text hooking comes on. */
+  const takeAgentScript = async (): Promise<void> => {
+    if (!hookExe) return
+    const exe = hookExe
+    await updateHookGame(exe, (game) => ({ ...game, exe: game.exe ?? exe, engine: 'agent' })).catch(() => {})
+    await setTextHook(true)
+  }
   /** Clearing the source: the game is let go, and nothing is hooked on its own until the next launch. */
   const clearSource = (): void => {
     if (mode === 'hook') autoHookPaused = true
@@ -1519,7 +1535,9 @@ export function SourcePanel({
         on={mode === 'hook'}
         // Until the session is on this game (it was just turned on), it is starting.
         status={hook.sourceId === source.sourceId ? hook : { ...hook, phase: 'starting', threads: [], detail: null }}
+        agent={hookTarget?.agent}
         onToggle={() => void setTextHook(mode !== 'hook')}
+        onUseAgent={() => void takeAgentScript()}
         onManage={() => void openTextHookerSettings(hookExe)}
       />
     ) : null

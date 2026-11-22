@@ -808,6 +808,23 @@ function ShowCardRow({
   )
 }
 
+/**
+ * Agent scripts (text_hook/agent), for every game: a game the Agent collection has a script for is
+ * hooked by it first. Off, such a game is hooked as any other.
+ */
+function AgentScriptsRow(): ReactNode {
+  const [on, setOn] = useSetting<boolean>('textHookerAgentScripts', true)
+  return (
+    <SettingsRow
+      label="Agent scripts"
+      controlId="th-agent-scripts"
+      description="Hook a game the Agent collection has a script for (many emulated console games, some PC games) with that script, ahead of LunaHook. Its card offers it. Frida and the scripts download the first time a game needs them."
+    >
+      <Switch id="th-agent-scripts" checked={on !== false} onCheckedChange={(next) => void setOn(next)} />
+    </SettingsRow>
+  )
+}
+
 export function TextHookerTab(): ReactNode {
   const [open, setOpen] = useSetting<string | null>('textHookerSettingsGame', null)
   const games = useHookGames()
@@ -832,6 +849,7 @@ export function TextHookerTab(): ReactNode {
                 <HookSettingsSections
                   scope={{ kind: 'defaults' }}
                   extra={{
+                    hooking: <AgentScriptsRow />,
                     text: (
                       <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
                         <Button size="sm" onClick={() => showSettingsTab('log')}>

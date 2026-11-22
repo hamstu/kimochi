@@ -322,5 +322,17 @@ texthook.dll for x86 and x64, with that release's Visual C++ runtime DLLs.
 Its LICENSE (from the upstream tag v5.2.0) travels with the download as
 LICENSE.txt. Source: the upstream tag v5.2.0.
 
+Agent scripts: https://github.com/0xDC00/scripts (MIT, Copyright (c) 2021
+0xDC00; PC_HCode.js states GPL-3.0). Used for games the collection has a
+script for. Downloaded on demand at the commit pinned in
+src-tauri/agent-scripts.json, each file checked by size and SHA-256, and run
+unmodified; its LICENSE travels with the download.
+
+Frida: https://github.com/frida/frida (wxWindows Library Licence 3.1). Runs
+the Agent scripts. frida-inject from release 17.27.4 (Windows x64 and ARM64)
+and 16.7.19 (Windows x64, inside Wine on Linux), downloaded on demand,
+pinned in src-tauri/texthook-manifest.json and run unmodified; its COPYING
+travels with the download as LICENSE.txt. Source: the upstream tags.
+
 Clean game voice decoding uses hound (Apache-2.0) and lewton (MIT OR Apache-2.0),
 with ogg (BSD-3-Clause), compiled from their crates.io source distributions.

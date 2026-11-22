@@ -14,6 +14,7 @@
 // --check rebuilds in memory and fails if the committed manifest differs (pins unchanged).
 // Upload: .github/workflows/download-mirror.yml copies each file to the mirror (DOWNLOADS_MIRROR.md).
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
@@ -27,6 +28,13 @@ export const MIRROR = 'https://downloads.kimochiapp.com/texthook'
  * hook DLLs and their pipe protocol must match. `entry` is the path inside the release zip;
  * `url` instead names a file served on its own.
  */
+/** The Frida release the Agent engine injects with (17: the first with Windows ARM64 builds). */
+export const FRIDA = '17.27.4'
+/** The one that runs inside Wine (the last 16; the Agent scripts' API, no shim needed). */
+export const FRIDA_WINE = '16.7.19'
+const FRIDA_RELEASE = `https://github.com/frida/frida/releases/download/${FRIDA}`
+const FRIDA_LICENSE = `https://raw.githubusercontent.com/frida/frida/${FRIDA}/COPYING`
+
 export const ENGINES = {
   luna: {
     name: 'LunaHook',
@@ -65,11 +73,57 @@ export const ENGINES = {
       'x86/vcruntime140.dll': { entry: 'Textractor/x86/vcruntime140.dll' },
       'LICENSE.txt': { url: 'https://raw.githubusercontent.com/Artikash/Textractor/v5.2.0/LICENSE' }
     }
+  },
+  // The Agent engine's injector (text_hook/agent): Frida's frida-inject, one build per Windows CPU.
+  // Each injects into 32- and 64-bit games (and, on ARM64, into x64 games run by emulation); under
+  // Wine the x64 build runs inside the game's prefix. Frida ships it xz-compressed only, so the
+  // pin also names the compressed file, which the mirror keeps as it is.
+  'agent-x64': {
+    name: 'Agent',
+    version: FRIDA,
+    project: 'https://github.com/frida/frida',
+    license: 'wxWindows Library Licence 3.1',
+    files: {
+      'frida-inject.exe': { xz: `${FRIDA_RELEASE}/frida-inject-${FRIDA}-windows-x86_64.exe.xz` },
+      'LICENSE.txt': { url: FRIDA_LICENSE }
+    }
+  },
+  'agent-arm64': {
+    name: 'Agent',
+    version: FRIDA,
+    project: 'https://github.com/frida/frida',
+    license: 'wxWindows Library Licence 3.1',
+    files: {
+      'frida-inject.exe': { xz: `${FRIDA_RELEASE}/frida-inject-${FRIDA}-windows-arm64.exe.xz` },
+      'LICENSE.txt': { url: FRIDA_LICENSE }
+    }
+  },
+  // Inside a Wine or Proton prefix (Linux): Frida 17 cannot start there ("Unable to locate the
+  // ntdll loader TLS routines"), 16 can.
+  'agent-wine': {
+    name: 'Agent',
+    version: FRIDA_WINE,
+    project: 'https://github.com/frida/frida',
+    license: 'wxWindows Library Licence 3.1',
+    files: {
+      'frida-inject.exe': {
+        xz: `https://github.com/frida/frida/releases/download/${FRIDA_WINE}/frida-inject-${FRIDA_WINE}-windows-x86_64.exe.xz`
+      },
+      'LICENSE.txt': { url: `https://raw.githubusercontent.com/frida/frida/${FRIDA_WINE}/COPYING` }
+    }
   }
 }
 
 export const manifestPath = path.join(root, 'src-tauri', 'texthook-manifest.json')
 const sha256 = (data) => createHash('sha256').update(data).digest('hex')
+
+/** An xz stream's contents, by the `xz` tool (Git for Windows, Linux and Homebrew have it). */
+function unxz(packed) {
+  const result = spawnSync('xz', ['-dc'], { input: packed, maxBuffer: 1 << 30 })
+  if (result.error || result.status !== 0)
+    throw Error(`xz could not unpack a pinned file: ${result.error?.message ?? result.stderr}`)
+  return result.stdout
+}
 
 async function fetchCached(url, cache) {
   const file = path.join(cache, sha256(url).slice(0, 16) + '-' + path.basename(new URL(url).pathname))
@@ -87,12 +141,17 @@ export async function build({ cache }) {
   const manifest = { engines: {} }
   const files = []
   for (const [id, engine] of Object.entries(ENGINES)) {
-    const zip = new Map(readZip(await fetchCached(engine.zip, cache)).map((e) => [e.name, e]))
+    const zip = engine.zip ? new Map(readZip(await fetchCached(engine.zip, cache)).map((e) => [e.name, e])) : new Map()
     const listed = []
     for (const [name, spec] of Object.entries(engine.files)) {
       let data
+      let packed = null
       const sources = []
-      if (spec.entry) {
+      if (spec.xz) {
+        packed = await fetchCached(spec.xz, cache)
+        data = unxz(packed)
+        sources.push({ url: spec.xz, xz: true })
+      } else if (spec.entry) {
         const entry = zip.get(spec.entry)
         if (!entry || entry.directory) throw Error(`${engine.zip} has no ${spec.entry}`)
         data = entry.data
@@ -101,9 +160,17 @@ export async function build({ cache }) {
         data = await fetchCached(spec.url, cache)
         sources.push({ url: spec.url })
       }
-      sources.push({ url: `${MIRROR}/${id}/${engine.version}/${name}` })
-      listed.push({ name, size: data.length, sha256: sha256(data), sources })
-      files.push({ engine: id, version: engine.version, name, data })
+      // A compressed pin is mirrored compressed: the app unpacks it, whichever host it came from.
+      if (packed) sources.push({ url: `${MIRROR}/${id}/${engine.version}/${name}.xz`, xz: true })
+      else sources.push({ url: `${MIRROR}/${id}/${engine.version}/${name}` })
+      listed.push({
+        name,
+        size: data.length,
+        sha256: sha256(data),
+        ...(packed ? { xz: { size: packed.length, sha256: sha256(packed) } } : {}),
+        sources
+      })
+      files.push({ engine: id, version: engine.version, name: packed ? `${name}.xz` : name, data: packed ?? data })
     }
     manifest.engines[id] = {
       name: engine.name,
