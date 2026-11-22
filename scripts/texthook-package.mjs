@@ -36,6 +36,16 @@ const FRIDA_RELEASE = `https://github.com/frida/frida/releases/download/${FRIDA}
 const FRIDA_LICENSE = `https://raw.githubusercontent.com/frida/frida/${FRIDA}/COPYING`
 
 export const ENGINES = {
+  'agent-gadget-macos': {
+    name: 'Agent launch',
+    version: FRIDA,
+    project: 'https://github.com/frida/frida',
+    license: 'wxWindows Library Licence 3.1',
+    files: {
+      'Gadget.dylib': { xz: `${FRIDA_RELEASE}/frida-gadget-${FRIDA}-macos-universal.dylib.xz` },
+      'LICENSE.txt': { url: FRIDA_LICENSE }
+    }
+  },
   luna: {
     name: 'LunaHook',
     version: '12.1.3.8',

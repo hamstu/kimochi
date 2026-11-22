@@ -20,9 +20,14 @@
   // ASCII only: frida-inject may write standard error in the console's code page (Frida 16 does,
   // and Wine's may not be UTF-8), which would mangle Japanese; \u escapes come through any of them.
   const ascii = (json) => json.replace(/[\u007f-￿]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
+  const output = host.outputFile ? new File(host.outputFile, 'a') : null
   const out = (payload) => {
     try {
-      error(MARK + ascii(JSON.stringify(payload)))
+      const line = MARK + ascii(JSON.stringify(payload))
+      if (output) {
+        output.write(line + '\n')
+        output.flush()
+      } else error(line)
     } catch (_) {}
   }
 
@@ -83,10 +88,21 @@
   }
 
   // Overlays are applied to loaded source only: the verified collection remains byte-for-byte
-  // pinned. These ARM64 library branches otherwise assume Android's module and C++ ABI.
+  // pinned. Native Mono can expose symbols through enumeration that named lookup misses;
+  // the ARM64 emulator branches otherwise assume Android's module and C++ ABI.
   function patchLibrary(path, source) {
-    if (Process.platform !== 'darwin' || Process.arch !== 'arm64') return source
+    if (Process.platform !== 'darwin') return source
     const name = path.slice(path.lastIndexOf(SEP) + 1)
+    if (name === 'libMono.js') {
+      const patched = source.replace(
+        'const address = _mod.findExportByName(name);',
+        'const address = _mod.findExportByName(name) || _mod.enumerateExports().find(e => e.name === name)?.address || null;'
+      )
+      return host.outputFile && Process.arch === 'x64'
+        ? patched.replaceAll('Interceptor.attach(', 'globalThis.__kimochi.monoAttach(')
+        : patched
+    }
+    if (Process.arch !== 'arm64') return source
     if (name === 'libCitra.js') {
       return source.replace("Process.findModuleByName('libcitra-android.so')", 'Process.mainModule')
     }
@@ -97,6 +113,38 @@
       )
     }
     return source
+  }
+
+  // Rosetta's old Mono JIT keeps its code allocation writable for lazy call-site
+  // patching. Frida can leave that allocation r-x after committing/unloading a hook.
+  // Restore only ranges observed as rwx before our own hooks; never widen an r-x range.
+  const monoListeners = new Set()
+  const monoRanges = new Map()
+  const restoreMonoRanges = () => {
+    for (const range of monoRanges.values()) {
+      if (!Memory.protect(range.base, range.size, range.protection))
+        throw Error('Could not restore Mono JIT permissions')
+    }
+  }
+  host.monoAttach = (address, callbacks) => {
+    const range = Process.findRangeByAddress(address)
+    if (range?.protection === 'rwx') monoRanges.set(String(range.base), range)
+    const listener = Interceptor.attach(address, callbacks)
+    const owned = {
+      detach() {
+        listener.detach()
+        Interceptor.flush()
+        restoreMonoRanges()
+        monoListeners.delete(owned)
+      }
+    }
+    monoListeners.add(owned)
+    Interceptor.flush()
+    restoreMonoRanges()
+    return owned
+  }
+  host.dispose = () => {
+    for (const listener of [...monoListeners]) listener.detach()
   }
 
   // ---------------------------------------------------------------- the host's answers

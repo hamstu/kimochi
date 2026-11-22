@@ -17,6 +17,8 @@
 //! On macOS or Linux a Windows game runs under Wine or Proton: the Windows frida-inject runs in the game's
 //! prefix with its Wine, as the hook helper does (`super::wine`), and sees the game as Windows
 //! would.
+#[cfg(target_os = "macos")]
+pub(super) mod gadget;
 pub mod index;
 pub mod scripts;
 
@@ -55,6 +57,10 @@ pub fn is_agent(hookcode: &str) -> bool {
 /// ARM64) and native Apple Silicon macOS; for Windows games under Wine, Frida 16, the last
 /// that starts inside Wine.
 pub fn injector(target: Option<&process::Target>) -> Option<&'static str> {
+    #[cfg(target_os = "macos")]
+    if target.and_then(gadget::find).is_some() {
+        return Some(gadget::ENGINE);
+    }
     if target.is_some_and(|t| t.wine.is_some()) {
         return Some("agent-wine");
     }
@@ -270,6 +276,10 @@ fn launch(
     target: &process::Target,
     started: Instant,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    if let Some(run) = gadget::find(target) {
+        return gadget::attach(hook, generation, collection, script, target, run, started);
+    }
     // Attaching waits on the game, which a game pause stops: never while paused.
     if !crate::game_pause::app::defer_while_paused("Agent start", Duration::from_secs(30)) {
         return Err("busy: the game is paused".into());
@@ -556,6 +566,8 @@ fn runtime_not_ready(text: &str) -> bool {
 }
 
 fn kill(session: &mut Session) {
+    #[cfg(target_os = "macos")]
+    gadget::stop(session);
     if let Some(mut child) = session.child.take() {
         let _ = child.kill();
         std::thread::spawn(move || child.wait());

@@ -3428,6 +3428,7 @@ fn main() {
         extension_store::extension_status,
         text_hook::texthook_targets,
         text_hook::texthook_start,
+        text_hook::texthook_launch,
         text_hook::texthook_engine,
         text_hook::texthook_stop,
         text_hook::texthook_status,

@@ -145,3 +145,7 @@ export const texthookGame = (exe: string): Promise<{ thread: string | null }> =>
 /** Forgets the thread remembered for a game; with `all`, its icon too. */
 export const texthookForget = (exe: string, all: boolean): Promise<void> =>
   invoke<void>('texthook_forget', { exe, all })
+
+/** Opt-in native Mac launch; the game is chosen in a native file dialog. */
+export const texthookLaunch = (): Promise<{ launched: boolean; pid?: number; title?: string }> =>
+  invoke('texthook_launch')
