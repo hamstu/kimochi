@@ -21,7 +21,14 @@ use std::time::Duration;
 
 fn main() {
     let seconds: f64 = std::env::var("KIMOCHI_SECONDS").ok().and_then(|s| s.parse().ok()).unwrap_or(5.0);
-    let mut capture = match SystemAudio::start() {
+    #[cfg(target_os = "macos")]
+    let capture = match std::env::var("KIMOCHI_AUDIO_PID").ok().and_then(|pid| pid.parse().ok()) {
+        Some(pid) => SystemAudio::start_for_process(pid),
+        None => SystemAudio::start(),
+    };
+    #[cfg(not(target_os = "macos"))]
+    let capture = SystemAudio::start();
+    let mut capture = match capture {
         Ok(capture) => capture,
         Err(e) => {
             eprintln!("start failed: {} ({})", e.message, e.code);

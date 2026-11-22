@@ -437,9 +437,10 @@ impl SentenceAudio {
         *lock(&self.state) = State::Starting;
         let (ring, state, current) = (self.ring.clone(), self.state.clone(), self.generation.clone());
         let pauses = self.pauses.clone();
+        let settings = self.settings.clone();
         std::thread::Builder::new()
             .name("sentence-audio".into())
-            .spawn(move || record(generation, current, ring, state, pauses))
+            .spawn(move || record(generation, current, ring, state, pauses, settings))
             .ok();
         let service = self.clone();
         std::thread::Builder::new().name("sentence-audio-listen".into()).spawn(move || service.listen(generation)).ok();
@@ -1265,6 +1266,34 @@ pub fn run_check() -> bool {
     true
 }
 
+/// Window capture stays confined to its host process. Only an explicitly selected display
+/// requests system-wide audio; a closed, missing or invalid window never broadens the capture.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MacAudioTarget {
+    Waiting,
+    System,
+    Process(u32),
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn mac_audio_target(source: Option<&str>) -> MacAudioTarget {
+    use kimochi_capture::{Platform, SourceId};
+    match source.and_then(SourceId::parse) {
+        Some(SourceId::Window { platform: Platform::MacOs, pid: Some(pid), .. }) if pid > 0 => {
+            MacAudioTarget::Process(pid)
+        }
+        Some(SourceId::Display { platform: Platform::MacOs, .. }) => MacAudioTarget::System,
+        _ => MacAudioTarget::Waiting,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn requested_audio_target(settings: &Settings) -> MacAudioTarget {
+    let source = settings.get("lastSelectedSource").ok().flatten();
+    mac_audio_target(source.as_ref().and_then(|s| s["sourceId"].as_str()))
+}
+
 /// The capture thread: start, drain into the ring, and start again after a failure, until the
 /// generation moves on.
 fn record(
@@ -1273,22 +1302,48 @@ fn record(
     ring: Arc<Mutex<AudioRing>>,
     state: Arc<Mutex<State>>,
     pauses: Arc<Pauses>,
+    _settings: Arc<Settings>,
 ) {
+    #[cfg(target_os = "macos")]
+    let mut previous = None;
     let live = || current.load(Ordering::SeqCst) == generation;
     let set = |next: State| {
         if live() {
             *lock(&state) = next;
         }
     };
-    while live() {
+    #[allow(unused_labels)]
+    'capture: while live() {
         set(State::Starting);
-        match SystemAudio::start() {
+        #[cfg(target_os = "macos")]
+        let target = requested_audio_target(&_settings);
+        #[cfg(target_os = "macos")]
+        if previous != Some(target) {
+            lock(&ring).clear();
+            previous = Some(target);
+        }
+        #[cfg(target_os = "macos")]
+        let started = match target {
+            MacAudioTarget::System => SystemAudio::start(),
+            MacAudioTarget::Process(pid) => SystemAudio::start_for_process(pid),
+            MacAudioTarget::Waiting => Err(kimochi_capture::CaptureError::new(
+                "unavailable",
+                "Choose a game window or display to record audio.",
+            )),
+        };
+        #[cfg(not(target_os = "macos"))]
+        let started = SystemAudio::start();
+        match started {
             Ok(mut capture) => {
                 set(State::Recording { source: capture.source(), excludes_own_audio: capture.excludes_own_audio() });
                 // What played while the game was paused is cut out, the rest stamped in game time.
                 let mut splicer = Splicer::new();
                 while live() {
                     std::thread::sleep(DRAIN_EVERY);
+                    #[cfg(target_os = "macos")]
+                    if requested_audio_target(&_settings) != target {
+                        continue 'capture;
+                    }
                     let clock = pauses.clock().clone();
                     capture.drain_spliced(&mut splicer, &clock, &mut lock(&ring));
                     if let Some(why) = capture.ended() {
@@ -1309,6 +1364,10 @@ fn record(
         let wait = if matches!(*lock(&state), State::Unavailable { .. }) { RETRY_UNAVAILABLE } else { RESTART_AFTER };
         let until = Instant::now() + wait;
         while live() && Instant::now() < until {
+            #[cfg(target_os = "macos")]
+            if requested_audio_target(&_settings) != target {
+                continue 'capture;
+            }
             std::thread::sleep(Duration::from_millis(100));
         }
     }
@@ -1511,6 +1570,18 @@ pub async fn sentence_audio_add_to_note(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mac_audio_stays_with_the_selected_app_and_only_displays_request_system_audio() {
+        use super::{mac_audio_target, MacAudioTarget};
+        assert_eq!(mac_audio_target(Some("macos:window:123:456")), MacAudioTarget::Process(456));
+        assert_eq!(mac_audio_target(Some("macos:display:1")), MacAudioTarget::System);
+        for source in
+            [None, Some("macos:window:123"), Some("macos:window:123:0"), Some("broken"), Some("windows:display:1")]
+        {
+            assert_eq!(mac_audio_target(source), MacAudioTarget::Waiting);
+        }
+    }
+
     use super::*;
 
     #[test]
