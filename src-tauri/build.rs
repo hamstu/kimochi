@@ -1,4 +1,7 @@
 fn main() {
+    // generate_context! embeds these assets. Vite changes hashed file names, so track the whole
+    // directory as well as the previously embedded files (frontend-only bundles must refresh).
+    println!("cargo:rerun-if-changed=../dist");
     // `kimochi-ext` (main.rs `ext_ipc_plugin`): the extension windows' commands as a plugin, so
     // capabilities can grant them to Hachidori's loopback origin, which Tauri treats as remote and
     // never lets reach app commands. Its default permission allows them all; which window may
