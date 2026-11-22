@@ -352,4 +352,14 @@ mod tests {
         assert!(index.files.iter().any(|(name, _, _)| name == "libLoader.js"));
         assert!(index.scripts.len() > 400);
     }
+
+    #[test]
+    fn both_seishun_psp_discs_match_the_compiled_in_script() {
+        let exe = Path::new("PPSSPPWindows64.exe");
+        for serial in ["ULJM06302", "ULJM06303"] {
+            let title = format!("PPSSPP v1.19.3 - {serial} : 青春はじめました！");
+            let found = find(&game(exe, &title)).unwrap();
+            assert_eq!(found.file, "PSP_ULJM06302-3_Seishun_Hajimemashita.js");
+        }
+    }
 }

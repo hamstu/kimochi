@@ -1102,7 +1102,7 @@
     {"file":"PSP_ULJM06129_Toki_no_Kizuna_Sekigahara_Kitan.js","title":"Toki no Kizuna Sekigahara Kitan (十鬼の絆 関ヶ原奇譚)","platform":"psp","ids":["ULJM06129"],"version":"0.1","author":"Mansive"},
     {"file":"PSP_ULJM06291_Arcana_Famiglia_2.js","title":"Arcana Famiglia 2","platform":"psp","ids":["ULJM06291"],"version":"0.1","author":"Mansive"},
     {"file":"PSP_ULJM06301_Toki_no_Kizuna_Hanayuitsuzuri.js","title":"Toki no Kizuna Hanayuitsuzuri (十鬼の絆 花結綴り)","platform":"psp","ids":["ULJM06301"],"version":"0.1","author":"Mansive"},
-    {"file":"PSP_ULJM06302-3_Seishun_Hajimemashita.js","title":"Seishun Hajimemashita!","platform":"psp","ids":["ULJM063023"],"version":"1.0","author":"kenzy"},
+    {"file":"PSP_ULJM06302-3_Seishun_Hajimemashita.js","title":"Seishun Hajimemashita!","platform":"psp","ids":["ULJM06302","ULJM06303"],"version":"1.0","author":"kenzy"},
     {"file":"PSP_ULJM06393_Omerta_Chinmoku_no_Okite_The_Legacy.js","title":"Omertà ~Chinmoku no Okite~ The Legacy / Omerta (オメルタ～沈黙の掟～ THE LEGACY)","platform":"psp","ids":["ULJM06393"],"version":"0.1","author":"Mansive"},
     {"file":"PSP_ULJM6064_Armen_Noir_Portable.js","title":"Armen Noir Portable","platform":"psp","ids":["ULJM6064"],"version":"1.0","author":"kenzy"},
     {"file":"PSP_ULJS00339_Amagami.js","title":"Amagami","platform":"psp","ids":["ULJS00339"],"version":"v1.02","author":"DC"},

@@ -50,6 +50,15 @@ test('PC scripts carry their Steam store ids; loaders and libraries are not game
   assert.equal(normaliseId('slpm_657.32'), 'SLPM65732')
 })
 
+test('multi-disc PSP serials match each disc separately', () => {
+  const entry = scriptEntry(
+    'PSP_ULJM06302-3_Seishun_Hajimemashita.js',
+    script(['@name [ULJM06302-3] Seishun Hajimemashita!'])
+  )
+  assert.deepEqual(entry.ids, ['ULJM06302', 'ULJM06303'])
+  assert.equal(entry.title, 'Seishun Hajimemashita!')
+})
+
 test('the committed index pins every file and lists only game scripts that exist in it', async () => {
   const index = JSON.parse(await readFile(indexPath, 'utf8'))
   assert.match(index.commit, /^[0-9a-f]{40}$/)
