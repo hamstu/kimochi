@@ -16,6 +16,12 @@
 //!
 //! On Linux the same Windows helper and hookers hook Windows games running through Proton or
 //! Wine: they run with the game's Wine, in its prefix (`wine.rs`).
+//!
+//! A game the Agent collection has a script for (`agent/`) is hooked by that script first: it
+//! knows where the game's text is, emulated games' included. If it cannot hook the game, LunaHook
+//! and Textractor follow as for any other game. The reader can choose LunaHook for a game instead
+//! (`textHookerGames.<exe>.engine`), and switch between the two while it is hooked.
+pub mod agent;
 pub mod clean;
 pub mod pick;
 pub mod process;
@@ -39,8 +45,18 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
-/// Engines in the order they are tried.
+/// Engines in the order they are tried, for a game with no Agent script.
 const ENGINES: &[&str] = &["luna", "textractor"];
+
+/// The engines to try, in order, for a game with `script` (or none), the reader's choice first
+/// (`"agent"`, `"luna"`; none: Agent when there is a script).
+fn engines_for(script: Option<&agent::Script>, choice: Option<&str>) -> Vec<&'static str> {
+    match (script, choice) {
+        (Some(_), Some("luna")) => vec!["luna", "textractor", agent::ENGINE],
+        (Some(_), _) => vec![agent::ENGINE, "luna", "textractor"],
+        (None, _) => ENGINES.to_vec(),
+    }
+}
 /// How long after a burst the next can carry on its line (a typewriter paused for effect).
 const CARRY_ON: Duration = Duration::from_secs(5);
 /// How soon after a row of the text box the next row can join it: this, and the time the row
@@ -131,6 +147,10 @@ struct Session {
     /// The game's processes, as found when hooking started.
     targets: Vec<process::Target>,
     pids: Vec<u32>,
+    /// The engines to try, in order (`engines_for`).
+    engines: Vec<&'static str>,
+    /// The Agent script for the game, when the collection has one.
+    agent: Option<&'static agent::Script>,
     engine: Option<&'static str>,
     phase: &'static str,
     detail: Option<String>,
@@ -293,10 +313,10 @@ impl Hook {
         // which is set whole, nor Ren'Py's say screen, whose lines come whole as they are shown.
         let recent = session.last_key.as_deref() == Some(key)
             && session.last_sent.is_some_and(|at| at.elapsed() < window)
-            && !session
-                .threads
-                .iter()
-                .any(|t| t.key == key && (unity::is_unity(&t.hookcode) || renpy::is_renpy(&t.hookcode)));
+            && !session.threads.iter().any(|t| {
+                t.key == key
+                    && (unity::is_unity(&t.hookcode) || renpy::is_renpy(&t.hookcode) || agent::is_agent(&t.hookcode))
+            });
         let piece_chars = text.chars().count();
         if !carries_on && config.join_lines && recent {
             if let Some(before) = session.last_line.as_deref() {
@@ -375,7 +395,13 @@ fn status_of(session: &Session) -> Value {
         "sourceId": session.source_id,
         "exe": session.exe.as_ref().map(|e| e.to_string_lossy()),
         "pids": session.pids,
-        "engine": session.engine.and_then(|id| manifest.engines.get(id).map(|e| json!({ "id": id, "name": e.name, "version": e.version }))),
+        "engine": session.engine.and_then(|id| match id {
+            agent::ENGINE => Some(agent::engine_status()),
+            _ => manifest.engines.get(id).map(|e| json!({ "id": id, "name": e.name, "version": e.version })),
+        }),
+        "engines": session.engines,
+        // Without its download size: the status goes out at every line (its progress is `download`).
+        "agent": session.agent.map(|script| agent::describe(script, None)),
         "download": session.download.map(|(done, total)| json!({ "done": done, "total": total })),
         "selected": session.selected,
         "selectedBy": session.selected_by,
@@ -475,6 +501,14 @@ fn send(session: &mut Session, command: Value) -> Result<(), String> {
 }
 
 fn stop_child(session: &mut Session) {
+    // Agent's frida-inject takes its script out of the game as it exits: it goes at once, before
+    // anything else hooks the game.
+    if session.engine == Some(agent::ENGINE) {
+        if let Some(mut child) = session.child.take() {
+            let _ = child.kill();
+            std::thread::spawn(move || child.wait());
+        }
+    }
     // Closing stdin asks the helper to detach from every game and exit; it is killed only if
     // it does not.
     session.stdin = None;
@@ -790,6 +824,9 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         // (`{w}`, `{p}`) or by an `extend`, it is the same line, which it replaces however late.
         if renpy::is_renpy(&thread.hookcode) {
             (vec![text.to_string()], renpy::carries_on(&thread.text, text))
+        // An Agent script sends the game's line whole, as the game shows it (its rows joined).
+        } else if agent::is_agent(&thread.hookcode) {
+            (vec![text.to_string()], false)
         // A Unity text object's text arrives settled, the whole text box (`unity::Settle`): one line,
         // never frames of a typewriter to take apart.
         } else if unity::is_unity(&thread.hookcode) {
@@ -1482,16 +1519,21 @@ fn read_lines(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec<
 
 /// Moves to the next engine after `failed` could not be installed, started or attached.
 fn fall_back(hook: &'static Hook, generation: u64, failed: &'static str, reason: String) {
-    let next = ENGINES.iter().skip_while(|e| **e != failed).nth(1).copied();
     let mut session = hook.lock();
     if session.generation != generation {
         return;
     }
+    let next = session.engines.iter().skip_while(|e| **e != failed).nth(1).copied();
     stop_child(&mut session);
     session.threads.clear();
     match next {
         Some(engine) => {
-            let name = |id: &str| store::manifest().engines.get(id).map_or(id.to_string(), |e| e.name.clone());
+            let name = |id: &str| match id {
+                agent::ENGINE => {
+                    session.agent.map_or("Agent".to_string(), |s| format!("The Agent script for {}", s.title))
+                }
+                _ => store::manifest().engines.get(id).map_or(id.to_string(), |e| e.name.clone()),
+            };
             session.fallback = Some(format!("{} could not hook this game: {reason}", name(failed)));
             session.detail = session.fallback.clone();
             hook.publish(&session);
@@ -1508,6 +1550,9 @@ fn fall_back(hook: &'static Hook, generation: u64, failed: &'static str, reason:
 
 /// Installs `engine` if needed and launches it on the session's targets.
 fn run(hook: &'static Hook, generation: u64, engine: &'static str) {
+    if engine == agent::ENGINE {
+        return agent::run(hook, generation);
+    }
     let targets: Vec<process::Target> = {
         let session = hook.lock();
         if session.generation != generation {
@@ -1574,7 +1619,13 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
         for id in source_ids {
             let pid = window_pid(&id);
             let value = match pid.map(process::target) {
-                Some(Ok(target)) => json!({ "hookable": true, "bits": target.bits, "exe": target.exe }),
+                Some(Ok(target)) => {
+                    let mut value = json!({ "hookable": true, "bits": target.bits, "exe": target.exe });
+                    if let Some(script) = agent_script(&target, &id) {
+                        value["agent"] = agent::describe(script, hook().and_then(|h| h.root().ok()).as_deref());
+                    }
+                    value
+                }
                 Some(Err(reason)) => json!({ "hookable": false, "reason": reason }),
                 None => json!({ "hookable": false, "reason": "Only app windows can be hooked." }),
             };
@@ -1586,6 +1637,26 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
     .map_err(|e| e.to_string())
 }
 
+/// The Agent script for the game in `target` (its window `source_id`), unless the reader turned
+/// Agent scripts off (Settings → Text Hooker).
+fn agent_script(target: &process::Target, source_id: &str) -> Option<&'static agent::Script> {
+    let hook = hook()?;
+    let service = hook.app.try_state::<Shared>()?;
+    let on = service.settings.get_path(&["textHookerAgentScripts"]).ok().flatten();
+    if on == Some(json!(false)) {
+        return None;
+    }
+    let language = crate::language::current(&service.settings);
+    agent::script_for(target, window_title(source_id).as_deref(), &language.code)
+}
+
+/// The engine the reader chose for the game at `exe` (`"agent"`, `"luna"`), if any.
+fn chosen_engine(hook: &Hook, exe: &Path) -> Option<String> {
+    let service = hook.app.try_state::<Shared>()?;
+    let value = service.settings.get_path(&["textHookerGames", &game_key(exe), "engine"]).ok().flatten()?;
+    value.as_str().map(str::to_string)
+}
+
 /// A session in this phase is hooking its game, or has: starting it again would only interrupt it.
 fn keeps_going(phase: &str) -> bool {
     matches!(phase, "starting" | "downloading" | "attaching" | "hooked")
@@ -1594,7 +1665,11 @@ fn keeps_going(phase: &str) -> bool {
 /// Hooks the game behind window source `source_id`; replaces any earlier session, unless it is
 /// one hooking the same game.
 #[tauri::command]
-pub async fn texthook_start(source_id: String, observer_engine: Option<String>) -> Result<Value, String> {
+pub async fn texthook_start(
+    source_id: String,
+    observer_engine: Option<String>,
+    engine: Option<String>,
+) -> Result<Value, String> {
     let hook = hook().ok_or("text hooking is not available")?;
     if !cfg!(any(windows, target_os = "linux")) {
         return Err("Text Hooker works on Windows and Linux.".into());
@@ -1648,13 +1723,22 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             return Err(reason);
         }
     };
+    // The game's Agent script, and the engines to try: the one asked for, else the one the reader
+    // chose for this game, else Agent when there is a script.
+    let script = targets.first().and_then(|t| agent_script(t, &source_id));
+    let choice = engine.or_else(|| targets.first().and_then(|t| chosen_engine(hook, &t.exe)));
+    let engines = engines_for(script, choice.as_deref());
     let generation = {
         let mut session = hook.lock();
         // The same game, already being hooked or hooked (the game started with Hook automatically
         // on, and the reader turned Text hooking on too): that session goes on. Stopping it while
         // it attaches leaves the hooker's DLL in the game with no host, which then never reconnects.
         let pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
-        if session.source_id == source_id && session.pids == pids && keeps_going(session.phase) {
+        if session.source_id == source_id
+            && session.pids == pids
+            && keeps_going(session.phase)
+            && session.engines.first() == engines.first()
+        {
             session.observer_engine = observer_engine.or(session.observer_engine.take());
             return Ok(status_of(&session));
         }
@@ -1668,6 +1752,8 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             targets: targets.clone(),
             phase: "starting",
             observer_engine,
+            engines: engines.clone(),
+            agent: script,
             ..Default::default()
         };
         // A Unity (Mono) game's text is read by the voice hook DLL too, from the start: the
@@ -1675,7 +1761,9 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         // all sorts of strings, which tell little of when a line is shown (`unity.rs`). A Ren'Py
         // game's dialogue likewise, from the say screen (`renpy.rs`); the hooker still runs, for
         // the game's other text and for a Ren'Py the DLL cannot read.
+        // Not while an Agent script reads the game's text: it would add threads of its own.
         if cfg!(windows)
+            && engines[0] != agent::ENGINE
             && targets.iter().any(|t| t.wine.is_none() && (unity::is_mono_game(&t.exe) || renpy::is_renpy_game(&t.exe)))
         {
             read_unity_text(hook, &mut session, true);
@@ -1705,9 +1793,45 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
                     return;
                 }
             }
-            run(hook, generation, ENGINES[0])
+            run(hook, generation, engines[0])
         });
     }
+    Ok(status_of(&hook.lock()))
+}
+
+/// Hooks the game being hooked again with `engine` (`"agent"` or `"luna"`) first: the reader
+/// switching between the game's Agent script and LunaHook. Its window and processes stay as they
+/// were found; the threads start afresh.
+#[tauri::command]
+pub fn texthook_engine(engine: String) -> Result<Value, String> {
+    let hook = hook().ok_or("text hooking is not available")?;
+    let mut session = hook.lock();
+    if session.targets.is_empty() || session.phase == "idle" {
+        return Err("No game is hooked.".into());
+    }
+    if engine == agent::ENGINE && session.agent.is_none() {
+        return Err("This game has no Agent script.".into());
+    }
+    let engines = engines_for(session.agent, Some(engine.as_str()));
+    stop_child(&mut session);
+    let generation = session.generation + 1;
+    let previous = std::mem::take(&mut *session);
+    *session = Session {
+        generation,
+        source_id: previous.source_id,
+        exe: previous.exe,
+        pids: previous.pids,
+        targets: previous.targets,
+        observer_engine: previous.observer_engine,
+        agent: previous.agent,
+        engines: engines.clone(),
+        phase: "starting",
+        ..Default::default()
+    };
+    hook.publish(&session);
+    drop(session);
+    crate::debug_report::trace(&hook.app, json!({ "check": "texthook-engine-switch", "engine": engine }));
+    std::thread::spawn(move || run(hook, generation, engines[0]));
     Ok(status_of(&hook.lock()))
 }
 

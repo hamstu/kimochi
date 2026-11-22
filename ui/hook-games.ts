@@ -104,6 +104,11 @@ export interface HookGame extends Partial<Omit<HookSettings, 'textSize'>> {
   textHook?: boolean
   /** H-codes inserted each time the game is hooked. */
   hookCodes?: string[]
+  /**
+   * What hooks the game, when it has an Agent script (text_hook/agent): the script (`agent`, the
+   * default) or LunaHook (`luna`). Chosen on its card.
+   */
+  engine?: 'agent' | 'luna'
   replacements?: HookReplacement[]
   /** The text's size, a fraction of the window's height: Auto align's measure, or the reader's. */
   text?: number

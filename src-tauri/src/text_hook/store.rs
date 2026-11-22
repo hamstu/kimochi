@@ -6,7 +6,9 @@
 //! places it can come from, our mirror first. A source is either a plain file (our mirror) or an
 //! entry of an upstream release zip on GitHub; a zip entry is read with HTTP range requests (the
 //! zip's directory, then that entry's bytes), so only a few megabytes of a large release are
-//! fetched. Whatever the source, the file must have the manifest's size and SHA-256.
+//! fetched. A source marked `xz` serves the file xz-compressed (Frida publishes its tools so); the
+//! download must match the pinned compressed form before it is unpacked. Whatever the source, the
+//! file must have the manifest's size and SHA-256.
 //!
 //! ```text
 //! <app local data>/texthook/
@@ -30,6 +32,16 @@ pub struct Source {
     /// The path of the file inside the zip at `url`; absent for a plain file.
     #[serde(rename = "zipEntry")]
     pub zip_entry: Option<String>,
+    /// The URL serves the file xz-compressed: its `xz` form.
+    #[serde(default)]
+    pub xz: bool,
+}
+
+/// A file's compressed form, as an `xz` source serves it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Packed {
+    pub size: u64,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,7 +50,21 @@ pub struct File {
     pub name: String,
     pub size: u64,
     pub sha256: String,
+    /// The compressed form, for a file whose sources serve it xz-compressed.
+    #[serde(default)]
+    pub xz: Option<Packed>,
     pub sources: Vec<Source>,
+}
+
+impl File {
+    /// The bytes downloaded for it: the compressed form's, when it comes compressed.
+    pub fn download_size(&self) -> u64 {
+        self.xz.as_ref().map_or(self.size, |p| p.size)
+    }
+}
+
+fn is_sha256(hash: &str) -> bool {
+    hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,10 +102,14 @@ impl Manifest {
                 if !safe_relative(&file.name) {
                     return Err(format!("{:?} is not a safe relative path", file.name));
                 }
-                if file.sha256.len() != 64
-                    || !file.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-                {
+                if !is_sha256(&file.sha256) || file.xz.as_ref().is_some_and(|p| !is_sha256(&p.sha256) || p.size == 0) {
                     return Err(format!("{} has no valid SHA-256", file.name));
+                }
+                // A compressed source needs the compressed form's pin, and is never a zip entry.
+                if file.sources.iter().any(|s| s.xz) != file.xz.is_some()
+                    || file.sources.iter().any(|s| s.xz && s.zip_entry.is_some())
+                {
+                    return Err(format!("{} has compressed sources without its compressed form", file.name));
                 }
                 if file.size == 0 || file.sources.is_empty() {
                     return Err(format!("{} has no size or no source", file.name));
@@ -104,10 +134,19 @@ pub trait Fetch: Send + Sync {
     fn get(&self, url: &str, range: Option<(u64, u64)>) -> Result<Vec<u8>, String>;
     /// The resource's size in bytes.
     fn size(&self, url: &str) -> Result<u64, String>;
+    /// The whole resource, telling `received` how many bytes have arrived as they do (a large
+    /// download's progress). By default, all at once.
+    fn get_streamed(&self, url: &str, received: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
+        let body = self.get(url, None)?;
+        received(body.len() as u64);
+        Ok(body)
+    }
 }
 
 pub struct HttpFetch {
     client: reqwest::blocking::Client,
+    /// For whole large files (tens of megabytes on a slow line): an hour for the body.
+    long: reqwest::blocking::Client,
 }
 
 impl HttpFetch {
@@ -118,7 +157,13 @@ impl HttpFetch {
             .timeout(Duration::from_secs(120))
             .build()
             .map_err(|e| e.to_string())?;
-        Ok(HttpFetch { client })
+        let long = reqwest::blocking::Client::builder()
+            .user_agent(concat!("Kimochi/", env!("CARGO_PKG_VERSION"), " (text hooker download)"))
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(60 * 60))
+            .build()
+            .map_err(|e| e.to_string())?;
+        Ok(HttpFetch { client, long })
     }
 }
 
@@ -142,6 +187,29 @@ impl Fetch for HttpFetch {
         }
         let mut body = Vec::new();
         response.take(WHOLE_LIMIT).read_to_end(&mut body).map_err(|e| format!("network error: {e}"))?;
+        Ok(body)
+    }
+
+    fn get_streamed(&self, url: &str, received: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
+        let mut response = self.long.get(url).send().map_err(|e| format!("network error: {}", e.without_url()))?;
+        let status = response.status();
+        if !status.is_success() {
+            let host = response.url().host_str().unwrap_or("the server").to_string();
+            return Err(format!("{host} answered HTTP {}", status.as_u16()));
+        }
+        let mut body = Vec::with_capacity(response.content_length().unwrap_or(0).min(WHOLE_LIMIT) as usize);
+        let mut chunk = vec![0u8; 256 * 1024];
+        loop {
+            let n = response.read(&mut chunk).map_err(|e| format!("network error: {e}"))?;
+            if n == 0 {
+                break;
+            }
+            body.extend_from_slice(&chunk[..n]);
+            if body.len() as u64 > WHOLE_LIMIT {
+                return Err("the download is larger than expected".into());
+            }
+            received(body.len() as u64);
+        }
         Ok(body)
     }
 
@@ -276,18 +344,40 @@ fn zip_entry(fetch: &dyn Fetch, url: &str, entry: &str, expected_size: u64) -> R
 }
 
 /// Fetches one manifest file from the first source that yields the right bytes.
+/// An xz stream's contents.
+pub fn unxz(packed: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    lzma_rs::xz_decompress(&mut std::io::BufReader::new(packed), &mut out)
+        .map_err(|e| format!("could not unpack: {e}"))?;
+    Ok(out)
+}
+
+#[cfg(test)]
 pub fn fetch_file(fetch: &dyn Fetch, file: &File) -> Result<Vec<u8>, String> {
+    fetch_file_with(fetch, file, &|_| {})
+}
+
+/// The file, verified, from the first of its sources that has it. `received` hears how many bytes
+/// of the download under way have arrived (from 0 again for each source tried).
+pub fn fetch_file_with(fetch: &dyn Fetch, file: &File, received: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
     let mut errors = Vec::new();
     // Our mirror first, then the upstream release (`download_mirror`).
     let sources = crate::download_mirror::order(
         &file.sources,
         |s| s.url.as_str(),
-        |s, url| Source { url, zip_entry: s.zip_entry.clone() },
+        |s, url| Source { url, zip_entry: s.zip_entry.clone(), xz: s.xz },
     );
     for source in &sources {
         let result = match &source.zip_entry {
             Some(entry) => zip_entry(fetch, &source.url, entry, file.size),
-            None => fetch.get(&source.url, None),
+            None if source.xz => fetch.get_streamed(&source.url, received).and_then(|packed| {
+                let pin = file.xz.as_ref().ok_or("no compressed form pinned")?;
+                if packed.len() as u64 != pin.size || hex(&Sha256::digest(&packed)) != pin.sha256 {
+                    return Err("the compressed file does not match its pin".to_string());
+                }
+                unxz(&packed)
+            }),
+            None => fetch.get_streamed(&source.url, received),
         }
         .and_then(|data| {
             if data.len() as u64 != file.size {
@@ -325,7 +415,7 @@ pub fn installed(root: &Path, id: &str) -> Option<PathBuf> {
 }
 
 /// Downloads and verifies every file of `id` into a staging directory, then renames it into
-/// place. `progress` gets (bytes done, bytes total) after each file.
+/// place. `progress` gets (bytes done, bytes total) as the download goes.
 pub fn install(fetch: &dyn Fetch, root: &Path, id: &str, progress: &dyn Fn(u64, u64)) -> Result<PathBuf, String> {
     install_from(fetch, manifest(), root, id, progress)
 }
@@ -345,18 +435,18 @@ fn install_from(
     fs::create_dir_all(root).map_err(|e| e.to_string())?;
     let staging = root.join(format!(".staging-{id}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&staging);
-    let total: u64 = engine.files.iter().map(|f| f.size).sum();
+    let total: u64 = engine.files.iter().map(File::download_size).sum();
     let mut done = 0;
     progress(0, total);
     let result = (|| {
         for file in &engine.files {
-            let data = fetch_file(fetch, file)?;
+            let data = fetch_file_with(fetch, file, &|n| progress(done + n.min(file.download_size()), total))?;
             let path = staging.join(&file.name);
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             fs::write(&path, data).map_err(|e| e.to_string())?;
-            done += file.size;
+            done += file.download_size();
             progress(done, total);
         }
         fs::rename(&staging, &dir).map_err(|e| e.to_string())
@@ -464,6 +554,7 @@ mod tests {
                             name: name.to_string(),
                             size: data.len() as u64,
                             sha256: sha(data),
+                            xz: None,
                             sources: sources.clone(),
                         })
                         .collect(),
@@ -524,7 +615,11 @@ mod tests {
         let manifest = manifest_for(&[(
             "LunaHost64.dll",
             &host,
-            vec![Source { url: "https://gh/r.zip".into(), zip_entry: Some("R/files/LunaHost64.dll".into()) }],
+            vec![Source {
+                url: "https://gh/r.zip".into(),
+                zip_entry: Some("R/files/LunaHost64.dll".into()),
+                xz: false,
+            }],
         )]);
         let root = std::env::temp_dir().join(format!("kimochi-texthook-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
@@ -550,15 +645,57 @@ mod tests {
             name: "a.dll".into(),
             size: good.len() as u64,
             sha256: sha(&good),
+            xz: None,
             sources: vec![
-                Source { url: "https://gone/404".into(), zip_entry: None },
-                Source { url: "https://mirror/tampered".into(), zip_entry: None },
-                Source { url: "https://mirror/good".into(), zip_entry: None },
+                Source { url: "https://gone/404".into(), zip_entry: None, xz: false },
+                Source { url: "https://mirror/tampered".into(), zip_entry: None, xz: false },
+                Source { url: "https://mirror/good".into(), zip_entry: None, xz: false },
             ],
         };
         assert_eq!(fetch_file(&fake, &file).unwrap(), good);
         let only_bad = File { sources: file.sources[..2].to_vec(), ..file };
         let error = fetch_file(&fake, &only_bad).unwrap_err();
         assert!(error.contains("SHA-256 mismatch"), "{error}");
+    }
+
+    #[test]
+    fn a_compressed_source_is_checked_packed_then_unpacked_and_reports_progress() {
+        let real = b"frida-inject bytes ".repeat(5000);
+        let mut packed = Vec::new();
+        lzma_rs::xz_compress(&mut std::io::BufReader::new(real.as_slice()), &mut packed).unwrap();
+        let mut tampered = packed.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 1;
+        let fake = Fake {
+            files: BTreeMap::from([
+                ("https://mirror/x.exe.xz".to_string(), tampered),
+                ("https://gh/x.exe.xz".to_string(), packed.clone()),
+            ]),
+            asked: Mutex::default(),
+        };
+        let file = File {
+            name: "x.exe".into(),
+            size: real.len() as u64,
+            sha256: sha(&real),
+            xz: Some(Packed { size: packed.len() as u64, sha256: sha(&packed) }),
+            sources: vec![
+                Source { url: "https://mirror/x.exe.xz".into(), zip_entry: None, xz: true },
+                Source { url: "https://gh/x.exe.xz".into(), zip_entry: None, xz: true },
+            ],
+        };
+        assert_eq!(file.download_size(), packed.len() as u64);
+        let heard = Mutex::new(Vec::new());
+        assert_eq!(fetch_file_with(&fake, &file, &|n| heard.lock().unwrap().push(n)).unwrap(), real);
+        assert_eq!(heard.lock().unwrap().last(), Some(&(packed.len() as u64)));
+        // The tampered mirror copy alone: refused before it is unpacked.
+        let only_tampered = File { sources: file.sources[..1].to_vec(), ..file.clone() };
+        let error = fetch_file(&fake, &only_tampered).unwrap_err();
+        assert!(error.contains("does not match its pin"), "{error}");
+        // A compressed source needs the compressed pin.
+        let json = format!(
+            r#"{{"engines":{{"a":{{"name":"A","version":"1","project":"","license":"","files":[{{"name":"x.exe","size":1,"sha256":"{}","sources":[{{"url":"https://x","xz":true}}]}}]}}}}}}"#,
+            sha(b"x")
+        );
+        assert!(Manifest::parse(&json).is_err());
     }
 }

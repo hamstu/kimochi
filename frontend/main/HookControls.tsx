@@ -28,6 +28,9 @@ import {
   Spinner
 } from '@kit'
 import { texthookSelect, type HookStatus, type HookThread } from '../bridge/textHook'
+import { EngineSwitch } from './AgentHook'
+import { megabytes, scriptLine } from './agentEngine'
+import { progressProps, type FieldProgress } from './fieldProgress'
 import { SidebarNotice } from './SidebarNotice'
 import { useLanguage } from '../bridge/useLanguage'
 import { useTextLang } from '../bridge/useTextLang'
@@ -54,6 +57,21 @@ function couldNotHook(status: HookStatus): boolean {
     !status.threads.some((t) => t.selected) &&
     (status.hookFailures?.length ?? 0) > 0
   )
+}
+
+/** A download under way, as the select's fill (like the OCR model's and the Dictionary's). */
+function downloadProgress(status: HookStatus): FieldProgress | null {
+  const d = status.download
+  if (status.phase !== 'downloading' || !d) return null
+  const value = d.total > 0 ? (d.done / d.total) * 100 : 0
+  const engine = status.engine?.name ?? 'the hooker'
+  return {
+    value,
+    exact: d.total > 0,
+    short: `${Math.floor(value)}%`,
+    title:
+      d.total > 0 ? `Downloading ${engine}: ${megabytes(d.done)} of ${megabytes(d.total)}` : `Downloading ${engine}`
+  }
 }
 
 /** What the select shows, and whether it is still working on it. */
@@ -94,13 +112,17 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
   const listed = showAll ? status.threads : status.threads.filter((thread) => thread.japanese || thread.selected)
   const hidden = status.threads.length - status.threads.filter((thread) => thread.japanese || thread.selected).length
   const how =
-    status.selectedBy === 'saved'
-      ? 'Remembered for this game'
-      : status.selectedBy === 'auto'
-        ? 'Matched to the screen'
-        : status.pickNote
-          ? 'Nothing matches the screen yet'
-          : undefined
+    status.selectedBy === 'agent'
+      ? 'From the Agent script'
+      : status.selectedBy === 'saved'
+        ? 'Remembered for this game'
+        : status.selectedBy === 'auto'
+          ? 'Matched to the screen'
+          : status.pickNote
+            ? 'Nothing matches the screen yet'
+            : undefined
+  const onAgent = status.engine?.id === 'agent'
+  const download = downloadProgress(status)
   return (
     <div className="src-hook">
       {failed && status.detail && (
@@ -131,6 +153,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
           </span>
         </div>
       )}
+      {!failed && status.phase !== 'idle' && <EngineSwitch status={status} />}
       {!failed && status.phase !== 'idle' && (
         <Menu>
           <MenuTrigger asChild disabled={status.threads.length === 0}>
@@ -140,6 +163,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
               aria-label="Hooked text"
               data-placeholder={selected ? undefined : ''}
               title={status.pickNote ?? undefined}
+              {...progressProps(download)}
             >
               <span className="src-hook-select-value">
                 {view.busy ? (
@@ -157,7 +181,9 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
             </button>
           </MenuTrigger>
           <MenuContent align="start" className="src-hook-menu">
-            <MenuLabel>Hooked text</MenuLabel>
+            <MenuLabel>
+              {onAgent && status.agent ? `Agent script: ${scriptLine(status.agent)}` : 'Hooked text'}
+            </MenuLabel>
             <MenuRadioGroup
               value={status.selectedBy === 'manual' && selected ? selected.key : AUTO}
               onValueChange={(value) => void texthookSelect(value === AUTO ? null : value).catch(() => {})}

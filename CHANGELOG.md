@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- 🧩 **Agent scripts for the Text Hooker.** Many games LunaHook can't reach, emulated console games above all (Switch, PSP, PS2, PS Vita, 3DS and more) and some PC games, have a script in the community's Agent collection that knows exactly where their text is. When the game you've picked has one, its Text hooking box says so: press **Use** and Kimochi hooks the game with that script, downloading what it needs the first time (about 30 MB). If the script can't hook the game, LunaHook takes over. While a game is hooked you can switch between **Agent script** and **LunaHook** on its card, and Kimochi remembers your choice. Windows, and Linux for Windows games under Proton or Wine. Turn it off in Settings → Text Hooker.
+
 ### Fixed
 
 - **Steam Deck Gaming Mode: drop-down lists work by touch.** A list such as **Section** in Hachidori's settings (and the lists in Yomitan's and 10ten's) took many taps to change. It now opens as a list inside the window, with rows big enough for a finger: one tap opens it, one tap chooses.

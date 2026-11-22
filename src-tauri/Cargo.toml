@@ -41,6 +41,8 @@ sha2 = "0.10"
 # CRC. Both already in the lock file (through png and image).
 flate2 = "1.1"
 crc32fast = "1.5"
+# Unpacks the Agent engine's injector, which Frida publishes xz-compressed only (text_hook/store.rs).
+lzma-rs = "0.3"
 png = "0.18"
 # Google Lens OCR (google_lens.rs): its request and response are protobuf, declared by hand with
 # prost's derive. Already in the lock file.
@@ -208,6 +210,8 @@ opt-level = 3
 [profile.dev.package.flate2]
 opt-level = 3
 [profile.dev.package.crc32fast]
+opt-level = 3
+[profile.dev.package.lzma-rs]
 opt-level = 3
 [profile.dev.package.adler2]
 opt-level = 3
