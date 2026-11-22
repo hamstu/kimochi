@@ -5,7 +5,7 @@
 //!
 //! When a game has a script (`index.rs`), it is the first engine tried; LunaHook and Textractor
 //! follow if it cannot hook (`super::fall_back`). Nothing is bundled: Frida's `frida-inject` (pinned
-//! in the texthook manifest, one build per Windows CPU) and the collection at its pinned commit
+//! in the texthook manifest, one build per target platform) and the collection at its pinned commit
 //! (`scripts.rs`) are downloaded the first time a game needs them.
 //!
 //! The script frida-inject runs in the game is built here: `prelude.js` (which answers what the
@@ -52,14 +52,21 @@ pub fn is_agent(hookcode: &str) -> bool {
 }
 
 /// The texthook manifest's injector for this computer, if Agent runs here: Frida 17 on Windows (x64,
-/// ARM64); on Linux x64, for Windows games under Wine, Frida 16, the last that starts inside Wine.
-pub fn injector() -> Option<&'static str> {
-    if cfg!(all(windows, target_arch = "aarch64")) {
+/// ARM64) and native Linux x64; for Windows games under Wine, Frida 16, the last
+/// that starts inside Wine.
+pub fn injector(target: Option<&process::Target>) -> Option<&'static str> {
+    if cfg!(all(target_os = "linux", not(target_arch = "x86_64"))) {
+        return None;
+    }
+    if target.is_some_and(|t| t.wine.is_some()) {
+        return Some("agent-wine");
+    }
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Some("agent-linux-x64")
+    } else if cfg!(all(windows, target_arch = "aarch64")) {
         Some("agent-arm64")
     } else if cfg!(all(windows, target_arch = "x86_64")) {
         Some("agent-x64")
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        Some("agent-wine")
     } else {
         None
     }
@@ -68,7 +75,7 @@ pub fn injector() -> Option<&'static str> {
 /// The script for the game in `target`, whose window is titled `window_title`, if Agent runs here
 /// and the collection has one.
 pub fn script_for(target: &process::Target, window_title: Option<&str>, language: &str) -> Option<&'static Script> {
-    injector()?;
+    injector(Some(target))?;
     // Development: every game has the script named here (a file put in the collection's folder),
     // to try the engine on a game the collection does not know.
     #[cfg(debug_assertions)]
@@ -91,8 +98,8 @@ pub fn script_for(target: &process::Target, window_title: Option<&str>, language
 }
 
 /// What the injector still needs, summed by `size` over its files (0 when it is here).
-fn injector_missing(root: &Path, size: fn(&store::File) -> u64) -> u64 {
-    let Some(engine) = injector() else { return 0 };
+fn injector_missing(root: &Path, target: Option<&process::Target>, size: fn(&store::File) -> u64) -> u64 {
+    let Some(engine) = injector(target) else { return 0 };
     match store::installed(root, engine) {
         Some(_) => 0,
         None => store::manifest().engines.get(engine).map_or(0, |e| e.files.iter().map(size).sum()),
@@ -109,29 +116,29 @@ fn collection_missing(root: &Path) -> u64 {
 }
 
 /// The bytes still to download before Agent can run (0 when it is ready).
-pub fn missing_bytes(root: &Path) -> u64 {
-    if injector().is_none() {
+pub fn missing_bytes(root: &Path, target: Option<&process::Target>) -> u64 {
+    if injector(target).is_none() {
         return 0;
     }
-    injector_missing(root, store::File::download_size) + collection_missing(root)
+    injector_missing(root, target, store::File::download_size) + collection_missing(root)
 }
 
 /// What the status says about the script: shown on the game's card.
-pub fn describe(script: &Script, root: Option<&Path>) -> Value {
+pub fn describe(script: &Script, root: Option<&Path>, target: Option<&process::Target>) -> Value {
     json!({
         "file": script.file,
         "title": script.title,
         "platform": script.platform,
         "author": script.author,
         "version": script.version,
-        "download": root.map_or(0, missing_bytes),
+        "download": root.map_or(0, |root| missing_bytes(root, target)),
         "collection": index::index().repository,
     })
 }
 
 /// The engine's name and version, for the status.
-pub fn engine_status() -> Value {
-    let version = injector().and_then(|id| store::manifest().engines.get(id)).map(|e| e.version.clone());
+pub fn engine_status(target: Option<&process::Target>) -> Value {
+    let version = injector(target).and_then(|id| store::manifest().engines.get(id)).map(|e| e.version.clone());
     json!({ "id": ENGINE, "name": "Agent", "version": version })
 }
 
@@ -148,7 +155,7 @@ pub(super) fn run(hook: &'static Hook, generation: u64) {
     let result = (|| {
         let script = script.ok_or("no Agent script fits this game")?;
         let target = targets.first().ok_or("the game has closed")?;
-        let (injector, collection) = install(hook, generation)?;
+        let (injector, collection) = install(hook, generation, target)?;
         launch(hook, generation, &injector, &collection, script, target, Instant::now())
     })();
     if let Err(reason) = result {
@@ -160,11 +167,11 @@ pub(super) fn run(hook: &'static Hook, generation: u64) {
 
 /// The injector's folder and the collection's, downloaded first if they are not here yet, with one
 /// progress bar for both.
-fn install(hook: &'static Hook, generation: u64) -> Result<(PathBuf, PathBuf), String> {
-    let engine = injector().ok_or("Agent does not run on this computer")?;
+fn install(hook: &'static Hook, generation: u64, target: &process::Target) -> Result<(PathBuf, PathBuf), String> {
+    let engine = injector(Some(target)).ok_or("Agent does not run on this computer")?;
     let root = hook.root()?;
     // One bar for both: the injector's download and unpacking (`File::work`), then the collection.
-    let injector_work = injector_missing(&root, store::File::work);
+    let injector_work = injector_missing(&root, Some(target), store::File::work);
     let missing = injector_work + collection_missing(&root);
     if missing > 0 {
         let mut session = hook.lock();
@@ -223,6 +230,10 @@ fn game_path(_target: &process::Target, path: &Path, _dir: bool) -> Result<Strin
 }
 #[cfg(target_os = "linux")]
 fn game_path(target: &process::Target, path: &Path, dir: bool) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    if target.wine.is_none() {
+        return Ok(path.to_string_lossy().into_owned());
+    }
     let wine = target.wine.as_ref().ok_or("Agent hooks Windows games only")?;
     let reachable = if dir { super::wine::reachable_dir(wine, path)? } else { super::wine::reachable(wine, path)? };
     Ok(super::wine::windows_path(&reachable))
@@ -236,6 +247,10 @@ fn game_path(_target: &process::Target, _path: &Path, _dir: bool) -> Result<Stri
 fn injector_command(target: &process::Target, exe: &Path) -> Result<Command, String> {
     #[cfg(target_os = "linux")]
     {
+        #[cfg(target_os = "linux")]
+        if target.wine.is_none() {
+            return Ok(Command::new(exe));
+        }
         let wine = target.wine.as_ref().ok_or("Agent hooks Windows games only")?;
         Ok(super::wine::command(wine, &super::wine::reachable(wine, exe)?))
     }
@@ -267,14 +282,21 @@ fn launch(
     }
     let loader = std::fs::read_to_string(collection.join("libLoader.js")).map_err(|e| format!("libLoader.js: {e}"))?;
     let dir = game_path(target, collection, true)?;
-    let mission = format!("{dir}\\{}", script.file);
+    let separator = if cfg!(target_os = "linux") && target.wine.is_none() { "/" } else { "\\" };
+    let mission = format!("{dir}{separator}{}", script.file);
     // One file per session, in a folder of its own (under Wine it is copied where the game can
     // reach it, folder and all).
     let run_dir = collection.with_file_name("agent-run");
     std::fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
     let file = run_dir.join(format!("hook-{generation}.js"));
     std::fs::write(&file, build_script(&loader, &dir, &mission)).map_err(|e| e.to_string())?;
-    let exe = injector.join("frida-inject.exe");
+    let native = cfg!(target_os = "linux") && target.wine.is_none();
+    let exe = injector.join(if native { "frida-inject" } else { "frida-inject.exe" });
+    #[cfg(unix)]
+    if native {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    }
     let mut command = injector_command(target, &exe)?;
     command.args(["-p", &target.pid.to_string(), "-s", &game_path(target, &file, false)?, "-R", "qjs"]);
     #[cfg(windows)]
@@ -442,6 +464,17 @@ fn running(_pid: u32) -> Option<bool> {
     None
 }
 
+fn target_running(target: &process::Target) -> Option<bool> {
+    #[cfg(target_os = "linux")]
+    if target.wine.is_none() {
+        let pid = i32::try_from(target.pid).ok()?;
+        return Some(
+            unsafe { libc::kill(pid, 0) } == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM),
+        );
+    }
+    running(target.pid)
+}
+
 /// Every half second, while the run is the session's: the game gone, or frida-inject gone.
 fn watch(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run>) {
     loop {
@@ -455,7 +488,7 @@ fn watch(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Ru
                 return;
             }
             let exited = session.child.as_mut().is_none_or(|child| matches!(child.try_wait(), Ok(Some(_))));
-            if running(context.target.pid) == Some(false) {
+            if target_running(&context.target) == Some(false) {
                 Some(Ending::GameClosed)
             } else if exited {
                 Some(Ending::Exited)
@@ -686,6 +719,14 @@ fn add_thread(session: &mut Session, key: &str, pid: u32, script: &Script) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[test]
+    fn native_linux_uses_the_linux_injector_and_posix_paths() {
+        let target = process::Target { pid: 1, exe: "/opt/PPSSPPSDL".into(), bits: 64, wine: None };
+        assert_eq!(injector(Some(&target)), Some("agent-linux-x64"));
+        assert_eq!(game_path(&target, Path::new("/tmp/scripts/game.js"), false).unwrap(), "/tmp/scripts/game.js");
+    }
 
     #[test]
     fn event_lines_are_read_through_their_colour_codes() {

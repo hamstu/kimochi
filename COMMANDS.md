@@ -2045,7 +2045,7 @@ missing. It is re-sent as `platform-capabilities` when the download changes stat
 browser installs meanwhile is found the next time the capabilities are asked for (the panel's
 "Look again").
 
-## Text Hooker (Windows; Linux through Proton or Wine)
+## Text Hooker (Windows; Linux native emulators, Proton or Wine)
 
 The `inputSource` `"hook"`: the game behind a chosen window is hooked and its text read from
 inside it. Implementation: `src-tauri/src/text_hook/` (session, process resolution, thread
@@ -2076,6 +2076,14 @@ Wine sessions remain unhookable, rather than starting a second wineserver on the
 On X11 a window's process is the one the X
 server reports for its client (XRes), else `_NET_WM_PID`, which a sandboxed client sets to its id
 inside the sandbox.
+
+Native Linux x64 emulators recognised by the Agent index can also be hooked, when their
+window title matches a script. They use `agent-linux-x64` (Frida 17.27.4), native process ids and
+POSIX collection paths. Their engine list contains only `agent`: no Windows DLL fallback,
+engine switch or voice-hook injection. The emulator must allow same-user ptrace attachment;
+Kimochi does not change system ptrace policy. Script helpers need their expected emulator
+symbols/signatures: a conventional PPSSPP 1.18.1 build with symbols was validated; AppImage
+packaged runtimes and other builds need separate compatibility testing.
 
 **Agent scripts** (`text_hook/agent/`). A game the Agent collection (https://github.com/0xDC00/scripts,
 MIT) has a script for is hooked by that script first, LunaHook and Textractor following if it
@@ -2109,7 +2117,7 @@ helper can keep its standard error open after it exits); a script that neither l
 
 | Command | Signature |
 | --- | --- |
-| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?, agent?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames. `agent` (an `AgentScript`) when the game has an Agent script |
+| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?, agent?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine or a recognised native emulator with a matching Agent script). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames. `agent` (an `AgentScript`) when the game has an Agent script |
 | `texthook_start` | `({sourceId, observerEngine?, engine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is (with the same engine first). `engine` (`'agent'` | `'luna'`) asks for that engine first, over the game's `engine` setting. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher). When the game cannot be hooked at all, the session becomes the window's, `failed` with the reason in `detail`, and the command rejects with it |
 | `texthook_engine` | `({engine}) -> HookStatus` — hooks the game being hooked again with `engine` (`'agent'` | `'luna'`) first, its processes as found; threads start afresh. Fails when nothing is hooked, or for `'agent'` when the game has no script. The card keeps the choice in `textHookerGames.<exe>.engine` |
 | `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |

@@ -372,6 +372,46 @@
           ]
         }
       ]
+    },
+    "agent-linux-x64": {
+      "name": "Agent",
+      "version": "17.27.4",
+      "project": "https://github.com/frida/frida",
+      "license": "wxWindows Library Licence 3.1",
+      "files": [
+        {
+          "name": "frida-inject",
+          "size": 104375864,
+          "sha256": "ed6c84b3be4d84587a57db06de67d53928a43738220dd5959db005b95d3eb1d5",
+          "xz": {
+            "size": 28185592,
+            "sha256": "b70d4aac432fcd9e9596768848f2f21e8e45fdaad822ba357ee670c3ee0a32bc"
+          },
+          "sources": [
+            {
+              "url": "https://github.com/frida/frida/releases/download/17.27.4/frida-inject-17.27.4-linux-x86_64.xz",
+              "xz": true
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-linux-x64/17.27.4/frida-inject.xz",
+              "xz": true
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 2416,
+          "sha256": "5ea1544b51a28bc823b03159190d4108f9fb4f4ef912389f5137c6d295e175b2",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/frida/frida/17.27.4/COPYING"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/agent-linux-x64/17.27.4/LICENSE.txt"
+            }
+          ]
+        }
+      ]
     }
   }
 }

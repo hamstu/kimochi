@@ -11,7 +11,7 @@
 // buffered, one marked JSON line each.
 //
 // `__kimochi` is defined before this file: `{ dir, mission, maxChars }` (dir and mission are the
-// game's own paths: Windows paths, under Wine too).
+// game's own paths: Windows paths under Wine, POSIX paths for native Linux).
 ;(function () {
   'use strict'
   const host = globalThis.__kimochi
@@ -37,13 +37,14 @@
   console.error = logged('error')
   console.debug = () => {}
 
-  // ---------------------------------------------------------------- paths (Windows' rules)
-  const SEP = '\\'
-  const isAbsolute = (p) => /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}/.test(p)
+  // ---------------------------------------------------------------- paths (the game’s platform)
+  const windows = Process.platform === 'windows'
+  const SEP = windows ? '\\' : '/'
+  const isAbsolute = (p) => (windows ? /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}/.test(p) : p.startsWith('/'))
   function normalise(p) {
-    const drive = /^[A-Za-z]:/.exec(p)?.[0] ?? ''
+    const drive = windows ? (/^[A-Za-z]:/.exec(p)?.[0] ?? '') : ''
     const parts = []
-    for (const part of p.slice(drive.length).split(/[\\/]+/)) {
+    for (const part of p.slice(drive.length).split(windows ? /[\\/]+/ : /\/+/)) {
       if (!part || part === '.') continue
       if (part === '..') parts.pop()
       else parts.push(part)
@@ -54,13 +55,13 @@
   const dirname = (p) => {
     const n = normalise(String(p))
     const at = n.lastIndexOf(SEP)
-    return at > 2 ? n.slice(0, at) : n.slice(0, 3)
+    return at > (windows ? 2 : 0) ? n.slice(0, at) : n.slice(0, windows ? 3 : 1)
   }
   const root = normalise(host.dir)
   // Only the collection's own files are ever read.
   const inside = (p) => {
-    const lower = p.toLowerCase()
-    const base = root.toLowerCase()
+    const lower = windows ? p.toLowerCase() : p
+    const base = windows ? root.toLowerCase() : root
     return lower === base || lower.startsWith(base + SEP)
   }
   function isFile(p) {

@@ -14,7 +14,7 @@ import type { AgentScript, HookEngineChoice, HookStatus } from '../bridge/textHo
 import { chooseEngine, currentEngine, megabytes, scriptLine } from './agentEngine'
 
 const ABOUT =
-  'A script written for this game reads its text from inside it, exactly where the game keeps it. Emulated console games too. If it cannot hook the game, LunaHook takes over.'
+  'A script written for this game reads its text from inside it, exactly where the game keeps it. Emulated console games too. For Windows games, LunaHook can take over if the script cannot hook the game.'
 
 /** The offer under the switch while Text hooking is off. */
 export function AgentOffer({ script, onUse }: { script: AgentScript; onUse: () => void }): ReactNode {
@@ -45,7 +45,7 @@ export function AgentOffer({ script, onUse }: { script: AgentScript; onUse: () =
 
 /** Agent script or LunaHook, for a hooked game that has a script. */
 export function EngineSwitch({ status }: { status: HookStatus }): ReactNode {
-  if (!status.agent) return null
+  if (!status.agent || (status.engines && !status.engines.includes('luna'))) return null
   return (
     <Segmented<HookEngineChoice>
       aria-label="Hooked with"
