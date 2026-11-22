@@ -54,9 +54,12 @@ pub fn is_agent(hookcode: &str) -> bool {
 }
 
 /// The texthook manifest's injector for this computer, if Agent runs here: Frida 17 on Windows (x64,
-/// ARM64) and native Apple Silicon macOS; for Windows games under Wine, Frida 16, the last
+/// ARM64), native Linux x64 and native Apple Silicon macOS; for Windows games under Wine, Frida 16, the last
 /// that starts inside Wine.
 pub fn injector(target: Option<&process::Target>) -> Option<&'static str> {
+    if cfg!(all(target_os = "linux", not(target_arch = "x86_64"))) {
+        return None;
+    }
     #[cfg(target_os = "macos")]
     if target.and_then(gadget::find).is_some() {
         return Some(gadget::ENGINE);
@@ -66,12 +69,12 @@ pub fn injector(target: Option<&process::Target>) -> Option<&'static str> {
     }
     if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         Some("agent-macos-arm64")
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Some("agent-linux-x64")
     } else if cfg!(all(windows, target_arch = "aarch64")) {
         Some("agent-arm64")
     } else if cfg!(all(windows, target_arch = "x86_64")) {
         Some("agent-x64")
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        Some("agent-wine")
     } else {
         None
     }
@@ -235,7 +238,7 @@ fn game_path(_target: &process::Target, path: &Path, _dir: bool) -> Result<Strin
 }
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn game_path(target: &process::Target, path: &Path, dir: bool) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     if target.wine.is_none() {
         return Ok(path.to_string_lossy().into_owned());
     }
@@ -252,7 +255,7 @@ fn game_path(_target: &process::Target, _path: &Path, _dir: bool) -> Result<Stri
 fn injector_command(target: &process::Target, exe: &Path) -> Result<Command, String> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        #[cfg(target_os = "macos")]
+        #[cfg(unix)]
         if target.wine.is_none() {
             return Ok(Command::new(exe));
         }
@@ -291,7 +294,8 @@ fn launch(
     }
     let loader = std::fs::read_to_string(collection.join("libLoader.js")).map_err(|e| format!("libLoader.js: {e}"))?;
     let dir = game_path(target, collection, true)?;
-    let separator = if cfg!(target_os = "macos") && target.wine.is_none() { "/" } else { "\\" };
+    let separator =
+        if cfg!(any(target_os = "linux", target_os = "macos")) && target.wine.is_none() { "/" } else { "\\" };
     let mission = format!("{dir}{separator}{}", script.file);
     // One file per session, in a folder of its own (under Wine it is copied where the game can
     // reach it, folder and all).
@@ -299,7 +303,7 @@ fn launch(
     std::fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
     let file = run_dir.join(format!("hook-{generation}.js"));
     std::fs::write(&file, build_script(&loader, &dir, &mission)).map_err(|e| e.to_string())?;
-    let native = cfg!(target_os = "macos") && target.wine.is_none();
+    let native = cfg!(any(target_os = "linux", target_os = "macos")) && target.wine.is_none();
     let exe = injector.join(if native { "frida-inject" } else { "frida-inject.exe" });
     #[cfg(unix)]
     if native {
@@ -476,7 +480,7 @@ fn running(_pid: u32) -> Option<bool> {
 }
 
 fn target_running(target: &process::Target) -> Option<bool> {
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     if target.wine.is_none() {
         let pid = i32::try_from(target.pid).ok()?;
         return Some(
@@ -732,6 +736,14 @@ fn add_thread(session: &mut Session, key: &str, pid: u32, script: &Script) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[test]
+    fn native_linux_uses_the_linux_injector_and_posix_paths() {
+        let target = process::Target { pid: 1, exe: "/opt/PPSSPPSDL".into(), bits: 64, wine: None };
+        assert_eq!(injector(Some(&target)), Some("agent-linux-x64"));
+        assert_eq!(game_path(&target, Path::new("/tmp/scripts/game.js"), false).unwrap(), "/tmp/scripts/game.js");
+    }
 
     #[test]
     fn event_lines_are_read_through_their_colour_codes() {

@@ -23,6 +23,8 @@
 //! (`textHookerGames.<exe>.engine`), and switch between the two while it is hooked.
 pub mod agent;
 pub mod clean;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(any(target_os = "macos", test))]
 mod macos;
 pub mod pick;
@@ -64,14 +66,15 @@ fn target_engines(
     script: Option<&agent::Script>,
     choice: Option<&str>,
 ) -> Result<Vec<&'static str>, String> {
-    if cfg!(target_os = "macos") && target.is_some_and(|t| t.wine.is_none()) {
+    if cfg!(any(target_os = "macos", target_os = "linux")) && target.is_some_and(|t| t.wine.is_none()) {
+        let os_label = if cfg!(target_os = "macos") { "Mac" } else { "Linux" };
         if script.is_none() {
-            return Err("No Agent script matches this native Mac game.".into());
+            return Err(format!("No Agent script matches this native {os_label} game."));
         }
         if choice.is_some_and(|c| c != agent::ENGINE) {
-            return Err(
-                "LunaHook and Textractor require a Windows game; use Agent scripts for native Mac games.".into()
-            );
+            return Err(format!(
+                "LunaHook and Textractor require a Windows game; use Agent scripts for native {os_label} games."
+            ));
         }
         return Ok(vec![agent::ENGINE]);
     }
@@ -1654,10 +1657,11 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
             let value = match pid.map(process::target) {
                 Some(Ok(target)) => {
                     let script = agent_script(&target, titles.get(&id).map(String::as_str));
-                    if cfg!(target_os = "macos") && target.wine.is_none() && script.is_none() {
+                    if cfg!(any(target_os = "macos", target_os = "linux")) && target.wine.is_none() && script.is_none() {
+                        let os_label = if cfg!(target_os = "macos") { "Mac" } else { "Linux" };
                         out.insert(
                             id,
-                            json!({ "hookable": false, "reason": "No Agent script matches this native Mac game." }),
+                            json!({ "hookable": false, "reason": format!("No Agent script matches this native {os_label} game.") }),
                         );
                         continue;
                     }
@@ -2027,6 +2031,7 @@ pub fn refresh_voice_hook() {
         return;
     };
     let config = service.config();
+    // Windows games, natively or (on Linux) through Wine or Proton.
     // The voice DLL crashes 32-bit games under macOS Wine WoW64. Keep macOS on
     // ScreenCaptureKit until that injector is validated; text hooking is independent.
     let enabled = (cfg!(windows) || (cfg!(target_os = "linux") && targets.iter().any(|t| t.wine.is_some())))
@@ -2136,6 +2141,16 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
 mod tests {
     use super::{another_click, count_missed, failed_hook, unwitnessed, Session, MISS_GAP, WITNESS_UNSURE};
     use std::time::{Duration, Instant};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn native_games_never_fall_back_to_windows_hook_dlls() {
+        let native = super::process::Target { pid: 1, exe: "/opt/PPSSPPSDL".into(), bits: 64, wine: None };
+        let script = &super::agent::index::index().scripts[0];
+        assert_eq!(super::target_engines(Some(&native), Some(script), None).unwrap(), vec!["agent"]);
+        assert!(super::target_engines(Some(&native), Some(script), Some("luna")).is_err());
+        assert!(super::target_engines(Some(&native), None, None).is_err());
+    }
 
     #[test]
     fn one_clicks_lines_from_other_threads_are_one_missed_line() {

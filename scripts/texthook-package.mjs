@@ -120,6 +120,16 @@ export const ENGINES = {
   },
   // Inside a Wine or Proton prefix (Linux): Frida 17 cannot start there ("Unable to locate the
   // ntdll loader TLS routines"), 16 can.
+  'agent-linux-x64': {
+    name: 'Agent',
+    version: FRIDA,
+    project: 'https://github.com/frida/frida',
+    license: 'wxWindows Library Licence 3.1',
+    files: {
+      'frida-inject': { xz: `${FRIDA_RELEASE}/frida-inject-${FRIDA}-linux-x86_64.xz` },
+      'LICENSE.txt': { url: FRIDA_LICENSE }
+    }
+  },
   'agent-wine': {
     name: 'Agent',
     version: FRIDA_WINE,

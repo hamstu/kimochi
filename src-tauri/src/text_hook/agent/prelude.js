@@ -11,7 +11,7 @@
 // buffered, one marked JSON line each.
 //
 // `__kimochi` is defined before this file: `{ dir, mission, maxChars }` (dir and mission are the
-// game's own paths: Windows paths, under Wine too).
+// game's own paths: Windows paths under Wine, POSIX paths for native Linux).
 ;(function () {
   'use strict'
   const host = globalThis.__kimochi
