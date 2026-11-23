@@ -62,10 +62,10 @@ function Credit({ item }: { item: Acknowledgement }) {
       <CreditTile id={item.id} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-3">
-          <a href={item.url} className="text-small font-medium text-ink no-underline hover:underline">
+          <a href={item.url} className="shrink-0 text-small font-medium text-ink no-underline hover:underline">
             {item.name}
           </a>
-          <span className="shrink-0 text-right text-meta text-ink-3">{item.license}</span>
+          <span className="min-w-0 text-right text-meta text-ink-3">{item.license}</span>
         </span>
         <span className="block text-small text-ink-3">{item.role}</span>
       </span>
