@@ -347,6 +347,12 @@ const HOOK_FIT_AGREE = 0.1
  */
 const HOOK_PIN_SNAP = 0.15
 const HOOK_PIN_SNAP_BRACKETED = 0.5
+/**
+ * A first row with fewer glyphs than this placed (はい。: two) says where the line starts only
+ * roughly, a few pixels either way: within half a glyph of where the game's lines start it is
+ * there, and it does not move that place for the lines after it.
+ */
+const HOOK_PIN_SURE_GLYPHS = 4
 const HOOK_PIN_READINGS = 8
 /** How far (in frame pixels) a reading must move a line's glyphs to move the card's (`hookGlyphsFrom`). */
 const HOOK_GLYPH_STILL = 0.75
@@ -2118,25 +2124,39 @@ function hookCardView() {
       // mean), each line's newest reading refining that for the lines after it. Text that really
       // moves (more than a sliver of a glyph: a box that moved) goes where this reading says.
       const kept = hook.glyphAt?.exe === hookKey() ? hook.glyphAt : null
-      const sliver = Math.max(2, HOOK_PIN_SNAP * fontPx)
+      // A first row of a few glyphs (はい。) places the line only roughly (`HOOK_PIN_SURE_GLYPHS`).
+      const sure = glyphs.marks[0].length >= HOOK_PIN_SURE_GLYPHS
+      const sliver = Math.max(2, (sure ? HOOK_PIN_SNAP : HOOK_PIN_SNAP_BRACKETED) * fontPx)
       if (
         kept &&
         Math.abs(reading.x - kept.x) * bounds.width < sliver &&
         Math.abs(reading.y - kept.y) * bounds.height < sliver
       ) {
-        if (kept.line !== hook.line)
-          Object.assign(kept, {
-            line: hook.line,
-            show: { x: kept.x, y: kept.y },
-            base: { x: kept.x, y: kept.y },
-            n: Math.min(kept.n + 1, HOOK_PIN_READINGS)
-          })
-        // This line's newest reading stands for it in the mean (the first may have caught its
-        // glyphs still sliding into place).
-        kept.x = kept.base.x + (reading.x - kept.base.x) / kept.n
-        kept.y = kept.base.y + (reading.y - kept.base.y) / kept.n
+        if (kept.line !== hook.line) {
+          Object.assign(kept, { line: hook.line, show: { x: kept.x, y: kept.y }, counted: false })
+        }
+        if (sure) {
+          if (!kept.counted)
+            Object.assign(kept, {
+              counted: true,
+              base: { x: kept.x, y: kept.y },
+              n: Math.min(kept.n + 1, HOOK_PIN_READINGS)
+            })
+          // This line's newest reading stands for it in the mean (the first may have caught its
+          // glyphs still sliding into place).
+          kept.x = kept.base.x + (reading.x - kept.base.x) / kept.n
+          kept.y = kept.base.y + (reading.y - kept.base.y) / kept.n
+        }
       } else {
-        hook.glyphAt = { exe: hookKey(), line: hook.line, n: 1, ...reading, show: reading, base: reading }
+        hook.glyphAt = {
+          exe: hookKey(),
+          line: hook.line,
+          n: 1,
+          counted: true,
+          ...reading,
+          show: reading,
+          base: reading
+        }
       }
       across = hook.glyphAt.show.x * bounds.width
       down = hook.glyphAt.show.y * bounds.height
