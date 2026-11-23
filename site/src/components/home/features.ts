@@ -7,7 +7,7 @@ import { InputsVisual } from './visuals/InputsVisual'
 import { LogVisual } from './visuals/LogVisual'
 import { MiniModeVisual } from './visuals/MiniModeVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
-import { OverlayLookVisual } from './visuals/OverlayLookVisual'
+import { OverlayStyleVisual } from './visuals/OverlayStyleVisual'
 import { OverlayVisual } from './visuals/OverlayVisual'
 import { SessionsVisual } from './visuals/SessionsVisual'
 import { StatsVisual } from './visuals/StatsVisual'
@@ -51,15 +51,8 @@ export const features: Feature[] = [
   {
     id: 'overlay',
     title: 'Cross Platform Overlay',
-    body: 'With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen.',
+    body: "With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen. Turn on Auto Game Pausing and the game freezes while you look a word up. It's experimental, so it won't work with every game!",
     Visual: OverlayVisual,
-    docs: '/reading/overlay/'
-  },
-  {
-    id: 'overlay-look',
-    title: 'Make the overlay yours',
-    body: "Set the hover cards to Transparent if you'd rather see the game's own text, and fade the dictionary so the game shows through it. Auto Game Pausing can also freeze the game while you look up a word. It's experimental, so it won't work with every game!",
-    Visual: OverlayLookVisual,
     docs: '/reading/overlay/'
   },
   {
@@ -127,6 +120,13 @@ export const features: Feature[] = [
     Visual: ControllerVisual,
     docs: '/controller/gaming-mode/',
     tag: 'deck'
+  },
+  {
+    id: 'overlay-style',
+    title: 'Fully customizable overlay',
+    body: 'Make the overlay look the way you like. Pick the highlight colour and how strongly it shows, make the hover cards light, dark, blended with the game or fully transparent, and fade the dictionary so the game shows through it. A live preview shows each change as you make it.',
+    Visual: OverlayStyleVisual,
+    docs: '/reading/overlay/#overlay-appearance'
   },
   {
     id: 'mini-mode',
