@@ -37,7 +37,7 @@ export const FAQ = [
     q: 'Which languages does Kimochi support?',
     a: [
       'Japanese, fully: it is what Kimochi was built for and the default. As of November 2026 you can also set Kimochi to any of 48 other left-to-right languages, including Korean, Chinese, Spanish, French, German, Portuguese, Russian, Thai and Vietnamese. These are experimental, so expect rough edges and tell us what you find. Right-to-left languages such as Arabic and Hebrew are not supported yet.',
-      'Some features stay Japanese-only for now: the MeikiOCR and Manga OCR engines, the Hachidori and 10ten dictionaries, read aloud, word audio, and the furigana and pitch-accent card fields. Use Yomitan with dictionaries for your language. Translations and AI explanations are always in English.'
+      'Some features stay Japanese-only for now: the MeikiOCR and Manga OCR engines, the 10ten dictionary, read aloud, word audio, and the furigana and pitch-accent card fields. Use Yomitan with dictionaries for your language. Hachidori reads about twenty languages besides Japanese, including Korean, Chinese, Spanish, French and German, each with its own dictionaries; that is experimental too. Translations and AI explanations are always in English.'
     ],
     links: [{ href: 'https://discord.gg/vdMge6TBZQ', label: 'Tell us how it reads your language on Discord' }]
   },
@@ -53,7 +53,7 @@ export const FAQ = [
     id: 'price',
     q: 'Is Kimochi free? What does Kimochi Cloud cost?',
     a: [
-      'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
+      'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, reading stats, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
       'Kimochi Cloud is optional and, as of October 2026, costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial.'
     ],
     links: [{ href: '/#cloud', label: 'Plans on the home page' }]
@@ -62,10 +62,11 @@ export const FAQ = [
     id: 'platforms',
     q: 'Which platforms does Kimochi run on?',
     a: [
-      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature. On Linux, the overlay is tested on KDE Plasma 6, Hyprland (Omarchy), Sway and GNOME 46 to 51.'
+      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature. On Linux, Kimochi lists your windows itself on GNOME, KDE Plasma 6, Hyprland, Sway 1.12+, COSMIC and Niri, and the overlay is tested on KDE Plasma 6, Hyprland (Omarchy), Sway and GNOME 46 to 51.'
     ],
     links: [
       { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },
+      { href: '/linux-steam-deck-text-hooker', label: 'Text hooking on Linux and Steam Deck' },
       { href: docsUrl('/install/'), label: 'Installation guide' }
     ]
   },
@@ -91,7 +92,7 @@ export const FAQ = [
     q: 'Which OCR engines and dictionaries does Kimochi support?',
     a: [
       'OCR engines: Google Lens (the default, online), PaddleOCR (on device, fast and accurate), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU; Japanese only), Manga OCR (on device, tuned for manga; Japanese only), or OneOCR (Windows 11, built in). Kimochi lists only the engines that read the language you chose.',
-      'Dictionaries: a built-in copy of Yomitan with your own dictionaries, or the Yomitan in your browser through the Yomitan API. For Japanese, Hachidori and 10ten are built in too.'
+      'Dictionaries: a built-in copy of Yomitan with your own dictionaries, or the Yomitan in your browser through the Yomitan API. Hachidori is built in too, for Japanese and (experimentally) about twenty other languages, and so is 10ten for Japanese.'
     ],
     links: [
       { href: docsUrl('/reading/ocr-engines/'), label: 'OCR engines' },
@@ -102,7 +103,7 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined. With Text hooking, Kimochi can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. Turn on Audio hooking too and the card gets the game’s own voice line, without the music or sound effects. When a line’s voice can’t be hooked, or for any other source, Kimochi records it from your speakers instead. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. owocr’s output works too.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined. With Text hooking, Kimochi can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux (NixOS’s Steam included) and the Steam Deck. Turn on Audio hooking too and the card gets the game’s own voice line, without the music or sound effects. When a line’s voice can’t be hooked, or for any other source, Kimochi records it from your speakers instead. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. owocr’s output works too.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
@@ -130,7 +131,7 @@ export const FAQ = [
     id: 'controller',
     q: 'Can I use Kimochi with a controller or on the Steam Deck?',
     a: [
-      'Yes. In Steam Deck Gaming Mode, press R4 (the upper right back button) to open Kimochi’s controller menu and scan, step to a word with the D-pad to see its dictionary entry, and press B to go back to the game. With another controller, click both sticks (L3 + R3) to open the menu. The dictionary can also fill the screen, which is easier to read on a TV or handheld.'
+      'Yes. In Steam Deck Gaming Mode, press R4 (the upper right back button) to open Kimochi’s controller menu and scan, step to a word with the D-pad to see its dictionary entry, and press B to go back to the game. With another controller, click both sticks (L3 + R3) to open the menu. You can choose the menu’s actions, their order, their buttons or keyboard shortcuts, and its colours. With a DualSense or DualShock, Kimochi shows PlayStation button names (✕ ○ □ △, L1/R1). The dictionary can also fill the screen, which is easier to read on a TV or handheld.'
     ],
     links: [{ href: docsUrl('/controller/'), label: 'Controller and Gaming Mode' }]
   },
