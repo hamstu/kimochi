@@ -73,6 +73,7 @@ const USER: AccountUser = {
   // `&plan=free` previews an account without Kimochi Cloud, `&plan=trial` one on its trial.
   plan: params.get('plan') === 'free' ? 'free' : params.get('plan') === 'trial' ? 'trial' : 'cloud',
   cloud: params.get('plan') !== 'free',
+  // `&billing=canceled|past_due|unpaid` previews a subscription in that Stripe status.
   billing:
     params.get('plan') === 'trial'
       ? {
@@ -81,7 +82,15 @@ const USER: AccountUser = {
           trialEnd: new Date(Date.now() + 10 * 86_400_000).toISOString(),
           cancelAt: null
         }
-      : null,
+      : params.get('billing')
+        ? {
+            source: params.get('plan') === 'free' ? null : 'subscription',
+            status: params.get('billing'),
+            trialEnd: null,
+            cancelAt: null,
+            trialAvailable: false
+          }
+        : null,
   status: seed === 'suspended' ? 'suspended' : 'active'
 }
 const OTHER: AccountUser = {
