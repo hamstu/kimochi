@@ -80,3 +80,46 @@ for (const failedEvent of ['reader:snapshot', 'reader:response']) {
     assert.equal(backend.handlers.size, 2)
   })
 }
+
+test("the Log's own window calls its host directly, in the order it calls, with the session it saw", async () => {
+  const { api, backend } = await setup()
+  const calls = []
+  api.setLocalHost(async (module, method, args, sessionId) => {
+    calls.push([module, method, args[0], sessionId])
+    return `${method}:${args[0]}`
+  })
+  api.acceptSnapshot({ sessions: { activeId: 'here' } })
+  // Two hooked lines a moment apart (one burst): they reach the Log as they came.
+  const a = api.call('host', 'ingest', ['a'])
+  const b = api.call('host', 'ingest', ['b'])
+  assert.deepEqual(await Promise.all([a, b]), ['ingest:a', 'ingest:b'])
+  assert.deepEqual(calls, [
+    ['host', 'ingest', 'a', 'here'],
+    ['host', 'ingest', 'b', 'here']
+  ])
+  assert.equal(backend.requests.length, 0, 'nothing over events')
+})
+
+test("the Log's own window does not take its broadcast back: a newer snapshot stays", async () => {
+  const { api, backend } = await setup()
+  // A client first (it listens for snapshots), then the Log's host starts in this window.
+  await api.call('store', 'deleteLine', [1]).catch(() => {})
+  api.setLocalHost(async () => null)
+  api.acceptSnapshot({ sessions: { activeId: 's' }, lines: [{ id: 1 }, { id: 2 }] })
+  // Its earlier broadcast, arriving late, without the newest line.
+  backend.handlers.get('reader:snapshot')({ payload: { sessions: { activeId: 's' }, lines: [{ id: 1 }] } })
+  assert.deepEqual(
+    api.getSnapshot().lines.map((l) => l.id),
+    [1, 2]
+  )
+})
+
+test('another window still takes the snapshots the Log broadcasts', async () => {
+  const { api, backend } = await setup()
+  await api.call('store', 'deleteLine', [1])
+  backend.handlers.get('reader:snapshot')({ payload: { sessions: { activeId: 's' }, lines: [{ id: 7 }] } })
+  assert.deepEqual(
+    api.getSnapshot().lines.map((l) => l.id),
+    [7]
+  )
+})
