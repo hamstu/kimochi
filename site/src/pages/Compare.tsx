@@ -24,8 +24,8 @@ export function Compare() {
         <li>
           <a href="https://github.com/bpwhelan/GameSentenceMiner">GameSentenceMiner</a> is probably the best choice if
           you like being in full control and having all the bells and whistles. It has more advanced Anki card
-          enrichment, automatic game pausing, and even built in text-hooking. It&rsquo;s really well maintained and is
-          always getting new updates and features.
+          enrichment, lots of options, and built in text-hooking too. It&rsquo;s really well maintained and is always
+          getting new updates and features.
         </li>
         <li>
           <a href="https://github.com/AuroraWright/owocr">owocr</a> is a lovely little CLI tool for OCR that is perfect
@@ -39,8 +39,9 @@ export function Compare() {
         </li>
         <li>
           <Link to="/#features">Kimochi</Link> is for you if you want a free, simple app with clean design and UX: you
-          can capture, OCR, overlay, use any dictionary you like (Yomitan, Hachidori, 10ten), keep a reading log, and
-          add and enhance your Anki cards. It also works well on a Steam Deck!
+          can capture, OCR or hook a game&rsquo;s text, overlay it, use any dictionary you like (Yomitan, Hachidori,
+          10ten), keep a reading log with stats, and add and enhance your Anki cards. It can pause the game while you
+          look up a word too (experimental). It also works well on a Steam Deck!
         </li>
       </ul>
       <p>

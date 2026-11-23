@@ -50,7 +50,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-11-16'
+    updated: '2026-11-23'
   },
   {
     path: '/faq',
@@ -60,7 +60,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-21',
-    updated: '2026-11-16'
+    updated: '2026-11-23'
   },
   {
     path: '/compare',
@@ -70,7 +70,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-11-12'
+    updated: '2026-11-23'
   },
   {
     path: '/download/linux',
@@ -80,7 +80,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-20',
-    updated: '2026-11-05'
+    updated: '2026-11-23'
   },
   {
     path: LINUX_HOOKER_PATH,
@@ -90,7 +90,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-11-16',
-    updated: '2026-11-16'
+    updated: '2026-11-23'
   },
   {
     path: '/privacy',
@@ -244,7 +244,7 @@ const APP = {
   alternateName: ENTITY_NAME,
   url: `${SITE_URL}/`,
   description:
-    'A desktop app for language learners that reads the text on your screen with OCR, draws it over your game, manga or video, and lets you hover any word to look it up in Yomitan (or, for Japanese, Hachidori or 10ten) and make Anki cards. Built for Japanese; 48 other left-to-right languages are experimental.',
+    'A desktop app for language learners that reads the text on your screen with OCR, draws it over your game, manga or video, and lets you hover any word to look it up in Yomitan, Hachidori or (for Japanese) 10ten and make Anki cards. Built for Japanese; 48 other left-to-right languages are experimental.',
   applicationCategory: 'EducationalApplication',
   operatingSystem: 'macOS, Windows, Linux',
   inLanguage: 'en',

@@ -7,8 +7,10 @@ import { InputsVisual } from './visuals/InputsVisual'
 import { LogVisual } from './visuals/LogVisual'
 import { MiniModeVisual } from './visuals/MiniModeVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
+import { OverlayStyleVisual } from './visuals/OverlayStyleVisual'
 import { OverlayVisual } from './visuals/OverlayVisual'
 import { SessionsVisual } from './visuals/SessionsVisual'
+import { StatsVisual } from './visuals/StatsVisual'
 import { SyncVisual } from './visuals/SyncVisual'
 import { TextHookerVisual } from './visuals/TextHookerVisual'
 
@@ -49,9 +51,23 @@ export const features: Feature[] = [
   {
     id: 'overlay',
     title: 'Cross Platform Overlay',
-    body: 'With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen.',
+    body: "With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen. Turn on Auto Game Pausing and the game freezes while you look a word up. It's experimental, so it won't work with every game!",
     Visual: OverlayVisual,
     docs: '/reading/overlay/'
+  },
+  {
+    id: 'dictionary',
+    title: 'Look up and save',
+    body: "Point at a word in the overlay or the Log while you hold Shift, another key, or your middle, back or forward mouse button, and it opens in your favorite dictionary. Or turn on Look up on hover and skip the key. (Mouse buttons can't be used on Linux with Wayland.)",
+    Visual: DictionaryVisual,
+    docs: '/lookups/looking-up/'
+  },
+  {
+    id: 'dictionaries',
+    title: 'Dictionary extensions',
+    body: 'Use a built-in copy of Yomitan, or point Kimochi at your own Yomitan and its dictionaries through the Yomitan API. Hachidori is built in too, for Japanese and (experimentally) about twenty other languages, and so is 10ten for Japanese.',
+    Visual: DictionariesVisual,
+    docs: '/lookups/dictionaries/'
   },
   {
     id: 'text-hooker',
@@ -59,7 +75,7 @@ export const features: Feature[] = [
     body: "Pick a game's window, turn on Text hooking, and Kimochi reads its text directly from the game, with each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
-    more: { to: '/linux-steam-deck-text-hooker', label: 'On Linux and Steam Deck' },
+    more: { to: '/linux-steam-deck-text-hooker', label: 'Text hooking on Linux and Steam Deck' },
     tag: 'windows'
   },
   {
@@ -70,18 +86,11 @@ export const features: Feature[] = [
     docs: '/log/the-log/'
   },
   {
-    id: 'dictionaries',
-    title: 'Dictionary extensions',
-    body: 'Use a built-in copy of Yomitan, or point Kimochi at your own Yomitan and its dictionaries through the Yomitan API. For Japanese, Hachidori and 10ten are built in too.',
-    Visual: DictionariesVisual,
-    docs: '/lookups/dictionaries/'
-  },
-  {
-    id: 'dictionary',
-    title: 'Look up and save',
-    body: 'Look up words from the overlay or the Log with your favorite dictionary.',
-    Visual: DictionaryVisual,
-    docs: '/lookups/looking-up/'
+    id: 'stats',
+    title: 'Stats and reading history',
+    body: "The Stats tab shows how much you've read: a heatmap with your streak, characters and time per day, your reading speed and the kanji you've met most. Every line is kept, and you can export it for exSTATic, or as CSV or JSON.",
+    Visual: StatsVisual,
+    docs: '/log/stats/'
   },
   {
     id: 'sessions',
@@ -107,10 +116,17 @@ export const features: Feature[] = [
   {
     id: 'controller',
     title: 'Gaming Mode',
-    body: "Kimochi runs beside your game in Gaming Mode. Press R4 to open its menu over the game, scan, then step through the words with the D-pad. Hit B and you're back in the game.",
+    body: "Kimochi runs beside your game in Gaming Mode. Press R4 to open its menu over the game, scan, then step through the words with the D-pad. Hit B and you're back in the game. You can choose the menu's actions, their order, buttons and colours.",
     Visual: ControllerVisual,
     docs: '/controller/gaming-mode/',
     tag: 'deck'
+  },
+  {
+    id: 'overlay-style',
+    title: 'Fully customizable overlay',
+    body: 'Make the overlay look the way you like. Pick the highlight colour and how strongly it shows, make the hover cards light, dark, blended with the game or fully transparent, and fade the dictionary so the game shows through it. A live preview shows each change as you make it.',
+    Visual: OverlayStyleVisual,
+    docs: '/reading/overlay/#overlay-appearance'
   },
   {
     id: 'mini-mode',

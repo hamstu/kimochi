@@ -379,6 +379,13 @@ export function DownloadLinux() {
                 Kimochi from your library. It runs alongside your game: press R4 (the upper right back button) to open
                 its radial menu.
               </p>
+              <p>
+                Playing a Windows game through Proton? Kimochi can read its text straight from the game, too. See{' '}
+                <Link to="/linux-steam-deck-text-hooker" className={inlineLink}>
+                  text hooking on Linux and Steam Deck
+                </Link>
+                .
+              </p>
             </Step>
           </Steps>
           <div className="md:pt-1">
@@ -448,6 +455,23 @@ export function DownloadLinux() {
       {/* For everyone */}
       <div className="mt-16 border-t border-hairline pt-12 md:mt-20">
         <div className="flex max-w-3xl flex-col gap-12">
+          <section aria-labelledby="text-hooking-h" id="text-hooking">
+            <h2 id="text-hooking-h" className="text-heading text-ink">
+              Text hooking Windows games
+            </h2>
+            <div className="mt-3 flex flex-col gap-3 text-body text-ink-2">
+              <p className="max-w-[65ch]">
+                Once Kimochi is installed, it can read the text of Windows games you run through Proton or Wine (Steam,
+                Lutris, Bottles, Heroic) straight from the game, with no Wine-prefix setup, in Steam Deck Gaming Mode
+                too.{' '}
+                <Link to="/linux-steam-deck-text-hooker" className={inlineLink}>
+                  Text hooking on Linux and Steam Deck
+                </Link>{' '}
+                explains how it works.
+              </p>
+            </div>
+          </section>
+
           <section aria-labelledby="updating-h" id="updating">
             <h2 id="updating-h" className="text-heading text-ink">
               Updating

@@ -164,7 +164,7 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
         name: 'ONNX Runtime',
         role: 'Runs the on-device OCR models',
         license: 'MIT',
-        url: 'https://github.com/microsoft/onnxruntime'
+        url: 'https://onnxruntime.ai'
       }
     ]
   },

@@ -32,7 +32,8 @@ export function LinuxTextHooker() {
         </li>
         <li>
           It hooks Windows games run through Steam (Proton) or a Wine launcher such as Lutris, Bottles or Heroic. Since
-          Kimochi 1.0.0, games run through Flatpak apps can be hooked too.
+          Kimochi 1.0.0, games run through Flatpak apps can be hooked too, and since 1.1.0 so can games in NixOS
+          Steam&rsquo;s own Wine sessions (that needs <code>nsenter</code> from util-linux).
         </li>
         <li>
           A hooked game sends several streams of text, called threads: the dialogue, the speaker&rsquo;s name, menus.

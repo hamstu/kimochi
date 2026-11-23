@@ -37,19 +37,31 @@ React), built for macOS first, with Windows and Linux builds.
   MeikiOCR, Manga OCR and VOCR6 for visual-novel dialogue). The engine list follows the language
   you're learning. Auto OCR watches for new text with a local engine, waits for it to settle, then
   reads it once.
-- **Pop-up dictionaries**: Yomitan, Hachidori or 10ten (the last two for Japanese), downloaded on
-  demand from their upstream releases, hash-checked and run unmodified, with your own dictionaries;
-  or the Yomitan API, which looks words up through the Yomitan already in your browser.
+- **Pop-up dictionaries**: Yomitan, Hachidori (Japanese and, experimentally, about twenty other
+  languages) or 10ten (Japanese), downloaded on demand from their upstream releases, hash-checked
+  and run unmodified, with your own dictionaries; or the Yomitan API, which looks words up through
+  the Yomitan already in your browser. Look words up with a key, the middle, back or forward mouse
+  button (not on Linux with Wayland), or on hover, and fade the pop-up so the game shows through.
+- **An overlay that stays out of the way**: hover cards and the Text Hooker card can be
+  Transparent, so you see the game's own text, and Auto Game Pausing (opt-in, experimental) freezes
+  the game while you look up a word, use the radial menu or draw a region.
 - **Text hooking**: reads a Windows game's text straight from the game (LunaHook, with Textractor
-  as a fallback), on Windows and, through Proton or Wine, on Linux and the Steam Deck.
+  as a fallback), on Windows and, through Proton or Wine, on Linux (NixOS Steam's own Wine sessions
+  included) and the Steam Deck. See
+  [Text hooking on Linux and Steam Deck](https://kimochiapp.com/linux-steam-deck-text-hooker).
 - **Audio hooking and sentence audio**: Anki cards get the line's voice. With Audio hooking on, it
   is the game's own voice line, without music or sound effects (hooked games on Windows, and
   through Proton or Wine on Linux and the Steam Deck); otherwise, or when a line can't be hooked,
   it is recorded from your speakers.
-- **Reading log**: a built-in texthooker with sessions, reading stats, a notebook and VNDB
-  import; clipboard and WebSocket texthookers work too.
-- **Controller-friendly**: a radial menu and gamepad navigation, including Steam Deck Gaming Mode,
-  where Kimochi runs beside your game with a layout made for the Deck.
+- **Reading log**: a built-in texthooker with sessions, a notebook and VNDB import; clipboard and
+  WebSocket texthookers work too.
+- **Stats and reading history**: a Stats tab with a reading heatmap and streaks, characters and time
+  per day, reading speed and your most-read kanji. Every line is kept, and can be exported for
+  exSTATic or as CSV or JSON.
+- **Controller-friendly**: a radial menu (choose its actions, order, buttons, shortcuts and
+  colours) and gamepad navigation, with PlayStation button names on DualSense and DualShock pads,
+  including Steam Deck Gaming Mode, where Kimochi runs beside your game with a layout made for the
+  Deck.
 
 ## Install
 

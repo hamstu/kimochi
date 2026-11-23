@@ -29,7 +29,7 @@ export function Home() {
         divider
         eyebrow="主な機能"
         heading="Features"
-        lede="Screen capture, OCR, an overlay on your game, dictionaries, a reading log and Anki cards, in one app."
+        lede="Screen capture, OCR, an overlay on your game, dictionaries, a reading log with stats, and Anki cards, in one app."
       >
         <FeatureGrid />
       </Section>
