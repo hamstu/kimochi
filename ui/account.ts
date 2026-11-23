@@ -21,6 +21,10 @@ export interface AccountUser {
     status: string | null
     trialEnd: string | null
     cancelAt: string | null
+    /** The account has never had a subscription, so checkout would include the free trial. */
+    trialAvailable?: boolean
+    /** A failed payment: when Kimochi Cloud goes off unless the card is updated. */
+    graceEnd?: string | null
   } | null
   status: 'active' | 'suspended'
 }
@@ -248,6 +252,65 @@ export function planNote(user: AccountUser | null | undefined): string | null {
   }
   if (b.cancelAt) return `Ends ${shortDate(b.cancelAt)}.`
   return null
+}
+
+export interface PlanNotice {
+  tone: 'warn' | 'neutral'
+  /** One short line, e.g. "Kimochi Cloud has ended". */
+  title: string
+  text: string
+}
+
+/**
+ * What Settings → Account says about a subscription that is not simply fine: a failed payment
+ * while Kimochi Cloud is still on, or one that ended, stopped or never went through. Null for a
+ * healthy plan, a grant or lifetime, and an account that never had a subscription. The server
+ * decides the plan (`cloud`); this only explains it.
+ */
+export function planNotice(user: AccountUser | null | undefined, cloud: boolean): PlanNotice | null {
+  const b = user?.billing
+  if (!b || b.source === 'grant' || b.source === 'lifetime') return null
+  if (cloud) {
+    return b.status === 'past_due'
+      ? {
+          tone: 'warn',
+          title: 'Payment failed',
+          text: `Your last payment didn’t go through. Kimochi Cloud stays on ${
+            shortDate(b.graceEnd) ? `until ${shortDate(b.graceEnd)}` : 'for now'
+          }; update your card under Manage account to keep it.`
+        }
+      : null
+  }
+  switch (b.status) {
+    case 'canceled':
+    case 'incomplete_expired':
+      return {
+        tone: 'neutral',
+        title: 'Kimochi Cloud has ended',
+        text: 'Your subscription has ended, so cloud OCR, read aloud, translation, explanations and Sync are off. Your synced data is kept. Subscribe again on the website to turn them back on.'
+      }
+    case 'unpaid':
+    case 'past_due':
+      return {
+        tone: 'warn',
+        title: 'Kimochi Cloud is paused',
+        text: 'Payments for your subscription failed, so Kimochi Cloud is off. Update your card under Manage account to turn it back on.'
+      }
+    case 'paused':
+      return {
+        tone: 'warn',
+        title: 'Kimochi Cloud is paused',
+        text: 'Your subscription is paused, so Kimochi Cloud is off. Add a payment method under Manage account to resume it.'
+      }
+    case 'incomplete':
+      return {
+        tone: 'warn',
+        title: 'Payment not finished',
+        text: 'Your subscription’s first payment hasn’t gone through yet. Finish it under Manage account.'
+      }
+    default:
+      return null
+  }
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

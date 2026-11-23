@@ -50,6 +50,7 @@ import {
   localProfileUser,
   PLAN_LABELS,
   planNote,
+  planNotice,
   resetLine,
   usageRows,
   type AccountStatus,
@@ -548,6 +549,8 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
   const rows = usageRows(account.usage)
   const plan = user?.plan ?? account.usage?.plan
   const note = planNote(user)
+  const notice = planNotice(user, account.cloud)
+  const trialAvailable = user?.billing?.trialAvailable !== false
   const refresh = (): void => {
     setRefreshing(true)
     setError('')
@@ -572,6 +575,11 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
             Manage account
           </Button>
         </SettingsRow>
+        {notice && (
+          <Callout tone={notice.tone}>
+            <strong>{notice.title}.</strong> {notice.text}
+          </Callout>
+        )}
         {user?.status === 'suspended' && (
           <Callout tone="warn">
             This account is suspended, so Kimochi cloud services are unavailable. See Manage account for details.
@@ -616,8 +624,12 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
       ) : (
         <SettingsSection title="Kimochi Cloud">
           <SettingsRow
-            label="Not on this account"
-            description="Kimochi Cloud adds cloud OCR, read aloud, translation, AI explanations and Sync. Start a 14-day free trial on the website; Kimochi picks it up within a few minutes, or press Refresh."
+            label={notice ? 'Not active' : 'Not on this account'}
+            description={
+              notice
+                ? 'Kimochi works as it does without an account until Kimochi Cloud is back on. Changes on the website show here within a few minutes, or press Refresh.'
+                : `Kimochi Cloud adds cloud OCR, read aloud, translation, AI explanations and Sync. ${trialAvailable ? 'Start a 14-day free trial' : 'Choose a plan'} on the website; Kimochi picks it up within a few minutes, or press Refresh.`
+            }
           >
             <Button
               size="sm"

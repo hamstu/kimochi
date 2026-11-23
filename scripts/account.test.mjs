@@ -18,6 +18,7 @@ const {
   accountBarName,
   accountInitial,
   planNote,
+  planNotice,
   hasCloudAccount,
   localProfileName,
   localProfileUser
@@ -158,6 +159,27 @@ test('a trial or a cancelled plan says when it ends', () => {
   )
   assert.equal(planNote({ billing: { status: 'active', trialEnd: null, cancelAt: null } }), null)
   assert.equal(planNote(null), null)
+})
+
+test('a lapsed or failing subscription is explained; a healthy one, a grant or lifetime is not', () => {
+  const sub = (status, source = 'subscription') => ({ billing: { source, status, trialEnd: null, cancelAt: null } })
+  assert.equal(planNotice(sub('active'), true), null)
+  assert.equal(planNotice(sub('trialing'), true), null)
+  assert.equal(planNotice(sub('past_due'), true).title, 'Payment failed')
+  assert.match(
+    planNotice({ billing: { source: 'subscription', status: 'past_due', graceEnd: '2026-12-07T09:00:00Z' } }, true)
+      .text,
+    /stays on until Dec 7;/
+  )
+  assert.equal(planNotice(sub('canceled', null), false).title, 'Kimochi Cloud has ended')
+  assert.equal(planNotice(sub('incomplete_expired', null), false).title, 'Kimochi Cloud has ended')
+  assert.equal(planNotice(sub('unpaid', null), false).title, 'Kimochi Cloud is paused')
+  assert.equal(planNotice(sub('paused', null), false).title, 'Kimochi Cloud is paused')
+  assert.equal(planNotice(sub('incomplete', null), false).title, 'Payment not finished')
+  assert.equal(planNotice(sub('canceled', 'grant'), true), null, 'a grant outlives an old subscription')
+  assert.equal(planNotice(sub('canceled', 'lifetime'), true), null)
+  assert.equal(planNotice({ billing: { source: null, status: null } }, false), null, 'never subscribed')
+  assert.equal(planNotice(null, false), null)
 })
 
 test('the accounts on this computer are read strictly, and one is in use', () => {
