@@ -558,6 +558,64 @@ async function hookScenario() {
     return seen
   })
 
+  // Where each of the card's rows starts: its first character that is not whitespace, in physical
+  // pixels (a row's margin, or a leading full-width space it shows, moves it).
+  const cardRows = () =>
+    overlay.eval(
+      `(()=>{const s=${SCREEN_SCALE},d=devicePixelRatio;return [...document.querySelectorAll('.hook-card .hook-card-row')].map((row)=>{const w=document.createTreeWalker(row,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode())){const m=/\\S/u.exec(n.data);if(!m)continue;const r=document.createRange();r.setStart(n,m.index);r.setEnd(n,m.index+1);const b=r.getBoundingClientRect();return {text:row.textContent,x:(screenX*s+b.left)*d,y:(screenY*s+b.top)*d}}return {text:row.textContent,x:null,y:null}})})()`
+    )
+  await check('hook-card-indented-row', async () => {
+    // A wrapped line whose second row the game draws an em in (Muv-Luv Alternative's
+    // 決起の目的を… over 現実的な…, a full-width space in): the card's second row starts where the
+    // game's does, whether the hooked text holds the indent (`indent hooked`: drawn with a leading
+    // U+3000) or not (`indent bare`: drawn an em to the right). OCR's geometry places the rows, not
+    // the hooked text's whitespace. Both rows are new text each time: a row that only moved may keep
+    // an earlier reading where Auto OCR reads only what changed. KIMOCHI_E2E_HOOK_OCR reads with
+    // another engine for this check (`ppocr`, `meikiocr`: engines that box lines, not glyphs).
+    const engine = process.env.KIMOCHI_E2E_HOOK_OCR
+    const ocrMode = engine ? await invoke(overlay, 'settings_get', { key: 'ocrMode' }) : null
+    const seen = { engine: engine ?? ocrMode ?? 'profile' }
+    try {
+      if (engine) {
+        await invoke(overlay, 'settings_set', { key: 'ocrMode', value: engine })
+        await sleep(2000)
+      }
+      for (const kind of ['bare', 'hooked']) {
+        await command('indent ' + kind)
+        await focusGame()
+        await command(`say ${freshLine()}|${freshLine().replace('きょうは', 'あしたは')}`)
+        const t = await truth()
+        await shown(t.dialogue)
+        await sleep(3000)
+        // The rows with text (PaddleOCR may take in the small line above the box: an empty row).
+        const rows = (await cardRows()).filter((r) => r.text.trim())
+        const first = t.lines.find((l) => l.text.length > 3 && t.dialogue.startsWith(l.text))
+        const second = t.lines.find((l) => l !== first && l.text.length > 3 && t.dialogue.endsWith(l.text))
+        const ink = (line) => line.glyphs.find((g) => g.c.trim())
+        const want = [ink(first), ink(second)]
+        seen[kind] = {
+          hooked: t.dialogue,
+          rows: rows.map((r) => r.text),
+          x: rows.slice(0, 2).map((r, i) => (r.x === null ? null : Math.round(r.x - want[i].x))),
+          gameIndent: want[1].x - want[0].x,
+          cardIndent: rows[1]?.x != null && rows[0]?.x != null ? Math.round(rows[1].x - rows[0].x) : null
+        }
+      }
+    } finally {
+      await command('indent off')
+      if (engine) await invoke(overlay, 'settings_set', { key: 'ocrMode', value: ocrMode })
+    }
+    for (const kind of ['bare', 'hooked']) {
+      const s = seen[kind]
+      assert.equal(s.rows.length, 2, `${kind}: the card shows the game's two rows: ${JSON.stringify(s)}`)
+      assert(
+        s.x.every((dx) => dx !== null && Math.abs(dx) <= 8 * scale),
+        `${kind}: each row starts where the game's does: ${JSON.stringify(s)}`
+      )
+    }
+    return seen
+  })
+
   await check('hook-typewriter-double-click', async () => {
     // A line typed out, skipped to its end, and the next one typed out, all in one burst: two
     // clean lines in the Log, the second on the card, nothing jumbled.
