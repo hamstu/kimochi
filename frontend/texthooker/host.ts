@@ -200,60 +200,72 @@ function repeatsLastReading(texts: string[]): boolean {
   return previous.length === texts.length && previous.every((text, i) => text === texts[i])
 }
 async function ingestHistory(entries: ScanEntry[]): Promise<void> {
-  for (const entry of [...entries].reverse()) {
-    if (seen.includes(entry.id)) continue
-    const groups = entry.groups?.filter((group) => group.text?.trim())
-    // A fuller reading of text already logged: its fragments' lines give way to it.
-    let repeat = false
-    if (entry.replaces?.length) {
-      for (const line of store.snapshotLines()) {
-        const from = line.ingestIds ?? []
-        if (from.some((key) => entry.replaces!.some((id) => key === id || key.startsWith(`${id}:group:`))))
-          store.deleteLine(line.id)
-      }
-      // A screen left alone for a while is read again whenever a blinking "next" mark is misread
-      // as one more character: that reading is a new line, and the clean reading after it
-      // replaces it with the line already above it. With Skip repeats on, it is not shown again.
-      const texts = (groups?.length ? groups.map((group) => group.text) : [entry.text])
-        .map(preparedText)
-        .filter((text): text is string => text !== null)
-      repeat = getSettings().dedupeDepth > 0 && repeatsLastReading(texts)
-    }
-    if (repeat) await flush()
-    // The browser extension's pictures are scans too (src-tauri/src/browser_bridge.rs).
-    else if (getSettings().inputSource === 'ocr' || getSettings().inputSource === 'browser') {
-      if (entry.source) await selectSource(entry.source)
-      // A browser tab's lines go to its session: the Log opens it, so coming back to Kimochi
-      // shows them there, at the end of the Log.
-      if (
-        entry.session &&
-        entry.session !== sessions.getActiveSession().id &&
-        sessions.listSessions().some((session) => session.id === entry.session)
-      ) {
-        await sessions.switchSession(entry.session)
-        broadcast()
-      }
-      if (groups?.length) {
-        for (const [index, group] of groups.entries()) {
-          await ingestText(group.text, 'ocr', entry.timestamp, `${entry.id}:group:${group.id}`, {
-            scanId: entry.id,
-            groupId: group.id,
-            groupIndex: index,
-            groupCount: groups.length,
-            engine: entry.engine,
-            orientation: group.orientation
-          })
-        }
-      } else await ingestText(entry.text, 'ocr', entry.timestamp, entry.id)
+  // Every new entry is logged before anything is written: a refresh of Auto OCR arrives as one
+  // change (`history_add_many`), and writing the session after each of its lines held the rest
+  // back, so they came in a line at a time. Lines reach disk before the acknowledgment, as they
+  // always have: one whose acknowledgment fails is replayed, and its durable ingest ids keep it
+  // from being logged twice.
+  const before = seen
+  try {
+    for (const entry of [...entries].reverse()) await ingestEntry(entry)
+  } finally {
+    if (seen !== before) {
       await flush()
+      await setSetting('texthookerIngestedHistory', seen)
     }
-    // Consume IDs even with another input selected: switching back must not replay
-    // scans the user deliberately excluded from this transcript.
-
-    seen = [...seen.slice(-1999), entry.id]
-    await setSetting('texthookerIngestedHistory', seen)
   }
   broadcast()
+}
+/** One entry of the history, logged unless it was already (`seen`). */
+async function ingestEntry(entry: ScanEntry): Promise<void> {
+  if (seen.includes(entry.id)) return
+  const groups = entry.groups?.filter((group) => group.text?.trim())
+  // A fuller reading of text already logged: its fragments' lines give way to it.
+  let repeat = false
+  if (entry.replaces?.length) {
+    for (const line of store.snapshotLines()) {
+      const from = line.ingestIds ?? []
+      if (from.some((key) => entry.replaces!.some((id) => key === id || key.startsWith(`${id}:group:`))))
+        store.deleteLine(line.id)
+    }
+    // A screen left alone for a while is read again whenever a blinking "next" mark is misread
+    // as one more character: that reading is a new line, and the clean reading after it
+    // replaces it with the line already above it. With Skip repeats on, it is not shown again.
+    const texts = (groups?.length ? groups.map((group) => group.text) : [entry.text])
+      .map(preparedText)
+      .filter((text): text is string => text !== null)
+    repeat = getSettings().dedupeDepth > 0 && repeatsLastReading(texts)
+  }
+  // The browser extension's pictures are scans too (src-tauri/src/browser_bridge.rs).
+  if (!repeat && (getSettings().inputSource === 'ocr' || getSettings().inputSource === 'browser')) {
+    if (entry.source) await selectSource(entry.source)
+    // A browser tab's lines go to its session: the Log opens it, so coming back to Kimochi
+    // shows them there, at the end of the Log.
+    if (
+      entry.session &&
+      entry.session !== sessions.getActiveSession().id &&
+      sessions.listSessions().some((session) => session.id === entry.session)
+    ) {
+      await sessions.switchSession(entry.session)
+      broadcast()
+    }
+    if (groups?.length) {
+      for (const [index, group] of groups.entries()) {
+        await ingestText(group.text, 'ocr', entry.timestamp, `${entry.id}:group:${group.id}`, {
+          scanId: entry.id,
+          groupId: group.id,
+          groupIndex: index,
+          groupCount: groups.length,
+          engine: entry.engine,
+          orientation: group.orientation
+        })
+      }
+    } else await ingestText(entry.text, 'ocr', entry.timestamp, entry.id)
+  }
+  // Consume IDs even with another input selected: switching back must not replay
+  // scans the user deliberately excluded from this transcript.
+
+  seen = [...seen.slice(-1999), entry.id]
 }
 const modules = { sessions, store, notebook, stats, presets, replacements }
 const allowed: Record<string, string[]> = {

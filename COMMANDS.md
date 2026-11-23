@@ -752,6 +752,7 @@ without a CFRunLoop has not been tested in-app.
 | --- | --- |
 | `texthooker_send` | `({text}) -> ()` |
 | `history_add` | `({text, detached?, groups?, engine?, merge?, frame?, session?}) -> entry` — `session`: the Log session the lines go to (the Log opens it first) |
+| `history_add_many` | `({entries: [{text, detached?, groups?, engine?, merge?, frame?, session?}]}) -> [entry]` — as `history_add` for each, in order (merging against the ones before), in one history write and one `settings:changed`: Auto OCR's passages from one refresh reach the Log together. An invalid item is answered `{text, invalid}` and the rest still go in; at most 50 (as many as the history keeps), longer refreshes are sent in batches |
 | `history_delete` | `({id}) -> ()` |
 | `history_clear` | `() -> ()` |
 | `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
@@ -1396,7 +1397,7 @@ reads the picture in the same place on the new page (`findLike` in `content.js`)
 flag isn't used in this mode.
 
 **Sessions.** Each tab sends its lines to a Log session, and the Log opens that session when they
-arrive (`history_add` `session`, `ingestHistory` in `frontend/texthooker/host.ts`). A tab's session
+arrive (`history_add`/`history_add_many` `session`, `ingestHistory` in `frontend/texthooker/host.ts`). A tab's session
 is the one chosen in its menu, else the one remembered for the page or a page like it
 (`browserExtension.pages`, newest first, at most 300: the same address or title with only numbers
 changed, or a title that is mostly the same, on the same site; `matched_session`), else a new one
@@ -1406,7 +1407,7 @@ session.
 **Mode.** The input source `superTexthooker.inputSource = "browser"`. A scan that isn't automatic
 switches to it; an automatic one is refused under any other source. In this mode the overlay draws
 nothing, its screen watcher stays off, and the scan button and shortcut call `browser_rescan`. The
-picture's text goes through `publishOcrResult` (the same filters, `history_add` with `detached`),
+picture's text goes through `publishOcrResult` (the same filters, `history_add_many` with `detached`),
 so the Log takes it as it takes a scan. Leaving the mode sends `ended` to the extension.
 
 **Transport.** A WebSocket at `ws://127.0.0.1:27640/kimochi-browser` (a development build:
@@ -1784,7 +1785,7 @@ request nor its reply changes.
 
 ## Screenshots
 
-Each new OCR scan (`history_add`, not skipped) captures its source again, whole (its own frame is
+Each new OCR scan (`history_add` or `history_add_many`, not skipped) captures its source again, whole (its own frame is
 cut to the OCR crop area), and keeps it as JPEG (longest edge 1920) in
 `<app local data>/screenshots/`, indexed by `shots.json`, the newest `cardScreenshot.kept` (0–500,
 default 50) (`src-tauri/src/screenshots.rs`). A Quick Shot's source is its display. Each Log line

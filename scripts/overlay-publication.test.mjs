@@ -296,3 +296,39 @@ test('the automatic loop never plucks, chimes for lines, and buzzes as automatic
     ['scan-error', true]
   ])
 })
+
+test("Auto OCR's refresh sends all its passages to the Log in one call, with its frame", async () => {
+  const batches = []
+  const logged = []
+  const context = vm.createContext({
+    setting: () => ({}),
+    performance: { now: () => 0 },
+    trace: () => {},
+    applyResult: async () => {},
+    autoJob: {},
+    hookMode: () => false,
+    state: { detached: false, annotations: [{}, {}, {}] },
+    noteAutoPublication: () => {},
+    publishOcrResults: async (results, options) => {
+      batches.push({ results, frame: options.frame, merge: options.merge })
+      return results.map((result) => result.fullText)
+    },
+    log: (record) => logged.push(record)
+  })
+  vm.runInContext(functionsNamed(['applyScene', 'publishPassages']), context)
+  const passage = (text) => ({ result: { fullText: text }, replaces: null })
+  await context.applyScene({
+    frame: { id: 9 },
+    result: { geometry: true },
+    publish: [passage('Objetivos'), passage('Completa encargos'), passage('Encargos')],
+    reason: 'settled'
+  })
+  assert.equal(batches.length, 1, 'one call for the whole refresh')
+  assert.deepEqual(
+    batches[0].results.map((r) => r.fullText),
+    ['Objetivos', 'Completa encargos', 'Encargos']
+  )
+  assert.equal(batches[0].frame, 9)
+  assert.equal(batches[0].merge, true)
+  assert.equal(logged.at(-1).published, 'Objetivos'.length + 'Completa encargos'.length + 'Encargos'.length)
+})

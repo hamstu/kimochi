@@ -71,7 +71,7 @@ import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookSettings, withLegacyShowCard } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
-import { publishOcrResult, listHistory } from './output.js'
+import { publishOcrResult, publishOcrResults, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import {
@@ -3004,10 +3004,13 @@ async function applyScene(update) {
     draw()
     void publishRegions()
   }
-  let published = 0
-  for (const passage of hookMode() ? [] : update.publish) {
-    published += (await publishPassage(passage, grouping, update.frame?.id ?? null)).length
-  }
+  // A refresh's passages go to the Log together, in one write (`publishPassages`).
+  const published = hookMode()
+    ? 0
+    : (await publishPassages(update.publish, grouping, update.frame?.id ?? null)).reduce(
+        (sum, text) => sum + text.length,
+        0
+      )
   log({
     check: 'auto-scan-scene',
     reason: update.reason,
@@ -3019,18 +3022,21 @@ async function applyScene(update) {
 }
 
 /**
- * Publish one passage from automatic OCR. Merged into the history rather than appended: a
- * passage that is the same sentence as one just written, or a piece of it, adds nothing, and
- * one that completes an earlier fragment replaces it.
+ * Publish a refresh's passages from automatic OCR, together (`publishOcrResults`). Merged into
+ * the history rather than appended: a passage that is the same sentence as one just written, or
+ * a piece of it, adds nothing, and one that completes an earlier fragment replaces it.
  */
-async function publishPassage(passage, grouping, frame) {
-  return publishOcrResult(passage.result, {
-    detached: state.detached,
-    grouping,
-    merge: true,
-    frame,
-    onPublication: noteAutoPublication
-  })
+async function publishPassages(passages, grouping, frame) {
+  return publishOcrResults(
+    passages.map((passage) => passage.result),
+    {
+      detached: state.detached,
+      grouping,
+      merge: true,
+      frame,
+      onPublication: noteAutoPublication
+    }
+  )
 }
 
 /**
