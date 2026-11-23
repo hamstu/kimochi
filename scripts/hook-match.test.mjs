@@ -326,3 +326,34 @@ test('a quote of nothing but dots: the name says where it is, the dots under it 
   // Not known yet, nor the dots read: nothing to place it by but the name, so it is not placed.
   assert.equal(hookAnnotations([aggregate, lines('n', ['アキ'], 600, 1300)], 'アキ「……」').box, null)
 })
+
+test('a line OCR took in above the text, holding none of the hooked line, is not one of its rows', () => {
+  // PaddleOCR (inferred groups): a small line just above the box joined the first row's group, and
+  // the indented second row is a group of its own, so the match takes both groups whole.
+  const groups = [
+    group('a', ['にほんご', '決起の目的を遂げるためには、オレ達を騙すっていう'], 50, 540),
+    group('b', ['現実的な選択もおかしくないはずだろう。'], 78, 624)
+  ]
+  const placed = placeHookedLine(
+    groups,
+    '決起の目的を遂げるためには、オレ達を騙すっていう現実的な選択もおかしくないはずだろう。'
+  )
+  const line = placed.groups.find((g) => g.id === placed.matched)
+  assert.deepEqual(line.lines, [
+    '決起の目的を遂げるためには、オレ達を騙すっていう',
+    '現実的な選択もおかしくないはずだろう。'
+  ])
+  // Its rows' boxes, and its box, are the game's two rows: the second still an em further in.
+  assert.deepEqual(
+    line.linePolygons.map((p) => p[0][0]),
+    [50, 78]
+  )
+  assert.equal(line.bbox[1], 540 + 30 * 1.4, 'the box starts at the first row, not the line above it')
+})
+
+test("a line's own blank rows in the middle stay: only the ends are trimmed", () => {
+  const groups = [group('a', ['今日は猫と一緒に学校へ行きます', '青い空と静かな海が好きです'], 50, 500)]
+  const placed = placeHookedLine(groups, '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。')
+  assert.equal(placed.groups[0].linePolygons.length, 2)
+  assert.deepEqual(placed.groups[0].bbox, groups[0].bbox)
+})

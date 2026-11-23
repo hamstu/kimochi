@@ -553,7 +553,7 @@ async function hookScenario() {
       ys = seen.map((s) => s.at[1])
     assert(
       Math.max(...xs) - Math.min(...xs) <= 2 * scale && Math.max(...ys) - Math.min(...ys) <= 2 * scale,
-      'the card does not move between lines'
+      'the card does not move between lines: ' + JSON.stringify(seen)
     )
     return seen
   })

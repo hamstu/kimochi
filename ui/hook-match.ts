@@ -248,21 +248,43 @@ export function placeHookedLine(groups: OcrGroup[], hooked: string, spaces = fal
   if (!best) return none
   const run = best.run
   const lines = run.flatMap(groupLines)
-  const polygons = run.flatMap((g) => g.linePolygons ?? [])
+  let polygons = run.flatMap((g) => g.linePolygons ?? [])
   const boxes = run.map((g) => g.bbox!)
+  let bbox: [number, number, number, number] = [
+    Math.min(...boxes.map((b) => b[0])),
+    Math.min(...boxes.map((b) => b[1])),
+    Math.max(...boxes.map((b) => b[2])),
+    Math.max(...boxes.map((b) => b[3]))
+  ]
+  let rows = polygons.length === lines.length ? splitAcrossLines(hooked, lines, spaces) : undefined
+  if (rows) {
+    // An OCR line at either end that holds none of the hooked line is not part of it (a small
+    // line just above the text box that OCR took in with it): it goes, with its box, so the
+    // line's rows and its box are the game's own.
+    let first = 0
+    let last = rows.length - 1
+    while (first < last && !rows[first].trim()) first++
+    while (last > first && !rows[last].trim()) last--
+    if (first > 0 || last < rows.length - 1) {
+      rows = rows.slice(first, last + 1)
+      polygons = polygons.slice(first, last + 1)
+      const points = polygons.flat()
+      bbox = [
+        Math.min(...points.map(([x]) => x)),
+        Math.min(...points.map(([, y]) => y)),
+        Math.max(...points.map(([x]) => x)),
+        Math.max(...points.map(([, y]) => y))
+      ]
+    }
+  }
   const id = `hook:${run.map((g) => g.id).join('+')}`
   const placed: OcrGroup = {
     ...run[0],
     id,
     text: unbroken(hooked, spaces),
-    bbox: [
-      Math.min(...boxes.map((b) => b[0])),
-      Math.min(...boxes.map((b) => b[1])),
-      Math.max(...boxes.map((b) => b[2])),
-      Math.max(...boxes.map((b) => b[3]))
-    ],
-    linePolygons: polygons.length === lines.length ? polygons : run[0].linePolygons,
-    lines: polygons.length === lines.length ? splitAcrossLines(hooked, lines, spaces) : undefined,
+    bbox,
+    linePolygons: rows ? polygons : run[0].linePolygons,
+    lines: rows,
     // OCR's word boxes belong to OCR's text, not the hooked text.
     lineSegments: undefined,
     inferred: undefined
