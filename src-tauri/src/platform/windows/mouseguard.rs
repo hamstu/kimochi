@@ -220,9 +220,10 @@ fn key_name(key: u32) -> Option<&'static str> {
     }
 }
 
-// Preserve OS escape routes. Blocked Shift/Control state is supplied to pointer polling.
+// Preserve OS escape routes, and Print Screen (44), so a screenshot works with the pointer on the
+// overlay's text. Blocked Shift/Control state is supplied to pointer polling.
 fn protected_key(key: u32) -> bool {
-    matches!(key, 9 | 18 | 91..=92 | 164..=165)
+    matches!(key, 9 | 18 | 44 | 91..=92 | 164..=165)
 }
 
 fn captures_key(owned: bool, down: bool, was_down: bool, modal: bool, hover: bool, ours: bool, source: bool) -> bool {
@@ -740,7 +741,7 @@ mod tests {
 
     #[test]
     fn system_escape_routes_stay_available_but_menu_modifiers_are_guarded() {
-        for key in [9, 18, 91, 92, 164, 165] {
+        for key in [9, 18, 44, 91, 92, 164, 165] {
             assert!(protected_key(key));
         }
         for key in [13, 16, 17, 27, 37, 160, 163] {

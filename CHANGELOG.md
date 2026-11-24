@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Windows: Print Screen works with the pointer on the overlay.** With the mouse over a scanned word or the Explain card, Print Screen and Win+Print Screen did nothing, because Kimochi kept the key from your game. It now always goes to Windows.
 - 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.
 - **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.
 - **Windows: Auto Game Pausing pauses and resumes much faster** for games made of many processes, such as browser and Electron games. One with 40 processes took around 5 seconds to pause; it now takes a fraction of a second.
