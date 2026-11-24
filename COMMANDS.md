@@ -642,7 +642,10 @@ with a notch on it; pressed again it closes the card. A word highlighted when it
 on) narrows it to the section that word is in, and a `FOCUS:` instruction after the prompt asks
 for that word (or the grammar it is part of) first. Text read with OCR is given as one run where
 it wraps on screen (`sectionText` in `ui/log-sections.js`, as Read along shows it), here and in the
-Log's own Explain; a hooked line keeps the game's breaks. The game menu (the radial) has the same
+Log's own Explain; a hooked line keeps the game's breaks. Text read with OCR also gets `OCR_NOTE`
+(`ui/explain-screen.ts`) after the prompt, before any `FOCUS:`: it may hold small misreadings, to
+be explained as the text most likely is. The Log's own Explain adds the same note for a line whose
+`source` is `ocr` (`buildExplainPrompt`); the Text Hooker's line gets none. The game menu (the radial) has the same
 Explain, which holds the controller while the card is open: B closes it and the right stick
 scrolls it. The card takes the mouse, Shift or not. A click anywhere else closes it, as it closes
 a dictionary pop-up: the overlay takes that click (`onFreeClick`, not with Look up on hover), or,

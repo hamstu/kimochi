@@ -501,7 +501,7 @@ export function createOverlayExplain(parent, context) {
       stored,
       language,
       asked.focus ?? asked.word,
-      // Read with OCR (not hooked from the game): its lines are joined where they wrap on screen.
+      // Read with OCR (not hooked from the game): the AI is told it may hold small misreadings.
       { ocr: Boolean(asked.ocr) }
     )
     const settings = explainSettings(stored)

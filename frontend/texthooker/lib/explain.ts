@@ -8,6 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { currentLanguage } from '../core/language'
 import { explainPromptFor } from '@ui/explain-prompt'
+import { OCR_NOTE } from '@ui/explain-screen'
 import { explainSettings } from '@ui/explain-settings'
 import { sectionText } from '@ui/log-sections'
 import { getSettings } from './settings'
@@ -105,7 +106,9 @@ export function buildExplainPrompt(line: Line, template: string): string {
   // the Log shows it, so the break is not taken for a misreading (ui/log-sections.js).
   const run = (l: Line): string => (l.source === 'ocr' ? sectionText(l.text) : l.text)
   const context = prev.length ? prev.map(run).join('\n') : '(no previous lines available)'
-  return explainPromptFor(template, currentLanguage(), context, run(line))
+  const prompt = explainPromptFor(template, currentLanguage(), context, run(line))
+  // And it may hold small misreadings: the AI is told so, as over the game (ui/explain-screen.ts).
+  return line.source === 'ocr' ? `${prompt}\n\n${OCR_NOTE}` : prompt
 }
 
 async function runExplain(line: Line): Promise<void> {

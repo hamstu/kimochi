@@ -29,7 +29,7 @@ export interface ExplainRequest {
   word: string | null
   /** Where in `sentence` the word is (its first character), or null when not found or none. */
   at: number | null
-  /** Whether the sentence was read with OCR (not hooked from the game): its wraps are taken out. */
+  /** Whether the sentence was read with OCR (not hooked from the game), so the prompt says so. */
   ocr: boolean
   prompt: string
 }
@@ -320,10 +320,19 @@ export function markWord(sentence: string, index: number, length: number): strin
 }
 
 /**
+ * What goes after the prompt when the text was read from the screen with OCR rather than hooked
+ * from the game: it can hold small misreadings, which the explanation should see past rather than
+ * explain as written. Over the game here, and for an OCR line in the Log's own Explain
+ * (frontend/texthooker/lib/explain.ts).
+ */
+export const OCR_NOTE =
+  'NOTE: The target sentence was read from the screen with OCR, so it may contain minor recognition errors, such as a wrong, missing or extra character. Where something looks misread, explain the text it most likely is, and say briefly what you read it as.'
+
+/**
  * The request for the text on screen (`sections`), or null when there is none. The Log has the
  * screen's own text too, usually as its newest lines: those are the sentence, not its scene, so
  * any line that is one of the sections is left out of the context. `ocr`: the text was read with
- * OCR, not hooked from the game.
+ * OCR, not hooked from the game (`OCR_NOTE`).
  */
 export function explainRequest(
   sections: readonly unknown[] | null | undefined,
@@ -353,8 +362,11 @@ export function explainRequest(
   const { prompt: template, focusPrompt } = explainSettings(stored)
   const asked = typeof word === 'string' ? { text: word } : word
   const focus = clean(asked?.text)
+  // After the prompt and before any word's instruction, as the word's is: a prompt of the reader's
+  // own gets it too.
+  const note = ocr ? `\n\n${OCR_NOTE}` : ''
   if (!focus) {
-    const prompt = explainPromptFor(template, language, context, sentence)
+    const prompt = `${explainPromptFor(template, language, context, sentence)}${note}`
     return { sentence, context, word: null, at: null, ocr, prompt }
   }
   // The highlighted one marked where it is in the sentence, so a word whose text occurs more than
@@ -368,6 +380,6 @@ export function explainRequest(
     word: focus,
     at: at < 0 ? null : at,
     ocr,
-    prompt: `${prompt}\n\n${focusInstruction(focus, focusPrompt)}`
+    prompt: `${prompt}${note}\n\n${focusInstruction(focus, focusPrompt)}`
   }
 }
