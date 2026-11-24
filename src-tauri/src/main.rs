@@ -4674,6 +4674,10 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         // pointer stopped is never lost.
         let mut unsent_move = false;
         let mut last_buttons = false;
+        // Windows: the overlay has the pointer over the game the reader paused
+        // (`platform::covers_paused_game`), whatever its own regions say.
+        #[cfg(target_os = "windows")]
+        let mut covering_game = false;
         let mut last_gate = false;
         let mut last_popup_shift = false;
         let mut ticks: u64 = 0;
@@ -4815,6 +4819,10 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 if let Some(window) = handle.get_webview_window(label) {
                     let _ = window.set_ignore_cursor_events(true);
                 }
+                #[cfg(target_os = "windows")]
+                if label == OVERLAY {
+                    covering_game = false;
+                }
             }
             if let Some(platform::PointerSample { x, y, down, modifiers }) = sample {
                 if down && !was_down {
@@ -4876,6 +4884,19 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     }
                     history.retain(|label, _| live.contains_key(label));
                     v.interactive = interactive_anywhere;
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    let cover = platform::covers_paused_game();
+                    if cover != covering_game {
+                        covering_game = cover;
+                        let own = history.get(OVERLAY).is_some_and(|was| was.interactive);
+                        changed.retain(|(label, _)| label != OVERLAY);
+                        changed.push((OVERLAY.to_owned(), cover || own));
+                    } else if cover {
+                        // Its words leaving the pointer must not hand it back to the frozen game.
+                        changed.retain(|(label, interactive)| label != OVERLAY || *interactive);
+                    }
                 }
                 was_down = down;
                 // What the overlay cannot see for itself: where the pointer is, and

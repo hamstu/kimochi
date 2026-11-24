@@ -56,7 +56,7 @@ mod workspace;
 pub use cli::run_cli;
 pub use icon::app_icon_png;
 pub use magpie::{report as scaler_report, watch as watch_scaler, Change as ScalerChange};
-pub use mouseguard::{set_keyboard_guard, sync_mouse_buttons};
+pub use mouseguard::{covers_paused_game, set_keyboard_guard, sync_mouse_buttons};
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use sources::{
     front_window, frontmost_app, frontmost_pid, picker_sources, scaled_full_screen, shown_frame_info, source_spaces,
