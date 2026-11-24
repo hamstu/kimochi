@@ -228,6 +228,38 @@ test('matching normalizes case and spacing, avoids ambiguous app matches, and do
   assert.equal(api.routing.sourceKey({ type: 'screen', name: 'Display 1' }), null)
 })
 
+test("a refresh's readings, arriving in one change, are logged together: one write, one acknowledgment", async () => {
+  const h = await harness()
+  await h.setSetting('scannedTextHistory', [entry('1', 'Game A', '一')])
+  await h.drain()
+  // From here on: how often the session's lines are written, and the ingested ids acknowledged.
+  const linesWrites = []
+  const set = h.files.set.bind(h.files)
+  h.files.set = (path, value) => {
+    if (String(path).endsWith('lines.json')) linesWrites.push(path)
+    return set(path, value)
+  }
+  let acknowledgments = 0
+  await h.listen('settings:changed', ({ payload }) => {
+    if (payload.key === 'texthookerIngestedHistory') acknowledgments++
+  })
+  // Auto OCR's refresh (`history_add_many`): three readings in one change, newest first.
+  await h.setSetting('scannedTextHistory', [
+    entry('4', 'Game A', '四'),
+    entry('3', 'Game A', '三'),
+    entry('2', 'Game A', '二'),
+    entry('1', 'Game A', '一')
+  ])
+  await h.drain()
+  assert.deepEqual(
+    h.snapshot().lines.map((l) => l.text),
+    ['一', '二', '三', '四']
+  )
+  assert.equal(linesWrites.length, 1, 'the session is written once for the whole refresh')
+  assert.equal(acknowledgments, 1, 'and its readings acknowledged once')
+  assert.deepEqual(h.settings.texthookerIngestedHistory.slice(-4), ['1', '2', '3', '4'])
+})
+
 test('restart restores the selected session and never duplicates OCR after an acknowledgment failure', async () => {
   const h = await harness({ superTexthooker: { dedupeDepth: 0 } })
   h.env.failAcknowledgment = true

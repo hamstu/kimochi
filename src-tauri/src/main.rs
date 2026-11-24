@@ -2905,6 +2905,18 @@ fn edit_history(app: &tauri::AppHandle, service: &Service, edit: impl FnOnce(&mu
     Ok(value)
 }
 
+/// One reading for the history: `history_add`'s arguments, and an item of `history_add_many`.
+#[derive(Deserialize)]
+struct HistoryItem {
+    text: String,
+    detached: Option<bool>,
+    groups: Option<Vec<ocr_result::OcrGroup>>,
+    engine: Option<String>,
+    merge: Option<bool>,
+    frame: Option<u64>,
+    session: Option<String>,
+}
+
 // One argument per field the overlay sends; a Tauri command's arguments are its IPC schema.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -2919,42 +2931,86 @@ fn history_add(
     frame: Option<u64>,
     session: Option<String>,
 ) -> Reply<Value> {
-    if text.trim().is_empty() {
-        return Err("invalid: history entries cannot be empty".into());
+    let item = HistoryItem { text, detached, groups, engine, merge, frame, session };
+    if let Some(reason) = invalid_reason(&item) {
+        return Err(reason.into());
     }
-    if let Some(groups) = &groups {
+    let mut entries = add_history(&app, &state, vec![item])?;
+    Ok(entries.remove(0))
+}
+
+/// Several readings, in order, as if each were `history_add`ed after the one before, in one
+/// write of the history and one `settings:changed`: a refresh of Auto OCR that publishes a
+/// screenful of passages lands in the Log together, rather than a line at a time. An invalid
+/// reading is answered `{text, invalid}` and the rest still go in; the overlay sends a longer
+/// refresh in batches of `HISTORY_LIMIT` (ui/output.js `addHistoryEntries`).
+#[tauri::command]
+fn history_add_many(app: tauri::AppHandle, state: State<Shared>, entries: Vec<HistoryItem>) -> Reply<Vec<Value>> {
+    if entries.is_empty() {
+        return Ok(Vec::new());
+    }
+    // No more than the history keeps: a longer batch would push out its own first readings.
+    if entries.len() > HISTORY_LIMIT {
+        return Err(format!("invalid: at most {HISTORY_LIMIT} history entries at once"));
+    }
+    add_history(&app, &state, entries)
+}
+
+/// Why `item` cannot go into the history, or None.
+fn invalid_reason(item: &HistoryItem) -> Option<&'static str> {
+    if item.text.trim().is_empty() {
+        return Some("invalid: history entries cannot be empty");
+    }
+    if let Some(groups) = &item.groups {
         let mut ids = std::collections::HashSet::new();
         if groups.len() > 1024 || groups.iter().any(|g| !g.validate() || !ids.insert(&g.id)) {
-            return Err("invalid: OCR groups need unique IDs, text and valid boxes".into());
+            return Some("invalid: OCR groups need unique IDs, text and valid boxes");
         }
     }
+    None
+}
+
+/// The history entry `item` makes, read at `now` from `selection` (the chosen source).
+fn history_entry(item: &HistoryItem, selection: &Value, now: u128) -> Value {
     // A Quick Shot is not from the chosen source, so it must not carry that source's
     // name: the reader would switch sessions to match a window nobody scanned.
-    let source = if detached.unwrap_or(false) { Value::Null } else { saved_selection(&state).unwrap_or(Value::Null) };
-    let now = now_millis();
-    let shot_groups = groups.clone().unwrap_or_default();
-    let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
-    // The capture frame this reading came from, so a mining screenshot taken from the Log's
-    // line can show that frame while the image store still holds it (`capture_frame_source`).
-    if let Some(frame) = frame {
+    let source = if item.detached.unwrap_or(false) { Value::Null } else { selection.clone() };
+    let mut entry = json!({
+        "id": history_id(),
+        "text": item.text,
+        "timestamp": now,
+        "source": source,
+        "groups": item.groups,
+        "engine": item.engine,
+    });
+    // The capture frame this reading came from, so a mining screenshot taken from the Log's line
+    // can show that frame while the image store still holds it (`capture_frame_source`).
+    if let Some(frame) = item.frame {
         entry["frame"] = json!(frame);
     }
     // The Log session these lines go to, when the reader chose one (the browser extension's
     // tabs): the Log switches to it before adding them (frontend/texthooker/host.ts).
-    if let Some(session) = session.filter(|s| !s.is_empty()) {
+    if let Some(session) = item.session.as_ref().filter(|s| !s.is_empty()) {
         entry["session"] = json!(session);
     }
-    // Merging is decided inside the history lock, against the list as it is now; see
-    // history_merge.rs. A replaced entry is named on the new one so the reader's log can
-    // swap its lines rather than keep the fragment.
-    let mut skipped = false;
-    edit_history(&app, &state, |list| {
-        if merge.unwrap_or(false) {
-            let forgotten = history_merge::forgotten_until();
-            match history_merge::decide(&text, &entry["source"], now as u64, forgotten, list) {
+    entry
+}
+
+/// Add `entries` (made from `items`, in order) to `list` (newest first), each against the list
+/// as the ones before it left it; see history_merge.rs. A repeat is marked `skipped` on its
+/// answer and not added; a fuller reading replaces the fragments it contains and names them in
+/// `replaces`, so the reader's log can swap its lines. An entry already marked `invalid` is left
+/// out.
+fn merge_into_history(list: &mut Vec<Value>, items: &[HistoryItem], entries: &mut [Value], now: u64, forgotten: u64) {
+    for (item, entry) in items.iter().zip(entries.iter_mut()) {
+        if entry.get("invalid").is_some() {
+            continue;
+        }
+        if item.merge.unwrap_or(false) {
+            match history_merge::decide(&item.text, &entry["source"], now, forgotten, list) {
                 history_merge::Merge::Skip => {
-                    skipped = true;
-                    return;
+                    entry["skipped"] = json!(true);
+                    continue;
                 }
                 history_merge::Merge::Replace(ids) => {
                     list.retain(|old| {
@@ -2966,32 +3022,51 @@ fn history_add(
             }
         }
         list.insert(0, entry.clone());
+    }
+}
+
+/// The entries `items` make, each as `history_add` answers it (`skipped`, `replaces`), after one
+/// edit of the history that adds them in order. An invalid item is answered `{text, invalid}`
+/// and left out, rather than costing the others their place.
+fn add_history(app: &tauri::AppHandle, state: &Shared, items: Vec<HistoryItem>) -> Reply<Vec<Value>> {
+    let selection = saved_selection(state).unwrap_or(Value::Null);
+    let now = now_millis();
+    let mut entries: Vec<Value> = items
+        .iter()
+        .map(|item| match invalid_reason(item) {
+            Some(reason) => json!({ "text": item.text, "invalid": reason }),
+            None => history_entry(item, &selection, now),
+        })
+        .collect();
+    edit_history(app, state, |list| {
+        merge_into_history(list, &items, &mut entries, now as u64, history_merge::forgotten_until());
     })?;
-    if skipped {
-        entry["skipped"] = json!(true);
-    } else {
+    for (item, entry) in items.into_iter().zip(&entries) {
+        if entry.get("skipped").is_some() || entry.get("invalid").is_some() {
+            continue;
+        }
         // The scan's frame is cropped to the OCR crop area: its screenshot is the source, whole.
         let image = {
             let images = state.images.lock().map_err(|e| e.to_string())?;
-            images.mining_frame(frame).and_then(|(id, _)| images.frame(id)).map(|image| state::Image::clone(image))
+            images.mining_frame(item.frame).and_then(|(id, _)| images.frame(id)).map(|image| state::Image::clone(image))
         };
         let info = image.as_ref().map(|image| image.info.clone());
         // A picture from the browser extension is the whole of what was read: it is the
         // screenshot, not a new capture of whatever window was last chosen.
         let picture = image.filter(|image| image.info["source"] == json!("browser"));
         screenshots::taken(
-            &app,
+            app,
             screenshots::Scan {
                 id: entry["id"].as_str().unwrap_or_default().to_string(),
-                text: text.clone(),
-                groups: shot_groups,
+                text: item.text,
+                groups: item.groups.unwrap_or_default(),
                 info,
-                detached: detached.unwrap_or(false),
+                detached: item.detached.unwrap_or(false),
                 picture,
             },
         );
     }
-    Ok(entry)
+    Ok(entries)
 }
 
 /// The capture frame a history entry was read from, when it recorded one.
@@ -3576,6 +3651,7 @@ fn main() {
         browser_bridge::browser_engines,
         browser_bridge::browser_session_reply,
         history_add,
+        history_add_many,
         history_delete,
         history_clear,
         log_lines::log_recent,
@@ -5295,6 +5371,73 @@ fn request_accessibility() -> Reply<bool> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::{json, Value};
+
+    fn reading(text: &str, merge: bool) -> crate::HistoryItem {
+        crate::HistoryItem {
+            text: text.into(),
+            detached: None,
+            groups: None,
+            engine: None,
+            merge: Some(merge),
+            frame: None,
+            session: None,
+        }
+    }
+
+    /// A batch merged into `list` as `add_history` merges it: entries made at `now`, in order.
+    fn merge(list: &mut Vec<Value>, items: &[crate::HistoryItem], now: u64) -> Vec<Value> {
+        let mut entries: Vec<Value> = items
+            .iter()
+            .map(|item| match crate::invalid_reason(item) {
+                Some(reason) => json!({ "text": item.text, "invalid": reason }),
+                None => crate::history_entry(item, &Value::Null, now as u128),
+            })
+            .collect();
+        crate::merge_into_history(list, items, &mut entries, now, 0);
+        entries
+    }
+
+    fn texts(list: &[Value]) -> Vec<&str> {
+        list.iter().map(|entry| entry["text"].as_str().unwrap()).collect()
+    }
+
+    #[test]
+    fn a_batch_is_merged_as_one_call_after_another() {
+        let mut list = Vec::new();
+        // Newest first, as separate calls would leave it; nothing merged without `merge`.
+        merge(&mut list, &[reading("目標", false), reading("依頼をこなす", false)], 1000);
+        assert_eq!(texts(&list), ["依頼をこなす", "目標"]);
+        // Within one batch, a later reading is merged against the earlier ones: a repeat of one
+        // is skipped (on its answer only), and a fuller one replaces the fragment it contains.
+        let mut list = Vec::new();
+        let answers = merge(
+            &mut list,
+            &[
+                reading("今日はいい天気ですね", true),
+                reading("今日はいい天気ですね", true),
+                reading("今日はいい天気ですね散歩に行きましょう", true),
+            ],
+            1000,
+        );
+        assert_eq!(answers[1]["skipped"], json!(true));
+        assert_eq!(answers[2]["replaces"], json!([answers[0]["id"]]));
+        assert_eq!(texts(&list), ["今日はいい天気ですね散歩に行きましょう"]);
+        assert!(list[0].get("skipped").is_none(), "the mark is on the answer, not the history");
+    }
+
+    #[test]
+    fn an_invalid_reading_is_left_out_and_the_rest_of_its_batch_goes_in() {
+        let mut list = Vec::new();
+        let answers = merge(
+            &mut list,
+            &[reading("Misiones activas", true), reading("  ", true), reading("Encargos", true)],
+            1000,
+        );
+        assert_eq!(answers[1]["invalid"], json!("invalid: history entries cannot be empty"));
+        assert!(answers[1].get("id").is_none());
+        assert_eq!(texts(&list), ["Encargos", "Misiones activas"]);
+    }
 
     #[test]
     fn a_dotted_write_announces_the_whole_top_level_setting_too() {

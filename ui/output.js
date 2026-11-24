@@ -39,32 +39,48 @@ function newEntry(text) {
  * add/delete race Electron already has when the log panel edits history while a
  * scan lands.
  */
-export async function addHistoryEntry(
-  text,
-  { detached = false, groups, engine, merge = false, frame = null, session = null } = {}
-) {
+export async function addHistoryEntry(text, options = {}) {
+  const { groups, engine, frame, session } = options
   const entry = {
     ...newEntry(text),
     ...(groups ? { groups, engine } : {}),
     ...(frame ? { frame } : {}),
     ...(session ? { session } : {})
   }
-  const native = await optional(
-    'history_add',
-    {
-      text,
-      detached,
-      groups: groups ?? null,
-      engine: engine ?? null,
-      merge,
-      frame: frame ?? null,
-      session: session ?? null
-    },
-    null
-  )
+  const native = await optional('history_add', nativeItem({ text, ...options }), null)
   if (native) return native
   await setSetting('scannedTextHistory', pushHistory(getSetting('scannedTextHistory'), entry))
   return entry
+}
+
+/** `history_add`'s arguments for a reading: every field present, null when not given. */
+function nativeItem({ text, detached, groups, engine, merge, frame, session }) {
+  return {
+    text,
+    detached: !!detached,
+    groups: groups ?? null,
+    engine: engine ?? null,
+    merge: !!merge,
+    frame: frame ?? null,
+    session: session ?? null
+  }
+}
+
+/**
+ * Several readings for the history, in order, as `{text, ...addHistoryEntry's options}`: one
+ * native write and one Log update (`history_add_many`), so a refresh of Auto OCR lands in the
+ * Log together rather than a line at a time. Without native (the browser preview), one by one.
+ */
+export async function addHistoryEntries(items) {
+  const entries = []
+  // At most what the history keeps per write: a longer batch would push out its own first lines.
+  for (let at = 0; at < items.length; at += MAX_HISTORY_ENTRIES) {
+    const batch = items.slice(at, at + MAX_HISTORY_ENTRIES)
+    const native = await optional('history_add_many', { entries: batch.map(nativeItem) }, null)
+    if (native) entries.push(...native)
+    else for (const { text, ...options } of batch) entries.push(await addHistoryEntry(text, options))
+  }
+  return entries
 }
 
 export function listHistory() {
@@ -111,37 +127,60 @@ export { MAX_HISTORY_ENTRIES }
  * already had, and to the reader those are different outcomes.
  */
 export async function publishOcrResult(result, options = {}) {
+  return (await publishOcrResults([result], options))[0]
+}
+
+/**
+ * `publishOcrResult` for several captures at once, in order (Auto OCR's passages from one
+ * refresh): their history entries are written together (`addHistoryEntries`), so they reach the
+ * Log at once. Returns each one's published string, as `publishOcrResult` does.
+ */
+export async function publishOcrResults(results, options = {}) {
   const report = (lines, duplicate = false) => options.onPublication?.({ lines, duplicate })
-  // The groups the Log will show, one line each (shared with Read along's full screen).
-  const groups = logGroups(result, options.grouping ?? {})
-  if (result.geometry && !result.textAnnotations.some((a) => a.granularity === 'block') && !groups.length) {
-    report(0)
-    return ''
-  }
-  const text = groups.map((group) => group.text).join('\n') || result.fullText || ''
-  if (!text.trim()) {
-    report(0)
-    return ''
-  }
+  const readings = results.map((result) => {
+    // The groups the Log will show, one line each (shared with Read along's full screen).
+    const groups = logGroups(result, options.grouping ?? {})
+    if (result.geometry && !result.textAnnotations.some((a) => a.granularity === 'block') && !groups.length) return null
+    const text = groups.map((group) => group.text).join('\n') || result.fullText || ''
+    return text.trim() ? { result, groups, text } : null
+  })
+  const written = readings.filter((reading) => reading !== null)
   // History first: with `merge`, a reading already in the history (the same sentence again,
   // or a piece of one) is skipped there, and then is not sent to the clipboard either. A fuller
   // reading replaces the fragments it contains; see history_merge.rs.
-  const entry = await addHistoryEntry(text, {
-    detached: options.detached,
-    groups,
-    engine: result.engine,
-    merge: !!options.merge,
-    // The capture frame it was read from: a mining screenshot from this line shows it.
-    frame: options.frame ?? null,
-    // The Log session it goes to (the browser extension's tabs choose theirs).
-    session: options.session ?? null
-  })
-  if (entry?.skipped) {
-    report(0, true)
-    return ''
+  const entries = await addHistoryEntries(
+    written.map(({ result, groups, text }) => ({
+      text,
+      detached: options.detached,
+      groups,
+      engine: result.engine,
+      merge: options.merge,
+      // The capture frame it was read from: a mining screenshot from this line shows it.
+      frame: options.frame,
+      // The Log session it goes to (the browser extension's tabs choose theirs).
+      session: options.session
+    }))
+  )
+  const published = []
+  let answered = 0
+  for (const reading of readings) {
+    // The answers are for the readings written, in order.
+    const entry = reading ? entries[answered++] : null
+    // Nothing to log, or nothing native would take (`invalid`, said on its answer).
+    if (!reading || entry?.invalid) {
+      report(0)
+      published.push('')
+      continue
+    }
+    if (entry?.skipped) {
+      report(0, true)
+      published.push('')
+      continue
+    }
+    await publishText(reading.text)
+    // The Log gives each non-empty group a line of its own, and an ungrouped reading one line.
+    report(reading.groups.filter((group) => group.text?.trim()).length || 1)
+    published.push(reading.text)
   }
-  await publishText(text)
-  // The Log gives each non-empty group a line of its own, and an ungrouped reading one line.
-  report(groups.filter((group) => group.text?.trim()).length || 1)
-  return text
+  return published
 }

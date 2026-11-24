@@ -2,7 +2,7 @@
 //! each Log line can show the picture its text came from (with what OCR saw drawn on it) and the
 //! cards mined from it can carry that picture.
 //!
-//! - **Taking**: `history_add` hands each new scan here (`taken`). The scan's own frame is cropped
+//! - **Taking**: `history_add` and `history_add_many` hand each new scan here (`taken`). The scan's own frame is cropped
 //!   to the OCR crop area, so the source is captured again, whole, straight after; the OCR boxes
 //!   are moved from the crop's pixels into the picture's. A Quick Shot's source is its display.
 //! - **Keeping**: JPEG files in `<app local data>/screenshots/`, indexed by `shots.json`, the newest
@@ -132,7 +132,7 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 pub struct Scan {
     pub id: String,
     pub text: String,
-    /// The OCR groups as `history_add` got them (boxes in the scan frame's pixels).
+    /// The OCR groups as the history got them (boxes in the scan frame's pixels).
     pub groups: Vec<crate::ocr_result::OcrGroup>,
     /// The scan frame's `FrameInfo` (with `capturedAt`), when the image store still held it.
     pub info: Option<Value>,
