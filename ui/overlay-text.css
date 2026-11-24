@@ -103,6 +103,11 @@
     opacity: 0;
   }
 }
+/* A box that has faded in once (`settled`, render.js) never does again: the overlay moves boxes
+   when the reading order changes around them, and a moved box would restart the animation. */
+:is(.ocr-word, .ocr-group)[data-settled] {
+  animation: none;
+}
 
 /* --- per-word mode ----------------------------------------------------------------------- */
 /* Boxes sitting exactly over the source's own glyphs. The text inside is fitted over the source

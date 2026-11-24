@@ -1099,6 +1099,14 @@ export class SceneMemory {
       const ids = new Set(cluster.map((t) => t.id))
       const units = shown.filter((u) => [...u.versions.keys()].some((id) => ids.has(id)))
       if (!units.length || units.some((u) => at < u.publishAfter)) continue
+      // Nothing new: each line last went out showing what it shows now, in readings already
+      // published, and only the grouping changed (two lines either side of `neighbours`' reach
+      // join on one look and split on the next). The fuzzier case is `similar`, below.
+      if (
+        units.every((u) => u.published) &&
+        cluster.every((t) => this.passageOf.get(t.id)?.keys.get(t.id) === t.version.key)
+      )
+        continue
       const result = compose(units, this.engine ?? '', o.language)
       const text = result.fullText
       if (!inLanguage(text, o.language)) continue
@@ -1119,6 +1127,7 @@ export class SceneMemory {
       if (!corrects) {
         // Or the same passage read again after the observer split its lines another way: close
         // to one published moments ago. Kept if it is no fuller; otherwise it takes its place.
+        // (Lines that only regrouped, their text unchanged, never get this far: see above.)
         const similar = this.recent.find((p) => at - p.at < o.passageMemoryMs && agreement(p.identity, identity) >= 0.8)
         if (similar && [...identity].length <= [...similar.identity].length) {
           for (const t of cluster) this.passageOf.set(t.id, similar)

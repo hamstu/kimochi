@@ -1068,7 +1068,14 @@ export class TextOverlayRenderer {
             ['x', 'y', 'width', 'height'].every((key) => Math.abs(candidate.renderBox[key] - fresh.renderBox[key]) <= 2)
         )
       }
-      if (!old) return fresh
+      if (!old) {
+        // Once it has faded in it never does again, however it is moved (`[data-settled]`,
+        // overlay-text.css): putting a box back into the page restarts its animation.
+        fresh.addEventListener('animationend', (event) => {
+          if (event.target === fresh && event.animationName === 'ocr-appear') fresh.dataset.settled = ''
+        })
+        return fresh
+      }
       available.delete(old.renderKey)
       this.revive(old)
       old.ocrIndex = fresh.ocrIndex

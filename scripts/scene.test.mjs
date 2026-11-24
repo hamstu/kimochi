@@ -422,6 +422,42 @@ test('a passage that grows after it was written replaces its history entry', () 
   assert.equal(passage.replaces, '今日は')
 })
 
+test('lines that only join and split again, their text the same, are not published again', () => {
+  // A heading and the line under it, one box-height apart: just inside `neighbours`' reach
+  // (1.2 × the 36 px line), so they are one passage. When the heading's box comes back 6 px
+  // shorter, the reach no longer spans the gap and they are two; a look later they are one again.
+  const heading = (height) => line('目標', 396, 90, 60, height)
+  const body = line('依頼をこなして博物館に寄付する', 470)
+  const joined = [heading(36), body]
+  const split = [heading(30), body]
+  // Beside them, a small animated icon the recogniser reads as `#` on some looks and misses on
+  // others, as on the quest menu where this was recorded (it blinked in and out all the while).
+  const ICON = line('#', 480, 620, 24, 24)
+  const scene = new SceneMemory()
+  // Looks a quarter second apart, two at a time: the icon read on the first and missed on the
+  // second. Returns when the second was.
+  let next = 0
+  const look = (lines) => {
+    scene.observe([...lines, ICON], next)
+    scene.observe(lines, next + 250)
+    next += 500
+    return next - 250
+  }
+  let at = look(joined)
+  scene.apply(reading([...joined, ICON]), scene.snapshot(at), at + 50)
+  assert.deepEqual(published(scene, at + 50), ['目標依頼をこなして博物館に寄付する'])
+  for (const lines of [split, joined, split, joined, split, joined]) {
+    at = look(lines)
+    assert.deepEqual(published(scene, at), [], 'the same text in another grouping is not news')
+  }
+  // A real change still goes out: the line under it now says something else.
+  const changed = [heading(36), line('新しい依頼が届きました', 470)]
+  look(changed)
+  at = look(changed)
+  scene.apply(reading(changed), scene.snapshot(at), at + 50)
+  assert.deepEqual(published(scene, at + 50), ['目標新しい依頼が届きました'])
+})
+
 test('new dialogue in the same box is a new entry, not a correction', () => {
   const scene = new SceneMemory()
   hold(scene, DIALOGUE, 0)
