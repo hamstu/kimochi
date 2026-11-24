@@ -154,15 +154,21 @@ skips a page every 100 ms: never, while it is the foreground window, or while `W
 said the app is active, as many engines do) and `minimize-on-blur on|off` (exclusive fullscreen's
 habit of minimising on focus loss, for #2/#17 without DXGI). `truth.json` reports `advances` and
 `believesActive`; `input.jsonl` logs `WM_ACTIVATEAPP`/`WM_NCACTIVATE` and every `advance` with
-its reason, and `say <text>` shows that line as the dialogue until the next advance. `Desktop.exe game <dir> "" hookable` draws the dialogue with GDI `TextOutW`, a speaker
+its reason, and `say <text>` shows that line as the dialogue until the next advance (`say <a>|<b>`
+shows `<b>` as its second line too). `Desktop.exe game <dir> "" hookable` draws the dialogue with GDI `TextOutW`, a speaker
 nameplate with `DrawTextW` and a HUD string with `DrawTextExW`, so a text hooker's generic Windows
 API hooks see several threads; `truth.json` then reports `dialogue`, `speaker`, `hud` and `bits`.
 `type <a>|<b>` types like a game read by clicking twice quickly: the first frames of `<a>`, all of
 `<a>` at once, then `<b>` a character at a time, a frame every 30 ms, so the hooker gets them in one
 burst (`truth.json` `typing` is true until it is done). `typeout <text>` types `<text>` a character a
 frame and holds for a second at each `‖` in it, longer than the hooker waits, so a line arrives in
-two bursts, the second carrying on the first. After the Log checks the hook scenario
+two bursts, the second carrying on the first. `indent hooked|bare|off` draws the dialogue's second
+row an em in, as a game indents a wrapped line: `hooked` with a leading ideographic space (`　`), so
+the hooked text holds the indent, `bare` an em to the right with no space, so only where the glyphs
+are says it is indented. After the Log checks the hook scenario
 checks the card over the game (ui/hook-card.js): Auto align's place and size over several lines,
+an indented second row placed where the game draws it (with and without the indent in the hooked text;
+`KIMOCHI_E2E_HOOK_OCR=ppocr` or `meikiocr` reads it with an engine that boxes lines, not glyphs),
 that burst arriving as two clean lines, a paused line arriving as one, dragging (which turns Auto align off), −/+ and the opacity
 menu, Auto align turned back on, and Read along over the card and as the full-screen dictionary,
 driven by `controller-nav` events emitted from the overlay page (the pointer is moved off the

@@ -13,7 +13,7 @@ import { ingestText, preparedText } from './core/ingest'
 import { flushHistory, setHistorySource } from './core/history'
 import { loadSettings, getSettings } from './lib/settings'
 import { loadLanguage } from './core/language'
-import { acceptSnapshot, type ReaderSnapshot } from './bridge'
+import { acceptSnapshot, setLocalHost, type ReaderSnapshot } from './bridge'
 import { matchedSession, sourceKey, type SourceName } from './source-sessions'
 import { loadProfileRoot, setWritesPaused } from './core/profile'
 import { gameKey, type HookGames } from '../../ui/hook-games'
@@ -302,6 +302,39 @@ const allowed: Record<string, string[]> = {
   ],
   replacements: ['setReplacements', 'addReplacement', 'removeReplacement', 'updateReplacement', 'reorderReplacement']
 }
+/**
+ * One request to the Log (a module's method, or `host` `snapshot` / `ingest`), run in turn with
+ * everything else that changes it (`enqueue`), then the new state broadcast. `sessionId`: the
+ * session the caller saw, so a notebook or line change meant for another session is refused.
+ */
+function handle(module: string, method: string, args: unknown[], sessionId?: string): Promise<unknown> {
+  return enqueue(async () => {
+    let value: unknown
+    if (module === 'host' && method === 'snapshot') value = snapshot()
+    else if (module === 'host' && method === 'ingest') {
+      await ingestText(...(args as Parameters<typeof ingestText>))
+      await flush()
+    } else {
+      if (['notebook', 'store'].includes(module) && sessionId !== sessions.getActiveSession().id)
+        throw new Error('Session changed; please retry in the current session')
+      if (!allowed[module]?.includes(method)) throw new Error('Unsupported log operation')
+      const target = modules[module as keyof typeof modules] as unknown as Record<
+        string,
+        (...values: unknown[]) => unknown
+      >
+      if (module === 'notebook' && method === 'attachImage') args[1] = new Blob([new Uint8Array(args[1] as number[])])
+      value = await target[method](...args)
+      if (module === 'sessions' && ['switchSession', 'createSession'].includes(method) && sourceKey(currentSource)) {
+        bindings[sourceKey(currentSource)!] = sessions.getActiveSession().id
+        await setSetting('texthookerSourceSessions', bindings)
+      }
+      await flush()
+      pokeSync()
+    }
+    broadcast()
+    return value
+  })
+}
 export function startHost(): Promise<void> {
   if (!startup)
     startup = (async () => {
@@ -374,6 +407,8 @@ export function startHost(): Promise<void> {
         window.addEventListener('focus', () => {
           void invoke('sync_local_changed', { reason: 'focus' }).catch(() => undefined)
         })
+      // Another window's request, over events; the Log's own window calls `handle` directly
+      // (bridge.ts `setLocalHost`), in order, without a round trip through native.
       await listen<{
         id: string
         module: string
@@ -382,42 +417,12 @@ export function startHost(): Promise<void> {
         sessionId?: string
       }>('reader:request', (e) => {
         const { id, module, method, args, sessionId } = e.payload
-        void enqueue(async () => {
-          try {
-            let value: unknown
-            if (module === 'host' && method === 'snapshot') value = snapshot()
-            else if (module === 'host' && method === 'ingest') {
-              await ingestText(...(args as Parameters<typeof ingestText>))
-              await flush()
-            } else {
-              if (['notebook', 'store'].includes(module) && sessionId !== sessions.getActiveSession().id)
-                throw new Error('Session changed; please retry in the current session')
-              if (!allowed[module]?.includes(method)) throw new Error('Unsupported log operation')
-              const target = modules[module as keyof typeof modules] as unknown as Record<
-                string,
-                (...values: unknown[]) => unknown
-              >
-              if (module === 'notebook' && method === 'attachImage')
-                args[1] = new Blob([new Uint8Array(args[1] as number[])])
-              value = await target[method](...args)
-              if (
-                module === 'sessions' &&
-                ['switchSession', 'createSession'].includes(method) &&
-                sourceKey(currentSource)
-              ) {
-                bindings[sourceKey(currentSource)!] = sessions.getActiveSession().id
-                await setSetting('texthookerSourceSessions', bindings)
-              }
-              await flush()
-              pokeSync()
-            }
-            broadcast()
-            await emit('reader:response', { id, value })
-          } catch (error) {
-            await emit('reader:response', { id, error: String(error) })
-          }
-        })
+        handle(module, method, args, sessionId).then(
+          (value) => emit('reader:response', { id, value }),
+          (error) => emit('reader:response', { id, error: String(error) })
+        )
       })
+      setLocalHost(handle)
       await listen<{ source?: SourceName }>('state', (e) => {
         if (e.payload.source && sourceKey(e.payload.source) !== sourceKey(currentSource))
           void enqueue(async () => {

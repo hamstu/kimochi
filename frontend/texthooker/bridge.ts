@@ -37,7 +37,12 @@ export function subscribe(fn: (value: ReaderSnapshot) => void): () => void {
 async function connect(): Promise<void> {
   if (!ready) {
     ready = (async () => {
-      const unlistenSnapshot = await listen<ReaderSnapshot>('reader:snapshot', (e) => acceptSnapshot(e.payload))
+      // The Log's own window already has each snapshot (host.ts `broadcast`): its broadcast coming
+      // back, after a newer one, would put the Log back as it was a moment ago (a new line gone
+      // until the next change).
+      const unlistenSnapshot = await listen<ReaderSnapshot>('reader:snapshot', (e) => {
+        if (!localHost) acceptSnapshot(e.payload)
+      })
       try {
         await listen<{ id: string; value?: unknown; error?: string }>('reader:response', (e) => {
           const item = pending.get(e.payload.id)
@@ -58,9 +63,18 @@ async function connect(): Promise<void> {
   }
   return ready
 }
+/** The Log's own handler, in the window that owns it (host.ts `handle`): its calls go straight there. */
+type LocalHost = (module: string, method: string, args: unknown[], sessionId?: string) => Promise<unknown>
+let localHost: LocalHost | null = null
+export function setLocalHost(handler: LocalHost): void {
+  localHost = handler
+}
 export async function call<T>(module: string, method: string, args: unknown[] = [], timeoutMs = 60000): Promise<T> {
   // Capture before the first await: a snapshot may change while listeners connect.
   const sessionId = snapshot?.sessions.activeId
+  // In the Log's own window, in-process and in the order made: over events, two calls made a
+  // moment apart (two hooked lines in one burst) could reach the host the other way round.
+  if (localHost) return (await localHost(module, method, args, sessionId)) as T
   await connect()
   const id = crypto.randomUUID()
   return new Promise<T>((resolve, reject) => {

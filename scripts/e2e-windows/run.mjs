@@ -519,291 +519,370 @@ async function hookScenario() {
     p.close()
   }
 
-  await check('hook-card-shows-line', async () => {
-    // From nothing learned: Auto align on, no size, no place.
-    await setGame({ autoAlign: true })
-    await focusGame()
-    await say()
-    const t = await truth()
-    const c = await shown(t.dialogue)
-    return { text: c.text, font: c.font }
-  })
-
-  await check('hook-card-auto-aligns-steadily', async () => {
-    // Several lines, long and short: once aligned, the card's text sits on the game's, at the
-    // game's size, and neither moves from line to line.
-    await until(async () => (await game()).ocrBox, 20000)
-    const seen = []
-    for (const line of [freshLine(), 'はい。', freshLine(), 'そうか。']) {
+  // The card's look is the profile's (Settings → Text Hooker → Card style): pinned here, so the
+  // checks below see the card they expect. Transparent takes out its bar, buttons and corner and
+  // keeps Auto align on, so dragging, the size buttons and the menu need the ordinary card; the
+  // indent check sets Transparent itself. The profile's own look is put back at the end.
+  const style = (await invoke(overlay, 'settings_get', { key: 'overlayStyle' })) ?? {}
+  const look = (hookAppearance) =>
+    invoke(overlay, 'settings_set', { key: 'overlayStyle', value: { ...style, hookAppearance } })
+  await look('app')
+  try {
+    await check('hook-card-shows-line', async () => {
+      // From nothing learned: Auto align on, no size, no place.
+      await setGame({ autoAlign: true })
       await focusGame()
-      await command('say ' + line)
+      await say()
+      const t = await truth()
+      const c = await shown(t.dialogue)
+      return { text: c.text, font: c.font }
+    })
+
+    await check('hook-card-auto-aligns-steadily', async () => {
+      // Several lines, long and short: once aligned, the card's text sits on the game's, at the
+      // game's size, and neither moves from line to line.
+      await until(async () => (await game()).ocrBox, 20000)
+      const seen = []
+      for (const line of [freshLine(), 'はい。', freshLine(), 'そうか。']) {
+        await focusGame()
+        await command('say ' + line)
+        const t = await truth()
+        await shown(t.dialogue)
+        await sleep(3000)
+        const c = await card()
+        const first = t.lines.find((l) => l.text === line)
+        seen.push({ line, x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size, at: [c.x, c.emTop] })
+      }
+      for (const s of seen) {
+        assert(Math.abs(s.x) <= 8 * scale, `the text starts where the game's does (${s.x.toFixed(1)} px off)`)
+        assert(Math.abs(s.y) <= 8 * scale, `the glyphs sit on the game's (${s.y.toFixed(1)} px off)`)
+        assert(Math.abs(s.font - 1) <= 0.1, `at the game's size (${s.font.toFixed(3)})`)
+      }
+      const xs = seen.map((s) => s.at[0]),
+        ys = seen.map((s) => s.at[1])
+      assert(
+        Math.max(...xs) - Math.min(...xs) <= 2 * scale && Math.max(...ys) - Math.min(...ys) <= 2 * scale,
+        'the card does not move between lines: ' + JSON.stringify(seen)
+      )
+      return seen
+    })
+
+    // Where each of the card's rows starts: its first character that is not whitespace, in physical
+    // pixels (a row's margin, or a leading full-width space it shows, moves it).
+    const cardRows = () =>
+      overlay.eval(
+        `(()=>{const s=${SCREEN_SCALE},d=devicePixelRatio;return [...document.querySelectorAll('.hook-card .hook-card-row')].map((row)=>{const w=document.createTreeWalker(row,NodeFilter.SHOW_TEXT);let n;while((n=w.nextNode())){const m=/\\S/u.exec(n.data);if(!m)continue;const r=document.createRange();r.setStart(n,m.index);r.setEnd(n,m.index+1);const b=r.getBoundingClientRect();return {text:row.textContent,x:(screenX*s+b.left)*d,y:(screenY*s+b.top)*d}}return {text:row.textContent,x:null,y:null}})})()`
+      )
+    await check('hook-card-indented-row', async () => {
+      // A wrapped line whose second row the game draws an em in (Muv-Luv Alternative's
+      // 決起の目的を… over 現実的な…, a full-width space in): the card's second row starts where the
+      // game's does, whether the hooked text holds the indent (`indent hooked`: drawn with a leading
+      // U+3000) or not (`indent bare`: drawn an em to the right). OCR's geometry places the rows, not
+      // the hooked text's whitespace. Both rows are new text each time: a row that only moved may keep
+      // an earlier reading where Auto OCR reads only what changed. KIMOCHI_E2E_HOOK_OCR reads with
+      // another engine for this check (`ppocr`, `meikiocr`: engines that box lines, not glyphs).
+      const engine = process.env.KIMOCHI_E2E_HOOK_OCR
+      const ocrMode = engine ? await invoke(overlay, 'settings_get', { key: 'ocrMode' }) : null
+      const seen = { engine: engine ?? ocrMode ?? 'profile' }
+      try {
+        // Transparent, Auto align on: Ice's setup, where the card must sit exactly on the game's text.
+        await look('transparent')
+        if (engine) {
+          await invoke(overlay, 'settings_set', { key: 'ocrMode', value: engine })
+          await sleep(2000)
+        }
+        for (const kind of ['bare', 'hooked']) {
+          await command('indent ' + kind)
+          await focusGame()
+          await command(`say ${freshLine()}|${freshLine().replace('きょうは', 'あしたは')}`)
+          const t = await truth()
+          await shown(t.dialogue)
+          await sleep(3000)
+          // The rows with text (PaddleOCR may take in the small line above the box: an empty row).
+          const rows = (await cardRows()).filter((r) => r.text.trim())
+          const first = t.lines.find((l) => l.text.length > 3 && t.dialogue.startsWith(l.text))
+          const second = t.lines.find((l) => l !== first && l.text.length > 3 && t.dialogue.endsWith(l.text))
+          const ink = (line) => line.glyphs.find((g) => g.c.trim())
+          const want = [ink(first), ink(second)]
+          seen[kind] = {
+            hooked: t.dialogue,
+            rows: rows.map((r) => r.text),
+            x: rows.slice(0, 2).map((r, i) => (r.x === null ? null : Math.round(r.x - want[i].x))),
+            gameIndent: want[1].x - want[0].x,
+            cardIndent: rows[1]?.x != null && rows[0]?.x != null ? Math.round(rows[1].x - rows[0].x) : null
+          }
+        }
+      } finally {
+        await command('indent off')
+        await look('app')
+        if (engine) await invoke(overlay, 'settings_set', { key: 'ocrMode', value: ocrMode })
+      }
+      for (const kind of ['bare', 'hooked']) {
+        const s = seen[kind]
+        assert.equal(s.rows.length, 2, `${kind}: the card shows the game's two rows: ${JSON.stringify(s)}`)
+        assert(
+          s.x.every((dx) => dx !== null && Math.abs(dx) <= 8 * scale),
+          `${kind}: each row starts where the game's does: ${JSON.stringify(s)}`
+        )
+      }
+      return seen
+    })
+
+    await check('hook-typewriter-double-click', async () => {
+      // A line typed out, skipped to its end, and the next one typed out, all in one burst: two
+      // clean lines in the Log, the second on the card, nothing jumbled.
+      const seen = new Set((await logEntries()).map((e) => e.id))
+      const a = '「' + freshLine() + '」'
+      const b = '「' + freshLine() + '」'
+      await focusGame()
+      await command(`type ${a}|${b}`)
+      await until(async () => !(await truth()).typing, 10000)
+      const lines = await until(async () => {
+        const l = await newLines(seen)
+        return l.includes(b) ? l : false
+      }, 10000)
+      assert(lines.includes(a), 'the first line reaches the Log whole: ' + JSON.stringify(lines))
+      assert(
+        lines.every((l) => l === a || l === b),
+        'nothing jumbled reaches the Log: ' + JSON.stringify(lines)
+      )
+      await shown(b)
+      return lines
+    })
+
+    await check('hook-typewriter-pause', async () => {
+      // A line that holds for a second before a drawn-out "ーーー", longer than the hooker waits: it
+      // arrives in two bursts, the second carrying on the first. One whole line in the Log (the
+      // part before the pause replaced, never left as a fragment) and on the card.
+      const seen = new Set((await logEntries()).map((e) => e.id))
+      const line = '「' + freshLine() + '、ん' + 'ーーーーーっ」'
+      // Each webview hears a broadcast once per webview: kept once per id.
+      await overlay.eval(
+        `window.__hookLines=new Map();window.__TAURI__.event.listen("texthook-line",(e)=>window.__hookLines.set(e.payload.id,e.payload))`
+      )
+      await focusGame()
+      await command(`typeout ${line.replace('、んー', '、ん‖ー')}`)
+      await until(async () => !(await truth()).typing, 15000)
+      const lines = await until(async () => {
+        const l = await newLines(seen)
+        return l.includes(line) ? l : false
+      }, 10000)
+      const sent = await overlay.eval(`JSON.stringify([...window.__hookLines.values()])`).then(JSON.parse)
+      assert(
+        lines.length === 1,
+        'one line in the Log, the part before the pause replaced: ' + JSON.stringify({ lines, sent })
+      )
+      assert(
+        sent.length >= 2 && sent.at(-1).replaces === sent.at(-2).id,
+        'it came in two pieces, the second replacing the first: ' + JSON.stringify(sent)
+      )
+      await shown(line).catch((error) => {
+        throw Error(error.message + ' after ' + JSON.stringify(sent))
+      })
+      return lines
+    })
+
+    await check('hook-card-drag-takes-over', async () => {
+      await focusGame()
+      await say()
+      const before = await settled((await truth()).dialogue)
+      const from = { x: Math.round(before.bar.x - 60), y: Math.round(before.bar.y) }
+      // Over the game, the card takes the mouse only with the lookup key held (click-through, on by
+      // default): a plain press on its bar goes to the game, as it should.
+      desktop('key', 16, 'down')
+      const trail = []
+      try {
+        desktop('mouse', from.x, from.y)
+        await sleep(200)
+        desktop('mouse', from.x, from.y, 'down')
+        await sleep(120)
+        for (let i = 1; i <= 8; i++) {
+          desktop('mouse', from.x - i * 20, from.y - i * 12)
+          await sleep(35)
+          const c = await card()
+          trail.push([Math.round(c.x - before.x), Math.round(c.y - before.y)])
+        }
+        desktop('mouse', from.x - 160, from.y - 96, 'up')
+      } finally {
+        desktop('key', 16, 'up')
+      }
+      await sleep(600)
+      const after = await card()
+      const g = await game()
+      for (const [i, [dx, dy]] of trail.entries())
+        assert(
+          Math.abs(dx + (i + 1) * 20) <= 3 && Math.abs(dy + (i + 1) * 12) <= 3,
+          'the card follows the pointer: ' + JSON.stringify(trail)
+        )
+      assert(
+        Math.abs(after.x - before.x + 160) <= 3 && Math.abs(after.y - before.y + 96) <= 3,
+        'and stays where it was let go'
+      )
+      assert(g.autoAlign === false && g.box, 'dragging turns Auto align off and keeps the place')
+      // A new line keeps the reader's place.
+      await focusGame()
+      await say()
+      const next = await shown((await truth()).dialogue)
+      assert(
+        Math.abs(next.x - after.x) <= 2 * scale && Math.abs(next.y - after.y) <= 2 * scale,
+        'the next line stays there'
+      )
+      return { trail, box: g.box }
+    })
+
+    await check('hook-card-text-size-and-menu', async () => {
+      const before = await card()
+      await press(before.larger)
+      const larger = await until(async () => {
+        const c = await card()
+        return c.font > before.font * 1.05 ? c : false
+      }, 4000)
+      await press(larger.smaller)
+      const back = await until(async () => {
+        const c = await card()
+        return Math.abs(c.font - before.font) < 1 ? c : false
+      }, 4000)
+      await press(back.more)
+      const open = await until(async () => {
+        const c = await card()
+        return c.menu ? c : false
+      }, 4000)
+      await press(open.menu.find((o) => o.value === 0.7))
+      const g = await until(async () => {
+        const g = await game()
+        return g.opacity === 0.7 ? g : false
+      }, 4000)
+      const opacity = await overlay.eval(`getComputedStyle(document.querySelector('.hook-card'),'::before').opacity`)
+      assert(Math.abs(Number(opacity) - 0.7) < 0.01, "the card's background fades, not its text")
+      return { font: [before.font, larger.font, back.font], opacity: g.opacity }
+    })
+
+    await check('hook-auto-align-back-on', async () => {
+      // Back on from the panel, it forgets the reader's size and aligns again. The reader's size is
+      // made plainly bigger than the game's first, so taking the game's again shows.
+      const reader = await game()
+      await setGame({ ...reader, text: (reader.text ?? 0.035) * 1.4 })
+      const p = await page('panel.html')
+      try {
+        let seen = null
+        await until(async () => {
+          seen = await p.eval(
+            `(()=>{const b=document.querySelector('button[aria-label="Auto align"]');return b?{checked:b.getAttribute('aria-checked'),disabled:b.disabled}:null})()`
+          )
+          return seen?.checked === 'false'
+        }, 4000).catch(async (error) => {
+          throw Error(`${error.message}: the switch ${JSON.stringify(seen)}, the game ${JSON.stringify(await game())}`)
+        })
+        await click(p, 'button[aria-label="Auto align"]')
+      } finally {
+        p.close()
+      }
+      // On is the default, so turning it back on takes away the game's own setting (`withSetting`):
+      // it follows the default again rather than storing `true`.
+      await until(async () => (await game()).autoAlign !== false, 4000)
+      await focusGame()
+      await say()
+      const t = await truth()
+      await until(async () => (await game()).ocrBox, 20000)
+      await sleep(800)
+      const c = await card()
+      const first = t.lines.find((l) => l.text.length > 3 && t.dialogue.startsWith(l.text))
+      assert(
+        Math.abs(c.font / first.size - 1) <= 0.1,
+        `the game's text size again, not the reader's (${c.font} vs ${first.size})`
+      )
+      assert(
+        Math.abs(c.x - first.x) <= 8 * scale && Math.abs(c.emTop - first.y) <= 8 * scale,
+        "and lines up with the game's text again"
+      )
+      return { x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size }
+    })
+
+    // A pad button pressed and let go, as native reports the controller (src-tauri/src/gamepad.rs).
+    const navEvent = (pressed, released, held) =>
+      overlay.eval(
+        `window.__TAURI__.event.emit('controller-nav',${JSON.stringify({ pressed, released, held, stick: { x: 0, y: 0 }, rstick: { x: 0, y: 0 } })})`
+      )
+    const nav = async (buttons) => {
+      await navEvent(buttons, [], buttons)
+      await sleep(80)
+      await navEvent([], buttons, [])
+    }
+    let menuSeen = null
+    const readAlong = async () => {
+      await focusGame()
+      // Out of the way: the menu's wedges follow the mouse, and a pad reader's is wherever it was.
+      desktop('mouse', 2, 2)
+      await sleep(150)
+      await invoke(overlay, 'trigger_action', { name: 'openControllerMenu' })
+      await until(() => overlay.eval(`Boolean(document.querySelector('#controller .cm-ring'))`), 4000).catch(() => null)
+      await sleep(400)
+      // What the menu offers and has selected, for a failure to say.
+      menuSeen = await overlay.eval(
+        `[...document.querySelectorAll("#controller .cm-item")].map((e) => (e.classList.contains("cm-selected") ? "*" : "") + e.textContent.trim())`
+      )
+      await nav([0]) // A: Read along, where the menu starts when the line is in
+    }
+    const leave = async () => {
+      await nav([1]) // B
+      await sleep(500)
+      await nav([1])
+      await sleep(500)
+    }
+
+    await check('hook-read-along', async () => {
+      // Read along as the pop-up style, over the text (Settings → Overlay → Game Mode).
+      const view = (await invoke(overlay, 'settings_get', { key: 'gameModeSettings' })) ?? {}
+      await invoke(overlay, 'settings_set', { key: 'gameModeSettings', value: { ...view, dictionaryView: 'popup' } })
+      await focusGame()
+      await say()
       const t = await truth()
       await shown(t.dialogue)
-      await sleep(3000)
-      const c = await card()
-      const first = t.lines.find((l) => l.text === line)
-      seen.push({ line, x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size, at: [c.x, c.emTop] })
-    }
-    for (const s of seen) {
-      assert(Math.abs(s.x) <= 8 * scale, `the text starts where the game's does (${s.x.toFixed(1)} px off)`)
-      assert(Math.abs(s.y) <= 8 * scale, `the glyphs sit on the game's (${s.y.toFixed(1)} px off)`)
-      assert(Math.abs(s.font - 1) <= 0.1, `at the game's size (${s.font.toFixed(3)})`)
-    }
-    const xs = seen.map((s) => s.at[0]),
-      ys = seen.map((s) => s.at[1])
-    assert(
-      Math.max(...xs) - Math.min(...xs) <= 2 * scale && Math.max(...ys) - Math.min(...ys) <= 2 * scale,
-      'the card does not move between lines'
-    )
-    return seen
-  })
-
-  await check('hook-typewriter-double-click', async () => {
-    // A line typed out, skipped to its end, and the next one typed out, all in one burst: two
-    // clean lines in the Log, the second on the card, nothing jumbled.
-    const seen = new Set((await logEntries()).map((e) => e.id))
-    const a = '「' + freshLine() + '」'
-    const b = '「' + freshLine() + '」'
-    await focusGame()
-    await command(`type ${a}|${b}`)
-    await until(async () => !(await truth()).typing, 10000)
-    const lines = await until(async () => {
-      const l = await newLines(seen)
-      return l.includes(b) ? l : false
-    }, 10000)
-    assert(lines.includes(a), 'the first line reaches the Log whole: ' + JSON.stringify(lines))
-    assert(
-      lines.every((l) => l === a || l === b),
-      'nothing jumbled reaches the Log: ' + JSON.stringify(lines)
-    )
-    await shown(b)
-    return lines
-  })
-
-  await check('hook-typewriter-pause', async () => {
-    // A line that holds for a second before a drawn-out "ーーー", longer than the hooker waits: it
-    // arrives in two bursts, the second carrying on the first. One whole line in the Log (the
-    // part before the pause replaced, never left as a fragment) and on the card.
-    const seen = new Set((await logEntries()).map((e) => e.id))
-    const line = '「' + freshLine() + '、ん' + 'ーーーーーっ」'
-    // Each webview hears a broadcast once per webview: kept once per id.
-    await overlay.eval(
-      `window.__hookLines=new Map();window.__TAURI__.event.listen("texthook-line",(e)=>window.__hookLines.set(e.payload.id,e.payload))`
-    )
-    await focusGame()
-    await command(`typeout ${line.replace('、んー', '、ん‖ー')}`)
-    await until(async () => !(await truth()).typing, 15000)
-    const lines = await until(async () => {
-      const l = await newLines(seen)
-      return l.includes(line) ? l : false
-    }, 10000)
-    const sent = await overlay.eval(`JSON.stringify([...window.__hookLines.values()])`).then(JSON.parse)
-    assert(
-      lines.length === 1,
-      'one line in the Log, the part before the pause replaced: ' + JSON.stringify({ lines, sent })
-    )
-    assert(
-      sent.length >= 2 && sent.at(-1).replaces === sent.at(-2).id,
-      'it came in two pieces, the second replacing the first: ' + JSON.stringify(sent)
-    )
-    await shown(line).catch((error) => {
-      throw Error(error.message + ' after ' + JSON.stringify(sent))
-    })
-    return lines
-  })
-
-  await check('hook-card-drag-takes-over', async () => {
-    await focusGame()
-    await say()
-    const before = await settled((await truth()).dialogue)
-    const from = { x: Math.round(before.bar.x - 60), y: Math.round(before.bar.y) }
-    // Over the game, the card takes the mouse only with the lookup key held (click-through, on by
-    // default): a plain press on its bar goes to the game, as it should.
-    desktop('key', 16, 'down')
-    const trail = []
-    try {
-      desktop('mouse', from.x, from.y)
-      await sleep(200)
-      desktop('mouse', from.x, from.y, 'down')
-      await sleep(120)
-      for (let i = 1; i <= 8; i++) {
-        desktop('mouse', from.x - i * 20, from.y - i * 12)
-        await sleep(35)
-        const c = await card()
-        trail.push([Math.round(c.x - before.x), Math.round(c.y - before.y)])
-      }
-      desktop('mouse', from.x - 160, from.y - 96, 'up')
-    } finally {
-      desktop('key', 16, 'up')
-    }
-    await sleep(600)
-    const after = await card()
-    const g = await game()
-    for (const [i, [dx, dy]] of trail.entries())
-      assert(
-        Math.abs(dx + (i + 1) * 20) <= 3 && Math.abs(dy + (i + 1) * 12) <= 3,
-        'the card follows the pointer: ' + JSON.stringify(trail)
-      )
-    assert(
-      Math.abs(after.x - before.x + 160) <= 3 && Math.abs(after.y - before.y + 96) <= 3,
-      'and stays where it was let go'
-    )
-    assert(g.autoAlign === false && g.box, 'dragging turns Auto align off and keeps the place')
-    // A new line keeps the reader's place.
-    await focusGame()
-    await say()
-    const next = await shown((await truth()).dialogue)
-    assert(
-      Math.abs(next.x - after.x) <= 2 * scale && Math.abs(next.y - after.y) <= 2 * scale,
-      'the next line stays there'
-    )
-    return { trail, box: g.box }
-  })
-
-  await check('hook-card-text-size-and-menu', async () => {
-    const before = await card()
-    await press(before.larger)
-    const larger = await until(async () => {
-      const c = await card()
-      return c.font > before.font * 1.05 ? c : false
-    }, 4000)
-    await press(larger.smaller)
-    const back = await until(async () => {
-      const c = await card()
-      return Math.abs(c.font - before.font) < 1 ? c : false
-    }, 4000)
-    await press(back.more)
-    const open = await until(async () => {
-      const c = await card()
-      return c.menu ? c : false
-    }, 4000)
-    await press(open.menu.find((o) => o.value === 0.7))
-    const g = await until(async () => {
-      const g = await game()
-      return g.opacity === 0.7 ? g : false
-    }, 4000)
-    const opacity = await overlay.eval(`getComputedStyle(document.querySelector('.hook-card'),'::before').opacity`)
-    assert(Math.abs(Number(opacity) - 0.7) < 0.01, "the card's background fades, not its text")
-    return { font: [before.font, larger.font, back.font], opacity: g.opacity }
-  })
-
-  await check('hook-auto-align-back-on', async () => {
-    // Back on from the panel, it forgets the reader's size and aligns again. The reader's size is
-    // made plainly bigger than the game's first, so taking the game's again shows.
-    const reader = await game()
-    await setGame({ ...reader, text: (reader.text ?? 0.035) * 1.4 })
-    const p = await page('panel.html')
-    try {
-      await until(
-        () =>
-          p.eval(`document.querySelector('button[aria-label="Auto align"]')?.getAttribute('aria-checked')==='false'`),
-        4000
-      )
-      await click(p, 'button[aria-label="Auto align"]')
-    } finally {
-      p.close()
-    }
-    await until(async () => (await game()).autoAlign === true, 4000)
-    await focusGame()
-    await say()
-    const t = await truth()
-    await until(async () => (await game()).ocrBox, 20000)
-    await sleep(800)
-    const c = await card()
-    const first = t.lines.find((l) => l.text.length > 3 && t.dialogue.startsWith(l.text))
-    assert(
-      Math.abs(c.font / first.size - 1) <= 0.1,
-      `the game's text size again, not the reader's (${c.font} vs ${first.size})`
-    )
-    assert(
-      Math.abs(c.x - first.x) <= 8 * scale && Math.abs(c.emTop - first.y) <= 8 * scale,
-      "and lines up with the game's text again"
-    )
-    return { x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size }
-  })
-
-  // A pad button pressed and let go, as native reports the controller (src-tauri/src/gamepad.rs).
-  const navEvent = (pressed, released, held) =>
-    overlay.eval(
-      `window.__TAURI__.event.emit('controller-nav',${JSON.stringify({ pressed, released, held, stick: { x: 0, y: 0 }, rstick: { x: 0, y: 0 } })})`
-    )
-  const nav = async (buttons) => {
-    await navEvent(buttons, [], buttons)
-    await sleep(80)
-    await navEvent([], buttons, [])
-  }
-  let menuSeen = null
-  const readAlong = async () => {
-    await focusGame()
-    // Out of the way: the menu's wedges follow the mouse, and a pad reader's is wherever it was.
-    desktop('mouse', 2, 2)
-    await sleep(150)
-    await invoke(overlay, 'trigger_action', { name: 'openControllerMenu' })
-    await until(() => overlay.eval(`Boolean(document.querySelector('#controller .cm-ring'))`), 4000).catch(() => null)
-    await sleep(400)
-    // What the menu offers and has selected, for a failure to say.
-    menuSeen = await overlay.eval(
-      `[...document.querySelectorAll("#controller .cm-item")].map((e) => (e.classList.contains("cm-selected") ? "*" : "") + e.textContent.trim())`
-    )
-    await nav([0]) // A: Read along, where the menu starts when the line is in
-  }
-  const leave = async () => {
-    await nav([1]) // B
-    await sleep(500)
-    await nav([1])
-    await sleep(500)
-  }
-
-  await check('hook-read-along', async () => {
-    // Read along as the pop-up style, over the text (Settings → Overlay → Game Mode).
-    const view = (await invoke(overlay, 'settings_get', { key: 'gameModeSettings' })) ?? {}
-    await invoke(overlay, 'settings_set', { key: 'gameModeSettings', value: { ...view, dictionaryView: 'popup' } })
-    await focusGame()
-    await say()
-    const t = await truth()
-    await shown(t.dialogue)
-    await readAlong()
-    // Stepping through the card's words: the lit word is on the card, which stays up although the
-    // game no longer has the focus.
-    let miss = null
-    const lit = await until(async () => {
-      const v = await overlay.eval(
-        `(()=>{const w=document.querySelector('#controller .cm-word');const c=document.querySelector('.hook-card');if(!w||!c||c.hidden)return {miss:{word:Boolean(w),card:c?!c.hidden:null,controller:document.querySelector('#controller')?.innerText.slice(0,80)}};const a=w.getBoundingClientRect(),b=c.querySelector('.hook-card-text').getBoundingClientRect();return a.left>=b.left-4&&a.right<=b.right+4&&a.top>=b.top-4&&a.bottom<=b.bottom+4?{word:a.toJSON(),card:b.toJSON()}:{miss:{word:a.toJSON(),card:b.toJSON()}}})()`
-      )
-      if (!v?.miss) return v
-      miss = { ...v.miss, foreground: JSON.parse(desktop('windows')).find((w) => w.foreground)?.title }
-      return false
-    }, 8000).catch((error) => {
-      throw Error(`no lit word on the card: ${JSON.stringify(miss)}, menu ${JSON.stringify(menuSeen)} (${error})`)
-    })
-    await leave()
-    return lit
-  })
-
-  await check('hook-read-along-full-screen', async () => {
-    const before = (await invoke(overlay, 'settings_get', { key: 'gameModeSettings' })) ?? {}
-    await invoke(overlay, 'settings_set', {
-      key: 'gameModeSettings',
-      value: { ...before, dictionaryView: 'fullscreen' }
-    })
-    await sleep(300)
-    try {
-      const t = await truth()
       await readAlong()
-      const text = await until(
-        () =>
-          overlay.eval(
-            `(()=>{const e=document.querySelector('.gd-root');return e?[...e.querySelectorAll('.gd-line')].map(x=>x.textContent).join(''):null})()`
-          ),
-        8000
-      )
-      assert(compact(text) === compact(t.dialogue), 'the hooked line across the top: ' + text)
+      // Stepping through the card's words: the lit word is on the card, which stays up although the
+      // game no longer has the focus.
+      let miss = null
+      const lit = await until(async () => {
+        const v = await overlay.eval(
+          `(()=>{const w=document.querySelector('#controller .cm-word');const c=document.querySelector('.hook-card');if(!w||!c||c.hidden)return {miss:{word:Boolean(w),card:c?!c.hidden:null,controller:document.querySelector('#controller')?.innerText.slice(0,80)}};const a=w.getBoundingClientRect(),b=c.querySelector('.hook-card-text').getBoundingClientRect();return a.left>=b.left-4&&a.right<=b.right+4&&a.top>=b.top-4&&a.bottom<=b.bottom+4?{word:a.toJSON(),card:b.toJSON()}:{miss:{word:a.toJSON(),card:b.toJSON()}}})()`
+        )
+        if (!v?.miss) return v
+        miss = { ...v.miss, foreground: JSON.parse(desktop('windows')).find((w) => w.foreground)?.title }
+        return false
+      }, 8000).catch((error) => {
+        throw Error(`no lit word on the card: ${JSON.stringify(miss)}, menu ${JSON.stringify(menuSeen)} (${error})`)
+      })
       await leave()
-      return text
-    } finally {
-      await invoke(overlay, 'settings_set', { key: 'gameModeSettings', value: before })
-    }
-  })
+      return lit
+    })
+
+    await check('hook-read-along-full-screen', async () => {
+      const before = (await invoke(overlay, 'settings_get', { key: 'gameModeSettings' })) ?? {}
+      await invoke(overlay, 'settings_set', {
+        key: 'gameModeSettings',
+        value: { ...before, dictionaryView: 'fullscreen' }
+      })
+      await sleep(300)
+      try {
+        const t = await truth()
+        await readAlong()
+        const text = await until(
+          () =>
+            overlay.eval(
+              `(()=>{const e=document.querySelector('.gd-root');return e?[...e.querySelectorAll('.gd-line')].map(x=>x.textContent).join(''):null})()`
+            ),
+          8000
+        )
+        assert(compact(text) === compact(t.dialogue), 'the hooked line across the top: ' + text)
+        await leave()
+        return text
+      } finally {
+        await invoke(overlay, 'settings_set', { key: 'gameModeSettings', value: before })
+      }
+    })
+  } finally {
+    await invoke(overlay, 'settings_set', { key: 'overlayStyle', value: style })
+  }
   await evidence('hook')
   return picked
 }

@@ -73,8 +73,10 @@ public class Game : Form {
  // engines do (a game told it is active and never told otherwise keeps reading the keyboard, #27).
  string skip="off"; bool appActive; bool minimizeOnBlur; int advances;
  // "say <text>": the dialogue's first line until the next advance, so a test can show a line the
- // Log has not seen before (the Log drops a line that repeats a recent one).
- string said;
+ // Log has not seen before (the Log drops a line that repeats a recent one). "say <a>|<b>": <b> is
+ // its second line too, so both rows are new text (a row that only moves may keep an earlier
+ // reading where Auto OCR reads only what changed).
+ string said, saidSecond;
  // "type <a>|<b>": a game typing its text out, read by clicking twice quickly: the first few
  // frames of <a>, then all of <a> at once (the first click), then <b> typed out a character at a
  // time (the second click), a frame every 30 ms, so a text hooker gets every frame in one burst.
@@ -85,6 +87,11 @@ public class Game : Form {
  // "hookable": the dialogue is drawn with TextOutW, a speaker nameplate with DrawTextW and a HUD
  // string with DrawTextExW (LunaHook's generic API hooks cover all three, not ExtTextOutW), so a text hooker finds several threads and must pick the dialogue one.
  public bool hookable;
+ // "indent hooked|bare|off": the dialogue's second row a whole em in, as a game indents a wrapped
+ // line (Muv-Luv's "　現実的な…"). "hooked" draws the row's text with a leading ideographic space, so a
+ // text hooker gets the indent; "bare" draws it without one, an em further right, so the hooked text
+ // has none and only where the glyphs are says it is indented.
+ string indent="off";
  public const string Speaker="ミサキ", Hud="オート　スキップ　セーブ";
  void Advance(string reason){page++;advances++;Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="advance",reason,page,foreground=Native.GetForegroundWindow()==Handle});Invalidate();}
  public Game(string folder,string title=null) {
@@ -110,8 +117,8 @@ public class Game : Form {
   if(keys[17]&&(skip=="active"&&appActive||skip=="focused"&&Native.GetForegroundWindow()==Handle)) Advance(Native.GetForegroundWindow()==Handle?"ctrl-skip":"ctrl-skip-unfocused");
   string file=Path.Combine(dir,"command.txt"); if(!File.Exists(file))return; string cmd; try{cmd=File.ReadAllText(file).Trim();File.Delete(file);}catch(IOException){return;}
   Write(new{kind="command",command=cmd,time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
-  if(cmd=="advance"){said=null;alone=false;Advance("command");}
-  else if(cmd.StartsWith("say ")){said=cmd.Substring(4);alone=false;Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="say",text=said});Invalidate();}
+  if(cmd=="advance"){said=null;saidSecond=null;alone=false;Advance("command");}
+  else if(cmd.StartsWith("say ")){var parts=cmd.Substring(4).Split('|');said=parts[0];saidSecond=parts.Length>1?parts[1]:null;alone=false;Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="say",text=said});Invalidate();}
   else if(cmd.StartsWith("type ")){
    var parts=cmd.Substring(5).Split('|'); typing.Clear();
    string a=parts[0]; for(int n=1;n<=Math.Min(4,a.Length);n++)typing.Enqueue(a.Substring(0,n)); typing.Enqueue(a);
@@ -126,6 +133,7 @@ public class Game : Form {
    StartTyping();
   }
   else if(cmd.StartsWith("skip "))skip=cmd.Substring(5);
+  else if(cmd=="indent hooked"||cmd=="indent bare"||cmd=="indent off"){indent=cmd.Substring(7);Invalidate();}
   else if(cmd=="minimize-on-blur on"||cmd=="minimize-on-blur off")minimizeOnBlur=cmd.EndsWith("on"); else if(cmd=="close")Close(); else if(cmd=="minimize")WindowState=FormWindowState.Minimized;
   // .NET's Cursor.Hide: ShowCursor(FALSE) through P/Invoke, looked up at run time (no import slot).
   else if(cmd=="hidecursor")Cursor.Hide(); else if(cmd=="showcursor")Cursor.Show();
@@ -160,17 +168,18 @@ public class Game : Form {
   line("回想",65,55,38,false);line("音楽",65,125,38,false);line("想",65,195,38,false);line("回",135,195,38,false);
   line("日本語の本を読む",ClientSize.Width-90,45,28,true);
   line("にほんご",50,ClientSize.Height-190,14,false);
-  string first=said??(page%2==0?"今日は猫と一緒に学校へ行きます。":"明日は友達と日本語の本を読みます。"),second="青い空と静かな海が好きです。";
+  string first=said??(page%2==0?"今日は猫と一緒に学校へ行きます。":"明日は友達と日本語の本を読みます。"),second=saidSecond??"青い空と静かな海が好きです。";
+  int secondX=50; if(indent=="hooked")second="\u3000"+second; else if(indent=="bare")secondX+=28;
   var gdi=new List<Tuple<string,int,int,int,string>>();
   if(hookable){
    // Recorded in the truth like the GDI+ lines, then drawn below with GDI once the frame is up.
    Action<string,int,int,int,string> record=(text,x,y,size,api)=>{line(text,x,y,size,false);gdi.Add(Tuple.Create(text,x,y,size,api));};
    recordOnly=true;
-   record(Speaker,50,ClientSize.Height-255,24,"DrawTextW"); record(first,50,ClientSize.Height-165,28,"TextOutW"); if(!alone)record(second,50,ClientSize.Height-105,28,"TextOutW"); record(Hud,ClientSize.Width-420,20,18,"DrawTextExW");
+   record(Speaker,50,ClientSize.Height-255,24,"DrawTextW"); record(first,50,ClientSize.Height-165,28,"TextOutW"); if(!alone)record(second,secondX,ClientSize.Height-105,28,"TextOutW"); record(Hud,ClientSize.Width-420,20,18,"DrawTextExW");
    recordOnly=false;
   } else {
   line(first,50,ClientSize.Height-165,28,false);
-  line(second,50,ClientSize.Height-105,28,false);
+  line(second,secondX,ClientSize.Height-105,28,false);
   }
   targetGraphics.DrawImageUnscaled(bitmap,0,0);
   if(gdi.Count>0){
@@ -187,7 +196,7 @@ public class Game : Form {
     }
    } finally { targetGraphics.ReleaseHdc(dc); }
   }
-  var truth=new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),pid=System.Diagnostics.Process.GetCurrentProcess().Id,bits=IntPtr.Size*8,hookable,dialogue=hookable?(alone?first:first+second):null,typing=typing.Count>0,speaker=hookable?Speaker:null,hud=hookable?Hud:null,page,advances,skip,believesActive=appActive,minimizeOnBlur,mode,renderer="GDI",hwnd=Handle.ToInt64(),dpi=Native.GetDpiForWindow(Handle),client=new{x=origin.X,y=origin.Y,width=ClientSize.Width,height=ClientSize.Height},lines,words};
+  var truth=new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),pid=System.Diagnostics.Process.GetCurrentProcess().Id,bits=IntPtr.Size*8,hookable,indent,dialogue=hookable?(alone?first:first+second):null,typing=typing.Count>0,speaker=hookable?Speaker:null,hud=hookable?Hud:null,page,advances,skip,believesActive=appActive,minimizeOnBlur,mode,renderer="GDI",hwnd=Handle.ToInt64(),dpi=Native.GetDpiForWindow(Handle),client=new{x=origin.X,y=origin.Y,width=ClientSize.Width,height=ClientSize.Height},lines,words};
   string path=Path.Combine(dir,"truth.json"); File.WriteAllText(path+".tmp",json.Serialize(truth)); if(File.Exists(path))File.Replace(path+".tmp",path,null);else File.Move(path+".tmp",path);
   }
  }

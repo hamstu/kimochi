@@ -65,7 +65,7 @@ import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { annotationGroups, fullWidth, hookAnnotations, readSpan, splitSpeaker } from './hook-match.js'
 import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
-import { glyphGeometry, OWN_PITCH_GLYPHS } from './hook-glyphs.js'
+import { glyphGeometry, leadingSpaces, OWN_PITCH_GLYPHS, rowIndents } from './hook-glyphs.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookSettings, withLegacyShowCard } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
@@ -347,6 +347,12 @@ const HOOK_FIT_AGREE = 0.1
  */
 const HOOK_PIN_SNAP = 0.15
 const HOOK_PIN_SNAP_BRACKETED = 0.5
+/**
+ * A first row with fewer glyphs than this placed (はい。: two) says where the line starts only
+ * roughly, a few pixels either way: within half a glyph of where the game's lines start it is
+ * there, and it does not move that place for the lines after it.
+ */
+const HOOK_PIN_SURE_GLYPHS = 4
 const HOOK_PIN_READINGS = 8
 /** How far (in frame pixels) a reading must move a line's glyphs to move the card's (`hookGlyphsFrom`). */
 const HOOK_GLYPH_STILL = 0.75
@@ -1643,7 +1649,12 @@ function hookAligned(annotations) {
   const rows = placed.annotations[0]?.lineTexts
   const bare = (value) => String(value).replace(/\s/g, '')
   if (whole && Array.isArray(rows) && rows.length > 1 && bare(rows.join('')) === bare(placed.shown)) {
-    const wrap = { line: hook.line, shown: placed.shown, rows }
+    // Where the game's ink of each row starts (OCR's row boxes, shares of the frame): an indented
+    // row starts further in, whatever the hooked text holds there (`rowIndents`).
+    const polygons = placed.annotations[0]?.linePolygons ?? []
+    const across = placed.annotations[0]?.orientation !== 'vertical' && polygons.length === rows.length
+    const lefts = across ? polygons.map((p) => (Math.min(...p.map(([x]) => x)) + cx) / fw) : null
+    const wrap = { line: hook.line, shown: placed.shown, rows, lefts }
     if (JSON.stringify(wrap) !== JSON.stringify(hook.wrap)) {
       hook.wrap = wrap
       queueMicrotask(syncHookCard)
@@ -1790,7 +1801,10 @@ function hookGlyphsFrom(placed, annotations, { cx, cy, fw, fh }) {
     rows: rows.length,
     glyphs: used,
     pitch: Math.round(geometry.pitch * 10) / 10,
-    error: Math.round(geometry.error * 10) / 10
+    error: Math.round(geometry.error * 10) / 10,
+    // Where each row starts by its glyphs, and where OCR's box for it does (frame pixels).
+    starts: geometry.rows.map((r) => (r.start === null ? null : Math.round(r.start))),
+    lefts: polygons.map((p) => Math.round(Math.min(...p.map(([x]) => x))))
   })
   queueMicrotask(syncHookCard)
 }
@@ -1888,6 +1902,30 @@ function hookCardView() {
     // The first row's ink in OCR's box (the rows below it are a pitch apart), centred on the card's
     // first row's: right however many rows the card ends up showing (one, while `pending`).
     const firstRow = Math.max(ink.height * 0.5, atHeight - (atRows - 1) * pitch)
+    // Each row where OCR found the game's row, on the game's own rows: an indented row (現実的な…
+    // a full-width space in, under a full first row) starts as far in on the card, whether or not
+    // the hooked text holds the indent (`rowIndents`). Null where OCR gave no row boxes; the
+    // glyphs, where an engine boxed them, place the rows more exactly still (below).
+    const rowLefts =
+      gameRows && wrap.lefts?.length === gameRows.length && ink.rows?.length === gameRows.length
+        ? wrap.lefts.map((x) => x * bounds.width)
+        : null
+    const leads = rowLefts ? gameRows.map(leadingSpaces) : null
+    const offsetsAt = (s) =>
+      rowLefts
+        ? rowIndents(
+            rowLefts,
+            ink.rows.map((row) => row.left),
+            leads,
+            s,
+            fontPx
+          )
+        : null
+    // Where the card's leftmost ink is in its text box at spacing `s`, its rows so placed.
+    const inkLeftAt = (s) => {
+      const offsets = offsetsAt(s)
+      return offsets ? Math.min(...ink.rows.map((row, i) => offsets[i] + row.left + leads[i] * s)) : ink.left
+    }
     // Until a reading finds this line, where the last line's text started: a game starts each
     // line where it started the last (an em before a 「, which inks half an em in), and nearer
     // than the last line's ink would put it. Kept with its box, so a move of the text box is not
@@ -1932,10 +1970,13 @@ function hookCardView() {
         span = {
           chars: widest.chars,
           bracketed: bracketed(whole[0], whole.at(-1)),
-          at: (s) => ({
-            left: ink.left,
-            right: Math.max(...ink.rows.map((row) => row.right + s * (row.chars - 1)))
-          })
+          at: (s) => {
+            const offsets = offsetsAt(s)
+            return {
+              left: inkLeftAt(s),
+              right: Math.max(...ink.rows.map((row, i) => (offsets?.[i] ?? 0) + row.right + s * (row.chars - 1)))
+            }
+          }
         }
       }
     }
@@ -1972,7 +2013,7 @@ function hookCardView() {
     let measured = null
     if (own && cardRows) {
       const y = at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
-      if (!exactRead) measured = { x: at.x * bounds.width - ink.left, y }
+      if (!exactRead) measured = { x: at.x * bounds.width - inkLeftAt(spacing), y }
       else if (trusted) {
         const { left, right } = span.at(spacing)
         measured = { x: (at.x + at.width / 2) * bounds.width - (left + right) / 2, y }
@@ -2031,7 +2072,7 @@ function hookCardView() {
       across = kept.show.x * bounds.width
       down = kept.show.y * bounds.height
     } else {
-      across = at.x * bounds.width - ink.left
+      across = at.x * bounds.width - inkLeftAt(spacing)
       down = at.y * bounds.height + firstRow / 2 - (ink.top + ink.height / 2)
     }
     // Where the game draws every glyph of this line, from OCR's character boxes (hook-glyphs.ts):
@@ -2083,37 +2124,61 @@ function hookCardView() {
       // mean), each line's newest reading refining that for the lines after it. Text that really
       // moves (more than a sliver of a glyph: a box that moved) goes where this reading says.
       const kept = hook.glyphAt?.exe === hookKey() ? hook.glyphAt : null
-      const sliver = Math.max(2, HOOK_PIN_SNAP * fontPx)
+      // A first row of a few glyphs (はい。) places the line only roughly (`HOOK_PIN_SURE_GLYPHS`).
+      const sure = glyphs.marks[0].length >= HOOK_PIN_SURE_GLYPHS
+      const sliver = Math.max(2, (sure ? HOOK_PIN_SNAP : HOOK_PIN_SNAP_BRACKETED) * fontPx)
       if (
         kept &&
         Math.abs(reading.x - kept.x) * bounds.width < sliver &&
         Math.abs(reading.y - kept.y) * bounds.height < sliver
       ) {
-        if (kept.line !== hook.line)
-          Object.assign(kept, {
-            line: hook.line,
-            show: { x: kept.x, y: kept.y },
-            base: { x: kept.x, y: kept.y },
-            n: Math.min(kept.n + 1, HOOK_PIN_READINGS)
-          })
-        // This line's newest reading stands for it in the mean (the first may have caught its
-        // glyphs still sliding into place).
-        kept.x = kept.base.x + (reading.x - kept.base.x) / kept.n
-        kept.y = kept.base.y + (reading.y - kept.base.y) / kept.n
+        if (kept.line !== hook.line) {
+          Object.assign(kept, { line: hook.line, show: { x: kept.x, y: kept.y }, counted: false })
+        }
+        if (sure) {
+          if (!kept.counted)
+            Object.assign(kept, {
+              counted: true,
+              base: { x: kept.x, y: kept.y },
+              n: Math.min(kept.n + 1, HOOK_PIN_READINGS)
+            })
+          // This line's newest reading stands for it in the mean (the first may have caught its
+          // glyphs still sliding into place).
+          kept.x = kept.base.x + (reading.x - kept.base.x) / kept.n
+          kept.y = kept.base.y + (reading.y - kept.base.y) / kept.n
+        }
       } else {
-        hook.glyphAt = { exe: hookKey(), line: hook.line, n: 1, ...reading, show: reading, base: reading }
+        hook.glyphAt = {
+          exe: hookKey(),
+          line: hook.line,
+          n: 1,
+          counted: true,
+          ...reading,
+          show: reading,
+          base: reading
+        }
       }
       across = hook.glyphAt.show.x * bounds.width
       down = hook.glyphAt.show.y * bounds.height
-      indents = glyphs.starts.map((x) => (x === null ? 0 : x * bounds.width - start))
+      // A row OCR matched too little of to place by its glyphs goes where its row box starts.
+      const boxed = offsetsAt(spacing)
+      indents = glyphs.starts.map((x, i) => (x === null ? (boxed?.[i] ?? 0) : x * bounds.width - start))
       glyphWidth = Math.max(...cardRows.map((row, i) => indents[i] + [...row].length * glyphPitch))
       hook.spacing = { exe: hookKey(), line: hook.line, n: HOOK_PIN_READINGS, em: spacing / fontPx }
-    } else if (hook.glyphAt?.exe === hookKey()) {
+    } else {
+      // Not placed glyph by glyph (an engine that boxes only lines, or a line too short to
+      // measure): each row where OCR's row box starts, and the text box as wide as the furthest
+      // row reaches.
+      const boxed = offsetsAt(spacing)
+      if (boxed?.some(Boolean)) {
+        indents = boxed
+        glyphWidth = Math.max(...ink.rows.map((row, i) => boxed[i] + row.right + spacing * (row.chars - 1)))
+      }
       // A line too short to measure glyph by glyph (はい。), or not read yet: where the game's
       // lines start, as the measured ones found it, when that is where this one is. Measured
       // from its box alone it would land a pixel or few from the lines around it.
-      const kept = hook.glyphAt
-      if (Math.abs(across - kept.x * bounds.width) < pitch && Math.abs(down - kept.y * bounds.height) < pitch) {
+      const kept = hook.glyphAt?.exe === hookKey() ? hook.glyphAt : null
+      if (kept && Math.abs(across - kept.x * bounds.width) < pitch && Math.abs(down - kept.y * bounds.height) < pitch) {
         across = kept.x * bounds.width
         down = kept.y * bounds.height
       }

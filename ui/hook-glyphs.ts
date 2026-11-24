@@ -189,3 +189,45 @@ export const OWN_PITCH_GLYPHS = 14
 const MIN_GLYPHS = 5
 /** The loosest typical error a fit may have, in pitches. */
 const MAX_ERROR = 0.2
+
+/**
+ * How far right of the card's first row each row of a wrapped line starts (a margin before the
+ * row, hook-card.js), so each row's ink starts where OCR found the game's: a row the game indents
+ * (現実的な… a full-width space in, under a full first row) is indented on the card too, by as
+ * much. For an engine that boxes only lines, not characters (the glyphs then place the rows,
+ * `glyphGeometry`).
+ *
+ * OCR's geometry decides, not the hooked text's whitespace, which varies by game: a row whose text
+ * starts with the indent (a full-width space U+3000, spaces) already inks that far in on the card,
+ * and is moved only by what the game's indent differs from it; a row whose text has none is moved
+ * by all of it.
+ *
+ * - `rowLefts`: where the game's ink of each row starts (OCR's row boxes' left edges), in pixels;
+ * - `inkLefts`: where the card's own ink of each row starts in its row at no letter-spacing (a
+ *   leading U+3000, or the ink of a 「 well inside its em);
+ * - `leads`: the whitespace characters each row starts with, each one a letter-spacing further in;
+ * - `spacing`: the card's letter-spacing; `fontPx`: its size. A difference of less than
+ *   [`ROW_INDENT_SNAP`] of an em is OCR's few pixels of give, not an indent: none.
+ */
+export function rowIndents(
+  rowLefts: number[],
+  inkLefts: number[],
+  leads: number[],
+  spacing: number,
+  fontPx: number
+): number[] {
+  const n = rowLefts.length
+  if (!n || inkLefts.length !== n || leads.length !== n) return rowLefts.map(() => 0)
+  const ink = (i: number): number => inkLefts[i] + leads[i] * spacing
+  return rowLefts.map((left, i) => {
+    if (i === 0) return 0
+    const indent = left - rowLefts[0] - (ink(i) - ink(0))
+    return Math.abs(indent) < ROW_INDENT_SNAP * fontPx ? 0 : indent
+  })
+}
+
+/** The whitespace a row starts with, in characters (U+3000, ASCII spaces, tabs). */
+export const leadingSpaces = (row: string): number => [...(/^\s*/u.exec(row)?.[0] ?? '')].length
+
+/** The least difference between two rows' starts that is an indent, in ems ([`rowIndents`]). */
+export const ROW_INDENT_SNAP = 0.2
