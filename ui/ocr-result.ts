@@ -11,6 +11,7 @@ import {
   type Surface
 } from './annotations.js'
 import { languageOf } from './languages.js'
+import { hasLatinLookalike, restoreLatinLookalikes, writtenOnlyInLatin } from './latin-lookalikes.js'
 import { joinBrokenWords, joiner } from './script-text.js'
 export type Orientation = 'horizontal' | 'vertical'
 /** A piece of a line (a word, or a character) with its own box, in capture pixels. */
@@ -368,11 +369,65 @@ export function scanGroups(annotations: Annotation[], grouping: Partial<Grouping
   )
 }
 
+type Pieces = { text: string }[]
+
+/** Every text a result holds: the full text, the groups' and their lines' and pieces', and the
+    annotations' and their pieces'. Each new text field of `OcrGroup` or `Annotation` belongs here. */
+function* textsOf(result: OcrResult): Generator<string> {
+  const pieces = function* (lists: (Pieces | undefined)[]) {
+    for (const list of lists) for (const piece of list ?? []) yield piece.text
+  }
+  yield result.fullText
+  for (const g of result.groups) {
+    yield g.text
+    yield* g.lines ?? []
+    yield* pieces(g.lineSegments ?? [])
+  }
+  for (const a of result.textAnnotations) {
+    yield a.description
+    yield* a.lineTexts ?? []
+    yield* pieces([a.segments, ...(a.lineSegments ?? [])])
+  }
+}
+
+/** `result` with every text `textsOf` names passed through `fix`; boxes and the rest as they are. */
+function mapTexts(result: OcrResult, fix: (text: string) => string): OcrResult {
+  const pieces = <T extends Pieces>(list: T): T => list.map((piece) => ({ ...piece, text: fix(piece.text) })) as T
+  return {
+    ...result,
+    fullText: fix(result.fullText),
+    groups: result.groups.map((g) => ({
+      ...g,
+      text: fix(g.text),
+      ...(g.lines && { lines: g.lines.map(fix) }),
+      ...(g.lineSegments && { lineSegments: g.lineSegments.map(pieces) })
+    })),
+    textAnnotations: result.textAnnotations.map((a) => ({
+      ...a,
+      description: fix(a.description),
+      ...(a.lineTexts && { lineTexts: a.lineTexts.map(fix) }),
+      ...(a.segments && { segments: pieces(a.segments) }),
+      ...(a.lineSegments && { lineSegments: a.lineSegments.map(pieces) })
+    }))
+  }
+}
+
 /**
  * `language` is the language being read (absent: Japanese): it decides whether a group or line
- * the engine left unoriented may be vertical, and what goes between words grouped here.
+ * the engine left unoriented may be vertical, and what goes between words grouped here. In a
+ * language written only in the Latin alphabet, a Cyrillic or Greek letter the engine read in
+ * place of a Latin one it looks exactly like is put back (`estrellа` → `estrella`,
+ * ui/latin-lookalikes.ts), so the word can be looked up. One letter for one, so it is done on the
+ * finished result; a result with no lookalike in it (nearly every one) is returned as it is.
  */
 export function normalizeOcrResult(raw: Partial<OcrResult>, engine: string, language?: string): OcrResult {
+  const result = normalized(raw, engine, language)
+  if (!writtenOnlyInLatin(language)) return result
+  for (const text of textsOf(result)) if (hasLatinLookalike(text)) return mapTexts(result, restoreLatinLookalikes)
+  return result
+}
+
+function normalized(raw: Partial<OcrResult>, engine: string, language?: string): OcrResult {
   const vertical = languageOf(language).vertical
   const supplied = Array.isArray(raw.groups) && raw.groups.some((g) => g && !g.inferred)
   const ids = new Set<string>()

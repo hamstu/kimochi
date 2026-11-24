@@ -51,6 +51,7 @@ import { groupTextAnnotations, visibleAnnotations } from './annotations.js'
 import { japaneseFilterOf } from './japanese-text.js'
 import { isJapanese, languageOf } from './languages.js'
 import { hasLanguageScript } from './script-text.js'
+import { restoreLatinLookalikes, writtenOnlyInLatin } from './latin-lookalikes.js'
 import { JAPANESE_WORDS } from './word-nav.js'
 import { AutoScanner } from './autoscan.js'
 import { resolveWatcher, observerModeOf } from './watcher.js'
@@ -3037,16 +3038,19 @@ async function publishPassage(passage, grouping, frame) {
  *
  * Line boxes arrive in the frame's own pixels with a top-left origin — see
  * `TextLine` in capture-core — which is the same space the box tolerance is
- * expressed in, so nothing is converted here.
+ * expressed in, so nothing is converted here. Its text gets back the Latin letters an engine read
+ * as their Cyrillic or Greek twins, as a recognition's does (`normalizeOcrResult`), so the two
+ * agree on the same line.
  */
 function observationFrom(frame) {
   const observation = frame?.observation
   if (!observation || typeof observation.text !== 'string') return null
+  const text = writtenOnlyInLatin(languageNow()) ? restoreLatinLookalikes : (value) => value
   return {
-    text: observation.text,
+    text: text(observation.text),
     durationMs: observation.duration_ms,
     lines: (observation.lines ?? []).map((line) => ({
-      text: line.text ?? '',
+      text: text(line.text ?? ''),
       box: { x: line.x ?? 0, y: line.y ?? 0, width: line.width ?? 0, height: line.height ?? 0 },
       ...(Array.isArray(line.ink) ? { ink: line.ink } : {})
     }))
