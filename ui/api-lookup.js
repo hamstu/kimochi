@@ -11,6 +11,7 @@ import { lookupButtonsBit } from './lookup-key.js'
 import { createScanner, wordAtStart, wholeWords, SCAN_WINDOW, SPACED_SCAN_WINDOW } from './scan-text.js'
 import { desktopPointOf } from './desktop-point.js'
 import { languageOf } from './languages.js'
+import { joinBrokenWords } from './script-text.js'
 
 /** Opens the Yomitan API pop-up for a term at a desktop point, once installed. */
 let showTerm = null
@@ -155,7 +156,9 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     block: WORD_BOX,
     sentenceOf: (node) => {
       const box = node.parentElement?.closest(WORD_BOX)
-      return box?.renderText ?? box?.querySelector('.ocr-word-current')?.textContent ?? null
+      const sentence = box?.renderText ?? box?.querySelector('.ocr-word-current')?.textContent ?? null
+      // A word a line broke with a hyphen goes on the card whole.
+      return sentence === null ? null : joinBrokenWords(sentence, language)
     },
     tokenize: (text, scanLength) =>
       invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: scanLength } }),

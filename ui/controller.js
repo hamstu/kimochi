@@ -1137,6 +1137,8 @@ export function createController(context) {
           nodes,
           text: nodes.map((node) => node.textContent).join(''),
           vertical,
+          // Ends in a word the line broke, which runs straight on into the next (render.js).
+          joinsNext: holder.classList.contains('ocr-joins-next'),
           box: { x: left, y: top, width, height }
         })
       }
