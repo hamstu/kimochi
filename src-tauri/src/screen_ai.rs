@@ -308,9 +308,15 @@ fn fit(width: u32, height: u32, max: u32) -> f64 {
     }
 }
 
-fn scaled(image: &image::RgbaImage, scale: f64) -> image::RgbaImage {
+/// `image` shrunk by `scale`. Through `DynamicImage`, whose resize is compiled in the `image` crate
+/// and so optimized in development builds too (Cargo.toml); `imageops::resize` is generic and
+/// would be compiled here, unoptimized: a 2560×1440 frame then took a second, not 30 ms.
+fn scaled(image: image::RgbaImage, scale: f64) -> image::RgbaImage {
     let size = |v: u32| ((f64::from(v) * scale).floor() as u32).max(1);
-    image::imageops::resize(image, size(image.width()), size(image.height()), image::imageops::FilterType::Triangle)
+    let (width, height) = (size(image.width()), size(image.height()));
+    image::DynamicImage::ImageRgba8(image)
+        .resize_exact(width, height, image::imageops::FilterType::Triangle)
+        .into_rgba8()
 }
 
 /// Recognise a captured frame.
@@ -338,14 +344,12 @@ pub fn recognize(app: &tauri::AppHandle, image: &Image) -> Result<Value, String>
 }
 
 /// Recognise an RGB image: Auto OCR's watcher (`text_observer`), whose frames arrive converted.
-pub(crate) fn recognize_rgb(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<Value, String> {
+/// To RGBA by the `image` crate's own conversion, optimized in development builds too (`scaled`).
+pub(crate) fn recognize_rgb(app: &tauri::AppHandle, image: image::RgbImage) -> Result<Value, String> {
     let found = component(app)?;
     let (width, height) = image.dimensions();
-    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
-    for pixel in image.as_raw().chunks_exact(3) {
-        rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
-    }
-    recognize_rows(app, &found, &rgba, width, height, width as usize * 4)
+    let rgba = image::DynamicImage::ImageRgb8(image).into_rgba8();
+    recognize_rows(app, &found, rgba.as_raw(), width, height, width as usize * 4)
 }
 
 /// Recognise RGBA rows of `stride` bytes with the warm worker, starting it if need be.
@@ -370,7 +374,7 @@ fn recognize_rows(
         for (row, out) in data.chunks(stride).zip(copy.chunks_exact_mut(width as usize * 4)) {
             out.copy_from_slice(&row[..width as usize * 4]);
         }
-        Pixels::Owned(scaled(&copy, scale))
+        Pixels::Owned(scaled(copy, scale))
     };
     let request = pixels.request();
     // Back to the frame's pixels from the size the library read.

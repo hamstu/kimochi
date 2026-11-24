@@ -291,19 +291,23 @@ fn scaled_crop(crop: &kimochi_capture::Crop, width: u32, height: u32) -> Option<
     (w >= 8 && h >= 8).then_some([x, y, w, h])
 }
 
-/// Shrink `picture` to at most `edge` on its longest side, and encode it as JPEG.
+/// Shrink `picture` to at most `edge` on its longest side, and encode it as JPEG. Both through the
+/// `image` crate's non-generic entry points (`DynamicImage::resize_exact`, `JpegEncoder::encode`),
+/// which are compiled in that crate and so optimized in development builds too (Cargo.toml); the
+/// generic `imageops::resize` and `encode_image` would be compiled here, unoptimized, and took
+/// about a second per screenshot.
 fn encode(picture: image::RgbImage, edge: u32, quality: u8) -> Result<Vec<u8>, String> {
     let (w, h) = picture.dimensions();
     let picture = if w.max(h) > edge {
         let scale = edge as f64 / w.max(h) as f64;
         let (nw, nh) = (((w as f64 * scale).round() as u32).max(1), ((h as f64 * scale).round() as u32).max(1));
-        image::imageops::resize(&picture, nw, nh, image::imageops::FilterType::Triangle)
+        image::DynamicImage::ImageRgb8(picture).resize_exact(nw, nh, image::imageops::FilterType::Triangle).into_rgb8()
     } else {
         picture
     };
     let mut out = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality)
-        .encode_image(&picture)
+        .encode(picture.as_raw(), picture.width(), picture.height(), image::ExtendedColorType::Rgb8)
         .map_err(|e| e.to_string())?;
     Ok(out)
 }
