@@ -119,6 +119,7 @@ import * as scanActivity from './scan-activity.js'
 import { openAppLane } from './app-lane.js'
 import { createSoundPlayer, outcomeSound, soundKind, soundKindOn } from './sounds.js'
 import * as native from './native.js'
+import { cropFor } from './crop-geometry.js'
 
 let waylandDisabled = false
 let waylandLayer = false
@@ -3548,18 +3549,6 @@ async function editRegion(
   }
 }
 
-/** Points in the overlay to capture pixels of a display or source with `bounds` at `scale`. */
-function cropFor(rect, origin, bounds, scale) {
-  return {
-    x: Math.max(0, Math.round((rect.x + origin.x - bounds.x) * scale)),
-    y: Math.max(0, Math.round((rect.y + origin.y - bounds.y) * scale)),
-    width: Math.round(rect.width * scale),
-    height: Math.round(rect.height * scale),
-    reference_width: Math.round(bounds.width * scale),
-    reference_height: Math.round(bounds.height * scale)
-  }
-}
-
 /** How often the window's picture is refreshed while its region is being edited. */
 const REGION_PICTURE_MS = 1500
 
@@ -3669,8 +3658,15 @@ async function editSourceRegion(target = 'ocr') {
     // next scan to the user.
     if (!state.flags.autoOcrEnabled && saved !== 'save') await performScan()
   } catch (error) {
-    log({ check: 'region-edit-error', error: String(error?.message ?? error) })
+    log({ check: 'region-edit-error', region: region.name, error: String(error?.message ?? error) })
     publish({ status: `Editing the region failed: ${error?.message ?? error}` })
+    // On the Log's activity line too, where it is seen: the status alone shows nowhere, so a refused
+    // Anki crop used to leave nothing but uncropped cards.
+    activity({
+      text: `${region.title} not saved: ${String(error?.message ?? error).replace(/^[a-z-]+: /, '')}`,
+      tone: 'error',
+      key: 'region-edit'
+    })
   } finally {
     // Auto OCR starts afresh here, on the new region.
     state.regionCommitting = false
@@ -4162,7 +4158,7 @@ async function editScreenRegion(sourceId, region = REGIONS.ocr) {
   })
   if (!rect) return false
   const crop = cropFor(rect, target.bounds, target.bounds, scaleOf(target))
-  if (crop.width <= 0 || crop.height <= 0) return false
+  if (!crop) return false
   const chosen = displaySourceId(target)
   await region.commit(chosen, crop)
   log({
@@ -4241,12 +4237,10 @@ async function editWindowRegion(sourceId, region = REGIONS.ocr) {
   })
   if (!rect) return false
   const scale = frame?.width ? frame.width / bounds.width : scaleOf(display)
-  const crop = cropFor(rect, origin, bounds, scale)
-  if (frame?.width && frame?.height) {
-    crop.reference_width = frame.width
-    crop.reference_height = frame.height
-  }
-  if (crop.width <= 0 || crop.height <= 0) return false
+  // Edges in the capture's own pixels, kept inside it: a window whose bounds are fractional points
+  // (125%, 150%, 175%) must not round past its picture.
+  const crop = cropFor(rect, origin, bounds, scale, frame?.width && frame?.height ? frame : null)
+  if (!crop) return false
   await region.commit(sourceId, crop)
   log({ check: 'region-saved', region: region.name, kind: 'window', sourceId, crop, action: rect.action })
   return savedAction(rect)
@@ -4360,6 +4354,10 @@ async function quickShot() {
       return
     }
     const crop = cropFor(rect, target.bounds, target.bounds, target.scale_factor ?? 1)
+    if (!crop) {
+      log({ check: 'quick-shot-cancelled', reason: 'empty' })
+      return
+    }
     const sourceId = displaySourceId(target)
     log({ check: 'quick-shot', display: target.id, crop })
 

@@ -276,6 +276,17 @@ mod tests {
             .is_err());
         }
     }
+    /// K-054: an 802 × 633 window at 125%. The editor used to send 803 wide (one pixel past the
+    /// capture), which stays refused; the edge-converted whole window saves as the whole capture.
+    #[test]
+    fn whole_window_at_125_percent_fits_its_capture() {
+        let old = Crop { x: 0, y: 36, width: 803, height: 598, reference_width: 802, reference_height: 633 };
+        assert_eq!(crop_rect(Some(old), 802, 633).unwrap_err().code, "invalid_crop");
+        let fixed = Crop { x: 0, y: 36, width: 802, height: 597, reference_width: 802, reference_height: 633 };
+        assert_eq!(crop_rect(Some(fixed), 802, 633).unwrap(), [0, 36, 802, 597]);
+        let whole = Crop { x: 0, y: 0, width: 802, height: 633, reference_width: 802, reference_height: 633 };
+        assert_eq!(crop_rect(Some(whole), 802, 633).unwrap(), [0, 0, 802, 633]);
+    }
     #[test]
     fn fractional_edges_include_requested_pixels() {
         assert_eq!(

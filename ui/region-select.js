@@ -188,6 +188,9 @@ function rectangleFrom(start, end) {
   }
 }
 
+/** A box edge's whole-point offset from its area's corner; the box never starts before the corner. */
+export const areaOffset = (edge, corner) => Math.max(0, Math.round(edge - corner))
+
 function roundRect(rect) {
   const x = Math.round(rect.x)
   const y = Math.round(rect.y)
@@ -950,9 +953,10 @@ export class RegionSelect {
     const editing = this._editing && !this._gesture
     const shown = roundRect(rect)
     els.size.textContent = `${shown.width} × ${shown.height}`
-    // Within an area (a window), the position counts from its corner.
+    // Within an area (a window), the position counts from its corner. A window's corner can be a
+    // fractional point (125%: 430.4) while the box snaps to whole points, so the offset is whole too.
     const corner = this._area ?? { x: 0, y: 0 }
-    els.origin.textContent = `${shown.x - corner.x}, ${shown.y - corner.y}`
+    els.origin.textContent = `${areaOffset(shown.x, corner.x)}, ${areaOffset(shown.y, corner.y)}`
     // The controller bar has its own Cancel and Save.
     els.actions.style.display = this._editing && !this._pad ? 'flex' : 'none'
     this._fitTitle(rect.width + RING * 2)
