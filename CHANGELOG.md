@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-25
+
 ### Game Pausing
 
 - ⏸️ **Pause game on demand.** You can now directly toggle pausing your game or use the new **Pause & scan** and **Pause & read along** in one press. Bind these new shortcuts them in Settings → Shortcuts & Controls in the radial menu section — this works even with Auto Game Pausing off.
