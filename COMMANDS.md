@@ -2608,7 +2608,9 @@ pressed on it resumes it and never reaches the game, unless the region editor or
 menu has Escape; so does the controller's Back button (`controllerButtons.back`, B) pressed alone
 while controller navigation is off. Controller navigation ending while the reader has the game
 paused does not resume it to hand it the focus: Kimochi keeps the focus and hands it back once the
-pause ends, if Kimochi is still in front. The shortcuts only pause the game while its window is in
+pause ends, if Kimochi is still in front. Escape with a dictionary pop-up up closes the pop-up and
+leaves the game paused, and a manual pause ending any way (the shortcut, Escape, B, a forced
+resume) closes a pop-up still up. The shortcuts only pause the game while its window is in
 front; `menuPause` resumes from anywhere. Forced resumes: the setting
 turned off, `select_source` to another source, another application in front (not in Gaming
 Mode), `overlayVisible` set false, the paused game exiting, quit, and `game_pause_resume_all`.
@@ -2636,7 +2638,8 @@ Events:
   processes, mechanism?, refusal?: {kind, detail}}`, on every change.
 - `pause-escape` — `{}`, Escape pressed on the game the reader paused (Windows: the keyboard hook,
   on the selected window only; elsewhere a global Escape shortcut held while paused), or the
-  controller's Back pressed alone with controller navigation off. The overlay resumes the game.
+  controller's Back pressed alone with controller navigation off. The overlay closes the
+  dictionary pop-up when one is up and stays paused; otherwise it resumes the game.
 - `game-pause-notice` — `{game, title?, kind, detail}`, once per game and refusal kind per run,
   when a game cannot be paused. `kind`: `unsupported`, `noPid`, `notFound`, `protected`,
   `antiCheat`, `elevated`, `denylisted`, `permissionDenied`, `other`. The main window shows it.

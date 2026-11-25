@@ -9,7 +9,15 @@ const { ReadingHold } = await load('reading-hold.ts')
 const source = await readFile(new URL('../ui/overlay.js', import.meta.url), 'utf8')
 const program = parse('overlay.js', source)
 const functions = topLevelFunctions(program)
-const names = ['syncHints', 'readingPopupShown', 'syncReadingHold', 'hitRects', 'publishRegions', 'startRegionLoop']
+const names = [
+  'syncHints',
+  'localPopupShown',
+  'readingPopupShown',
+  'syncReadingHold',
+  'hitRects',
+  'publishRegions',
+  'startRegionLoop'
+]
 const bindings = new Set(['publishing', 'republish', 'publishedSignature', 'publishedAt', 'REPUBLISH_MS'])
 const code = [
   ...program.body.filter(

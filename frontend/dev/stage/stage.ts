@@ -374,7 +374,10 @@ words.addEventListener('mousedown', (event) => {
   void showPopup(range.toString(), rect)
 })
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') hidePopup()
+  if (event.key !== 'Escape') return
+  // With the game paused, Escape closes an open pop-up and leaves the pause for the next one.
+  if (!popup.hidden) event.preventDefault()
+  hidePopup()
 })
 
 // --------------------------------------------------------------- the controller
@@ -634,6 +637,8 @@ function setManualPause(on: boolean, instant = false): void {
   if (!on) {
     showPauseGlow(false)
     settlePause(false)
+    // A pop-up still up goes with the pause, however it ended.
+    hidePopup()
     showPauseBadge('Resumed', 'info', 1200)
     return
   }
@@ -664,7 +669,8 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'p' || event.key === 'P') setManualPause(!manualPause)
   // B: the controller's B, which resumes only while nothing of Kimochi's has the controller.
   else if ((event.key === 'b' || event.key === 'B') && manualPause && controller.mode === 'idle') setManualPause(false)
-  else if (event.key === 'Escape' && manualPause) setManualPause(false)
+  // Not the Escape that just closed a pop-up (the listener above marks it): that one keeps the pause.
+  else if (event.key === 'Escape' && manualPause && !event.defaultPrevented) setManualPause(false)
 })
 
 // --------------------------------------------------------------- scenes
