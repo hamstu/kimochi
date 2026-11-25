@@ -2624,6 +2624,25 @@ released.
 | `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor" \| "manual")[]}` | — |
 | `game_pause_resume_all` | — | `{running, recovered: [{pid, exe, outcome, since}]}` |
 | `game_pause_spans` | `{since?: number}` | `PauseSpan[]` |
+| `overlay_popup_open` | `{open: boolean}` | — |
+
+**Escape clears the overlay.** While a pop-up is open, wherever the pointer is, Escape is the
+overlay's: native dispatches `dismissOverlay` (emit-only), and the overlay closes its pop-ups and
+puts out lit text (logged as `overlay-dismissed`). With nothing open Escape is the game's. The
+overlay reports pop-ups with `overlay_popup_open` (`hotkeys::set_popup_open`, checked on the
+region loop); native takes Escape as a global shortcut only while one is open, and it comes before
+a paused game's `pause-escape`. On Windows the keyboard guard holds keys back from the game with
+the pointer on the text, and hands Escape on through `fire_swallowed`. Not while the region editor
+or the controller menu owns Escape: theirs comes first. Off Windows it shares the editor's and the
+menu's Escape registration (`sync_keys`). Wayland's portal takes no Escape: there Escape stays the
+game's.
+
+**Shortcuts under the pointer (Windows).** With the pointer on the overlay's text or a pop-up, the
+keyboard guard keeps key presses from the game, so Windows never matches them against the
+registered shortcuts. The guard names each such press as an accelerator and
+`hotkeys::fire_swallowed` fires the live shortcut it is, logged as `shortcut-under-pointer`. Held
+for reading, the lookup key (`overlayLookupKey`) also counts as not held: a shortcut with the
+lookup key in it wins over one without.
 
 `game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`; with the setting off it
 sends only `manual`): every 500 ms while any reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof

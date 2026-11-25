@@ -62,6 +62,7 @@ function fixture() {
     readingHold: false,
     syncScanHold: () => holds.push(context.readingHold),
     beatGamePause() {},
+    syncEscapeKey() {},
     overlayTextOn: () => true,
     refreshLayerPointer() {},
     shiftGated: true,

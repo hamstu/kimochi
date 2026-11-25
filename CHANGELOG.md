@@ -10,6 +10,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Hachidori no longer gets stuck on "Starting" partway through a session.** After a rare hiccup inside the app, Hachidori could stop showing word pop-ups everywhere, Log included, until Kimochi was restarted. It now carries on.
 - While you have the game paused, Escape (or B on a controller) now closes an open dictionary pop-up first and keeps the game paused; press it again to resume. Resuming the game any other way (the Pause game shortcut, the radial menu) closes the pop-up too.
+- Escape closes an open dictionary pop-up, and doesn't reach the game when it does.
+- **Windows:** shortcuts such as Pause game now work while the pointer is over the overlay's text or a dictionary pop-up.
 
 ## [1.2.0] - 2026-11-25
 

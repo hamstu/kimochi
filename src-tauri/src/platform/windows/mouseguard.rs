@@ -19,6 +19,9 @@ use tauri::{Emitter, Manager};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetAncestor, GetCursorPos, GetForegroundWindow, GetMessageW, GetSystemMetrics,
     IsWindowVisible, PeekMessageW, PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
@@ -83,6 +86,75 @@ struct Hook {
     buttons_owned: u8,
     /// Lookup-button presses swallowed and not yet released (`mouse_buttons::lookup_step`).
     lookup_owned: u8,
+    /// Key presses swallowed over the overlay's text, as accelerators, for `hotkeys::fire_swallowed`.
+    shortcuts: SyncSender<String>,
+}
+
+/// A key's name as an accelerator takes it, for every key Settings records a shortcut on
+/// (`keyToken` in frontend/panels/settings/accelerator.ts): letters,
+/// digits, the numpad's digits, the function keys, Space, Enter, the arrows, Home, End,
+/// Page Up and Down, Insert, Pause, Scroll Lock and the punctuation keys (by their place on the
+/// keyboard, as the recorder takes them). Tab never reaches here (`protected_key`). None for the rest.
+fn accelerator_key(key: u32) -> Option<String> {
+    let name = match key {
+        0x30..=0x39 | 0x41..=0x5A => return char::from_u32(key).map(String::from),
+        0x60..=0x69 => return Some(format!("Num{}", key - 0x60)),
+        0x70..=0x87 => return Some(format!("F{}", key - 0x6F)),
+        0x20 => "Space",
+        0x0D => "Enter",
+        // Not a setting's shortcut, but it closes the overlay's pop-ups (`hotkeys::fire_swallowed`).
+        0x1B => "Escape",
+        0x25 => "Left",
+        0x26 => "Up",
+        0x27 => "Right",
+        0x28 => "Down",
+        0x24 => "Home",
+        0x23 => "End",
+        0x21 => "PageUp",
+        0x22 => "PageDown",
+        0x2D => "Insert",
+        0x13 => "Pause",
+        0x91 => "ScrollLock",
+        0xBA => ";",
+        0xBB => "=",
+        0xBC => ",",
+        0xBD => "-",
+        0xBE => ".",
+        0xBF => "/",
+        0xC0 => "`",
+        0xDB => "[",
+        0xDC => "\\",
+        0xDD => "]",
+        0xDE => "'",
+        _ => return None,
+    };
+    Some(name.into())
+}
+
+/// The accelerator for a key pressed with these modifiers held, e.g. `Shift+F7`; None for a key
+/// no shortcut can be.
+fn pressed_accelerator(key: u32, shift: bool, control: bool, alt: bool, win: bool) -> Option<String> {
+    let key = accelerator_key(key)?;
+    let mut parts: Vec<&str> = Vec::new();
+    if control {
+        parts.push("Control");
+    }
+    if alt {
+        parts.push("Alt");
+    }
+    if win {
+        parts.push("Super");
+    }
+    if shift {
+        parts.push("Shift");
+    }
+    parts.push(&key);
+    Some(parts.join("+"))
+}
+
+/// Whether a key is held, as the system sees it or as this hook has swallowed it.
+fn held(vk: VIRTUAL_KEY) -> bool {
+    (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0
 }
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }
 static TARGETS: Mutex<Vec<Target>> = Mutex::new(Vec::new());
@@ -365,6 +437,7 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
     let (sender, receiver) = mpsc::sync_channel::<Press>(1024);
     let (keys, key_receiver) = mpsc::sync_channel(1024);
     let (buttons, button_receiver) = mpsc::sync_channel::<u8>(16);
+    let (shortcuts, shortcut_receiver) = mpsc::sync_channel::<String>(16);
     let (ready_tx, ready_rx) = mpsc::channel();
     std::thread::Builder::new()
         .name("kimochi-mouse-guard".into())
@@ -382,6 +455,7 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                     buttons,
                     buttons_owned: 0,
                     lookup_owned: 0,
+                    shortcuts,
                 })
             });
             let module = GetModuleHandleW(None).ok().map(|m| HINSTANCE(m.0));
@@ -418,6 +492,15 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
     let app = app.clone();
     let key_app = app.clone();
     let button_app = app.clone();
+    let shortcut_app = app.clone();
+    std::thread::Builder::new()
+        .name("kimochi-swallowed-shortcuts".into())
+        .spawn(move || {
+            for accelerator in shortcut_receiver {
+                crate::hotkeys::fire_swallowed(&shortcut_app, &accelerator);
+            }
+        })
+        .map_err(|e| e.to_string())?;
     std::thread::Builder::new()
         .name("kimochi-mouse-shortcuts".into())
         .spawn(move || {
@@ -509,11 +592,13 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 hook.keys_down[key as usize] = down;
                 // Pause game: Escape pressed on the paused game resumes it, and never reaches
                 // the game (which would act on it once resumed). Its release and repeats are
-                // swallowed with it, as an owned key.
+                // swallowed with it, as an owned key. With a pop-up open, Escape closes that first
+                // (`hotkeys::escape_wanted`); the next one resumes.
                 if key == 27
                     && down
                     && !was_down
                     && MANUAL_PAUSE.load(Ordering::Relaxed)
+                    && !crate::hotkeys::escape_wanted()
                     && !region
                     && !nav
                     && !foreground.0.is_null()
@@ -535,6 +620,18 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                     modal_key_target(region, nav, key, source),
                 ) {
                     return false;
+                }
+                // A press swallowed because the pointer is on the overlay's text: Windows never
+                // matches it against Kimochi's own shortcuts, so match it here (Pause game's key with
+                // a pop-up under the pointer). Not modifiers, and not while a modal mode owns the keys.
+                if down && !was_down && !(region || nav) && modifier_bit(key) == 0 && !matches!(key, 91 | 92) {
+                    let bits = BLOCKED_MODIFIERS.load(Ordering::Relaxed);
+                    let shift = bits & 3 != 0 || held(VK_SHIFT);
+                    let control = bits & 12 != 0 || held(VK_CONTROL);
+                    let win = held(VK_LWIN) || held(VK_RWIN);
+                    if let Some(accelerator) = pressed_accelerator(key, shift, control, held(VK_MENU), win) {
+                        let _ = hook.shortcuts.try_send(accelerator);
+                    }
                 }
                 if down
                     && (region || nav)
@@ -565,6 +662,36 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_swallowed_press_is_named_as_a_shortcut_would_be() {
+        assert_eq!(pressed_accelerator(0x58, false, false, false, false).as_deref(), Some("X"));
+        assert_eq!(pressed_accelerator(0x58, true, false, false, false).as_deref(), Some("Shift+X"));
+        assert_eq!(pressed_accelerator(0x76, true, false, false, false).as_deref(), Some("Shift+F7"));
+        assert_eq!(pressed_accelerator(0x38, true, true, true, true).as_deref(), Some("Control+Alt+Super+Shift+8"));
+        assert_eq!(pressed_accelerator(0x91, false, false, false, false).as_deref(), Some("ScrollLock"));
+        assert_eq!(pressed_accelerator(0x1B, false, false, false, false).as_deref(), Some("Escape"));
+        // The other keys Settings records too: Enter, arrows, punctuation, numpad.
+        assert_eq!(pressed_accelerator(0x0D, false, false, false, false).as_deref(), Some("Enter"));
+        assert_eq!(pressed_accelerator(0x25, false, false, false, false).as_deref(), Some("Left"));
+        assert_eq!(pressed_accelerator(0xBA, false, false, false, false).as_deref(), Some(";"));
+        assert_eq!(pressed_accelerator(0x65, false, false, false, false).as_deref(), Some("Num5"));
+        // Keys no shortcut can be: Backspace, Caps Lock, the Windows key's menu key.
+        for key in [0x08, 0x14, 0x5D] {
+            assert_eq!(pressed_accelerator(key, false, false, false, false), None);
+        }
+        // Every name parses as the plugin parses accelerators, to the key the recorder's name does.
+        let keys = (0x30..=0x39)
+            .chain(0x41..=0x5A)
+            .chain(0x60..=0x69)
+            .chain(0x70..=0x87)
+            .chain([0x20, 0x0D, 0x1B, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22, 0x2D, 0x13, 0x91])
+            .chain([0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xDB, 0xDC, 0xDD, 0xDE]);
+        for key in keys {
+            let accelerator = pressed_accelerator(key, true, false, false, false).unwrap();
+            assert!(accelerator.parse::<tauri_plugin_global_shortcut::Shortcut>().is_ok(), "{accelerator}");
+        }
+    }
 
     #[test]
     fn quick_shot_editing_keys_work_with_a_foreign_foreground_and_no_window_source() {

@@ -1140,7 +1140,7 @@ function apiPopupVisible(visible) {
 /**
  * Whether a dictionary pop-up is up for certain. The pop-up host's pop-up counts only while that
  * window keeps saying so: a host that crashed or reloaded after "visible" must not hold the game
- * paused, nor keep Escape from resuming it.
+ * paused, nor keep Escape from the game.
  */
 function livePopupShown(now = performance.now()) {
   const remoteAlive = remoteReadingPopup && now - remotePopupAliveAt < REMOTE_POPUP_ALIVE_MS
@@ -1148,7 +1148,7 @@ function livePopupShown(now = performance.now()) {
 }
 /**
  * Close what the reader has open on the overlay: the dictionary pop-ups (the Yomitan API's window
- * too), the word they were for and the lit text. Escape on a paused game, and that pause ending.
+ * too), the word they were for and the lit text. Escape, and a pause the reader took ending.
  */
 function clearReading() {
   dismissPopup()
@@ -1337,6 +1337,8 @@ function onGamePauseStatus(status) {
 void native.listen('game-pause', ({ payload }) => onGamePauseStatus(payload))
 // Escape (or B) on the paused game: native sends it only while the reader has the game paused.
 // With a dictionary pop-up up it closes that and the game stays paused; the next one resumes.
+// Escape itself seldom gets here with a pop-up up (native hands it over as `dismissOverlay`,
+// `syncEscapeKey`); the controller's B always does.
 void native.listen('pause-escape', () => {
   if (!livePopupShown()) return setManualPause(false, 'reader')
   log({ check: 'pause-escape-closed-popup' })
@@ -3302,6 +3304,11 @@ async function onAction(name) {
       return openController()
     case 'playAudio':
       return playLatest()
+    // Escape with a pop-up open: clear what the overlay shows (native takes Escape only then;
+    // hotkeys::dismiss_overlay).
+    case 'dismissOverlay':
+      log({ check: 'overlay-dismissed' })
+      return clearReading()
     // The controller reads these back from the shared view, so this window owns
     // the flip. Native must pass these names through without touching the flag,
     // or the switch would toggle twice and appear dead.
@@ -5825,6 +5832,21 @@ async function publishRegions(readWordRects = null) {
   }
 }
 
+/** Whether a pop-up was last open, as told to native (`overlay_popup_open`). */
+let popupOpenForEscape = false
+
+/**
+ * Escape clears the overlay while a pop-up is open, wherever the pointer is; with nothing open it
+ * is the game's. Checked on the region loop.
+ */
+function syncEscapeKey() {
+  // A hidden overlay shows no pop-up to clear.
+  const open = state.flags.overlayVisible !== false && livePopupShown()
+  if (open === popupOpenForEscape) return
+  popupOpenForEscape = open
+  void native.invoke('overlay_popup_open', { open }).catch(() => {})
+}
+
 function startRegionLoop() {
   setInterval(() => {
     void refreshLayerPointer()
@@ -5835,6 +5857,7 @@ function startRegionLoop() {
     const readWordRects = () => (wordRects ??= renderer.hitRects({ x: 0, y: 0 }))
     syncReadingHold(readWordRects)
     syncHints(readWordRects)
+    syncEscapeKey()
     void publishRegions(readWordRects)
   }, 100)
 }
