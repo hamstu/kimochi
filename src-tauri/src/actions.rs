@@ -43,6 +43,9 @@ pub const ACTIONS: &[&str] = &[
     "hoverSourceOn",
     "hoverSourceOff",
     "hoverSourceDismiss",
+    // Escape with a pop-up open: the overlay clears its pop-ups and lit text
+    // (`hotkeys::dismiss_overlay`). Emit-only.
+    "dismissOverlay",
 ];
 
 /// The subset that can be bound to a shortcut or a gamepad button. The order also breaks

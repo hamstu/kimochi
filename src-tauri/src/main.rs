@@ -1280,6 +1280,13 @@ async fn linux_window_geometry(
     }
 }
 
+/// A pop-up opened on the overlay, or the last one closed: Escape clears the overlay while one is
+/// open, wherever the pointer is; see `hotkeys::set_popup_open`.
+#[tauri::command]
+fn overlay_popup_open(app: tauri::AppHandle, open: bool) -> Reply<()> {
+    hotkeys::set_popup_open(&app, open)
+}
+
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
@@ -3630,6 +3637,7 @@ fn main() {
         activate_source,
         extension_fetch,
         region_keys,
+        overlay_popup_open,
         controller_nav,
         game_pause::app::game_pause_status,
         game_cursor::game_cursor_status,

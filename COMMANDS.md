@@ -2608,7 +2608,9 @@ pressed on it resumes it and never reaches the game, unless the region editor or
 menu has Escape; so does the controller's Back button (`controllerButtons.back`, B) pressed alone
 while controller navigation is off. Controller navigation ending while the reader has the game
 paused does not resume it to hand it the focus: Kimochi keeps the focus and hands it back once the
-pause ends, if Kimochi is still in front. The shortcuts only pause the game while its window is in
+pause ends, if Kimochi is still in front. Escape with a dictionary pop-up up closes the pop-up and
+leaves the game paused, and a manual pause ending any way (the shortcut, Escape, B, a forced
+resume) closes a pop-up still up. The shortcuts only pause the game while its window is in
 front; `menuPause` resumes from anywhere. Forced resumes: the setting
 turned off, `select_source` to another source, another application in front (not in Gaming
 Mode), `overlayVisible` set false, the paused game exiting, quit, and `game_pause_resume_all`.
@@ -2622,6 +2624,25 @@ released.
 | `game_pause_beat` | `{reasons: ("lookup" \| "navigation" \| "regionEditor" \| "manual")[]}` | — |
 | `game_pause_resume_all` | — | `{running, recovered: [{pid, exe, outcome, since}]}` |
 | `game_pause_spans` | `{since?: number}` | `PauseSpan[]` |
+| `overlay_popup_open` | `{open: boolean}` | — |
+
+**Escape clears the overlay.** While a pop-up is open, wherever the pointer is, Escape is the
+overlay's: native dispatches `dismissOverlay` (emit-only), and the overlay closes its pop-ups and
+puts out lit text (logged as `overlay-dismissed`). With nothing open Escape is the game's. The
+overlay reports pop-ups with `overlay_popup_open` (`hotkeys::set_popup_open`, checked on the
+region loop); native takes Escape as a global shortcut only while one is open, and it comes before
+a paused game's `pause-escape`. On Windows the keyboard guard holds keys back from the game with
+the pointer on the text, and hands Escape on through `fire_swallowed`. Not while the region editor
+or the controller menu owns Escape: theirs comes first. Off Windows it shares the editor's and the
+menu's Escape registration (`sync_keys`). Wayland's portal takes no Escape: there Escape stays the
+game's.
+
+**Shortcuts under the pointer (Windows).** With the pointer on the overlay's text or a pop-up, the
+keyboard guard keeps key presses from the game, so Windows never matches them against the
+registered shortcuts. The guard names each such press as an accelerator and
+`hotkeys::fire_swallowed` fires the live shortcut it is, logged as `shortcut-under-pointer`. Held
+for reading, the lookup key (`overlayLookupKey`) also counts as not held: a shortcut with the
+lookup key in it wins over one without.
 
 `game_pause_beat` is the overlay's (`ui/overlay.js` `beatGamePause`; with the setting off it
 sends only `manual`): every 500 ms while any reason is held, at once when one starts or ends, and once with `[]` when all end. It is the proof
@@ -2636,7 +2657,8 @@ Events:
   processes, mechanism?, refusal?: {kind, detail}}`, on every change.
 - `pause-escape` — `{}`, Escape pressed on the game the reader paused (Windows: the keyboard hook,
   on the selected window only; elsewhere a global Escape shortcut held while paused), or the
-  controller's Back pressed alone with controller navigation off. The overlay resumes the game.
+  controller's Back pressed alone with controller navigation off. The overlay closes the
+  dictionary pop-up when one is up and stays paused; otherwise it resumes the game.
 - `game-pause-notice` — `{game, title?, kind, detail}`, once per game and refusal kind per run,
   when a game cannot be paused. `kind`: `unsupported`, `noPid`, `notFound`, `protected`,
   `antiCheat`, `elevated`, `denylisted`, `permissionDenied`, `other`. The main window shows it.
