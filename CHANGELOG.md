@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **Hachidori no longer gets stuck on "Starting" partway through a session.** After a rare hiccup inside the app, Hachidori could stop showing word pop-ups everywhere, Log included, until Kimochi was restarted. It now carries on.
+
 ## [1.2.0] - 2026-11-25
 
 ### Game Pausing

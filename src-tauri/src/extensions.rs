@@ -484,6 +484,25 @@ pub fn download_name(suggested: &str) -> String {
     }
 }
 
+/// The bytes of a command sent a `Uint8Array` body (`ext_relay_bytes`, `ext_save_file`,
+/// `ext_migration_put`). Over the IPC custom protocol they arrive raw. A webview whose custom
+/// protocol request ever fails, a response included (Tauri's ipc-protocol.js catches even a JSON
+/// body that does not parse), sends every later call by `postMessage` for as long as the page
+/// lives, and that path turns the array into a JSON list of numbers. Rejecting it there cut
+/// Hachidori's hidden window off from the hub for good: each answer it sent was refused, so
+/// lookups stopped and the engine showed as starting until the app was restarted.
+pub fn binary_body(body: &tauri::ipc::InvokeBody) -> Option<std::borrow::Cow<'_, [u8]>> {
+    match body {
+        tauri::ipc::InvokeBody::Raw(bytes) => Some(std::borrow::Cow::Borrowed(bytes)),
+        tauri::ipc::InvokeBody::Json(Value::Array(items)) => items
+            .iter()
+            .map(|item| item.as_u64().and_then(|n| u8::try_from(n).ok()))
+            .collect::<Option<Vec<u8>>>()
+            .map(std::borrow::Cow::Owned),
+        _ => None,
+    }
+}
+
 /// Saves a file an extension page downloads (`<a download>` on a `blob:` or `data:` URL:
 /// Hachidori's backup, debug info and Anki add-on). A webview inside Kimochi has no browser
 /// download UI: WKWebView cancels such a download, WebKitGTK drops it and WebView2 saves it
@@ -508,10 +527,10 @@ pub async fn ext_save_file(
         .and_then(percent_decode)
         .map(|name| download_name(&name))
         .unwrap_or_else(|| "download".into());
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+    let Some(bytes) = binary_body(request.body()) else {
         return Err("invalid: a download needs a binary body".into());
     };
-    let bytes = bytes.clone();
+    let bytes = bytes.into_owned();
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.dialog().file().set_title("Save download").set_file_name(&name).set_parent(&window).save_file(move |path| {
         let _ = tx.send(path);
@@ -736,6 +755,30 @@ mod script_dialogs {
 
 #[cfg(test)]
 mod tests {
+    use super::binary_body;
+    use tauri::ipc::InvokeBody;
+
+    #[test]
+    fn binary_bodies_survive_the_post_message_fallback() {
+        // The custom protocol: raw bytes.
+        assert_eq!(binary_body(&InvokeBody::Raw(b"{\"a\":1}".to_vec())).as_deref(), Some(&b"{\"a\":1}"[..]));
+        // postMessage: ipc-protocol.js turned the Uint8Array into a list of numbers.
+        let listed = InvokeBody::Json(serde_json::json!([123, 125]));
+        assert_eq!(binary_body(&listed).as_deref(), Some(&b"{}"[..]));
+        assert_eq!(binary_body(&InvokeBody::Json(serde_json::json!([]))).as_deref(), Some(&b""[..]));
+        // Anything else is not a byte array.
+        for body in [
+            serde_json::json!([256]),
+            serde_json::json!([-1]),
+            serde_json::json!([1.5]),
+            serde_json::json!(["1"]),
+            serde_json::json!({ "0": 1 }),
+            serde_json::Value::Null,
+        ] {
+            assert_eq!(binary_body(&InvokeBody::Json(body.clone())), None, "{body}");
+        }
+    }
+
     #[test]
     fn json_module_imports_are_served_as_fetches() {
         let source = b"kanjiReadings ??= createKanjiReadings((await import(\"./vendor/kanjidic/kanji-readings.json\",\n    { with: { type: \"json\" } })).default.readings);".to_vec();

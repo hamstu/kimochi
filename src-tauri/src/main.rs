@@ -1638,9 +1638,10 @@ fn ext_relay_bytes(
         .and_then(|value| value.to_str().ok())
         .ok_or("invalid: relay target missing")?
         .to_string();
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+    let Some(bytes) = extensions::binary_body(request.body()) else {
         return Err("invalid: relay requires a binary JSON body".into());
     };
+    let bytes = &*bytes;
     let channel = state.relay_channels.lock().unwrap().get(&target).cloned();
     let Some(channel) = channel else {
         let payload = serde_json::from_slice(bytes).map_err(|e| format!("invalid: {e}"))?;
