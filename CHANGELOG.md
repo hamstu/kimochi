@@ -8,36 +8,48 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-### Added
+### Game Pausing
 
-- 📋 **Copy hooked lines to the clipboard.** Like OCR scans, lines from the Text Hooker can now go to your clipboard as they arrive, for clipboard-based tools and browser texthooker pages. Turn on **Copy hooked lines to clipboard** in Settings → Sources → Output. Each new line is copied once, after Kimochi's line filter and duplicate check.
-- ⏸️ **Pause game.** Pause the game with one press so a tooltip or pop-up stays on screen while you read it, then press again, Escape or B on your controller to carry on. **Pause & scan** and **Pause & read along** pause the game and then scan it or step through its text, in one press. Give them a key or controller button in Settings → Shortcuts & Controls, or add them to the radial menu. Works even with Auto Game Pausing off. Experimental, like Auto Game Pausing!
-- 🖱️ **Keep the mouse cursor visible in games** (opt-in, Windows, Settings → Overlay). Some games hide the mouse pointer even while you move it, so you can't see what you're pointing at for a lookup. With this on, Kimochi makes the pointer show whenever you move the mouse in the game you've selected, with no other software and no changes to the game. Games that hide a resting pointer still do. Don't use it with online games that use anti-cheat.
-- ☑️ **Select several Log lines at once.** Right-click a line (or open its ⋯ menu) and choose **Select**: every line and note gets a checkbox, and the bar at the bottom of the Log shows how many you've picked. Click lines to add or remove them, or Shift+click to select a whole range, then **Copy text** or **Delete** them all at once. Handy for clearing out junk lines from OCR or a texthooker. Dictionary lookups are off while you select; press **Done** or Escape to go back.
-- 📖 **Read along's bar stays off the line you're reading.** With a game in a window, the bar with your position and buttons now sits just outside the window (below it, or above it when the window is at the bottom of the screen) instead of over the game's text. Full-screen games keep it inside, and it moves to the top if it would cover the line you're on. In Settings → Overlay → **Read along bar** you can hide it, hide the position counter, or show only the basic buttons or none.
-- **Words split across two lines are read as one word.** In a language written in the Latin alphabet (Spanish, French, German, English and so on), when a line ends in a hyphen right after a letter, like `esta-` with `ba` on the next line, Kimochi reads it as `estaba`: hovering it looks up the whole word, and the Log, Read along, Anki sentences and the Text Hooker get it whole. The hyphen still shows on the overlay. If the next line starts with a capital (`Baden-` / `Württemberg`), the hyphen is kept as part of the word.
+- ⏸️ **Pause game on demand.** You can now directly toggle pausing your game or use the new **Pause & scan** and **Pause & read along** in one press. Bind these new shortcuts them in Settings → Shortcuts & Controls in the radial menu section — this works even with Auto Game Pausing off.
+- **Windows:** pausing and resuming multi-process games is now much faster.
 
-### Fixed
+### OCR & overlay 👓
 
-- **Words OCR read with a lookalike letter can be looked up again.** Screen AI sometimes reads a letter as its Cyrillic or Greek twin, which looks exactly the same (the last *a* of *estrella*, say), so the dictionary found nothing. In a language written in the Latin alphabet, such as Spanish, French or German, Kimochi now puts the Latin letter back. Real Russian or Greek words in the text are left as they are.
-- **Overlay text no longer blinks while it stays the same, and the Log stops repeating it.** When a small bit of text came or went elsewhere on screen (an icon Auto OCR read as text now and then), every other line's highlight faded out and back in, every couple of seconds. And a heading close to the text under it could be sent to the Log again and again. Now only text that actually changed fades, and only new text reaches the Log.
-- **Auto OCR's lines reach the Log together.** When a screen with several passages (a quest menu, say) is read, its lines now appear in the Log at once, instead of one after another.
-- ✂️ **Anki crop area saves on Windows at 125%, 150% or 175% display scale.** With a game in a window, Save could fail and leave your Anki cards with the whole, uncropped screenshot. It now saves, and if a crop area really can't be saved, the Log says so instead of failing quietly.
-- **Text Hooker: indented lines line up with the game.** When a game wraps a line and indents the next row (often with a full-width space, as in Muv-Luv Alternative), Auto align and Transparent mode now put that row where the game draws it, instead of flush left under the first. It goes by where the text is on screen, so it works whether or not the hooked text includes the indent. A small line just above the text box (furigana-sized labels, for example) no longer gets counted as part of the line, which could push the card down a row. Short lines (like 「はい。」) also no longer make the card jump a few pixels sideways now and then.
-- **Log: hooked lines that arrive together stay in order and don't flicker.** When a game sent two lines at once (clicking through quickly), the Log could now and then show them in the wrong order, or briefly lose the newest one until the next line came in.
-- **Settings → Account now says when Kimochi Cloud has ended or a payment failed,** with a link to manage it on the website. Before, an ended subscription looked like an account that never had one, and offered a free trial that was already used.
-- **Linux: Global shortcuts and the dictionary Shift work on Hyprland 0.57.** Hyprland 0.57 answers Kimochi differently, so Kimochi never added its key binds there: shortcuts did nothing, and the overlay's words caught clicks meant for the game.
-- 🗂️ **Sentence audio and screenshots work with Manatan SRS.** Cards mined into Manatan's flashcards (through its AnkiConnect) now get their sentence audio and screenshot. Before, the fields pointed to a file Manatan had renamed, so they showed nothing. Settings → Anki's **Detect** also recognises Manatan's own note type now.
-- ✂️ **Window sources no longer read the title bar.** When you choose a window that has no crop area saved yet, Kimochi now starts it cropped to the window's content, without the title bar, its title and buttons, or the frame, so they no longer turn up as stray lines in your Log. Borderless and full-screen games are still read whole, and a crop area you've set or cleared yourself is never changed. Windows and macOS (on macOS, once Kimochi is allowed Accessibility). Change it any time with the crop tool.
-- 📜 **The Log keeps up with new lines again.** When you're at or near the bottom, new lines scroll into view, even once a session reaches its line limit, when an OCR line is read again more fully, or when a line grows after it appears (furigana, a screenshot). Scroll up to read older lines and the Log stays put until you scroll back down. While you're selecting lines, the Log holds still and catches up when you press **Done**.
-- 🖱️ **The lookup key can be picked from a list.** In Settings → Shortcuts & Controls, the new ▾ button next to **Lookup key** lists every key and mouse button it can be. Use it when pressing a button there doesn't set it, as can happen with the middle mouse button when mouse software is installed.
-- **Linux: Window, display and Quick Shot capture work on Niri 26.04.** Before, choosing a source said "That source is gone", because that Niri version shares the screen only as GPU buffers, which Kimochi couldn't read. Thanks to TAG for finding the cause and writing the first version of this fix!
-- **Linux: Global shortcuts now work on niri.** niri has no shortcut portal yet, so Kimochi now writes your shortcuts as niri binds to `~/.config/niri/kimochi.kdl` and keeps that file up to date. Your niri config needs to include it once: **Settings → Shortcuts & Controls** shows the line, and can add it for you after backing up your config. Once niri gets the shortcut portal, Kimochi uses that instead.
-- **Settings → Text Hooker:** the card preview's game dialogue box now surrounds the card, as a game's would, instead of showing as a thin strip beside it.
-- 🎮 **Controller: R1 and L1 in the dictionary pop-up now move exactly one entry per press.** Before, each press skipped three entries, which with many dictionaries could be several screens. Holding the button still moves just once.
-- **Linux: Text hooking and Audio hooking now work with older Wine,** such as Wine 8 (for example an older Flathub Wine on the Steam Deck). Before, they failed with "found no programs in the Wine prefix". If a game's Wine is too old even for this, Kimochi says so and links to how to update Wine. Audio hooking also no longer reports success when it couldn't start in a Flatpak sandbox.
-- **Windows: Auto Game Pausing pauses and resumes much faster** for games made of many processes, such as browser and Electron games. One with 40 processes took around 5 seconds to pause; it now takes a fraction of a second.
-- **`kimochi settings set` with a dotted key,** such as `kimochi settings set overlayStyle.appearance light`, now updates open windows right away, as changing it in Settings does. Before, the new value was saved but the overlay kept its old look until something else changed it.
+- 🖱️ **Windows: Keep the mouse cursor visible in games** (opt-in, Settings → Overlay). This setting tries to show the pointer while you move it in games that otherwuse would hide it.
+- **Radial menu labels** now sit beneath the ring so longer action names stay readable.
+- **Read along bar stays off your text.** Sits outside windowed games, shifts away from the current line in full-screen, and can be hidden or customised in Settings → Overlay → **Read along bar**.
+- **Window sources skip the title bar.** New window sources start cropped to their content area on Windows and macOS (needs Accessibility permission), leaving borderless games and manual crops untouched.
+- **Hyphenated words across line breaks** in Latin-alphabet languages (`esta-` / `ba`) are read and looked up whole across the overlay, Log, Read along, Anki and Text Hooker.
+- **Steadier overlay on busy screens:** unchanged lines stop blinking when Auto OCR catches an icon, and nearby headings stop repeating in the Log.
+
+### Log 📖
+
+- ☑️ **Select several lines at once.** Right-click a line (or open its **⋯** menu) and choose **Select** to pick multiple lines and notes (click or Shift+click), then **Copy text** or **Delete** them together.
+- **Keeps up with new lines again** when you're at or near the bottom (even at the line limit or when lines grow), while holding your place when scrolled up or selecting.
+- **Lines arrive together and in order:** Auto OCR sends all passages from a screen at once, and bursts of hooked lines stay in order without dropping the newest line.
+
+### Text Hooker 🪝
+
+- 📋 **Copy hooked lines to the clipboard.** Turn on **Copy hooked lines to clipboard** in Settings → Sources → Output to send filtered, deduplicated lines to external tools and browser texthooker pages.
+- **Indented lines line up with the game** in Auto align and Transparent mode, without small labels above the text box or short lines shifting the card.
+
+### Linux 🐧
+
+- **Global shortcuts on Niri.** Kimochi writes shortcuts to `~/.config/niri/kimochi.kdl` and can add the include to your Niri config from Settings → Shortcuts & Controls.
+- **Niri 26.04 capture:** window, display and Quick Shot capture work with GPU-only screencasts instead of failing with "That source is gone". Thanks to TAG for finding the cause and writing the first fix!
+- **Hyprland 0.57:** global shortcuts and the lookup key work again, without overlay words swallowing game clicks.
+- **Older Wine (Wine 8):** text and audio hooking work on older prefixes (including older Flathub Wine on Steam Deck), explain how to update when Wine is too old, and stop reporting audio hooking active when blocked by Flatpak.
+
+### Other fixes and improvements
+
+- **Manatan SRS:** sentence audio and screenshots work on mined cards, and Settings → Anki's **Detect** recognises Manatan's note type.
+- **Lookup key list:** pick any supported key or mouse button from the new **▾** menu next to **Lookup key** in Settings → Shortcuts & Controls.
+- **OCR lookalike letters:** Latin-alphabet words where Screen AI misread a letter as an identical Cyrillic or Greek character can be looked up again.
+- **Windows:** Anki crop area saves at 125%, 150% and 175% display scale, and logs an error if saving fails.
+- **Controller:** R1 and L1 in the dictionary pop-up move one entry per press instead of three.
+- **Settings → Account:** shows when Kimochi Cloud has ended or a payment failed, with a link to manage it.
+- **Settings → Text Hooker:** the card preview's game dialogue box now surrounds the card properly.
+- **CLI:** `kimochi settings set` with a dotted key (such as `overlayStyle.appearance`) updates open windows right away.
 
 ## [1.1.0] - 2026-11-18
 
