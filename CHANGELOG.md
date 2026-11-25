@@ -8,6 +8,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hachidori with Manatan SRS:** a card whose definition has a dictionary image is added again, instead of failing with "Anki stored media under a different filename".
+- **Linux AppImage:** saving the debug zip (Settings → About) no longer fails with "Read-only file system". Save dialogs now open in your Downloads folder, for the debug zip, exports and Hachidori's downloads.
+
 ## [1.2.0] - 2026-11-25
 
 ### Game Pausing

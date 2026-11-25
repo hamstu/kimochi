@@ -893,7 +893,8 @@ surface.
 `data:` URL: Hachidori's backup, debug info and Anki add-on), which a webview frame has no download
 UI for. The page's host (`host/ext/page.js`) reads the bytes and hands them to its window's
 document, which sends them as the raw body; native shows a save dialog with the suggested name
-(directories and reserved characters stripped) and writes the file. `saved: false` when the
+(directories and reserved characters stripped) and writes the file (see "Save dialogs" for
+where the dialog opens and where the file goes when that place is read-only). `saved: false` when the
 dialog is cancelled. Only the `dictionary` and `welcome` windows may call it. Web links in those
 pages, and `window.open`, go to the system browser through the hub's `tabs.create` path.
 
@@ -1507,7 +1508,7 @@ Settings → About → Debug info (`src-tauri/src/debug_report.rs`, `ui/debug-re
 | Command | Signature |
 | --- | --- |
 | `debug_report` | `() -> DebugReport` |
-| `debug_bundle_save` | `(markdown: string) -> {saved, path?}` |
+| `debug_bundle_save` | `(markdown: string) -> {saved, path?}`: `path` is where the zip was written |
 | `debug_verbose_set` | `(enabled?: bool) -> bool` (without `enabled`, whether it is on) |
 
 `DebugReport` is `{generatedAt, app: {version, commit, build, tauri, webview}, os: {name,
@@ -1521,7 +1522,7 @@ replaced, and every string loses bearer tokens, JWTs, URL query strings, `key=` 
 addresses, long opaque strings and the user's name in paths. `debug_bundle_save` asks where to
 save, then writes a zip of `report.md` (the page's Markdown, redacted again), `report.json` and
 the redacted last 2 MB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
-`auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `input` is Windows only (`null` elsewhere):
+`auto-ocr-trace.1.jsonl` and `sync-log.jsonl` (see "Save dialogs" for where). `input` is Windows only (`null` elsewhere):
 `{pointerDevices: [{type, product, maxContacts}], digitizer, maxTouches}`, the pens,
 touchscreens and Windows Ink tablets that reach the webviews as pointers of their own.
 `debug_verbose_set(true)` lasts a day, across restarts (the deadline is kept in `verbose-until` in
@@ -1636,6 +1637,26 @@ sets each browser's `HKCU` key above with `reg add`. A running `yomitan-host.exe
 it open) is renamed to `.exe.old` and the new one renamed into place; the browser runs the new one
 the next time it starts the helper.
 
+## Save dialogs
+
+A save dialog given only a file name opens in the process's working directory, which for an
+AppImage is the image's read-only mount (`/tmp/.mount_Kimoch…/usr`); saving there failed with
+"Read-only file system (os error 30)". `src-tauri/src/save_location.rs` decides instead:
+
+- Every save dialog opens in the first of the user's Downloads, Documents, Desktop and home
+  folders that exists and can be written. The native dialogs (`debug_bundle_save`,
+  `ext_save_file`) set it themselves; a page passes `save_default_path`'s answer as its dialog's
+  `defaultPath` (`frontend/bridge/saveLocation.ts`).
+- A file native writes itself (`debug_bundle_save`, `ext_save_file`) that cannot go where the
+  user chose, because the place is read-only, not permitted, or inside the AppImage's mount,
+  is written under the same name (`name (2).zip` when taken) to the first of those folders that
+  can be written, else the temporary folder. The command's `path` is where it went. Any other
+  failure, and nowhere to fall back to, is the error `could not write <chosen path>: …`.
+
+| Command | Signature |
+| --- | --- |
+| `save_default_path` | `({name}) -> string`: `name` in the folder a save dialog should open in (just `name` when there is none) |
+
 ## AnkiConnect
 
 Kimochi's own AnkiConnect requests (the Yomitan API pop-up and its card builder) go to
@@ -1670,6 +1691,22 @@ a POST whose body is a JSON object with a string `action`, a numeric `version` a
 Settings → Anki, and sends the body unchanged (the extension's API key in it), so the extension's
 own Anki settings stay in charge. The extension windows may invoke it (`extensions::EXTENSION_WINDOW_COMMANDS`).
 A card the relay adds may afterwards be given its line's audio (see "Sentence audio" below).
+
+One thing the relay does change is the name of a media file the server stored under another name
+than the extension sent (`src-tauri/src/reader/relay_media.rs`). `storeMediaFile` answers the
+stored name: Anki's differs when another file already has the name, and Manatan SRS's always
+does (it converts every file and names it after its content, `hachidori_<hash>.png` →
+`mtn_<hash>.avif`). Hachidori requires the name it sent and otherwise refuses to add the card
+("Anki stored media under a different filename"), so the relay answers such a `storeMediaFile`
+(alone or in a `multi`) with the name sent and remembers the pair for that server, in memory.
+After that, the sent name in a note's fields (`addNote`, `addNotes`, `canAddNotes`,
+`canAddNotesWithErrorDetail`, `updateNoteFields`, `updateNote`, `updateNoteModel`) goes out as
+the stored one, a note read back (`notesInfo`) shows the sent one again, and `deleteMediaFile`,
+`retrieveMediaFile` and `getMediaFilesNames` for the sent name ask about the stored file. A
+`getMediaFilesNames` the server answers with "unsupported action" (Manatan SRS has none) is
+answered from those pairs: the name when it was stored through the relay, else nothing, so the
+extension stores the file (again). Requests and replies that name no such file pass byte for
+byte; a store that failed or answered no name is not remembered.
 
 ### The session's cards (the Anki tab)
 
@@ -1781,7 +1818,7 @@ Then `notesInfo`, `storeMediaFile` (`kimochi_<ms>.mp3`, `kimochi_<ms>_word.mp3`)
 `updateNoteFields` put `[sound:…]` in the fields, but only those the note has and that are empty.
 An extension's card is noticed by `anki_connect_relay` (an `addNote` AnkiConnect accepted); its
 follow-up calls use the address and key of the extension's request. Neither the extension's
-request nor its reply changes.
+request nor its reply changes for it.
 
 ## Screenshots
 
