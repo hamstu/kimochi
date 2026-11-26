@@ -9,6 +9,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - **Hachidori no longer gets stuck on "Starting" partway through a session.** After a rare hiccup inside the app, Hachidori could stop showing word pop-ups everywhere, Log included, until Kimochi was restarted. It now carries on.
+- **Replaying a voice line no longer stops Kimochi attaching the game's voices.** Playing the same line's voice again a few times could make Kimochi take the game's voice for a repeating sound effect, so the lines after it fell back to recorded system audio. Replays are now recognised and ignored.
 
 ## [1.2.0] - 2026-11-25
 

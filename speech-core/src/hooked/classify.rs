@@ -115,6 +115,67 @@ pub fn repeated(c: &HookClip, clips: &[HookClip]) -> bool {
     clips.iter().any(|o| !itself(o) && o.group() == group && same_sound(c, o))
 }
 
+/// A sound played again at least this long after it ended is played again on its own: a loop
+/// plays again as it ends.
+const REPLAY_GAP_MS: f64 = 1000.0;
+/// The shortest sound taken for a replayed line: clicks and blips played again are effects.
+const REPLAY_MIN_S: f64 = 0.8;
+/// How long before its line a replayed voice may first have started: a typed-out row arrives
+/// seconds after its voice (KiriKiri), before the game's typing delay is known.
+const REPLAY_LEAD_MS: f64 = 4000.0;
+
+/// Whether `c` is a line's voice the reader played again (from the text box or the backlog): the
+/// same recording (`same_sound`) as an earlier clip of its group that started with a line, played
+/// again with no line of its own (none that arrived after the first play ended starts with it),
+/// and not as the first play ended (a loop plays again as it ends). It says nothing about its
+/// group: it is neither a sound played again (an effect) nor a voice of its own, and is left out
+/// of both (live KiriKiri: one line's voice replayed twice scored the voice stream 0.005, and
+/// the game's remembered voice stream was set aside). An effect the script fires with its lines
+/// starts with a new line every time, and is still told apart as one. Without lines, nothing is
+/// a replay.
+pub fn replay(c: &HookClip, clips: &[HookClip], lines: &[Line]) -> bool {
+    if lines.is_empty() || c.looping || c.dur < REPLAY_MIN_S {
+        return false;
+    }
+    let starts_with = |start: f64, l: &Line, lead_ms: f64| {
+        let a = l.anchor();
+        start >= a - lead(l, lead_ms) && start <= a + MAX_LAG_MS
+    };
+    let group = c.group();
+    let again = |o: &HookClip| o.group() == group && same_sound(c, o);
+    // A loop's every play follows the one before as it ends.
+    if clips.iter().any(|o| again(o) && (c.start - (o.start + o.dur * 1000.0)).abs() < REPLAY_GAP_MS) {
+        return false;
+    }
+    clips.iter().any(|o| {
+        let ended = o.start + o.dur * 1000.0;
+        if o.start >= c.start || o.looping || c.start < ended + REPLAY_GAP_MS || !again(o) {
+            return false;
+        }
+        let first: Vec<&Line> = lines.iter().filter(|l| starts_with(o.start, l, REPLAY_LEAD_MS)).collect();
+        // A line read again (Auto OCR reads the text box again as it refreshes) is not a new one.
+        !first.is_empty()
+            && !lines.iter().any(|l| {
+                l.anchor() > ended
+                    && starts_with(c.start, l, MAX_LEAD_MS)
+                    && !first.iter().any(|f| same_text(&f.text, &l.text))
+            })
+    })
+}
+
+/// Two readings of one line: the shorter's character pairs are mostly in the longer (one may
+/// carry a name box, or an OCR misreading, the other not). Too short a line (an exclamation, an
+/// ellipsis) could be any line's: never the same.
+fn same_text(a: &str, b: &str) -> bool {
+    let pairs = |t: &str| {
+        let chars = crate::matching::fold(t).0;
+        chars.windows(2).map(|w| (w[0], w[1])).collect::<Vec<_>>()
+    };
+    let (a, b) = (pairs(a), pairs(b));
+    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    short.len() >= 3 && short.iter().filter(|p| long.contains(p)).count() as f64 >= 0.6 * short.len() as f64
+}
+
 /// How many clips a group needs that are not repeats, for its repeats to be told apart as effects.
 const UNREPEATED: usize = 3;
 

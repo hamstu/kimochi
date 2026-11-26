@@ -133,7 +133,8 @@ impl Hooked {
     /// once each, for at most [`PASS_MS`] a call, those nearest a line waiting for one first.
     pub fn by_words(&mut self, now: f64, transcribe: &mut Transcribe) -> Vec<Matched> {
         let letters = |text: &str| matching::fold(text).0.len() as f64;
-        let all: Vec<super::HookClip> = self.feeds.values().flat_map(|f| f.clips().iter().cloned()).collect();
+        // A line's voice played again is not a sound its stream repeats, nor any line's voice.
+        let (all, _) = self.without_replays(self.feeds.values().flat_map(|f| f.clips().iter().cloned()).collect());
         // Lines waiting for a clip whose window has passed, long enough to be told by their words.
         let open: Vec<crate::timeline::Line> = self
             .lines
