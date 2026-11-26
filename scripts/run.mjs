@@ -102,14 +102,22 @@ if (darwin && (task === 'bundle' || task === 'release') && !env.APPLE_SIGNING_ID
 await (await import('./prepare.mjs')).prepare()
 
 const ocrResources = ['src-tauri/resources/meikiocr', 'src-tauri/resources/mangaocr']
-// Written last by each staging script, so their presence means a complete earlier run.
-const ocrStaged = [
-  'src-tauri/resources/meikiocr/runtime/build.json',
-  'src-tauri/resources/mangaocr/model-manifest.json'
-]
 // Each OCR script reads KIMOCHI_TARGET from the environment; they run in-process like before.
 if (env.KIMOCHI_TARGET) process.env.KIMOCHI_TARGET = env.KIMOCHI_TARGET
-if (task === 'bundle' || task === 'release' || (task === 'dev' && !ocrStaged.every((file) => existsSync(file)))) {
+// `dev` stages the OCR runtimes only when they are missing or are not the ones this host needs:
+// a runtime staged for another machine (an x64 ONNX Runtime in an ARM64 checkout) loads nowhere,
+// and speech detection, which needs it too, quietly stops. `build.json` and `model-manifest.json`
+// are written last by their staging scripts, so their presence means a complete earlier run.
+async function devNeedsOcrStaging() {
+  const { meikiocrDestination, runtimeIdentity, runtimeMismatch } = await import('./meikiocr-runtime.mjs')
+  const identity = runtimeIdentity()
+  const mismatch = await runtimeMismatch(path.join(meikiocrDestination(), 'runtime'), identity)
+  if (mismatch && mismatch !== 'not staged yet') {
+    console.log(`MeikiOCR runtime ${mismatch}; restaging it for ${identity.target} (${identity.flavor}).`)
+  }
+  return mismatch !== null || !existsSync('src-tauri/resources/mangaocr/model-manifest.json')
+}
+if (task === 'bundle' || task === 'release' || (task === 'dev' && (await devNeedsOcrStaging()))) {
   await import('./prepare-meikiocr.mjs')
   await import('./prepare-mangaocr.mjs')
   if (darwin && task !== 'dev') {

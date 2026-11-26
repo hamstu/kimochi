@@ -15,52 +15,15 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import zlib from 'node:zlib'
+import { meikiocrDestination, runtimeIdentity } from './meikiocr-runtime.mjs'
 import { ocrCrateDir } from './ocr-crates.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const destination = path.resolve(process.env.MEIKIOCR_DEST ?? path.join(root, 'src-tauri/resources/meikiocr'))
+const destination = meikiocrDestination()
 
-// Rust target triples this script can stage a runtime for.
-const TARGETS = {
-  'aarch64-apple-darwin': { platform: 'darwin', arch: 'arm64' },
-  'x86_64-apple-darwin': { platform: 'darwin', arch: 'x64' },
-  'x86_64-pc-windows-msvc': { platform: 'win32', arch: 'x64' },
-  'aarch64-pc-windows-msvc': { platform: 'win32', arch: 'arm64' },
-  'x86_64-unknown-linux-gnu': { platform: 'linux', arch: 'x64' },
-  'aarch64-unknown-linux-gnu': { platform: 'linux', arch: 'arm64' }
-}
-
-function requestedTarget() {
-  const argv = process.argv.slice(2)
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--target') return argv[i + 1]
-    if (argv[i].startsWith('--target=')) return argv[i].slice('--target='.length)
-  }
-  if (process.env.KIMOCHI_TARGET) return process.env.KIMOCHI_TARGET
-  // MEIKIOCR_ARCH predates --target and still selects the architecture on the host OS.
-  const arch = process.env.MEIKIOCR_ARCH ?? process.arch
-  const host = Object.entries(TARGETS).find(([, t]) => t.platform === process.platform && t.arch === arch)
-  if (!host) throw new Error(`No MeikiOCR runtime for host ${process.platform}/${arch}`)
-  return host[0]
-}
-
-const target = requestedTarget()
-if (!TARGETS[target]) {
-  throw new Error(`Unsupported MeikiOCR target "${target}". Supported: ${Object.keys(TARGETS).join(', ')}`)
-}
-const { platform, arch } = TARGETS[target]
-const version = platform === 'darwin' && arch === 'arm64' ? '1.30.0' : '1.22.0'
-const flavor = process.env.MEIKIOCR_RUNTIME_FLAVOR ?? (platform === 'win32' ? 'directml' : 'cpu')
-if (!['cpu', 'directml', 'cuda'].includes(flavor)) {
-  throw new Error(`Unknown MEIKIOCR_RUNTIME_FLAVOR "${flavor}" (cpu, directml or cuda)`)
-}
-if (flavor === 'directml' && platform !== 'win32') throw new Error('DirectML is Windows-only')
-if (flavor === 'cuda' && (platform === 'darwin' || arch !== 'x64')) {
-  throw new Error('CUDA runtime requires Windows or Linux on x64')
-}
-// 3: Windows DirectML staging gained DirectML.dll and the marker records the target triple.
-// 4: the CPU runtime comes from Microsoft's NuGet package (the GitHub archives are gone, #250).
-const packagingVersion = 4
+// The target, version, flavor and `build.json` marker (scripts/meikiocr-runtime.mjs, which
+// scripts/run.mjs also checks before `npm run dev`).
+const { target, platform, arch, version, flavor, override, library, required, marker, legacy } = runtimeIdentity()
 
 // SHA-256 of every archive this script downloads. An archive missing from this table is
 // refused unless it is an opt-in CUDA build, which is staged with a loud warning instead.
@@ -262,11 +225,8 @@ const openArchive = (archive, bytes) => (archive.endsWith('.tgz') ? openTarGz(by
 const ortRelease = (archive) => `https://github.com/microsoft/onnxruntime/releases/download/v${version}/${archive}`
 // `._*` are AppleDouble resource forks that macOS-built tarballs can carry.
 const isLicense = (name) => !name.startsWith('._') && /license|notice|thirdparty/i.test(name)
-const library = { darwin: 'libonnxruntime.dylib', win32: 'onnxruntime.dll', linux: 'libonnxruntime.so' }[platform]
-const required = flavor === 'directml' ? [library, 'DirectML.dll'] : [library]
-// Linux's archive exposes both the SONAME and versioned library through links.
-// Keep those names in the bundle too; extract() resolves them to regular files.
-if (platform === 'linux') required.push(`${library}.1`, `${library}.${version}`)
+// `required` (meikiocr-runtime.mjs) lists Linux's SONAME and versioned library names too, which
+// the archive exposes through links; extract() resolves them to regular files.
 
 /** Copy the selected files and top-level licences out of one archive into `install`. */
 async function extract(install, archive, bytes, { dir, pick, top, licensePrefix = '' }) {
@@ -391,14 +351,6 @@ if (withModels) {
 // ---- Runtime ---------------------------------------------------------------------------------
 
 const runtime = path.join(destination, 'runtime')
-const override = process.env.MEIKIOCR_RUNTIME_DIR
-const marker = JSON.stringify({
-  packagingVersion,
-  version,
-  target,
-  flavor,
-  override: override ?? null
-})
 const markerFile = path.join(runtime, 'build.json')
 const current = await readFile(markerFile, 'utf8').catch(() => '')
 const present = async () => {
@@ -414,15 +366,8 @@ const present = async () => {
   return true
 }
 // A packaging-version-2 marker (no triple) describes byte-identical macOS and Linux staging, so
-// adopt it rather than re-download: on macOS the staged dylib has also been re-signed in place.
-const legacy = JSON.stringify({
-  packagingVersion: 2,
-  version,
-  platform,
-  arch,
-  flavor,
-  override: override ?? null
-})
+// adopt it (`legacy`) rather than re-download: on macOS the staged dylib has also been re-signed
+// in place.
 if (current !== marker && current === legacy && platform !== 'win32' && (await present())) {
   await writeFile(markerFile, marker)
 } else if (current !== marker || !(await present())) {
