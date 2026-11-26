@@ -341,7 +341,9 @@ function hookExeOf(source: DemoSource): string {
 /**
  * Embedded: what the demo's own game starts as once hooked (new to Kimochi, Auto align off), by
  * game key. Kept under every write of `textHookerGames`, so the source panel's own write of its
- * Text hooking switch, racing `texthook_start`, cannot drop it.
+ * Text hooking switch, racing `texthook_start`, cannot drop it. Auto align off is only how the game
+ * starts: it leaves this record once the game is hooked (`texthook_start`), because the visitor
+ * turning Auto align on stores nothing (on is the default), and the record would turn it off again.
  */
 const embedGames: HookGames = {}
 function withEmbedGames(games: HookGames, add?: string): HookGames {
@@ -1250,6 +1252,8 @@ const HANDLERS: Record<string, Handler> = {
           // Hooked: the game's record again, past any write that raced the first one.
           embedGames[key].hookedAt = Date.now()
           publish('textHookerGames', withEmbedGames((settings.textHookerGames as HookGames | undefined) ?? {}, key))
+          // From here Auto align is the visitor's: the stored game has it off, and their switch decides.
+          delete embedGames[key].autoAlign
           HOOK_STATUS.phase = 'hooked'
           HOOK_STATUS.threads = HOOK_THREADS.map((t) => ({ ...t, selected: t.key === HOOK_STATUS.selected }))
           pushHookStatus()
