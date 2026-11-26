@@ -1007,3 +1007,209 @@ fn two_voice_files_as_long_as_each_other_are_two_voices() {
     assert_eq!(matched.len(), 8, "{matched:?} groups: {:?}", h.report.groups);
     assert!(matched.iter().all(|(uid, seq)| uid == &seq.to_string()), "{matched:?}");
 }
+/// One sound of the format KiriKiri plays its voices in (mono 48 kHz DirectSound buffers, no names),
+/// as loud as `rms`: the same recording played again measures the same.
+fn kirikiri(f: &Fixture, seq: u64, start: f64, dur: f64, rms: f64, fmt: &str) {
+    let name = format!("clips/k{seq}.wav");
+    crate::wav::write(&f.0.join(&name), &vec![0.2; 16000], 16000).unwrap();
+    f.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"dsound","start":start,"t":start+dur*1000.,"dur":dur,"file":name,"fmt":fmt,"rms":rms}));
+}
+const KIRIKIRI_VOICE: &str = "pcm16 1ch 48000Hz";
+fn kirikiri_group(h: &Hooked, fmt: &str) -> classify::Verdict {
+    let group = format!("dsound | {fmt} | ");
+    h.report.groups.iter().find(|v| v.group == group).cloned().unwrap_or_else(|| panic!("{:?}", h.report.groups))
+}
+/// Live KiriKiri (2026-11-25): a quote's 6.66 s voice, then the reader replays it from the text
+/// box (`replays`, ms after its line; two text-box sounds before the first), then reads on.
+/// Counted as one sound played three times, the voice stream scored 0.005 and was set aside,
+/// remembered or not. Returns each line given a clip, with the clip, and the voice stream's verdict.
+fn replayed_line(remembered: bool, before: bool, replays: &[f64]) -> (Vec<(String, u64)>, classify::Verdict) {
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    if remembered {
+        h.remembered = Some(format!("dsound | {KIRIKIRI_VOICE} | "));
+    }
+    let mut got = Vec::new();
+    let mut run = |h: &mut Hooked, now: f64| got.extend(h.tick(now).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+    // Two lines voiced before it, or none: it starts the session.
+    let mut ts = 10_000.;
+    if before {
+        for (i, dur) in [(1u64, 2.4), (2, 3.9)] {
+            kirikiri(&f, i, ts - 330., dur, 0.05 + i as f64 * 0.01, KIRIKIRI_VOICE);
+            h.line(text_line(&i.to_string(), &format!("「台詞その{i}」"), ts));
+            run(&mut h, ts + 6000.);
+            ts += 8000.;
+        }
+    }
+    kirikiri(&f, 3, ts - 330., 6.6626875, 0.0891, KIRIKIRI_VOICE);
+    h.line(text_line("3", "「そんなこと言われても困ります」", ts));
+    run(&mut h, ts + 8000.);
+    kirikiri(&f, 50, ts + 40_550., 0.6252607709750567, 0.10716, "pcm16 1ch 44100Hz");
+    kirikiri(&f, 51, ts + 41_735., 0.6252607709750567, 0.10716, "pcm16 1ch 44100Hz");
+    for (k, at) in replays.iter().enumerate() {
+        // Auto OCR reads the text box again as the reader clicks, just before the replay: the
+        // same line (with the name box, and a misread character), not a new one.
+        let read = ts + at - 2164.;
+        h.line(Line {
+            uid: format!("ocr{k}"),
+            text: "芳乃\n「そんなこと言われても困りま寸」".into(),
+            ts: read,
+            appeared: None,
+            ocr: true,
+            scan: Some(format!("scan{k}")),
+        });
+        kirikiri(&f, 60 + k as u64, ts + at, 6.6626875, 0.0891, KIRIKIRI_VOICE);
+        run(&mut h, ts + at + 8000.);
+    }
+    // The reader reads on: the next quotes have voices of their own.
+    ts += replays.iter().fold(0., |a: f64, b| a.max(*b)) + 12_000.;
+    for (i, dur) in [(4u64, 3.1), (5, 2.2)] {
+        kirikiri(&f, i, ts - 330., dur, 0.05 + i as f64 * 0.01, KIRIKIRI_VOICE);
+        h.line(text_line(&i.to_string(), &format!("「台詞その{i}」"), ts));
+        run(&mut h, ts + 6000.);
+        ts += 8000.;
+    }
+    let verdict = kirikiri_group(&h, KIRIKIRI_VOICE);
+    (got, verdict)
+}
+#[test]
+fn a_replayed_voice_line_keeps_a_remembered_stream_the_voice() {
+    let (got, verdict) = replayed_line(true, false, &[43_141., 65_808.]);
+    assert_eq!(got, [("3", 3), ("4", 4), ("5", 5)].map(|(l, s)| (l.to_string(), s)).to_vec(), "{verdict:?}");
+    assert!(verdict.voice > 0.75, "{verdict:?}");
+    // (The first replay, by now 20 s from every line, is no longer judged at all.)
+    assert!(verdict.reasons.iter().any(|r| r.contains("of its clips replay a line's voice")), "{verdict:?}");
+}
+#[test]
+fn a_replayed_voice_line_does_not_unseat_a_voice_stream_learned_this_session() {
+    for replays in [&[43_141., 65_808.][..], &[8_700., 17_000., 25_500.]] {
+        let (got, verdict) = replayed_line(false, true, replays);
+        assert!(verdict.voice > 0.75, "{verdict:?}");
+        // Every line its own voice, each once and as it is read: a replay is never a line's.
+        assert_eq!(got, (1..=5u64).map(|i| (i.to_string(), i)).collect::<Vec<_>>(), "{replays:?} {verdict:?}");
+        // The replayed line the session's first: once three voices have come with their lines,
+        // the stream is the voice, and each of them is given its own.
+        let (mut got, verdict) = replayed_line(false, false, replays);
+        assert!(verdict.voice > 0.75, "{replays:?} {verdict:?}");
+        got.sort();
+        assert_eq!(got, (3..=5u64).map(|i| (i.to_string(), i)).collect::<Vec<_>>(), "{replays:?} {verdict:?}");
+    }
+}
+#[test]
+fn a_voice_replayed_soon_after_it_ends_is_a_replay_too() {
+    // Replayed 2 s after it ended, within the window its own line's voice may start in.
+    let (got, verdict) = replayed_line(true, false, &[8_700., 17_000., 25_500.]);
+    assert!(verdict.voice > 0.75, "{verdict:?}");
+    assert_eq!(got, [("3", 3), ("4", 4), ("5", 5)].map(|(l, s)| (l.to_string(), s)).to_vec(), "{verdict:?}");
+}
+#[test]
+fn a_sound_played_again_as_it_ends_is_still_a_loop() {
+    // Ambience started with a line and played again as each play ends (no line between): a
+    // sound played again, not a replay.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    for i in 1..=3u64 {
+        let ts = i as f64 * 8000.;
+        kirikiri(&f, i, ts - 330., 3.0 + i as f64 * 0.4, 0.05 + i as f64 * 0.01, KIRIKIRI_VOICE);
+        h.line(text_line(&i.to_string(), &format!("「台詞その{i}」"), ts));
+    }
+    let amb = "pcm16 2ch 22050Hz";
+    for k in 0..5u64 {
+        kirikiri(&f, 100 + k, 40_000. + k as f64 * 2_150., 2.0, 0.03, amb);
+    }
+    h.line(text_line("4", "地の文", 40_200.));
+    h.tick(60_000.);
+    let v = kirikiri_group(&h, amb);
+    assert!(v.reasons.iter().any(|r| r.contains("play the same sounds again")), "{v:?}");
+    assert!(!v.reasons.iter().any(|r| r.contains("replay")), "{v:?}");
+    assert!(v.voice < 0.1, "{v:?}");
+}
+#[test]
+fn an_effect_played_again_with_new_lines_is_no_replay() {
+    // The script fires the same 1.61 s effect with three different lines, apart: an effect.
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    let texts = ["「行くぞ」と彼は言った", "扉が勢いよく開いた", "風が吹き抜けていく"];
+    for (i, text) in texts.iter().enumerate() {
+        let ts = 10_000. + i as f64 * 9000.;
+        kirikiri(&f, 100 + i as u64, ts - 320., 1.61, 0.142, "pcm16 2ch 48000Hz");
+        h.line(text_line(&i.to_string(), text, ts));
+    }
+    h.tick(40_000.);
+    let v = kirikiri_group(&h, "pcm16 2ch 48000Hz");
+    assert!(v.reasons.iter().any(|r| r.contains("play the same sounds again")), "{v:?}");
+    assert!(!v.reasons.iter().any(|r| r.contains("replay")), "{v:?}");
+    assert_eq!(v.clips, 3, "{v:?}");
+}
+#[test]
+fn a_sound_played_again_that_never_started_with_a_line_is_no_replay() {
+    let f = Fixture::new();
+    let mut h = f.hooked();
+    // Each play 13 s or more from every line (and within 20 s of one: played while reading).
+    for (k, start) in [25_000., 32_000., 60_000.].into_iter().enumerate() {
+        kirikiri(&f, 100 + k as u64, start, 2.0, 0.03, KIRIKIRI_VOICE);
+    }
+    for (i, ts) in [10_000., 45_000., 80_000.].into_iter().enumerate() {
+        h.line(text_line(&i.to_string(), "「台詞」", ts));
+    }
+    h.tick(90_000.);
+    let v = kirikiri_group(&h, KIRIKIRI_VOICE);
+    assert!(v.reasons.iter().any(|r| r.contains("play the same sounds again")), "{v:?}");
+    assert!(v.voice < 0.1, "{v:?}");
+}
+/// The live replay with speech detection, opt-in: `KIMOCHI_ORT=<onnxruntime.dll>
+/// KIMOCHI_REPLAY_WAV=<a voiced clip> cargo test --lib hooked::tests::a_replayed_voice_line_with -- --ignored`.
+#[test]
+#[ignore]
+fn a_replayed_voice_line_with_speech_detection_keeps_the_stream() {
+    ort::init_from(std::env::var("KIMOCHI_ORT").expect("KIMOCHI_ORT")).commit().unwrap();
+    let src = std::path::PathBuf::from(std::env::var("KIMOCHI_REPLAY_WAV").expect("KIMOCHI_REPLAY_WAV"));
+    let (samples, rate) = feed::decode(&src).unwrap();
+    let dur = samples.len() as f64 / rate as f64;
+    for remembered in [true, false] {
+        let f = Fixture::new();
+        let mut h = f.hooked();
+        h.speech = Some(crate::vad::Vad::new().unwrap());
+        if remembered {
+            h.remembered = Some(format!("dsound | {KIRIKIRI_VOICE} | "));
+        }
+        let play = |seq: u64, start: f64| {
+            let name = format!("clips/r{seq}.wav");
+            std::fs::copy(&src, f.0.join(&name)).unwrap();
+            f.event(json!({"ev":"clip","seq":seq,"s":seq,"api":"dsound","start":start,"t":start+dur*1000.,"dur":dur,"file":name,"fmt":KIRIKIRI_VOICE,"rms":0.0891}));
+        };
+        let mut got = Vec::new();
+        let mut ts = 10_000.;
+        if !remembered {
+            // Two other voices first (the real clip's speech, as loud as another recording).
+            for i in 1..=2u64 {
+                let name = format!("clips/v{i}.wav");
+                std::fs::copy(&src, f.0.join(&name)).unwrap();
+                f.event(json!({"ev":"clip","seq":i,"s":i,"api":"dsound","start":ts-330.,"t":ts-330.+dur*1000.,"dur":dur+i as f64*0.1,"file":name,"fmt":KIRIKIRI_VOICE,"rms":0.05+i as f64*0.01}));
+                h.line(text_line(&format!("v{i}"), "「台詞」", ts));
+                got.extend(h.tick(ts + dur * 1000. + 2000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+                ts += dur * 1000. + 4000.;
+            }
+        }
+        play(10, ts - 330.);
+        h.line(text_line("a", "「そんなこと言われても困ります」", ts));
+        got.extend(h.tick(ts + dur * 1000. + 2000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+        for (k, at) in [43_141., 65_808.].into_iter().enumerate() {
+            // Read again by Auto OCR just before (as live).
+            h.line(Line {
+                uid: format!("ocr{k}"),
+                text: "「そんなこと言われても困ります」".into(),
+                ts: ts + at - 2164.,
+                appeared: None,
+                ocr: true,
+                scan: Some(format!("scan{k}")),
+            });
+            play(11 + k as u64, ts + at);
+            got.extend(h.tick(ts + at + dur * 1000. + 2000.).into_iter().map(|m| (m.line.uid, m.clip.seq)));
+        }
+        let v = kirikiri_group(&h, KIRIKIRI_VOICE);
+        assert!(v.voice > 0.75, "remembered {remembered}: {v:?}");
+        assert!(got.contains(&("a".to_string(), 10)), "remembered {remembered}: {got:?}");
+        assert_eq!(h.report.rejected, 0, "remembered {remembered}");
+    }
+}
