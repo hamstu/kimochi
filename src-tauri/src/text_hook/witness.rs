@@ -125,8 +125,15 @@ pub fn dialogue_blocks(lines: &[OcrLine], title: &str, language: &Language) -> V
 /// over the dialogue, nor hands the choice to one.
 pub fn judge(chosen: &str, earlier: &[&str], others: &[Other], blocks: &[Block], language: &Language) -> Verdict {
     let scale = pick::letter_scale(language);
-    let chosen = fold(chosen);
     let letters = |text: &str| text.chars().filter(|c| language.has(*c)).count();
+    // A line with no letters (`「………」`, `「！？」`): the box shows only marks, which no reading
+    // keeps, so the screen can say nothing either way. Judged anyway, whatever else has letters
+    // there (the speaker's nameplate, now the largest text) took the choice from a thread that
+    // was fine.
+    if !chosen.trim().is_empty() && letters(chosen) == 0 {
+        return Verdict::Unclear;
+    }
+    let chosen = fold(chosen);
     let largest = blocks.iter().enumerate().max_by(|a, b| a.1.area.total_cmp(&b.1.area)).map(|(i, _)| i);
     // Where on screen a text is: in the largest block, elsewhere, or not at all.
     let place = |text: &str| -> Option<bool> {
@@ -140,7 +147,7 @@ pub fn judge(chosen: &str, earlier: &[&str], others: &[Other], blocks: &[Block],
     // line (sent again, or more around it) is no other. Off the largest block, only a long line.
     let theirs = others
         .iter()
-        .filter(|o| o.fresh && !o.generic)
+        .filter(|o| o.fresh && !o.generic && !pick::is_nameplate(o.text))
         .filter_map(|o| {
             let text = fold(o.text);
             let length = text.chars().count();
@@ -341,6 +348,25 @@ mod tests {
         let blocks = screen(&["「全然違う話をしている」"]);
         let others = [other("copy", "「今日はいい天気だね」")];
         assert_eq!(judge("「今日はいい天気だね」", &[], &others, &blocks, ja()), Verdict::Unhooked);
+    }
+
+    #[test]
+    fn a_line_of_marks_alone_hands_nothing_to_the_nameplate() {
+        // A KiriKiri game: its nameplate above the box, sent by a thread of its own (drawn three
+        // times over), and a line that is all marks, which the reading drops; the nameplate is
+        // then the largest text on screen.
+        let mut lines = vec![line("千恋＊万花", 2.0), line("女性", 470.0)];
+        lines.push(OcrLine { text: "「………」".into(), x: 100.0, y: 520.0, width: 200.0, height: 40.0 });
+        let blocks = dialogue_blocks(&lines, "千恋＊万花", ja());
+        let tripled = [other("name", "【 女性 】【 女性 】【 女性 】")];
+        assert_eq!(judge("「………」", &[], &tripled, &blocks, ja()), Verdict::Unclear);
+        // A line with letters and the nameplate on screen with it: the nameplate is never named.
+        let blocks = dialogue_blocks(&[line("将臣", 470.0), line("「芦花姉？　本当に？」", 520.0)], "千恋＊万花", ja());
+        let others = [other("name", "【 将臣 】")];
+        assert_eq!(judge("「前の場面の台詞だった」", &[], &others, &blocks, ja()), Verdict::Unhooked);
+        // Chosen by mistake, the nameplate's thread is not vouched for: the dialogue takes over.
+        let others = [other("dialogue", "「芦花姉？　本当に？」")];
+        assert_eq!(judge("【 将臣 】", &[], &others, &blocks, ja()), Verdict::Other("dialogue".into()));
     }
 
     #[test]
