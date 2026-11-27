@@ -9,7 +9,8 @@
 // http://tauri.localhost on Windows, hachidori://localhost, …), and plugin-http forwards it.
 // AnkiConnect's default webCorsOriginList (["http://localhost"]) refuses those origins with
 // HTTP 403. A request from Rust has no Origin, which AnkiConnect always admits, so the
-// extensions' requests are re-sent from here (host/anki-relay.js routes them), unchanged.
+// extensions' requests are re-sent from here (host/anki-relay.js routes them), unchanged but
+// for the names of media files the server stored under another name (relay_media.rs).
 //
 // All calls use the classic endpoint (`/`, API version 6) that every AnkiConnect release
 // serves; 26.10's JSON-RPC endpoint (`/api/v1`) is not used.
@@ -17,9 +18,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use super::relay_media::StoredNames;
 use crate::settings::Settings;
 use crate::state::Shared;
 
@@ -353,19 +355,45 @@ async fn relay_request(url: &str, request: &Value) -> Result<RelayReply, String>
     Ok(RelayReply { status, body })
 }
 
+/// One relayed request, with media files named on each side as that side knows them.
+struct Relayed {
+    /// The request as it went to AnkiConnect.
+    sent: Value,
+    /// AnkiConnect's answer.
+    answered: RelayReply,
+    /// The answer for the extension.
+    reply: RelayReply,
+}
+
+/// Relays `request` to the AnkiConnect at `url`. A media file that server stored under another
+/// name than the extension sent keeps the sent name towards the extension and the stored one
+/// towards the server (`names`, relay_media.rs); everything else passes as it is.
+async fn relay_named(names: &Mutex<StoredNames>, url: &str, request: &Value) -> Result<Relayed, String> {
+    let server = parse_url(url)?.to_string();
+    let lock = || names.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let sent = lock().outgoing(&server, request).unwrap_or_else(|| request.clone());
+    let answered = relay_request(url, &sent).await?;
+    let body = if answered.status == 200 { lock().incoming(&server, request, &answered.body) } else { None };
+    let reply = RelayReply { status: answered.status, body: body.unwrap_or_else(|| answered.body.clone()) };
+    Ok(Relayed { sent, answered, reply })
+}
+
 /// A dictionary extension's AnkiConnect request (host/anki-relay.js), sent from here without the
 /// webview's Origin to the address its own Anki settings name (`url`, validated like the one in
-/// Settings → Anki), and otherwise as it was: the extension's settings stay in charge. A card it
-/// adds is recorded in the open session (`anki_cards`), given its line's audio afterwards when
-/// sentence audio is on (`sentence_audio`), and card enhancement's tags (`card_tags`).
+/// Settings → Anki), and otherwise as it was: the extension's settings stay in charge. Only the
+/// names of media files change, where the server stored a file under another name than the
+/// extension sent (relay_media.rs). A card it adds is recorded in the open session
+/// (`anki_cards`), given its line's audio afterwards when sentence audio is on
+/// (`sentence_audio`), and card enhancement's tags (`card_tags`).
 #[tauri::command]
 pub async fn anki_connect_relay(app: tauri::AppHandle, url: String, body: String) -> Result<RelayReply, String> {
     let request = relay_body(&body)?;
-    let reply = relay_request(&url, &request).await?;
-    crate::anki_cards::after_relay(&app, &url, &request, reply.status, &reply.body);
-    crate::sentence_audio::after_relay(&app, &url, &request, reply.status, &reply.body);
-    crate::card_tags::after_relay(&app, &url, &request, reply.status, &reply.body);
-    crate::screenshots::after_relay(&app, &url, &request, reply.status, &reply.body);
+    let Relayed { sent, answered, reply } = relay_named(super::relay_media::shared(), &url, &request).await?;
+    // What follows a card reads the note as AnkiConnect got it.
+    crate::anki_cards::after_relay(&app, &url, &sent, answered.status, &answered.body);
+    crate::sentence_audio::after_relay(&app, &url, &sent, answered.status, &answered.body);
+    crate::card_tags::after_relay(&app, &url, &sent, answered.status, &answered.body);
+    crate::screenshots::after_relay(&app, &url, &sent, answered.status, &answered.body);
     Ok(reply)
 }
 
@@ -748,6 +776,140 @@ pub(crate) mod tests {
             store_media(&refusing, None, "kimochi_4.mp3", "AAAA".into()).await.unwrap_err(),
             "unsupported audio"
         );
+    }
+
+    /// A stand-in for Manatan SRS's AnkiConnect: it names every stored file after its content,
+    /// has no `getMediaFilesNames`, and answers a `multi` call by call.
+    fn fake_manatan(body: &str) -> (u16, String) {
+        fn answer(call: &Value) -> Value {
+            match call["action"].as_str().unwrap_or("") {
+                "storeMediaFile" => {
+                    let data = call["params"]["data"].as_str().unwrap_or("");
+                    json!({ "result": format!("mtn_{:08x}.avif", data.len()), "error": null })
+                }
+                "multi" => {
+                    let answers: Vec<Value> =
+                        call["params"]["actions"].as_array().unwrap().iter().map(answer).collect();
+                    json!({ "result": answers, "error": null })
+                }
+                "addNote" => json!({ "result": 1795635391945u64, "error": null }),
+                _ => json!({ "result": null, "error": "unsupported action" }),
+            }
+        }
+        (200, answer(&serde_json::from_str(body).unwrap()).to_string())
+    }
+
+    /// The body of the last request `seen` holds.
+    fn last_body(seen: &Arc<Mutex<Vec<String>>>) -> Value {
+        let request = seen.lock().unwrap().last().cloned().unwrap();
+        serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap()
+    }
+
+    /// Hachidori 0.5.2 adding a card whose definition holds a dictionary image (its
+    /// anki-worker.js `prepareAdd`): the image goes up in a `multi`, and the note is added only
+    /// when the answer is the name it sent. Manatan SRS answered another name, and the card was
+    /// refused with "Anki stored media under a different filename".
+    #[tokio::test]
+    async fn the_relay_keeps_an_extensions_media_names_and_sends_the_stored_ones() {
+        let (manatan, seen) = serve(fake_manatan);
+        let names = Mutex::new(StoredNames::default());
+        let image = format!("hachidori_{}.png", "ab".repeat(32));
+
+        let upload = json!({ "action": "multi", "version": 6, "params": { "actions": [
+            { "action": "storeMediaFile", "version": 6, "params": { "filename": image, "data": "AAAA", "deleteExisting": false } },
+        ] } });
+        let relayed = relay_named(&names, &manatan, &upload).await.unwrap();
+        assert_eq!(relayed.sent, upload, "the file is stored under the name the extension chose");
+        assert_eq!(
+            serde_json::from_str::<Value>(&relayed.answered.body).unwrap()["result"][0]["result"],
+            "mtn_00000004.avif"
+        );
+        assert_eq!(serde_json::from_str::<Value>(&relayed.reply.body).unwrap()["result"][0]["result"], image);
+
+        let add = json!({ "action": "addNote", "version": 6, "params": { "note": {
+            "deckName": "Mining", "modelName": "Manatan-NoteType",
+            "fields": { "Expression": "注目", "MainDefinition": format!("<img src=\"{image}\"> notice") },
+        } } });
+        let relayed = relay_named(&names, &manatan, &add).await.unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&relayed.reply.body).unwrap()["result"], 1795635391945u64);
+        assert_eq!(relayed.reply.body, relayed.answered.body, "a reply that names no file is the server's own");
+        let wire = last_body(&seen);
+        assert_eq!(wire, relayed.sent);
+        assert_eq!(wire["params"]["note"]["fields"]["MainDefinition"], "<img src=\"mtn_00000004.avif\"> notice");
+        assert_eq!(wire["params"]["note"]["fields"]["Expression"], "注目");
+
+        // Its check that a file is there, on a server without one: answered from what was stored.
+        let exists =
+            |name: &str| json!({ "action": "getMediaFilesNames", "version": 6, "params": { "pattern": name } });
+        let relayed = relay_named(&names, &manatan, &exists(&image)).await.unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&relayed.reply.body).unwrap(),
+            json!({ "result": [image], "error": null })
+        );
+        let relayed = relay_named(&names, &manatan, &exists("hachidori_other.png")).await.unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&relayed.reply.body).unwrap(), json!({ "result": [], "error": null }));
+
+        // An AnkiConnect that keeps names is relayed byte for byte.
+        let (anki, seen) = serve(|body| {
+            let request: Value = serde_json::from_str(body).unwrap();
+            (200, format!("{{\"result\": {}, \"error\": null}}", request["params"]["filename"]))
+        });
+        let store =
+            json!({ "action": "storeMediaFile", "version": 6, "params": { "filename": image, "data": "AAAA" } });
+        let relayed = relay_named(&names, &anki, &store).await.unwrap();
+        assert_eq!(relayed.reply.body, format!("{{\"result\": \"{image}\", \"error\": null}}"));
+        relay_named(&names, &anki, &add).await.unwrap();
+        assert_eq!(last_body(&seen), add, "Manatan's names stay with Manatan");
+        // A failed request is the server's answer as it came.
+        let (down, _) = serve(|_| (500, "oops".into()));
+        let relayed = relay_named(&names, &down, &store).await.unwrap();
+        assert_eq!((relayed.reply.status, relayed.reply.body.as_str()), (500, "oops"));
+    }
+
+    /// Against a real server that renames what it stores, opt-in:
+    /// `KIMOCHI_MANATAN_E2E_URL=http://127.0.0.1:8765 cargo test --bin kimochi manatan_e2e -- --ignored`
+    /// with Manatan SRS's AnkiConnect extension on, a throwaway collection and a deck named
+    /// `Kimochi E2E`. Adds one note the way Hachidori does and reads it back from the server.
+    #[tokio::test]
+    #[ignore]
+    async fn manatan_e2e() {
+        let url = std::env::var("KIMOCHI_MANATAN_E2E_URL").expect("KIMOCHI_MANATAN_E2E_URL");
+        let names = Mutex::new(StoredNames::default());
+        let result = |reply: &RelayReply| {
+            let value: Value = serde_json::from_str(&reply.body).unwrap();
+            assert!(value["error"].is_null(), "{value}");
+            value["result"].clone()
+        };
+        // An 8×8 red PNG, under a name of Hachidori's making.
+        let png =
+            "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC";
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
+        let image = format!("hachidori_{stamp:064x}.png");
+        let upload = json!({ "action": "multi", "version": 6, "params": { "actions": [
+            { "action": "storeMediaFile", "version": 6, "params": { "filename": image, "data": png, "deleteExisting": false } },
+        ] } });
+        let relayed = relay_named(&names, &url, &upload).await.unwrap();
+        assert_eq!(result(&relayed.reply)[0]["result"], image, "the extension is answered with its own name");
+        let stored = result(&relayed.answered)[0]["result"].as_str().unwrap().to_string();
+        assert_ne!(stored, image, "this server keeps names: nothing to check");
+
+        let add = json!({ "action": "addNote", "version": 6, "params": { "note": {
+            "deckName": "Kimochi E2E", "modelName": "Basic", "tags": ["kimochi-e2e"],
+            "options": { "allowDuplicate": true },
+            "fields": { "Front": format!("注目 {stamp}"), "Back": format!("<img src=\"{image}\"> notice") },
+        } } });
+        let note = result(&relay_named(&names, &url, &add).await.unwrap().reply);
+        let note = note.as_u64().expect("a note id");
+
+        // What the server holds: the note names the stored file, and the file is there.
+        let info = action(&url, None, "notesInfo", json!({ "notes": [note] })).await.unwrap();
+        assert_eq!(info[0]["fields"]["Back"]["value"], format!("<img src=\"{stored}\"> notice"));
+        let file = action(&url, None, "retrieveMediaFile", json!({ "filename": stored })).await.unwrap();
+        assert!(file.as_str().is_some_and(|data| !data.is_empty()), "{file}");
+        // What the extension reads back: the name it wrote.
+        let info = json!({ "action": "notesInfo", "version": 6, "params": { "notes": [note] } });
+        let read = result(&relay_named(&names, &url, &info).await.unwrap().reply);
+        assert_eq!(read[0]["fields"]["Back"]["value"], format!("<img src=\"{image}\"> notice"));
     }
 
     /// Against a real AnkiConnect, opt-in: `KIMOCHI_ANKI_E2E_URL=http://127.0.0.1:8771

@@ -58,6 +58,7 @@ mod pp_ocr;
 mod profile;
 mod reading_history;
 mod relay_link;
+mod save_location;
 mod scan_trace;
 mod screen_ai;
 mod screenshots;
@@ -3567,6 +3568,7 @@ fn main() {
         scan_trace::scan_trace,
         debug_report::debug_report,
         debug_report::debug_bundle_save,
+        save_location::save_default_path,
         debug_report::debug_verbose_set,
         bug_report::bug_report_send,
         webview_scale::webview_scale_sync,

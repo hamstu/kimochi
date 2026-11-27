@@ -508,8 +508,9 @@ pub fn binary_body(body: &tauri::ipc::InvokeBody) -> Option<std::borrow::Cow<'_,
 /// download UI: WKWebView cancels such a download, WebKitGTK drops it and WebView2 saves it
 /// somewhere the user is never told about. The page's host reads the bytes and its window
 /// (`dictionary`) sends them here as the raw body, with the suggested name percent-encoded in
-/// `x-kimochi-filename`; the user picks where it goes. Answers `{saved, path?, bytes?}`;
-/// `saved: false` when the dialog was cancelled.
+/// `x-kimochi-filename`; the user picks where it goes (save_location.rs: the dialog opens in
+/// Downloads, and a read-only choice falls back to it). Answers `{saved, path?, bytes?}`, `path`
+/// being where it was written; `saved: false` when the dialog was cancelled.
 #[tauri::command]
 pub async fn ext_save_file(
     app: tauri::AppHandle,
@@ -532,14 +533,19 @@ pub async fn ext_save_file(
     };
     let bytes = bytes.into_owned();
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog().file().set_title("Save download").set_file_name(&name).set_parent(&window).save_file(move |path| {
+    let mut dialog = app.dialog().file().set_title("Save download").set_file_name(&name).set_parent(&window);
+    // Not the working directory, which for an AppImage is its read-only mount.
+    if let Some(dir) = crate::save_location::start_dir(&app) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.save_file(move |path| {
         let _ = tx.send(path);
     });
     let Some(path) = rx.await.map_err(|e| format!("native: {e}"))? else {
         return Ok(json!({ "saved": false }));
     };
-    let path = path.into_path().map_err(|e| format!("native: {e}"))?;
-    std::fs::write(&path, &bytes).map_err(|e| format!("native: could not write {}: {e}", path.display()))?;
+    let chosen = path.into_path().map_err(|e| format!("native: {e}"))?;
+    let path = crate::save_location::write(&app, &chosen, &bytes)?;
     Ok(json!({ "saved": true, "path": path.to_string_lossy(), "bytes": bytes.len() }))
 }
 

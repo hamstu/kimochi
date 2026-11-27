@@ -3,6 +3,7 @@ import { inProfile } from './profile'
 import { BaseDirectory, exists, mkdir, readTextFile } from '@tauri-apps/plugin-fs'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { getSettings, updateSettings } from '../lib/settings'
+import { defaultSavePath } from '../../bridge/saveLocation'
 import { getReplacements, setReplacements } from './replacements'
 import type { Preset, PresetsFile, Replacement, Settings } from '../lib/types'
 import { SETTINGS_DEFAULTS } from '../lib/types'
@@ -229,7 +230,7 @@ export async function exportActiveToFile(): Promise<string | null> {
   if (!active) return null
   const path = await saveDialog({
     title: `Export preset "${state.active}"`,
-    defaultPath: `${state.active}.preset.json`,
+    defaultPath: await defaultSavePath(`${state.active}.preset.json`),
     filters: [{ name: 'Preset JSON', extensions: ['json'] }]
   })
   if (!path) return null

@@ -2,6 +2,7 @@
 pub mod ankiconnect;
 pub mod explain;
 pub mod popover;
+pub mod relay_media;
 pub mod translate;
 pub mod vndb;
 pub mod yomitan;

@@ -5,6 +5,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { postActivity } from '../../bridge/activity'
+import { defaultSavePath } from '../../bridge/saveLocation'
 import { getSettings } from './settings'
 
 export type HistoryFormat = 'exstatic-lines' | 'exstatic-stats' | 'csv' | 'json'
@@ -46,7 +47,11 @@ export const HISTORY_FORMATS: readonly {
 export async function exportReadingHistory(format: HistoryFormat): Promise<void> {
   const choice = HISTORY_FORMATS.find((f) => f.format === format)
   if (!choice) return
-  const path = await save({ title: 'Export reading history', defaultPath: choice.file, filters: [choice.filter] })
+  const path = await save({
+    title: 'Export reading history',
+    defaultPath: await defaultSavePath(choice.file),
+    filters: [choice.filter]
+  })
   if (!path) return
   try {
     const lines = await invoke<number>('reading_history_export', {

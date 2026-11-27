@@ -73,6 +73,7 @@ import {
   useAccount,
   useLinkEvent
 } from '../../bridge/account'
+import { defaultSavePath } from '../../bridge/saveLocation'
 import { exportSyncedData, resolveConflict, syncNow, useSync } from '../../bridge/sync'
 import { nativeError, panel } from '../../bridge/tauri'
 import { DEV_BUILD } from '../../bridge/devBuild'
@@ -721,7 +722,7 @@ function SyncSection(): ReactNode {
     const day = new Date().toISOString().slice(0, 10)
     const path = await save({
       title: 'Export your synced data',
-      defaultPath: `kimochi-export-${day}.zip`,
+      defaultPath: await defaultSavePath(`kimochi-export-${day}.zip`),
       filters: [{ name: 'ZIP archive', extensions: ['zip'] }]
     })
     if (!path) return

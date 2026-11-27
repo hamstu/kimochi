@@ -1183,6 +1183,7 @@ const HANDLERS: Record<string, Handler> = {
     return previewVerbose
   },
   debug_bundle_save: () => ({ saved: true, path: '~/Downloads/kimochi-debug-preview.zip' }),
+  save_default_path: (a) => `~/Downloads/${String(a?.name ?? '')}`,
   bug_report_send: async (a) => {
     await new Promise((resolve) => setTimeout(resolve, 900))
     return { id: (a?.report as { kind?: string } | undefined)?.kind === 'feature' ? 'KF-PREV1EW' : 'KB-PREV1EW' }

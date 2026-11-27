@@ -240,7 +240,8 @@ pub async fn debug_report(app: tauri::AppHandle, state: tauri::State<'_, Shared>
 
 /// `debug_bundle_save(markdown) -> {saved, path?}`: asks where to save, then writes
 /// `kimochi-debug-<time>.zip` with `report.md` (the page's Markdown, redacted again here),
-/// `report.json` and the tail of each log in `LOGS`.
+/// `report.json` and the tail of each log in `LOGS`. `path` is where it was written: the place
+/// chosen, or the user's Downloads (…) when that place is read-only (save_location.rs).
 #[tauri::command]
 pub async fn debug_bundle_save(
     app: tauri::AppHandle,
@@ -251,23 +252,27 @@ pub async fn debug_bundle_save(
     use tauri_plugin_dialog::DialogExt;
     let service = state.inner().clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
+    let mut dialog = app
+        .dialog()
         .file()
         .set_title("Save debug bundle")
         .set_file_name(format!("kimochi-debug-{}.zip", stamp()))
         .add_filter("Zip archive", &["zip"])
-        .set_parent(&window)
-        .save_file(move |path| {
-            let _ = tx.send(path);
-        });
+        .set_parent(&window);
+    // Not the working directory, which for an AppImage is its read-only mount.
+    if let Some(dir) = crate::save_location::start_dir(&app) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.save_file(move |path| {
+        let _ = tx.send(path);
+    });
     let Some(path) = rx.await.map_err(|e| format!("native: {e}"))? else {
         return Ok(json!({ "saved": false }));
     };
-    let path = path.into_path().map_err(|e| format!("native: {e}"))?;
-    let target = path.clone();
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+    let chosen = path.into_path().map_err(|e| format!("native: {e}"))?;
+    let path = tauri::async_runtime::spawn_blocking(move || -> Result<std::path::PathBuf, String> {
         let zip = bundle(&app, &service, &markdown)?;
-        std::fs::write(&target, zip).map_err(|e| format!("native: could not write {}: {e}", target.display()))
+        crate::save_location::write(&app, &chosen, &zip)
     })
     .await
     .map_err(|e| e.to_string())??;
