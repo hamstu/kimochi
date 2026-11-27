@@ -107,3 +107,22 @@ test('the AppImage bundles libgpg-error, which linuxdeploy excludes but NixOS la
   )
   assert.throws(() => linuxGpgErrorSource(ldconfigLibraries(ldconfig([gtk3Layer]))), /install libgpg-error0/)
 })
+
+test("a multilib build machine's 32-bit libraries are never bundled, whichever ldconfig lists last", () => {
+  // Arch with lib32 packages (Steam, Wine): appimagetool refuses an AppDir with both architectures.
+  const own = 'libgpg-error.so.0 (libc6,x86-64) => /usr/lib/libgpg-error.so.0'
+  const lib32 = 'libgpg-error.so.0 (libc6) => /usr/lib32/libgpg-error.so.0'
+  for (const lines of [
+    [own, lib32],
+    [lib32, own]
+  ])
+    assert.equal(linuxGpgErrorSource(ldconfigLibraries(ldconfig(lines), 'x86-64')), '/usr/lib/libgpg-error.so.0')
+  // Only a 32-bit copy is no copy at all.
+  assert.throws(() => linuxGpgErrorSource(ldconfigLibraries(ldconfig([lib32]), 'x86-64')), /install libgpg-error0/)
+  // An ARM64 machine keeps its own, tagged AArch64.
+  const arm = 'libgpg-error.so.0 (libc6,AArch64) => /usr/lib/aarch64-linux-gnu/libgpg-error.so.0'
+  assert.equal(
+    linuxGpgErrorSource(ldconfigLibraries(ldconfig([arm]), 'AArch64')),
+    '/usr/lib/aarch64-linux-gnu/libgpg-error.so.0'
+  )
+})

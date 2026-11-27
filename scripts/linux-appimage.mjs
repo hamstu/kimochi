@@ -149,9 +149,20 @@ export async function verifyDictionaryImages(appdir, run = spawnSync) {
   console.log(output)
 }
 
-/** Library names to paths from `ldconfig -p` output (later entries win, as before). */
-export function ldconfigLibraries(output) {
-  return new Map([...output.matchAll(/^\s*(\S+)\s+.*=>\s+(\S+)$/gm)].map((match) => [match[1], match[2]]))
+/** The tag `ldconfig -p` gives this machine's own libraries, as in `(libc6,x86-64)`. */
+const ldconfigAbi = { x64: 'x86-64', arm64: 'AArch64' }[process.arch]
+
+/**
+ * Library names to paths from `ldconfig -p` output (later entries win, as before), for `abi` only:
+ * a multilib system (Arch with Steam or Wine) also lists 32-bit copies, tagged plain `(libc6)`,
+ * which a 64-bit AppImage cannot load and appimagetool refuses to pack beside its own.
+ */
+export function ldconfigLibraries(output, abi = ldconfigAbi) {
+  return new Map(
+    [...output.matchAll(/^\s*(\S+)\s+\(([^)]*)\)\s*=>\s+(\S+)$/gm)]
+      .filter((match) => !abi || match[2].split(',').some((tag) => tag.trim() === abi))
+      .map((match) => [match[1], match[3]])
+  )
 }
 
 /**
