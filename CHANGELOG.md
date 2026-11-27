@@ -12,6 +12,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Hachidori with Manatan SRS:** a card whose definition has a dictionary image is added again, instead of failing with "Anki stored media under a different filename".
 - **Linux AppImage:** saving the debug zip (Settings → About) no longer fails with "Read-only file system". Save dialogs now open in your Downloads folder, for the debug zip, exports and Hachidori's downloads.
+- **Windows: one click on the taskbar brings Kimochi back.** When Kimochi was minimised and another app was in front, clicking its taskbar button only selected it and the window stayed hidden until a second click. The first click now restores it, as it does for other apps.
+- **Hachidori no longer gets stuck on "Starting" partway through a session.** After a rare hiccup inside the app, Hachidori could stop showing word pop-ups everywhere, Log included, until Kimochi was restarted. It now carries on.
+- **Replaying a voice line no longer stops Kimochi attaching the game's voices.** Playing the same line's voice again a few times could make Kimochi take the game's voice for a repeating sound effect, so the lines after it fell back to recorded system audio. Replays are now recognised and ignored.
+- **Text hooking no longer switches to the speaker's name partway through a game.** In games that draw the speaker's name above the text box (Senren＊Banka, other KiriKiri games), a line with no words in it, like 「………」, could make Kimochi start reading the names instead of the dialogue, and remember that for next time. It now keeps the dialogue, and takes it back if an earlier version had switched.
 
 ## [1.2.0] - 2026-11-25
 

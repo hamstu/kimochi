@@ -737,9 +737,10 @@ pub fn ext_migration_begin(app: tauri::AppHandle, window: tauri::WebviewWindow) 
 #[tauri::command]
 pub fn ext_migration_put(window: tauri::WebviewWindow, request: tauri::ipc::Request<'_>) -> Result<u64, String> {
     require_copy_window(&window)?;
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+    let Some(bytes) = crate::extensions::binary_body(request.body()) else {
         return Err("invalid: a part is sent as raw bytes".into());
     };
+    let bytes = &*bytes;
     let mut live = lock();
     if live.exported.is_some() {
         return Err("invalid: the export is already complete".into());

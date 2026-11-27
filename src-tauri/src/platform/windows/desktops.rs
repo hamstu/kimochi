@@ -9,6 +9,8 @@
 //! `HKCU\…\Explorer\VirtualDesktops` (the ids in order, and any name the user gave one),
 //! which is read for the label only; without it the label is "Another desktop".
 use std::mem::ManuallyDrop;
+use std::sync::mpsc::{self, Sender};
+use std::sync::OnceLock;
 
 use windows::core::{GUID, HSTRING};
 use windows::Win32::Foundation::HWND;
@@ -56,9 +58,46 @@ pub(super) fn elsewhere(hwnd: HWND) -> Option<String> {
     })
 }
 
+/// A foreground window and the panels to bring onto its desktop, as raw handles.
+type Follow = (usize, Vec<usize>);
+
 /// Move `panels` (this process's overlay family) onto the desktop `foreground` is on, so
 /// they appear wherever the reader just went. Panels already there are left alone.
-pub(super) fn follow(foreground: HWND, panels: &[usize]) {
+///
+/// Queued for a thread of its own and returns at once. Every call to the manager is a
+/// cross-process call into Explorer, and on the UI thread (a single-threaded apartment)
+/// COM waits for the answer in a modal loop that takes messages off the thread's queue and
+/// drops some of them. The taskbar restores a minimised window by posting it
+/// `WM_SYSCOMMAND`/`SC_RESTORE` just after making it the foreground window, and that change
+/// of foreground is what calls this: the loop swallowed the restore, so clicking Kimochi's
+/// taskbar button activated the main window but left it minimised until a second click. A
+/// thread in the multithreaded apartment waits without touching any window's messages.
+pub(super) fn follow(foreground: HWND, panels: Vec<usize>) {
+    static FOLLOWER: OnceLock<Option<Sender<Follow>>> = OnceLock::new();
+    if let Some(follower) = FOLLOWER.get_or_init(spawn_follower) {
+        let _ = follower.send((foreground.0 as usize, panels));
+    }
+}
+
+/// The thread `follow` hands its work to. Only the latest foreground matters, so a backlog
+/// (a burst of Alt+Tab while Explorer is slow to answer) is skipped to its last entry.
+fn spawn_follower() -> Option<Sender<Follow>> {
+    let (sender, receiver) = mpsc::channel::<Follow>();
+    std::thread::Builder::new()
+        .name("kimochi-desktop-follow".into())
+        .spawn(move || {
+            while let Ok(mut next) = receiver.recv() {
+                while let Ok(newer) = receiver.try_recv() {
+                    next = newer;
+                }
+                move_panels(HWND(next.0 as *mut core::ffi::c_void), &next.1);
+            }
+        })
+        .ok()?;
+    Some(sender)
+}
+
+fn move_panels(foreground: HWND, panels: &[usize]) {
     with_manager(|manager| {
         let target = desktop_of(manager, foreground)?;
         for raw in panels {

@@ -614,7 +614,7 @@ static EDITING: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 /// every change of foreground window, which a desktop switch always is.
 pub(super) fn follow_desktop(foreground: HWND) {
     let panels = PANELS.lock().unwrap().clone();
-    super::desktops::follow(foreground, &panels);
+    super::desktops::follow(foreground, panels);
 }
 
 fn is_panel(hwnd: HWND) -> bool {

@@ -928,6 +928,8 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH * pick::letter_scale(language), language)
             && !pick::same_line(&chosen, &shown)
             && !pick::is_generic(&spoken.hookcode, &spoken.name)
+            // A speaker's nameplate comes with every line: no line the chosen thread missed.
+            && !pick::is_nameplate(&spoken.text)
             && !(dll_reads && unity::is_hooker_tmp_setter(&spoken.hookcode))
             // Ren'Py's say screen misses no line: the others' are its labels, errors and lines to come.
             && !chosen_dialogue
@@ -1006,6 +1008,9 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     if unity::remembers_by_signature(&session.threads[index].hookcode)
         && saved.as_ref() == Some(&session.threads[index].signature())
         && !session.dropped.iter().any(|k| k == key)
+        // A nameplate remembered by mistake (an earlier version could hand it the choice) is left
+        // for the screen to choose past.
+        && !pick::is_nameplate(&session.threads[index].text)
         && !(dll_reads && unity::is_hooker_tmp_setter(&session.threads[index].hookcode))
     {
         session.selected = Some(key.to_string());

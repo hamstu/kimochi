@@ -372,6 +372,20 @@ impl Hooked {
     fn typed(&self, line: &Line) -> Line {
         typed(line, self.report.typing_ms)
     }
+    /// `clips` without the line voices the reader played again (`classify::replay`), and those.
+    fn without_replays(&self, clips: Vec<HookClip>) -> (Vec<HookClip>, Vec<HookClip>) {
+        let lines: Vec<Line> = self.lines.iter().map(|l| self.typed(l)).collect();
+        let replay: Vec<bool> = clips.iter().map(|c| classify::replay(c, &clips, &lines)).collect();
+        let (mut kept, mut replays) = (Vec::new(), Vec::new());
+        for (c, r) in clips.into_iter().zip(replay) {
+            if r {
+                replays.push(c)
+            } else {
+                kept.push(c)
+            }
+        }
+        (kept, replays)
+    }
     /// The typing delay that explains clearly more voice starts than none does (two more at
     /// least), else none: engines that hand over whole lines keep their anchors. A start explained
     /// by a line that opens a quote counts fully, by any other line half: voiced lines are quotes,
@@ -427,7 +441,9 @@ impl Hooked {
                 .cloned()
                 .collect()
         };
-        let all = observed;
+        // A line's voice the reader played again says nothing about its stream (`classify::replay`):
+        // judged without it, it is neither a sound played again nor a voice of its own.
+        let (all, replays) = self.without_replays(observed);
         // How many sounds a group has heard, the evidence it is judged on: not its clips, as an
         // adapter can make several of one sound (the `koe` archive's reads: three of each voice).
         let sounds = |v: &classify::Verdict| v.clips as f64 / classify::per_sound(&all, &v.group) >= 2.5;
@@ -495,6 +511,12 @@ impl Hooked {
             self.report.lead_ms = (p90(early) + 400.0).clamp(classify::MIN_LEAD_MS, classify::MAX_LEAD_MS);
         }
         self.report.groups = classify::classify(&all, &lines, self.report.lead_ms, self.report.lag_ms);
+        for v in self.report.groups.iter_mut() {
+            let n = replays.iter().filter(|c| c.group() == v.group).count();
+            if n > 0 {
+                v.reasons.push(format!("{n} of its clips replay a line's voice (left out)"));
+            }
+        }
         // Unnamed groups need repeated evidence, and a clear lead over competing sounds. A group too
         // small to be judged (a door and a chime that happened to come with lines) competes with none.
         // A group that hears the same sounds (`classify::echoes`) is no competitor: of the two, the
@@ -590,6 +612,8 @@ impl Hooked {
                     && classify::candidate(c, &voice)
                     // An effect sharing the voice's format, played again (`classify::repeated`).
                     && !classify::repeated(c, &all)
+                    // A line's voice played again is not a new line's.
+                    && !replays.iter().any(|r| r.stream == c.stream && r.seq == c.seq && r.start == c.start)
             })
             .collect();
         // Of the pieces an adapter makes of one sound (`classify::per_sound`: the archive's partial

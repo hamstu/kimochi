@@ -261,6 +261,7 @@ pub fn score(candidates: &[Candidate], blocks: &[Block], language: &Language) ->
             // title also turn up in hooked threads and on screen. In a language that spaces its
             // words, a text with no space in it is one word, a name or a code, not a line.
             if length < MIN_MATCH * scale
+                || is_nameplate(candidate.text)
                 || japanese_ratio(&text, language) < MIN_JAPANESE
                 || (language.spaces && !candidate.text.trim().contains(char::is_whitespace))
             {
@@ -706,12 +707,13 @@ fn collapse_once(text: &str, ends: &str, longest: usize) -> String {
         // Up to all that is left but a character: copies differing in line breaks differ in length.
         let longest = (chars.len() - i).saturating_sub(1).min(longest);
         // The shortest sentence that repeats: drawn four times, the line twice over repeats too.
-        // A whole quote, however short (`「ん？」「ん？」「ん？」`), is a sentence too.
-        let quote = |n: usize| chars[i] == '「' && chars[i + n - 1] == '」';
+        // A whole quote, however short (`「ん？」「ん？」「ん？」`), is a sentence too, and so is a
+        // bracketed name (KiriKiri draws its nameplate three times over: `【 女性 】【 女性 】【 女性 】`).
+        let enclosed = |n: usize| matches!((chars[i], chars[i + n - 1]), ('「', '」') | ('『', '』') | ('【', '】'));
         // The copies need not break where each other does: a game can send a long line as drawn,
         // wrapped onto two lines, and then whole (`…ている\n壁の…た。…ている壁の…た。`).
         let repeat = (3..=longest).find_map(|n| {
-            if !(n >= MIN_REPEAT || quote(n)) || !ends(chars[i + n - 1]) {
+            if !(enclosed(n) || n >= MIN_REPEAT && ends(chars[i + n - 1])) {
                 return None;
             }
             same_but_breaks(&chars[i..i + n], &chars[i + n..]).map(|len| (n, len))
@@ -771,6 +773,20 @@ pub fn another_line(before: &str, shown: &str, min: usize, language: &Language) 
     let fresh = before.is_empty() || !(shown.starts_with(before) || before.starts_with(shown));
     fresh && shown.chars().count() >= min && reads_as(shown, language)
 }
+
+/// Whether a thread's text is a speaker's nameplate: nothing but a name in lenticular brackets
+/// (`【 将臣 】`), the way KiriKiri games and many others draw the name above the box. Its thread
+/// sends a name with every line, and the name is on screen with every line, so the screen alone
+/// would vouch for it; it is never the dialogue.
+pub fn is_nameplate(text: &str) -> bool {
+    let text = text.trim();
+    let Some(inner) = text.strip_prefix('【').and_then(|t| t.strip_suffix('】')) else { return false };
+    let name = normalize(inner);
+    !name.is_empty() && name.chars().count() <= MAX_NAME && !inner.contains(['【', '】', '\n'])
+}
+
+/// The longest name [`is_nameplate`] takes, in characters.
+const MAX_NAME: usize = 12;
 
 /// Whether normalized text holds enough of the language's letters to be chosen or handed over to
 /// automatically ([`MIN_JAPANESE`]).
@@ -981,6 +997,42 @@ mod tests {
     }
 
     #[test]
+    fn a_nameplate_is_never_chosen_for_the_dialogue() {
+        for name in ["【 女性 】", "【芦花姉】", " 【 将臣 】\n"] {
+            assert!(is_nameplate(name), "{name:?}");
+        }
+        for text in [
+            "【 女性 】「人違いならごめんなさい」",
+            "小京都とも呼ばれる街並みは、いい意味で【和】の雰囲気を残している。",
+            "【】",
+            "「………」",
+            "【 女性 】【 将臣 】",
+        ] {
+            assert!(!is_nameplate(text), "{text:?}");
+        }
+        // The screen: the nameplate above the box, whose line is all marks (no reading keeps it).
+        let lines = [
+            OcrLine { text: "女性".into(), x: 100.0, y: 500.0, width: 80.0, height: 30.0 },
+            OcrLine { text: "「………」".into(), x: 100.0, y: 560.0, width: 200.0, height: 36.0 },
+        ];
+        let screen = blocks(&lines);
+        let threads = [("dialogue", "「………」"), ("name", "【 女性 】")];
+        let candidates: Vec<Candidate> = threads
+            .iter()
+            .map(|(key, text)| Candidate {
+                key,
+                hookcode: "HW-8*14:-8*0@F4600:Game.exe",
+                name: "KiriKiriZ",
+                text,
+                recent: 1,
+                count: 5,
+                noise: 0.0,
+            })
+            .collect();
+        assert!(score(&candidates, &screen, ja()).is_empty());
+    }
+
+    #[test]
     fn sentences_drawn_three_times_come_out_once() {
         let a = "「わ、わかったよ」";
         let b = "今日はもう帰ることにした。";
@@ -989,6 +1041,9 @@ mod tests {
         let named = "ゆかり＠？？？「え、ちょっと待って……」";
         assert_eq!(collapse(&named.repeat(4)), named);
         assert_eq!(collapse("「ん？」「ん？」「ん？」"), "「ん？」");
+        // A KiriKiri nameplate, drawn three times (and twice through another thread).
+        assert_eq!(collapse("【 女性 】【 女性 】【 女性 】"), "【 女性 】");
+        assert_eq!(collapse("【芦花姉】【芦花姉】"), "【芦花姉】");
         // Its name and line drawn apart: name, name, line, line, then the two together.
         assert_eq!(collapse("ゆかり＠？？？ゆかり＠？？？「それは秘密にしておくよ」「それは秘密にしておくよ」ゆかり＠？？？「それは秘密にしておくよ」"), "ゆかり＠？？？「それは秘密にしておくよ」");
         assert_eq!(
