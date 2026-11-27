@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Send hooked lines over WebSocket** (Settings → Sources → Output): each new line from the Text Hooker goes to Kimochi's WebSocket server, so a texthooker page in your browser shows it and your browser's Yomitan can look its words up. It has its own switch, apart from Send scans over WebSocket, and uses the same URL.
+
 ### Fixed
 
 - **Hachidori with Manatan SRS:** a card whose definition has a dictionary image is added again, instead of failing with "Anki stored media under a different filename".

@@ -46,8 +46,19 @@ impl Texthooker {
         Self { settings, server: Arc::new(Mutex::new(None)), generation: Arc::new(AtomicU64::new(0)), log }
     }
 
-    fn enabled(&self) -> bool {
+    /// Send scans over WebSocket.
+    fn sends_scans(&self) -> bool {
         self.settings.get_or("texthookerSettings.sendToWebSocket", false)
+    }
+
+    /// Send hooked lines over WebSocket.
+    fn sends_hooked_lines(&self) -> bool {
+        self.settings.get_or("texthookerSettings.sendHookedLines", false)
+    }
+
+    /// The server runs while either switch is on; both share its URL.
+    fn enabled(&self) -> bool {
+        self.sends_scans() || self.sends_hooked_lines()
     }
 
     fn url(&self) -> String {
@@ -148,6 +159,8 @@ impl Texthooker {
         }
     }
 
+    /// An OCR scan: copied when Copy scans to clipboard is on, sent when Send scans over
+    /// WebSocket is.
     pub fn publish(&self, text: &str) {
         if text.trim().is_empty() {
             return;
@@ -162,9 +175,20 @@ impl Texthooker {
                 })),
             }
         }
-        if !self.enabled() {
-            return;
+        if self.sends_scans() {
+            self.broadcast(text);
         }
+    }
+
+    /// A line the Log took in from the Text Hooker: sent when Send hooked lines over WebSocket
+    /// is on. The Log copies it to the clipboard itself.
+    pub fn publish_hooked(&self, text: &str) {
+        if !text.trim().is_empty() && self.sends_hooked_lines() {
+            self.broadcast(text);
+        }
+    }
+
+    fn broadcast(&self, text: &str) {
         // Take a snapshot and send outside the server lock: a slow client must not be
         // able to block `settings_changed` or another `publish`.
         let clients: Vec<Client> = match self.server.lock().unwrap().as_ref() {
@@ -212,24 +236,27 @@ mod tests {
     }
 
     fn hooker(port: u16) -> Texthooker {
+        hooker_with(port, "sendToWebSocket")
+    }
+
+    /// A texthooker serving on `port` with only the switch `key` on (the test's settings file
+    /// may be left from an earlier run on the same port, so both are set).
+    fn hooker_with(port: u16, key: &str) -> Texthooker {
         let settings = Arc::new(crate::settings::Settings::load(
             std::env::temp_dir().join(format!("kimochi-texthooker-test-{port}.json")),
         ));
         settings
             .set_many(&[
-                (&["texthookerSettings", "sendToWebSocket"], json!(true)),
+                (&["texthookerSettings", "sendToWebSocket"], json!(key == "sendToWebSocket")),
+                (&["texthookerSettings", "sendHookedLines"], json!(key == "sendHookedLines")),
                 (&["texthookerSettings", "webSocketUrl"], json!(format!("ws://127.0.0.1:{port}"))),
             ])
             .expect("settings");
         Texthooker::new(settings, Arc::new(|_| {}))
     }
 
-    /// Loopback only, no external network: a real client connects and receives a real
-    /// frame, which is the part that unit-testing `parse_port` alone would miss.
-    #[test]
-    fn publishes_text_to_a_connected_local_client() {
-        let port = free_port();
-        let hooker = hooker(port);
+    /// Start `hooker` on `port` and connect a client to it, once the server has registered it.
+    fn connect(hooker: &Texthooker, port: u16) -> WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>> {
         hooker.start();
         let mut client = None;
         for _ in 0..50 {
@@ -239,7 +266,7 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        let mut client = client.expect("client should connect to the texthooker server");
+        let client = client.expect("client should connect to the texthooker server");
         // Give the accept loop a moment to register the connection.
         for _ in 0..50 {
             if hooker.server.lock().unwrap().as_ref().is_some_and(|s| !s.clients.is_empty()) {
@@ -247,10 +274,36 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
+        client
+    }
+
+    /// Loopback only, no external network: a real client connects and receives a real
+    /// frame, which is the part that unit-testing `parse_port` alone would miss.
+    #[test]
+    fn publishes_text_to_a_connected_local_client() {
+        let port = free_port();
+        let hooker = hooker(port);
+        let mut client = connect(&hooker, port);
         hooker.publish("日本語");
         let message = client.read().expect("read frame");
         assert_eq!(message.into_text().unwrap().as_str(), "日本語");
         hooker.stop();
+    }
+
+    /// Each switch sends only its own lines: with only Send hooked lines on, a scan is not sent
+    /// and a hooked line is; the next frame the client reads is the hooked line.
+    #[test]
+    fn hooked_lines_and_scans_follow_their_own_switches() {
+        for (key, sent) in [("sendHookedLines", "「おはよう」"), ("sendToWebSocket", "スキャン")] {
+            let port = free_port();
+            let texthooker = hooker_with(port, key);
+            let mut client = connect(&texthooker, port);
+            texthooker.publish("スキャン");
+            texthooker.publish_hooked("「おはよう」");
+            let message = client.read().expect("read frame");
+            assert_eq!(message.into_text().unwrap().as_str(), sent, "with only {key} on");
+            texthooker.stop();
+        }
     }
 
     #[test]

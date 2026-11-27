@@ -78,6 +78,8 @@ async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
     async writeText(text) {
       env.copied.push(text)
     },
+    /** What the Log sent the texthooker WebSocket server (`texthooker_send`). */
+    sent: [],
     /** What the Log sent the reading history (`reading_history_append`). */
     history: [],
     async invoke(command, args) {
@@ -86,6 +88,10 @@ async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
       if (command === 'history_merge_reset') return
       if (command === 'profile_current') return { key: null, root: options.profileRoot ?? '' }
       if (command === 'sync_local_changed') return
+      if (command === 'texthooker_send') {
+        env.sent.push(structuredClone(args))
+        return
+      }
       if (command === 'reading_history_append') {
         env.history.push(...structuredClone(args.events))
         return args.events.length
@@ -707,6 +713,57 @@ test('Copy hooked lines to clipboard leaves lines from other sources alone', asy
   await new Promise((resolve) => setTimeout(resolve, 30))
   assert.equal(h.snapshot().lines.length, 1)
   assert.deepEqual(h.copied, [])
+  await h.call('stats', 'resetStats')
+})
+
+test('Send hooked lines over WebSocket sends each hooked line the Log takes in, once, and nothing else', async () => {
+  const output = {
+    copyToClipboard: false,
+    copyHookedLines: false,
+    sendToWebSocket: false,
+    sendHookedLines: true,
+    webSocketUrl: ''
+  }
+  const h = await harness({
+    superTexthooker: { inputSource: 'hook', autoMatchSource: false, japaneseFilter: 'off' },
+    texthookerSettings: output
+  })
+  // Sends wait on a settings read each, one after another.
+  const sent = () => new Promise((resolve) => setTimeout(() => resolve(h.sent), 30))
+  await h.call('host', 'ingest', ['「おはよう」', 'hook', 1, 'hook-1'])
+  await h.call('host', 'ingest', ['「おはよう」', 'hook', 2, 'hook-2'])
+  await h.call('host', 'ingest', ['「今日は', 'hook', 3, 'hook-3'])
+  await h.call('host', 'ingest', ['「今日はいい天気だね」', 'hook', 4, 'hook-4', null, 'hook-3'])
+  assert.deepEqual(await sent(), [
+    { text: '「おはよう」', hooked: true },
+    { text: '「今日は', hooked: true },
+    { text: '「今日はいい天気だね」', hooked: true }
+  ])
+  // Its own switch: the clipboard is left alone.
+  assert.deepEqual(h.copied, [])
+  // Off: nothing more is sent.
+  h.sent.length = 0
+  h.settings.texthookerSettings = { ...output, sendHookedLines: false }
+  await h.call('host', 'ingest', ['「またね」', 'hook', 5, 'hook-5'])
+  assert.deepEqual(await sent(), [])
+  await h.call('stats', 'resetStats')
+})
+
+test('Send hooked lines over WebSocket leaves lines from other sources alone', async () => {
+  const h = await harness({
+    superTexthooker: { inputSource: 'clipboard', autoMatchSource: false, japaneseFilter: 'off' },
+    texthookerSettings: {
+      copyToClipboard: false,
+      copyHookedLines: false,
+      sendToWebSocket: true,
+      sendHookedLines: true,
+      webSocketUrl: ''
+    }
+  })
+  await h.call('host', 'ingest', ['「クリップボードから」', 'clipboard', 1, 'clip-1'])
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(h.snapshot().lines.length, 1)
+  assert.deepEqual(h.sent, [])
   await h.call('stats', 'resetStats')
 })
 

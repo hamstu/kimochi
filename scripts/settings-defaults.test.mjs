@@ -93,6 +93,7 @@ const AGREED = {
     copyToClipboard: false,
     copyHookedLines: false,
     sendToWebSocket: false,
+    sendHookedLines: false,
     webSocketUrl: 'ws://localhost:6677'
   },
   gamepadSettings: { enabled: true, preferredGamepadIndex: undefined },
