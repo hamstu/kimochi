@@ -117,7 +117,7 @@ pub fn target(pid: u32) -> Result<Target, String> {
     if !cfg!(target_arch = "aarch64") {
         return Err("Native Agent scripts currently require an Apple Silicon Mac.".into());
     }
-    Ok(Target { pid, exe, bits: 64, wine: None })
+    Ok(Target { pid, exe, bits: 64, arm64: false, wine: None })
 }
 
 #[cfg(target_os = "macos")]
@@ -182,7 +182,13 @@ pub fn wine_target(pid: u32) -> Result<Target, String> {
         return Err("Text Hooker needs a 64-bit Wine prefix; it can run 32-bit games too.".into());
     }
     let env = wine::shared_env(&process.env, Path::exists);
-    Ok(Target { pid, exe, bits, wine: Some(wine::Wine { binary, prefix, env, image, flatpak: None, namespace: None }) })
+    Ok(Target {
+        pid,
+        exe,
+        bits,
+        arm64: false,
+        wine: Some(wine::Wine { binary, prefix, env, image, flatpak: None, namespace: None, host_pid: Some(pid) }),
+    })
 }
 
 #[cfg(test)]

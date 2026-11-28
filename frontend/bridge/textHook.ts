@@ -30,6 +30,8 @@ export interface HookTarget {
   hookable: boolean
   bits?: number
   exe?: string
+  /** True when the window belongs to a recognised console emulator (whose title changes when a game boots). */
+  emulator?: boolean
   /** Why the window cannot be hooked. */
   reason?: string
   /** The game's Agent script, when the collection has one (and Agent scripts are on). */

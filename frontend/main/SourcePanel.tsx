@@ -501,9 +501,16 @@ function TextHookBox({
 /**
  * Whether the game behind a window can be hooked, and its exe; null until known. A window shared
  * through the Wayland portal names no process until Kimochi links it to its window (KWin,
- * Hyprland), after its first frames, so it is asked about again until then.
+ * Hyprland), after its first frames, so it is asked about again until then. Recognised emulator
+ * windows are also polled while no Agent script has matched yet so booting a game inside an
+ * already-selected emulator pops up the Agent offer automatically.
  */
-function useHookTarget(sourceId: string | null): HookTarget | null {
+function useHookTarget(
+  sourceId: string | null,
+  sourceName: string | null,
+  agentScriptsOn: boolean,
+  languageCode: string
+): HookTarget | null {
   const [found, setFound] = useState<{ id: string; target: HookTarget } | null>(null)
   useEffect(() => {
     if (!sourceId) return
@@ -519,7 +526,9 @@ function useHookTarget(sourceId: string | null): HookTarget | null {
               ? was
               : { id: sourceId, target }
           )
-          if (!target.hookable && sourceId.startsWith('portal:window:')) timer = setTimeout(look, 3000)
+          const pollPortal = !target.hookable && sourceId.startsWith('portal:window:')
+          const pollEmulator = agentScriptsOn && Boolean(target.emulator) && !target.agent
+          if (pollPortal || pollEmulator) timer = setTimeout(look, 3000)
         })
         .catch(() => {})
     }
@@ -528,7 +537,7 @@ function useHookTarget(sourceId: string | null): HookTarget | null {
       live = false
       clearTimeout(timer)
     }
-  }, [sourceId])
+  }, [sourceId, sourceName, agentScriptsOn, languageCode])
   return found && found.id === sourceId ? found.target : null
 }
 
@@ -1003,8 +1012,14 @@ export function SourcePanel({
     startedHook.current = sourceId
     void texthookStart(sourceId, hookObserver).catch(() => {})
   }
+  const [agentScriptsOn] = useSetting<boolean>('textHookerAgentScripts', true)
   // The chosen window's game, when it can be hooked: the Text hooking box is shown for it.
-  const hookTarget = useHookTarget(hookAvailable && source?.type === 'window' ? source.sourceId : null)
+  const hookTarget = useHookTarget(
+    hookAvailable && source?.type === 'window' ? source.sourceId : null,
+    source?.type === 'window' ? (source.name ?? null) : null,
+    agentScriptsOn !== false,
+    language.code
+  )
   // A Text Hooker source restored at launch (or changed from elsewhere) is hooked again: a window
   // shared through the portal once it is linked to its game's window (`useHookTarget`).
   const hookSourceId = mode === 'hook' && source?.type === 'window' ? source.sourceId : null
@@ -1096,13 +1111,14 @@ export function SourcePanel({
    * Makes sure the game behind `sourceId` is hooked. A session already on it is kept: one paused
    * while Text hooking was off, or while another source was chosen, carries on as it was.
    */
-  const ensureHook = (sourceId: string): void => {
+  const ensureHook = (sourceId: string, engine?: 'agent' | 'luna'): void => {
     autoHookPaused = false
     startedHook.current = sourceId
     void texthookStatus()
       .then((current) => {
-        if (current.sourceId === sourceId && HOOK_ACTIVE.includes(current.phase)) return
-        return texthookStart(sourceId, hookObserver)
+        const sameEngine = !engine || current.engines?.[0] === engine
+        if (current.sourceId === sourceId && HOOK_ACTIVE.includes(current.phase) && sameEngine) return
+        return texthookStart(sourceId, hookObserver, engine)
       })
       .catch(() => {})
   }
@@ -1133,7 +1149,7 @@ export function SourcePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per linked source
   }, [source?.sourceId, mode, lateHookOn])
   /** The Text hooking switch: kept for the game, and the Log's input follows it at once. */
-  const setTextHook = async (on: boolean): Promise<void> => {
+  const setTextHook = async (on: boolean, engine?: 'agent' | 'luna'): Promise<void> => {
     if (!source || !hookExe) return
     const exe = hookExe
     const sourceId = source.sourceId
@@ -1141,14 +1157,14 @@ export function SourcePanel({
     // writing the games back, and must see the switch as it is now.
     await updateHookGame(exe, (game) => ({ ...game, exe: game.exe ?? exe, textHook: on })).catch(() => {})
     choose(on ? 'hook' : 'ocr')
-    if (on) ensureHook(sourceId)
+    if (on) ensureHook(sourceId, engine)
   }
   /** The Agent offer taken: the script is the game's engine from now on, and Text hooking comes on. */
   const takeAgentScript = async (): Promise<void> => {
     if (!hookExe) return
     const exe = hookExe
     await updateHookGame(exe, (game) => ({ ...game, exe: game.exe ?? exe, engine: 'agent' })).catch(() => {})
-    await setTextHook(true)
+    await setTextHook(true, 'agent')
   }
   /** Clearing the source: the game is let go, and nothing is hooked on its own until the next launch. */
   const clearSource = (): void => {

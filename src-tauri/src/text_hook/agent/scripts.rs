@@ -11,14 +11,43 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const VERIFIED_MARKER: &str = ".verified";
+
 pub fn dir(root: &Path) -> PathBuf {
     root.join(format!("agent-scripts-{}", &index().commit[..12]))
+}
+
+/// Fast check for UI status / target polling: checks the verified marker written after a full
+/// SHA-256 unpack plus `libLoader.js`, falling back once to the full 600-file size scan for
+/// directories unpacked before the marker existed.
+pub fn installed_fast(root: &Path) -> Option<PathBuf> {
+    let dir = dir(root);
+    if !dir.is_dir() {
+        return None;
+    }
+    let marker = dir.join(VERIFIED_MARKER);
+    if fs::read_to_string(&marker).ok().as_deref().map(str::trim) == Some(index().commit.as_str()) {
+        let loader_ok = index()
+            .files
+            .iter()
+            .find(|(name, _, _)| name == "libLoader.js")
+            .is_some_and(|(name, size, _)| fs::metadata(dir.join(name)).map(|m| m.len() == *size).unwrap_or(false));
+        if loader_ok {
+            return Some(dir);
+        }
+    }
+    let verified = installed(root)?;
+    let _ = fs::write(&marker, &index().commit);
+    Some(verified)
 }
 
 /// The collection's folder, when it is there whole (each file at its size; the hashes were checked
 /// when it was unpacked, and the folder only exists once they all passed).
 pub fn installed(root: &Path) -> Option<PathBuf> {
     let dir = dir(root);
+    if !dir.is_dir() {
+        return None;
+    }
     let complete = index()
         .files
         .iter()
@@ -71,6 +100,7 @@ fn unpack(archive: &[u8], root: &Path, target: &Path) -> Result<(), String> {
             _ => "stopped".to_string(),
         })
         .and_then(|()| {
+            fs::write(staging.join(VERIFIED_MARKER), &index().commit).map_err(|e| e.to_string())?;
             let _ = fs::remove_dir_all(target);
             crate::extension_store::rename_with_retry(&staging, target).map_err(|e| e.to_string())
         });

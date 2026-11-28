@@ -116,7 +116,7 @@ fn injector_missing(root: &Path, target: Option<&process::Target>, size: fn(&sto
 
 /// The collection's download, if it is not here yet.
 fn collection_missing(root: &Path) -> u64 {
-    if scripts::installed(root).is_some() {
+    if scripts::installed_fast(root).is_some() {
         0
     } else {
         scripts::download_size()
@@ -292,15 +292,20 @@ fn launch(
     {
         return Err("busy: the game is paused".into());
     }
+    if !collection.join(&script.file).is_file() {
+        return Err(format!("the script {} is missing from the collection", script.file));
+    }
     let loader = std::fs::read_to_string(collection.join("libLoader.js")).map_err(|e| format!("libLoader.js: {e}"))?;
     let dir = game_path(target, collection, true)?;
     let separator =
         if cfg!(any(target_os = "linux", target_os = "macos")) && target.wine.is_none() { "/" } else { "\\" };
     let mission = format!("{dir}{separator}{}", script.file);
     // One file per session, in a folder of its own (under Wine it is copied where the game can
-    // reach it, folder and all).
+    // reach it, folder and all). Prune earlier hook-*.js files first so the folder stays tiny and
+    // sandboxed Wine prefixes do not accumulate stale staged copies.
     let run_dir = collection.with_file_name("agent-run");
     std::fs::create_dir_all(&run_dir).map_err(|e| e.to_string())?;
+    prune_run_dir(&run_dir);
     let file = run_dir.join(format!("hook-{generation}.js"));
     std::fs::write(&file, build_script(&loader, &dir, &mission)).map_err(|e| e.to_string())?;
     let native = cfg!(any(target_os = "linux", target_os = "macos")) && target.wine.is_none();
@@ -351,23 +356,12 @@ fn launch(
         started,
     });
     let run = Arc::new(Mutex::new(Run::default()));
-    // A script that neither loads nor fails (a scan of the game's memory that never ends) is given
-    // up after a while, for the next engine.
-    std::thread::spawn(move || {
-        std::thread::sleep(STARTUP_LIMIT);
-        let stuck = {
-            let session = hook.lock();
-            session.generation == generation && session.engine == Some(ENGINE) && session.phase == "attaching"
-        };
-        if stuck {
-            fall_back(hook, generation, ENGINE, "the script did not start".into());
-        }
-    });
-    // The game closing, or frida-inject stopping: noticed here, since its standard error may stay
-    // open after it (a Frida helper it started keeps it), and the reader would never hear the end.
+    let attempt_started = Instant::now();
+    // Watches for the game closing, frida-inject stopping (its stderr can stay open if a Frida
+    // helper inherited it), or a script that never finishes loading within STARTUP_LIMIT.
     {
         let (context, run) = (context.clone(), run.clone());
-        std::thread::spawn(move || watch(hook, generation, &context, &run));
+        std::thread::spawn(move || watch(hook, generation, &context, &run, attempt_started));
     }
     std::thread::spawn(move || {
         read(hook, generation, &context, &run, BufReader::new(stderr));
@@ -376,6 +370,18 @@ fn launch(
         again(hook, generation, &context, end);
     });
     Ok(())
+}
+
+/// Removes previous session script files in `agent-run/` before writing a new one.
+fn prune_run_dir(run_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(run_dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("hook-") && name.ends_with(".js") {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// What a session's run of frida-inject needs to be started again.
@@ -404,7 +410,7 @@ struct Run {
 impl Run {
     fn note(&mut self, text: String) {
         self.said.push_back(text);
-        if self.said.len() > 6 {
+        if self.said.len() > 12 {
             self.said.pop_front();
         }
     }
@@ -481,36 +487,56 @@ fn running(_pid: u32) -> Option<bool> {
 
 fn target_running(target: &process::Target) -> Option<bool> {
     #[cfg(unix)]
-    if target.wine.is_none() {
-        let pid = i32::try_from(target.pid).ok()?;
-        return Some(
-            unsafe { libc::kill(pid, 0) } == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM),
-        );
+    {
+        let unix_pid =
+            if target.wine.is_none() { Some(target.pid) } else { target.wine.as_ref().and_then(|w| w.host_pid) };
+        if let Some(pid) = unix_pid.and_then(|p| i32::try_from(p).ok()) {
+            return Some(
+                unsafe { libc::kill(pid, 0) } == 0
+                    || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM),
+            );
+        }
     }
     running(target.pid)
 }
 
-/// Every half second, while the run is the session's: the game gone, or frida-inject gone.
-fn watch(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run>) {
+/// Every half second, while the run is the session's: the game gone, frida-inject gone, or the
+/// script stuck in startup beyond `STARTUP_LIMIT`.
+fn watch(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run>, attempt_started: Instant) {
     loop {
         std::thread::sleep(Duration::from_millis(500));
-        let ending = {
+        let (ending, timed_out) = {
             let mut session = hook.lock();
             if session.generation != generation || session.engine != Some(ENGINE) {
                 return;
             }
-            if run.lock().unwrap_or_else(|e| e.into_inner()).over {
+            let state = run.lock().unwrap_or_else(|e| e.into_inner());
+            if state.over {
                 return;
             }
+            let ready = state.ready;
+            drop(state);
             let exited = session.child.as_mut().is_none_or(|child| matches!(child.try_wait(), Ok(Some(_))));
             if target_running(&context.target) == Some(false) {
-                Some(Ending::GameClosed)
+                (Some(Ending::GameClosed), false)
             } else if exited {
-                Some(Ending::Exited)
+                (Some(Ending::Exited), false)
+            } else if !ready && session.phase == "attaching" && attempt_started.elapsed() >= STARTUP_LIMIT {
+                (None, true)
             } else {
-                None
+                (None, false)
             }
         };
+        if timed_out {
+            let mut state = run.lock().unwrap_or_else(|e| e.into_inner());
+            if state.over || state.ready {
+                return;
+            }
+            state.over = true;
+            drop(state);
+            fall_back(hook, generation, ENGINE, "the script did not start".into());
+            return;
+        }
         if let Some(ending) = ending {
             let end = finish(hook, generation, context, run, ending);
             again(hook, generation, context, end);
@@ -563,18 +589,125 @@ pub fn plain_error(text: &str) -> String {
         .join(" ")
 }
 
+/// Extracts the `[Compatibility]` line logged by an emulator helper library (e.g.
+/// `PPSSPP v1.12.3-867 -> v1.18.1-1464`, `Azahar 2120.1+`), if any.
+fn compatibility_note(said: &VecDeque<String>) -> Option<String> {
+    let mut after_marker = false;
+    for line in said {
+        let trimmed = line.trim();
+        if trimmed.eq_ignore_ascii_case("[Compatibility]") {
+            after_marker = true;
+            continue;
+        }
+        if after_marker && !trimmed.is_empty() && !trimmed.starts_with('[') {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn default_emulator_range(platform: &str) -> Option<&'static str> {
+    match platform {
+        "switch" => Some("a yuzu-family emulator build 1646+ (Eden, Citron, or Sudachi)"),
+        "psp" => Some("PPSSPP 1.12.3–1.18.1 (1.20.x is not supported)"),
+        "ps2" => Some("PCSX2 2.2.0–2.7.494"),
+        "ps3" => Some("RPCS3 0.0.20-13234–0.0.28-15144"),
+        "vita" => Some("Vita3K 0.2.0 build 3742–0.2.1 build 3994"),
+        "3ds" => Some("Azahar 2120.1+"),
+        _ => None,
+    }
+}
+
+/// Turns a raw script or injector error into a clear, actionable explanation for the card.
+pub fn explain_error(script: &Script, raw: &str, said: &VecDeque<String>, native_linux: bool) -> String {
+    let cleaned = plain_error(raw);
+    let lower = cleaned.to_ascii_lowercase();
+    if lower.contains("libryujinx") {
+        return "Standard Ryujinx isn't supported by the Agent scripts collection; use a yuzu-family Switch emulator (Eden, Citron, or Sudachi).".into();
+    }
+    let emu_signature_fail = lower.contains("registerblock not found")
+        || lower.contains("dojit not found")
+        || lower.contains("failed to find initialize")
+        || lower.contains("failed to setup nce")
+        || lower.contains("couldn't find start of function")
+        || lower.contains("unsupported emulator")
+        || lower.contains("invalid address for");
+    if emu_signature_fail && script.platform != "pc" {
+        let range = compatibility_note(said).or_else(|| default_emulator_range(&script.platform).map(str::to_string));
+        let mut msg = match range {
+            Some(range) => format!("This emulator version isn't supported by the script (needs {range})."),
+            None => format!("This emulator version isn't supported by the script ({cleaned})."),
+        };
+        if native_linux {
+            msg.push_str(" Native Linux builds also need unstripped symbols.");
+        }
+        return msg;
+    }
+    if lower.starts_with("todo:") && script.platform != "pc" {
+        return "This emulator's Agent helper only supports Windows so far.".into();
+    }
+    if lower.contains("unable to access")
+        || lower.contains("operation not permitted")
+        || lower.contains("permission denied")
+        || lower.contains("ptrace")
+        || lower.contains("access is denied")
+    {
+        if cfg!(target_os = "linux") {
+            return "Linux blocked Agent from attaching to this process (check kernel.yama.ptrace_scope or sandbox restrictions).".into();
+        }
+        if cfg!(windows) {
+            return "Windows blocked Agent from attaching to this game (it may be protected or running as administrator).".into();
+        }
+    }
+    cleaned
+}
+
 /// Whether the script's log says the game's Unity (Mono) runtime is not there yet.
 fn runtime_not_ready(text: &str) -> bool {
     let lower = text.to_lowercase();
     lower.contains("mono not found") || lower.contains("mono is not ready") || lower.contains("il2cpp not found")
 }
 
-fn kill(session: &mut Session) {
+/// Gracefully stops `frida-inject` (SIGTERM first on Unix so Frida can unload hooks cleanly) and
+/// waits briefly for exit before returning, so a following engine attaches cleanly.
+pub(super) fn stop_child_process(mut child: std::process::Child) {
+    #[cfg(unix)]
+    {
+        if let Ok(pid) = i32::try_from(child.id()) {
+            unsafe {
+                libc::kill(pid, libc::SIGTERM);
+            }
+            let deadline = Instant::now() + Duration::from_millis(600);
+            while Instant::now() < deadline {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+    let _ = child.kill();
+    let deadline = Instant::now() + Duration::from_millis(400);
+    while Instant::now() < deadline {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+}
+
+fn kill(session: &mut Session) -> Option<std::process::Child> {
     #[cfg(target_os = "macos")]
     gadget::stop(session);
-    if let Some(mut child) = session.child.take() {
-        let _ = child.kill();
-        std::thread::spawn(move || child.wait());
+    session.child.take()
+}
+
+fn kill_async(session: &mut Session) {
+    if let Some(child) = kill(session) {
+        std::thread::spawn(move || stop_child_process(child));
     }
 }
 
@@ -641,8 +774,9 @@ fn read(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run
                 );
             }
             // The script could not load (a library it needs, the game's code it looks for): it says
-            // so itself, and frida-inject, which would stay, is stopped.
-            "error" if !state.ready => {
+            // so itself, and frida-inject, which would stay, is stopped. Also catches delayed load
+            // errors that arrive before the script produces any text.
+            "error" if !state.spoke => {
                 let text = event["text"].as_str().unwrap_or("the script did not load").to_string();
                 crate::debug_report::trace(
                     &hook.app,
@@ -650,13 +784,18 @@ fn read(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<Run
                 );
                 state.over = true;
                 if state.not_ready || runtime_not_ready(&text) {
-                    kill(&mut session);
+                    let child = kill(&mut session);
                     drop((state, session));
+                    if let Some(child) = child {
+                        stop_child_process(child);
+                    }
                     again(hook, generation, context, End::RuntimeNotReady);
                     return;
                 }
+                let native_linux = cfg!(target_os = "linux") && context.target.wine.is_none();
+                let explained = explain_error(script, &text, &state.said, native_linux);
                 drop((state, session));
-                fall_back(hook, generation, ENGINE, plain_error(&text));
+                fall_back(hook, generation, ENGINE, explained);
                 return;
             }
             // The script gave up on this game (a version it does not know).
@@ -680,9 +819,11 @@ fn finish(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<R
         return End::Done;
     }
     state.over = true;
-    kill(&mut session);
+    kill_async(&mut session);
     let key = format!("{}:agent", context.target.pid);
-    let closed = ending == Ending::GameClosed || state.said.iter().any(|s| s.to_lowercase().contains("terminated"));
+    let closed = ending == Ending::GameClosed
+        || target_running(&context.target) == Some(false)
+        || state.said.iter().any(|s| s.to_lowercase().contains("terminated"));
     if closed {
         session.phase = "ended";
         session.detail = Some("The game has closed.".into());
@@ -693,7 +834,13 @@ fn finish(hook: &'static Hook, generation: u64, context: &Context, run: &Mutex<R
     if state.not_ready && !state.spoke {
         return End::RuntimeNotReady;
     }
-    let what = state.said.iter().rev().find(|s| !s.is_empty()).cloned();
+    let native_linux = cfg!(target_os = "linux") && context.target.wine.is_none();
+    let what = state
+        .said
+        .iter()
+        .rev()
+        .find(|s| !s.is_empty() && !s.trim().eq_ignore_ascii_case("[Compatibility]"))
+        .map(|raw| explain_error(context.script, raw, &state.said, native_linux));
     if !state.ready || !state.spoke {
         drop((state, session));
         fall_back(hook, generation, ENGINE, what.unwrap_or_else(|| "the script did not load".into()));
@@ -740,7 +887,7 @@ mod tests {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     #[test]
     fn native_linux_uses_the_linux_injector_and_posix_paths() {
-        let target = process::Target { pid: 1, exe: "/opt/PPSSPPSDL".into(), bits: 64, wine: None };
+        let target = process::Target { pid: 1, exe: "/opt/PPSSPPSDL".into(), bits: 64, arm64: false, wine: None };
         assert_eq!(injector(Some(&target)), Some("agent-linux-x64"));
         assert_eq!(game_path(&target, Path::new("/tmp/scripts/game.js"), false).unwrap(), "/tmp/scripts/game.js");
     }
@@ -785,5 +932,60 @@ mod tests {
     fn a_unity_runtime_not_up_yet_is_told_from_the_log() {
         assert!(runtime_not_ready("Mono not found!"));
         assert!(!runtime_not_ready("Attach: TMP_Text.set_text"));
+    }
+
+    #[test]
+    fn emulator_and_ryujinx_errors_are_explained_clearly() {
+        let psp = Script {
+            file: "PSP_ULJM06302-3_Seishun_Hajimemashita.js".into(),
+            title: "Seishun".into(),
+            platform: "psp".into(),
+            ids: vec![],
+            steam: vec![],
+            lang: None,
+            version: None,
+            author: None,
+            generic: false,
+        };
+        let said = VecDeque::from(["[Compatibility]".to_string(), "PPSSPP v1.12.3-867 -> v1.18.1-1464".to_string()]);
+        let win_msg = explain_error(&psp, "Error: RegisterBlock not found!", &said, false);
+        assert!(win_msg.contains("PPSSPP v1.12.3-867 -> v1.18.1-1464"), "{win_msg}");
+        assert!(!win_msg.contains("unstripped"), "{win_msg}");
+        let linux_msg = explain_error(&psp, "Error: RegisterBlock not found!", &said, true);
+        assert!(linux_msg.contains("unstripped symbols"), "{linux_msg}");
+
+        let switch = Script { platform: "switch".into(), ..psp.clone() };
+        let ryu = explain_error(
+            &switch,
+            "Module require error: Can't get real module path for ./libRyujinx.js",
+            &VecDeque::new(),
+            false,
+        );
+        assert!(ryu.contains("Eden, Citron, or Sudachi"), "{ryu}");
+
+        let todo = explain_error(&psp, "TODO: linux x64", &VecDeque::new(), true);
+        assert!(todo.contains("only supports Windows"), "{todo}");
+
+        let denied = explain_error(&psp, "Unable to access /proc/1234/mem: Permission denied", &VecDeque::new(), true);
+        if cfg!(target_os = "linux") {
+            assert!(denied.contains("ptrace_scope"), "{denied}");
+        } else if cfg!(windows) {
+            assert!(denied.contains("administrator"), "{denied}");
+        }
+    }
+
+    #[test]
+    fn stale_run_scripts_are_pruned_before_launching_a_new_session() {
+        let dir = std::env::temp_dir().join(format!("kimochi-agent-prune-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("hook-1.js"), "old").unwrap();
+        std::fs::write(dir.join("hook-2.js"), "older").unwrap();
+        std::fs::write(dir.join("keep.txt"), "keep").unwrap();
+        prune_run_dir(&dir);
+        assert!(!dir.join("hook-1.js").exists());
+        assert!(!dir.join("hook-2.js").exists());
+        assert!(dir.join("keep.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

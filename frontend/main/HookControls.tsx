@@ -63,14 +63,21 @@ function couldNotHook(status: HookStatus): boolean {
 function downloadProgress(status: HookStatus): FieldProgress | null {
   const d = status.download
   if (status.phase !== 'downloading' || !d) return null
-  const value = d.total > 0 ? (d.done / d.total) * 100 : 0
+  const value = d.total > 0 ? Math.min(100, (d.done / d.total) * 100) : 0
   const engine = status.engine?.name ?? 'the hooker'
+  // Agent counts both downloading and xz unpacking in `total`, so show percentage rather than
+  // doubled megabytes that would contradict the offer's download size.
+  const isAgent = status.engine?.id === 'agent'
   return {
     value,
     exact: d.total > 0,
     short: `${Math.floor(value)}%`,
     title:
-      d.total > 0 ? `Downloading ${engine}: ${megabytes(d.done)} of ${megabytes(d.total)}` : `Downloading ${engine}`
+      d.total > 0
+        ? isAgent
+          ? `Preparing ${engine}: ${Math.floor(value)}%`
+          : `Downloading ${engine}: ${megabytes(d.done)} of ${megabytes(d.total)}`
+        : `Downloading ${engine}`
   }
 }
 

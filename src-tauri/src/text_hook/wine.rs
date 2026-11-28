@@ -16,7 +16,7 @@
 //!
 //! Wine's process ids are its own, not Linux's, so the game's id inside the prefix comes from the
 //! helper (`kimochi-hookd processes`), matched to the game by its Windows image path.
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use super::process::Target;
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 use std::path::Path;
@@ -40,6 +40,9 @@ pub struct Wine {
     pub flatpak: Option<u32>,
     /// A non-Flatpak game with a private Wine socket, in an unprivileged user/mount namespace.
     pub namespace: Option<u32>,
+    /// The game's Linux/macOS host process id, kept after `windows_targets` swaps `Target::pid`
+    /// to Wine's internal process id so liveness watchers can detect game exit immediately.
+    pub host_pid: Option<u32>,
 }
 
 /// `path` as a process sees it, as Kimochi can open it: through `/proc/<pid>/root`.
@@ -468,7 +471,13 @@ mod imp {
             })
             .unwrap_or(64);
         let env = shared_env(&environ, |p| outside(p).exists());
-        Ok(Target { pid, exe, bits, wine: Some(Wine { binary, prefix, env, image, flatpak, namespace }) })
+        Ok(Target {
+            pid,
+            exe,
+            bits,
+            arm64: false,
+            wine: Some(Wine { binary, prefix, env, image, flatpak, namespace, host_pid: Some(pid) }),
+        })
     }
 
     #[cfg(target_os = "linux")]
@@ -709,6 +718,7 @@ mod imp {
                 pid: p.pid,
                 exe: game.exe.clone(),
                 bits: p.bits.unwrap_or(game.bits),
+                arm64: false,
                 wine: game.wine.clone(),
             })
             .collect())

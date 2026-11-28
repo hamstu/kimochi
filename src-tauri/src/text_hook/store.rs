@@ -348,16 +348,23 @@ fn zip_entry(fetch: &dyn Fetch, url: &str, entry: &str, expected_size: u64) -> R
     Ok(data)
 }
 
-/// Fetches one manifest file from the first source that yields the right bytes.
 /// An xz stream's contents, telling `unpacked` how many bytes are out every megabyte or so.
-pub fn unxz(packed: &[u8], unpacked: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
+/// Pre-allocates `expected_size` and refuses streams that expand beyond it (guards against OOM).
+pub fn unxz(packed: &[u8], expected_size: u64, unpacked: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
     struct Counting<'a> {
         out: Vec<u8>,
+        limit: usize,
         told: usize,
         unpacked: &'a dyn Fn(u64),
     }
     impl std::io::Write for Counting<'_> {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.out.len().saturating_add(buf.len()) > self.limit {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "unpacked stream exceeds expected size",
+                ));
+            }
             self.out.extend_from_slice(buf);
             if self.out.len() - self.told >= 1 << 20 {
                 self.told = self.out.len();
@@ -369,8 +376,9 @@ pub fn unxz(packed: &[u8], unpacked: &dyn Fn(u64)) -> Result<Vec<u8>, String> {
             Ok(())
         }
     }
-    let mut out = Counting { out: Vec::new(), told: 0, unpacked };
-    lzma_rs::xz_decompress(&mut std::io::BufReader::new(packed), &mut out)
+    let cap = usize::try_from(expected_size).unwrap_or(0).min(WHOLE_LIMIT as usize);
+    let mut out = Counting { out: Vec::with_capacity(cap), limit: cap, told: 0, unpacked };
+    lzma_rs::xz_decompress(&mut std::io::BufReader::with_capacity(256 * 1024, packed), &mut out)
         .map_err(|e| format!("could not unpack: {e}"))?;
     Ok(out.out)
 }
@@ -400,7 +408,9 @@ pub fn fetch_file_with(fetch: &dyn Fetch, file: &File, received: &dyn Fn(u64)) -
                     return Err("the compressed file does not match its pin".to_string());
                 }
                 let (packed_size, size) = (pin.size, file.size.max(1));
-                unxz(&packed, &|out| received(packed_size + packed_size * out.min(size) / size))
+                let data = unxz(&packed, file.size, &|out| received(packed_size + packed_size * out.min(size) / size));
+                drop(packed);
+                data
             }),
             None => fetch.get_streamed(&source.url, received),
         }
@@ -429,14 +439,16 @@ pub fn engine_dir(root: &Path, id: &str, engine: &Engine) -> PathBuf {
     root.join(format!("{id}-{}", engine.version))
 }
 
+fn engine_complete(dir: &Path, engine: &Engine) -> bool {
+    engine.files.iter().all(|f| fs::metadata(dir.join(&f.name)).map(|m| m.len() == f.size).unwrap_or(false))
+}
+
 /// The engine's directory when every file is present with its size (hashes are checked when
 /// installing; the directory only exists once they all passed).
 pub fn installed(root: &Path, id: &str) -> Option<PathBuf> {
     let engine = manifest().engines.get(id)?;
     let dir = engine_dir(root, id, engine);
-    let complete =
-        engine.files.iter().all(|f| fs::metadata(dir.join(&f.name)).map(|m| m.len() == f.size).unwrap_or(false));
-    complete.then_some(dir)
+    engine_complete(&dir, engine).then_some(dir)
 }
 
 /// Downloads and verifies every file of `id` into a staging directory, then renames it into
@@ -455,7 +467,9 @@ fn install_from(
 ) -> Result<PathBuf, String> {
     let engine = manifest.engines.get(id).ok_or_else(|| format!("no engine {id}"))?;
     let dir = engine_dir(root, id, engine);
-    if dir.is_dir() {
+    // Check every file, not just that the folder exists: antivirus quarantine can remove an
+    // executable while leaving LICENSE.txt behind, which must trigger a clean reinstall.
+    if engine_complete(&dir, engine) {
         return Ok(dir);
     }
     fs::create_dir_all(root).map_err(|e| e.to_string())?;
@@ -475,7 +489,10 @@ fn install_from(
             done += file.work();
             progress(done, total);
         }
-        fs::rename(&staging, &dir).map_err(|e| e.to_string())
+        if dir.exists() {
+            let _ = fs::remove_dir_all(&dir);
+        }
+        crate::extension_store::rename_with_retry(&staging, &dir).map_err(|e| e.to_string())
     })();
     if result.is_err() {
         let _ = fs::remove_dir_all(&staging);
@@ -725,5 +742,34 @@ mod tests {
             sha(b"x")
         );
         assert!(Manifest::parse(&json).is_err());
+        // A stream that unpacks beyond its expected size is refused before OOM.
+        assert!(unxz(&packed, 100, &|_| {}).is_err());
+    }
+
+    #[test]
+    fn a_quarantined_or_deleted_file_in_an_existing_dir_is_reinstalled() {
+        let bin = b"injector binary bytes".to_vec();
+        let lic = b"license text".to_vec();
+        let fake = Fake {
+            files: BTreeMap::from([
+                ("https://gh/frida.exe".to_string(), bin.clone()),
+                ("https://gh/LICENSE.txt".to_string(), lic.clone()),
+            ]),
+            asked: Mutex::default(),
+        };
+        let manifest = manifest_for(&[
+            ("frida.exe", &bin, vec![Source { url: "https://gh/frida.exe".into(), zip_entry: None, xz: false }]),
+            ("LICENSE.txt", &lic, vec![Source { url: "https://gh/LICENSE.txt".into(), zip_entry: None, xz: false }]),
+        ]);
+        let root = std::env::temp_dir().join(format!("kimochi-texthook-av-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let dir = install_from(&fake, &manifest, &root, "luna", &|_, _| {}).unwrap();
+        assert_eq!(fs::read(dir.join("frida.exe")).unwrap(), bin);
+        // Simulate AV quarantine removing the executable while leaving the directory and license.
+        fs::remove_file(dir.join("frida.exe")).unwrap();
+        let dir2 = install_from(&fake, &manifest, &root, "luna", &|_, _| {}).unwrap();
+        assert_eq!(dir2, dir);
+        assert_eq!(fs::read(dir2.join("frida.exe")).unwrap(), bin);
+        let _ = fs::remove_dir_all(&root);
     }
 }

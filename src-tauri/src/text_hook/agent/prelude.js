@@ -19,7 +19,7 @@
   const error = console.error.bind(console)
   // ASCII only: frida-inject may write standard error in the console's code page (Frida 16 does,
   // and Wine's may not be UTF-8), which would mangle Japanese; \u escapes come through any of them.
-  const ascii = (json) => json.replace(/[\u007f-￿]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
+  const ascii = (json) => json.replace(/[\u007f-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
   const output = host.outputFile ? new File(host.outputFile, 'a') : null
   const out = (payload) => {
     try {
@@ -47,13 +47,16 @@
   const SEP = windows ? '\\' : '/'
   const isAbsolute = (p) => (windows ? /^[A-Za-z]:[\\/]/.test(p) || /^[\\/]{2}/.test(p) : p.startsWith('/'))
   function normalise(p) {
-    const drive = windows ? (/^[A-Za-z]:/.exec(p)?.[0] ?? '') : ''
+    const unc = windows && /^[\\/]{2}/.test(p)
+    const drive = windows && !unc ? (/^[A-Za-z]:/.exec(p)?.[0] ?? '') : ''
+    const rest = unc ? p.replace(/^[\\/]+/, '') : p.slice(drive.length)
     const parts = []
-    for (const part of p.slice(drive.length).split(windows ? /[\\/]+/ : /\/+/)) {
+    for (const part of rest.split(windows ? /[\\/]+/ : /\/+/)) {
       if (!part || part === '.') continue
       if (part === '..') parts.pop()
       else parts.push(part)
     }
+    if (unc) return '\\\\' + parts.join(SEP)
     return drive + SEP + parts.join(SEP)
   }
   const resolve = (base, p) => normalise(isAbsolute(p) ? p : base + SEP + p)

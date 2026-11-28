@@ -63,6 +63,21 @@ test('Wine keeps Windows paths and the original emulator library', () => {
   assert.equal(ask('fs_readFileSync', ['..\\private.js']), null)
 })
 
+test('Windows UNC roots stay confined and keep their leading double backslash', () => {
+  const ask = host(
+    'windows',
+    '\\\\nas\\share\\Scripts',
+    new Map([
+      ['\\\\nas\\share\\Scripts\\game.js', 'unc-game'],
+      ['\\\\nas\\share\\Other\\secret.js', 'outside']
+    ])
+  )
+  assert.equal(ask('fs_readFileSync', ['./game.js']), 'unc-game')
+  assert.equal(ask('path_dirname', ['\\\\nas\\share\\Scripts\\game.js']), '\\\\nas\\share\\Scripts')
+  assert.equal(ask('fs_readFileSync', ['..\\Other\\secret.js']), null)
+  assert.equal(ask('fs_readFileSync', ['\\\\nas\\share\\Other\\secret.js']), null)
+})
+
 test('the Switch ARM64 overlay resolves macOS libc++ symbols without altering other modules', () => {
   const source = "addresses = [__e.getExportByName('_ZN6KernelNSt6__ndk14spanTest')];"
   const ask = host(

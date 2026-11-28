@@ -28,7 +28,7 @@ pub fn target(pid: u32) -> Result<Target, String> {
     if !x64_elf(&header) {
         return Err("Native Linux Agent scripts require an x64 ELF emulator.".into());
     }
-    Ok(Target { pid, exe, bits: 64, wine: None })
+    Ok(Target { pid, exe, bits: 64, arm64: false, wine: None })
 }
 
 #[cfg(test)]

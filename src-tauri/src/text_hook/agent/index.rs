@@ -13,8 +13,9 @@
 //! Where a title has several scripts (one per language of a multilingual release), the one in the
 //! language being read comes first.
 use serde::Deserialize;
-use std::path::Path;
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 const INDEX_JSON: &str = include_str!("../../../agent-scripts.json");
 
@@ -68,27 +69,31 @@ pub fn emulator_platform(exe: &Path) -> Option<&'static str> {
         ("ps2", &["pcsx2"]),
         ("ps3", &["rpcs3"]),
         ("vita", &["vita3k"]),
-        ("3ds", &["citra", "lime3ds", "azahar"]),
+        ("3ds", &["citra", "lime3ds", "azahar", "mandarine"]),
         ("pc98", &["dosbox-x", "dosbox_x"]),
     ];
     EMULATORS.iter().find(|(_, names)| names.iter().any(|name| stem.starts_with(name))).map(|(platform, _)| *platform)
 }
 
-/// Title ids (16 hex digits) and disc serials (`SLPM-65732`, `ULJM05800`, `PCSG 00291`) in a
-/// window title, as the index keeps them: upper case, letters and digits.
+/// Title ids (16 hex digits, with optional `0x` prefix) and disc serials (`SLPM-65732`,
+/// `ULJM05800`, `PCSG 00291`) in a window title, as the index keeps them: upper case, letters and
+/// digits.
 pub fn ids_in(title: &str) -> Vec<String> {
     let upper = title.to_uppercase();
     let chars: Vec<char> = upper.chars().collect();
     let mut found = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        // A title id: 16 hex digits, standing alone.
-        let hex: String = chars[i..].iter().take_while(|c| c.is_ascii_hexdigit()).collect();
         let alone_before = i == 0 || !chars[i - 1].is_ascii_alphanumeric();
-        if alone_before && hex.len() == 16 && hex.chars().any(|c| c.is_ascii_digit()) {
-            found.push(hex);
-            i += 16;
-            continue;
+        // A title id: 16 hex digits, standing alone (optionally prefixed by `0X`).
+        let hex_start = if alone_before && chars.get(i..i + 2) == Some(&['0', 'X']) { i + 2 } else { i };
+        if alone_before && hex_start < chars.len() {
+            let hex: String = chars[hex_start..].iter().take_while(|c| c.is_ascii_hexdigit()).collect();
+            if hex.len() == 16 && hex.chars().any(|c| c.is_ascii_digit()) {
+                found.push(hex);
+                i = hex_start + 16;
+                continue;
+            }
         }
         // A serial: four letters, an optional separator, five digits (maybe split by a dot).
         if alone_before && i + 4 <= chars.len() && chars[i..i + 4].iter().all(|c| c.is_ascii_uppercase()) {
@@ -115,14 +120,39 @@ pub fn ids_in(title: &str) -> Vec<String> {
     found
 }
 
-/// A name as titles are compared: lower case, letters and digits of any script only.
+/// Folds fullwidth ASCII (`！..=～`) to plain ASCII so titles written in either width match.
+fn fold_width(c: char) -> char {
+    match c {
+        '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+        _ => c,
+    }
+}
+
+/// A name as titles are compared: lower case, fullwidth ASCII folded, letters and digits of any
+/// script only.
 pub fn normalise(name: &str) -> String {
-    name.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+    name.chars().map(fold_width).filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
 
 /// The Steam app id of the game at `exe`: its `steam_appid.txt`, else the library manifest for the
-/// folder it is installed in.
+/// folder it is installed in. Cached per path because `texthook_targets` polls every few seconds
+/// and a Steam library can hold hundreds of `.acf` manifests.
 pub fn steam_app_id(exe: &Path) -> Option<u64> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Option<u64>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(&cached) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(exe) {
+        return cached;
+    }
+    let found = steam_app_id_uncached(exe);
+    let mut map = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if map.len() > 256 {
+        map.clear();
+    }
+    map.insert(exe.to_path_buf(), found);
+    found
+}
+
+fn steam_app_id_uncached(exe: &Path) -> Option<u64> {
     for dir in exe.ancestors().skip(1).take(4) {
         if let Ok(text) = std::fs::read_to_string(dir.join("steam_appid.txt")) {
             if let Ok(id) = text.trim().parse() {
@@ -167,11 +197,137 @@ pub struct Game<'a> {
     pub language: &'a str,
 }
 
-/// The script for this game, if the collection has one.
-pub fn find(game: &Game) -> Option<&'static Script> {
-    find_in(&index().scripts, game)
+/// Pre-indexed view of the compiled-in scripts so frequent `texthook_targets` calls do no repeated
+/// title normalisation or full-collection scans.
+struct Lookup {
+    /// `(platform, id)` → script indices.
+    by_id: HashMap<(&'static str, String), Vec<usize>>,
+    /// `platform` → `(script index, normalised title, char len)` for titles >= 4 chars.
+    by_platform: HashMap<&'static str, Vec<(usize, String, usize)>>,
+    /// Steam app id → PC script indices.
+    by_steam: HashMap<u64, Vec<usize>>,
+    /// Normalised PC title (>= 3 chars) → PC script indices.
+    by_pc_name: HashMap<String, Vec<usize>>,
 }
 
+impl Lookup {
+    fn build(scripts: &'static [Script]) -> Self {
+        let mut by_id: HashMap<(&'static str, String), Vec<usize>> = HashMap::new();
+        let mut by_platform: HashMap<&'static str, Vec<(usize, String, usize)>> = HashMap::new();
+        let mut by_steam: HashMap<u64, Vec<usize>> = HashMap::new();
+        let mut by_pc_name: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, s) in scripts.iter().enumerate() {
+            if s.generic {
+                continue;
+            }
+            let norm = normalise(&s.title);
+            let len = norm.chars().count();
+            if s.platform == "pc" {
+                for &app_id in &s.steam {
+                    by_steam.entry(app_id).or_default().push(i);
+                }
+                if len >= 3 {
+                    by_pc_name.entry(norm).or_default().push(i);
+                }
+            } else {
+                let plat: &'static str = s.platform.as_str();
+                for id in &s.ids {
+                    by_id.entry((plat, id.clone())).or_default().push(i);
+                }
+                if len >= 4 {
+                    by_platform.entry(plat).or_default().push((i, norm, len));
+                }
+            }
+        }
+        Lookup { by_id, by_platform, by_steam, by_pc_name }
+    }
+}
+
+fn lookup() -> &'static Lookup {
+    static LOOKUP: OnceLock<Lookup> = OnceLock::new();
+    LOOKUP.get_or_init(|| Lookup::build(&index().scripts))
+}
+
+fn best_for_language<'s>(candidates: impl IntoIterator<Item = &'s Script>, language: &str) -> Option<&'s Script> {
+    // The script in the language being read, then one for any language, then the rest.
+    candidates.into_iter().min_by_key(|s| match s.lang.as_deref() {
+        Some(lang) if lang == language => 0,
+        None => 1,
+        Some(_) => 2,
+    })
+}
+
+/// The script for this game, if the collection has one.
+pub fn find(game: &Game) -> Option<&'static Script> {
+    let scripts = &index().scripts;
+    let map = lookup();
+    let title = game.window_title.unwrap_or_default();
+    let candidates: Vec<&'static Script> = match emulator_platform(game.exe) {
+        Some(platform) => {
+            let mut by_id = Vec::new();
+            for id in ids_in(title) {
+                if let Some(indices) = map.by_id.get(&(platform, id)) {
+                    for &i in indices {
+                        if !by_id.iter().any(|s: &&Script| std::ptr::eq(*s, &scripts[i])) {
+                            by_id.push(&scripts[i]);
+                        }
+                    }
+                }
+            }
+            if by_id.is_empty() {
+                let window = normalise(title);
+                let mut longest = 0usize;
+                let mut named = Vec::new();
+                if let Some(entries) = map.by_platform.get(platform) {
+                    for (i, name, len) in entries {
+                        if *len >= longest && window.contains(name.as_str()) {
+                            if *len > longest {
+                                longest = *len;
+                                named.clear();
+                            }
+                            named.push(&scripts[*i]);
+                        }
+                    }
+                }
+                named
+            } else {
+                by_id
+            }
+        }
+        None => {
+            let by_steam: Vec<&'static Script> = game
+                .steam
+                .and_then(|id| map.by_steam.get(&id))
+                .map(|indices| indices.iter().map(|&i| &scripts[i]).collect())
+                .unwrap_or_default();
+            if by_steam.is_empty() {
+                let window = normalise(title);
+                let path = game.exe.to_string_lossy().replace('\\', "/");
+                let folder =
+                    Path::new(&path).parent().and_then(Path::file_name).map(|f| normalise(&f.to_string_lossy()));
+                let mut matched = Vec::new();
+                if let Some(indices) = map.by_pc_name.get(&window) {
+                    matched.extend(indices.iter().map(|&i| &scripts[i]));
+                }
+                if let Some(folder) = folder.filter(|f| f != &window) {
+                    if let Some(indices) = map.by_pc_name.get(&folder) {
+                        for &i in indices {
+                            if !matched.iter().any(|s| std::ptr::eq(*s, &scripts[i])) {
+                                matched.push(&scripts[i]);
+                            }
+                        }
+                    }
+                }
+                matched
+            } else {
+                by_steam
+            }
+        }
+    };
+    best_for_language(candidates, game.language)
+}
+
+#[cfg(test)]
 pub fn find_in<'s>(scripts: &'s [Script], game: &Game) -> Option<&'s Script> {
     let title = game.window_title.unwrap_or_default();
     let candidates: Vec<&Script> = match emulator_platform(game.exe) {
@@ -183,15 +339,19 @@ pub fn find_in<'s>(scripts: &'s [Script], game: &Game) -> Option<&'s Script> {
                 // The game's name in the title (`Eden | v0.1 | Tsukihime | 1.0.2`): the longest
                 // script title found there, at least four letters of it.
                 let window = normalise(title);
-                let mut named: Vec<&Script> = on
-                    .into_iter()
-                    .filter(|s| {
-                        let name = normalise(&s.title);
-                        name.chars().count() >= 4 && window.contains(&name)
-                    })
-                    .collect();
-                let longest = named.iter().map(|s| normalise(&s.title).chars().count()).max().unwrap_or(0);
-                named.retain(|s| normalise(&s.title).chars().count() == longest);
+                let mut longest = 0usize;
+                let mut named = Vec::new();
+                for s in on {
+                    let name = normalise(&s.title);
+                    let len = name.chars().count();
+                    if len >= 4 && len >= longest && window.contains(&name) {
+                        if len > longest {
+                            longest = len;
+                            named.clear();
+                        }
+                        named.push(s);
+                    }
+                }
                 named
             } else {
                 by_id
@@ -220,12 +380,7 @@ pub fn find_in<'s>(scripts: &'s [Script], game: &Game) -> Option<&'s Script> {
             }
         }
     };
-    // The script in the language being read, then one for any language, then the rest.
-    candidates.into_iter().min_by_key(|s| match s.lang.as_deref() {
-        Some(lang) if lang == game.language => 0,
-        None => 1,
-        Some(_) => 2,
-    })
+    best_for_language(candidates, game.language)
 }
 
 #[cfg(test)]
@@ -367,5 +522,18 @@ mod tests {
             let found = find(&game(exe, &title)).unwrap();
             assert_eq!(found.file, "PSP_ULJM06302-3_Seishun_Hajimemashita.js");
         }
+    }
+
+    #[test]
+    fn fullwidth_titles_0x_prefixed_ids_and_mandarine_match() {
+        assert_eq!(normalise("ＣＬＡＮＮＡＤ"), "clannad");
+        assert_eq!(normalise("９-nine-"), "9nine");
+        assert_eq!(ids_in("Eden | 0x0100A3A00CC7E000 | CLANNAD"), vec!["0100A3A00CC7E000"]);
+        assert_eq!(emulator_platform(Path::new("/usr/bin/mandarine-qt")), Some("3ds"));
+        // Pre-indexed `find` agrees with linear `find_in` on compiled-in scripts.
+        let eden = Path::new("C:/Eden/eden.exe");
+        let query = game(eden, "Eden | 0x0100A3A00CC7E000 | ＣＬＡＮＮＡＤ");
+        assert_eq!(find(&query), find_in(&index().scripts, &query));
+        assert_eq!(find(&query).unwrap().file, "NS_0100A3A00CC7E000_CLANNAD_JP.js");
     }
 }
