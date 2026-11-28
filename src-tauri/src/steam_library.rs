@@ -577,6 +577,13 @@ pub async fn steam_library_add(app: tauri::AppHandle) -> Value {
     }
 }
 
+/// Ask the running Steam client to open a `steam://` URL (Gaming Mode's on-screen keyboard).
+/// Blocks for as long as Steam's command takes, so not for the main thread.
+#[cfg(target_os = "linux")]
+pub fn open_url(url: &str) -> Result<(), String> {
+    host::open_url(url)
+}
+
 /// At launch (Linux): give Kimochi's existing entry any library art it is missing.
 pub fn start() {
     #[cfg(target_os = "linux")]
@@ -955,22 +962,37 @@ mod host {
             .open("/tmp/addnonsteamgamefile")
             .and_then(|f| f.set_modified(std::time::SystemTime::now()))
             .map_err(|e| format!("/tmp/addnonsteamgamefile: {e}"))?;
-        let url = add_url(desktop);
-        let mut command = match (root.flatpak, on_path("steam"), on_path("flatpak")) {
+        send_url(root.flatpak, &[&add_url(desktop)])
+    }
+
+    /// Hand a `steam://` URL (the last of `args`) to the client: `steam <args>`, or the Flatpak's.
+    fn send_url(flatpak: bool, args: &[&str]) -> Result<(), String> {
+        let mut command = match (flatpak, on_path("steam"), on_path("flatpak")) {
             (false, Some(steam), _) => {
                 let mut c = host_command(&steam.to_string_lossy());
-                c.arg(&url);
+                c.args(args);
                 c
             }
-            (_, _, Some(flatpak)) if root.flatpak => {
-                let mut c = host_command(&flatpak.to_string_lossy());
-                c.args(["run", "com.valvesoftware.Steam", &url]);
+            (true, _, Some(tool)) => {
+                let mut c = host_command(&tool.to_string_lossy());
+                c.args(["run", "com.valvesoftware.Steam"]).args(args);
                 c
             }
             _ => return Err("Steam's command is not available".into()),
         };
         let child = command.stdout(Stdio::null()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
         wait(child, Duration::from_secs(10)).map_err(|e| format!("steam: {e}"))
+    }
+
+    /// See `super::open_url`.
+    pub(super) fn open_url(url: &str) -> Result<(), String> {
+        if !steam_running() {
+            return Err("Steam is not running".into());
+        }
+        // The native client when it is installed; the Flatpak only when it is the one there is.
+        let flatpak = on_path("steam").is_none() && home().is_some_and(|home| roots(&home).iter().any(|r| r.flatpak));
+        // `-ifrunning`: never start a second client.
+        send_url(flatpak, &["-ifrunning", url])
     }
 
     pub fn status() -> Value {

@@ -10,6 +10,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Steam Deck Gaming Mode: drop-down lists work by touch.** A list such as **Section** in Hachidori's settings (and the lists in Yomitan's and 10ten's) took many taps to change. It now opens as a list inside the window, with rows big enough for a finger: one tap opens it, one tap chooses.
+- **Steam Deck Gaming Mode: the on-screen keyboard.** Tapping a text field in Kimochi (a session's name, a search box, a dictionary's settings) now brings up Steam's on-screen keyboard, so you can type without **Steam + X**.
+- **Steam Deck Gaming Mode: each game gets its own session.** With **Screen** as the source, a second game's lines went into the first game's session. The Log now switches to the session named after the game you are playing, and makes one the first time. Kimochi also no longer stays on the first game when the second one was still starting as you switched.
+- **Steam Deck Gaming Mode: the controller menu.** The button that chooses an item in the controller menu is no longer passed on to the game while you are still holding it. A shortcut on a back button (L4, R4, L5, R5) could also miss a press now and then; it no longer does.
 - **Hachidori with Manatan SRS:** a card whose definition has a dictionary image is added again, instead of failing with "Anki stored media under a different filename".
 - **Linux AppImage:** saving the debug zip (Settings → About) no longer fails with "Read-only file system". Save dialogs now open in your Downloads folder, for the debug zip, exports and Hachidori's downloads.
 - **Windows: one click on the taskbar brings Kimochi back.** When Kimochi was minimised and another app was in front, clicking its taskbar button only selected it and the window stayed hidden until a second click. The first click now restores it, as it does for other apps.

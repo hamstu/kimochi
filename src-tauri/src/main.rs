@@ -884,6 +884,7 @@ fn snapshot_value(service: &Service) -> Value {
     // is gone, the main window shows its empty "Choose a source" state instead of a stale card.
     let selected = service.selection.lock().unwrap().is_some();
     let source = if selected { saved_selection(service) } else { None };
+    let session_source = if selected { session_source(service) } else { None };
     let v = service.view.lock().unwrap();
     json!({
         "revision": v.revision,
@@ -897,6 +898,7 @@ fn snapshot_value(service: &Service) -> Value {
         "dictionary": v.dictionary,
         "dismiss": v.dismiss,
         "source": source.map(with_source_kind),
+        "sessionSource": session_source,
         "crop": crop,
         "cropEnabled": crop.is_some(),
         // The part of the source that goes on Anki cards; null means the whole source.
@@ -916,6 +918,21 @@ fn snapshot_value(service: &Service) -> Value {
 /// The saved descriptor of the chosen source (`{sourceId, type, name, appName}`).
 fn saved_selection(service: &Service) -> Option<Value> {
     service.settings.get("lastSelectedSource").ok().flatten()
+}
+
+/// The source the Log files a reading under when that is not the chosen one: in Gaming Mode
+/// with the screen chosen, the game being played (`gaming_sources::session_source`).
+fn session_source(service: &Service) -> Option<Value> {
+    #[cfg(target_os = "linux")]
+    {
+        let selected = service.selection.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        platform::gaming_sources::session_source(selected.as_deref())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = service;
+        None
+    }
 }
 
 #[tauri::command]
@@ -1331,6 +1348,19 @@ fn panel_controller_input(app: tauri::AppHandle, label: String) -> std::result::
     }
     let _ = (app, label);
     Ok(())
+}
+
+/// A text field was tapped in Gaming Mode: show Steam's on-screen keyboard (host/gaming-input.js).
+/// The field's place is in fractions of the window, which fills the screen there.
+#[tauri::command]
+fn gaming_keyboard_show(x: f64, y: f64, width: f64, height: f64, multiline: bool) -> std::result::Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return platform::gamescope::show_keyboard(Some(platform::gamescope::FieldRect { x, y, width, height }), multiline);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (x, y, width, height, multiline);
+        Ok(())
+    }
 }
 
 /// Return from Gaming Mode controls to the game without opening another menu.
@@ -3031,7 +3061,7 @@ fn merge_into_history(list: &mut Vec<Value>, items: &[HistoryItem], entries: &mu
 /// edit of the history that adds them in order. An invalid item is answered `{text, invalid}`
 /// and left out, rather than costing the others their place.
 fn add_history(app: &tauri::AppHandle, state: &Shared, items: Vec<HistoryItem>) -> Reply<Vec<Value>> {
-    let selection = saved_selection(state).unwrap_or(Value::Null);
+    let selection = session_source(state).or_else(|| saved_selection(state)).unwrap_or(Value::Null);
     let now = now_millis();
     let mut entries: Vec<Value> = items
         .iter()
@@ -3639,6 +3669,7 @@ fn main() {
         game_pause::app::game_pause_resume_all,
         game_pause::app::game_pause_spans,
         panel_controller_input,
+        gaming_keyboard_show,
         return_to_game,
         hotkeys_load,
         hotkeys_save,

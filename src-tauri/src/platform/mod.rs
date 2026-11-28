@@ -958,8 +958,13 @@ pub fn platform_prelude() -> String {
     // Windows: keep each webview's CSS pixel at the window's DPI scale (webview_scale.rs).
     #[cfg(target_os = "windows")]
     let prelude = prelude + crate::webview_scale::prelude();
+    // Gaming Mode: drop-down lists and the on-screen keyboard by touch (host/gaming-input.js).
+    #[cfg(target_os = "linux")]
+    let prelude = if gaming_mode() { prelude + GAMING_INPUT } else { prelude };
     prelude
 }
+#[cfg(target_os = "linux")]
+const GAMING_INPUT: &str = include_str!("../../../host/gaming-input.js");
 
 /// A URL on the `capture:` protocol, as a page loads it on this OS.
 pub fn capture_url(path: &str) -> String {

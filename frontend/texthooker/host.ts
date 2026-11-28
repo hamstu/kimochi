@@ -435,10 +435,12 @@ export function startHost(): Promise<void> {
         )
       })
       setLocalHost(handle)
-      await listen<{ source?: SourceName }>('state', (e) => {
-        if (e.payload.source && sourceKey(e.payload.source) !== sourceKey(currentSource))
+      await listen<{ source?: SourceName; sessionSource?: SourceName | null }>('state', (e) => {
+        // Gaming Mode with the screen chosen: the game being played names the session.
+        const source = e.payload.sessionSource ?? e.payload.source
+        if (source && sourceKey(source) !== sourceKey(currentSource))
           void enqueue(async () => {
-            await selectSource(e.payload.source!)
+            await selectSource(source)
             broadcast()
           }).catch(reportError)
       })

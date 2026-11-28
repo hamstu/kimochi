@@ -132,6 +132,18 @@ pub fn handoff() {
         *lease = None;
     }
 }
+/// The shortest time Steam stays stopped after Kimochi lets go of the controller.
+const RELEASE_SETTLE: std::time::Duration = std::time::Duration::from_millis(250);
+/// How long every button must have been up before Steam reads the controller again.
+const RELEASE_CLEAR: std::time::Duration = std::time::Duration::from_millis(60);
+/// The longest a held button keeps Steam stopped after the release.
+const RELEASE_LIMIT: std::time::Duration = std::time::Duration::from_millis(1500);
+/// Whether to resume Steam, `since` Kimochi released the controller, with every button up for
+/// `clear` (None while one is down). Where the Deck's controller cannot be read, nothing is
+/// ever seen down, so this is the plain settle time.
+fn resume_after_release(since: std::time::Duration, clear: Option<std::time::Duration>) -> bool {
+    since >= RELEASE_LIMIT || (since >= RELEASE_SETTLE && clear.is_some_and(|clear| clear >= RELEASE_CLEAR))
+}
 extern "C" fn terminate(_: libc::c_int) {
     STOP.store(true, Ordering::Relaxed);
 }
@@ -238,8 +250,25 @@ pub fn run_watchdog() -> bool {
             break;
         }
         if buffer[..count as usize].contains(&b'R') {
-            // Let the physical B/confirm release settle before Steam reads HID again.
-            std::thread::sleep(std::time::Duration::from_millis(250));
+            // Let the physical B/confirm release settle before Steam reads HID again: the press
+            // that chose a menu item is usually still down, and a resumed Steam would hand the
+            // game that button as a new press.
+            let released = std::time::Instant::now();
+            let mut clear = None;
+            loop {
+                let held = physical.poll().map(|sample| sample.buttons.iter().any(|down| *down));
+                if physical.system_menu() || STOP.load(Ordering::Relaxed) {
+                    break;
+                }
+                match held {
+                    Some(true) => clear = None,
+                    _ => clear = clear.or(Some(std::time::Instant::now())),
+                }
+                if resume_after_release(released.elapsed(), clear.map(|at: std::time::Instant| at.elapsed())) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
             break;
         }
         if buffer[..count as usize].contains(&b'A') {
@@ -268,6 +297,21 @@ pub fn run_watchdog() -> bool {
 #[cfg(test)]
 mod tests {
     use super::start_time;
+    #[test]
+    fn steam_resumes_once_the_choosing_button_is_up_or_after_the_limit() {
+        use super::{resume_after_release, RELEASE_LIMIT};
+        let ms = std::time::Duration::from_millis;
+        // Nothing held: the settle time alone.
+        assert!(!resume_after_release(ms(100), Some(ms(100))));
+        assert!(resume_after_release(ms(250), Some(ms(250))));
+        // A still held past the settle time: Steam stays stopped,
+        assert!(!resume_after_release(ms(400), None));
+        // until it has been up for a moment,
+        assert!(!resume_after_release(ms(620), Some(ms(20))));
+        assert!(resume_after_release(ms(660), Some(ms(60))));
+        // and never longer than the limit.
+        assert!(resume_after_release(RELEASE_LIMIT, None));
+    }
     #[test]
     fn stat_handles_spaces_and_parentheses_in_name() {
         let suffix = (3..=22).map(|v| v.to_string()).collect::<Vec<_>>().join(" ");
