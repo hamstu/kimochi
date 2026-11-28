@@ -3010,7 +3010,8 @@ of every window (Kimochi's pages and the dictionary extensions' own). It does tw
   `input` and `change` events. List boxes (`multiple`, `size > 1`) are left alone.
 - A tap on a text field (text-like `<input>`, `<textarea>`, editable content; not `readonly`,
   `disabled` or `inputmode="none"`) calls `gaming_keyboard_show({x, y, width, height, multiline})`:
-  the field's place as fractions (0–1) of the top window, which fills the screen there. A frame
+  the field's place as fractions (0–1) of the top window, which fills the screen there; a field that takes the focus within a second of a
+  tap (a button that opens one) asks the same. A frame
   on another origin posts `{__kimochiGamingKeyboard: rect}` to its parent, which adds the frame's
   offset and passes it on. Native asks the running Steam client for its on-screen keyboard
   (`steam -ifrunning steam://open/keyboard?XPosition=…&YPosition=…&Width=…&Height=…&Mode=0|1`, in

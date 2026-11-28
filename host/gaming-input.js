@@ -13,8 +13,9 @@
  *   finger, and reports the choice with the same `input` and `change` events.
  * - **The on-screen keyboard.** Nothing tells Steam that a text field was tapped. A tap on one
  *   asks native to show Steam's keyboard (`gaming_keyboard_show`), with where the field is on
- *   screen so Steam can keep it in view. A frame that cannot reach native (an extension's own
- *   origin) passes the request to its parent.
+ *   screen so Steam can keep it in view; so does a field that takes the focus just after a tap
+ *   (a button that opens one). A frame that cannot reach native (an extension's own origin)
+ *   passes the request to its parent.
  *
  * `window.__kimochiGamingInput` holds the parts, for scripts/gaming-input.test.mjs.
  */
@@ -22,6 +23,8 @@
   'use strict'
 
   const KEYBOARD_MESSAGE = '__kimochiGamingKeyboard'
+  /** How long after a tap a field taking the focus still counts as that tap's doing. */
+  const FOCUS_AFTER_TAP_MS = 1000
   /** `<input>` types that take typed text. */
   const TEXT_TYPES = new Set(['', 'text', 'search', 'url', 'email', 'password', 'number', 'tel'])
 
@@ -265,9 +268,21 @@
       },
       true
     )
+    const askFor = (field) => {
+      const box = field.getBoundingClientRect()
+      requestKeyboard(view, {
+        x: box.left,
+        y: box.top,
+        width: box.width,
+        height: box.height,
+        multiline: field.localName === 'textarea' || !!field.isContentEditable
+      })
+    }
+    let tappedAt = -Infinity
     view.addEventListener(
       'click',
       (event) => {
+        tappedAt = Date.now()
         const select = dropdownOf(event)
         if (select) {
           select.focus?.({ preventScroll: true })
@@ -275,15 +290,18 @@
           return
         }
         const field = textEntryOf(event.target)
-        if (!field) return
-        const box = field.getBoundingClientRect()
-        requestKeyboard(view, {
-          x: box.left,
-          y: box.top,
-          width: box.width,
-          height: box.height,
-          multiline: field.localName === 'textarea' || !!field.isContentEditable
-        })
+        if (field) askFor(field)
+      },
+      true
+    )
+    // A tap on a button that opens a field and puts the caret in it (Add a note, Rename) is a
+    // tap to type too. A field the page focuses by itself, with no tap, is not.
+    view.addEventListener(
+      'focusin',
+      (event) => {
+        if (Date.now() - tappedAt > FOCUS_AFTER_TAP_MS) return
+        const field = textEntryOf(event.target)
+        if (field) askFor(field)
       },
       true
     )

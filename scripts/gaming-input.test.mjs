@@ -147,9 +147,12 @@ function page({ platform = { gamescope: true }, parent, invoke } = {}) {
   win.parent = parent ?? win
   if (invoke) win.__TAURI_INTERNALS__ = { invoke }
   doc.defaultView = win
-  vm.runInNewContext(source, { window: win, Promise, Math, Set, String })
+  vm.runInNewContext(source, { window: win, Promise, Math, Set, String, Date: clock })
   return { win, doc, api: win.__kimochiGamingInput }
 }
+
+/** The script's clock, moved by hand. */
+const clock = { at: 1_000_000, now: () => clock.at }
 
 const SECTIONS = [{ label: 'Dictionaries' }, { label: 'Reading' }, { label: 'Anki' }]
 const picker = (doc) => doc.body.children.find((node) => 'data-kimochi-select-picker' in node.attributes)
@@ -289,6 +292,28 @@ test('a tap on a text field asks for the keyboard, with where the field is', () 
   // A button is not a text field.
   win.fire('click', { target: element(doc, 'button') })
   assert.equal(calls.length, 2)
+})
+
+test('a field that takes the focus just after a tap gets the keyboard; one focused unasked does not', () => {
+  const calls = []
+  const { win, doc } = page({ invoke: (command, args) => calls.push([command, args]) })
+  const field = element(doc, 'textarea', { box: { left: 64, top: 300, width: 512, height: 40 } })
+  // The page focuses a field as it loads: nobody asked to type.
+  win.fire('focusin', { target: field })
+  assert.equal(calls.length, 0)
+  // "Add a note": the tap is on a button, and the page then puts the caret in the note.
+  win.fire('click', { target: element(doc, 'button') })
+  clock.at += 120
+  win.fire('focusin', { target: field })
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    ['gaming_keyboard_show', { x: 0.1, y: 0.75, width: 0.8, height: 0.1, multiline: true }]
+  ])
+  // Long after the tap, a focus is the page's own again; and a button taking focus is not a field.
+  clock.at += 5000
+  win.fire('focusin', { target: field })
+  win.fire('click', { target: element(doc, 'button') })
+  win.fire('focusin', { target: element(doc, 'button') })
+  assert.equal(calls.length, 1)
 })
 
 test('a frame that cannot reach native hands the request to its parent, which places it', () => {
