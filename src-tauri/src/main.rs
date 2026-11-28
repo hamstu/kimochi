@@ -1333,6 +1333,19 @@ fn panel_controller_input(app: tauri::AppHandle, label: String) -> std::result::
     Ok(())
 }
 
+/// A text field was tapped in Gaming Mode: show Steam's on-screen keyboard (host/gaming-input.js).
+/// The field's place is in fractions of the window, which fills the screen there.
+#[tauri::command]
+fn gaming_keyboard_show(x: f64, y: f64, width: f64, height: f64, multiline: bool) -> std::result::Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return platform::gamescope::show_keyboard(Some(platform::gamescope::FieldRect { x, y, width, height }), multiline);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (x, y, width, height, multiline);
+        Ok(())
+    }
+}
+
 /// Return from Gaming Mode controls to the game without opening another menu.
 #[tauri::command]
 fn return_to_game(app: tauri::AppHandle) {
@@ -3639,6 +3652,7 @@ fn main() {
         game_pause::app::game_pause_resume_all,
         game_pause::app::game_pause_spans,
         panel_controller_input,
+        gaming_keyboard_show,
         return_to_game,
         hotkeys_load,
         hotkeys_save,

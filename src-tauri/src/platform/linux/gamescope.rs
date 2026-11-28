@@ -572,6 +572,85 @@ mod input_tests {
     }
 }
 
+/// A text field's place in a window that fills the screen, as fractions of it (0–1).
+#[derive(Clone, Copy, Debug, serde::Deserialize)]
+pub struct FieldRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+/// The URL that opens Steam's on-screen keyboard for a field at `field` on an output of
+/// `output` pixels: what SDL sends for its text input on a Steam Deck. Steam keeps the
+/// rectangle in view above the keyboard; `Mode` 1 is a multi-line field (Enter adds a line).
+fn keyboard_url(field: Option<FieldRect>, output: (u32, u32), multiline: bool) -> String {
+    let (width, height) = (f64::from(output.0), f64::from(output.1));
+    let pixel = |fraction: f64, size: f64| (fraction.clamp(0., 1.) * size).round() as u32;
+    let field = field.filter(|f| [f.x, f.y, f.width, f.height].iter().all(|v| v.is_finite()));
+    let (x, y, w, h) = field.map_or((0, 0, 0, 0), |f| {
+        (pixel(f.x, width), pixel(f.y, height), pixel(f.width, width), pixel(f.height, height))
+    });
+    format!("steam://open/keyboard?XPosition={x}&YPosition={y}&Width={w}&Height={h}&Mode={}", u8::from(multiline))
+}
+static KEYBOARD_ASKED: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+/// Show Steam's on-screen keyboard for a text field the user tapped in one of Kimochi's
+/// windows (host/gaming-input.js). Steam's own Steam + X does this only while Steam counts
+/// Kimochi as the app in front; asking covers the rest. Returns at once: Steam's command runs
+/// on a thread of its own.
+pub fn show_keyboard(field: Option<FieldRect>, multiline: bool) -> Result<(), String> {
+    if !active() {
+        return Ok(());
+    }
+    // One tap is one request, however many frames reported it.
+    {
+        let mut asked = KEYBOARD_ASKED.lock().unwrap_or_else(|e| e.into_inner());
+        if asked.is_some_and(|at| at.elapsed() < std::time::Duration::from_millis(400)) {
+            return Ok(());
+        }
+        *asked = Some(std::time::Instant::now());
+    }
+    let output = super::x11::monitors()
+        .first()
+        .map(|monitor| (monitor.rect.width.max(0) as u32, monitor.rect.height.max(0) as u32))
+        .ok_or("Gamescope: no output to place the keyboard on")?;
+    let url = keyboard_url(field, output, multiline);
+    std::thread::Builder::new()
+        .name("kimochi-steam-keyboard".into())
+        .spawn(move || {
+            if let Err(error) = crate::steam_library::open_url(&url) {
+                eprintln!("Gamescope keyboard: {error}");
+            }
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::*;
+    #[test]
+    fn the_keyboard_url_places_the_field_in_output_pixels() {
+        let field = FieldRect { x: 0.25, y: 0.5, width: 0.5, height: 0.05 };
+        assert_eq!(
+            keyboard_url(Some(field), (1280, 800), false),
+            "steam://open/keyboard?XPosition=320&YPosition=400&Width=640&Height=40&Mode=0"
+        );
+        assert!(keyboard_url(Some(field), (1280, 800), true).ends_with("&Mode=1"));
+    }
+    #[test]
+    fn a_missing_or_broken_field_still_opens_the_keyboard() {
+        let nowhere = "steam://open/keyboard?XPosition=0&YPosition=0&Width=0&Height=0&Mode=0";
+        assert_eq!(keyboard_url(None, (1280, 800), false), nowhere);
+        let broken = FieldRect { x: f64::NAN, y: 0., width: 1., height: 1. };
+        assert_eq!(keyboard_url(Some(broken), (1280, 800), false), nowhere);
+        let outside = FieldRect { x: -2., y: 3., width: 9., height: 0.5 };
+        assert_eq!(
+            keyboard_url(Some(outside), (1280, 800), false),
+            "steam://open/keyboard?XPosition=0&YPosition=800&Width=1280&Height=400&Mode=0"
+        );
+    }
+}
+
 /// The Steam app id of the game Gamescope shows in front, in Gaming Mode (game pause's target).
 pub fn focused_app_id() -> Option<u32> {
     if !active() {

@@ -3000,6 +3000,23 @@ Event `gamescope-shown` (a bool): whether Gamescope is showing Kimochi rather th
 emitted on every change and again every 5 s. The main window pauses its CSS animations while it
 is false (`[data-behind-game]`): mapped behind the game, WebKit would otherwise keep painting them.
 
+## Gaming Mode touch input
+
+In Gaming Mode `platform_prelude` also carries `host/gaming-input.js`, so it runs in every frame
+of every window (Kimochi's pages and the dictionary extensions' own). It does two things by touch:
+
+- A `<select>` opens as a list inside the page rather than WebKitGTK's GTK menu, a second X window
+  Gamescope does not show or route touch to reliably. The choice is reported with the usual
+  `input` and `change` events. List boxes (`multiple`, `size > 1`) are left alone.
+- A tap on a text field (text-like `<input>`, `<textarea>`, editable content; not `readonly`,
+  `disabled` or `inputmode="none"`) calls `gaming_keyboard_show({x, y, width, height, multiline})`:
+  the field's place as fractions (0–1) of the top window, which fills the screen there. A frame
+  on another origin posts `{__kimochiGamingKeyboard: rect}` to its parent, which adds the frame's
+  offset and passes it on. Native asks the running Steam client for its on-screen keyboard
+  (`steam -ifrunning steam://open/keyboard?XPosition=…&YPosition=…&Width=…&Height=…&Mode=0|1`, in
+  output pixels; `Mode=1` for a multi-line field), at most once per 400 ms. Outside Gaming Mode
+  the command does nothing.
+
 ## Dictionary setup relay
 
 The overlay's one Yomitan backend serves app-owned `__setupDictionaries` relay
