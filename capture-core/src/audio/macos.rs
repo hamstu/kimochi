@@ -1,5 +1,6 @@
 //! System audio through ScreenCaptureKit: a stream of the main display with `capturesAudio`,
-//! which hears everything the computer plays (whatever the output device) under the Screen
+//! scoped to one application when a window is selected, or everything for a display source,
+//! under the Screen
 //! Recording permission Kimochi already asks for. Kimochi's own sounds are left out
 //! (`excludesCurrentProcessAudio`). Core Audio's process taps would avoid the screen stream but
 //! need macOS 14.6, and Kimochi supports 14.0.
@@ -48,11 +49,12 @@ const FLAG_NON_INTERLEAVED: u32 = 1 << 5;
 
 pub(super) struct Stream {
     stream: SCStream,
+    source: String,
 }
 
 impl Backend for Stream {
     fn source(&self) -> String {
-        "Everything this Mac plays".into()
+        self.source.clone()
     }
     // `excludesCurrentProcessAudio`. WebKit plays a page's audio from its own helper processes,
     // which this may not cover: see docs/system-audio-capture.md.
@@ -67,7 +69,7 @@ impl Drop for Stream {
     }
 }
 
-pub(super) fn start(feed: Feed, health: Arc<Health>) -> Result<Stream> {
+pub(super) fn start(feed: Feed, health: Arc<Health>, pid: Option<u32>) -> Result<Stream> {
     if !unsafe { CGPreflightScreenCaptureAccess() } {
         return Err(CaptureError::new(
             "permission",
@@ -80,7 +82,22 @@ pub(super) fn start(feed: Feed, health: Arc<Health>) -> Result<Stream> {
         .into_iter()
         .next()
         .ok_or_else(|| CaptureError::new("native", "No display to record audio from."))?;
-    let filter = SCContentFilter::create().with_display(&display).with_excluding_windows(&[]).build();
+    let (filter, source) = if let Some(pid) = pid {
+        let application = content
+            .applications()
+            .into_iter()
+            .find(|app| u32::try_from(app.process_id()).ok() == Some(pid))
+            .ok_or_else(|| CaptureError::new("unavailable", "The selected app is not available for audio capture."))?;
+        let source = format!("{} (selected app)", application.application_name());
+        let filter =
+            SCContentFilter::create().with_display(&display).with_including_applications(&[&application], &[]).build();
+        (filter, source)
+    } else {
+        (
+            SCContentFilter::create().with_display(&display).with_excluding_windows(&[]).build(),
+            "Everything this Mac plays".into(),
+        )
+    };
     let config = SCStreamConfiguration::new()
         .with_width(2)
         .with_height(2)
@@ -118,7 +135,7 @@ pub(super) fn start(feed: Feed, health: Arc<Health>) -> Result<Stream> {
         SCStreamOutputType::Audio,
     );
     stream.start_capture().map_err(|e| CaptureError::new("native", e))?;
-    Ok(Stream { stream })
+    Ok(Stream { stream, source })
 }
 
 /// Downmix one audio buffer into the feed, stamped with the wall-clock time its first sample

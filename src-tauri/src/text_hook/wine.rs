@@ -16,9 +16,9 @@
 //!
 //! Wine's process ids are its own, not Linux's, so the game's id inside the prefix comes from the
 //! helper (`kimochi-hookd processes`), matched to the game by its Windows image path.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use super::process::Target;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -26,7 +26,7 @@ use std::path::PathBuf;
 /// platform's hook target carries one (`None` off Linux), so the type exists everywhere; only
 /// Linux reads it.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(dead_code))]
 pub struct Wine {
     /// The `wine` launcher of the build the game runs on.
     pub binary: PathBuf,
@@ -40,24 +40,27 @@ pub struct Wine {
     pub flatpak: Option<u32>,
     /// A non-Flatpak game with a private Wine socket, in an unprivileged user/mount namespace.
     pub namespace: Option<u32>,
+    /// The game's Linux/macOS host process id, kept after `windows_targets` swaps `Target::pid`
+    /// to Wine's internal process id so liveness watchers can detect game exit immediately.
+    pub host_pid: Option<u32>,
 }
 
 /// `path` as a process sees it, as Kimochi can open it: through `/proc/<pid>/root`.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn in_root(pid: u32, path: &Path) -> PathBuf {
     PathBuf::from(format!("/proc/{pid}/root{}", path.to_string_lossy()))
 }
 
 /// The folder Wine's processes reach a prefix's wineserver in, for a prefix on device `dev` at
 /// inode `ino`, run by user `uid` (Wine's `server-<dev>-<ino>`, both in hex).
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn server_dir(uid: u32, dev: u64, ino: u64) -> PathBuf {
     PathBuf::from(format!("/tmp/.wine-{uid}/server-{dev:x}-{ino:x}"))
 }
 
 /// A short name for a folder's contents: the same files give the same name, so a staged copy is
 /// reused until Kimochi (or the hooker) changes. FNV-1a, stable across builds and Rust versions.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn content_key(files: &[(String, Vec<u8>)]) -> String {
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     for (name, bytes) in files {
@@ -70,20 +73,22 @@ pub fn content_key(files: &[(String, Vec<u8>)]) -> String {
 
 /// Variables that describe the game's own process rather than its prefix; a second program
 /// inheriting them would break (the preloader's reserved range, an inherited server socket).
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 const PROCESS_ONLY: &[&str] =
     &["WINELOADERNOEXEC", "WINESERVERSOCKET", "WINEPRELOADRESERVE", "WINE_LD_PRELOAD", "WINEDEBUG"];
 
 /// From a process's environment, the variables a program sharing its prefix needs: every `WINE*`
 /// variable except the process-only ones (the sync mode in particular must match the game's, or
 /// the two disagree about how waits work), and Wine's library path where it exists here.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn shared_env(environ: &[(String, String)], exists: impl Fn(&Path) -> bool) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (key, value) in environ {
-        if key.starts_with("WINE") && !PROCESS_ONLY.contains(&key.as_str()) {
+        if (key.starts_with("WINE") || key.starts_with("CX_") || key.starts_with("GPTK_"))
+            && !PROCESS_ONLY.contains(&key.as_str())
+        {
             out.push((key.clone(), value.clone()));
-        } else if key == "LD_LIBRARY_PATH" {
+        } else if matches!(key.as_str(), "LD_LIBRARY_PATH" | "DYLD_LIBRARY_PATH" | "DYLD_FALLBACK_LIBRARY_PATH") {
             // Inside the runtime container some entries do not exist outside it; Proton's own
             // library directory does.
             let kept: Vec<&str> = value.split(':').filter(|p| !p.is_empty() && exists(Path::new(p))).collect();
@@ -98,7 +103,7 @@ pub fn shared_env(environ: &[(String, String)], exists: impl Fn(&Path) -> bool) 
 /// The `wine` launcher of the build whose loader is `loader` (what `/proc/<pid>/exe` names).
 /// Wine 7 and later keep loaders in `lib/wine/<arch>-unix/` under the build's root; older builds
 /// and distribution packages keep them in `bin/` beside `wine`.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn launcher_candidates(loader: &Path) -> Vec<PathBuf> {
     let Some(dir) = loader.parent() else { return Vec::new() };
     let unix_dir = dir.file_name().is_some_and(|n| n.to_string_lossy().ends_with("-unix"));
@@ -114,7 +119,7 @@ pub fn launcher_candidates(loader: &Path) -> Vec<PathBuf> {
 }
 
 /// Whether the program a process runs is one of Wine's loaders.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn is_wine_loader(loader: &Path) -> bool {
     loader
         .file_name()
@@ -124,7 +129,7 @@ pub fn is_wine_loader(loader: &Path) -> bool {
 
 /// A Windows path inside a prefix as a Linux path, through the prefix's drive links
 /// (`dosdevices/s:` → the Steam library, `z:` → `/`). `None` for a path on no linked drive.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn unix_path(prefix: &Path, windows: &str, read_link: impl Fn(&Path) -> Option<PathBuf>) -> Option<PathBuf> {
     if windows.starts_with('/') {
         return Some(PathBuf::from(windows));
@@ -150,15 +155,25 @@ pub fn unix_path(prefix: &Path, windows: &str, read_link: impl Fn(&Path) -> Opti
     Some(PathBuf::from(path))
 }
 
-/// A Linux path as Wine sees it, on the `Z:` drive every prefix maps to `/`.
+/// A relative image in Wine's command line is relative to the game's Linux working
+/// directory, not Kimochi's. Drive-qualified and UNC paths need their prefix mapping.
 #[cfg(any(target_os = "linux", test))]
+fn relative_image(image: &str, cwd: &Path) -> Option<PathBuf> {
+    if image.contains(':') || image.starts_with(['/', '\\']) {
+        return None;
+    }
+    Some(PathBuf::from(format!("{}/{}", cwd.to_string_lossy().trim_end_matches('/'), image.replace('\\', "/"))))
+}
+
+/// A Linux path as Wine sees it, on the `Z:` drive every prefix maps to `/`.
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn windows_path(path: &Path) -> String {
     format!("Z:{}", path.to_string_lossy().replace('/', "\\"))
 }
 
 /// One process inside the prefix, as `kimochi-hookd processes` lists it.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub struct Listed {
     pub pid: u32,
     pub parent: u32,
@@ -167,7 +182,7 @@ pub struct Listed {
     pub bits: Option<u32>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn parse_listing(output: &str) -> Vec<Listed> {
     output
         .lines()
@@ -185,18 +200,18 @@ pub fn parse_listing(output: &str) -> Vec<Listed> {
         .collect()
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn same_image(a: &str, b: &str) -> bool {
     a.replace('/', "\\").eq_ignore_ascii_case(&b.replace('/', "\\"))
 }
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn file_name(windows: &str) -> &str {
     windows.rsplit(['\\', '/']).next().unwrap_or(windows)
 }
 
 /// The architecture a prefix was made for, from the head of its `system.reg` (`#arch=win32` or
 /// `#arch=win64`, which Wine writes when it creates the prefix).
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn prefix_arch(system_reg: &str) -> Option<&str> {
     system_reg.lines().take(20).find_map(|l| l.trim().strip_prefix("#arch=")).map(str::trim)
 }
@@ -204,7 +219,7 @@ pub fn prefix_arch(system_reg: &str) -> Option<&str> {
 /// The Flatpak app a sandboxed game runs in, with its branch (`org.winehq.Wine stable-22.08`),
 /// from the sandbox's `/.flatpak-info`. Flathub's Wine keeps one Wine release per branch, so the
 /// branch says which Wine the game has.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn flatpak_app(info: &str) -> Option<String> {
     let mut section = "";
     let (mut name, mut branch) = (None, None);
@@ -231,7 +246,7 @@ pub fn flatpak_app(info: &str) -> Option<String> {
 /// gain DLLs and functions, so on a Wine too old for the helper this is what goes missing. (Wine
 /// before 8.14 lacks `bcryptprimitives.dll`, which Kimochi ships a stand-in for; see
 /// `hookd/shim/`.)
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn missing_from_wine(output: &str) -> Option<String> {
     let lines: Vec<&str> = output.lines().map(str::trim).filter(|l| l.contains("err:module:")).collect();
     let after = |l: &str, start: &str, end: &str| -> Option<String> {
@@ -267,7 +282,7 @@ pub fn needs_newer_wine(reason: &str) -> bool {
 /// tell: `flatpak enter` exits 0 whatever the program it ran did. Wine reports an exe it cannot
 /// start (`Bad EXE format`) on stdout, a program it cannot load (a DLL it lacks) on stderr as a
 /// `err:module` line, so both are looked at. `sandbox` names a Flatpak the game runs in.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn not_found_reason(
     image: &str,
     prefix: &Path,
@@ -314,7 +329,7 @@ pub fn not_found_reason(
 
 /// The game's processes inside the prefix: the one running `image` (by full path, else by file
 /// name) and its engine children (a launcher's `.bin`/`.log` process), with Wine's ids.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub fn pick<'a>(listed: &'a [Listed], image: &str) -> Vec<&'a Listed> {
     let by_path: Vec<&Listed> =
         listed.iter().filter(|p| p.path.as_deref().is_some_and(|q| same_image(q, image))).collect();
@@ -340,12 +355,13 @@ pub fn pick<'a>(listed: &'a [Listed], image: &str) -> Vec<&'a Listed> {
     found
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod imp {
     use super::*;
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
 
+    #[cfg(target_os = "linux")]
     fn environ(pid: u32) -> Option<Vec<(String, String)>> {
         let bytes = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
         Some(
@@ -362,6 +378,7 @@ mod imp {
 
     /// The process as a hook target, still with its Linux id: whether it runs under Wine, with
     /// which build and prefix, and its Windows image. Cheap enough for every listed window.
+    #[cfg(target_os = "linux")]
     pub fn target(pid: u32) -> Result<Target, String> {
         if pid == 0 || pid == std::process::id() {
             return Err("Kimochi and the system cannot be hooked".into());
@@ -405,12 +422,26 @@ mod imp {
             return Err("Kimochi cannot find this game's Wine prefix.".into());
         }
         let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).map_err(|_| "this process cannot be inspected")?;
-        let image = String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default()).trim().to_string();
+        let mut image =
+            String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default()).trim().to_string();
         if !image.to_ascii_lowercase().ends_with(".exe") {
             return Err("this is part of Wine, not a game".into());
         }
-        let exe = unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok())
-            .unwrap_or_else(|| PathBuf::from(&image));
+        let exe = match unix_path(&prefix, &image, |p| std::fs::read_link(outside(p)).ok()) {
+            Some(path) => path,
+            None => {
+                let cwd = std::fs::read_link(format!("/proc/{pid}/cwd"))
+                    .map_err(|_| "Kimochi cannot find this game's working directory.")?;
+                match relative_image(&image, &cwd) {
+                    Some(path) => {
+                        // Match the full image inside the prefix, even with two games named game.exe.
+                        image = windows_path(&path);
+                        path
+                    }
+                    None => PathBuf::from(&image),
+                }
+            }
+        };
         let lower = image.to_ascii_lowercase().replace('/', "\\");
         if lower.starts_with("c:\\windows\\") || lower.contains("\\proton") && lower.contains("\\files\\") {
             return Err("this is part of Wine, not a game".into());
@@ -440,9 +471,16 @@ mod imp {
             })
             .unwrap_or(64);
         let env = shared_env(&environ, |p| outside(p).exists());
-        Ok(Target { pid, exe, bits, wine: Some(Wine { binary, prefix, env, image, flatpak, namespace }) })
+        Ok(Target {
+            pid,
+            exe,
+            bits,
+            arm64: false,
+            wine: Some(Wine { binary, prefix, env, image, flatpak, namespace, host_pid: Some(pid) }),
+        })
     }
 
+    #[cfg(target_os = "linux")]
     fn private_user_namespace(pid: u32) -> bool {
         ["user", "mnt"].iter().all(|name| {
             let target = std::fs::read_link(format!("/proc/{pid}/ns/{name}"));
@@ -454,6 +492,7 @@ mod imp {
     /// Whether a Wine started here reaches the game's wineserver, rather than starting a second
     /// one on its prefix: false only when the game's is in a `/tmp` of its own (a sandbox) and
     /// none is in ours.
+    #[cfg(target_os = "linux")]
     fn server_reachable(pid: u32, prefix: &Path) -> bool {
         use std::os::unix::fs::MetadataExt;
         let (Ok(me), Ok(prefix)) = (std::fs::metadata("/proc/self"), std::fs::metadata(prefix)) else { return true };
@@ -561,7 +600,12 @@ mod imp {
             None if wine.namespace.is_some() => Path::new("nsenter"),
             None => wine.binary.as_path(),
         });
-        command.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD");
+        command
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("LD_PRELOAD")
+            .env_remove("DYLD_LIBRARY_PATH")
+            .env_remove("DYLD_FALLBACK_LIBRARY_PATH")
+            .env_remove("DYLD_INSERT_LIBRARIES");
         match wine.flatpak {
             // Inside the game's sandbox, where it starts with the game's environment: what
             // describes only the game's own process is taken out, and the prefix's variables given.
@@ -674,6 +718,7 @@ mod imp {
                 pid: p.pid,
                 exe: game.exe.clone(),
                 bits: p.bits.unwrap_or(game.bits),
+                arm64: false,
                 wine: game.wine.clone(),
             })
             .collect())
@@ -681,7 +726,9 @@ mod imp {
 }
 
 #[cfg(target_os = "linux")]
-pub use imp::{command, reachable, reachable_dir, target, windows_targets};
+pub use imp::target;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use imp::{command, reachable, reachable_dir, windows_targets};
 
 #[cfg(test)]
 mod tests {
@@ -780,6 +827,22 @@ not json"#;
         // Wine may report another drive for the same file; the name still finds it.
         assert_eq!(pids("Z:\\home\\deck\\Game\\game.exe"), vec![308, 400]);
         assert!(pids("S:\\Other\\Other.exe").is_empty());
+    }
+
+    #[test]
+    fn relative_images_use_the_games_directory() {
+        let cwd = Path::new("/home/deck/Games/Cave Story");
+        assert_eq!(
+            relative_image("Doukutsu.exe", cwd),
+            Some(PathBuf::from("/home/deck/Games/Cave Story/Doukutsu.exe"))
+        );
+        assert_eq!(
+            relative_image(r"bin\Game.exe", cwd),
+            Some(PathBuf::from("/home/deck/Games/Cave Story/bin/Game.exe"))
+        );
+        assert!(relative_image(r"C:\Games\game.exe", cwd).is_none());
+        assert!(relative_image(r"\\server\share\game.exe", cwd).is_none());
+        assert!(relative_image("/opt/game.exe", cwd).is_none());
     }
 
     #[test]

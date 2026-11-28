@@ -226,7 +226,7 @@ test('overlay look: the cards follow Kimochi unless told otherwise', () => {
 })
 
 test('a Text Hooker input from another system reads as OCR where games cannot be hooked', () => {
-  assert.equal(usableInputSource('hook', 'macos'), 'ocr')
+  assert.equal(usableInputSource('hook', 'macos'), 'hook')
   assert.equal(usableInputSource('hook', 'windows'), 'hook')
   assert.equal(usableInputSource('hook', 'linux'), 'hook')
   // Unknown system: as stored.

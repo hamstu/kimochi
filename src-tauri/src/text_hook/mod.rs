@@ -16,7 +16,17 @@
 //!
 //! On Linux the same Windows helper and hookers hook Windows games running through Proton or
 //! Wine: they run with the game's Wine, in its prefix (`wine.rs`).
+//!
+//! A game the Agent collection has a script for (`agent/`) is hooked by that script first: it
+//! knows where the game's text is, emulated games' included. If it cannot hook the game, LunaHook
+//! and Textractor follow as for any other game. The reader can choose LunaHook for a game instead
+//! (`textHookerGames.<exe>.engine`), and switch between the two while it is hooked.
+pub mod agent;
 pub mod clean;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(any(target_os = "macos", test))]
+mod macos;
 pub mod pick;
 pub mod process;
 mod renpy;
@@ -39,8 +49,49 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
-/// Engines in the order they are tried.
+/// Engines in the order they are tried, for a game with no Agent script.
 const ENGINES: &[&str] = &["luna", "textractor"];
+
+/// The engines to try, in order, for a game with `script` (or none), the reader's choice first
+/// (`"agent"`, `"luna"`; none: Agent when there is a script).
+fn engines_for(script: Option<&agent::Script>, choice: Option<&str>) -> Vec<&'static str> {
+    match (script, choice) {
+        (Some(_), Some("luna")) => vec!["luna", "textractor", agent::ENGINE],
+        (Some(_), _) => vec![agent::ENGINE, "luna", "textractor"],
+        (None, _) => ENGINES.to_vec(),
+    }
+}
+fn target_engines(
+    target: Option<&process::Target>,
+    script: Option<&agent::Script>,
+    choice: Option<&str>,
+) -> Result<Vec<&'static str>, String> {
+    if cfg!(windows) && target.is_some_and(|t| t.arm64) {
+        if script.is_none() {
+            return Err("this app runs as native ARM64, which text hooks cannot enter".into());
+        }
+        if choice.is_some_and(|c| c != agent::ENGINE) {
+            return Err(
+                "LunaHook and Textractor require an x86 or x64 game; use Agent scripts for native ARM64 games.".into(),
+            );
+        }
+        return Ok(vec![agent::ENGINE]);
+    }
+    if cfg!(any(target_os = "macos", target_os = "linux")) && target.is_some_and(|t| t.wine.is_none()) {
+        let os_label = if cfg!(target_os = "macos") { "Mac" } else { "Linux" };
+        if script.is_none() {
+            return Err(format!("No Agent script matches this native {os_label} game."));
+        }
+        if choice.is_some_and(|c| c != agent::ENGINE) {
+            return Err(format!(
+                "LunaHook and Textractor require a Windows game; use Agent scripts for native {os_label} games."
+            ));
+        }
+        return Ok(vec![agent::ENGINE]);
+    }
+    Ok(engines_for(script, choice))
+}
+
 /// How long after a burst the next can carry on its line (a typewriter paused for effect).
 const CARRY_ON: Duration = Duration::from_secs(5);
 /// How soon after a row of the text box the next row can join it: this, and the time the row
@@ -131,6 +182,10 @@ struct Session {
     /// The game's processes, as found when hooking started.
     targets: Vec<process::Target>,
     pids: Vec<u32>,
+    /// The engines to try, in order (`engines_for`).
+    engines: Vec<&'static str>,
+    /// The Agent script for the game, when the collection has one.
+    agent: Option<&'static agent::Script>,
     engine: Option<&'static str>,
     phase: &'static str,
     detail: Option<String>,
@@ -194,6 +249,8 @@ struct Session {
     text_at: Option<u64>,
     /// The whole text box the next line is a sentence of (`clean::new_sentence`), for the card.
     screen: Option<String>,
+    #[cfg(target_os = "macos")]
+    gadget: Option<PathBuf>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
     /// The code page the helper decodes ANSI text with, when it can be changed while it runs (a
@@ -293,10 +350,10 @@ impl Hook {
         // which is set whole, nor Ren'Py's say screen, whose lines come whole as they are shown.
         let recent = session.last_key.as_deref() == Some(key)
             && session.last_sent.is_some_and(|at| at.elapsed() < window)
-            && !session
-                .threads
-                .iter()
-                .any(|t| t.key == key && (unity::is_unity(&t.hookcode) || renpy::is_renpy(&t.hookcode)));
+            && !session.threads.iter().any(|t| {
+                t.key == key
+                    && (unity::is_unity(&t.hookcode) || renpy::is_renpy(&t.hookcode) || agent::is_agent(&t.hookcode))
+            });
         let piece_chars = text.chars().count();
         if !carries_on && config.join_lines && recent {
             if let Some(before) = session.last_line.as_deref() {
@@ -368,14 +425,20 @@ fn status_of(session: &Session) -> Value {
     threads.sort_by_key(|t| pick::is_generic(&t.hookcode, &t.name));
     let manifest = store::manifest();
     json!({
-        "supported": cfg!(any(windows, target_os = "linux")),
+        "supported": cfg!(any(windows, target_os = "linux", target_os = "macos")),
         "phase": session.phase,
         "detail": session.detail,
         "helpUrl": session.help_url,
         "sourceId": session.source_id,
         "exe": session.exe.as_ref().map(|e| e.to_string_lossy()),
         "pids": session.pids,
-        "engine": session.engine.and_then(|id| manifest.engines.get(id).map(|e| json!({ "id": id, "name": e.name, "version": e.version }))),
+        "engine": session.engine.and_then(|id| match id {
+            agent::ENGINE => Some(agent::engine_status(session.targets.first())),
+            _ => manifest.engines.get(id).map(|e| json!({ "id": id, "name": e.name, "version": e.version })),
+        }),
+        "engines": session.engines,
+        // Without its download size: the status goes out at every line (its progress is `download`).
+        "agent": session.agent.map(|script| agent::describe(script, None, session.targets.first())),
         "download": session.download.map(|(done, total)| json!({ "done": done, "total": total })),
         "selected": session.selected,
         "selectedBy": session.selected_by,
@@ -474,7 +537,22 @@ fn send(session: &mut Session, command: Value) -> Result<(), String> {
     writeln!(stdin, "{command}").and_then(|_| stdin.flush()).map_err(|e| format!("the hook helper stopped: {e}"))
 }
 
+/// Takes a running Agent injector child out of `session` (and unloads macOS Gadget) so the caller
+/// can wait for clean detach before attaching another engine without holding the session lock.
+fn take_agent_child(session: &mut Session) -> Option<Child> {
+    #[cfg(target_os = "macos")]
+    agent::gadget::stop(session);
+    if session.engine == Some(agent::ENGINE) {
+        session.child.take()
+    } else {
+        None
+    }
+}
+
 fn stop_child(session: &mut Session) {
+    if let Some(child) = take_agent_child(session) {
+        std::thread::spawn(move || agent::stop_child_process(child));
+    }
     // Closing stdin asks the helper to detach from every game and exit; it is killed only if
     // it does not.
     session.stdin = None;
@@ -511,7 +589,7 @@ fn launch(
     // Under Wine the helper runs in the game's prefix, so it sees the game as Windows would, and
     // takes the hooker's folder as a Windows path; both copied where the game can reach them,
     // for a game in a sandbox that does not see Kimochi's folders.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     if let Some(wine) = targets.first().and_then(|t| t.wine.as_ref()) {
         command = wine::command(wine, &wine::reachable(wine, &exe)?);
         command.arg(engine).arg("--dir").arg(wine::windows_path(&wine::reachable_dir(wine, dir)?));
@@ -790,6 +868,9 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         // (`{w}`, `{p}`) or by an `extend`, it is the same line, which it replaces however late.
         if renpy::is_renpy(&thread.hookcode) {
             (vec![text.to_string()], renpy::carries_on(&thread.text, text))
+        // An Agent script sends the game's line whole, as the game shows it (its rows joined).
+        } else if agent::is_agent(&thread.hookcode) {
+            (vec![text.to_string()], false)
         // A Unity text object's text arrives settled, the whole text box (`unity::Settle`): one line,
         // never frames of a typewriter to take apart.
         } else if unity::is_unity(&thread.hookcode) {
@@ -1482,32 +1563,67 @@ fn read_lines(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec<
 
 /// Moves to the next engine after `failed` could not be installed, started or attached.
 fn fall_back(hook: &'static Hook, generation: u64, failed: &'static str, reason: String) {
-    let next = ENGINES.iter().skip_while(|e| **e != failed).nth(1).copied();
     let mut session = hook.lock();
     if session.generation != generation {
         return;
     }
+    let next = session.engines.iter().skip_while(|e| **e != failed).nth(1).copied();
+    let prev_agent = take_agent_child(&mut session);
     stop_child(&mut session);
     session.threads.clear();
     match next {
         Some(engine) => {
-            let name = |id: &str| store::manifest().engines.get(id).map_or(id.to_string(), |e| e.name.clone());
+            let name = |id: &str| match id {
+                agent::ENGINE => {
+                    session.agent.map_or("Agent".to_string(), |s| format!("The Agent script for {}", s.title))
+                }
+                _ => store::manifest().engines.get(id).map_or(id.to_string(), |e| e.name.clone()),
+            };
             session.fallback = Some(format!("{} could not hook this game: {reason}", name(failed)));
             session.detail = session.fallback.clone();
+            let start_unity = cfg!(windows)
+                && failed == agent::ENGINE
+                && engine == ENGINES[0]
+                && session.unity.is_empty()
+                && session.targets.iter().any(|t| {
+                    !t.arm64 && t.wine.is_none() && (unity::is_mono_game(&t.exe) || renpy::is_renpy_game(&t.exe))
+                });
             hook.publish(&session);
             drop(session);
-            std::thread::spawn(move || run(hook, generation, engine));
+            std::thread::spawn(move || {
+                if let Some(child) = prev_agent {
+                    agent::stop_child_process(child);
+                }
+                if start_unity {
+                    let mut session = hook.lock();
+                    if session.generation != generation {
+                        return;
+                    }
+                    read_unity_text(hook, &mut session, true);
+                    if !session.unity.is_empty() {
+                        return;
+                    }
+                }
+                run(hook, generation, engine);
+            });
         }
         None => {
             session.phase = "failed";
             session.detail = Some(reason);
             hook.publish(&session);
+            drop(session);
+            if let Some(child) = prev_agent {
+                std::thread::spawn(move || agent::stop_child_process(child));
+            }
         }
     }
 }
 
 /// Installs `engine` if needed and launches it on the session's targets.
 fn run(hook: &'static Hook, generation: u64, engine: &'static str) {
+    if engine == agent::ENGINE {
+        return agent::run(hook, generation);
+    }
     let targets: Vec<process::Target> = {
         let session = hook.lock();
         if session.generation != generation {
@@ -1571,10 +1687,54 @@ fn window_pid(source_id: &str) -> Option<u32> {
 pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut out = serde_json::Map::new();
+        // Window titles, for matching games to Agent scripts: the source list, read once.
+        let titles: BTreeMap<String, String> = crate::sources::catalog()
+            .map(|all| {
+                all.into_iter()
+                    .filter_map(|s| Some((s["id"].as_str()?.to_string(), s["name"].as_str()?.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
         for id in source_ids {
             let pid = window_pid(&id);
             let value = match pid.map(process::target) {
-                Some(Ok(target)) => json!({ "hookable": true, "bits": target.bits, "exe": target.exe }),
+                Some(Ok(target)) => {
+                    let script = agent_script(&target, titles.get(&id).map(String::as_str));
+                    let emulator = agent::index::emulator_platform(&target.exe).is_some();
+                    if cfg!(windows) && target.arm64 && script.is_none() {
+                        let mut value = json!({
+                            "hookable": false,
+                            "reason": "this app runs as native ARM64, which text hooks cannot enter",
+                        });
+                        if emulator {
+                            value["emulator"] = json!(true);
+                        }
+                        out.insert(id, value);
+                        continue;
+                    }
+                    if cfg!(any(target_os = "macos", target_os = "linux")) && target.wine.is_none() && script.is_none()
+                    {
+                        let os_label = if cfg!(target_os = "macos") { "Mac" } else { "Linux" };
+                        let mut value = json!({
+                            "hookable": false,
+                            "reason": format!("No Agent script matches this native {os_label} game."),
+                        });
+                        if emulator {
+                            value["emulator"] = json!(true);
+                        }
+                        out.insert(id, value);
+                        continue;
+                    }
+                    let mut value = json!({ "hookable": true, "bits": target.bits, "exe": target.exe });
+                    if emulator {
+                        value["emulator"] = json!(true);
+                    }
+                    if let Some(script) = script {
+                        value["agent"] =
+                            agent::describe(script, hook().and_then(|h| h.root().ok()).as_deref(), Some(&target));
+                    }
+                    value
+                }
                 Some(Err(reason)) => json!({ "hookable": false, "reason": reason }),
                 None => json!({ "hookable": false, "reason": "Only app windows can be hooked." }),
             };
@@ -1586,6 +1746,26 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
     .map_err(|e| e.to_string())
 }
 
+/// The Agent script for the game in `target` (its window titled `title`), unless the reader turned
+/// Agent scripts off (Settings → Text Hooker).
+fn agent_script(target: &process::Target, title: Option<&str>) -> Option<&'static agent::Script> {
+    let hook = hook()?;
+    let service = hook.app.try_state::<Shared>()?;
+    let on = service.settings.get_path(&["textHookerAgentScripts"]).ok().flatten();
+    if on == Some(json!(false)) {
+        return None;
+    }
+    let language = crate::language::current(&service.settings);
+    agent::script_for(target, title, &language.code)
+}
+
+/// The engine the reader chose for the game at `exe` (`"agent"`, `"luna"`), if any.
+fn chosen_engine(hook: &Hook, exe: &Path) -> Option<String> {
+    let service = hook.app.try_state::<Shared>()?;
+    let value = service.settings.get_path(&["textHookerGames", &game_key(exe), "engine"]).ok().flatten()?;
+    value.as_str().map(str::to_string)
+}
+
 /// A session in this phase is hooking its game, or has: starting it again would only interrupt it.
 fn keeps_going(phase: &str) -> bool {
     matches!(phase, "starting" | "downloading" | "attaching" | "hooked")
@@ -1594,13 +1774,17 @@ fn keeps_going(phase: &str) -> bool {
 /// Hooks the game behind window source `source_id`; replaces any earlier session, unless it is
 /// one hooking the same game.
 #[tauri::command]
-pub async fn texthook_start(source_id: String, observer_engine: Option<String>) -> Result<Value, String> {
+pub async fn texthook_start(
+    source_id: String,
+    observer_engine: Option<String>,
+    engine: Option<String>,
+) -> Result<Value, String> {
     let hook = hook().ok_or("text hooking is not available")?;
-    if !cfg!(any(windows, target_os = "linux")) {
-        return Err("Text Hooker works on Windows and Linux.".into());
+    if !cfg!(any(windows, target_os = "linux", target_os = "macos")) {
+        return Err("Text Hooker works on Windows, macOS and Linux.".into());
     }
     let pid = window_pid(&source_id).ok_or("Choose an app window to hook.")?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let helper = hookd_path(&hook.app);
     let found = tauri::async_runtime::spawn_blocking(move || {
         // Listing a Wine game's processes asks a helper inside its prefix: not while paused.
@@ -1613,7 +1797,7 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         }
         // Under Wine the hooker addresses the game by the prefix's process id, which only a
         // program inside the prefix can see.
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if found[0].wine.is_some() {
             return wine::windows_targets(&helper?, &found[0]);
         }
@@ -1648,13 +1832,23 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             return Err(reason);
         }
     };
+    // The game's Agent script, and the engines to try: the one asked for, else the one the reader
+    // chose for this game, else Agent when there is a script.
+    let title = window_title(&source_id);
+    let script = targets.first().and_then(|t| agent_script(t, title.as_deref()));
+    let choice = engine.or_else(|| targets.first().and_then(|t| chosen_engine(hook, &t.exe)));
+    let engines = target_engines(targets.first(), script, choice.as_deref())?;
     let generation = {
         let mut session = hook.lock();
         // The same game, already being hooked or hooked (the game started with Hook automatically
         // on, and the reader turned Text hooking on too): that session goes on. Stopping it while
         // it attaches leaves the hooker's DLL in the game with no host, which then never reconnects.
         let pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
-        if session.source_id == source_id && session.pids == pids && keeps_going(session.phase) {
+        if session.source_id == source_id
+            && session.pids == pids
+            && keeps_going(session.phase)
+            && session.engines.first() == engines.first()
+        {
             session.observer_engine = observer_engine.or(session.observer_engine.take());
             return Ok(status_of(&session));
         }
@@ -1668,6 +1862,8 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             targets: targets.clone(),
             phase: "starting",
             observer_engine,
+            engines: engines.clone(),
+            agent: script,
             ..Default::default()
         };
         // A Unity (Mono) game's text is read by the voice hook DLL too, from the start: the
@@ -1675,8 +1871,12 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         // all sorts of strings, which tell little of when a line is shown (`unity.rs`). A Ren'Py
         // game's dialogue likewise, from the say screen (`renpy.rs`); the hooker still runs, for
         // the game's other text and for a Ren'Py the DLL cannot read.
+        // Not while an Agent script reads the game's text: it would add threads of its own.
         if cfg!(windows)
-            && targets.iter().any(|t| t.wine.is_none() && (unity::is_mono_game(&t.exe) || renpy::is_renpy_game(&t.exe)))
+            && engines[0] != agent::ENGINE
+            && targets
+                .iter()
+                .any(|t| !t.arm64 && t.wine.is_none() && (unity::is_mono_game(&t.exe) || renpy::is_renpy_game(&t.exe)))
         {
             read_unity_text(hook, &mut session, true);
         }
@@ -1705,10 +1905,72 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
                     return;
                 }
             }
-            run(hook, generation, ENGINES[0])
+            run(hook, generation, engines[0])
         });
     }
     Ok(status_of(&hook.lock()))
+}
+
+/// Hooks the game being hooked again with `engine` (`"agent"` or `"luna"`) first: the reader
+/// switching between the game's Agent script and LunaHook. Its window and processes stay as they
+/// were found; the threads start afresh.
+#[tauri::command]
+pub fn texthook_engine(engine: String) -> Result<Value, String> {
+    if !matches!(engine.as_str(), "agent" | "luna") {
+        return Err(format!("Unknown text hooker engine: {engine}."));
+    }
+    let hook = hook().ok_or("text hooking is not available")?;
+    let mut session = hook.lock();
+    if session.targets.is_empty() || matches!(session.phase, "idle" | "ended") {
+        return Err("No game is hooked.".into());
+    }
+    if engine == agent::ENGINE && session.agent.is_none() {
+        return Err("This game has no Agent script.".into());
+    }
+    let engines = target_engines(session.targets.first(), session.agent, Some(engine.as_str()))?;
+    let prev_agent = take_agent_child(&mut session);
+    stop_child(&mut session);
+    let generation = session.generation + 1;
+    let previous = std::mem::take(&mut *session);
+    *session = Session {
+        generation,
+        source_id: previous.source_id,
+        exe: previous.exe,
+        pids: previous.pids,
+        targets: previous.targets,
+        observer_engine: previous.observer_engine,
+        agent: previous.agent,
+        engines: engines.clone(),
+        phase: "starting",
+        ..Default::default()
+    };
+    let start_unity = cfg!(windows)
+        && engines[0] != agent::ENGINE
+        && session
+            .targets
+            .iter()
+            .any(|t| !t.arm64 && t.wine.is_none() && (unity::is_mono_game(&t.exe) || renpy::is_renpy_game(&t.exe)));
+    hook.publish(&session);
+    let status = status_of(&session);
+    drop(session);
+    crate::debug_report::trace(&hook.app, json!({ "check": "texthook-engine-switch", "engine": engine }));
+    std::thread::spawn(move || {
+        if let Some(child) = prev_agent {
+            agent::stop_child_process(child);
+        }
+        if start_unity {
+            let mut session = hook.lock();
+            if session.generation != generation {
+                return;
+            }
+            read_unity_text(hook, &mut session, true);
+            if !session.unity.is_empty() {
+                return;
+            }
+        }
+        run(hook, generation, engines[0]);
+    });
+    Ok(status)
 }
 
 /// Detaches from the game and stops the helper.
@@ -1861,8 +2123,13 @@ pub fn refresh_voice_hook() {
     };
     let config = service.config();
     // Windows games, natively or (on Linux) through Wine or Proton.
-    let enabled =
-        (cfg!(windows) || cfg!(target_os = "linux")) && config.enabled && config.voice_hook && hook.reading_text();
+    // The voice DLL crashes 32-bit games under macOS Wine WoW64. Keep macOS on
+    // ScreenCaptureKit until that injector is validated; text hooking is independent.
+    let enabled = ((cfg!(windows) && targets.iter().any(|t| !t.arm64))
+        || (cfg!(target_os = "linux") && targets.iter().any(|t| t.wine.is_some())))
+        && config.enabled
+        && config.voice_hook
+        && hook.reading_text();
     if enabled {
         let mut bases: Vec<PathBuf> = Vec::new();
         for target in &targets {
@@ -1920,7 +2187,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
     let prepare = |e: String| format!("The voice hook DLL could not be prepared; using system audio: {e}");
     // Under Wine the helper injects from inside the game's prefix, and the DLL is staged in the
     // prefix so that the game (inside Steam's runtime container, for Proton) can load it.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let mut command = {
         let wine = target.wine.as_ref().ok_or("Audio hooking reads Windows games running through Proton or Wine.")?;
         let user = std::env::var("USER").ok();
@@ -1933,7 +2200,7 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
         command.args(["inject", "--pid", &target.pid.to_string(), "--dll", &path]);
         command
     };
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let mut command = {
         let dll = crate::sentence_audio::voice_hook::staged_dll(&dll, &crate::sentence_audio::voice_hook::base_dir())
             .map_err(prepare)?;
@@ -1966,6 +2233,17 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
 mod tests {
     use super::{another_click, count_missed, failed_hook, unwitnessed, Session, MISS_GAP, WITNESS_UNSURE};
     use std::time::{Duration, Instant};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn native_games_never_fall_back_to_windows_hook_dlls() {
+        let native =
+            super::process::Target { pid: 1, exe: "/opt/PPSSPPSDL".into(), bits: 64, arm64: false, wine: None };
+        let script = &super::agent::index::index().scripts[0];
+        assert_eq!(super::target_engines(Some(&native), Some(script), None).unwrap(), vec!["agent"]);
+        assert!(super::target_engines(Some(&native), Some(script), Some("luna")).is_err());
+        assert!(super::target_engines(Some(&native), None, None).is_err());
+    }
 
     #[test]
     fn one_clicks_lines_from_other_threads_are_one_missed_line() {
@@ -2024,5 +2302,32 @@ mod tests {
         assert_eq!(failed_hook("MH_ERROR_MEMORY_ALLOC"), None);
         assert_eq!(failed_hook("注入钩子: String:String: 000001DCD4B56610"), None);
         assert_eq!(failed_hook("移除钩子: String:String:"), None);
+    }
+}
+
+/// Choose a native Mac game and opt into loading Agent at launch.
+#[tauri::command]
+pub async fn texthook_launch(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<Value, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        app.dialog().file().set_title("Launch native Mac game through Kimochi").set_parent(&window).pick_file(
+            move |path| {
+                let _ = tx.send(path);
+            },
+        );
+        let Some(path) = rx.await.map_err(|e| e.to_string())? else {
+            return Ok(json!({"launched":false}));
+        };
+        let path = path.into_path().map_err(|e| e.to_string())?;
+        tauri::async_runtime::spawn_blocking(move || agent::gadget::launch_game(path))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, window);
+        Err("Native game launch is available on macOS only.".into())
     }
 }

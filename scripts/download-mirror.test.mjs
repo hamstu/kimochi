@@ -58,6 +58,16 @@ test('the inventory covers every pinned download the app makes', async () => {
   assert.equal(new Set(files.map((f) => f.path)).size, files.length, 'one entry per path')
   const helper = files.filter((f) => f.artifact.startsWith('yomitan-host/'))
   assert.ok(helper.length >= 6, 'the Yomitan API helper pins parse')
+  // A file pinned compressed is mirrored compressed: the entry is the xz stream's size and hash.
+  const manifest = JSON.parse(await readFile(`${root}src-tauri/texthook-manifest.json`, 'utf8'))
+  for (const [id, engine] of Object.entries(manifest.engines)) {
+    for (const file of engine.files.filter((f) => f.xz)) {
+      const entry = files.find((f) => f.artifact === `texthook/${id}/${file.name}`)
+      assert.ok(entry.path.endsWith(`/${file.name}.xz`), entry.path)
+      assert.equal(entry.sha256, file.xz.sha256)
+      assert.equal(entry.size, file.xz.size)
+    }
+  }
 })
 
 test('retention keeps pinned, recent and the newest versions, and never touches app/ or data/', () => {

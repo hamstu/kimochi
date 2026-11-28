@@ -7,13 +7,39 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
+/**
+ * The Agent script for a game (text_hook/agent): a script from the Agent collection that knows
+ * where the game's text is. Emulated games above all.
+ */
+export interface AgentScript {
+  /** The script's file in the collection (`NS_0100A3A00CC7E000_CLANNAD_JP.js`). */
+  file: string
+  /** The game, as the script names it. */
+  title: string
+  /** What runs the game: `switch`, `psp`, `ps2`, `ps3`, `vita`, `3ds`, `pc`, `pc98`. */
+  platform: string
+  author?: string | null
+  version?: string | null
+  /** Bytes still to download before it can run (Frida and the scripts); 0 when ready. */
+  download: number
+  /** Where the scripts come from (their repository). */
+  collection: string
+}
+
 export interface HookTarget {
   hookable: boolean
   bits?: number
   exe?: string
+  /** True when the window belongs to a recognised console emulator (whose title changes when a game boots). */
+  emulator?: boolean
   /** Why the window cannot be hooked. */
   reason?: string
+  /** The game's Agent script, when the collection has one (and Agent scripts are on). */
+  agent?: AgentScript
 }
+
+/** The engines a session can be switched between: the game's Agent script, or LunaHook. */
+export type HookEngineChoice = 'agent' | 'luna'
 
 export interface HookThread {
   key: string
@@ -41,10 +67,15 @@ export interface HookStatus {
   sourceId?: string
   exe?: string | null
   pids?: number[]
-  engine?: { id: string; name: string; version: string } | null
+  engine?: { id: string; name: string; version: string | null } | null
+  /** The engines this session tries, in order (`agent`, `luna`, `textractor`). */
+  engines?: string[]
+  /** The game's Agent script, when it has one: the card can switch to it or away from it. */
+  agent?: AgentScript | null
   download?: { done: number; total: number } | null
   selected?: string | null
-  selectedBy?: 'saved' | 'auto' | 'manual' | null
+  /** `agent`: the Agent script's own text, chosen as soon as it loaded. */
+  selectedBy?: 'saved' | 'auto' | 'manual' | 'agent' | null
   /** Why no thread has been chosen automatically yet. */
   pickNote?: string | null
   /** Why the first engine was given up for the one in use. */
@@ -60,8 +91,16 @@ export const IDLE: HookStatus = { supported: false, phase: 'idle', threads: [] }
 
 export const texthookTargets = (sourceIds: string[]): Promise<Record<string, HookTarget>> =>
   invoke<Record<string, HookTarget>>('texthook_targets', { sourceIds })
-export const texthookStart = (sourceId: string, observerEngine?: string | null): Promise<HookStatus> =>
-  invoke<HookStatus>('texthook_start', { sourceId, observerEngine: observerEngine ?? null })
+/** Hooks a window's game; `engine` asks for one first (else the game's choice, else Agent when it has a script). */
+export const texthookStart = (
+  sourceId: string,
+  observerEngine?: string | null,
+  engine?: HookEngineChoice | null
+): Promise<HookStatus> =>
+  invoke<HookStatus>('texthook_start', { sourceId, observerEngine: observerEngine ?? null, engine: engine ?? null })
+/** Hooks the game being hooked again, with `engine` first. */
+export const texthookEngine = (engine: HookEngineChoice): Promise<HookStatus> =>
+  invoke<HookStatus>('texthook_engine', { engine })
 export const texthookStop = (): Promise<HookStatus> => invoke<HookStatus>('texthook_stop')
 export const texthookStatus = (): Promise<HookStatus> => invoke<HookStatus>('texthook_status')
 /** Chooses a thread by hand; `null` goes back to choosing automatically. */
@@ -108,3 +147,7 @@ export const texthookGame = (exe: string): Promise<{ thread: string | null }> =>
 /** Forgets the thread remembered for a game; with `all`, its icon too. */
 export const texthookForget = (exe: string, all: boolean): Promise<void> =>
   invoke<void>('texthook_forget', { exe, all })
+
+/** Opt-in native Mac launch; the game is chosen in a native file dialog. */
+export const texthookLaunch = (): Promise<{ launched: boolean; pid?: number; title?: string }> =>
+  invoke('texthook_launch')

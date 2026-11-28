@@ -2083,12 +2083,15 @@ missing. It is re-sent as `platform-capabilities` when the download changes stat
 browser installs meanwhile is found the next time the capabilities are asked for (the panel's
 "Look again").
 
-## Text Hooker (Windows; Linux through Proton or Wine)
+## Text Hooker (Windows, macOS and Linux)
 
 The `inputSource` `"hook"`: the game behind a chosen window is hooked and its text read from
 inside it. Implementation: `src-tauri/src/text_hook/` (session, process resolution, thread
-choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). On macOS the commands
-answer `supported: false` or refuse.
+choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). macOS runs the same Windows helpers inside
+the selected game’s Wine/CrossOver prefix. Process inspection uses `proc_pidpath` and
+`KERN_PROCARGS2`; only prefix/runtime variables are inherited, and the existing wineserver
+socket must be reachable. Mac bundles cross-build the helpers with a pinned, checksum-verified LLVM-MinGW download
+(build tool only; Rust targets `x86_64-pc-windows-gnullvm`, `i686-pc-windows-gnullvm`).
 
 On Linux a window is hookable when its process is a Wine loader running a Windows game
 (`text_hook/wine.rs`): Proton (including Steam Deck Gaming Mode's `gamescope:window:{appid}:{pid}`
@@ -2115,10 +2118,78 @@ On X11 a window's process is the one the X
 server reports for its client (XRes), else `_NET_WM_PID`, which a sandboxed client sets to its id
 inside the sandbox.
 
+On macOS, sentence audio uses ScreenCaptureKit to record everything the Mac plays, excluding
+Kimochi itself. Voice DLL injection stays disabled: testing found that it crashes a 32-bit
+Wine WoW64 game. System audio capture remains available for native games, Wine and emulators.
+
+Native macOS Apple Silicon games and emulators use Agent scripts only when a script matches.
+LunaHook and Textractor are Windows engines and are not offered for native Mac targets.
+Native attach works for unhardened ARM64 targets; hardened and Rosetta processes may refuse
+injection and report the injector’s reason. Kimochi does not change signing, SIP or entitlements.
+Native Frida is pinned as `agent-macos-arm64`. The host uses POSIX paths, and applies Citra
+(main module) and Yuzu (libc++ symbol) ARM64 overlays while reading libraries, leaving the pinned
+archive unchanged. Native Mono also falls back to exact export enumeration when named lookup
+misses an exported function. For Rosetta Gadget hooks, the Mono overlay also preserves
+originally writable JIT allocations across script disposal (only ranges observed as rwx;
+read-only code is never made writable by this restoration). These overlays do not guarantee support for every emulator/game version.
+
+Settings → Text Hooker → **Launch through Kimochi…** is an opt-in launch for a native Mac `.app`
+with an indexed PC script (including Rosetta Higurashi). Close the game first. Kimochi downloads
+checksum-pinned universal Frida Gadget, launches with `DYLD_INSERT_LIBRARIES` and the matched
+Steam app id when available, and verifies the process id and executable written by Gadget. It
+does not alter the game bundle, signing, entitlements or system permissions. Select the launched
+window, then use Agent as usual. Gadget uses script reload mode, with no network listener; its
+private directory is mode 0700 under `texthook/gadget-<random>/`. Each hook run writes the normal
+Agent protocol to its own event file, read through the same text pipeline. Stop or switching sources
+replaces the script with an idle script, unloading hooks without terminating the game. Closing the
+game ends the session and removes its launch directory while Kimochi is running. Relaunch through
+Kimochi after restarting Kimochi; a still-running game is not adopted. Hardened games may refuse
+to load Gadget, in which case launch reports the failure without changing security settings.
+
+Native Linux x64 emulators recognised by the Agent index can also be hooked, when their
+window title matches a script. They use `agent-linux-x64` (Frida 17.27.4), native process ids and
+POSIX collection paths. Their engine list contains only `agent`: no Windows DLL fallback,
+engine switch or voice-hook injection. The emulator must allow same-user ptrace attachment;
+Kimochi does not change system ptrace policy. Script helpers need their expected emulator
+symbols/signatures: a conventional PPSSPP 1.18.1 build with symbols was validated; AppImage
+packaged runtimes and other builds need separate compatibility testing.
+
+**Agent scripts** (`text_hook/agent/`). A game the Agent collection (https://github.com/0xDC00/scripts,
+MIT) has a script for is hooked by that script first, LunaHook and Textractor following if it
+cannot hook the game. The match is native and needs no download (`text_hook/agent/index.rs`, over
+the index compiled in from `src-tauri/agent-scripts.json`): an emulator (Yuzu and its successors,
+Ryujinx, PPSSPP, PCSX2, RPCS3, Vita3K, Citra/Azahar, DOSBox-X) by its executable, then the title id
+or disc serial in its window title, else the game's name there; a Steam game by its app id
+(`steam_appid.txt`, else the library's `appmanifest_<id>.acf` for its install folder); any other
+PC game by its exact title only. Off with `textHookerAgentScripts: false`; per game,
+`textHookerGames.<exe>.engine` (`'agent'` (default) | `'luna'`) says which comes first. On first
+use it downloads Frida's `frida-inject` (texthook manifest `agent-x64` / `agent-arm64`, Frida 17;
+under Wine on macOS and Linux `agent-wine`, Frida 16, which starts inside Wine where 17 does not; xz-compressed, pinned
+both packed and unpacked) and the collection at its pinned commit (GitHub's archive, every file
+checked against the pin, into `<app local data>/texthook/agent-scripts-<commit>/`). Then
+`frida-inject -p <pid> -s <script> -R qjs` runs (under Wine, the Windows build in the game's
+prefix, as the sidecar does) a script built per session in `texthook/agent-run/`: `prelude.js`
+(answers the collection's runtime inside the game: its files from the collection folder only,
+writes refused, storage for the session), `frida16.js` (the Frida 16 API on 17), the collection's
+`libLoader.js` (with the prelude's `send`/`recv`), which loads the game's script. It reports on
+standard error, unbuffered, one line per event: `K <JSON, ASCII-escaped>`, with `cmd`
+`ready` (loaded: the session is `hooked`, one thread `AGENT:<file>` selected at once,
+`selectedBy: 'agent'`), `copy` (a line, whole; over 2000 characters cut, over 8000 dropped),
+`log`, `error` (the script threw while loading: frida-inject would stay, so it is stopped) and
+`detach`. An `error`, or exiting, before `ready` (or before any text, unless frida-inject says the game
+terminated) falls back to the next engine; a Unity game whose runtime is not up yet ("Mono not
+found") is tried again for up to 20 s. Stopping kills frida-inject, which takes the script out of
+the game. A watcher notices the game closing, or frida-inject stopping, within half a second (a Frida
+helper can keep its standard error open after it exits); a script that neither loads nor fails within
+45 s hands over too. Debug builds only: `KIMOCHI_AGENT_SCRIPT=<file>` gives every game that script
+(a file put in the collection folder), for trying the engine on a game the collection does not know.
+
 | Command | Signature |
 | --- | --- |
-| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames |
-| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher). When the game cannot be hooked at all, the session becomes the window's, `failed` with the reason in `detail`, and the command rejects with it |
+| `texthook_launch` | `() -> {launched, pid?, title?}` — macOS only: native application picker, pinned Gadget download, opt-in launch; cancelled picker returns `launched: false`. Select the game window afterward |
+| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, emulator?, reason?, agent?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes without a matching Agent script, Kimochi; on Linux, anything not a Windows game under Proton or Wine or a recognised native emulator with a matching Agent script; on macOS, anything not a Windows game under Wine or a native game/emulator with a matching Agent script). A window shared through the Wayland portal (`portal:window:*`) names no process: it is the one KWin or Hyprland linked the stream to, so it is not hookable until linked, after its first frames. `emulator` is `true` for recognised emulator windows so the sidebar can detect when a game boots in an already-selected emulator; `agent` (an `AgentScript`) when the game has an Agent script |
+| `texthook_start` | `({sourceId, observerEngine?, engine?}) -> HookStatus` — hooks the window's process and its engine children (a launcher's `.bin`/`.log`/`.dat`, an Electron or NW.js game's renderers); replaces any session, except one already hooking (or hooked to) the same window, which goes on as it is (with the same engine first). `engine` (`'agent'` | `'luna'`) asks for that engine first, over the game's `engine` setting. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher). When the game cannot be hooked at all, the session becomes the window's, `failed` with the reason in `detail`, and the command rejects with it |
+| `texthook_engine` | `({engine}) -> HookStatus` — hooks the game being hooked again with `engine` (`'agent'` | `'luna'`) first, its processes as found; threads start afresh. Fails when nothing is hooked, or for `'agent'` when the game has no script. The card keeps the choice in `textHookerGames.<exe>.engine` |
 | `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |
 | `texthook_status` | `() -> HookStatus` |
 | `texthook_select` | `({key}) -> HookStatus` — the thread the Log reads, remembered for the game; `key: null` forgets it and chooses automatically again |
@@ -2133,9 +2204,11 @@ HookStatus = {
   detail,                         // why it failed or ended, or which engine it fell back from
   helpUrl?,                       // a page that helps with `detail` (how to update Wine, when the game's is too old)
   sourceId, exe, pids,
-  engine: {id: 'luna' | 'textractor', name, version} | null,
-  download: {done, total} | null, // bytes, while downloading the hooker
-  selected, selectedBy: 'saved' | 'auto' | 'manual' | null,
+  engine: {id: 'agent' | 'luna' | 'textractor', name, version} | null,
+  engines,                        // the engines tried, in order ('agent' first for a game with a script)
+  agent: AgentScript | null,      // the game's Agent script, when it has one
+  download: {done, total} | null, // bytes, while downloading the hooker (Agent: Frida and the scripts)
+  selected, selectedBy: 'saved' | 'auto' | 'manual' | 'agent' | null,
   pickNote,                       // why no thread was chosen automatically yet
   fallback,                       // why the first engine was given up for the one in use
   hookFailures,                   // hook codes the hooker found but could not insert (LunaHook's
@@ -2147,6 +2220,8 @@ HookStatus = {
                                   // (stable: not reordered by new text); `japanese` once any of a
                                   // thread's text has read as the `language` setting (sticky; the
                                   // name is from when that was always Japanese), the menu's filter
+AgentScript = {file, title, platform: 'switch' | 'psp' | 'ps2' | 'ps3' | 'vita' | '3ds' | 'pc' | 'pc98',
+  author, version, download /* bytes still to fetch, 0 when ready */, collection /* its repository */}
 ```
 
 Events: `texthook-status` (a `HookStatus`, on every change and every hooked sentence) and

@@ -462,6 +462,10 @@ jobs:
         if: runner.os == 'Linux' && runner.arch == 'X64'
         run: rustup target add x86_64-pc-windows-gnu i686-pc-windows-gnu
 
+      - name: Install macOS Wine helper Rust targets
+        if: runner.os == 'macOS'
+        run: rustup target add x86_64-pc-windows-gnullvm i686-pc-windows-gnullvm
+
       - name: Ensure ARM64 C++ tools for OneOCR helper
         if: runner.os == 'Windows'
         shell: powershell

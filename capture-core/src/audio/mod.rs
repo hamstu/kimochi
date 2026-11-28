@@ -228,10 +228,21 @@ impl SystemAudio {
     /// audio now: no output device, no PipeWire; worth trying again later), `unsupported` (no
     /// backend for this OS), or `native`.
     pub fn start() -> Result<Self> {
+        Self::start_inner(None)
+    }
+
+    /// Record one macOS application's audio. A missing app is an error, never a fallback to
+    /// recording the whole computer. The PID is the host macOS PID, also for a Wine game.
+    #[cfg(target_os = "macos")]
+    pub fn start_for_process(pid: u32) -> Result<Self> {
+        Self::start_inner(Some(pid))
+    }
+
+    fn start_inner(_pid: Option<u32>) -> Result<Self> {
         let (feed, drain) = queue();
         let health = Arc::new(Health::default());
         #[cfg(target_os = "macos")]
-        let backend: Box<dyn Backend> = Box::new(macos::start(feed, health.clone())?);
+        let backend: Box<dyn Backend> = Box::new(macos::start(feed, health.clone(), _pid)?);
         #[cfg(target_os = "windows")]
         let backend: Box<dyn Backend> = Box::new(windows::start(feed, health.clone())?);
         #[cfg(target_os = "linux")]

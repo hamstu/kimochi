@@ -40,6 +40,7 @@ import {
   texthookGame,
   texthookGameIcon,
   texthookInsert,
+  texthookLaunch,
   texthookSelect,
   useHookStatus
 } from '../../bridge/textHook'
@@ -808,6 +809,60 @@ function ShowCardRow({
   )
 }
 
+/**
+ * Agent scripts (text_hook/agent), for every game: a game the Agent collection has a script for is
+ * hooked by it first. Off, such a game is hooked as any other.
+ */
+function AgentScriptsRow(): ReactNode {
+  const [on, setOn] = useSetting<boolean>('textHookerAgentScripts', true)
+  return (
+    <SettingsRow
+      label="Agent scripts"
+      controlId="th-agent-scripts"
+      description="A game with a script in the Agent collection (many emulated console games, some PC games) is hooked with it first, then LunaHook. Frida and the scripts download the first time a game needs them."
+    >
+      <Switch id="th-agent-scripts" checked={on !== false} onCheckedChange={(next) => void setOn(next)} />
+    </SettingsRow>
+  )
+}
+
+/** Start a compatible native app with Agent available before macOS blocks attachment. */
+function NativeAgentLaunchRow(): ReactNode {
+  const capabilities = useCapabilities()
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  if (capabilities.os !== 'macos') return null
+  const launch = async (): Promise<void> => {
+    setBusy(true)
+    setMessage('Downloading Agent if needed, then launching the chosen game…')
+    try {
+      const result = await texthookLaunch()
+      setMessage(
+        result.launched
+          ? `${result.title ?? 'Game'} launched. Select its window as your source, then use Agent scripts.`
+          : ''
+      )
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <SettingsRow
+      label="Native Mac games"
+      description={
+        message ||
+        'Launch a game with an indexed Agent script. Close it first. Clearing the source unloads the hook and leaves the game running.'
+      }
+    >
+      <Button size="sm" disabled={busy} onClick={() => void launch()}>
+        {busy ? 'Launching…' : 'Launch through Kimochi…'}
+      </Button>
+    </SettingsRow>
+  )
+}
+
 export function TextHookerTab(): ReactNode {
   const [open, setOpen] = useSetting<string | null>('textHookerSettingsGame', null)
   const games = useHookGames()
@@ -832,6 +887,12 @@ export function TextHookerTab(): ReactNode {
                 <HookSettingsSections
                   scope={{ kind: 'defaults' }}
                   extra={{
+                    hooking: (
+                      <>
+                        <AgentScriptsRow />
+                        <NativeAgentLaunchRow />
+                      </>
+                    ),
                     text: (
                       <SettingsRow label="Replacements" description="Manage replacements in Log & Sessions.">
                         <Button size="sm" onClick={() => showSettingsTab('log')}>

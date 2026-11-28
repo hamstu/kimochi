@@ -12,7 +12,7 @@
 //! - Not hookable: Kimochi itself, Windows' own processes and Store apps, native ARM64
 //!   processes (the hook DLLs are x86/x64), and any process we may not open for injection
 //!   (protected, anti-cheat, or elevated while Kimochi is not).
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -23,13 +23,16 @@ pub struct Target {
     /// The game's image (a Linux path under Wine), which keys what is remembered for the game.
     pub exe: PathBuf,
     pub bits: u32,
+    /// Native ARM64 Windows process: x86/x64 hook DLLs (LunaHook/Textractor) cannot enter it,
+    /// only an Agent script through `agent-arm64` can.
+    pub arm64: bool,
     /// Under Wine: how to run the hook helper alongside the game. `None` on Windows.
     pub wine: Option<super::wine::Wine>,
 }
 
 /// The PE image's bitness from its header: 32 for i386, 64 for x64, `None` for anything else
 /// (ARM64 native images cannot take x86/x64 hook DLLs). `bytes` is the start of the file.
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 pub fn pe_bits(bytes: &[u8]) -> Option<u32> {
     if bytes.get(..2)? != b"MZ" {
         return None;
@@ -55,7 +58,7 @@ pub fn is_system_image(exe: &Path) -> bool {
 }
 
 /// A launcher's child that is the real game: same family of image, another extension.
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 pub fn is_engine_child(exe: &Path) -> bool {
     exe.extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
@@ -98,7 +101,8 @@ mod imp {
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
     };
     use windows::Win32::System::SystemInformation::{
-        IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_I386, IMAGE_FILE_MACHINE_UNKNOWN,
+        IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
+        IMAGE_FILE_MACHINE_UNKNOWN,
     };
     use windows::Win32::System::Threading::{
         GetProcessInformation, IsWow64Process2, OpenProcess, ProcessMachineTypeInfo, QueryFullProcessImageNameW,
@@ -122,8 +126,8 @@ mod imp {
         Some(PathBuf::from(String::from_utf16_lossy(&buf[..len as usize])))
     }
 
-    /// What the process runs as: 32, 64, or `None` for a native ARM64 process.
-    fn running_bits(handle: HANDLE) -> Option<Option<u32>> {
+    /// What the process runs as: `(bits, arm64)` or `None` for an unsupported machine.
+    fn running_bits(handle: HANDLE) -> Option<Option<(u32, bool)>> {
         let mut info = PROCESS_MACHINE_INFORMATION::default();
         let machine = unsafe {
             GetProcessInformation(
@@ -142,8 +146,9 @@ mod imp {
             Some(if process == IMAGE_FILE_MACHINE_UNKNOWN { native } else { process })
         })?;
         Some(match machine {
-            IMAGE_FILE_MACHINE_I386 => Some(32),
-            IMAGE_FILE_MACHINE_AMD64 => Some(64),
+            IMAGE_FILE_MACHINE_I386 => Some((32, false)),
+            IMAGE_FILE_MACHINE_AMD64 => Some((64, false)),
+            IMAGE_FILE_MACHINE_ARM64 if cfg!(target_arch = "aarch64") => Some((64, true)),
             _ => None,
         })
     }
@@ -184,12 +189,12 @@ mod imp {
             Some(bytes)
         });
         let from_header = header.as_deref().and_then(pe_bits);
-        let bits = match running_bits(query.0) {
-            Some(Some(bits)) => bits,
+        let (bits, arm64) = match running_bits(query.0) {
+            Some(Some(pair)) => pair,
             Some(None) => return Err("this app runs as native ARM64, which text hooks cannot enter".into()),
-            None => from_header.ok_or("this app is not an x86 or x64 program")?,
+            None => (from_header.ok_or("this app is not an x86 or x64 program")?, false),
         };
-        Ok(Target { pid, exe, bits, wine: None })
+        Ok(Target { pid, exe, bits, arm64, wine: None })
     }
 
     /// How long the process has been running.
@@ -261,19 +266,21 @@ pub fn age(_pid: u32) -> Option<std::time::Duration> {
 }
 
 #[cfg(target_os = "linux")]
-pub use super::wine::target;
+pub use super::linux::target;
+#[cfg(target_os = "macos")]
+pub use super::macos::target;
 /// Under Wine, the window's process alone; its engine children are found inside the prefix
 /// (`wine::windows_targets`), where the parent links are.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn game_processes(pid: u32) -> Vec<Target> {
     target(pid).into_iter().collect()
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub fn target(_pid: u32) -> Result<Target, String> {
     Err("text hooking runs on Windows and Linux".into())
 }
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub fn game_processes(_pid: u32) -> Vec<Target> {
     Vec::new()
 }
@@ -317,7 +324,7 @@ mod tests {
 
     #[test]
     fn a_chromium_games_voice_hook_goes_into_its_browser_process_alone() {
-        let t = |pid, exe: &str| Target { pid, exe: PathBuf::from(exe), bits: 64, wine: None };
+        let t = |pid, exe: &str| Target { pid, exe: PathBuf::from(exe), bits: 64, arm64: false, wine: None };
         let game =
             [t(10, "C:\\G\\game.exe"), t(11, "C:\\G\\game.exe"), t(12, "C:\\G\\game.exe"), t(13, "C:\\G\\game.bin")];
         let pids = |v: Vec<Target>| v.iter().map(|t| t.pid).collect::<Vec<_>>();

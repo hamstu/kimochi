@@ -19,7 +19,7 @@ export function TextHookerCardSection(): ReactNode {
   const { os } = useCapabilities()
   const [defaults] = useHookDefaults()
   const alignLocked = useHookCardLocksAutoAlign()
-  if (os !== 'windows' && os !== 'linux') return null
+  if (os !== 'windows' && os !== 'linux' && os !== 'macos') return null
   // With the card never shown over games by default (Text Hooker → Card), it has no look to set.
   if (defaults.showCard === 'never') return null
 

@@ -8,8 +8,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- 🧩 **Agent scripts for the Text Hooker.** Many games LunaHook can't reach, emulated console games above all (Switch, PSP, PS2, PS Vita, 3DS and more) and some PC games, have a script in the community's Agent collection that knows exactly where their text is. When the game you've picked has one, its Text hooking box says so: press **Use** and Kimochi hooks the game with that script, downloading what it needs the first time (about 30 MB). If the script can't hook the game, LunaHook takes over. While a game is hooked you can switch between **Agent script** and **LunaHook** on its card, and Kimochi remembers your choice. Works on Windows (x64 and ARM64); on Linux for Windows games under Proton or Wine and for native x64 emulators; and on Mac for Windows games under Wine, native Apple Silicon emulators and, through **Launch through Kimochi…** in Settings → Text Hooker, native Mac games such as Higurashi. Turn it off in Settings → Text Hooker.
+- 🍎 **Text hooking for Windows games under Wine on Mac.** Kimochi now finds Windows games running through Wine on macOS and hooks them in their own Wine prefix with LunaHook, Textractor or an Agent script.
+- 🔊 **Sentence audio records just the game on Mac.** With a game window selected, sentence audio now records only that game's sound (Wine games included), not everything the Mac plays. Selecting a display still records all system audio.
+
 ### Fixed
 
+- **Linux: Wine games appear in the source picker on WSLg.** Games started with a relative path are also hooked with the right 32- or 64-bit helper.
 - **Steam Deck Gaming Mode: drop-down lists work by touch.** A list such as **Section** in Hachidori's settings (and the lists in Yomitan's and 10ten's) took many taps to change. It now opens as a list inside the window, with rows big enough for a finger: one tap opens it, one tap chooses.
 - **Steam Deck Gaming Mode: the on-screen keyboard.** Tapping a text field in Kimochi (a session's name, a search box, a dictionary's settings) now brings up Steam's on-screen keyboard, so you can type without **Steam + X**.
 - **Steam Deck Gaming Mode: each game gets its own session.** With **Screen** as the source, a second game's lines went into the first game's session. The Log now switches to the session named after the game you are playing, and makes one the first time. Kimochi also no longer stays on the first game when the second one was still starting as you switched.

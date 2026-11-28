@@ -185,6 +185,20 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
         role: 'The Text Hooker’s fallback',
         license: 'GPL-3.0',
         url: 'https://github.com/Artikash/Textractor'
+      },
+      {
+        id: 'agent-scripts',
+        name: 'Agent scripts',
+        role: 'Per-game hooks for games LunaHook can’t reach, emulated ones included, by 0xDC00 and contributors.',
+        license: 'MIT',
+        url: 'https://github.com/0xDC00/scripts'
+      },
+      {
+        id: 'frida',
+        name: 'Frida',
+        role: 'Runs the Agent scripts inside the game.',
+        license: 'wxWindows Library Licence 3.1',
+        url: 'https://github.com/frida/frida'
       }
     ]
   },

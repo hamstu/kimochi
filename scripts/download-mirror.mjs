@@ -168,14 +168,16 @@ export async function pinnedFiles(tree) {
         const mirror = file.sources.find((s) => s.url.startsWith(`${MIRROR}/`) && !s.zipEntry)
         const upstream = file.sources.find((s) => !s.url.startsWith(`${MIRROR}/`))
         if (!mirror || !upstream) continue
+        // A file pinned compressed (`xz`) is kept compressed: its stored bytes are the xz stream.
+        const stored = file.xz ?? file
         add({
           path: mirror.url.slice(MIRROR.length + 1),
           artifact: `texthook/${id}/${file.name}`,
           version: engine.version,
           url: upstream.url,
           ...(upstream.zipEntry ? { zipEntry: upstream.zipEntry } : {}),
-          sha256: file.sha256,
-          size: file.size
+          sha256: stored.sha256,
+          size: stored.size
         })
       }
     }
