@@ -7,6 +7,7 @@ export function OutputSections() {
     copyToClipboard: false,
     copyHookedLines: false,
     sendToWebSocket: false,
+    sendHookedLines: false,
     webSocketUrl: 'ws://localhost:6677'
   })
   return (
@@ -36,7 +37,18 @@ export function OutputSections() {
           onCheckedChange={(value) => void save({ ...settings, sendToWebSocket: value })}
         />
       </SettingsRow>
-      {settings.sendToWebSocket && (
+      <SettingsRow
+        label="Send hooked lines over WebSocket"
+        description="Each new line from the Text Hooker, after the Log's line filter and duplicate check, for a texthooker page in your browser."
+        controlId="texthooker-out-hook-ws"
+      >
+        <Switch
+          id="texthooker-out-hook-ws"
+          checked={settings.sendHookedLines}
+          onCheckedChange={(value) => void save({ ...settings, sendHookedLines: value })}
+        />
+      </SettingsRow>
+      {(settings.sendToWebSocket || settings.sendHookedLines) && (
         <SettingsSubgroup>
           <SettingsRow label="WebSocket URL" controlId="texthooker-out-ws-url">
             <Input

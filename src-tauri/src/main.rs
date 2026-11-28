@@ -2890,9 +2890,15 @@ fn watch_source(app: tauri::AppHandle, state: State<Shared>, source_id: Option<S
 
 // ---------------------------------------------------------------- output
 
+/// `hooked`: a line the Log took in from the Text Hooker, rather than an OCR scan.
 #[tauri::command]
-fn texthooker_send(app: tauri::AppHandle, text: String) -> Reply<()> {
-    app.try_state::<Arc<texthooker::Texthooker>>().ok_or("native: texthooker unavailable")?.publish(&text);
+fn texthooker_send(app: tauri::AppHandle, text: String, hooked: Option<bool>) -> Reply<()> {
+    let texthooker = app.try_state::<Arc<texthooker::Texthooker>>().ok_or("native: texthooker unavailable")?;
+    if hooked.unwrap_or(false) {
+        texthooker.publish_hooked(&text);
+    } else {
+        texthooker.publish(&text);
+    }
     Ok(())
 }
 

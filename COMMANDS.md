@@ -90,7 +90,7 @@ held; never on Wayland or in Gaming Mode; a machine key, never synced; see `poin
 `scannedTextHistory[]`, `audioSettings.voiceId`,
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
-`texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
+`texthookerSettings.{copyToClipboard,copyHookedLines,sendToWebSocket,sendHookedLines,webSocketUrl}` (one WebSocket server, running while either send switch is on),
 `gamepadSettings.{enabled,preferredGamepadIndex,lookupButton}` (enabled defaults true; `lookupButton`, a
 button index held as the lookup key (`gamepad::lookup_held`), defaults on a Steam Deck to the first
 back grip no shortcut's chord uses, L4 (17) first, and to `null` elsewhere; an `xinput` left by
@@ -750,7 +750,7 @@ without a CFRunLoop has not been tested in-app.
 
 | Command | Signature |
 | --- | --- |
-| `texthooker_send` | `({text}) -> ()` |
+| `texthooker_send` | `({text, hooked?}) -> ()` — `hooked`: a line the Log took in from the Text Hooker, sent only when `sendHookedLines` is on and never copied here (the Log copies it); otherwise an OCR scan |
 | `history_add` | `({text, detached?, groups?, engine?, merge?, frame?, session?}) -> entry` — `session`: the Log session the lines go to (the Log opens it first) |
 | `history_add_many` | `({entries: [{text, detached?, groups?, engine?, merge?, frame?, session?}]}) -> [entry]` — as `history_add` for each, in order (merging against the ones before), in one history write and one `settings:changed`: Auto OCR's passages from one refresh reach the Log together. An invalid item is answered `{text, invalid}` and the rest still go in; at most 50 (as many as the history keeps), longer refreshes are sent in batches |
 | `history_delete` | `({id}) -> ()` |

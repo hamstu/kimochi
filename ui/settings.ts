@@ -418,6 +418,8 @@ export interface Settings {
     /** Copy each line the Log takes in from the Text Hooker (after its filter and dedupe). */
     copyHookedLines: boolean
     sendToWebSocket: boolean
+    /** Send each line the Log takes in from the Text Hooker to the WebSocket server. */
+    sendHookedLines: boolean
     webSocketUrl: string
   }
   audioSettings: { voiceId: string; model?: string }
@@ -524,6 +526,7 @@ export const SETTINGS_DEFAULTS: Settings = {
     copyToClipboard: false,
     copyHookedLines: false,
     sendToWebSocket: false,
+    sendHookedLines: false,
     webSocketUrl: 'ws://localhost:6677'
   },
   audioSettings: { voiceId: DEFAULT_VOICE_ID },

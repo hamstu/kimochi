@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Send hooked lines over WebSocket** (Settings → Sources → Output): each new line from the Text Hooker goes to Kimochi's WebSocket server, so a texthooker page in your browser shows it and your browser's Yomitan can look its words up. It has its own switch, apart from Send scans over WebSocket, and uses the same URL.
+
 ### Fixed
 
 - **Steam Deck Gaming Mode: drop-down lists work by touch.** A list such as **Section** in Hachidori's settings (and the lists in Yomitan's and 10ten's) took many taps to change. It now opens as a list inside the window, with rows big enough for a finger: one tap opens it, one tap chooses.
