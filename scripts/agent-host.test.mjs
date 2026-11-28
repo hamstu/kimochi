@@ -257,3 +257,61 @@ test('Mono hook wrapper never grants write access to originally read-only code',
   context.__kimochi.dispose()
   assert.equal(protectedCount, 0)
 })
+
+test('storage preserves structured values, null-prototype objects, and missing-key defaults', () => {
+  const context = vm.createContext({
+    __kimochi: { dir: 'C:\\scripts', mission: 'C:\\scripts\\game.js', maxChars: 2000 },
+    Process: { platform: 'windows', arch: 'x64' },
+    console: { error() {}, log() {}, info() {}, warn() {}, debug() {} },
+    send() {},
+    recv() {},
+    File: class {}
+  })
+  vm.runInContext(prelude, context)
+  let id = 0
+  const call = (cmd, args) => {
+    const key = String(++id)
+    let result
+    context.__kimochi.send({ cmd, args, key })
+    context.__kimochi
+      .recv(key, (reply) => {
+        result = reply.result
+      })
+      .wait()
+    return result
+  }
+
+  // libLoader always passes [key, defaultValue] — missing keys must return null, not undefined.
+  assert.equal(call('sessionStorage_getItem', ['missing', undefined]), null)
+  assert.equal(call('sessionStorage_getItem', ['missing', 'fallback']), 'fallback')
+  assert.equal(call('sessionStorage_getItem', ['missing', false]), false)
+  assert.equal(call('sessionStorage_getItem', ['missing', 0]), 0)
+
+  // Emulator libraries (libPCSX2, libYuzu, libPPSSPP, etc.) store null-prototype maps, objects, booleans, and numbers.
+  const nullProto = Object.assign(Object.create(null), { baseBlocksNew: '0x140001000', eeMem: '0x140002000' })
+  call('sessionStorage_setItem', ['PCSX2_ADDRESSES', nullProto])
+  assert.equal(call('sessionStorage_getItem', ['PCSX2_ADDRESSES', undefined]), nullProto)
+
+  const initParams = { codeAddress: '123456', titleId: '0100A3A00CC7E000' }
+  call('sessionStorage_setItem', ['Initialize_Params', initParams])
+  assert.deepEqual(call('sessionStorage_getItem', ['Initialize_Params', undefined]), initParams)
+
+  call('sessionStorage_setItem', ['NCE', true])
+  assert.equal(call('sessionStorage_getItem', ['NCE', undefined]), true)
+
+  call('sessionStorage_setItem', ['ASLR_Offset', 4096])
+  assert.equal(call('sessionStorage_getItem', ['ASLR_Offset', undefined]), 4096)
+
+  assert.deepEqual(Array.from(call('sessionStorage_keys', [])), [
+    'PCSX2_ADDRESSES',
+    'Initialize_Params',
+    'NCE',
+    'ASLR_Offset'
+  ])
+  assert.equal(call('sessionStorage_length', []), 4)
+  assert.equal(call('sessionStorage_key', [1]), 'Initialize_Params')
+  call('sessionStorage_removeItem', ['NCE'])
+  assert.equal(call('sessionStorage_getItem', ['NCE', undefined]), null)
+  call('sessionStorage_clear', [])
+  assert.equal(call('sessionStorage_length', []), 0)
+})

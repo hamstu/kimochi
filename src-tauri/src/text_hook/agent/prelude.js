@@ -183,9 +183,9 @@
     const key = String(args[0])
     switch (op) {
       case 'getItem':
-        return map.has(key) ? map.get(key) : args.length > 1 ? args[1] : null
+        return map.has(key) ? map.get(key) : args[1] !== undefined ? args[1] : null
       case 'setItem':
-        map.set(key, String(args[1]))
+        map.set(key, args[1])
         return undefined
       case 'removeItem':
         map.delete(key)

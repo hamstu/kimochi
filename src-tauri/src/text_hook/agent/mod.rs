@@ -622,7 +622,7 @@ fn default_emulator_range(platform: &str) -> Option<&'static str> {
 pub fn explain_error(script: &Script, raw: &str, said: &VecDeque<String>, native_linux: bool) -> String {
     let cleaned = plain_error(raw);
     let lower = cleaned.to_ascii_lowercase();
-    if lower.contains("libryujinx") {
+    if lower.contains("libryujinx") || said.iter().any(|line| line.to_ascii_lowercase().contains("libryujinx")) {
         return "Standard Ryujinx isn't supported by the Agent scripts collection; use a yuzu-family Switch emulator (Eden, Citron, or Sudachi).".into();
     }
     let emu_signature_fail = lower.contains("registerblock not found")
@@ -962,6 +962,13 @@ mod tests {
             false,
         );
         assert!(ryu.contains("Eden, Citron, or Sudachi"), "{ryu}");
+        let ryu_from_log = explain_error(
+            &switch,
+            "TypeError: not a function",
+            &VecDeque::from(["libRyujinx.js not found! Please switch to QuickJS runtime.".to_string()]),
+            false,
+        );
+        assert!(ryu_from_log.contains("Eden, Citron, or Sudachi"), "{ryu_from_log}");
 
         let todo = explain_error(&psp, "TODO: linux x64", &VecDeque::new(), true);
         assert!(todo.contains("only supports Windows"), "{todo}");
