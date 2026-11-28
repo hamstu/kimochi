@@ -172,6 +172,49 @@ fn follows(selected: Option<&str>, game: u32) -> bool {
     }
 }
 
+/// The game whose Log session lines read from the screen belong to: the one being played,
+/// while the screen is the source. The screen reads whatever is in front and has no session of
+/// its own, so its lines stayed in whichever session was open: a second game's went into the
+/// first game's (#312). None for any other source (a game's window already names its session).
+fn screen_game(selected: Option<&str>, playing: Option<u32>) -> Option<u32> {
+    (selected.map(linux_gamescope::app_of) == Some(Some(0))).then_some(playing).flatten().filter(|app| *app != 0)
+}
+
+/// The source a reading is filed under in the Log when it is not the selected one: the game
+/// being played, as `{sourceId, type, name, appName}`, while the screen is selected
+/// (`screen_game`). The id stays the screen's, which is what was captured.
+pub fn session_source(selected: Option<&str>) -> Option<serde_json::Value> {
+    // Asked on every state snapshot: the game and its name are looked up twice a second at most.
+    /// When the game was last looked up, and the game (app id and name) found then.
+    type Looked = (std::time::Instant, Option<(u32, String)>);
+    static LAST: std::sync::Mutex<Option<Looked>> = std::sync::Mutex::new(None);
+    if !active() || selected.map(linux_gamescope::app_of) != Some(Some(0)) {
+        return None;
+    }
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let fresh = last.as_ref().filter(|(at, _)| at.elapsed() < std::time::Duration::from_millis(500));
+    let game = match fresh {
+        Some((_, game)) => game.clone(),
+        None => {
+            let known = last.as_ref().and_then(|(_, game)| game.clone());
+            let game = screen_game(selected, super::gamescope_handoff::game_id()).map(|app| {
+                let name = known.filter(|(id, _)| *id == app).map(|(_, name)| name).unwrap_or_else(|| {
+                    sources()
+                        .into_iter()
+                        .find(|s| linux_gamescope::app_of(&s.id) == Some(app))
+                        .map(|s| s.name)
+                        .unwrap_or_else(|| name_of(app, ""))
+                });
+                (app, name)
+            });
+            *last = Some((std::time::Instant::now(), game.clone()));
+            game
+        }
+    };
+    let (_, name) = game?;
+    Some(serde_json::json!({ "sourceId": selected, "type": "window", "name": name, "appName": name }))
+}
+
 /// Whether the follower is done with the game now in front: it is not one to follow, or its
 /// window was found (and selected). Otherwise the game is looked for again on the next poll.
 fn settled(follows: bool, listed: bool) -> bool {
@@ -294,7 +337,19 @@ pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{follows, restarted, settled, source_in_front};
+    use super::{follows, restarted, screen_game, settled, source_in_front};
+
+    #[test]
+    fn lines_read_from_the_screen_belong_to_the_game_being_played() {
+        assert_eq!(screen_game(Some("gamescope:display:0"), Some(310360)), Some(310360));
+        // No game running: the screen's lines stay where they are.
+        assert_eq!(screen_game(Some("gamescope:display:0"), None), None);
+        assert_eq!(screen_game(Some("gamescope:display:0"), Some(0)), None);
+        // A game's window names its own session; other sources and no source are left alone.
+        assert_eq!(screen_game(Some("gamescope:window:1263470:42"), Some(310360)), None);
+        assert_eq!(screen_game(Some("clipboard"), Some(310360)), None);
+        assert_eq!(screen_game(None, Some(310360)), None);
+    }
 
     #[test]
     fn a_game_in_front_but_not_listed_yet_is_looked_for_again() {

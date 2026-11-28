@@ -203,6 +203,49 @@ test('OCR intake routes to window sessions, preserves manual selection, and neve
   await h.call('stats', 'resetStats')
 })
 
+test('Gaming Mode with the screen chosen: each game gets its own session, and a chosen session is kept', async () => {
+  // #312. The screen has no session of its own; native names the game being played instead
+  // (`sessionSource` in the state, and as each reading's source).
+  const h = await harness()
+  const screen = { type: 'display', name: 'Screen', sourceId: 'gamescope:display:0' }
+  const game = (name) => ({ type: 'window', name, appName: name, sourceId: 'gamescope:display:0' })
+  const active = () => h.snapshot().sessions.sessions.find((s) => s.id === h.snapshot().sessions.activeId).name
+  await h.setSetting('lastSelectedSource', screen)
+  await h.emit('state', { source: screen, sessionSource: game('ATRI') })
+  await h.drain()
+  assert.equal(active(), 'ATRI')
+  await h.setSetting('scannedTextHistory', [{ id: '1', source: game('ATRI'), text: '猫が好きです', timestamp: 1 }])
+  await h.drain()
+  // The second game comes to the front: its lines go to a session of its own.
+  await h.emit('state', { source: screen, sessionSource: game('Higurashi') })
+  await h.drain()
+  assert.equal(active(), 'Higurashi')
+  await h.setSetting('scannedTextHistory', [
+    { id: '2', source: game('Higurashi'), text: '次の台詞', timestamp: 2 },
+    { id: '1', source: game('ATRI'), text: '猫が好きです', timestamp: 1 }
+  ])
+  await h.drain()
+  assert.equal(active(), 'Higurashi')
+  assert.deepEqual(
+    h.snapshot().lines.map((l) => l.text),
+    ['次の台詞']
+  )
+  // A session chosen by hand for this game stays through further state events and readings.
+  const manual = await h.call('sessions', 'createSession', ['Chapter 2'])
+  await h.emit('state', { source: screen, sessionSource: game('Higurashi') })
+  await h.setSetting('scannedTextHistory', [
+    { id: '3', source: game('Higurashi'), text: 'もう一つ', timestamp: 3 },
+    { id: '2', source: game('Higurashi'), text: '次の台詞', timestamp: 2 }
+  ])
+  await h.drain()
+  assert.equal(h.snapshot().sessions.activeId, manual.id)
+  // No game in front: the screen alone moves nothing.
+  await h.emit('state', { source: screen, sessionSource: null })
+  await h.drain()
+  assert.equal(h.snapshot().sessions.activeId, manual.id)
+  await h.call('stats', 'resetStats')
+})
+
 test('notebook edits and images use the owner and survive a session round trip', async () => {
   const h = await harness()
   const original = h.snapshot().sessions.activeId

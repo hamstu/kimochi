@@ -2996,6 +2996,11 @@ front (switching through Steam): when the selected source is another game's wind
 front is selected with its own saved crop (`gaming_sources::follow`); the screen and other sources
 stay.
 
+The screen has no Log session of its own. While it is the source and a game is being played,
+`state` carries `sessionSource`: `{sourceId, type: "window", name, appName}` with the game's name
+(the screen's id), else null; each reading's `source` is that too. The Log files the lines under
+the session of that name, as it does for a window source (`gaming_sources::session_source`).
+
 Event `gamescope-shown` (a bool): whether Gamescope is showing Kimochi rather than a game or Steam,
 emitted on every change and again every 5 s. The main window pauses its CSS animations while it
 is false (`[data-behind-game]`): mapped behind the game, WebKit would otherwise keep painting them.
