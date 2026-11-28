@@ -172,6 +172,12 @@ fn follows(selected: Option<&str>, game: u32) -> bool {
     }
 }
 
+/// Whether the follower is done with the game now in front: it is not one to follow, or its
+/// window was found (and selected). Otherwise the game is looked for again on the next poll.
+fn settled(follows: bool, listed: bool) -> bool {
+    !follows || listed
+}
+
 /// Keep the source on the game being played. Switching games through Steam (its library,
 /// the Steam button, Quick Access) brings another app to the front; when the reader was on
 /// a different game's window, select the one now in front, with the crop saved for it, as
@@ -183,6 +189,8 @@ pub fn follow(service: crate::state::Shared) {
     }
     let spawned = std::thread::Builder::new().name("kimochi-game-follow".into()).spawn(move || {
         let mut seen = super::gamescope_handoff::last_game();
+        // The game last reported as in front but not listed yet, so it is reported once.
+        let mut waiting = 0;
         let mut ticks: u32 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(250));
@@ -194,7 +202,10 @@ pub fn follow(service: crate::state::Shared) {
             if game == 0 || game == seen {
                 continue;
             }
-            seen = game;
+            // Once a second while waiting for a game's window to be listed.
+            if game == waiting && !ticks.is_multiple_of(4) {
+                continue;
+            }
             let selected = service.selection.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let follow = follows(selected.as_deref(), game);
             let found = if follow {
@@ -202,14 +213,22 @@ pub fn follow(service: crate::state::Shared) {
             } else {
                 None
             };
-            crate::debug_report::trace_now(serde_json::json!({
-                "check": "gaming-mode-front-game",
-                "game": game,
-                "selected": selected,
-                "follows": follow,
-                // A game in front that is not among the sources: see `gamescope-catalog` for why.
-                "listed": found.as_ref().map(|s| &s.id),
-            }));
+            // A game comes to the front before its window is among the sources (while it starts):
+            // ask again next time rather than staying on the last game for good (#312).
+            if settled(follow, found.is_some()) {
+                seen = game;
+            }
+            if settled(follow, found.is_some()) || waiting != game {
+                crate::debug_report::trace_now(serde_json::json!({
+                    "check": "gaming-mode-front-game",
+                    "game": game,
+                    "selected": selected,
+                    "follows": follow,
+                    // A game in front that is not among the sources: see `gamescope-catalog` for why.
+                    "listed": found.as_ref().map(|s| &s.id),
+                }));
+            }
+            waiting = game;
             let Some(source) = found else {
                 continue;
             };
@@ -275,7 +294,16 @@ pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{follows, restarted, source_in_front};
+    use super::{follows, restarted, settled, source_in_front};
+
+    #[test]
+    fn a_game_in_front_but_not_listed_yet_is_looked_for_again() {
+        // Followed and found, or not one to follow: done with this game.
+        assert!(settled(true, true));
+        assert!(settled(false, false));
+        // To follow, but its window is not among the sources yet (#312): ask again.
+        assert!(!settled(true, false));
+    }
 
     #[test]
     fn a_restarted_game_is_found_again_by_its_app_id() {

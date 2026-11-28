@@ -319,7 +319,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             // Rising edge only: holding a button must not repeat the action. While Settings
             // records a binding the press is still emitted above, so it can be assigned, but
             // it does not fire whatever the button is bound to now.
-            let rising: Vec<bool> = buttons.iter().zip(&previous).map(|(now, before)| *now && !*before).collect();
+            let rising = rising_edges(&buttons, &previous);
             // Pause game: B (the controller's Back, `controllerButtons.back`) pressed alone on the
             // paused game resumes it. Only here, with nothing of Kimochi's using the controller: the
             // press that closes the menu or reading began while it had the controller.
@@ -698,6 +698,13 @@ fn install_gilrs_log() {
 /// Ordinary controls own controller actions while focused; overlay navigation is separate.
 static PANEL_FOCUS: Mutex<Option<String>> = Mutex::new(None);
 static PANEL_FOCUS_REVISION: AtomicU64 = AtomicU64::new(0);
+
+/// The buttons newly down in `buttons`. One the last reading did not have (the Deck's back
+/// grips, after a reading from the standard 17-button pad) was up then: left out, its press
+/// was never an edge, and a shortcut on L4 could be lost.
+fn rising_edges(buttons: &[bool], previous: &[bool]) -> Vec<bool> {
+    buttons.iter().enumerate().map(|(index, now)| *now && !previous.get(index).copied().unwrap_or(false)).collect()
+}
 
 fn update_panel_focus(owner: &mut Option<String>, label: &str, focused: bool) -> bool {
     if focused {
@@ -1366,6 +1373,17 @@ mod tests {
     }
     use super::*;
 
+    #[test]
+    fn a_back_grip_pressed_after_a_standard_pad_reading_is_still_an_edge() {
+        let mut deck = vec![false; 23];
+        deck[17] = true;
+        // The last reading had only the 17 standard buttons: L4 (17) is newly down.
+        assert!(rising_edges(&deck, &[false; 17])[17]);
+        assert_eq!(rising_edges(&deck, &[false; 17]).len(), 23);
+        // Held since the last reading: not an edge.
+        assert!(!rising_edges(&deck, &deck)[17]);
+        assert_eq!(rising_edges(&[true, false], &[false, false, true]), [true, false]);
+    }
     #[test]
     fn panel_focus_transfer_ignores_late_blur_from_previous_window() {
         let mut owner = None;
