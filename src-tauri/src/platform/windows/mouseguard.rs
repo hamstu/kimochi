@@ -95,6 +95,8 @@ static MANUAL_PAUSE: AtomicBool = AtomicBool::new(false);
 /// The selected source window (0 for a display), whether or not the overlay shows words on it:
 /// `TARGETS` names it only while the overlay has words there.
 static SOURCE_WINDOW: AtomicUsize = AtomicUsize::new(0);
+/// The overlay's window (0 until it exists).
+static OVERLAY_WINDOW: AtomicUsize = AtomicUsize::new(0);
 
 /// What the keyboard hook hands the delivery thread.
 enum KeyEvent {
@@ -133,6 +135,40 @@ pub fn set_keyboard_guard(region: bool, navigation: bool, manual_pause: bool) {
     REGION.store(region, Ordering::Relaxed);
     NAV.store(navigation, Ordering::Relaxed);
     MANUAL_PAUSE.store(manual_pause, Ordering::Relaxed);
+}
+
+/// Whether Escape resumes the game the reader paused: pressed with the game in front, or with
+/// the overlay in front. Word navigation takes the foreground for the overlay and keeps it until
+/// the pause ends (`gamepad::reactivate`), so after reading the game is not in front to press on.
+fn pause_escape_target(foreground: usize, source: usize, overlay: usize) -> bool {
+    foreground != 0 && (foreground == source || foreground == overlay)
+}
+
+/// Whether the overlay takes the pointer over the game the reader paused (Pause game). A game that
+/// hides the system cursor and draws its own shows no pointer once frozen: the cursor follows the
+/// window under it. Over the overlay it is Kimochi's and shows, and presses no longer queue in the
+/// game until it resumes. Never over another window in front of the game.
+pub fn covers_paused_game() -> bool {
+    if !MANUAL_PAUSE.load(Ordering::Relaxed) {
+        return false;
+    }
+    let source = SOURCE_WINDOW.load(Ordering::Relaxed);
+    let mut point = POINT::default();
+    if source == 0 || unsafe { GetCursorPos(&mut point) }.is_err() {
+        return false;
+    }
+    let Some(game) = super::sources::frame_bounds(HWND(source as *mut _)) else { return false };
+    let at = (f64::from(point.x), f64::from(point.y));
+    over_paused_game(at, &game, root_at(point).0 as usize, source, OVERLAY_WINDOW.load(Ordering::Relaxed))
+}
+
+fn over_paused_game(at: (f64, f64), game: &Rect, root: usize, source: usize, overlay: usize) -> bool {
+    crate::platform::contains(game, at) && root != 0 && (root == source || root == overlay)
+}
+
+/// The top-level window the pointer is on.
+fn root_at(point: POINT) -> HWND {
+    unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) }
 }
 
 fn key_name(key: u32) -> Option<&'static str> {
@@ -202,13 +238,15 @@ pub fn update_mouse_guard(app: &tauri::AppHandle, service: &Service) {
     let mut targets = Vec::new();
     // Popup takes precedence over a word underneath it.
     for label in ["popup-host", "overlay"] {
-        if label == "overlay" && !overlay_visible {
-            continue;
+        let window = app.get_webview_window(label);
+        let hwnd = window.as_ref().and_then(|window| window.hwnd().ok());
+        if label == "overlay" {
+            OVERLAY_WINDOW.store(hwnd.map_or(0, |hwnd| hwnd.0 as usize), Ordering::Relaxed);
+            if !overlay_visible {
+                continue;
+            }
         }
-        let Some(window) = app.get_webview_window(label) else {
-            continue;
-        };
-        let Ok(hwnd) = window.hwnd() else {
+        let (Some(window), Some(hwnd)) = (window, hwnd) else {
             continue;
         };
         if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
@@ -507,17 +545,20 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 let owned = hook.key_owners[key as usize];
                 let was_down = hook.keys_down[key as usize];
                 hook.keys_down[key as usize] = down;
-                // Pause game: Escape pressed on the paused game resumes it, and never reaches
-                // the game (which would act on it once resumed). Its release and repeats are
-                // swallowed with it, as an owned key.
+                // Pause game: Escape pressed on the paused game (or on the overlay, when it has
+                // the foreground) resumes it, and never reaches the game (which would act on it
+                // once resumed). Its release and repeats are swallowed with it, as an owned key.
                 if key == 27
                     && down
                     && !was_down
                     && MANUAL_PAUSE.load(Ordering::Relaxed)
                     && !region
                     && !nav
-                    && !foreground.0.is_null()
-                    && foreground.0 as usize == SOURCE_WINDOW.load(Ordering::Relaxed)
+                    && pause_escape_target(
+                        foreground.0 as usize,
+                        SOURCE_WINDOW.load(Ordering::Relaxed),
+                        OVERLAY_WINDOW.load(Ordering::Relaxed),
+                    )
                 {
                     if hook.keys.try_send(KeyEvent::PauseEscape).is_err() {
                         return false;
@@ -606,6 +647,28 @@ mod tests {
     }
 
     #[test]
+    fn escape_resumes_the_paused_game_from_the_game_or_the_overlay() {
+        assert!(pause_escape_target(10, 10, 20));
+        // After word navigation the overlay keeps the foreground until the pause ends.
+        assert!(pause_escape_target(20, 10, 20));
+        // Another window (Settings, another app), no foreground, or a display with no overlay yet.
+        assert!(!pause_escape_target(30, 10, 20));
+        assert!(!pause_escape_target(0, 0, 0));
+    }
+
+    #[test]
+    fn the_overlay_takes_the_pointer_only_over_the_paused_game() {
+        let game = Rect { x: 100., y: 100., width: 400., height: 300. };
+        assert!(over_paused_game((200., 200.), &game, 10, 10, 20));
+        // Already taken: the overlay is what the pointer is on.
+        assert!(over_paused_game((200., 200.), &game, 20, 10, 20));
+        // Another window in front of the game there, and outside the game.
+        assert!(!over_paused_game((200., 200.), &game, 30, 10, 20));
+        assert!(!over_paused_game((600., 200.), &game, 20, 10, 20));
+        assert!(!over_paused_game((500., 400.), &game, 10, 10, 20));
+    }
+
+    #[test]
     fn a_press_says_whether_it_was_a_mouse_a_pen_or_a_finger() {
         assert_eq!(press_origin(0, 0), ("mouse", false));
         assert_eq!(press_origin(0x1, 0), ("mouse", true));
@@ -655,7 +718,7 @@ mod tests {
 }
 
 fn target_at(point: POINT) -> Option<Target> {
-    let root = unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) };
+    let root = root_at(point);
     // Where the reader sees the cursor, over a game Magpie scales (as in `mouse_proc`).
     let (x, y) = super::magpie::shown_press((f64::from(point.x), f64::from(point.y)))
         .unwrap_or((f64::from(point.x), f64::from(point.y)));
@@ -768,7 +831,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                                     return false;
                                 }
                                 let window = HWND(target.window as *mut _);
-                                let root = unsafe { GetAncestor(WindowFromPoint(info.pt), GA_ROOT) };
+                                let root = root_at(info.pt);
                                 unsafe { IsWindowVisible(window) }.as_bool()
                                     && !root.is_invalid()
                                     && (root == window

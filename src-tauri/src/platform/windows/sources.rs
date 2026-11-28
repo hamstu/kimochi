@@ -49,7 +49,7 @@ fn cloaked(hwnd: HWND) -> bool {
 /// Windows 10+ draws around every standard window (7 or so pixels on three sides), so
 /// a capture crop or overlay aligned to it would be off; DWM's extended frame bounds are
 /// what the user sees, and are always physical pixels.
-fn frame_bounds(hwnd: HWND) -> Option<Rect> {
+pub(super) fn frame_bounds(hwnd: HWND) -> Option<Rect> {
     let mut r = RECT::default();
     let dwm = unsafe {
         DwmGetWindowAttribute(
